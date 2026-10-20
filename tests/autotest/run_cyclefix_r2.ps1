@@ -404,7 +404,6 @@ try {
   # T6-follow fix round 1: a type the LIBRARY does not declare (a name made up for the plan) written through the
   # unit scope `System.Classes.` while the uses says `Classes`: the unit comes from the class unit's uses entry
   # under the default unit scope `System` (rule iii), never from the library, and never `uses System`.
-  # (`--library-db none` cannot reach the leaf at all: R2 refuses `receiver-unknown`, no ancestry -- see g1 / i2.)
   $v26n = Get-VariantPlan (New-Variant $cleanDir 'v-f26n' @(@($G, "  System.Classes;`n`ntype", "  Classes;`n`ntype"),
     @($G, '    property Log: TStrings read FLog;', '    property Log: System.Classes.TNoSuchInClasses read FLog;'))) 'v-f26n' $Lib
   Check 'f26n a dotted type the library does not declare: cut, the leaf uses System.Classes via the uses entry `Classes` (never `uses System`)' `
@@ -430,6 +429,39 @@ try {
   Check 'f28 an unresolvable dotted type `System.NoSuchUnit.TNoSuchGauge`: refused unresolved-qualified-type' `
     ($v28.Ok -and ($v28.Dump.verdict -eq 'refused') -and (@($v28.Dump.refusals -split ',') -contains 'unresolved-qualified-type') -and
      $v28.Text.Contains('refused: unresolved-qualified-type -- ') -and ($v28.Text -notmatch '(?m)^  System[;,]\r?$')) "[$($v28.Dump.verdict) / $($v28.Dump.refusals)]"
+  # T6-follow fix round 2 (A): the same through --library-db none. R2 reaches the leaf with no library only when the
+  # `with` ancestry is complete in the PROJECT index, so the variant gives the project its own stand-in
+  # TObject / TComponent (unit DemoStubs); the receiver is a parameter (Sender: TComponent). The leaf must use
+  # System.Classes (rule iii: the uses says `Classes`), never `uses System`.
+  $StubUnit = "unit DemoStubs;`n`n// T6-follow variant: project stand-ins so the ancestry is complete without a platform library.`n`ninterface`n`ntype`n  TObject = class`n  end;`n`n  TComponent = class(TObject)`n  end;`n`nimplementation`n`nend.`n"
+  $NoLibEdits = @(@('DemoUIConnect.pas', "procedure TDemoUIConnect.Attach;`nbegin`n  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`nend;", "procedure TDemoUIConnect.Attach;`nbegin`nend;"),
+    @('DemoUIConnect.pas', 'Sender: TObject', 'Sender: TComponent'),
+    @('DemoStubs.pas', '<new>', $StubUnit),
+    @($G, "  System.Classes;`n`ntype", "  Classes,`n  DemoStubs;`n`ntype"),
+    @($G, '    property Log: TStrings read FLog;', '    property Log: System.Classes.TStrings read FLog;'),
+    @('MemberWrite.dpr', "  DemoGagePort in 'DemoGagePort.pas',", "  DemoStubs in 'DemoStubs.pas',`n  DemoGagePort in 'DemoGagePort.pas',"),
+    @('MemberWrite.dproj', '        <DCCReference Include="DemoGagePort.pas"/>', "        <DCCReference Include=`"DemoStubs.pas`"/>`n        <DCCReference Include=`"DemoGagePort.pas`"/>"))
+  $v26x = Get-VariantPlan (New-Variant $cleanDir 'v-f26x' $NoLibEdits) 'v-f26x' 'none'
+  Check 'f26x --library-db none, a parameter receiver: cut, the leaf uses System.Classes (never `uses System`)' `
+    ($v26x.Ok -and ($v26x.Dump.verdict -eq 'mechanical') -and ($v26x.Text -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  System\.Classes;") -and
+     ($v26x.Text -notmatch '(?m)^  System[;,]\r?$') -and $v26x.Text.Contains('property Log: System.Classes.TStrings read GetLog;')) "[$($v26x.Dump.verdict) / $($v26x.Dump.refusals)]"
+  # (B) the project's DCC_Namespace: `MyCo.Classes.TNoSuchInClasses` with `Classes` in the uses reads as the unit
+  # `MyCo.Classes`; the same variant without MyCo in the .dproj is refused; an unresolvable MyCo-rooted type
+  # refuses unresolved-qualified-type (the scope-root list is the same effective list).
+  $MyCoDproj = @('MemberWrite.dproj', '<DCC_Namespace>System;Xml;', '<DCC_Namespace>MyCo;System;Xml;')
+  $MyCoType = @(@($G, "  System.Classes;`n`ntype", "  Classes;`n`ntype"),
+    @($G, '    property Log: TStrings read FLog;', '    property Log: MyCo.Classes.TNoSuchInClasses read FLog;'))
+  $v29 = Get-VariantPlan (New-Variant $cleanDir 'v-f29' ($MyCoType + @(, $MyCoDproj))) 'v-f29' $Lib
+  Check 'f29 DCC_Namespace=MyCo: `MyCo.Classes.TNoSuchInClasses` (uses Classes) is the unit MyCo.Classes: cut, the leaf uses it' `
+    ($v29.Ok -and ($v29.Dump.verdict -eq 'mechanical') -and ($v29.Text -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  MyCo\.Classes;")) "[$($v29.Dump.verdict) / $($v29.Dump.refusals)]"
+  $v29c = Get-VariantPlan (New-Variant $cleanDir 'v-f29c' $MyCoType) 'v-f29c' $Lib
+  Check 'f29c control: the same without MyCo in DCC_Namespace is refused (MyCo is no unit scope)' `
+    ($v29c.Ok -and ($v29c.Dump.verdict -eq 'refused')) "[$($v29c.Dump.verdict) / $($v29c.Dump.refusals)]"
+  $v30 = Get-VariantPlan (New-Variant $cleanDir 'v-f30' @(@($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FGauge: MyCo.NoSuchUnit.TNoSuchGauge;"),
+    @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    property Gauge: MyCo.NoSuchUnit.TNoSuchGauge read FGauge;"),
+    @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf);`n    if Gauge <> nil then`n      Exit;"), $MyCoDproj)) 'v-f30' $Lib
+  Check 'f30 DCC_Namespace=MyCo: an unresolvable `MyCo.NoSuchUnit.TNoSuchGauge` refuses unresolved-qualified-type' `
+    ($v30.Ok -and ($v30.Dump.verdict -eq 'refused') -and (@($v30.Dump.refusals -split ',') -contains 'unresolved-qualified-type')) "[$($v30.Dump.verdict) / $($v30.Dump.refusals)]"
   Check 'a13 the demo plan names the exception change of `as` (EInvalidCast -> EIntfCastError)' `
     ($txA.Contains('a failed `as IDemoGagePortSurface` raises EIntfCastError, not EInvalidCast')) ''
 

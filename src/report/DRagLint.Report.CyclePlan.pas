@@ -3379,7 +3379,9 @@ begin
       if R.Kind in [erTypeIs, erTypeAs] then Tested:= True;
     if (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
-    var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, Refusal);
+    var UnitScopes:= EffectiveUnitScopes(if TFile.Exists(FProjectFile) and SameText(ExtractFileExt(FProjectFile), '.dproj')
+      then TFile.ReadAllText(FProjectFile) else '');
+    var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
     if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then
       for var S in GetFile(Leaf.Fid).Syms do
         if SameText(S.Name, Steps.IfaceName) then

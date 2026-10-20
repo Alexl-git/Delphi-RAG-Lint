@@ -344,6 +344,7 @@ function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; 
 /// <param name="pSurface">The edge's surface (BuildEdgeSurface).</param>
 /// <param name="pLeafUnit">The unit name of the leaf that will hold the interface (its GUID
 /// is derived from it).</param>
+/// <param name="pUnitScopes">EffectiveUnitScopes of the project; nil = the Delphi defaults.</param>
 /// <param name="pRefusal">Receives why the recipe does not apply; Kind '' when it does.</param>
 /// <returns>The steps; Recipe = crNone when refused.</returns>
 /// <remarks>
@@ -373,12 +374,24 @@ function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; 
 /// <para>Leaf: the units declaring the member types -- a project unit as bound from B, else
 /// the library unit B's interface uses names (`type-unresolved`); never a unit of the
 /// group (`leaf-uses-cycle`). The dotted prefixes are walked longest to shortest; the first that names a unit wins (a
-/// project unit, a uses entry of B, a uses entry under a default unit scope, a library unit declaring
+/// project unit, a uses entry of B, a uses entry under a unit scope of the project's DCC_Namespace (the Delphi defaults when none), a library unit declaring
 /// the type); with none and a unit-scope first segment the plan refuses `unresolved-qualified-type`; otherwise it is the outer type of a nested type and the
 /// unit declaring that outer type is used (`member-unsupported` when none resolves).</para>
 /// </remarks>
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
-  const pSurface: TEdgeSurface; const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+  const pSurface: TEdgeSurface; const pLeafUnit: string; const pUnitScopes: TArray<string>;
+  out pRefusal: TRecipeRefusal): TRecipeSteps;
+
+/// <summary>The effective unit-scope names of a project: every `&lt;DCC_Namespace&gt;` value of
+/// the .dproj (any configuration group), split at `;`.</summary>
+/// <param name="pDprojText">The text of the .dproj; '' when none is available.</param>
+/// <returns>The scope names (`System`, `System.Win`, `MyCo`...). The Delphi defaults
+/// (System;Xml;Data;Datasnap;Web;Soap;Vcl;Winapi;System.Win) when the project sets no
+/// DCC_Namespace, and also added when a value keeps the `$(DCC_Namespace)` macro.</returns>
+/// <remarks>The one list that PlanMemberInterface uses both to read `MyCo.Foo.TBar` as the unit
+/// `MyCo.Foo` (rule: scope + uses entry) and to refuse `unresolved-qualified-type` for a
+/// scope-rooted prefix that names no unit; the two cannot drift.</remarks>
+function EffectiveUnitScopes(const pDprojText: string): TArray<string>;
 
 implementation
 
@@ -390,7 +403,6 @@ const
   { The Delphi default unit-scope names (.dproj DCC_Namespace when it sets none); a type written
     `System.Classes.TStrings` names the unit through such a scope when the uses says `Classes`. }
   CUnitScopeNames: array[0..8] of string = ('System', 'Xml', 'Data', 'Datasnap', 'Web', 'Soap', 'Vcl', 'Winapi', 'System.Win');
-  CUnitScopeRoots = ' System Xml Data Datasnap Web Soap Vcl Winapi ';
   CNotTypeWords = ' const var out array of function procedure reference to packed ';
   { System-unit types every unit sees without a uses entry (R1, J2) }
   CBuiltinTypes = ' integer cardinal shortint smallint longint int64 uint64 byte word longword nativeint ' +
@@ -1502,6 +1514,7 @@ type
     FSource  : IEdgeSurfaceSource;
     FStore   : ISymbolStore;
     FIdx     : TTypeIndex;
+    FScopes  : TArray<string>;
     FSurface : TEdgeSurface;
     FFromFid : Int64;
     FClsFid  : Int64;
@@ -1532,6 +1545,7 @@ type
     function CheckCastUnit: Boolean;
     function CheckWithBodies: Boolean;
     function LibUnitOf(const pIdent: string): string;
+    function IsScopeRoot(const pSegment: string): Boolean;
     function KnownUnitPrefix(const pSegments: TArray<string>; pCount: Integer): string;
     function LibDeclaresIn(const pIdent, pUnit: string): Boolean;
     function AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
@@ -1542,15 +1556,17 @@ type
     procedure BuildClassEdits;
     function IfaceDecl(const pLeafUnit: string): TArray<string>;
   public
-    constructor Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore; const pSurface: TEdgeSurface);
+    constructor Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore; const pSurface: TEdgeSurface;
+      const pUnitScopes: TArray<string>);
     destructor Destroy; override;
     function Run(const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
   end;
 
 constructor TMemberPlan.Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
-  const pSurface: TEdgeSurface);
+  const pSurface: TEdgeSurface; const pUnitScopes: TArray<string>);
 begin
   inherited Create;
+  FScopes     := if Length(pUnitScopes) > 0 then pUnitScopes else EffectiveUnitScopes('');
   FSource     := pSource;
   FStore      := pSource.Store;
   FIdx.Project:= FStore;
@@ -1998,6 +2014,40 @@ begin
     if SameText(UnitOfFile(FIdx.Lib.GetFilePath(S.FileId)), pUnit) then Exit(True);
 end;
 
+function EffectiveUnitScopes(const pDprojText: string): TArray<string>;
+var
+  L: TList<string>;
+begin
+  L:= TList<string>.Create;
+  try
+    var UseDefaults:= True;
+    for var M in TRegEx.Matches(pDprojText, '<DCC_Namespace>([^<]*)</DCC_Namespace>') do
+    begin
+      UseDefaults:= False;
+      for var Part in M.Groups[1].Value.Split([';']) do
+      begin
+        var N:= Trim(Part);
+        if ContainsStr(N, '$(') then UseDefaults:= True
+        else if (N <> '') and not L.Contains(N) then L.Add(N);
+      end;
+    end;
+    if UseDefaults then
+      for var N in CUnitScopeNames do
+        if not L.Contains(N) then L.Add(N);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+{ Whether pSegment starts a unit-scope name of the project (`System` of `System.Win`, `MyCo`). }
+function TMemberPlan.IsScopeRoot(const pSegment: string): Boolean;
+begin
+  for var NS in FScopes do
+    if SameText(NS.Split(['.'])[0], pSegment) then Exit(True);
+  Result:= False;
+end;
+
 { The unit a dotted prefix of a type name names, walking the prefixes from the LONGEST to the shortest
   (`A.B.C` then `A.B` then `A`); the first that is a unit wins and the rest is a nested type inside it.
   A prefix is a unit when it is a project unit stem, a uses entry of the class unit, a uses entry
@@ -2014,7 +2064,7 @@ begin
     for var U in FStore.GetUnitUsesForFile(FClsFid) do
     begin
       if SameText(U.UnitName, P) then Exit(P);
-      for var NS in CUnitScopeNames do
+      for var NS in FScopes do
         if SameText(NS + '.' + U.UnitName, P) then Exit(P);
     end;
     if LibDeclaresIn(Next, P) then Exit(P);
@@ -2052,7 +2102,7 @@ begin
     UnitPart:= KnownUnitPrefix(Segs, Length(Segs) - 1);
     if UnitPart = '' then
     begin
-      if ContainsText(CUnitScopeRoots, ' ' + Segs[0] + ' ') then
+      if IsScopeRoot(Segs[0]) then
         Exit(Refuse('unresolved-qualified-type', pShown, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, ' +
           'is written with a unit-scope prefix that names no unit this plan can find (pass --library-db, or add the unit to ' +
           'the uses clause)', [pShown, FCls.Name, pM.Name])));
@@ -2188,11 +2238,12 @@ begin
 end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
-  const pSurface: TEdgeSurface; const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+  const pSurface: TEdgeSurface; const pLeafUnit: string; const pUnitScopes: TArray<string>;
+  out pRefusal: TRecipeRefusal): TRecipeSteps;
 var
   P: TMemberPlan;
 begin
-  P:= TMemberPlan.Create(pSource, pLibrary, pSurface);
+  P:= TMemberPlan.Create(pSource, pLibrary, pSurface, pUnitScopes);
   try
     Result:= P.Run(pLeafUnit, pRefusal);
   finally
