@@ -541,9 +541,11 @@ it builds the project first (a baseline that fails refuses the run; `--no-compil
 the build), stages the edits in a shadow tree and prints the verdict, writing no source
 file. Add `--apply` to write them: every touched file is backed up as `<file>.BCK<n>`
 first, the project is built again (a compile error rolls every file back), the index
-refreshed, and `cycles` re-run against the prediction -- exit 0 verified; 1 refused, rolled
-back, or written but not verified; 2 error (`--part all` applies Part A then Part B in one
-run). A group the engine cannot cut
+refreshed, and `cycles` re-run against the prediction -- exit 0 written and verified (or
+written with `--no-reindex`, unverified); 1 refused, rolled back after a compile error or build
+timeout, or written but not verified; 2 error -- a write or build failed part-way (rolled back,
+project not changed, or the rollback failure is named), or bad flags (`--part all` applies
+Part A then Part B in one run). A group the engine cannot cut
 mechanically is refused with a named reason, never guessed at. The IDE offers it under
 *Uses & Dependencies*, on the Uses & Deps tab's *Circular uses* section, and on a
 `circular-uses` finding in the Structure window; details on the wiki page
@@ -1059,7 +1061,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| `cycles --db <db>` | Circular unit dependencies -- see the [worked example](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report) below | `--edges`, `--causes` (blame the exact symbols), `--plan` (refactoring playbook), `--fix --project <X.dproj>` (mechanical fix of one group: `--cycle <n>`, `--unit <stem>`, `--part a\|b\|all`, `--no-compile`, `--shadow-out <dir>` (debug: where the shadow tree of the result is staged, default `C:\TEMP\draglint_cyclefix_<pid>\`); dry run exit 0 mechanical / 1 refused / 2 error; `--apply` writes with `.BCK<n>` backups (`--no-backup`), builds, re-indexes (`--no-reindex`) and verifies: exit 0 verified / 1 refused, rolled back or not verified / 2 error), `--format json\|text` |
+| `cycles --db <db>` | Circular unit dependencies -- see the [worked example](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report) below | `--edges`, `--causes` (blame the exact symbols), `--plan` (refactoring playbook), `--fix --project <X.dproj>` (mechanical fix of one group: `--cycle <n>`, `--unit <stem>`, `--part a\|b\|all`, `--no-compile`, `--shadow-out <dir>` (debug: where the shadow tree of the result is staged, default `C:\TEMP\draglint_cyclefix_<pid>\`); dry run exit 0 mechanical / 1 refused / 2 error; `--apply` writes with `.BCK<n>` backups (`--no-backup`), builds, re-indexes (`--no-reindex`) and verifies: exit 0 written and verified (or written with `--no-reindex`, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back) or bad flags), `--format json\|text` |
 | `top --db <db>` | Top symbols by fan-in | `--by fanin`, `--limit N` |
 | `graph --db <db>` | Export the symbol graph | `--format dot\|mermaid`, `--name <substr>`, `--output <f>` |
 | [`callgraph`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) `--qname <X> --db <db>` | N-deep resolved call tree | `--direction callers\|callees`, `--depth N` |

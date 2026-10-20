@@ -371,6 +371,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json
 | `--shadow-out` | `<dir>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--platform` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
 
 Described in:
 

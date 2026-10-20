@@ -92,7 +92,8 @@ and proves them with the compiler.
 ```text
 drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> [--cycle <n> | --unit <stem>]
                  [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile]
-                 [--platform win32|win64] [--library-db <lib.sqlite>] [--format json|text]
+                 [--platform win32|win64] [--library-db <lib.sqlite>] [--rules-dir <dir>]
+                 [--format json|text]
 ```
 
 **Which group.** `--cycle <n>` (the number `drag-lint cycles` prints) or `--unit <stem>` (the

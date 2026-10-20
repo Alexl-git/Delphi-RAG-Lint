@@ -15,7 +15,10 @@ No extractor change (1.22.0-alpha): no re-parse.
   mechanical / 1 refused / 2 error, `cycle-fix/1` JSON. `--apply` writes it under `.BCK<n>`
   backups (`--no-backup`), builds in place with one bounded repair (R4) or rolls every file
   back, re-indexes (`--no-reindex`) and re-runs `cycles` against the prediction: exit 0
-  verified / 1 refused, rolled back or not verified / 2 error; `--apply --no-compile` is exit 2.
+  written and verified (or written with `--no-reindex`, unverified) / 1 refused, rolled back after a
+  compile error or build timeout, or written but not verified / 2 error -- a write or build failed
+  part-way (rolled back, project not changed, or the rollback failure is named), or bad flags;
+  `--apply --no-compile` is exit 2.
   `--part all` (needs `--apply`, refuses `--no-reindex`) applies Part A then Part B. Every
   refusal is named (`dirty-baseline`, `compile-error`, `build-timeout`, `anchor-mismatch`,
   `non-ascii-text`, `base-class`, `receiver-unknown`, `manual-edit`, ...; the full list is on

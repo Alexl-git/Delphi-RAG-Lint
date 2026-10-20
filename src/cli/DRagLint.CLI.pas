@@ -1020,11 +1020,12 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another) and builds the project unless --no-compile,' +
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another) and builds the project unless --no-compile,' +
     ' exit 0 mechanical / 1 refused / 2 error; --apply writes it' +
-    ' (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 verified / 1 refused, rolled back or not verified / 2 error; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex;' +
+    ' (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified /' +
+    ' 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex;' +
     ' --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); ' +
-    '--library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); ' +
+    '--library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; ' +
     '--format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
@@ -13676,7 +13677,7 @@ begin
   F.StartCol := 1;
   F.EndLine  := ImplLine;
   F.EndCol   := 1;
-  F.Message  := Msg;
+  F.Message  := WithCycleFixPointer(Msg, AProject, MyStem); { E18 T16: THIS unit and project }
   F.FixHint  := Format('cycles --fix --project "%s" --db "%s" --unit %s',
     [(if AProject <> '' then AProject else CNoProject), ADb, MyStem]);
   Result:= Result + [F];
@@ -20319,6 +20320,13 @@ begin
     if LintRuleWants(Nr, LINT_GATE_PROJECT_RULES) then
       Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
         Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
+    { E18 T16: a circular-uses message ends in a `cycles --fix` pointer; --project names the real
+      project in it instead of the placeholder (the stem stays the finding's anchor unit). }
+    if AArgs.ProjectPath <> '' then
+      for var Ci:= 0 to High(Findings) do
+        if SameText(Findings[Ci].RuleId, 'circular-uses') then
+          Findings[Ci].Message:= WithCycleFixPointer(Findings[Ci].Message, AArgs.ProjectPath,
+            LowerCase(ChangeFileExt(ExtractFileName(Findings[Ci].FilePath), '')));
     { LibStore is the platform library index, already open above for the
       ownership/DCU checks. unused-unit-in-uses needs it because a PROJECT
       store cannot see System.IniFiles: without it the rule's own
