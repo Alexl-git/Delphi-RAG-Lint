@@ -72,6 +72,38 @@ $dsText = Get-Content -LiteralPath $ds -Raw
 Check 'docs-sync no longer defines its own Get-CaptionKey' (-not ($dsText -match '(?m)^function Get-CaptionKey'))
 Check 'docs-sync dot-sources the lib' ($dsText -match 'DocsSurfaceHarvest\.ps1')
 
+# --- the two implementations agree (PowerShell lib vs featuregen's FeatureGen.Live port) ----------
+# The harvest exists twice: this lib (docs-sync checks 1 and 5) and the Delphi port that
+# featuregen's registry checks B / C use. This is the test that keeps them equal on the REAL repo.
+Write-Host '-- PowerShell lib vs featuregen dump-live (real repo)' -ForegroundColor Cyan
+function Compare-HarvestSets([string]$Kind, [string[]]$Ps, [string[]]$Port) {
+  $onlyPs = @($Ps | Where-Object { $Port -cnotcontains $_ })
+  $onlyPort = @($Port | Where-Object { $Ps -cnotcontains $_ })
+  return [pscustomobject]@{ Kind = $Kind; OnlyPs = $onlyPs; OnlyPort = $onlyPort; Equal = (($onlyPs.Count + $onlyPort.Count) -eq 0) }
+}
+$cmpA = Compare-HarvestSets 'ctl' @('a', 'b') @('a', 'b')
+$cmpB = Compare-HarvestSets 'ctl' @('a', 'b') @('a', 'c')
+Check 'POSITIVE CONTROL: the set comparison is equal for equal sets and names a seeded difference' ($cmpA.Equal -and (-not $cmpB.Equal) -and ($cmpB.OnlyPs -contains 'b') -and ($cmpB.OnlyPort -contains 'c'))
+. (Join-Path $Repo 'tools\featuregen-ensure.ps1')
+$engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
+$fgExe = $null
+try { $fgExe = Get-FeatureGenExe -Repo $Repo } catch { Check 'featuregen.exe is available and current' $false $_.Exception.Message }
+if ($fgExe -and -not (Test-Path -LiteralPath $engine)) { Check 'engine available for the parity run' $false $engine; $fgExe = $null }
+if ($fgExe) {
+  $dump = @(& $fgExe dump-live --repo $Repo --engine $engine 2>&1)
+  Check 'featuregen dump-live succeeds' ($LASTEXITCODE -eq 0) (($dump | Select-Object -First 3) -join ' / ')
+  $portVerbs = @($dump | Where-Object { "$_" -like "verb`t*" } | ForEach-Object { ("$_" -split "`t", 2)[1] })
+  $portCaps = @($dump | Where-Object { "$_" -like "caption`t*" } | ForEach-Object { ("$_" -split "`t", 2)[1] })
+  $help = (& $engine --help 2>&1 | Out-String)
+  $psVerbs = @(Get-HelpVerbList -HelpText $help)
+  $psCaps = @((Get-LiveMenuCaptions -Repo $Repo -ExcludeDialogButtons))
+  Check 'both harvests are non-trivial (verbs >= 20, captions >= 40)' (($psVerbs.Count -ge 20) -and ($portVerbs.Count -ge 20) -and ($psCaps.Count -ge 40) -and ($portCaps.Count -ge 40)) "(verbs ps=$($psVerbs.Count) port=$($portVerbs.Count); captions ps=$($psCaps.Count) port=$($portCaps.Count))"
+  $cv = Compare-HarvestSets 'verbs' $psVerbs $portVerbs
+  Check 'help verbs: PowerShell lib == featuregen port' $cv.Equal ("only-ps: $($cv.OnlyPs -join ', ') | only-port: $($cv.OnlyPort -join ', ')")
+  $cc = Compare-HarvestSets 'captions' $psCaps $portCaps
+  Check 'menu captions: PowerShell lib == featuregen port' $cc.Equal ("only-ps: $($cc.OnlyPs -join ' | ') | only-port: $($cc.OnlyPort -join ' | ')")
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SURFACE HARVEST LIB: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SURFACE HARVEST LIB: PASS' -ForegroundColor Green

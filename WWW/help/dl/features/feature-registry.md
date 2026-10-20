@@ -43,7 +43,9 @@ team that shipped it -- the registry only has to know it exists and link to it.
 ### Registering a feature (every shipped change, however small)
 
 The tool is `featuregen.exe` (see featuregen; it replaced the PowerShell
-scripts `feature-registry.ps1` and `build-feature-pages.ps1`).
+scripts `feature-registry.ps1` and `build-feature-pages.ps1`). It is not on PATH: below,
+`featuregen` means `src\tools\featuregen\featuregen.exe`, run from the repo root (build it with
+`build\_build_featuregen_local.bat`; the gates rebuild it when it is missing or stale).
 
 1. `featuregen add --id <id> --title "<name>" --group <group> --owner <TEAM> --summary "<one line>" --intro "<what, when, needs>" --wiki-page <page> --surface "cli:<verb>[/<sub>] ;; ide-menu:drag-lint > Uses & Dependencies > Call Graph" [--requires index,...] [--aliases "..."]`
    -- an unknown group or team is refused unless `--new-group` / `--new-team` creates it.
@@ -51,7 +53,7 @@ scripts `feature-registry.ps1` and `build-feature-pages.ps1`).
 2. Write or update `docs\wiki\<page>.md` -- you own it.
 3. `featuregen normalise`, then `featuregen build --all`, and commit the regenerated pages,
    blocks, manifest, `cli-reference.md` and website set WITH the feature.
-4. `featuregen verify --id <id>` once the entry matches what you shipped -- your own entries only.
+4. `featuregen verify --id <id> --by <TEAM>` once the entry matches what you shipped -- your own entries only.
 5. `pwsh -File tests\autotest\run_feature_registry_guard.ps1` -- it names exactly
    what is missing and prints a JSON skeleton for it.
 6. Moving or renaming a menu item? `featuregen blast-radius --menu-path "drag-lint > Uses & Dependencies"`

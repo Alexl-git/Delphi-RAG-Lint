@@ -1506,7 +1506,7 @@ begin
   end;
 end;
 
-procedure TChecker.CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);  // dl:ok too-many-locals@7fef, cyclomatic-complexity@cc84, cognitive-complexity@723a -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original; one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
+procedure TChecker.CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);  // dl:ok too-many-locals@7fef, cyclomatic-complexity@cc84, cognitive-complexity@723a -- REVIEWED 2026-10-19: one routine per ported check, kept 1:1 with the retired PowerShell original so the golden parity tests compare like with like
 var
   lAll: TArray<TJSONObject>;
   lE: TJSONObject;

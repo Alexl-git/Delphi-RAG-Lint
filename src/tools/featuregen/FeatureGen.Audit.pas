@@ -48,7 +48,7 @@ function SurfaceHash(const pEntry: TFeatureEntry; const pLive: TLiveSurface; con
 
 /// <summary>Runs every audit rule over the registry.</summary>
 /// <param name="pReg">Loaded registry; deprecated entries are skipped.</param>
-/// <param name="pRepo">Repo root; wiki bodies are read from docs\wiki\&lt;WikiPage&gt;.md.</param>
+/// <param name="pRepo">Repo root; wiki bodies are read from docs\wiki\&lt;WikiPage&gt;.md. A wikiPage listed in features\site-format.json generatedWikiPages counts as an empty body (the leaf has no Details section), so such an entry without an intro is thin-leaf.</param>
 /// <param name="pLive">Live surface for surface-changed; nil: that kind is not reported.</param>
 /// <param name="pHelp">Engine help for surface-changed (see SurfaceHash).</param>
 /// <param name="pToday">The date stale-verified counts from.</param>
@@ -66,6 +66,7 @@ uses
   , System.DateUtils
   , System.RegularExpressions
   , System.Generics.Collections
+  , FeatureGen.SiteFormat
   ;
 
 function HelpBlock(const pHelp: TLiveHelp; const pVerb, pSub: string): string;
@@ -180,12 +181,15 @@ begin
   end;
 end;
 
-function WikiBodyLength(const pEntry: TFeatureEntry; const pRepo: string): Integer;
+function WikiBodyLength(const pEntry: TFeatureEntry; const pRepo: string; pHasFmt: Boolean; const pFmt: TSiteFormat): Integer;
 var
   lFile: string;
 begin
   Result := 0;
   if pEntry.WikiPage = '' then
+    Exit;
+  // a generated page (Features, Home, ...) is never the entry's own body: its leaf has no Details section
+  if pHasFmt and IsGeneratedWikiPage(pFmt, pEntry.WikiPage) then
     Exit;
   lFile := TPath.Combine(pRepo, 'docs\wiki\' + pEntry.WikiPage + '.md');
   if TFile.Exists(lFile) then
@@ -217,6 +221,8 @@ var
   lS: TSurface;
   lNoUsage, lNoFlags, lNoSteps: Boolean;
   lAge: Integer;
+  lFmt: TSiteFormat;
+  lHasFmt: Boolean;
 
   procedure Add(const pKind: string);
   var
@@ -231,6 +237,10 @@ var
 begin
   lList := TList<TAuditFinding>.Create;
   try
+    lHasFmt := TFile.Exists(TPath.Combine(pRepo, 'features\site-format.json'));
+    lFmt := Default(TSiteFormat);
+    if lHasFmt then
+      lFmt := LoadSiteFormat(pRepo);
     for lE in pReg.Entries do
     begin
       if lE.Status = 'deprecated' then
@@ -248,7 +258,7 @@ begin
         else if (lS.Kind = 'ide-menu') or (lS.Kind = 'ide-context') or (lS.Kind = 'ide-about') or (lS.Kind = 'tool-window') then
           lNoSteps := lNoSteps or (Length(lS.Steps) = 0);
       end;
-      if (lE.Intro = '') and (WikiBodyLength(lE, pRepo) < AUDIT_THIN_CHARS) then
+      if (lE.Intro = '') and (WikiBodyLength(lE, pRepo, lHasFmt, lFmt) < AUDIT_THIN_CHARS) then
         Add('thin-leaf');
       if lNoUsage then
         Add('no-usage');

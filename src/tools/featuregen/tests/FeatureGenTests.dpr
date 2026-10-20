@@ -142,8 +142,10 @@ begin
   end;
 end;
 
-const
-  SCRATCH = 'C:\TEMP\claude\featuregen-task4\scratch';  // dl:ok hardcoded-absolute-path@7ba9 -- REVIEWED 2026-10-19: test harness: names the main-tree engine and a scratch folder under C:\TEMP\claude on purpose
+var
+  { One folder per RUN (temp path + process id), created and removed by the main block, so two
+    concurrent runs on this machine never delete each other's golden repo or running stub exe. }
+  SCRATCH: string = '';
 
 function FreshDir(const pName: string): string;
 begin
@@ -777,7 +779,9 @@ end;
 
 procedure TestGeneratedWikiPage;
 var
-  lRepo, lOut, lMsg, lLeaf, lAsk: string;
+  lRepo, lOut, lMsg, lLeaf, lAsk, lFile: string;
+  lAll: Boolean;
+  lCount: Integer;
 begin
   lRepo := CopySiteRepo('gen-repo');
   TFile.WriteAllText(TPath.Combine(lRepo, 'features\entries\gen-page.json'),
@@ -795,6 +799,15 @@ begin
     Check('Site.GeneratedWikiPageLeafNoDetailsNoMapRow',
       (Pos('title: Gen page', lLeaf) > 0) and (Pos('## Details', lLeaf) = 0) and (Pos('Use ', lLeaf) = 0)  // dl:ok boolean-expression-complexity@29c8 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos('"Features"', ReadSiteFile(lOut, 'wiki-map.json')) = 0) and (Pos('See Features now.', lAsk) > 0) and (Pos('gen-page.md', lAsk) = 0), lLeaf);
+    lAll := True;
+    lCount := 0;
+    for lFile in TDirectory.GetFiles(TPath.Combine(lOut, 'features'), '*.md') do
+    begin
+      Inc(lCount);
+      if Pos('[All features](../index.md)', ReadBytesText(lFile)) = 0 then
+        lAll := False;
+    end;
+    Check('Site.EveryLeafLinksBackToIndex', lAll and (lCount > 1), IntToStr(lCount) + ' leaves');
   end;
 end;
 
@@ -1161,10 +1174,22 @@ end;
   featuregen's own registry entry, so GoldenRepo rebuilds exactly that tree. ---- }
 
 const
-  MAIN_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';  // dl:ok hardcoded-absolute-path@6bef -- REVIEWED 2026-10-19: test harness: names the main-tree engine and a scratch folder under C:\TEMP\claude on purpose
+  ENGINE_ENV = 'FEATUREGEN_TEST_ENGINE';
+  MAIN_ENGINE_FALLBACK = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';  // dl:ok hardcoded-absolute-path@7f58 -- REVIEWED 2026-10-20: last-resort fallback only (documented in MainEngine); the engine normally comes from FEATUREGEN_TEST_ENGINE
   GOLDEN_STUB_NAME = 'golden-engine-stub.exe';
+  FROZEN_SCRATCH = 'C:\TEMP\claude\featuregen-task4\scratch';  // dl:ok hardcoded-absolute-path@8adf -- REVIEWED 2026-10-20: the scratch folder the golden check captures were written under; the live per-run folder is mapped onto it before comparing
   STUB_USAGE_EXIT = 2;
   FROZEN_SUFFIX = '.frozen';
+
+{ The live engine the live-surface tests run: the file named by the environment variable
+  FEATUREGEN_TEST_ENGINE when set, else the main-tree path MAIN_ENGINE_FALLBACK (the worktree's
+  own third_party\dll-win64 copy can be stale, so it is not preferred). }
+function MainEngine: string;
+begin
+  Result := GetEnvironmentVariable(ENGINE_ENV);
+  if Result = '' then
+    Result := MAIN_ENGINE_FALLBACK;
+end;
 
 var
   GGoldenRepo: string = '';
@@ -1601,7 +1626,7 @@ end;
 
 function SharedLive(const pRepo: string): TLiveSurface;
 begin
-  Result := SharedLiveFrom(pRepo, MAIN_ENGINE);
+  Result := SharedLiveFrom(pRepo, MainEngine);
 end;
 
 procedure TestSharedLiveNotCachedOnFailure(const pRepo: string);
@@ -1690,7 +1715,7 @@ begin
   lLive := TLiveSurface.Create;
   try
     try
-      lLive.Harvest(lDir, MAIN_ENGINE);
+      lLive.Harvest(lDir, MainEngine);
     except
       on E: Exception do
         lMsg := E.Message;
@@ -1891,7 +1916,7 @@ begin
   try
     lFindings := RunCheckCommand(pCheckRepo, GoldenEngine(pRepo), pLevel, lNotes);
     for lF in lFindings do
-      lMine := lMine + [ScrubTodayDate(FindingText(lF))];
+      lMine := lMine + [ScrubTodayDate(FindingText(lF)).Replace(SCRATCH, FROZEN_SCRATCH)];
   except
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
@@ -2141,7 +2166,9 @@ begin
   Result := FreshDir(pName);
   for lRel in ['features', 'docs\wiki'] do
     TDirectory.Copy(TPath.Combine(pRepo, lRel), TPath.Combine(Result, lRel));
-  for lRel in ['CHANGELOG.md', 'src\core\DRagLint.Core.Model.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas'] do
+  // run_docs_sync_guard.ps1: LoadSiteFormat (audit) reads its $UndocumentedOnPurpose block
+  for lRel in ['CHANGELOG.md', 'src\core\DRagLint.Core.Model.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas',
+    'tests\autotest\run_docs_sync_guard.ps1'] do
     CopyFileTo(pRepo, Result, lRel);
 end;
 
@@ -2454,7 +2481,16 @@ begin
   TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\intro.json'),
     '{ "id": "intro", "title": "Intro", "group": "g-search", "owner": "CHARTS", "status": "shipped", "since": "0.1.0-alpha",'
     + ' "summary": "Has intro", "intro": "A real introduction.", "wikiPage": "Missing-page", "surfaces": [ { "type": "cli", "verb": "intro" } ], "audience": "both" }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\gen-bare.json'),
+    '{ "id": "gen-bare", "title": "Gen bare", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "Generated page, no intro", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "genbare" } ], "audience": "both" }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\gen-intro.json'),
+    '{ "id": "gen-intro", "title": "Gen intro", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "Generated page, intro", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "genintro" } ], "audience": "both" }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'docs\wiki\Features.md'), StringOfChar('y', 2000), TEncoding.ASCII);  // dl:ok large-magic-number@538e, magic-literal@538e -- REVIEWED 2026-10-20: test expectation: a body far over the thin limit, so only the generated-page rule can make the entry thin
   lF := AuditOf(lCopy, nil, nil, Date);
+  Check('Audit.ThinWhenWikiPageIsGenerated', HasKind(lF, 'gen-bare', 'thin-leaf') and not HasKind(lF, 'gen-intro', 'thin-leaf')
+    and not HasKind(lF, 'gen-bare', 'no-wiki-page'));
   Check('Audit.ThinEntryListed', HasKind(lF, 'thin', 'thin-leaf') and HasKind(lF, 'thin', 'no-usage') and HasKind(lF, 'thin', 'no-flags')
     and HasKind(lF, 'thin', 'no-questions') and not HasKind(lF, 'thin', 'no-wiki-page'));
   Check('Audit.ThinPositiveControls', not HasKind(lF, 'fat', 'thin-leaf') and not HasKind(lF, 'intro', 'thin-leaf')
@@ -2750,6 +2786,8 @@ begin
     RunGoldenEngineStub;
     Exit;
   end;
+  SCRATCH := TPath.Combine(TPath.GetTempPath, 'featuregen-tests-' + IntToStr(GetCurrentProcessId));
+  ForceDirectories(SCRATCH);
   try
     lRepo := FindRepoRoot;
     Check('Harness.RepoRootFound', lRepo <> '', ParamStr(0));
@@ -2827,6 +2865,12 @@ begin
   end;
   FreeAndNil(GLive);
   FreeAndNil(GGoldenLive);
+  try
+    TDirectory.Delete(SCRATCH, True);
+  except
+    on E: Exception do
+      Writeln('INFO scratch folder not removed: ', SCRATCH, ' (', E.Message, ')');
+  end;
   Writeln(Format('SUMMARY pass=%d fail=%d', [GPass, GFail]));
   if GFail > 0 then
     Halt(1);

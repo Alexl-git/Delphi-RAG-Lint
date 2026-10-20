@@ -15,8 +15,8 @@
   E  staleness is a [NOTE], never a FAIL (the periodic review consumes it)
 
   This runner executes  featuregen check --level full  and  featuregen build --all --check
-  on the real repo. A MISSING featuregen.exe or engine is "GUARD BROKEN" (exit 1), never a
-  pass. Before the real run it proves, on a scratch copy of the registry, that the tool goes
+  on the real repo. A MISSING or stale featuregen.exe is rebuilt (tools\featuregen-ensure.ps1); a failed rebuild
+  or a missing engine is "GUARD BROKEN" (exit 1), never a pass. Before the real run it proves, on a scratch copy of the registry, that the tool goes
   RED on a seeded defect and green on the unseeded copy (the positive control); the
   injected-verb / caption / MCP-tool / hand-edit controls for B, C and D live in
   src\tools\featuregen\tests\FeatureGenTests.dpr (run by run_featuregen_tests.ps1).
@@ -39,9 +39,28 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:Failed = $true }
 }
 Write-Host '== feature registry guard (featuregen) ==' -ForegroundColor Cyan
-$exe = if ($env:FEATUREGEN_EXE) { $env:FEATUREGEN_EXE } else { Join-Path $Repo 'src\tools\featuregen\featuregen.exe' }
+. (Join-Path $Repo 'tools\featuregen-ensure.ps1')
 $engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
-if (-not (Test-Path -LiteralPath $exe)) { Write-Host "GUARD BROKEN: featuregen.exe not found: $exe (build\_build_featuregen_local.bat builds it)" -ForegroundColor Red; exit 1 }
+try { $exe = Get-FeatureGenExe -Repo $Repo }
+catch { Write-Host "GUARD BROKEN: $($_.Exception.Message) (build\_build_featuregen_local.bat builds it)" -ForegroundColor Red; exit 1 }
+# ---- control 0: the freshness rule itself goes RED on a missing / stale exe -------------
+$fresh = Join-Path $env:TEMP "drag-lint-featuregen-fresh-$PID-$([guid]::NewGuid().ToString('N'))"
+$fdir = Join-Path $fresh 'src\tools\featuregen'
+New-Item -ItemType Directory -Path $fdir -Force | Out-Null
+try {
+  [IO.File]::WriteAllText((Join-Path $fdir 'x.pas'), "unit x;`r`n", [Text.Encoding]::ASCII)
+  $miss = $null; try { Get-FeatureGenExe -Repo $fresh -NoBuild | Out-Null } catch { $miss = $_.Exception.Message }
+  if ($miss -notmatch 'is missing') { Write-Host 'GUARD BROKEN: a missing featuregen.exe was not refused' -ForegroundColor Red; exit 1 }
+  $fx = Join-Path $fdir 'featuregen.exe'
+  [IO.File]::WriteAllText($fx, 'x', [Text.Encoding]::ASCII)
+  (Get-Item -LiteralPath $fx).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(-1)
+  $stale = $null; try { Get-FeatureGenExe -Repo $fresh -NoBuild | Out-Null } catch { $stale = $_.Exception.Message }
+  if ($stale -notmatch 'older than its sources') { Write-Host 'GUARD BROKEN: a stale featuregen.exe was not refused' -ForegroundColor Red; exit 1 }
+  (Get-Item -LiteralPath $fx).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(1)
+  $ok = $null; try { $ok = Get-FeatureGenExe -Repo $fresh -NoBuild } catch { $ok = $null }
+  if ($ok -ne $fx) { Write-Host 'GUARD BROKEN: a fresh featuregen.exe was refused' -ForegroundColor Red; exit 1 }
+} finally { [IO.Directory]::Delete($fresh, $true) }
+Write-Host '  [CTRL] the freshness rule refuses a missing and a stale featuregen.exe and accepts a fresh one' -ForegroundColor DarkGray
 if (-not (Test-Path -LiteralPath $engine)) { Write-Host "GUARD BROKEN: engine not found: $engine" -ForegroundColor Red; exit 1 }
 if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null

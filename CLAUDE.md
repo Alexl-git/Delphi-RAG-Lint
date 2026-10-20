@@ -25,7 +25,11 @@ Spec: `docs\superpowers\specs\2026-10-19-featuregen-design.md` (the 2026-10-05 P
 `docs\superpowers\specs\2026-10-05-feature-registry-design.md`, is superseded); page
 `docs\wiki\featuregen.md`. The registry, its checks and every generated page belong to
 `featuregen.exe` (`src\tools\featuregen`; build it with `build\_build_featuregen_local.bat`;
-the PowerShell scripts that did this are retired). `featuregen --help` lists every verb.
+the PowerShell scripts that did this are retired). `featuregen` below means
+`src\tools\featuregen\featuregen.exe` (not on PATH; run it from the repo root, e.g.
+`.\src\tools\featuregen\featuregen.exe --help`, which lists every verb). The gates
+(`tools\featuregen-gate.ps1`, `run_feature_registry_guard.ps1`) rebuild the exe themselves when
+it is missing or older than its sources.
 1. `featuregen add --id .. --title .. --group .. --owner .. --summary .. --intro ..
    --wiki-page .. --surface "<type>:<...> ;; <type>:<...>"`; surfaces carry the FULL menu path
    (`ide-menu:<top> > Submenu > Caption`), every level. Moving a menu item:
@@ -40,7 +44,7 @@ the PowerShell scripts that did this are retired). `featuregen --help` lists eve
    `dl:registry` block or anything under `WWW\help\dl\`; edit the entry or `features\templates\`
    and regenerate. Groups and teams are data (`--new-group` / `--new-team`).
 6. A commit that adds or changes a feature updates ITS OWN entry (usage, flags,
-   steps, questions, wiki page) and runs `featuregen verify --id <its id>`. Never
+   steps, questions, wiki page) and runs `featuregen verify --id <its id> --by <TEAM>`. Never
    verify another team's entry; report it to its owner instead.
 `status: internal` = accepted-but-unadvertised verbs; docs-sync's `$UndocumentedOnPurpose`
 stays a separate list (owner 2026-10-05).

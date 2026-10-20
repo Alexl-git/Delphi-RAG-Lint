@@ -381,11 +381,69 @@ begin
   end;
 end;
 
+{ Test aid (not in PrintUsage): prints the live help verbs and the main-menu captions this tool
+  harvests, one "verb<TAB>x" / "caption<TAB>x" line each, so run_docs_surface_harvest_lib.ps1 can
+  compare them with the PowerShell harvest (tests\autotest\lib\DocsSurfaceHarvest.ps1). }
+function DumpLiveCommand(pArgs: TArray<string>): Integer;
+var
+  lRepo, lEngine, lS: string;
+  lI: Integer;
+  lLive: TLiveSurface;
+begin
+  lRepo := '';
+  lEngine := '';
+  lI := 0;
+  while lI + 1 < Length(pArgs) do
+  begin
+    if pArgs[lI] = '--repo' then
+      lRepo := pArgs[lI + 1]
+    else if pArgs[lI] = '--engine' then
+      lEngine := pArgs[lI + 1];
+    Inc(lI, 2);
+  end;
+  Result := 1;
+  try
+    if lRepo = '' then
+      lRepo := FindRepo(GetCurrentDir);
+    if lRepo = '' then
+      raise EFeatureGen.Create('dump-live: no repo found; pass --repo');
+    lRepo := TPath.GetFullPath(lRepo);
+    if lEngine = '' then
+      lEngine := TPath.Combine(lRepo, LoadSiteFormat(lRepo).Engine);
+    lLive := TLiveSurface.Create;
+    try
+      lLive.Harvest(lRepo, lEngine);
+      for lS in lLive.HelpVerbs do
+        Writeln('verb'#9, lS);
+      for lS in lLive.Captions do
+        Writeln('caption'#9, lS);
+    finally
+      lLive.Free;
+    end;
+    Result := 0;
+  except
+    on E: Exception do
+      Writeln('featuregen: ', E.Message);
+  end;
+end;
+
 var
   lArgs: TArray<string>;
   lI: Integer;
 begin
-  if (ParamCount >= 1) and (ParamStr(1) = 'build') then
+  if (ParamCount >= 1) and ((ParamStr(1) = '--help') or (ParamStr(1) = '-h')) then
+  begin
+    PrintUsage;
+    ExitCode := 0;
+  end
+  else if (ParamCount >= 1) and (ParamStr(1) = 'dump-live') then
+  begin
+    SetLength(lArgs, ParamCount - 1);
+    for lI := 2 to ParamCount do
+      lArgs[lI - 2] := ParamStr(lI);
+    ExitCode := DumpLiveCommand(lArgs);
+  end
+  else if (ParamCount >= 1) and (ParamStr(1) = 'build') then
   begin
     SetLength(lArgs, ParamCount - 1);
     for lI := 2 to ParamCount do

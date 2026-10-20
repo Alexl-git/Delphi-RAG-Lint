@@ -10,9 +10,10 @@
   -Repo  repository root (default: the parent of this script's folder)
   -Full  also run "featuregen check --level full" (live surface, checks A-E)
 
-  The exe is the tool's build output, src\tools\featuregen\featuregen.exe (gitignored;
-  build\_build_featuregen_local.bat produces it), or the file named by the environment
-  variable FEATUREGEN_EXE. The engine is <root>\third_party\dll-win64\drag-lint.exe.
+  The exe is the tool's build output, src\tools\featuregen\featuregen.exe (gitignored).
+  It is REBUILT here (build\_build_featuregen_local.bat) when missing or older than its
+  sources (tools\featuregen-ensure.ps1); a failed build is GATE BROKEN. Or the file named by
+  the environment variable FEATUREGEN_EXE (used as is). The engine is <root>\third_party\dll-win64\drag-lint.exe.
   The tool never ships: nothing here, and nothing in build\pack-lint-release.ps1,
   copies it into a payload.
 #>
@@ -21,10 +22,11 @@ param([string]$Repo = (Split-Path -Parent $PSScriptRoot), [switch]$Full)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Repo = (Resolve-Path -LiteralPath $Repo).Path
-$exe = if ($env:FEATUREGEN_EXE) { $env:FEATUREGEN_EXE } else { Join-Path $Repo 'src\tools\featuregen\featuregen.exe' }
+. (Join-Path $PSScriptRoot 'featuregen-ensure.ps1')
 $engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
-if (-not (Test-Path -LiteralPath $exe)) {
-  Write-Host "feature pages: GATE BROKEN -- featuregen.exe not found: $exe (build it with build\_build_featuregen_local.bat, or set FEATUREGEN_EXE)" -ForegroundColor Red
+try { $exe = Get-FeatureGenExe -Repo $Repo }
+catch {
+  Write-Host "feature pages: GATE BROKEN -- $($_.Exception.Message) (build\_build_featuregen_local.bat builds it, or set FEATUREGEN_EXE)" -ForegroundColor Red
   exit 1
 }
 if (-not (Test-Path -LiteralPath $engine)) {

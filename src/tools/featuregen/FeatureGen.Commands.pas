@@ -1081,8 +1081,8 @@ begin
         HarvestLive(pArgs, pRepo, lLive, lHelp);
       except
         on E: Exception do
-          if not pJson then
-            pOut('# audit: live surface unavailable (' + E.Message + '); surface-changed not checked');
+          // stderr in both modes: a JSON consumer must see "not checked" too, without breaking the JSON on stdout
+          Writeln(ErrOutput, '# audit: live surface unavailable (' + E.Message + '); surface-changed not checked');
       end;
     lFindings := AuditRegistry(lReg, pRepo, lLive, lHelp, Date);
     lArr := TJSONArray.Create;

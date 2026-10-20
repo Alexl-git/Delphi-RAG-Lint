@@ -13,11 +13,11 @@ Source: `src\tools\featuregen\`. Build: `build\_build_featuregen_local.bat` (Win
 is `src\tools\featuregen\featuregen.exe`, gitignored). Tests: `build\_build_featuregen_tests_local.bat`
 then `src\tools\featuregen\tests\FeatureGenTests.exe`, or `tests\autotest\run_featuregen_tests.ps1`.
 
-## Verbs
+Tests read the live engine from the environment variable `FEATUREGEN_TEST_ENGINE` (fallback: the main-tree\n`drag-lint.exe`) and keep their scratch files in a per-run folder under the temp directory.\n\nLint: featuregen has no `.dproj`; its index is a directory index. After an edit run\n`drag-lint.exe index src\tools\featuregen --db src\tools\featuregen\_D-RAG\featuregen.sqlite` and\n`drag-lint.exe lint-all --db src\tools\featuregen\_D-RAG\featuregen.sqlite --enable magic-literal,multiple-statements-per-line,commented-out-code`\n(expected: 0 findings; `drag-lint-lint.json` beside the sources holds the naming setting).\n\n## Verbs
 
 Every verb takes `--repo <dir>` (default: found above the current directory) and the ones that
 read the live surface take `--engine <drag-lint.exe>` (default
-`third_party\dll-win64\drag-lint.exe`). `featuregen --help` is the full list.
+`third_party\dll-win64\drag-lint.exe`). `featuregen --help` is the full list. `featuregen` is not on PATH: call `src\tools\featuregen\featuregen.exe` from the repo root.
 
 | Verb | What it does |
 |---|---|
@@ -31,7 +31,7 @@ read the live surface take `--engine <drag-lint.exe>` (default
 | `normalise` | rewrite entries into canonical JSON |
 | `import-help` | seed usage / flags / pitfalls of cli entries from the engine `--help`; never overwrites a field, never verifies |
 | `audit` | one line per gap: thin entries, stale verification, changed surface |
-| `verify` | stamp an entry as verified: date, who, build and a hash of its live surface |
+| `verify` | stamp an entry as verified: `--id <id> --by <TEAM>` records date, who, build and a hash of its live surface |
 
 Outputs are 7-bit ASCII with CRLF line ends, written only when the bytes differ, with no
 dates in them. A non-ASCII character in a rendered output fails the build and names the
@@ -48,7 +48,7 @@ path -- never a pass.
 ## The self-verify rule
 
 A commit that adds or changes a feature updates ITS OWN entry (usage, flags, steps,
-questions, wiki page) and runs `featuregen verify --id <its id>`. Never verify another
+questions, wiki page) and runs `featuregen verify --id <its id> --by <TEAM>`. Never verify another
 team's entry; report it to its owner instead. `verify` records the build version and a hash
 of the live surface, so `featuregen audit` reports "surface changed since verified" when the
 help line or flags move afterwards.

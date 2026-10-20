@@ -55,6 +55,8 @@ type
 const
   /// <summary>Stands in for the updated value while a leaf is hashed (set when TSiteFormat.Version is non-empty).</summary>
   UPDATED_TOKEN = 'UPDATEDVERSIONTOKEN';
+  /// <summary>Leaf `order` = group order * this stride + the 1-based place within the group (spec 5.2).</summary>
+  SITE_ORDER_STRIDE = 1000;
 
 /// <summary>Renders the website leaf page of one entry.</summary>
 /// <param name="pEntry">The entry.</param>
@@ -243,7 +245,7 @@ begin
   for lE in pReg.Entries do
     if EntryOnSite(pFmt, lE) and (lE.Group = pEntry.Group) and (CompareStr(lE.Id, pEntry.Id) < 0) then
       Inc(lPlace);
-  Result := GroupOrder(pReg, pEntry.Group) * 1000 + lPlace;  // dl:ok magic-literal@f156 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
+  Result := GroupOrder(pReg, pEntry.Group) * SITE_ORDER_STRIDE + lPlace;
 end;
 
 function FrontMatter(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry): string;

@@ -316,6 +316,9 @@ end;
 procedure TLiveHelp.Load(const pExe: string);
 begin
   LoadFromText(RunCapture(pExe, '--help'));
+  // a crashing or half-started engine prints (almost) nothing: never build pages from an empty help
+  if TRegEx.Matches(Text, '(?m)^\s{2}drag-lint\s+[a-z]').Count < MIN_HELP_VERBS then
+    raise EFeatureGenLive.CreateFmt('engine help from %s lists fewer than %d verbs (engine crashed or not started?)', [pExe, MIN_HELP_VERBS]);
 end;
 
 procedure TLiveHelp.LoadFromText(const pText: string);

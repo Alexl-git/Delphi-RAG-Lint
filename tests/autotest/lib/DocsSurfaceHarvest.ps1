@@ -1,11 +1,13 @@
 #Requires -Version 7.3
 <#
-  DocsSurfaceHarvest.ps1 -- the ONE definition of how the live CLI verb list and
-  the live IDE caption set are harvested. Dot-sourced by
-  tests\autotest\run_docs_sync_guard.ps1 (checks 1 and 5) and by
-  featuregen (FeatureGen.Live, a port of the retired Get-LiveSurface). Extracted 2026-10-05 so the
-  feature registry could not fork the regexes silently; a change here changes
-  both guards, which is the point.
+  DocsSurfaceHarvest.ps1 -- how the live CLI verb list and the live IDE caption set are
+  harvested for tests\autotest\run_docs_sync_guard.ps1 (checks 1 and 5). Extracted 2026-10-05.
+  Since the 2026-10 featuregen cut-over there are TWO implementations: this lib, and the
+  Delphi port src\tools\featuregen\FeatureGen.Live.pas that the registry checks B / C use.
+  tests\autotest\run_docs_surface_harvest_lib.ps1 keeps them equal: it runs
+  `featuregen dump-live` on the real repo and compares the help-verb set and the main-menu
+  caption set with Get-HelpVerbList / Get-LiveMenuCaptions -ExcludeDialogButtons (with a
+  seeded-difference positive control). Change a regex here and there together.
 
   No side effects: pure functions over text and the plugin sources on disk.
   Strict mode is set INSIDE each function, not at the top of this file: a
