@@ -14,7 +14,7 @@ updated: 1.32.0-alpha
 
 The machine-checked master list of every feature, and the generator of the index pages.
 
-Register a feature with tools\feature-registry.ps1 add, regenerate the pages with tools\build-feature-pages.ps1, and let the battery guard name what is missing. Needs PowerShell 7.3 and a repository clone.
+Register a feature with featuregen add, regenerate the pages with featuregen build --all, and let the battery guard name what is missing. Needs a repository clone and a built featuregen.exe (see the featuregen page); the publish scripts need PowerShell 7.3.
 
 **Needs:** powershell7, repo-clone
 
@@ -23,7 +23,7 @@ Register a feature with tools\feature-registry.ps1 add, regenerate the pages wit
 The master list of every feature drag-lint ships, as data: one JSON file per
 feature under `features\entries\`, two imported families (lint rules from
 `drag-lint rules --json`, chart questions from `REPORT_QUESTIONS`), groups and
-teams as data, and a generator that writes the pages you are reading the index
+teams as data, and a generator (`featuregen`) that writes the pages you are reading the index
 of. The registry owns the LIST; the detail page for each feature stays with the
 team that shipped it -- the registry only has to know it exists and link to it.
 
@@ -42,64 +42,38 @@ team that shipped it -- the registry only has to know it exists and link to it.
 
 ### Registering a feature (every shipped change, however small)
 
-1. `pwsh -File tools\feature-registry.ps1 add -Id <id> -Title "<name>" -Group <group> -Owner <TEAM> -Summary "<one line>" -Intro "<what, when, needs>" -WikiPage <page> -Surface "cli:<verb>[/<sub>] ;; ide-menu:drag-lint > Uses & Dependencies > Call Graph" [-Requires index,...] [-Aliases "..."]`
-   -- an unknown group or team is refused unless `-NewGroup` / `-NewTeam` creates it.
-   Several surfaces go in one `-Surface` argument separated by ` ;; `.
+The tool is `featuregen.exe` (see featuregen; it replaced the PowerShell
+scripts `feature-registry.ps1` and `build-feature-pages.ps1`).
+
+1. `featuregen add --id <id> --title "<name>" --group <group> --owner <TEAM> --summary "<one line>" --intro "<what, when, needs>" --wiki-page <page> --surface "cli:<verb>[/<sub>] ;; ide-menu:drag-lint > Uses & Dependencies > Call Graph" [--requires index,...] [--aliases "..."]`
+   -- an unknown group or team is refused unless `--new-group` / `--new-team` creates it.
+   Several surfaces go in one `--surface` argument separated by ` ;; `.
 2. Write or update `docs\wiki\<page>.md` -- you own it.
-3. `pwsh -File tools\build-feature-pages.ps1 -Normalise` and commit the regenerated pages,
-   blocks and manifest WITH the feature.
-4. `pwsh -File tests\autotest\run_feature_registry_guard.ps1` -- it names exactly
+3. `featuregen normalise`, then `featuregen build --all`, and commit the regenerated pages,
+   blocks, manifest, `cli-reference.md` and website set WITH the feature.
+4. `featuregen verify --id <id>` once the entry matches what you shipped -- your own entries only.
+5. `pwsh -File tests\autotest\run_feature_registry_guard.ps1` -- it names exactly
    what is missing and prints a JSON skeleton for it.
-5. Moving or renaming a menu item? `feature-registry.ps1 blast-radius -MenuPath "drag-lint > Uses & Dependencies"`
-   first, then `move-menu -From "<old prefix>" -To "<new prefix>"`, in the same commit
+6. Moving or renaming a menu item? `featuregen blast-radius --menu-path "drag-lint > Uses & Dependencies"`
+   first, then `featuregen move-menu --from "<old prefix>" --to "<new prefix>"`, in the same commit
    as the plugin change.
 
 ### Other verbs
 
-`update -Id x -Set "field=value ;; field2=value2"`, `find -Text <words>`,
-`deprecate -Id x -SupersededBy y`, `normalise` (canonical form), `check`
-(the guard's checks A-D on their own), `generate -Check` (the publish gate used by
-`tools\publish-wiki.ps1`, `build\pack-lint-release.ps1` and `tools\publish-release.ps1`).
+`update --id x --set "field=value ;; field2=value2"`, `find --text <words>`,
+`deprecate --id x --superseded-by y`, `normalise` (canonical form), `check`
+(the guard's checks A-E), `build --all --check` (the publish gate, reached through
+`tools\featuregen-gate.ps1` from `tools\publish-wiki.ps1`, `build\pack-lint-release.ps1`
+and `tools\publish-release.ps1`), `import-help`, `audit`, `verify`.
 
 ### Script reference
 
-Every flag of the three registry scripts. Each script's own comment header says
-the same; the two must agree.
-
-#### `tools\feature-registry.ps1 <verb> ...`
-
-| Verb | Flags |
-|---|---|
-| `add` | `-Id <id> -Title <t> -Group <g> -Owner <TEAM> -Summary <s> -WikiPage <page> -Surface "<spec> ;; <spec>"`; optional `-Intro <i>`, `-Status shipped\|experimental\|planned\|deprecated\|internal`, `-Since <ver>`, `-Audience human\|agent\|both`, `-Requires <tok,...>`, `-Aliases <a,...>`, `-Related <id,...>`, `-Notes <n>`, `-HomeOrder <n>`, `-By <who>` (default: the user name); `-NewGroup -GroupTitle <t> -GroupSummary <s>` registers an unknown group, `-NewTeam -TeamTitle <t> -TeamSummary <s>` an unknown team |
-| `update` | `-Id <id> -Set "field=value ;; field2=value2"` -- JSON for arrays and objects (`aliases=["a","b"]`); `field=` with no value removes the field |
-| `find` | `-Text <text>` [`-IncludeChildren`: also the lint-rule and chart-question family rows] |
-| `blast-radius` | one of `-MenuPath "<node>"`, `-VerbName <verb>`, `-WikiPage <page>`, `-Group <g>`; [`-IncludeChildren`] |
-| `move-menu` | `-From "<old prefix>" -To "<new prefix>"` [`-WhatIf`: print, write nothing]; also rewrites `menuPrefix` in `families\chart-questions.json` when the node covers it. `-To` must be `drag-lint` or start `drag-lint > ` (the plugin's root menu); any other target is refused |
-| `deprecate` | `-Id <id>` [`-SupersededBy <id>`] [`-RemovedIn <ver>`] |
-| `normalise` | none -- rewrites entries into canonical JSON, `groups.json` / `teams.json` one row per line; families, exemptions, related-projects and the `features\templates` pages get CRLF / trailing newline / BOM fixes only |
-| `check` | [`-Level WellFormed\|Full`] (default `Full`, which needs the engine exe) |
-| `generate` | [`-Check`] [`-OutDir <dir>`] -- the same as `build-feature-pages.ps1` |
-
-Common to every verb: `-Repo <root>` (default: the parent of `tools\`) and `-Json`
-(machine output). Surface specs: `cli:<verb>[/<sub>][|<example>]`,
+The flags of `featuregen` are on its own page and in `featuregen --help`.
+Surface specs: `cli:<verb>[/<sub>][|<example>]`,
 `ide-menu:<full path, every level>` (for example `ide-menu:drag-lint > Uses & Dependencies > Call Graph (Butterfly)...`), `ide-context:<Structure form|Project Manager|Editor>|<caption>`,
 `ide-about:<caption>`, `tool-window:<View > Tool Windows > X>`, `shortcut:<keys>`,
 `lsp:<method>`, `mcp:<tool>`, `script:<repo path>[|<args>]`, `exe:<name.exe>[|<menu>]`,
 `workflow:<repo .md>`. Exit codes: 0 ok, 1 refused / check failed / no hits, 2 usage.
-
-#### `tools\build-feature-pages.ps1`
-
-| Flag | Does |
-|---|---|
-| (none) | regenerate every output; a file is written only when its bytes differ |
-| `-Check` | write nothing; exit 1 with a diff head per output that would change (the publish gate) |
-| `-OutDir <dir>` | render into another directory (the guard's byte comparison) |
-| `-Normalise` | first rewrite every entry and data file into canonical form |
-| `-Repo <root>` | repository root (default: the parent of `tools\`) |
-
-Exit codes: 0 nothing changed or everything written; 1 `-Check` found a difference,
-or the generator failed.
-
 #### `tools\publish-release.ps1 -Version <X.Y.Z-alpha>`
 
 | Flag | Does |
@@ -117,10 +91,10 @@ or the generator failed.
 
 0. preflight -- version constant, CHANGELOG heading, deployed engine present
 1. build the engine (`build\build_draglint_win64.bat`)
-2. `tools\build-feature-pages.ps1 -Check` -- the generated pages are committed
+2. `tools\featuregen-gate.ps1` (`featuregen build --all --check`) -- the generated pages are committed
 3. `tools\build-manual.ps1` -- exactly once, after the last doc change
 4. `tests\run_battery.ps1`
-5. `tools\publish-wiki.ps1` (re-runs the `-Check` gate itself)
+5. `tools\publish-wiki.ps1` (re-runs the featuregen gate itself)
 6. `installer\Build-Installer.ps1` -- the Inno Setup installer is the release package;
    no zip archives are built (the deployed engine is not touched)
 7. prints the `git tag` and `gh release create` commands, which are still run by hand
@@ -158,7 +132,7 @@ button and a menu item sharing one variable name would both count as buttons.
 
 ### Files
 
-`features\groups.json`, `teams.json` (data; add through `-NewGroup` / `-NewTeam`),
+`features\groups.json`, `teams.json` (data; add through `--new-group` / `--new-team`),
 `exemptions.json` (containers and headers that are not features, each WITH a
 reason, asserted two-way), `seed-backlog.json` (seeded entries still owing an
 `intro` and `lastVerified`; the guard prints the remaining count per team, the

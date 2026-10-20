@@ -21,20 +21,27 @@ weaken it to get green.
 
 ## Feature registry (every shipped change, however small)
 
-Spec: `docs\superpowers\specs\2026-10-05-feature-registry-design.md`; page
-`docs\wiki\Feature-Registry.md`.
-1. `tools\feature-registry.ps1 add -Id .. -Title .. -Group .. -Owner .. -Summary .. -Intro ..
-   -WikiPage .. -Surface "<type>:<...> ;; <type>:<...>"`; surfaces carry the FULL menu path
+Spec: `docs\superpowers\specs\2026-10-19-featuregen-design.md` (the 2026-10-05 PowerShell design,
+`docs\superpowers\specs\2026-10-05-feature-registry-design.md`, is superseded); page
+`docs\wiki\featuregen.md`. The registry, its checks and every generated page belong to
+`featuregen.exe` (`src\tools\featuregen`; build it with `build\_build_featuregen_local.bat`;
+the PowerShell scripts that did this are retired). `featuregen --help` lists every verb.
+1. `featuregen add --id .. --title .. --group .. --owner .. --summary .. --intro ..
+   --wiki-page .. --surface "<type>:<...> ;; <type>:<...>"`; surfaces carry the FULL menu path
    (`ide-menu:<top> > Submenu > Caption`), every level. Moving a menu item:
-   `blast-radius -MenuPath "<node>"`, then `move-menu -From .. -To ..`, in the plugin's commit.
+   `featuregen blast-radius --menu-path "<node>"`, then `featuregen move-menu --from .. --to ..`,
+   in the plugin's commit.
 2. Write/update the wiki page named in `wikiPage` (yours; the registry links to it).
-3. `tools\build-feature-pages.ps1 -Normalise`; commit the regenerated `docs\wiki` pages,
-   README / AI-USAGE blocks and `features\generated\manifest.json` WITH the feature.
+3. `featuregen normalise`, then `featuregen build --all`; commit the regenerated `docs\wiki`
+   pages, README / AI-USAGE blocks, `features\generated\` (manifest.json, cli-reference.md,
+   site-pages.json) and the website set `WWW\help\dl\` WITH the feature.
 4. `tests\autotest\run_feature_registry_guard.ps1` -- names what is missing.
-5. Never hand-edit `Home.md`, `Features.md`, `Feature-Index.md`, `Quick-Help.md` or a
-   `dl:registry` block; edit the entry or `features\templates\` and regenerate. Groups and
-   teams are data (`-NewGroup` / `-NewTeam`).
-`status: internal` = accepted-but-unadvertised verbs; docs-sync's `$UndocumentedOnPurpose`
+5. Never hand-edit `Home.md`, `Features.md`, `Feature-Index.md`, `Quick-Help.md`, a
+   `dl:registry` block or anything under `WWW\help\dl\`; edit the entry or `features\templates\`
+   and regenerate. Groups and teams are data (`--new-group` / `--new-team`).
+6. A commit that adds or changes a feature updates ITS OWN entry (usage, flags,
+   steps, questions, wiki page) and runs `featuregen verify --id <its id>`. Never
+   verify another team's entry; report it to its owner instead.`status: internal` = accepted-but-unadvertised verbs; docs-sync's `$UndocumentedOnPurpose`
 stays a separate list (owner 2026-10-05).
 
 ## A project index is only as complete as its `.dproj` / `.dpr`

@@ -6275,18 +6275,13 @@
       "status": "shipped",
       "since": "1.22.0-alpha",
       "summary": "The machine-checked master list of every feature, and the generator of the index pages",
-      "intro": "Register a feature with tools\\feature-registry.ps1 add, regenerate the pages with tools\\build-feature-pages.ps1, and let the battery guard name what is missing. Needs PowerShell 7.3 and a repository clone.",
+      "intro": "Register a feature with featuregen add, regenerate the pages with featuregen build --all, and let the battery guard name what is missing. Needs a repository clone and a built featuregen.exe (see the featuregen page); the publish scripts need PowerShell 7.3.",
       "wikiPage": "Feature-Registry",
       "surfaces": [
         {
           "type": "script",
-          "path": "tools\\feature-registry.ps1",
-          "args": "add / update / find / blast-radius / move-menu / deprecate / normalise / check / generate"
-        },
-        {
-          "type": "script",
-          "path": "tools\\build-feature-pages.ps1",
-          "args": "-Check -OutDir -Normalise"
+          "path": "tools\\featuregen-gate.ps1",
+          "args": "-Repo -Full"
         },
         {
           "type": "script",
@@ -6301,6 +6296,45 @@
       "audience": "both",
       "requires": ["powershell7", "repo-clone"],
       "aliases": ["blast radius", "feature list", "quick help", "registry"]
+    },
+    {
+      "id": "featuregen",
+      "title": "featuregen",
+      "group": "maintenance",
+      "owner": "CONVERTER",
+      "status": "internal",
+      "since": "1.32.0-alpha",
+      "summary": "The registry tool: adds and checks feature entries and generates every doc page from features",
+      "intro": "Run featuregen from a repository clone to register a feature (add), regenerate the wiki, README and website pages (build --all), guard the registry (check) and stamp an entry as verified (verify). Developer tool; it is not part of any release package.",
+      "wikiPage": "featuregen",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "featuregen.exe"
+        },
+        {
+          "type": "script",
+          "path": "build\\_build_featuregen_local.bat",
+          "args": "builds featuregen.exe from this checkout"
+        },
+        {
+          "type": "script",
+          "path": "tools\\featuregen-gate.ps1",
+          "args": "-Repo -Full"
+        },
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\featuregen.md"
+        }
+      ],
+      "audience": "human",
+      "aliases": ["build-feature-pages", "feature registry tool", "registry generator"],
+      "verified": {
+        "date": "2026-10-19",
+        "by": "CONVERTER",
+        "build": "1.32.0-alpha",
+        "surfaceHash": "db2fce9107b6535be56483366d29b2beab83f616381bc02aedbb954b7b41d2fb"
+      }
     },
     {
       "id": "info",
