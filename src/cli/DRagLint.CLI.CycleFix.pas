@@ -13,7 +13,7 @@ interface
 
 uses
   System.Generics.Collections,
-  DRagLint.Core.Interfaces, DRagLint.Report.CyclePlan;
+  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan;
 
 type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
@@ -32,8 +32,10 @@ type
     NoReindex: Boolean;
     /// <summary>--no-compile: skip the baseline build (the dry run has none yet).</summary>
     NoCompile: Boolean;
-    /// <summary>--cycle: 1-based group; 0 = not given.</summary>
+    /// <summary>--cycle: the value given (checked: must be 1 or more).</summary>
     CycleIndex: Integer;
+    /// <summary>True when --cycle was on the command line.</summary>
+    CycleGiven: Boolean;
     /// <summary>--unit: select the group holding this unit stem; '' = not given.</summary>
     UnitStem: string;
     /// <summary>--part: 'a', 'b', 'all' or '' (the group's default).</summary>
@@ -42,13 +44,16 @@ type
     Json: Boolean;
   end;
 
-/// <summary>The refusals the front end adds to the planner's own: outside-roots and manual-edit.</summary>
+/// <summary>The refusals the front end adds to the planner's own: outside-roots.</summary>
 /// <param name="pView">The plan of one group.</param>
-/// <param name="pOwnRoots">Absolute folders the project owns; empty = no restriction.</param>
-/// <returns>One refusal per touched file outside every root, and one per manual edit the planner
-/// did not already refuse.</returns>
-/// <remarks>Pure: reads no file. stale-file needs the index and is added by RunCycleFix.</remarks>
-function MechanisabilityGate(const pView: TCyclePlanView; const pOwnRoots: TArray<string>): TArray<TRefusal>;
+/// <param name="pOwn">The project's own roots (TOwnRoots.Load of the project folder).</param>
+/// <returns>One refusal per touched file that is empty or outside every root.</returns>
+/// <remarks>Pure: reads no file. stale-file needs the index and is added by RunCycleFix.
+/// manual-edit is NOT added here: the planner's own refusals already name every manual
+/// edit (TCyclePlanner.CaptureRefusals walks every touched file and the .dproj), so a gate
+/// copy could never fire. TOwnRoots.IsOurs lets an empty path through, so an empty touched
+/// path is refused explicitly.</remarks>
+function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots): TArray<TRefusal>;
 
 /// <summary>Runs `cycles --fix` as a dry run and prints the result to stdout.</summary>
 /// <param name="pOpts">The flags.</param>
@@ -66,7 +71,7 @@ implementation
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
-  System.StrUtils, DRagLint.Project.OwnRoots;
+  System.StrUtils;
 
 const
   CExitMechanical = 0;
@@ -74,22 +79,9 @@ const
   CExitError      = 2;
   CDefaultPlatform = 'win64';
   CSchema          = 'cycle-fix/1';
-  CNeedsProject    = 'ERROR: cycles --fix needs --project <X.dproj>';
+  CNeedsProject    = 'cycles --fix needs --project <X.dproj>';
   CVerdictOk       = 'Verdict: mechanical (dry run; add --apply to write)';
   CVerdictRefused  = 'Verdict: refused';
-
-function NormDir(const pPath: string): string;
-begin
-  Result:= LowerCase(IncludeTrailingPathDelimiter(StringReplace(ExpandFileName(pPath), '/', '\', [rfReplaceAll])));
-end;
-
-function IsUnderRoots(const pFile: string; const pRoots: TArray<string>): Boolean;
-begin
-  var Norm:= LowerCase(StringReplace(ExpandFileName(pFile), '/', '\', [rfReplaceAll]));
-  for var R in pRoots do
-    if StartsStr(NormDir(R), Norm) then Exit(True);
-  Result:= False;
-end;
 
 function MakeRefusal(const pKind, pSymbol, pFile, pReason: string; pLine: Integer): TRefusal;
 begin
@@ -100,27 +92,15 @@ begin
   Result.Line    := pLine;
 end;
 
-function MechanisabilityGate(const pView: TCyclePlanView; const pOwnRoots: TArray<string>): TArray<TRefusal>;
+function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots): TArray<TRefusal>;
 var
   L: TList<TRefusal>;
-
-  function AlreadyRefused(const pFile: string; pLine: Integer): Boolean;
-  begin
-    for var R in pView.Refusals do
-      if SameText(R.FilePath, pFile) and (R.Line = pLine) then Exit(True);
-    Result:= False;
-  end;
-
 begin
   L:= TList<TRefusal>.Create;
   try
-    if Length(pOwnRoots) > 0 then
-      for var P in pView.TouchedPaths do
-        if not IsUnderRoots(P, pOwnRoots) then
-          L.Add(MakeRefusal('outside-roots', '', P, 'the plan edits a file outside the project''s own roots', 0));
-    for var E in pView.Edits do
-      if (E.Kind = 'manual') and not AlreadyRefused(E.FilePath, E.First) then
-        L.Add(MakeRefusal('manual-edit', '', E.FilePath, 'this edit has to be made by hand', E.First));
+    for var P in pView.TouchedPaths do
+      if (P = '') or not pOwn.IsOurs(P) then
+        L.Add(MakeRefusal('outside-roots', '', P, 'the plan edits a file outside the project''s own roots', 0));
     Result:= L.ToArray;
   finally
     L.Free;
@@ -286,40 +266,58 @@ end;
 // Checks the flags and resolves the group (0 = scan for the first mechanical one) and the
 // project's own roots; returns the error text, '' when all is well.
 function ResolveSelection(const pOpts: TCycleFixOptions; const pSccs: TList<TArray<string>>;
-  out pRoots: TArray<string>; out pOnly: Integer): string;
-var
-  Own: TOwnRoots;
+  out pOwn: TOwnRoots; out pOnly: Integer): string;
 begin
   Result:= '';
   pOnly := 0;
-  pRoots:= nil;
+  pOwn  := Default(TOwnRoots);
   if pOpts.Project = '' then Result:= CNeedsProject
   else if pOpts.Apply then
-    Result:= 'ERROR: cycles --fix --apply is not available yet (E18 Tasks 9-12); the dry run needs no --apply'
+    Result:= 'cycles --fix --apply is not available yet (E18 Tasks 9-12); the dry run needs no --apply'
   else if not MatchText(pOpts.Part, ['', 'a', 'b', 'all']) then
-    Result:= 'ERROR: cycles --fix --part must be a, b or all'
+    Result:= 'cycles --fix --part must be a, b or all'
   else if SameText(pOpts.Part, 'all') then
-    Result:= 'ERROR: cycles --fix --part all is not available yet (E18 Task 12)';
+    Result:= 'cycles --fix --part all is not available yet (E18 Task 12)'
+  else if pOpts.CycleGiven and (pOpts.CycleIndex < 1) then
+    Result:= 'cycles --fix --cycle needs a group number of 1 or more (see `drag-lint cycles` for the groups)';
   if Result <> '' then Exit;
-  Own:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(pOpts.Project)));
-  if Own.Error <> '' then Exit('ERROR: ' + Own.Error);
-  pRoots:= Own.Roots;
-  if (Length(pRoots) = 0) and (Own.Anchor <> '') then pRoots:= [Own.Anchor];
-  if pOpts.CycleIndex > 0 then pOnly:= pOpts.CycleIndex
+  pOwn:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(pOpts.Project)));
+  if pOwn.Error <> '' then Exit(pOwn.Error);
+  if pOpts.CycleGiven then pOnly:= pOpts.CycleIndex
   else if pOpts.UnitStem <> '' then
   begin
     pOnly:= GroupOfUnit(pSccs, pOpts.UnitStem);
-    if pOnly = 0 then Exit('ERROR: cycles --fix: unit ' + pOpts.UnitStem + ' is in no circular group');
+    if pOnly = 0 then Exit('cycles --fix: unit ' + pOpts.UnitStem + ' is in no circular group');
   end;
   if (pOnly > pSccs.Count) then
-    Result:= Format('ERROR: cycles --fix: --cycle %d, but there are %d circular group(s)', [pOnly, pSccs.Count]);
+    Result:= Format('cycles --fix: --cycle %d, but there are %d circular group(s)', [pOnly, pSccs.Count]);
+end;
+
+// Error path: a cycle-fix/1 object with "error" under --format json (as the other verbs'
+// JSON reports do), else `ERROR: <message>`.
+procedure ReportError(const pOpts: TCycleFixOptions; const pMessage: string);
+begin
+  if pOpts.Json then
+  begin
+    var Doc:= TJSONObject.Create;
+    try
+      Doc.AddPair('schema', CSchema);
+      Doc.AddPair('error', pMessage);
+      Doc.AddPair('ok', TJSONBool.Create(False));
+      Doc.AddPair('exit_code', TJSONNumber.Create(CExitError));
+      Writeln(Doc.ToJSON);
+    finally
+      Doc.Free;
+    end;
+  end
+  else Writeln('ERROR: ', pMessage);
 end;
 
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 var
   Problem : string;
-  Roots   : TArray<string>;
+  Own     : TOwnRoots;
   Only    : Integer;
   Cycles  : TJSONArray;
   Playbook: TStringList;
@@ -327,10 +325,10 @@ var
   Chosen  : Boolean;
   BadPart : string;
 begin
-  Problem:= ResolveSelection(pOpts, pSccs, Roots, Only);
+  Problem:= ResolveSelection(pOpts, pSccs, Own, Only);
   if Problem <> '' then
   begin
-    Writeln(Problem);
+    ReportError(pOpts, Problem);
     Exit(CExitError);
   end;
 
@@ -348,15 +346,20 @@ begin
         All:= TList<TRefusal>.Create;
         try
           All.AddRange(pView.Refusals);
-          All.AddRange(MechanisabilityGate(pView, Roots));
+          All.AddRange(MechanisabilityGate(pView, Own));
           All.AddRange(StaleRefusals(pStore, pView));
           var Verdict:= All.ToArray;
           var Wanted:= pOpts.Part;
           if (Wanted <> '') and not SameText(Wanted, string(pView.Part)) then
           begin
-            BadPart:= Format('ERROR: cycles --fix: cycle %d is planned as part %s, not --part %s ' +
-              '(the other part comes with --part all, E18 Task 12)', [pView.CycleIndex, LowerCase(pView.Part), Wanted]);
-            Exit(False);
+            { an explicit group is an error; a scan just skips the groups of the other part }
+            if Only > 0 then
+            begin
+              BadPart:= Format('cycles --fix: cycle %d is planned as part %s, not --part %s ' +
+                '(the other part comes with --part all, E18 Task 12)', [pView.CycleIndex, LowerCase(pView.Part), Wanted]);
+              Exit(False);
+            end;
+            Exit(True);
           end;
           Cycles.AddElement(CycleToJson(pView, Verdict, pGraph));
           Chosen:= Length(Verdict) = 0;
@@ -382,7 +385,7 @@ begin
       end, Only);
     if BadPart <> '' then
     begin
-      Writeln(BadPart);
+      ReportError(pOpts, BadPart);
       Exit(CExitError);
     end;
     Result:= if Chosen or (pSccs.Count = 0) then CExitMechanical else CExitRefused;

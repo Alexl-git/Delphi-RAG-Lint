@@ -60,8 +60,8 @@ function Index-Copy([string]$Dir, [string]$Tag) {
   return $db
 }
 # `cycles --fix <extra>` on a copy; returns Exit + stdout text (+ parsed JSON when asked).
-function Run-Fix([string]$Dir, [string]$Db, [string[]]$Extra, [bool]$Json = $true) {
-  $a = @('cycles', '--fix', '--project', (Join-Path $Dir 'CircularDemo.dproj'), '--db', $Db) + $Extra
+function Run-Fix([string]$Dir, [string]$Db, [string[]]$Extra, [bool]$Json = $true, [string]$Dproj = 'CircularDemo.dproj') {
+  $a = @('cycles', '--fix', '--project', (Join-Path $Dir $Dproj), '--db', $Db) + $Extra
   if ($Json) { $a += @('--format', 'json') }
   $out = (& $Exe @a 2>$null | Out-String)
   $code = $LASTEXITCODE
@@ -129,6 +129,46 @@ try {
 
   Write-Host '== (f) the dry run wrote nothing' -ForegroundColor Cyan
   Check 'f: SHA-256 of every file of the copy and of its DB unchanged' ((Get-TreeHash $demo $db) -eq $hashBefore) ''
+
+  Write-Host '== (g) flags: --cycle 0 / junk, JSON error object, --part on a default scan' -ForegroundColor Cyan
+  $r = Run-Fix $demo $db @('--cycle', '0', '--library-db', 'none') $false
+  Check 'g: --cycle 0 -> exit 2 with a usage message' ($r.Exit -eq 2 -and $r.Out -match '--cycle needs a group number') $r.Out
+  Check 'g: --cycle -3 -> exit 2' ((Run-Fix $demo $db @('--cycle', '-3', '--library-db', 'none') $false).Exit -eq 2) ''
+  Check 'g: --cycle abc -> exit 2' ((Run-Fix $demo $db @('--cycle', 'abc', '--library-db', 'none') $false).Exit -eq 2) ''
+  $r = Run-Fix $demo $db @('--cycle', '0', '--library-db', 'none')
+  Check 'g: --format json error: exit 2 and a JSON object with "error"' `
+    ($r.Exit -eq 2 -and $r.Json -and $r.Json.error -match '--cycle' -and $r.Json.ok -eq $false -and $r.Json.exit_code -eq 2) $r.Out
+  $r = Run-Fix $demo $db @('--part', 'b', '--no-compile', '--library-db', 'none')
+  $parts = if ($r.Json) { @($r.Json.cycles | ForEach-Object { $_.part }) } else { @() }
+  Check 'g: default scan with --part b skips the part-a group and picks a part-b one (exit 0)' `
+    ($r.Exit -eq 0 -and $parts.Count -ge 1 -and (@($parts | Where-Object { $_ -ne 'b' }).Count -eq 0) -and $r.Json.cycles[-1].verdict -eq 'mechanical') $r.Out
+
+  Write-Host '== (h) outside-roots: the gate refuses a plan that edits files outside ownRoots' -ForegroundColor Cyan
+  $own = Join-Path $WorkDir 'outroots'
+  Copy-Tree (Join-Path $Repo 'circular-demo') $own
+  $odb = Index-Copy $own 'outroots'
+  $r = Run-Fix $own $odb @('--cycle', '1', '--no-compile', '--library-db', 'none')
+  Check 'h: POSITIVE CONTROL without an ownRoots file the same plan is mechanical (exit 0)' ($r.Exit -eq 0) $r.Out
+  New-Item -ItemType Directory -Force (Join-Path $own 'owned'), (Join-Path $own '_D-RAG') | Out-Null
+  [IO.File]::WriteAllText((Join-Path $own '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["owned"] }')
+  $r = Run-Fix $own $odb @('--cycle', '1', '--no-compile', '--library-db', 'none')
+  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  Check 'h: --cycle 1 -> exit 1, refusals include outside-roots' ($r.Exit -eq 1 -and $kinds -contains 'outside-roots') $r.Out
+
+  Write-Host '== (i) manual-edit: a plan with a manual edit is refused (planner-sourced; see note)' -ForegroundColor Cyan
+  # The gate has NO manual-edit branch of its own: TCyclePlanner.CaptureRefusals already names every
+  # ekManual edit, so one in the gate could never fire (verified by disabling it, see task-8-report).
+  $fx = Join-Path $WorkDir 'ifdef'
+  Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\ifdefclause') $fx
+  $fdb = Join-Path $WorkDir 'ifdef.sqlite'
+  $fidx = & $Exe index --project (Join-Path $fx 'IfdefClause.dproj') --db $fdb 2>&1 | Out-String
+  Check 'i: SANITY ifdefclause indexed with 0 errors' ($fidx -match ', 0 errors' -and $fidx -notmatch '[1-9]\d* errors') $fidx
+  $r = Run-Fix $fx $fdb @('--cycle', '1', '--no-compile', '--library-db', 'none') $true 'IfdefClause.dproj'
+  $c = if ($r.Json) { $r.Json.cycles[0] } else { $null }
+  Check 'i: exit 1, verdict refused, a directive refusal naming CfAlpha.pas' `
+    ($r.Exit -eq 1 -and $c -and $c.verdict -eq 'refused' -and @($c.refusals | Where-Object { $_.kind -eq 'directive' -and $_.file -like '*CfAlpha.pas' }).Count -ge 1) $r.Out
+  Check 'i: each refusal is reported once (no gate duplicate)' `
+    ($c -and (@($c.refusals | ForEach-Object { "$($_.kind)|$($_.file)|$($_.line)" } | Select-Object -Unique).Count -eq @($c.refusals).Count)) $r.Out
 
   Write-Host '== (d) stale-file' -ForegroundColor Cyan
   $stale = Join-Path $WorkDir 'stale'

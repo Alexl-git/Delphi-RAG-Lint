@@ -427,7 +427,8 @@ type
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
-    FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan; 0 = first mechanical)
+    FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
+    FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
@@ -1838,7 +1839,7 @@ begin
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
-    else if (A = '--cycle') and (i < ParamCount) then begin Inc(i); Result.FixCycle:= StrToIntDef(ParamStr(i), 0); end // cycles --fix
+    else if (A = '--cycle') and (i < ParamCount) then begin Inc(i); Result.FixCycle:= StrToIntDef(ParamStr(i), 0); Result.FixCycleGiven:= True; end // cycles --fix
     else if (A = '--part') and (i < ParamCount) then begin Inc(i); Result.FixPart:= LowerCase(ParamStr(i)); end // cycles --fix
     else if A = '--no-compile' then Result.NoCompile:= True // cycles --fix
     // v0.69 D2a: rename --kind param positional args
@@ -22316,6 +22317,7 @@ begin
         FixOpts.NoReindex:= AArgs.NoReindex;
         FixOpts.NoCompile:= AArgs.NoCompile;
         FixOpts.CycleIndex:= AArgs.FixCycle;
+        FixOpts.CycleGiven:= AArgs.FixCycleGiven;
         FixOpts.UnitStem := AArgs.GhostUnit;
         FixOpts.Part     := AArgs.FixPart;
         FixOpts.Json     := SameText(AArgs.Format, 'json');
