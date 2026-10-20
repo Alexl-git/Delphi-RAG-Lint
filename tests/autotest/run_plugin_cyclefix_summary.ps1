@@ -6,8 +6,8 @@
 
   Fed the cycle-fix/1 documents captured from real `cycles --fix` runs on circular-demo copies
   (tests\fixtures\cyclefix\outcome-*.json, paths scrubbed to C:\w\demo):
-    outcome-applied.json                --unit demoblueprint --apply (R1, routine-inversion), exit 0
-    outcome-dryrun.json                 --unit demoblueprint dry run, baseline ok, exit 0
+    outcome-15b-applied.json                --unit demoblueprint --apply (R1, routine-inversion), exit 0
+    outcome-15b-dryrun.json                 --unit demoblueprint dry run, baseline ok, exit 0
     outcome-refused-dirty-baseline.json DemoConfig.pas line 1 -> `unit DemoConfigX;`, exit 1
     outcome-dryrun-parta.json           default group (Part A, move-globals, no single edge)
   plus inline documents for rolled back / group refusal / unreadable.
@@ -70,8 +70,8 @@ $kv = @{}
 foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
 Check 'harness ran to completion' ($out -match '(?m)^DONE') $out
 
-$dry     = Get-Content (Join-Path $FixtureDir 'outcome-dryrun.json') -Raw | ConvertFrom-Json
-$applied = Get-Content (Join-Path $FixtureDir 'outcome-applied.json') -Raw | ConvertFrom-Json
+$dry     = Get-Content (Join-Path $FixtureDir 'outcome-15b-dryrun.json') -Raw | ConvertFrom-Json
+$applied = Get-Content (Join-Path $FixtureDir 'outcome-15b-applied.json') -Raw | ConvertFrom-Json
 $dryFiles = @($dry.cycles[-1].edits | ForEach-Object { $_.file.ToLowerInvariant() } | Sort-Object -Unique).Count
 Check 'SANITY the dry run edits at least one file' ($dryFiles -gt 0) ''
 

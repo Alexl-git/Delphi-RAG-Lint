@@ -28,12 +28,12 @@ end;
 begin
   Dir:= ParamStr(1);
   try
-    Writeln('sum.applied=', CycleFixSummary(Fixture('outcome-applied.json')));
+    Writeln('sum.applied=', CycleFixSummary(Fixture('outcome-15b-applied.json')));
     Writeln('sum.dirty=', CycleFixSummary(Fixture('outcome-refused-dirty-baseline.json')));
-    Writeln('sum.dry=', CycleFixSummary(Fixture('outcome-dryrun.json')));
+    Writeln('sum.dry=', CycleFixSummary(Fixture('outcome-15b-dryrun.json')));
     Writeln('sum.parta=', CycleFixSummary(Fixture('outcome-dryrun-parta.json')));
     Writeln('sum.interleaved=', CycleFixSummary('drag-lint: note: cycles --plan reads no platform library'#13#10 +
-      Fixture('outcome-dryrun.json') + #13#10'drag-lint: note: done {x}'));
+      Fixture('outcome-15b-dryrun.json') + #13#10'drag-lint: note: done {x}'));
     Writeln('sum.rolled=', CycleFixSummary('{"schema":"cycle-fix/1","mode":"apply","error":' +
       '"rolled back, project not changed: build error: E2003 Undeclared identifier","ok":false,"exit_code":2}'));
     Writeln('sum.grouprefused=', CycleFixSummary('{"schema":"cycle-fix/1","mode":"dry-run",' +
@@ -41,17 +41,17 @@ begin
       '"refusals":[{"kind":"receiver-unknown","reason":"Sender has no static class"}]}]}'));
     Writeln('sum.garbage=', CycleFixSummary('ERROR: database not found'));
     Writeln('sum.otherschema=', CycleFixSummary('{"schema":"uses-fix/1"}'));
-    Writeln('can.dry=', CycleFixCanApply(Fixture('outcome-dryrun.json')));
-    Writeln('can.applied=', CycleFixCanApply(Fixture('outcome-applied.json')));
+    Writeln('can.dry=', CycleFixCanApply(Fixture('outcome-15b-dryrun.json')));
+    Writeln('can.applied=', CycleFixCanApply(Fixture('outcome-15b-applied.json')));
     Writeln('can.dirty=', CycleFixCanApply(Fixture('outcome-refused-dirty-baseline.json')));
-    Writeln('confirm.dry=', OneLine(CycleFixConfirmText(Fixture('outcome-dryrun.json'))));
+    Writeln('confirm.dry=', OneLine(CycleFixConfirmText(Fixture('outcome-15b-dryrun.json'))));
     Writeln('confirm.parta=', OneLine(CycleFixConfirmText(Fixture('outcome-dryrun-parta.json'))));
     Writeln('confirm.garbage=[', CycleFixConfirmText('nothing'), ']');
-    var W: TArray<string>:= CycleFixWrittenFiles(Fixture('outcome-applied.json'));
+    var W: TArray<string>:= CycleFixWrittenFiles(Fixture('outcome-15b-applied.json'));
     Writeln('written.count=', Length(W));
     if Length(W) > 0 then Writeln('written.first=', W[0]);
-    Writeln('written.dry=', Length(CycleFixWrittenFiles(Fixture('outcome-dryrun.json'))));
-    Writeln('edited.dry=', Length(CycleFixEditedFiles(Fixture('outcome-dryrun.json'))));
+    Writeln('written.dry=', Length(CycleFixWrittenFiles(Fixture('outcome-15b-dryrun.json'))));
+    Writeln('edited.dry=', Length(CycleFixEditedFiles(Fixture('outcome-15b-dryrun.json'))));
     Writeln('edited.garbage=', Length(CycleFixEditedFiles('nothing')));
     Writeln('DONE');
   except

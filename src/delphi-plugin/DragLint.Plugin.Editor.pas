@@ -254,6 +254,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
+  , DragLint.Plugin.CycleFix
   ;
 
 { ---- PluginBuildTag ---- }
@@ -4283,14 +4284,19 @@ begin
   if (AFilePath <> '') and FileExists(AFilePath) and Supports(BorlandIDEServices, IOTAActionServices, AS_) then AS_.OpenFile(AFilePath);
 end;
 
-{ Run "exe <tail>", capture stdout, write to %TEMP%\<base>, open it in the IDE. }
-procedure DLRunReport(const ACmdTail, ABaseName: string);
+const
+  { A menu report's default limit; a caller with a longer job passes its own. }
+  REPORT_TIMEOUT_MS = 180000;
+
+{ Run "exe <tail>", capture stdout, write to %TEMP%\<base>, open it in the IDE.
+  ATimeoutMs: the engine's limit (E18 T15: cycles --fix passes CYCLE_FIX_TIMEOUT_MS). }
+procedure DLRunReport(const ACmdTail, ABaseName: string; ATimeoutMs: Integer = REPORT_TIMEOUT_MS);
 var
   Cmd    : string;
   OutPath: string;
 begin
   { v0.46 review (M): run the engine OFF the main thread so a slow/hung command
-    (cap 180s) does not freeze the IDE. The worker only runs the subprocess +
+    (cap ATimeoutMs) does not freeze the IDE. The worker only runs the subprocess +
     writes a temp file (both thread-safe, no OTAPI); the editor open (OTAPI) is
     marshalled back to the main thread via TThread.Queue -- same pattern as
     LiveDiagnostics.TLiveRunner. Cmd/OutPath are locals captured (heap-promoted)
@@ -4304,7 +4310,7 @@ begin
     begin
       Output:= '';
       try
-        RunAndCaptureStdout(Cmd, Output, 180000);
+        RunAndCaptureStdout(Cmd, Output, ATimeoutMs);
       except
         on E: Exception do Output:= 'drag-lint: command failed: ' + E.ClassName + ': ' + E.Message;
       end;
@@ -4431,6 +4437,25 @@ begin
   Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no active project index (DB) found.'); Exit; end;
   DLRunReport(Format('cycles --db "%s" --plan --edges --causes --format text', [Db]), 'drag-lint-circular-uses.txt');
+end;
+
+{ E18 Task 15: the mechanical fix, as a DRY RUN only (no --cycle: the engine
+  picks the SCC) -- the same rule as InvokeUsesFix below: no --apply from a menu click. The reviewed,
+  one-SCC apply is the Uses & Deps tab's "Circular uses" section. Save first:
+  the engine plans and compiles from the files on disk. }
+procedure InvokeCircularUsesFix(Sender: TObject);
+var
+  Db, Proj: string; MS: IOTAModuleServices;
+begin
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Db  := ResolvePrimaryIndexDb;
+  Proj:= GetActiveProjectFile;
+  if (Db = '') or (Proj = '') then
+  begin
+    ShowMessage('drag-lint: no project/index found.');
+    Exit;
+  end;
+  DLRunReport(CycleFixMenuArgs(Proj, Db), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);
 end;
 
 procedure InvokeUsesAudit(Sender: TObject);
@@ -6197,6 +6222,7 @@ begin
   AddSeparator(SubUses);
   AddSectionHeader(SubUses, 'This project');
   AddWrappedItem(SubUses, 'Circular Uses Report (cycles + fix plan)...'                , InvokeCircularUses    );
+  AddWrappedItem(SubUses, 'Fix Circular Uses Mechanically (dry run)...'                , InvokeCircularUsesFix );
   AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...'                 , InvokeReconcileProject);
   AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
   AddWrappedItem(SubUses, 'Dependency Report (third-party rollup)...'                  , InvokeDepsReport      );
