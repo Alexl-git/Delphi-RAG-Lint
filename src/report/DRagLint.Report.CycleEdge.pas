@@ -264,10 +264,10 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// `overloaded-routine` (two signatures of the name in its unit), `signature-unknown` (a function
 /// with no stored signature), `routine-not-called`
 /// (a ref of the edge is not a call -- `@Foo`, `X := Foo` as a value),
-/// `qualified-ref` (the consumer names `.Foo` anywhere), `init-order` (a call line lies in
+/// `qualified-ref` (the consumer names anything as `B.X`, B the declaring unit), `init-order` (a call line lies in
 /// A's initialization section, or that section -- from `initialization` to `end.` --
 /// names the enclosing routine as a whole word: the variable is still nil there),
-/// `unsupported-directive` (varargs on the declaration, or directives it cannot read).</para>
+/// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).</para>
 /// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
 /// winapi) is carried into the procedural type; inline, overload, external, forward and the
 /// hint directives do not change it and are skipped.</para>
@@ -300,7 +300,10 @@ const
   CConventionWords       = ' register pascal cdecl stdcall safecall winapi ';
   CUnsupportedDirectives = ' varargs ';
   CNeutralDirectives     = ' inline overload external forward deprecated platform library experimental assembler delayed ';
-  CMaxDeclLines          = 8;  { a routine declaration and its directives span at most this many lines }
+  CMaxDeclLines          = 8;
+  CDeclStartWords        = ' function procedure constructor destructor class operator type var const threadvar ' +
+    'resourcestring label begin asm implementation interface initialization finalization exports uses ' +
+    'property end strict private protected public published ';  { a routine declaration and its directives span at most this many lines }
 
 function StemOfPath(const pPath: string): string;
 begin
@@ -838,6 +841,16 @@ begin
   Result:= False;
 end;
 
+{ Whether the word pWord, ending before pText[pAfter], starts the declaration that
+  follows a routine's directives: a declaration keyword, or an identifier followed
+  by `:` `,` `=` `.` `(` `[` (a field, a variable, a qualified name). }
+function StartsNextDeclaration(const pText: string; pAfter: Integer; const pWord: string): Boolean;
+begin
+  if ContainsStr(CDeclStartWords, ' ' + pWord + ' ') then Exit(True);
+  var Rest:= TrimLeft(pText.Substring(pAfter - 1));
+  Result:= (Rest = '') or CharInSet(Rest[1], [':', ',', '=', '.', '(', '[']);
+end;
+
 { The calling convention of the routine pName declared at line pLine, read from the
   directives after its signature. False, with pWhy, on a directive that changes the
   procedural type in a way R1 does not carry (varargs), or on text it cannot read. }
@@ -890,7 +903,14 @@ begin
         pWhy:= Format('the directive `%s` changes its procedural type', [Word]);
         Exit(False);
       end
-      else if not ContainsStr(CNeutralDirectives, ' ' + Word + ' ') then Break;
+      else if not ContainsStr(CNeutralDirectives, ' ' + Word + ' ') then
+      begin
+        { the directive run ends at the next declaration; any other word is a
+          directive this planner cannot classify }
+        if StartsNextDeclaration(Text, P + W.Length, Word) then Break;
+        pWhy:= Format('the directive `%s` is not one the plan can classify', [Word]);
+        Exit(False);
+      end;
       Inc(P, W.Length);
       if not SkipPastSemicolon(Text, P) then Break;
     end;
@@ -900,17 +920,47 @@ begin
   end;
 end;
 
-{ R1 refusals a call site can give: not a call, a unit-qualified call anywhere in the
-  consumer (the uses entry it needs would be removed), init order (J4). }
-function CallRefusal(const pSurface: TEdgeSurface; pFromFid: Int64; const pLines: TArray<string>;
-  const pFromUnit: string): TRecipeRefusal;
+{ The first `<DeclUnit>.<member>` of the consumer (a qualified name is no ref on the edge
+  surface, but needs the uses entry the cut removes): its line, member in pMember; 0 for none.
+  `<DeclUnit>.<more>` that is itself a unit of the project (e.g. its Untangle leaf) is skipped. }
+function UnitQualifiedLine(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>;
+  const pDeclUnit: string; out pMember: string): Integer;
+begin
+  pMember:= '';
+  var Parts:= pDeclUnit.Split(['.']);
+  for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+  var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)';
+  for var L:= 1 to Length(pLines) do
+    for var M in TRegEx.Matches(BareCode(pLines[L - 1]), Rx, [roIgnoreCase]) do
+    begin
+      var Tail:= TRegEx.Replace(M.Groups[1].Value, '\s', '').Split(['.']);
+      var IsUnit:= False;
+      var Name  := pDeclUnit;
+      for var Seg in Tail do
+      begin
+        Name:= Name + '.' + Seg;
+        if pSource.FidOfStem(LowerCase(Name)) > 0 then IsUnit:= True;
+      end;
+      if IsUnit then Continue;
+      pMember:= Tail[0];
+      Exit(L);
+    end;
+  Result:= 0;
+end;
+
+{ R1 refusals a call site can give: not a call, a name qualified by the declaring unit
+  anywhere in the consumer (the uses entry it needs would be removed), init order (J4). }
+function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;
+  const pLines: TArray<string>; const pFromUnit, pDeclUnit: string): TRecipeRefusal;
+var
+  Member: string;
 begin
   Result:= Default(TRecipeRefusal);
   var Name:= pSurface.RoutineName;
-  for var L:= 1 to Length(pLines) do
-    if TRegEx.IsMatch(BareCode(pLines[L - 1]), '\.\s*' + TRegEx.Escape(Name) + '\b', [roIgnoreCase]) then
-      Exit(MakeRefusal('qualified-ref', Name, pFromFid, L, Format('line %d names `%s` qualified (`%s`); ' +
-        'that call would keep needing the unit whose uses entry the cut removes', [L, Name, Trim(pLines[L - 1])])));
+  var Q:= UnitQualifiedLine(pSource, pLines, pDeclUnit, Member);
+  if Q > 0 then
+    Exit(MakeRefusal('qualified-ref', Member, pFromFid, Q, Format('line %d names `%s` qualified by its unit ' +
+      '(`%s`); that use keeps needing the uses entry the cut removes', [Q, Member, Trim(pLines[Q - 1])])));
   for var R in pSurface.Refs do
   begin
     if R.Kind <> erCall then
@@ -938,8 +988,9 @@ begin
   var Lines  := pSource.FileLines(FromFid);
   pRefusal:= SignatureRefusal(pSource, pSurface, DeclFid, Routine);
   if pRefusal.Kind = '' then
-    pRefusal:= CallRefusal(pSurface, FromFid, Lines,
-      ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''));
+    pRefusal:= CallRefusal(pSource, pSurface, FromFid, Lines,
+      ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''),
+      ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''));
   if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
     pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
   if pRefusal.Kind <> '' then Exit;

@@ -32,6 +32,12 @@
       remove the uses entry that call needs).
   (k) a second overload in R1Title -- `refused: overloaded-routine` (the index binds an overload's
       call by name; the pointer type could mirror the wrong signature -- E2010 seen).
+  Fix round 2 (RED on the round-1 engine / with the refusal disabled):
+  (l) tests\fixtures\cyclefix\r1stillused: TR1Form calls its INHERITED class method R1Note; the
+      planner binds the bare name to R1Title.R1Note -- `refused: edge-still-used`.
+  (n) `export; stdcall;` -- an unclassified directive refuses (stdcall is no longer silently lost).
+  (o) `R1Title.R1TitleCount` -- any name qualified by the declaring unit refuses `qualified-ref`.
+  (p) `TR1Local.R1TitleOf` -- a same-named method through a non-unit receiver does NOT refuse.
   The compile of every applied tree is run_cyclefix_r1_dcc.ps1 (needs RAD Studio).
 #>
 [CmdletBinding()]
@@ -313,14 +319,22 @@ try {
 
   # --- (g)-(k) fix round 1: directives, qualified calls, overloads -------------------------------
   # Each case is a copy of r1extend with ONE edit; returns cycle 1's block text and plan dump.
-  function Get-Variant([string]$Tag, [string]$File, [string]$Old, [string]$New) {
+  # An optional second edit (pFile2 / pOld2 / pNew2) goes into another file of the same copy.
+  function Get-Variant([string]$Tag, [string]$File, [string]$Old, [string]$New, [string]$File2 = '', [string]$Old2 = '', [string]$New2 = '') {
     $dir = Join-Path $WorkDir $Tag
     Copy-Tree (Join-Path $Fx 'r1extend') $dir
     $p = Join-Path $dir $File
     $t = [IO.File]::ReadAllText($p)
     Set-Text $p ($t.Replace($Old, $New))
+    $ok2 = $true
+    if ($File2 -ne '') {
+      $p2 = Join-Path $dir $File2
+      $t2 = [IO.File]::ReadAllText($p2)
+      Set-Text $p2 ($t2.Replace($Old2, $New2))
+      $ok2 = [IO.File]::ReadAllText($p2) -ne $t2
+    }
     $db = Join-Path $WorkDir "$Tag.sqlite"
-    $okIdx = ([IO.File]::ReadAllText($p) -ne $t) -and ((Invoke-Index (Join-Path $dir 'R1Extend.dproj') $db $Tag) -eq 0)
+    $okIdx = $ok2 -and ([IO.File]::ReadAllText($p) -ne $t) -and ((Invoke-Index (Join-Path $dir 'R1Extend.dproj') $db $Tag) -eq 0)
     $pl = Get-Cycles $db $Tag @('--plan')
     return @{ Ok = $okIdx; Text = ((Get-CycleBlock $pl.Out 1) -join "`n"); Dump = $pl.Dump[1] }
   }
@@ -353,7 +367,35 @@ try {
   Check 'k1 refused: overloaded-routine (the index binds an overload by name)' `
     ($vk.Ok -and $vk.Text.Contains('refused: overloaded-routine -- `R1TitleOf` is overloaded (2 signatures)') -and
      (($vk.Dump.refusals -split ',') -contains 'overloaded-routine')) "[$($vk.Dump.verdict) / $($vk.Dump.refusals)]"
-} finally {
+  # --- (l)-(p) fix round 2 ---------------------------------------------------------------------
+  Write-Host '== (l) r1stillused: an inherited R1Note keeps R1Title in use by name' -ForegroundColor Cyan
+  $su = Join-Path $WorkDir 'r1stillused'
+  Copy-Tree (Join-Path $Fx 'r1stillused') $su
+  $dbSu = Join-Path $WorkDir 'r1stillused.sqlite'
+  Check 'l0 indexed' ((Invoke-Index (Join-Path $su 'R1StillUsed.dproj') $dbSu 'l') -eq 0)
+  $pl = Get-Cycles $dbSu 'l' @('--plan')
+  $txL = (Get-CycleBlock $pl.Out 1) -join "`n"
+  Check 'l1 refused: edge-still-used naming R1Note (the uses entry of R1Title stays)' `
+    ($txL.Contains('refused: edge-still-used -- the implementation section of `R1Form.pas` still uses `R1Title`: `R1Note` line 31') -and
+     ($pl.Dump[1].verdict -eq 'refused') -and (($pl.Dump[1].refusals -split ',') -contains 'edge-still-used')) "[$($pl.Dump[1].verdict) / $($pl.Dump[1].refusals)]"
+  Write-Host '== (n) an unlisted directive before stdcall' -ForegroundColor Cyan
+  $vn = Get-Variant 'r1export' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; export; stdcall;`r`n`r`nimplementation"
+  Check 'n1 `export; stdcall;`: refused: unsupported-directive naming export (stdcall is not silently lost)' `
+    ($vn.Ok -and $vn.Text.Contains('refused: unsupported-directive -- `R1TitleOf`: the directive `export` is not one the plan can classify') -and
+     (($vn.Dump.refusals -split ',') -contains 'unsupported-directive')) "[$($vn.Dump.verdict) / $($vn.Dump.refusals)]"
+  Write-Host '== (o) another symbol named through the unit: R1Title.R1TitleCount' -ForegroundColor Cyan
+  $vo = Get-Variant 'r1qualother' 'R1Form.pas' "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));" `
+    ("  Writeln(Format('[form] %s', [R1TitleOf(pId)]));`r`n  Writeln(R1Title.R1TitleCount);") `
+    'R1Title.pas' "function R1TitleOf(const pId: Integer): string;`r`n`r`nimplementation" `
+    ("function R1TitleOf(const pId: Integer): string;`r`n`r`n/// <summary>Number of titles.</summary>`r`n/// <returns>A count.</returns>`r`nfunction R1TitleCount: Integer;`r`n`r`nimplementation")
+  Check 'o1 refused: qualified-ref naming R1TitleCount (that use needs the uses entry the cut removes)' `
+    ($vo.Ok -and $vo.Text.Contains('refused: qualified-ref -- line 27 names `R1TitleCount` qualified by its unit') -and
+     (($vo.Dump.refusals -split ',') -contains 'qualified-ref')) "[$($vo.Dump.verdict) / $($vo.Dump.refusals)]"
+  Write-Host '== (p) a same-named method through a non-unit receiver' -ForegroundColor Cyan
+  $vp = Get-Variant 'r1objrcv' 'R1Form.pas' "class procedure TR1Form.Open(const pId: Integer);`r`nbegin`r`n" `
+    ("type`r`n  TR1Local = class`r`n    class function R1TitleOf: string;`r`n  end;`r`n`r`nclass function TR1Local.R1TitleOf: string;`r`nbegin`r`n  Result := 'local';`r`nend;`r`n`r`nclass procedure TR1Form.Open(const pId: Integer);`r`nbegin`r`n  Writeln(TR1Local.R1TitleOf);`r`n")
+  Check 'p1 `TR1Local.R1TitleOf` is no unit-qualified call: still cut by R1, no refusal' `
+    ($vp.Ok -and ($vp.Dump.verdict -eq 'mechanical') -and $vp.Text.Contains('by **routine-call inversion**')) "[$($vp.Dump.verdict) / $($vp.Dump.refusals)]"} finally {
   $env:DRAGLINT_TEST_DUMP_PLAN = $null
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

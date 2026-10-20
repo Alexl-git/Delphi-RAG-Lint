@@ -448,6 +448,7 @@ type
     function IsInversionStem(const pStem: string): Boolean;
     function InversionDeclLines(const pStem: string): TArray<string>;
     procedure RenderInversion(pStep: Integer);
+    function InversionStillUsed: string;
     procedure CapturePlan(var pPlan: TCycleFixPlan);
     procedure CaptureRefusals(var pPlan: TCycleFixPlan);
     procedure DumpPlanForTests(const pPlan: TCycleFixPlan);
@@ -3413,6 +3414,18 @@ begin
   end;
 end;
 
+{ Why the R1 consumer keeps the declaring unit's uses entry (its section still
+  uses another name the planner binds to that unit), or '' when it drops it. }
+function TCyclePlanner.InversionStillUsed: string;
+begin
+  Result:= '';
+  for var D in FDecisions do
+    if (D.Fid = FInversion.ConsumerFid) and (D.PartnerStem = FInversion.DeclStem) and
+      (D.Verdict in [uvKeep, uvKeepUnseen]) then
+      Exit(Format('the %s section of `%s` still uses `%s`%s', [SectLabel(D.Sect), ExtractFileName(PathOf(D.Fid)),
+        UnitNameOfStem(D.PartnerStem), (if D.Still <> '' then ': ' + D.Still else '')]));
+end;
+
 procedure TCyclePlanner.RenderInversion(pStep: Integer);
 var
   Calls: TList<string>;
@@ -3461,6 +3474,10 @@ begin
       'procedural variable declared in `%s` instead. No edge of this cycle can be cut by moving ' +
       'declarations.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem,
       FInversion.RoutineName, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem, FLeafName[FInversion.DeclStem]]);
+    var Still:= InversionStillUsed;
+    if Still <> '' then
+      EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
+        'do not follow them.', [Still]);
     Emit('');
     RenderDone(False);
     RenderInversion(CStepMoves);
@@ -3534,11 +3551,8 @@ begin
     else if pPlan.CutEdge.Recipe = crRoutineInversion then
     begin
       { R1 cuts the edge only when the consumer drops the uses entry }
-      for var D in FDecisions do
-        if (D.Fid = FInversion.ConsumerFid) and (D.PartnerStem = FInversion.DeclStem) and
-          (D.Verdict in [uvKeep, uvKeepUnseen]) then
-          Add('edge-still-used', D.Still, PathOf(D.Fid), Format('the %s section still uses `%s`%s',
-            [SectLabel(D.Sect), UnitNameOfStem(D.PartnerStem), (if D.Still <> '' then ': ' + D.Still else '')]), 0);
+      var Still:= InversionStillUsed;
+      if Still <> '' then Add('edge-still-used', FInversion.RoutineName, PathOf(FInversion.ConsumerFid), Still, 0);
     end;
     for var Fid in pPlan.Touched do
       for var E in EditsOf(Fid) do
