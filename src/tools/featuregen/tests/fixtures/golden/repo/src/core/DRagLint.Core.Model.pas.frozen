@@ -1,0 +1,2646 @@
+unit DRagLint.Core.Model;
+
+interface
+
+const
+  /// <summary>The engine version, in ONE place.</summary>
+  /// <remarks>It used to be written twice: DRagLint.CLI's VERSION said
+  /// '1.2.2-alpha' while the LSP handshake's serverInfo.version said
+  /// '0.40.5-alpha', eleven releases behind. Editors surface serverInfo.version
+  /// in their language-server logs, so anyone debugging the VS Code or Zed
+  /// integration read a version that had not existed for months and could not
+  /// tell which binary they were actually talking to. Reported from outside
+  /// (tree-sitter-delphi13's editor-integration note, 2026-08-09).
+  /// This unit is the right home because it is the one both sides already use:
+  /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
+  /// constant here reaches both with no new dependency and no cycle.</remarks>
+  DRAGLINT_VERSION = '1.32.0-alpha';
+
+  /// <summary>The identity of what this build EXTRACTS from a byte sequence.
+  /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
+  /// Bump this ONLY when a re-parse is genuinely required.</summary>
+  /// <remarks>
+  /// WHY THIS IS SEPARATE FROM THE PRODUCT VERSION. The indexer fingerprint used
+  /// DRAGLINT_VERSION, so EVERY release re-parsed EVERY database whether or not
+  /// extraction had changed. Cutting v1.4.0-alpha -- two memos, an emit-order
+  /// sort and some instrumentation, nothing that changes what the parser sees --
+  /// forced a full re-parse of ~7,000 library files plus every project index.
+  /// That is hours of machine time bought for nothing, and it recurs on every
+  /// version bump.
+  ///
+  /// SEEDED TO '1.4.0-alpha' DELIBERATELY: it is the value DRAGLINT_VERSION had
+  /// when this constant was introduced, so the fingerprint STRING IS UNCHANGED
+  /// and no existing index is invalidated by the refactor itself. The very first
+  /// benefit lands on the next product bump, which will now cost nothing.
+  ///
+  /// BUMP IT WHEN, AND ONLY WHEN, A RE-PARSE IS REQUIRED:
+  ///   * the parser or grammar changes what it produces (tree-sitter version,
+  ///     src\parser)
+  ///   * an extractor emits new/different symbols, refs, uses or call edges
+  ///     (src\index, src\storage's write side)
+  ///   * the preprocessor changes which branches are parsed (src\preprocess)
+  ///   * a schema change alters stored parse content -- though `schema` is
+  ///     already its own component of the fingerprint
+  ///
+  /// DO NOT bump it for: performance work, lint rules, output formatting,
+  /// documentation, the IDE plugin, the LSP, or anything downstream of the
+  /// index. Those cannot make a stored parse wrong.
+  ///
+  /// THE FAILURE MODE THIS INTRODUCES, STATED PLAINLY: forgetting to bump it
+  /// after a real extractor change leaves SILENTLY STALE PARSES -- strictly
+  /// worse than a redundant re-parse, because the index then looks complete and
+  /// answers confidently with fewer results. `--force-reparse` is the manual
+  /// escape hatch. Guarded by tests\autotest\run_extractor_version_guard.ps1,
+  /// which fails when extractor sources change without this constant moving.
+  /// </remarks>
+  { 1.14.0-alpha -> 1.15.0-alpha (2026-09-09, PLAN-routine-directives-in-index.md).
+    A GENUINE extraction change -- the textbook case this constant exists for,
+    not a judgement call: every routine symbol now carries a new emitted fact
+    (directives), every class/record member carries another (vis_explicit), and
+    the DFM extractor emits a dfm-prop row for every value kind instead of only
+    string-valued ones. Schema moves 21 -> 22 in the same change, which would
+    force the re-parse on its own through IndexerFingerprint.
+    WHAT IS STALE UNTIL THE RE-PARSE, stated plainly: every pre-v22 row answers
+    NULL for both columns, so hover and the managed doc block show no
+    Directives line, `query --json` reports directives '' for routines that do
+    have them, and DFM text search still finds only quoted values. Nothing reads
+    WRONG -- it reads SHORT, which is the failure mode this stamp exists to make
+    visible rather than silent. }
+  { 1.16.0 -> 1.17.0 (2026-09-17, extractor batch): generic type/method NAMES
+    drop the parameter list into symbols.generic_params; nested-routine locals
+    and inline vars are emitted as local_var; symbol_facts reads/writes_fields
+    gain inherited fields via the facts-inherited post-pass. Re-parses every
+    index. Spec: docs\superpowers\specs\2026-09-17-extractor-batch-*.md }
+  { 1.17.0 -> 1.18.0 (2026-09-23): the define profile now reads the PLATFORM
+    PropertyGroups (Base_<P>, Cfg_N_<P>) as well as Base and Cfg_N, so a define
+    set only per-platform (Micronite2027: EUREKALOG) is active. That changes
+    which IFDEF branches are parsed and which units the project closure
+    admits -- the "preprocessor changes which branches are parsed" case.
+    Re-parses every index. docs\INBOX-pp-profile-ignores-platform-propertygroups.md }
+  { 1.18.0 -> 1.19.0 (2026-09-23, extractor batch 2, ONE bump for three fixes):
+    D18 symbol_facts.sql_reads/sql_writes assemble consecutive `<ds>.SQL.Add`
+    / `.CommandText.Add` literal lines per receiver before table extraction
+    (readers built line by line were lost); D19 the SQL-script extractor keeps
+    QUOTED table/column identifiers ("ACTION", "TABLE"), stored the Firebird
+    way -- quotes stripped, "" unescaped, case verbatim; P1 the preprocessor
+    neutralises Delphi 12+ multi-line string literals before the directive
+    lexer and the grammar see them (a body with an apostrophe, or a 5-quote
+    delimiter, made the whole unit unparseable). Schema unchanged. Re-parses
+    every index. docs\INBOX-defects-found-2026-09-23-rule-work.md D18/D19 }
+  { 1.20.0 -> 1.21.0 -> 1.21.1 (2026-10-05, Ref-gap F): a routine whose header
+    is the ONLY place its signature exists now emits type_use refs for its
+    parameter and return types. 1.21.0 covered implementation-only FREE
+    routines; 1.21.1 adds NESTED routines (inside a free routine, a method impl
+    or an interface-declared routine), which 1.21.0 missed. 1.21.0 was never
+    released, but databases already stamped 1.21.0 hold the incomplete parse,
+    so the second bump is what makes them re-parse. Before the fix an imported
+    unit whose type appeared only in such a signature read as unused
+    (unused-unit-in-uses false positive). Guard:
+    tests\autotest\run_impl_only_signature_type_uses.ps1 }
+  { 1.21.1 -> 1.22.0 (2026-10-14, two fixes, one re-parse):
+    (1) a statement-level `if C then Foo else Bar;` parses as
+    (statement (exprIf ..)) -- the inline if-EXPRESSION -- and its bare-call
+    branches emitted NO ref; they are now call refs. Siblings in the same
+    change: a bare-identifier `ifElse` condition and the three slots of an
+    expression-position exprIf now emit 'read'. Guard:
+    tests\autotest\run_bare_call_in_exprif_refs.ps1.
+    (2) symbol_facts SQL tables were cut at '$' (FIB$ENUMVALUES -> 'FIB', and
+    a SELECT FROM such a table lost its read entirely). Guard:
+    tests\autotest\run_sql_dollar_identifier.ps1. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.22.0-alpha';
+
+  /// <summary>The identity of what this build DERIVES from parses it already
+  /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
+  /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
+  /// <remarks>
+  /// WHY A SECOND STAMP. The extractor version answers "would this build PARSE a
+  /// byte sequence differently?", and a bump costs a ~5 hour re-parse of every
+  /// index. The resolve pass asks a different question -- "would this build
+  /// derive different EDGES from parses it already has?" -- and its remedy is
+  /// measured in minutes. One stamp cannot answer both, and measured against
+  /// real history it got both wrong in opposite directions:
+  /// <para>src\index\DRagLint.Index.CallResolver.pas sits INSIDE the extractor
+  /// hash, so 19 resolve-only commits each demanded a full re-parse.</para>
+  /// <para>src\storage's resolve writers sit OUTSIDE it: 42 resolve-write
+  /// commits, one every 2.2 days, moved nothing and left indexes silently
+  /// stale.</para>
+  /// The defect is not theoretical. On 2026-08-30 the post-reindex sequence ran
+  /// all 31 project sections specifically to pick up an enum-candidate resolve
+  /// fix, and the calls resolve executed in THREE of them -- incremental scope
+  /// is decided by changed FILES, and a changed resolver is not a changed file.
+  /// <para>The surface is scoped BY FUNCTION, in tests\resolver-surface.txt, and
+  /// guarded by tests\autotest\run_resolver_version_guard.ps1.</para>
+  /// </remarks>
+  /// <para>1.1.0-alpha -&gt; 1.2.0-alpha (2026-09-09): PickAncestorCandidateByScope
+  /// gained rule 0 -- content-identical copies of one declaration collapse to a
+  /// single candidate, so an index holding one source tree twice resolves the
+  /// ancestor edges it used to decline. Changes DERIVED edges only, never a
+  /// parse: remedy is `index --all --resolve-only`, NOT a re-parse.</para>
+  /// <para>1.2.0-alpha -&gt; 1.3.0-alpha (2026-09-16): member-access refs that name a
+  /// PROPERTY or FIELD now bind (refs.symbol_id), record their mode and accessor
+  /// (member_accesses), and a METHOD accessor earns a call_edges row. DERIVED
+  /// rows only, no parse change: remedy is `index --all --resolve-only`.</para>
+  /// <para>1.3.0-alpha -&gt; 1.4.0-alpha (2026-09-17, extractor batch): ancestor
+  /// edges resolve by ARITY before scope rule 0 (FilterCandidatesByArity;
+  /// ResolveAncestry, ResolveTypeNameToClass, GetTransitiveAncestors);
+  /// NormalizeAncestorName hands back the type arguments. Note: 1.2.0 -&gt; 1.3.0
+  /// (bc2e39dc) was never pinned in the baseline; this pin absorbs it.</para>
+  /// <para>1.4.0-alpha -&gt; 1.5.0-alpha (2026-09-21, purity v2): a new `purity`
+  /// resolve stage writes symbol_facts.effect_free / effect_summary /
+  /// effect_witness from call_edges, member_accesses, refs and source text.
+  /// DERIVED columns only, no parse change: remedy is `index --all
+  /// --resolve-only`. The stage recomputes only while some body row still has
+  /// effect_free IS NULL, so a filled database would keep OLD verdicts forever
+  /// -- this stamp is the only thing that can force it to think again.
+  /// Spec: docs\superpowers\specs\2026-09-15-interprocedural-purity.md</para>
+  /// <para>1.5.0-alpha -&gt; 1.5.1-alpha (2026-09-22, purity v2 Task 7 fix round):
+  /// the purity stage no longer concatenates symbol_facts.touches into the
+  /// witness raw. That column is the two-field wire string
+  /// 'resources|transactions' with the separator ALWAYS present, so the stored
+  /// witness read 'touches file system|' and reached users through the new
+  /// query-name-with-effect rule. TouchesWitness now splits it the way
+  /// DRagLint.Doc.Regions renders it. VERDICTS ARE UNCHANGED -- effect_free and
+  /// effect_summary are identical; only effect_witness TEXT moves, on every
+  /// routine with a non-empty touches fact (316 rows on this repo's own index).
+  /// A PATCH bump, not 1.6.0: that number is reserved for C2.3 + the IsStub
+  /// unification -- since moved to 1.7.0 by the 2026-09-23 ruling; 1.6.0 is the
+  /// enum-value binding. Remedy: `index --all --resolve-only`. It is billed rather
+  /// than absorbed because TPurityStage recomputes only while some verdict is
+  /// NULL, so a filled database would keep the old witness text forever.</para>
+  /// <para>1.5.1-alpha -&gt; 1.6.0-alpha (2026-09-23, enum-value-ref-binding): the
+  /// calls stage binds refs.symbol_id for a `read` ref that names an ENUM VALUE
+  /// (by name + scope, certain or NULL: R1 visibility, R2 uniqueness, R3
+  /// shadowing, R4 no enclosing symbol, rule-0 duplicate collapse) and for a
+  /// `member-access` ref
+  /// qualified by the enum type or its unit. No call_edges row, no
+  /// member_accesses row, no new table. DERIVED rows only, no parse change:
+  /// remedy is `index --all --resolve-only`. A MINOR, not a patch: a new class
+  /// of derived row, and the 1.6.0 reservation for C2.3 + IsStub moved to 1.7.0
+  /// by owner ruling the same day.
+  /// Spec: docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md</para>
+  /// <para>1.6.0-alpha -&gt; 1.7.0-alpha (2026-09-23, parenless-call binding, D1):
+  /// a THIRD calls-stage stream (ResolveParenlessCallRefs -&gt;
+  /// TCallResolver.ResolveParenlessRead) writes a call_edges row, and
+  /// refs.symbol_id for a certain edge, for a `read` ref that is a PARENLESS
+  /// CALL -- a value-returning routine with no required parameters named
+  /// without parentheses in an expression (`Assert(NextId &gt; 0)`,
+  /// `N := NextId`, a bare `Tick` in its class). Nearest declaration wins; a
+  /// shadowing value, a procedure-value site, an argument-taking overload or a
+  /// `with` declines, each counted. 1,715 such unbound reads on ORM3 CLIENT at
+  /// 1.6.0. DERIVED rows only, no parse change: remedy is `index --all
+  /// --resolve-only`. A MINOR: a new class of derived edge. The reservation for
+  /// C2.3 + the IsStub unification MOVES from 1.7.0 to 1.8.0-alpha.</para>
+  /// <para>1.7.0-alpha -&gt; 1.8.0-alpha (2026-09-23, `with` scope, D14 + D16):
+  /// the resolver models `with A, B do` -- a bare name binds to the innermost
+  /// target's member first (last-listed entity first), for bare calls, for the
+  /// leading identifier of a receiver, and for the enum-value and parenless
+  /// passes, which replace 1.7.0's "any `with` in the routine declines" rule.
+  /// An untypable target, or one whose ancestry leaves the index, binds
+  /// nothing (the enum pass alone keeps its pre-1.8 binding there, counted).
+  /// A FOURTH calls-stage stream binds bare `read` refs of a with target's
+  /// property/field and of the enclosing class's PROPERTY (D16a:
+  /// refs.symbol_id + member_accesses + getter edge). The parenless
+  /// procedure-value test reads split argument lists across lines (D16c) and
+  /// recognises qualified `TFunc&lt;T&gt;` / Spring `Func&lt;T&gt;` (D16b). The
+  /// with spans come from parsing the source in the resolver; no stored parse
+  /// changes. DERIVED rows only: remedy is `index --all --resolve-only`. A
+  /// MINOR: new classes of derived row, and bindings that MOVE.
+  /// The same 1.8.0-alpha also carries resolver batch A, built in parallel
+  /// from the same base and merged into this one version: (D12) the purity
+  /// stage treats a write to the enclosing function's OWN NAME
+  /// (`Greater:= X &gt; Y`) as a result assignment, not a global write: 34
+  /// routines on ORM3 CLIENT, and all 4 assert-with-side-effect findings there.
+  /// (D13) a FIFTH calls-stage stream (ResolveWriteRefs -&gt;
+  /// TCallResolver.ResolveWriteRef) binds refs.symbol_id for a bare `write`
+  /// ref -- local, parameter, field, property, class var, unit-level var --
+  /// certain or nothing; 32,909 write rows on CLIENT had none. (ENG-16) rung 4b
+  /// of ResolveOne binds a UNIT-QUALIFIED free-routine call
+  /// (`Pipes.Commands.DispatchCommand(...)`). The reservation for C2.3 + the
+  /// IsStub unification MOVES from 1.8.0 to
+  /// 1.9.0-alpha.</para>
+  /// <para>1.8.0-alpha -&gt; 1.9.0-alpha (2026-09-24, D22): rung 3d of
+  /// TCallResolver.ResolveOne binds refs.symbol_id for a `member-access` ref
+  /// that names a unit-level VAR or CONST THROUGH ITS UNIT
+  /// (`uStyles.SkipRefresh`, read or written -- the extractor emits the write
+  /// as a member-access too), the value twin of ENG-16's rung 4b and under
+  /// the same gates: the receiver did not type, names exactly one unit, and
+  /// nothing nearer (local, parameter, class member, `with` target) claims
+  /// its first segment. Recorded like a dotted field access (ruling R15):
+  /// refs.symbol_id plus a member_accesses row with its read/write mode, no
+  /// accessor and no call_edges row. 4 such unbound sites on ORM3 CLIENT at
+  /// 1.8.0, all writes. The same release changes Storage.SQLite.pas
+  /// ResolveCallTargets (R13: these bindings get their own `unit-values:`
+  /// log line and reconciliation instead of inflating the enum Shape B count
+  /// and its WARNING) and gates rung 3c's `Unit.enumValue` branch the same
+  /// way (R14: a local or undecidable `with` target spelled like the unit
+  /// now DECLINES, counted on the `enum-values:` line). DERIVED rows only, no
+  /// parse change: remedy is `index --all --resolve-only`. A MINOR: a new
+  /// class of derived row, and bindings that can disappear. The reservation
+  /// for C2.3 + the IsStub unification MOVES from 1.9.0 to 1.10.0-alpha.</para>
+  /// <para>1.9.0-alpha -&gt; 1.10.0-alpha (2026-09-28, rode the extractor
+  /// 1.20.0 re-parse; this paragraph written 2026-09-28 after the fact): an
+  /// explicit `Self.X := v` write binds X on the enclosing class chain in
+  /// TCallResolver.ResolveWriteRef and skips the with and lexical rungs, so a
+  /// same-named local is no longer bound. Bindings that MOVE. The reservation
+  /// for C2.3 + the IsStub unification MOVES from 1.10.0 to 1.11.0-alpha.</para>
+  /// <para>1.10.0-alpha -&gt; 1.11.0-alpha (2026-09-28, RB-1 + RB-4 + FIX-4):
+  /// (RB-1) TypeReceiver's last identifier rung is TypeOfOrdinaryName, so a
+  /// call on a field/property of an ANCESTOR class or on a unit-level var
+  /// (own unit, or exactly one visible in a used unit's interface) is typed
+  /// and binds -- `GDatasetsDef.GetTable(...)` on ORM3 SERVER; the type-name
+  /// rung is still last. (RB-4) UnshadowedUnitFile also declines when a
+  /// unit-level var/const spelled like the receiver's first segment is
+  /// visible, so `uLib.Go` no longer binds to unit uLib's routine when a var
+  /// uLib of an unindexed type is nearer. (FIX-3) the purity stage scores a
+  /// bound unit-qualified write (`uVars.GFlag := True`, a member-access in
+  /// write mode) as a GLOBAL write, as it already scored the bare spelling --
+  /// it scored '?' "receiver not classified". (FIX-4) the calls stage's
+  /// `enum-shadow-set` line is a WARNING only when the enum stream bound reads
+  /// under an empty shadow set. DERIVED rows only, no parse change: remedy is
+  /// `index --all --resolve-only`. A MINOR: new bindings, and bindings that
+  /// can disappear. The reservation for C2.3 + the IsStub unification MOVES
+  /// from 1.11.0 to 1.12.0-alpha.</para>
+  /// <para>1.11.0-alpha -&gt; 1.12.0-alpha (2026-10-06, E5 / DEC-19, owner ruled
+  /// YES 2026-10-05): TCallResolver.ResolveBareMemberRead binds a BARE read of
+  /// a FIELD of the enclosing class or of one of its resolved ancestors
+  /// (`if FConnected`, `with tblFtrs do`, the receiver read of `tblFtrs.Post`
+  /// where a grand-ancestor declares tblFtrs) -- refs.symbol_id plus a
+  /// member_accesses row, mode read, no accessor, no call edge. It declined
+  /// 'field' by design since 1.8.0; that reason is gone. Shadowing is
+  /// unchanged (with target, then locals/params of the routine and its outer
+  /// routines, then the class chain). The class chain is now walked NEAREST
+  /// first over ANY member kind (NearestClassMember): a nearer method, class
+  /// const/var or nested type hides a farther field ('hidden'), an unresolved
+  /// parent ends the walk, and an implemented interface's property -- which
+  /// the 1.8.0 bare-property read bound -- is no longer in scope. DERIVED rows only, no parse change:
+  /// remedy is `index --all --resolve-only`. A MINOR: a new class of derived
+  /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
+  /// counters). The reservation for C2.3 + the IsStub unification MOVES from
+  /// 1.12.0 to 1.13.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.12.1-alpha';
+
+  /// <summary>Hidden per-project folder holding everything drag-lint keeps for
+  /// one Delphi project: its index, its drag-lint-project.json, its reports, and
+  /// the ghost-compile journal that first created the folder.</summary>
+  DRAG_HOME_DIR = '_D-RAG';
+
+type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.PurityStage.pas), declaration (DRagLint.Core.Model.pas), DRagLint.Analysis.SurfaceFingerprint.IsSurfaceKind (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas), DRagLint.Hover.Renderer.KindQualifier (DRagLint.Hover.Renderer.pas) (+33 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TSymbolKind = (  // NOTE: DragLint.Plugin.StructureCache deliberately re-declares this; it is a design-time BPL that shells out to the CLI and uses only System.* units, so depending on Core.Model would link the whole engine into the IDE package
+    skUnit, skProgram, skPackage, skClass, skInterface, skRecord, skEnum, skEnumValue, skProcedure, skFunction, skMethod, skConstructor, skDestructor,
+    skProperty, skField, skVarDecl, skConstDecl, skTypeAlias, skForm, skComponent,
+    // v0.40.5 Tier 1: SQL DDL symbols extracted from MS*.SQL files.
+    // Stored in the same symbols table so the existing query/hover/refs
+    // infrastructure carries them transparently; the kind text
+    // ('sql_table', 'sql_column', ...) is the disambiguator.
+    skSqlTable, skSqlColumn, skSqlIndex, skSqlTrigger, skSqlGenerator, skSqlProcedure, skSqlView, skSqlException, skSqlDomain, skSqlConstraint,
+    // v0.41: unit initialization / finalization sections (no name; one each
+    // per unit at most).  Emitted as unit-child markers so the structure view
+    // can list them.
+    skInitialization, skFinalization,
+    // v14 (D5): typed local vars + params, emitted so call-site receivers
+    // can be resolved to a concrete type. Populated starting Task 2.
+    skLocalVar, skParam);
+
+  TSymbolKindHelper = record helper for TSymbolKind
+    /// <returns><!-- drag-lint:auto -->string -- Observed: KindText[Self].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.FromText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function ToText: string                                          ;
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbolKind</returns>
+    /// <exception cref="Exception"><!-- drag-lint:auto exc -->Unknown symbol kind: "%s"</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Storage.SQLite.ReadSymbolFromQuery (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTypeCandidates (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetUnitLevelRoutines (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetUnitLevelValueDecls (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function FromText(const AText: string): TSymbolKind; static;
+  end;
+
+  /// <summary>v11 (M1): the broad category a declared/aliased type resolves to.
+  /// Drives the type-aware rule family (float/string-equality, freeandnil-on-
+  /// interface, win64-pointer-cast). tcUnknown = could not resolve.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Core.Model.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CatOf (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.TypeTextIsFloat (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.TypeTextIsInterface (DRagLint.Diagnostics.AstChecks.pas) (+12 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TTypeCategory = (
+    tcUnknown, tcFloat, tcString, tcChar, tcOrdinal, tcBoolean,
+    tcInterface, tcClass, tcRecord, tcPointer, tcEnum);
+
+  TTypeCategoryHelper = record helper for TTypeCategory
+    /// <returns><!-- drag-lint:auto -->string -- Observed: 'float'; 'string'; 'char';
+    /// 'ordinal'; 'boolean'; 'interface'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Complexity: 11 (cyclomatic, outer body), 15 lines (full implementation)</para>
+    /// <para>Pure</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function ToText: string;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenFileTx (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TFileTxToken = record
+    FileId: Int64 ;
+    Path  : string;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ComputeDelta (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.InterfaceSymbolsOf (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.SymbolToJson (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.WriteBaselineFile (DRagLint.Analysis.LintTree.pas) (+415 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree (+41 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TSymbol = record
+    Id           : Int64      ;
+    FileId       : Int64      ;
+    ParentId     : Int64      ;
+    Kind         : TSymbolKind;
+    Name         : string     ;
+    QualifiedName: string     ;
+    Signature    : string     ;
+    Modifiers    : string     ;
+    Section      : string     ; // 'interface' | 'implementation' | '' (usable-from-other-units)
+    // v17 (proptree assignability engine, Task 6/R1): a PROPERTY's read/write
+    // accessor shape, derived from the declProp getter/setter grammar fields --
+    // 'ro' (read only), 'rw' (read+write), 'wo' (write only), or '' for a bare
+    // redeclaration (`property Color;`) that inherits the ancestor's accessors.
+    // ALWAYS '' for non-property symbols (fields/consts/methods/types). proptree
+    // wires is_writable = (prop_access <> 'ro'); an empty value defaults writable
+    // (back-compat + inheritance-resolved up-tree). Stored NULL when '' (see
+    // UpsertSymbol) so an un-re-indexed pre-v17 DB reads back '' unchanged.
+    PropAccess   : string     ;
+    // v11 (M1): raw ancestor list text for class/interface symbols, e.g.
+    // 'TBar, IBaz'. Empty for non-class/interface or no ancestors. The
+    // resolve pass normalizes names + links them cross-unit (type_ancestors).
+    Heritage     : string     ;
+    // v12 (M1): True when this method is virtually dispatched (virtual/dynamic/
+    // override). False for non-methods / static methods. Backs cross-unit
+    // virtual-method-in-constructor.
+    IsVirtual    : Boolean     ;
+    // v15: True when this class/record symbol is a `record helper for T` /
+    // `class helper for T` declaration (grammar node `declHelper`, distinct
+    // from `declClass`). When True, Heritage carries the helper's TARGET type
+    // name (e.g. 'TColor'), not an ancestor list (helpers have no ancestors).
+    // The resolve pass (ResolveHelpers) reads this to populate type_helpers.
+    IsHelper     : Boolean     ;
+    // v22 (PLAN-routine-directives-in-index.md): EVERY routine directive --
+    // virtual dynamic override abstract overload reintroduce final static
+    // assembler export inline deprecated platform experimental message stdcall
+    // cdecl pascal register safecall winapi varargs -- plus `external`, in
+    // canonical lowercase, DECLARATION order, space-joined. '' when the routine
+    // carries none; '' for every non-routine symbol.
+    //
+    // A NEW COLUMN RATHER THAN MORE WORDS IN Modifiers, and the reason is not
+    // taste: four consumers equality-match Trim(Modifiers) as THE visibility
+    // word or use Modifiers = '' as "not a method" -- LSP.Server,
+    // LSP.Completion, Convert.PropTree and CLI's IsValidTarget, which tests
+    // `Vis in ('published','public')`. Appending tokens there would silently
+    // drop members from proptree rather than fail loudly.
+    //
+    // The READ side maps NULL to '', so '' alone cannot distinguish "no
+    // directives" from "row written by a pre-v22 index" -- a consumer that
+    // needs that difference must read the DB's schema version.
+    Directives   : string     ;
+    // v22: True when a visibility keyword was actually WRITTEN for the member's
+    // section; False for the unlabelled leading section of a class or record.
+    // The distinction matters because under $M+ -- every TPersistent descendant
+    // -- that unlabelled section is PUBLISHED, while Modifiers says 'public'
+    // for both. Meaningless for non-members, where it is True. NULL on a
+    // pre-v22 row reads back as True: the conservative direction, since
+    // claiming "the keyword was written" invents nothing, whereas defaulting to
+    // False would invent published members across every old index.
+    VisExplicit  : Boolean    ;
+    /// <summary>v23: the generic parameter list AS WRITTEN, without the angle
+    /// brackets and including constraints ('T', 'K, V', 'I: IMicObject',
+    /// 'T: class'). '' for a non-generic symbol. Name is always the BARE
+    /// identifier; see DisplayName for the assembled form.</summary>
+    GenericParams: string     ;
+    StartLine    : Integer    ;
+    StartCol     : Integer    ;
+    EndLine      : Integer    ;
+    EndCol       : Integer    ;
+    // v9: the routine's implementation BODY span (header..final 'end'), so
+    // "which routine contains line N" / context bundles don't need a text-scan.
+    // 0 when the symbol has no body (types, fields, consts, abstract/interface
+    // methods). StartLine/EndLine stay the DECLARATION range.
+    ImplStartLine: Integer;
+    ImplEndLine  : Integer;
+    /// <summary>C2.5 (forward-stub design, 2026-09-17): when a by-name lookup
+    /// folded a forward declaration (`TFoo = class;`) into THIS row -- the real
+    /// declaration further down the same unit -- this is the stub's start line.
+    /// 0 when no stub was folded. TRANSIENT: set only by the readers that fold
+    /// (FindSymbolsByExactName / FindSymbolsByQualifiedName) and never written
+    /// to the database; ReadSymbolFromQuery leaves it 0.</summary>
+    ForwardLine  : Integer;
+    /// <summary>The human-visible name: Name, or Name&lt;GenericParams&gt; for a
+    /// generic. Renderers print this; nothing matches on it.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Name + '&lt;' + GenericParams
+    /// + '&gt;'; Name.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas)</para>
+    /// <para>Reads: GenericParams, Name</para>
+    /// <para>Pure</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function DisplayName: string;
+  end; // record
+
+  /// <summary>v(ADP2 T1): index-time ANALYSIS facts about one symbol -- as
+  /// opposed to symbol_docs' hand/generated DOC-COMMENT text, these are
+  /// derived purely from static analysis: field read/write sets, return
+  /// ownership, cyclomatic complexity, body size, the DFM event handler it is
+  /// wired to, SQL tables it touches, and covering test qnames. Persisted 1:1
+  /// in the symbol_facts table (symbol_id is the PRIMARY KEY / FK to
+  /// symbols(id) ON DELETE CASCADE). Task 1 only plumbs storage -- every
+  /// analyzer that POPULATES these fields lands in a later Phase 2 task.
+  /// CSV-typed fields (ReadsFields/WritesFields/SqlReads/SqlWrites/CoveredBy)
+  /// use DRagLint.Doc.SymbolFacts' SymbolFactsCsvJoin/Split helpers.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ApplyFacts (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.Create (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanRoutine (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas) (+14 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.PurityStage, DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Doc.Facts, DRagLint.Doc.SymbolFacts, DRagLint.Lint.ProjectRules, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TSymbolFacts = record
+    SymbolId    : Int64  ;
+    ReadsFields : string ;   // CSV of field names read
+    WritesFields: string ;   // CSV of field names written
+    ReturnsOwner: string ;   // '', 'new', 'borrowed', 'self'
+    Cyclomatic  : Integer;   // 0 = not computed
+    BodyLoc     : Integer;
+    DfmEvent    : string ;   // 'Button1.OnClick' or ''
+    SqlReads    : string ;   // CSV of tables read
+    SqlWrites   : string ;   // CSV of tables written
+    CoveredBy   : string ;   // CSV of test qnames (capped)
+    /// <summary>v19 (ADP3 T11): var/out parameters the routine writes to,
+    /// display-ready, e.g. 'pReason (out), pList (var)'. '' when none.</summary>
+    MutatesParams: string;
+    /// <summary>v19 (ADP3 T12): VCL/DevExpress controls or Application/Screen
+    /// the routine touches, display-ready, e.g. 'cxGrid1, Application'. ''
+    /// when none -- POSITIVE FINDINGS ONLY, never a thread-safety claim.</summary>
+    UiAffinity   : string;
+    /// <summary>v19 (ADP3 T13): CATEGORIES of external resource touched, plus
+    /// transaction verbs, e.g. 'file system, registry|starts, commits'. The
+    /// pipe separates the resource list from the transaction list; either side
+    /// may be empty. '' when neither.</summary>
+    Touches      : string;
+    /// <summary>v19 (ADP3 T14): DI/ORM wiring joined from di_bindings /
+    /// orm_links / fb_relations, e.g. 'di:IFolderService (singleton)' or
+    /// 'ds:qryFolders -&gt; FOLDERS (ID, NAME)'. '' when none.</summary>
+    Wiring       : string;
+    /// <summary>False when no symbol_facts row exists for SymbolId -- the
+    /// renderer's cue to omit every derived doc-comment line entirely.</summary>
+    Present     : Boolean;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored; PutSymbolFacts does
+    /// not read it. The UNCAPPED own-class fields READ (display spelling, body
+    /// order). Empty for a free routine.</summary>
+    OwnReads  : TArray<string>;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored. The UNCAPPED
+    /// own-class fields WRITTEN (display spelling, body order). Empty for a
+    /// free routine.</summary>
+    OwnWrites : TArray<string>;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored. The UNCLASSIFIED bare
+    /// identifiers READ (not a local, param, Result or own field), as written,
+    /// that the facts-inherited post-pass matches against ancestor fields.</summary>
+    HeldReads : TArray<string>;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored. The UNCLASSIFIED bare
+    /// identifiers WRITTEN (not a local, param, Result or own field), as
+    /// written, that the facts-inherited post-pass matches against ancestor
+    /// fields.</summary>
+    HeldWrites: TArray<string>;
+    /// <summary>Purity v2 (spec 2026-09-15 section 9.2): the interprocedural
+    /// verdict written by the `purity` resolve stage, NEVER by PutSymbolFacts.
+    /// -1 = not computed (column NULL: pre-stage index, or the row was just
+    /// rewritten by a per-file reindex); 0 = not proven; 1 = proven effect-free.</summary>
+    EffectFree   : Integer;
+    /// <summary>The machine-readable effect summary: comma-joined components
+    /// 'g' (writes global/unit state, resource, SQL), 'h' (frees storage it did
+    /// not allocate), 's' (writes its own Self's fields), 'p&lt;k&gt;' (writes through
+    /// parameter k, 0-based) and '?' (a callee or member could not be bound).
+    /// '' = writes nothing outside itself. NULL reads back ''.</summary>
+    EffectSummary: string;
+    /// <summary>The FIRST blocker, display-ready and TRANSLATED through the call
+    /// site, e.g. 'writes through SetLength(#0 = FBuffer, a field)' or
+    /// 'calls SubString (unbound; receiver S)'. '' when proven.</summary>
+    EffectWitness: string;
+  end; // record
+
+  /// <summary>One purity verdict to persist -- the row the `purity` resolve
+  /// stage hands ISymbolStore.PutEffectFacts for a routine that has a
+  /// symbol_facts row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Analysis.PurityStage.TPurityRun.WriteVerdicts (DRagLint.Analysis.PurityStage.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutEffectFacts (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.PurityStage, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TEffectFactRow = record
+    SymbolId  : Int64  ;
+    /// <summary>0 or 1; the stage never writes -1.</summary>
+    EffectFree: Integer;
+    Summary   : string ;
+    Witness   : string ;
+  end;
+
+  /// <summary>v11 (M1): one resolved ancestor edge of a class/interface --
+  /// either a direct heritage entry (type_ancestors row) or, in a transitive
+  /// closure, a reachable ancestor. Name is the normalized ancestor type name;
+  /// Kind is 'class'|'interface'|'?' ('?' when unresolved). Resolved is True
+  /// when the ancestor was linked to a defining symbol (SymbolId/FileId set).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.AncestorsOf (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.Create (DRagLint.Analysis.PurityStage.pas), DRagLint.Charts.Q.Hierarchy.AncestorsOf (DRagLint.Charts.Q.Hierarchy.pas), DRagLint.Charts.Q.Hierarchy.Emit (DRagLint.Charts.Q.Hierarchy.pas) (+46 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.PurityStage, DRagLint.Charts.Q.Hierarchy, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Facts, DRagLint.Doc.SymbolFacts, DRagLint.Index.CallResolver, DRagLint.Lint.ClassMetrics, DRagLint.Lint.ProjectRules, DRagLint.LSP.Completion, DRagLint.Resolver.TypeAt, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TTypeAncestor = record
+    Name    : string ;
+    Kind    : string ;
+    Resolved: Boolean;
+    SymbolId: Int64  ;
+    FileId  : Int64  ;
+    Ordinal : Integer; // position in the declaring type's heritage list (direct edges)
+    /// <summary>v1.13: the name of the class a late-resolved TYPE ALIAS edge
+    /// actually landed on, when that differs from <c>Name</c>; '' otherwise.
+    /// <c>Name</c> always stays the ancestor name as WRITTEN in the heritage
+    /// list.</summary>
+    /// <remarks>One ancestor, two names -- never a second ROW and never an
+    /// overwritten <c>Name</c>; GetTransitiveAncestors' assignment site states
+    /// why both of those break a consumer. Match with MatchesName, never with
+    /// <c>SameText(A.Name, X)</c>. Pinned by
+    /// tests\autotest\run_ancestors_alias_target_name.ps1.</remarks>
+    ResolvedName: string;
+    /// <summary>v23: the instantiation's argument list as written on the edge
+    /// ('T', 'TFoo', 'string, TBar'); '' when the ancestor was named without
+    /// arguments. Arity = GenericArity(TypeArgs) when non-empty.</summary>
+    TypeArgs: string;
+    /// <summary>True when AName names this ancestor -- either as WRITTEN in the
+    /// heritage list (<c>Name</c>) or as the class a type alias resolved to
+    /// (<c>ResolvedName</c>). The by-name ancestry test; use it instead of
+    /// <c>SameText(A.Name, X)</c>, which misses every alias target.</summary>
+    /// <param name="AName">Candidate ancestor name; compared case-insensitively.
+    /// An empty AName never matches.</param>
+    /// <returns>True when AName equals Name or ResolvedName.</returns>
+    /// <remarks>
+    /// Pure; no side effects.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.IsComponentType (DRagLint.Convert.PropTree.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus.IsDataModuleClass (DRagLint.Lint.ProjectRules.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ImplementsInterface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsDescendantOf (DRagLint.Storage.SQLite.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Name, ResolvedName</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function MatchesName(const AName: string): Boolean;
+  end;
+
+  /// <summary>v15: one helper-target edge -- a `record helper for T` /
+  /// `class helper for T` declaration linked to its target type T. Captured
+  /// first-class so the enum-helper generator's create-only-if-missing guard
+  /// and the enum-helper-separate-units lint rule never string-parse heritage.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods (DRagLint.Index.CallResolver.pas), DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits (DRagLint.Lint.ProjectRules.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Index.CallResolver, DRagLint.Lint.ProjectRules, DRagLint.Refactor.EnumHelper, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  THelperEdge = record
+    HelperSymbolId: Int64 ;
+    TargetName    : string;
+    TargetSymbolId: Int64 ;
+    TargetFileId  : Int64 ;
+    HelperKind    : string; // 'record' | 'class'
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.LintTree.CollectNameJoinFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectRoutineFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.IsBound (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.PrecededByInherited (DRagLint.Analysis.PurityStage.pas) (+116 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Charts.Q.WhoCalls, DRagLint.Charts.Q.Wiring, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.UsesReconcile, DRagLint.Core.Interfaces (+16 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TReference = record
+    Id         : Int64  ;
+    SymbolId   : Int64  ;
+    FileId     : Int64  ;
+    Kind       : string ;
+    NameText   : string ;
+    StartLine  : Integer;
+    StartCol   : Integer;
+    EndLine    : Integer;
+    EndCol     : Integer;
+    ContextText: string ; // v0.17: surrounding source lines (find-callers --context N)
+    // v13 (v0.82): DB id of the innermost routine whose impl body contains this
+    // ref's StartLine; 0 when the ref is not inside any routine body. Set by the
+    // indexer (per-file attribution) and read back by the ref-reading store
+    // methods (NULL -> 0). Distinct from SymbolId (the ref's target slot).
+    EnclosingSymbolId: Int64;
+    // v(2026-08-16): the text before the dot at this ref's site -- 'Self' for
+    // `Self.Run`, 'B' for `B.Run`, '' for a bare `Run` or for a routine passed
+    // by name. The refs table has carried receiver_text since v20; TReference
+    // simply never surfaced it, and that gap is not cosmetic: it is the only
+    // thing distinguishing a QUALIFIED member access from a BARE pass, which is
+    // what find-callers --resolved needs to report a callback reach without
+    // mislabelling `Self.Run` as one. Populated by the ref-reading store
+    // methods; '' when the column is absent (pre-v20 DB) or NULL.
+    ReceiverText: string;
+    // 2026-10-19 (wave 3 lane G): member_accesses.mode for this ref -- 'read' |
+    // 'write' when the resolver bound a qualified field/property access
+    // (`AJob.Streaming`, `LJob.Streaming := True`; refs.kind 'member-access'
+    // carries no direction of its own). '' when there is no member_accesses
+    // row. Filled by FindCallersByName only; `usages` buckets on it.
+    AccessMode: string;
+  end;
+
+  /// <summary>v14 (D5): one resolved call-site edge, written by the
+  /// ResolveCallTargets pass and read back by the Called-from / find-callees
+  /// queries. Stored Confidence is ALWAYS 'certain' or 'ambiguous' (the two
+  /// values the resolver writes to call_edges.confidence).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.CallRef (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.Create (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.IsBound (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.MemberRef (DRagLint.Analysis.PurityStage.pas) (+26 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.PurityStage, DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Index.CallResolver, DRagLint.Report.RCallTree, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TCallEdge = record
+    RefId               : Int64 ;
+    TargetSymbolId      : Int64 ;
+    ReceiverTypeSymbolId: Int64 ;
+    Confidence          : string;
+    // v20: the call-site RECEIVER TEXT, verbatim as written left of the dot.
+    // '' for a bare call AND for `inherited M` (neither has a dot before the
+    // name); 'Self'; a bare type or variable name; the FULL dotted chain for a
+    // qualified call ('System.JSON.TJSONArray'); or a cast expression, which
+    // TryParseCastTarget reduces.
+    //
+    // Carried on the EDGE record but persisted for EVERY call ref, resolved or
+    // not -- the unresolved ones are precisely the ones that need it, because
+    // they are what the leaf-name caller bucket draws from. TargetSymbolId = 0
+    // does not mean "no receiver to record".
+    ReceiverText        : string;
+    // v21: the qualified NAME of a target in ANOTHER index (RTL/VCL/DevExpress/
+    // Spring), set only when TargetSymbolId = 0. A ref never carries both: a
+    // local edge always wins, and cross-DB resolution runs last.
+    ExternalTarget      : string;
+    // v(2026-08-16): True when the receiver could NOT be derived from source
+    // matching the index -- the file was edited since it was indexed, or could
+    // not be read. It means "unknown", NEVER "no receiver", and the persistence
+    // step must leave the stored receiver_text alone rather than write ''.
+    // Defaults False so Default(TCallEdge) keeps the old meaning (known).
+    // See TCallResolver.LinesOf and INBOX-whole-db-resolve-degrades-a-stale-index.
+    ReceiverUnknown     : Boolean;
+    { 2026-09-16 (property-refs-resolve): a member-access ref that named a
+      PROPERTY or FIELD rather than a routine. TargetSymbolId is then the
+      MEMBER's id and these three describe the access: MemberMode is 'read' or
+      'write' (E3: := after the name, past any indexer, is a write);
+      AccessorSymbolId is the getter/setter the mode resolves to -- a METHOD
+      (AccessorKind 'method'), which earns a call_edges row, or the backing
+      FIELD (AccessorKind 'field'), which earns a member_accesses row only --
+      or 0 when the declaration names none this resolver could find. '' /
+      0 on every routine edge, so Default(TCallEdge) keeps its old meaning.
+      Since resolver 1.9.0-alpha (D22, ruling R15) a UNIT-LEVEL var or const
+      named through its unit (`uStyles.SkipRefresh`, rung 3d) carries a
+      MemberMode too, with AccessorSymbolId 0: a member_accesses row, no call
+      edge. }
+    MemberMode          : string;
+    AccessorSymbolId    : Int64 ;
+    AccessorKind        : string;
+    { 2026-09-23 (enum-value-ref-binding): True when TargetSymbolId is an ENUM
+      VALUE reached through a qualified member-access (TEnum.value / Unit.value).
+      The store then writes refs.symbol_id ONLY -- no call_edges row
+      (CanBeCallTarget stays routine-only), no member_accesses row (there is no
+      mode/accessor to record). Default False so Default(TCallEdge) keeps its
+      meaning. }
+    ValueOnly           : Boolean;
+  end;
+
+  /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see
+  /// (has in its uses graph, directly) the unit whose file is ATargetFileId.
+  /// Bulk-read by TCallResolver to build its per-file in-scope set, mirroring
+  /// ResolveAncestry's FileScope map. Both ids are always &gt; 0 (the reader
+  /// filters out unresolved uses rows).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetUnitScopeEdges (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Index.CallResolver, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TFileScopeEdge = record
+    FileId      : Int64;
+    TargetFileId: Int64;
+  end;
+
+  /// <summary>One unit that would have to be recompiled because it reaches,
+  /// directly or transitively, the unit whose interface changed.</summary>
+  /// <remarks>
+  /// There is no DEPTH field, and that is a measurement rather than an
+  /// omission. unit_uses legitimately contains CYCLES -- Delphi allows a
+  /// circular reference through the implementation section, and this repo
+  /// ships a `circular-uses` rule because of it. The recursive CTE terminates
+  /// only because UNION dedupes on the file id alone; carrying a depth column
+  /// makes (fid, depth) the dedupe key, so a 2-cycle emits (A,0) (B,1) (A,2)
+  /// (B,3) ... forever. MEASURED 2026-09-10 on this repository's own index,
+  /// which has 2 such cycles: the fid-only closure is 78 rows in 1.8 ms, while
+  /// the depth-carrying form ARTIFICIALLY CAPPED at 200 already returns 4,124
+  /// rows -- 53x -- and is non-terminating without the cap. IsDirect carries
+  /// the only distinction the fan-out actually needs.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectNameJoinFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDependentFile = record
+    /// <summary>files.id of the dependent.</summary>
+    FileId  : Int64;
+    /// <summary>Absolute path as the index stores it.</summary>
+    Path    : string;
+    /// <summary>True when it names the changed unit in its OWN uses clause.</summary>
+    IsDirect: Boolean;
+  end;
+
+  /// <summary>v14 (D5): a RENDERING value for one resolved (or best-effort
+  /// unresolved) caller of a target symbol. Confidence is 'certain' |
+  /// 'ambiguous' | 'unverified' -- the last for the no-call_edges-row '?'
+  /// bucket surfaced by FindUnresolvedNameCallers. Renderer: 'certain' ->
+  /// plain; 'ambiguous'/'unverified' -> append ' ?'.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoAmbiguousCalls (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Facts.ForeignReceiverType (DRagLint.Doc.Facts.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Doc.Facts, DRagLint.Doc.SymbolFacts, DRagLint.Report.RCallTree, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TResolvedCaller = record
+    EnclosingSymbolId: Int64 ;
+    EnclosingQName   : string;
+    /// <summary>How the site uses the target, by FindResolvedCallers arm:
+    /// '' for a routine call (call_edges row); 'read' | 'write' for a
+    /// member_accesses row (member_accesses.mode) -- a PROPERTY or FIELD access
+    /// (2026-09-16) or, since resolver 1.9.0-alpha (R15), a unit-qualified
+    /// var/const (Unit.Var; a const is always 'read'); 'read' for a bound
+    /// usage read (enum value, bare or qualified -- owner ruling R7); 'write'
+    /// for a bound bare write (D13 binding, reported since D31). Rendered as a
+    /// trailing mode key / bracket so routine rows are byte-identical to
+    /// what they were.</summary>
+    Mode             : string;
+    Location         : string; // filename only (unchanged; existing consumers rely on this)
+    /// <summary>The same file, fully qualified.</summary>
+    /// <remarks>Location is deliberately filename-only and must stay that way --
+    /// the CLI's JSON is compared across machines, and an absolute path there
+    /// would make every golden machine-specific. But a filename cannot be
+    /// OPENED, and the hover popup both navigates to these rows and (since
+    /// 2026-08-19) renders the source line at them, so the full path has to
+    /// travel alongside rather than replace it.</remarks>
+    FullPath         : string;
+    /// <summary>1-based line of the call site in the caller's file; 0 when unknown.
+    /// Added for reverse-calltree; other consumers may ignore it.</summary>
+    CallSiteLine     : Integer;
+    Confidence       : string;
+    /// <summary>The call site's receiver text as extracted -- `LModule` in
+    /// `LModule.TransferFile(...)`, '' for an unqualified call.</summary>
+    /// <remarks>An empty value means two very different things depending on the
+    /// TARGET. For a free routine it is simply correct: an unqualified call to a
+    /// routine in scope has no receiver, and counting those as a defect is what
+    /// inflated "3,882 untypable receivers" out of a real handful. For a METHOD
+    /// it means the receiver was not captured, so nothing here proves the call
+    /// reached THIS method rather than a same-named one -- which is how a DPP
+    /// test came to be listed as covering eight different TransferFile symbols.
+    /// ComputeCoveredBy reads it to mark such a coverage fact unverified rather
+    /// than dropping it (owner ruling 2026-09-03) or asserting it.
+    /// Filled by FindUnresolvedNameCallers; the resolved bucket does not need it
+    /// -- a call_edges row IS the proof, so those callers are verified whatever
+    /// this holds.</remarks>
+    ReceiverText     : string;
+  end;
+
+  /// <summary>2026-09-23 (enum-value-ref-binding): one enum_value declaration as
+  /// the enum-value resolve stream sees it (ISymbolStore.GetEnumValueSymbols).
+  /// OwnerTypeId is the class/record/interface that DECLARES the enum when the
+  /// enum is nested inside a type, and 0 for a unit-level enum.</summary>
+  /// <remarks>
+  /// Deliberately NOT a TSymbol. The enum-value pass keys on the facts this
+  /// record carries and no others -- identity, declaring file, the parent enum,
+  /// the declaring type (for the nested-enum visibility rule), the value's own
+  /// section (R1), the name pair rule 0 groups on, and the span rule 0 compares.
+  /// Carrying a full TSymbol would invite a later rung to consult a field
+  /// (Signature, Heritage, Modifiers) that the bulk SQL does not select and
+  /// which would therefore read back empty rather than absent.
+  ///
+  /// Section is the VALUE's own section, measured identical to its parent enum's
+  /// on both reference corpora; R1 uses it directly rather than re-deriving it
+  /// from EnumId, so a future extractor change that lets the two differ makes the
+  /// value's own section win, which is the correct reading.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.CollapseIdenticalEnumCopies (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Index.CallResolver, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TEnumValueDecl = record
+    /// <summary>symbols.id of the enum_value itself -- what lands in
+    /// refs.symbol_id when the ref binds.</summary>
+    Id           : Int64;
+    /// <summary>Declaring file; the left-hand side of every R1 visibility test.</summary>
+    FileId       : Int64;
+    /// <summary>symbols.id of the parent enum TYPE (the value's parent_id).</summary>
+    EnumId       : Int64;
+    /// <summary>symbols.id of the class/record/interface declaring the parent
+    /// enum, or 0 when the enum is declared at unit level. Non-zero means the
+    /// bare form is only reachable from inside that type or a descendant.</summary>
+    OwnerTypeId  : Int64;
+    /// <summary>The bare identifier as written; matched case-insensitively.</summary>
+    Name         : string;
+    /// <summary>Fully qualified name; rule 0's grouping key (lowercased).</summary>
+    QualifiedName: string;
+    /// <summary>'interface' | 'implementation' | ''; R1's cross-unit gate.</summary>
+    Section      : string;
+    /// <summary>Declaration span start; half of rule 0's identity test.</summary>
+    StartLine    : Integer;
+    /// <summary>Declaration span end; the other half.</summary>
+    EndLine      : Integer;
+  end;
+
+  /// <summary>2026-09-23 (enum-value-ref-binding): per-run counters of the
+  /// enum-value pass, printed on the calls stage's ResolveLog line and recorded
+  /// by the corpus measurement.</summary>
+  /// <remarks>
+  /// Every DECLINE is counted by reason, and that is the point of the record
+  /// rather than a nicety: the pass answers `certain` or nothing, so a ref that
+  /// does not bind leaves no trace anywhere else. Without these counters an
+  /// over-strict rule and a correctly-empty corpus look identical from outside.
+  /// Bound counts BOTH shapes (the bare read and rung 3c's qualified hit).
+  /// DupGroupsCollapsed / CollapseDecisive make owner ruling 4's rule-0 collapse
+  /// auditable after the fact: how many duplicate groups were folded, and in how
+  /// many of those the fold is what turned an ambiguous set into a binding.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas)</para>
+  /// <para>Used in units: DRagLint.Index.CallResolver</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TEnumResolveStats = record
+    /// <summary>Refs bound, both shapes.</summary>
+    Bound             : Int64;
+    /// <summary>Declined: no candidate visible under R1.</summary>
+    NotVisible        : Int64;
+    /// <summary>Declined: two or more visible candidates survived rule 0 (R2).</summary>
+    Ambiguous         : Int64;
+    /// <summary>Declined: a nearer or same-scope same-named symbol (R3 a/b/c).</summary>
+    Shadowed          : Int64;
+    /// <summary>Duplicate groups folded to one representative by rule 0.</summary>
+    DupGroupsCollapsed: Int64;
+    /// <summary>Of those, the folds that turned &gt;1 candidate into exactly 1.</summary>
+    CollapseDecisive  : Int64;
+    /// <summary>1.8.0: declined because an enclosing `with` target declares the
+    /// name -- the read names that member (R7), not the enum value.</summary>
+    WithMember        : Int64;
+    /// <summary>1.8.0: NOT a decline. Bound although an enclosing `with` target
+    /// could not be typed and so might declare the name; the residual that
+    /// enum-read-inside-with reports.</summary>
+    WithUndecided     : Int64;
+  end;
+
+  /// <summary>v8: one Spring4D DI registration (interface implemented by impl,
+  /// with lifetime). Endpoint names are verbatim, including nested generics.
+  /// FileId is filled by the store from the file transaction token.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.Charts.Q.Wiring.DistinctLifetimes (DRagLint.Charts.Q.Wiring.pas), DRagLint.Charts.Q.Wiring.Emit (DRagLint.Charts.Q.Wiring.pas), DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas) (+8 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Wiring, DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Doc.SymbolFacts, DRagLint.Parser.Delphi13, DRagLint.Storage.SQLite, DRagLint.Wiring</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDiBindingRow = record
+    Id           : Int64  ;
+    FileId       : Int64  ;
+    InterfaceName: string ;
+    ImplName     : string ;
+    Lifetime     : string ;
+    StartLine    : Integer;
+    StartCol     : Integer;
+    EndLine      : Integer;
+    EndCol       : Integer;
+  end;
+
+  /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the
+  /// orm-link pass to a Firebird relation, with that relation's leading columns
+  /// in declaration order. Backs the doc/hover 'Dataset: qryFolders -&gt;
+  /// FOLDERS (ID, NAME)' line.</summary>
+  /// <remarks>
+  /// Columns is CAPPED by the reader, not by the renderer, so the row
+  /// is display-ready in the same sense reads_fields is: the store decides how
+  /// many columns are worth carrying, and every consumer shows the same set.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Doc.SymbolFacts.ComputeWiring.AddDatasetLinks (DRagLint.Doc.SymbolFacts.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindOrmDatasetLinks (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Doc.SymbolFacts, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TOrmDatasetLink = record
+    RelationName: string        ;
+    Columns     : TArray<string>;
+  end;
+
+  /// <summary>One indexed string-literal occurrence (a message, caption, or
+  /// exception text). SymbolId is the enclosing routine/component, resolved by
+  /// the indexer post-parse (0 in parser output). Text is the DECODED logical
+  /// string (escapes/`#nn`/continuations resolved); never empty.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Parser.DFM.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Lint.ProjectRules.CollectDfmPropertyNotDeclared (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectDfmPropertyNotDeclared.AddStreamedNames (DRagLint.Lint.ProjectRules.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Lint.ProjectRules, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TStringLiteral = record
+    Id       : Int64  ;
+    FileId   : Int64  ;
+    /// <summary>Enclosing symbol; 0 until indexer resolves it.</summary>
+    SymbolId : Int64  ;
+    /// <summary>Source language: 'pas' | 'dfm' | 'sql'.</summary>
+    Source   : string ;
+    /// <summary>Literal kind: 'literal'|'const'|'resourcestring'|'format'|'dfm-prop'|'sql-exception'.</summary>
+    Kind     : string ;
+    /// <summary>Const name / DFM property / exception name; '' if n/a.</summary>
+    OwnerName: string ;
+    Text     : string ;
+    StartLine: Integer;
+    StartCol : Integer;
+    EndLine  : Integer;
+    EndCol   : Integer;
+  end;
+
+  /// <summary>A text-search hit returned by ISymbolStore.SearchText: a
+  /// TStringLiteral enriched with the file path and enclosing qualified name.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.CLI.DoQueryText (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.SearchText (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TStringLitMatch = record
+    FilePath      : string ;
+    Source        : string ;
+    Kind          : string ;
+    OwnerName     : string ;
+    Text          : string ;
+    EnclosingQName: string ;
+    StartLine     : Integer;
+    StartCol      : Integer;
+    EndLine       : Integer;
+    EndCol        : Integer;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertChunk (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TChunk = record
+    Id       : Int64  ;
+    FileId   : Int64  ;
+    SymbolId : Int64  ;
+    Kind     : string ;
+    StartLine: Integer;
+    EndLine  : Integer;
+    Text     : string ;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.ScanAdd (DRagLint.CLI.pas) (+181 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Lint.Baseline, DRagLint.Lint.ClassMetrics, DRagLint.Lint.DocRules (+12 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TLintFinding = record
+    Id       : Int64  ;
+    RuleId   : string ;
+    FileId   : Int64  ;
+    FilePath : string ;
+    StartLine: Integer;
+    StartCol : Integer;
+    EndLine  : Integer;
+    EndCol   : Integer;
+    Severity : string ;
+    Message  : string ;
+    { Short name of the declaration this finding is anchored to, when the rule
+      knows it ('' otherwise -- most rules anchor to a position, not a symbol).
+      Exists so a fixer can re-resolve the SAME declaration later instead of
+      trusting (file, line) to identify it: a line number is not an identity, and
+      a finding produced against an index that has since gone stale points at a
+      line whose content has moved on. Set it in any rule whose findings feed a
+      fixer. }
+    SymbolName: string;
+    { The MEASURED VALUE behind a whole-routine metric finding -- 6 for "has 6
+      Exit statements", 31 for a cyclomatic complexity of 31 -- and 0 for every
+      rule that is not one of those (see ROUTINE_METRIC_RULES).
+
+      It exists because a `dl:ok` review on such a rule could not go stale. The
+      marker's hash covers ONE LINE, the routine's declaration, while the rule's
+      subject is the whole routine: allow a 6-exit routine, add a seventh Exit
+      inside the body, and `lint` reports nothing at all -- not the finding, and
+      not a stale marker either. The review said "6 exits here is fine" and was
+      silently answering for 7.
+
+      Feeding the metric into the hash INPUT makes the marker stale exactly when
+      the number moves, and not on every edit to the body -- which a body-span
+      hash would do, flagging a renamed local across all 58 markers in this
+      class. The marker grammar is untouched; only what the four hex digits are
+      computed from changes. }
+    Metric: Integer;
+    { The OTHER site of a two-site finding -- today only duplicate-code, whose
+      pair is anchored at the lexicographically greater (file, line) and whose
+      partner is RelatedFile:RelatedLine. '' / 0 for every other rule (zeroed by
+      Default). A `dl:ok` marker on EITHER site suppresses the finding and counts
+      as used (ApplyLineMarkers, D30 2026-09-24): `lint <file>` and `lint-all`
+      pick different partners for the same tokens, so a marker bound to one
+      anchor was "unused" in the other scope. Not serialised to --json or LSP. }
+    RelatedFile: string;
+    RelatedLine: Integer;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), DRagLint.Core.Indexer.FindDocRegionAbove (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.FindDocRegionAbove (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas) (+5 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocCommentKind = ( dckTripleSlash, dckDoubleSlashOne, dckTripleSlashOne, dckPasDocCurly, dckPasDocParen, dckLooseLine, dckLooseBlock );
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocFormat = (dfXmlDoc, dfPasDoc, dfOneline, dfLoose);
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Core.Indexer.FindDocRegionAbove (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.FindDocRegionAbove (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.NarrowToTrailingDocBlock (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document, DRagLint.Parser.DocComments</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocCommentRegion = record
+    StartLine: Integer        ;
+    EndLine  : Integer        ;
+    StartCol : Integer        ;
+    Kind     : TDocCommentKind;
+    RawText  : string         ;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Model, DRagLint.Doc.Drift, DRagLint.Parser.DocComments</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocParam = record
+    Name: string;
+    Desc: string;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Model, DRagLint.Doc.Drift, DRagLint.Parser.DocComments</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocException = record
+    TypeName: string;
+    Desc    : string;
+  end;
+
+  // v0.40.4: captured from `uses` clauses to support circular-dep detection,
+  // move-down (interface->implementation) suggestions, and unused-unit
+  // analysis in graphing + lint utilities.
+  /// <summary><!-- drag-lint:auto sum -->v0.40.4: captured from `uses` clauses to support
+  /// circular-dep detection, move-down (interface-&gt;implementation) suggestions, and
+  /// unused-unit analysis in graphing + lint utilities.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), declaration (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.TWalkState.EmitUnitUse (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.WalkSection (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.WalkUsesClause (DRagLint.Parser.Delphi13.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TUnitUseSection = (
+    uusInterface, // `interface uses ...`
+    uusImplementation, // `implementation uses ...`
+    uusProgram, // top-level uses in a .dpr
+    uusPackage // top-level uses in a .dpk
+  );
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), declaration (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.Analysis.LintTree.InterfaceUsesOf (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine (DRagLint.Analysis.SurfaceFingerprint.pas) (+38 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Core.Interfaces, DRagLint.Lint.ProjectChecks, DRagLint.Lint.ProjectRules, DRagLint.Parser.Delphi13, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.TextEdit, DRagLint.Report.CyclePlan, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TUnitUse = record
+    FileId   : Int64          ; // owning file (set by indexer post-parse; -1 in parser output)
+    UnitName : string         ; // verbatim, with dots: 'System.SysUtils'
+    Section  : TUnitUseSection;
+    InPath   : string         ; // text inside `in '<path>'`; empty when absent
+    StartLine: Integer        ; // 1-based
+    StartCol : Integer        ;
+    EndLine  : Integer        ;
+    EndCol   : Integer        ;
+  end;
+
+  // One 'global-only' uses edge: ReaderFileId depends on DeclFileId for
+  // NOTHING but the named interface-section global variable(s), so RELOCATING
+  // them deletes the edge. Produced by
+  // ISymbolStore.FindGlobalOnlyUsesEdges; consumed by global-only-uses-edge.
+  // GlobalNames arrives comma-separated and in UNSPECIFIED order (SQLite's
+  // GROUP_CONCAT gives no ordering guarantee) -- the rule sorts before it
+  // renders, because an unstable message is an unstable diff.
+  //
+  // AllInterfaceTyped is TRUE only when EVERY carrying global's declared type
+  // resolves, in this index, to a symbol of kind 'interface'. It is the sole
+  // licence to say "inject" (owner ruling 2026-08-30): an interface can be
+  // registered and resolved, a Boolean cannot. It is deliberately ALL and not
+  // ANY -- injecting the interface half of a mixed edge leaves the other
+  // global carrying it, so the edge survives and the advice would be false.
+  // One uses edge weighed by how many of the target's globals the reader
+  // actually touches -- the coupling census. Sibling of TGlobalOnlyEdge and
+  // deliberately NOT the same question: that one asks whether the edge can be
+  // DELETED, this one asks how heavy it is, and makes no only-link claim.
+  //
+  // Counts are REFERENCED names, not everything B exports. What B exports is a
+  // property of B alone -- the same number on every edge into B -- so it cannot
+  // rank edges or justify acknowledging one over another, which is the owner's
+  // stated purpose ("must go together when separated for a test").
+  //
+  // Names arrive comma-separated and UNORDERED (GROUP_CONCAT gives no ordering
+  // guarantee); the rule sorts before rendering, because an unstable message is
+  // an unstable diff.
+  /// <summary><!-- drag-lint:auto sum -->One 'global-only' uses edge: ReaderFileId
+  /// depends on DeclFileId for NOTHING but the named interface-section global
+  /// variable(s), so RELOCATING them deletes the edge. Produced by
+  /// ISymbolStore.FindGlobalOnlyUsesEdges; consumed by global-only-uses-edge. GlobalNames
+  /// arrives comma-separated and in UNSPECIFIED order (SQLite's GROUP_CONCAT gives no
+  /// ordering guarantee) -- the rule sorts before it renders, because an unstable message
+  /// is an unstable diff.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto -->AllInterfaceTyped is TRUE only when EVERY carrying global's declared
+  /// type resolves, in this index, to a symbol of kind 'interface'. It is the sole licence to say
+  /// "inject" (owner ruling 2026-08-30): an interface can be registered and resolved, a Boolean
+  /// cannot. It is deliberately ALL and not ANY -- injecting the interface half of a mixed edge
+  /// leaves the other global carrying it, so the edge survives and the advice would be false. One
+  /// uses edge weighed by how many of the target's globals the reader actually touches -- the
+  /// coupling census. Sibling of TGlobalOnlyEdge and deliberately NOT the same question: that one
+  /// asks whether the edge can be DELETED, this one asks how heavy it is, and makes no only-link
+  /// claim.
+  ///
+  /// Counts are REFERENCED names, not everything B exports. What B exports is a property of B alone
+  /// -- the same number on every edge into B -- so it cannot rank edges or justify acknowledging
+  /// one over another, which is the owner's stated purpose ("must go together when separated for a
+  /// test").
+  ///
+  /// Names arrive comma-separated and UNORDERED (GROUP_CONCAT gives no ordering guarantee); the
+  /// rule sorts before rendering, because an unstable message is an unstable diff.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus (DRagLint.Lint.ProjectRules.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindUsesGlobalCensus (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Lint.ProjectRules, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TUsesCensusEdge = record
+    ReaderFileId: Int64  ;
+    DeclFileId  : Int64  ;
+    VarCount    : Integer;
+    ConstCount  : Integer;
+    VarNames    : string ;
+    ConstNames  : string ;
+    { WHAT THE USED UNIT CONTAINS, added 2026-08-31 on the owner's request, as
+      against the four fields above -- which say what the READER draws. The
+      earlier note here argued a total "cannot rank edges or justify
+      acknowledging one over another", and that is still true: it is the same
+      number on every edge into B. But ranking was never the only question. The
+      owner's is "consolidate, inject, or leave as is", and "you use 7 of
+      BASICS's 143" decides that where either number alone does not.
+      DeclDfmObjects is the .dfm object count -- NOT part of DeclVarTotal, since
+      DFM components are published fields of the form CLASS, not unit-level
+      globals. }
+    DeclVarTotal  : Integer;
+    DeclConstTotal: Integer;
+    DeclDfmObjects: Integer;
+    { The DFM root object's class, '' when the used unit has no .dfm. The rule
+      skips a unit that HAS one unless this class descends from TDataModule --
+      owner ruling: a form you open from a button cannot be injected without
+      fighting RAD, so reporting it is noise, while a datamodule usually can be.
+      Measured on ORM3 CLIENT: 61 DFM roots, exactly 2 datamodules -- and
+      uStyles is one of them, so the canonical 26-finding case survives the
+      exclusion while ~43 plain-form edges go quiet. }
+    DeclDfmRootClass: string;
+  end;
+
+  // One DECLARING SITE of a name that is declared at interface unit level in
+  // two or more indexed units. Rows arrive one per SITE, ordered by
+  // (lower(name), lower(path), start_line), so the rule groups them in Delphi:
+  // the whole result set is 22 rows on ORM3 and grouping in SQL would buy
+  // nothing but a GROUP_CONCAT whose order is not guaranteed.
+  //
+  // Signature carries the DECLARATION TEXT INCLUDING THE INITIALIZER
+  // ('Integer = 15', a whole TColor array), which is what makes the
+  // identical-vs-differing verdict a query-time read rather than a re-parse.
+  // Compare it NORMALIZED -- lowercased, whitespace runs collapsed: raw
+  // comparison calls ORM3's tbltdistrcount a difference on 'integer' versus
+  // 'Integer', and a case difference is not a semantic one.
+  /// <summary><!-- drag-lint:auto sum -->One DECLARING SITE of a name that is declared at
+  /// interface unit level in two or more indexed units. Rows arrive one per SITE, ordered
+  /// by (lower(name), lower(path), start_line), so the rule groups them in Delphi: the
+  /// whole result set is 22 rows on ORM3 and grouping in SQL would buy nothing but a
+  /// GROUP_CONCAT whose order is not guaranteed.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto -->Signature carries the DECLARATION TEXT INCLUDING THE INITIALIZER
+  /// ('Integer = 15', a whole TColor array), which is what makes the identical-vs-differing verdict
+  /// a query-time read rather than a re-parse. Compare it NORMALIZED -- lowercased, whitespace runs
+  /// collapsed: raw comparison calls ORM3's tbltdistrcount a difference on 'integer' versus
+  /// 'Integer', and a case difference is not a semantic one.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls.CollectLibraryMasking (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls.CollectLibraryMasking.ReportName (DRagLint.Lint.ProjectRules.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Lint.ProjectRules, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDuplicateDeclSite = record
+    Name     : string ;
+    Kind     : string ; // 'const' | 'var'
+    FileId   : Int64  ;
+    StartLine: Integer;
+    StartCol : Integer;
+    Signature: string ;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Lint.ProjectRules.CollectGlobalOnlyUsesEdges (DRagLint.Lint.ProjectRules.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindGlobalOnlyUsesEdges (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindGlobalOnlyUsesEdges.HasSecondLink (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Lint.ProjectRules, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TGlobalOnlyEdge = record
+    ReaderFileId    : Int64  ;
+    DeclFileId      : Int64  ;
+    GlobalNames     : string ;
+    GlobalCount     : Integer;
+    AllInterfaceTyped: Boolean;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverJson (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverMarkdown (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverPlain (DRagLint.CLI.pas) (+34 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Hover.Renderer, DRagLint.Lint.DocRules, DRagLint.LSP.Completion (+6 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TParsedDoc = record
+    Format     : TDocFormat           ;
+    RawBlock   : string               ;
+    Summary    : string               ;
+    Remarks    : string               ;
+    ReturnsText: string               ;
+    Params     : TArray<TDocParam>    ;
+    Exceptions : TArray<TDocException>;
+    ExampleText: string               ;
+    SeeAlso    : TArray<string>       ;
+    SinceText  : string               ;
+    Deprecated : Boolean              ;
+    StartLine  : Integer              ;
+    EndLine    : Integer              ;
+    HasContent : Boolean              ;
+    // v(ADP3 T3): per-tag PRESENCE, independent of content. Summary/ReturnsText
+    // parse to '' BOTH when the tag is genuinely absent AND when a human wrote
+    // an explicitly empty tag (<summary></summary> / <returns></returns>) --
+    // MergeComment's omit-when-empty repair logic needs to tell those two
+    // apart (a human's deliberate blank slot is preserved verbatim; a truly
+    // absent tag is filled from the harvest/mined facts, or left absent).
+    // True whenever the parser matched the tag literally (dfXmlDoc), or found
+    // any non-empty content for it (dfPasDoc/dfOneline, which have no
+    // "explicitly empty tag" concept of their own). Params need no such flag:
+    // a param's PRESENCE is already the fact that its TDocParam entry exists
+    // in Params (by name), empty Desc or not.
+    HasSummaryTag: Boolean;
+    HasReturnsTag: Boolean;
+    // v(ADP3 T3b review, Important/Minor 1): same PRESENCE-vs-content distinction
+    // as HasSummaryTag/HasReturnsTag, for <example> -- ExampleText <> '' cannot
+    // tell "no <example> tag" apart from a human's deliberate, empty
+    // <example></example>, so MergeComment's omit-when-empty repair logic
+    // needs this flag to preserve the latter instead of silently dropping it.
+    HasExampleTag: Boolean;
+    // v(ADP3 T3b review round 3, NEW IMPORTANT): same PRESENCE-vs-content
+    // distinction as HasSummaryTag/HasReturnsTag/HasExampleTag, for <since>.
+    // SinceText <> '' could not tell "no <since> tag" apart from a human's
+    // deliberate, empty <since></since>, AND (the actual reported bug) it
+    // meant MergeComment's repair path had no way to gate <since>'s PRESENCE
+    // from a stripped ("is this genuinely standalone, not nested inside
+    // <exception>/<example>/<deprecated>") view without ALSO reading its
+    // CONTENT from that same stripped view -- which silently deleted
+    // legitimately-nested content, and in one shape (<since><deprecated>...
+    // </deprecated></since>) deleted the ENTIRE hand-written comment, because
+    // both <since> and <deprecated> independently stripped each other out of
+    // existence. See TDocRegions.MergeComment's own remarks for the fix.
+    HasSinceTag: Boolean;
+    // v(ADP3 T3b review round 3, STRUCTURAL 1): same PRESENCE-vs-content
+    // distinction, for <remarks> -- added so MergeComment's remarks-prose
+    // emission can also gate on a stripped ("genuinely standalone") view
+    // instead of reading AExisting.Remarks unconditionally, which is exactly
+    // what let a <remarks> nested inside <example>/<exception>/<deprecated>
+    // become the engine's real remarks prose (with the facts fence wrongly
+    // attaching to it) -- reported reproduction, see MergeComment's own
+    // remarks. Remarks <> '' was ALREADY relied upon elsewhere (e.g.
+    // HasAnyRecognizedTag in DRagLint.Parser.DocComments.pas) as a stand-in
+    // for this exact flag, in the absence of one -- this field replaces that
+    // stand-in with a real presence signal wherever it matters.
+    HasRemarksTag: Boolean;
+    // v(ADP3 T3b review, Important 2): the message text from a hand-written
+    // <deprecated>message</deprecated> tag; '' for a bare <deprecated/> (or
+    // <deprecated />), and '' when the tag is absent (test Deprecated itself
+    // for presence, same as before -- this field only ever HOLDS a payload,
+    // it does not replace the presence signal). Populated by ParseXmlDoc only
+    // (dfXmlDoc); ParsePasDoc's own @deprecated has never captured a trailing
+    // message either, before or after this change -- that is a separate,
+    // pre-existing PasDoc gap, out of this task's scope.
+    DeprecatedText: string;
+    // v(ADP3 T3b review, Critical 1 fix): parallel to SeeAlso (same length,
+    // same index correspondence) -- True when that entry's SOURCE tag was
+    // bare '<see cref="X"/>', False when it was '<seealso cref="X"/>'. RxSee's
+    // own (?:see|seealso) alternation conflates both spellings into ONE
+    // SeeAlso array (correct for every OTHER consumer -- hover, the index --
+    // which legitimately wants every related-symbol mention regardless of
+    // which spelling the author used); MergeComment's repair path is the ONE
+    // consumer that must round-trip the author's ORIGINAL tag spelling
+    // verbatim (a <see> is an inline cross-reference, a <seealso> is a
+    // separate top-level entry -- they render differently, so silently
+    // rewriting one as the other is a fabrication as well as a destruction).
+    // ParsePasDoc's own @see has no bare-<see>-vs-<seealso> distinction to
+    // make (PasDoc has one @see tag, not two), so it always reports False
+    // (rendered as <seealso>, matching this field's pre-existing behaviour).
+    SeeAlsoIsInline: TArray<Boolean>;
+    // Raw JSON strings from storage (populated by GetSymbolDoc for renderers).
+    // FillChar zeroes these; empty means not stored or not retrieved.
+    ParamsJsonRaw    : string;
+    ExceptionsJsonRaw: string;
+    SeeAlsoJsonRaw   : string;
+  end; // record
+
+  // v0.16 Task 13: .drag-lint.json "docs" section config.
+  // CaptureLooseComments: when False (default), loose // and {..} regions
+  //   preceding a symbol are ignored by FindDocRegionAbove.
+  // ImplPrecedence: reserved for future use; 'interface' is the only
+  //   behavior in v0.16.
+  // AllowBlankLineGap: number of blank lines permitted between a doc region
+  //   and the following symbol declaration. Default 1.
+  /// <summary><!-- drag-lint:auto sum -->v0.16 Task 13: .drag-lint.json "docs" section
+  /// config. CaptureLooseComments: when False (default), loose // and {..} regions
+  /// preceding a symbol are ignored by FindDocRegionAbove. ImplPrecedence: reserved for
+  /// future use; 'interface' is the only behavior in v0.16. AllowBlankLineGap: number of
+  /// blank lines permitted between a doc region and the following symbol declaration.
+  /// Default 1.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Model</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocConfig = record
+    CaptureLooseComments: Boolean;
+    ImplPrecedence      : string ;
+    AllowBlankLineGap   : Integer;
+  end;
+
+  /// <summary>How the 'Catches:' doc fact (the exceptions a routine HANDLES,
+  /// INBOX-report-exceptions-raised-and-handled gap 3) is rendered: which
+  /// routines count as "showing a dialog", and how many entries the line
+  /// may carry. Parsed from the manifest's docs block (docs.dialog_routines,
+  /// docs.max_handles) and threaded to every renderer -- document, doc-drift,
+  /// hover, LSP -- so the writer and the checker cannot disagree.</summary>
+  /// <remarks>
+  /// DialogRoutines is matched on the LAST dotted segment, case-insensitively,
+  /// so a configured 'Application.MessageBox' and a bare 'MessageBox' both hit
+  /// a call written either way. That looseness is deliberate: the fact carries
+  /// the routine that matched as its witness, so a false hit is visible.
+  /// An EMPTY list is the feature's off switch (no 'dialog:' disposition is
+  /// ever emitted) -- the escape hatch for a project whose error dialog is a
+  /// method on a singleton. A zeroed record is therefore "dialogs off, cap at
+  /// the default", not "invalid"; construct with Defaults for the built-in set.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), declaration (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Core.Model, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Facts, DRagLint.Index.Manifest</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocHandlesOptions = record
+    /// <summary>Routine names whose call in a handler body makes the
+    /// disposition 'dialog: name'. Empty = never.</summary>
+    DialogRoutines: TArray<string>;
+    /// <summary>Cap on rendered entries; overflow is a visible '(+N more)'.
+    /// 0 or negative = the default (8).</summary>
+    MaxHandles    : Integer;
+    /// <summary>The built-in dialog set (ShowMessage, MessageDlg,
+    /// Application.MessageBox, Application.HandleException) and a cap of 8.</summary>
+    /// <returns>A fully populated record.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults (DRagLint.Doc.Facts.pas), DRagLint.Index.Manifest.LoadDocHandlesOptions (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TDocSettings.Defaults (DRagLint.Index.Manifest.pas)</para>
+    /// <para>Pure</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function Defaults: TDocHandlesOptions; static;
+  end;
+
+const
+  /// <summary>Default cap on 'Catches:' entries; see TDocHandlesOptions.MaxHandles.</summary>
+  DOC_HANDLES_DEFAULT_CAP = 8;
+
+type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Core.Model.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TImpactLevel = record
+    Depth      : Integer       ;
+    CallerCount: Integer       ;
+    UnitCount  : Integer       ;
+    Categories : TArray<string>;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Context.Bundler.StripDfmFields (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.RenderRaw (DRagLint.Context.Bundler.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.MCP.Server, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TSurfaceLine = record
+    Kind     : string ;
+    Text     : string ;
+    StartLine: Integer;
+    EndLine  : Integer;
+  end;
+
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.CLI.DoSlice (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.RenderRaw (DRagLint.Context.Bundler.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.MCP.Server, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TSliceChunk = record
+    Kind     : string ;
+    Text     : string ;
+    StartLine: Integer;
+    EndLine  : Integer;
+  end;
+
+  /// <summary>One concept topic parsed out of one symbol's doc comment.</summary>
+  /// <remarks>
+  /// A record, not a class: topics are produced in small arrays, read
+  /// once and discarded, and every consumer so far wants value semantics.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CollectWikiTopics (DRagLint.CLI.pas), DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.CLI.PrintWikiTopic (DRagLint.CLI.pas), DRagLint.CLI.WikiTopicToJson (DRagLint.CLI.pas), DRagLint.Hover.Renderer.WikiIndicatorLines (DRagLint.Hover.Renderer.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Core.Model, DRagLint.Doc.Wiki, DRagLint.Hover.Renderer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TWikiTopic = record
+    /// <summary>The human name from the header line, verbatim after trimming.
+    /// Empty means a malformed `dl:wiki` line with no name -- kept rather than
+    /// dropped so `wiki --check` can REPORT it. A silently ignored header is
+    /// indistinguishable from a topic nobody wrote.</summary>
+    Name      : string        ;
+    Aliases   : TArray<string>;
+    /// <summary>Bare or qualified identifiers naming the other participants of
+    /// a multi-symbol concept. Unresolved here; `wiki --check` resolves them.</summary>
+    SeeCode   : TArray<string>;
+    /// <summary>The prose, lines joined with the platform line break. XML-only
+    /// lines and anything between the engine's AUTO_BEGIN/AUTO_END fences are
+    /// excluded.</summary>
+    Body      : string        ;
+    /// <summary>The symbol whose doc comment carried the topic. This is the
+    /// IMPLICIT SeeCode entry -- the block's own location is a code location,
+    /// so a single-owner topic needs no SeeCode line at all.</summary>
+    OwnerQName: string        ;
+    OwnerKind : string        ;
+    FilePath  : string        ;
+    /// <summary>1-based file line of the `dl:wiki` header itself, not of the
+    /// comment. This is what the hover indicator navigates to (ruling R3).</summary>
+    HeaderLine: Integer       ;
+    /// <summary>Which index answered. Printed when the same alias resolves in
+    /// more than one database, so the reader can tell them apart.</summary>
+    DbPath    : string        ;
+  end;
+
+  /// <summary>One symbol_docs row whose raw_block carries a `dl:wiki` marker,
+  /// joined to everything the wiki parser needs to place it.</summary>
+  /// <remarks>
+  /// Declared HERE rather than in DRagLint.Doc.Wiki so that
+  /// DRagLint.Storage.SQLite can return it without src\storage acquiring a
+  /// dependency on src\doc. This record adds no table and no column -- it is a
+  /// projection of columns that already exist -- so neither
+  /// DRAGLINT_EXTRACTOR_VERSION nor SCHEMA_VERSION moves for it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.CLI.CollectWikiTopics (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindWikiDocBlocks (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TWikiDocRow = record
+    SymbolId : Int64  ;
+    QName    : string ;
+    Kind     : string ;
+    FilePath : string ;
+    /// <summary>symbol_docs.start_line: the 1-based file line of the comment's
+    /// FIRST line, which is the base the wiki header's own line is offset
+    /// from.</summary>
+    StartLine: Integer;
+    RawBlock : string ;
+  end;
+
+  /// <summary>One indexed file's identity for a FRESHNESS comparison: the path
+  /// exactly as stored, and the mtime recorded when that file was parsed.</summary>
+  /// <remarks>
+  /// Exists so a freshness sweep costs ONE query instead of two per file.
+  /// GetAllFileIds + GetFilePath + GetFileMTime is the same information at
+  /// 2N round trips, which is fine for a hundred-file project index and not
+  /// fine for a library index of several thousand -- and a check that gets
+  /// skipped because it is slow protects nothing.
+  /// A projection of columns that already exist: no table, no column, so
+  /// neither DRAGLINT_EXTRACTOR_VERSION nor SCHEMA_VERSION moves for it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.CLI.ReindexPreview (DRagLint.CLI.pas), DRagLint.Index.Freshness.ChangedFilePaths (DRagLint.Index.Freshness.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas), DRagLint.Index.Freshness.StampState (DRagLint.Index.Freshness.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.UsesReconcile, DRagLint.Core.Interfaces, DRagLint.Index.Freshness, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TFileStamp = record
+    /// <summary>Path in the canonical stored form (see NormalizeStoredPath).</summary>
+    Path     : string;
+    /// <summary>files.mtime_unix as recorded at parse time.</summary>
+    MTimeUnix: Int64 ;
+  end;
+
+  // v0.18: resolved caller entry for a context bundle (FilePath pre-resolved
+  // from FileId so renderers don't need a store callback).
+  /// <summary><!-- drag-lint:auto sum -->v0.18: resolved caller entry for a context
+  /// bundle (FilePath pre-resolved from FileId so renderers don't need a store callback).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas)</para>
+  /// <para>Used in units: DRagLint.Context.Bundler, DRagLint.Core.Model</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TBundleCaller = record
+    FilePath   : string ;
+    Line       : Integer;
+    Col        : Integer;
+    ContextText: string ;
+  end;
+
+  // v0.26: compiler diagnostic finding (from dcc64 or msbuild output).
+  /// <summary><!-- drag-lint:auto sum -->v0.26: compiler diagnostic finding (from dcc64
+  /// or msbuild output).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.NormalizeFindings (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Completion, DRagLint.MCP.Server, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TCompilerFinding = record
+    FileId  : Int64  ;
+    RawPath : string ;
+    Code    : string ; // e.g. 'W1002'
+    Severity: string ; // 'Error' | 'Warning' | 'Hint' | 'Information'
+    LineNo  : Integer;
+    ColNo   : Integer;
+    Message : string ;
+  end;
+
+  // v0.18: context bundle -- minimum AI-ready slice for a symbol.
+  /// <summary><!-- drag-lint:auto sum -->v0.18: context bundle -- minimum AI-ready slice
+  /// for a symbol.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Context.Bundler.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TContextBundle = record
+    Task         : string               ;
+    Verb         : string               ;
+    QName        : string               ;
+    GeneratedAt  : TDateTime            ;
+    TokenEstimate: Integer              ;
+    Doc          : TParsedDoc           ;
+    HasDoc       : Boolean              ;
+    ClassSurface : TArray<TSurfaceLine> ;
+    ImplSlice    : TArray<TSliceChunk>  ;
+    Callers      : TArray<TBundleCaller>;
+    ImpactSummary: TArray<TImpactLevel> ;
+    { dl:wiki concept topics whose NAME OR ALIAS the task phrase matched.
+      Capped at two on purpose: a bundle exists to be small, and a third
+      loosely-matching concept note costs more tokens than it repays. }
+    WikiTopics   : TArray<TWikiTopic>   ;
+    { True only when the qualified name actually resolved to a symbol.
+      A caller CANNOT infer this from QName: Build stamps QName with what
+      was asked for before it looks anything up, so the pre-existing
+      `Bundle.QName = ''` not-found test was DEAD -- a nonexistent symbol
+      rendered an empty bundle and exited 0, which is precisely the silent
+      empty answer the bare-name fallback was added to stop. }
+    Resolved     : Boolean              ;
+  end;
+
+/// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'xmldoc'; 'pasdoc'; 'oneline';
+/// 'loose'; 'unknown'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.MCP.Server.TMCPServer.FormatDocAsJson (DRagLint.MCP.Server.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbolDoc (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DocFormatToStr     (AFormat : TDocFormat     ): string;
+/// <param name="ASection"><!-- drag-lint:auto type -->TUnitUseSection</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'interface'; 'implementation';
+/// 'program'; 'package'; 'unknown'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertUnitUse (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function UnitUseSectionToStr(ASection: TUnitUseSection): string;
+/// <param name="AStr"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TUnitUseSection -- Observed: uusInterface;
+/// uusImplementation; uusProgram; uusPackage.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindUsersOfUnit (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetUnitUsesForFile (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function StrToUnitUseSection(const AStr: string): TUnitUseSection          ;
+/// <param name="S"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas), DRagLint.Core.Model.ExceptionsToJson (DRagLint.Core.Model.pas) (+11 more)</para>
+/// <para>Calls: Format</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function JsonEscape(const S: string): string                               ;
+/// <param name="AParams"><!-- drag-lint:auto type -->const TArray&lt;TDocParam &gt;</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: '[' + string.Join(',', Parts) +
+/// ']'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbolDoc (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.JsonEscape, Format</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ParamsToJson    (const AParams    : TArray<TDocParam    >): string;
+/// <param name="AExceptions"><!-- drag-lint:auto type -->const TArray&lt;TDocException&gt;</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: '[' + string.Join(',', Parts) +
+/// ']'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbolDoc (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.JsonEscape, Format</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
+/// <param name="ASeeAlso"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: '[' + string.Join(',', Parts) +
+/// ']'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbolDoc (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.JsonEscape, Format</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SeeAlsoToJson(const ASeeAlso: TArray<string>): string             ;
+
+/// <returns><!-- drag-lint:auto type -->TDocConfig</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/2 (DRagLint.Core.Indexer.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DefaultDocConfig: TDocConfig;
+
+{ v(ADP3 T3j review round 1): THE doc-region/declaration attribution predicate.
+  ONE declaration, read by all THREE places that decide whether a doc comment
+  belongs to a given declaration:
+
+    * DRagLint.Core.Indexer.FindDocRegionAbove   (index-time capture)
+    * DRagLint.Doc.Document.FindDocRegionAbove   (the `document --apply` write path)
+    * DRagLint.Doc.Strip.StripSymbolRegion       (the `document --strip` remove path)
+
+  It lives HERE, in the lowest layer (this unit's own uses clause is
+  System.SysUtils alone), because all three already depend on Core.Model and
+  none of them can depend on each other -- Doc.Strip is deliberately
+  index-free, and Doc.Document keeps its own copy of the region scan
+  specifically so it does not pull in Indexer.
+
+  WHY A SHARED PREDICATE AND NOT THREE CAREFUL COPIES. The Phase 3 T3j defect
+  (register S1) was exactly this drift: Doc.Strip copied FindDocRegionAbove's
+  WINDOW, claimed in a comment to tolerate "the same gap", and silently omitted
+  its GUARD -- so `--strip` deleted a doc block belonging to a different
+  symbol. Three copies with a comment asserting they agree is what failed; a
+  single declaration both sides read makes that drift structurally impossible. }
+
+const
+  /// <summary>Intervening lines tolerated between a doc region's end and its
+  /// declaration. Read by TDocumenter's two FindDocRegionAbove call sites and by
+  /// TDocStripper.StripSymbolRegion (both branches), and DefaultDocConfig.
+  /// AllowBlankLineGap defaults to it -- so the APPLY and STRIP paths cannot
+  /// drift apart by way of a stray literal. Changing it moves both together.
+  /// <para>ONE DELIBERATE EXCEPTION: index-time capture
+  /// (DRagLint.Core.Indexer) passes FDocConfig.AllowBlankLineGap instead, which
+  /// is user-settable from JSON, so that path honours the user's configured
+  /// value rather than this constant. It merely DEFAULTS to it, via
+  /// DefaultDocConfig.</para></summary>
+  /// <remarks>v(ADP3 T3j review round 2, Important 2): this DocInsight
+  /// previously asserted the no-drift invariant while three of the four sites
+  /// still passed a literal 1 -- only StripSymbolRegion actually read the
+  /// constant, so raising it to 2 would have widened `--strip` alone and
+  /// silently reintroduced the apply/strip asymmetry the comment claimed to
+  /// prevent. Fixed by changing the CODE to match the claim, not the claim to
+  /// match the code: a comment describing a guard the code does not perform is
+  /// the documented root cause of register S1 (see the block comment on
+  /// DocRegionFitsDecl below).</remarks>
+  DOC_ALLOW_GAP = 1;
+
+/// <summary>True when a doc-comment region ending at 1-based line AEndLine is
+/// close enough to a declaration at 1-based ADeclLine to be attributed to it:
+/// the region must end within AAllowGap lines above the declaration.</summary>
+/// <param name="AEndLine">1-based last line of the candidate doc region.</param>
+/// <param name="ADeclLine">1-based declaration line the region might belong to.</param>
+/// <param name="AAllowGap">Tolerated intervening lines; 1 everywhere today.</param>
+/// <returns>True when AEndLine is in [ADeclLine - 1 - AAllowGap, ADeclLine - 1].</returns>
+/// <remarks>
+/// Proximity only. It says nothing about WHAT occupies the gap -- pair
+/// it with NoDeclarationInGap (or use DocRegionFitsDecl, which is both).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.FindDocRegionAbove (DRagLint.Core.Indexer.pas), DRagLint.Core.Model.DocRegionFitsDecl (DRagLint.Core.Model.pas), DRagLint.Doc.Document.FindDocRegionAbove (DRagLint.Doc.Document.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
+/// <para>Returns: (AEndLine &gt;= ADeclLine - 1 - AAllowGap) and (AEndLine &lt;= ADeclLine - 1)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap: Integer): Boolean;
+
+/// <summary>True when NO other declaration starts strictly between a doc
+/// region's end line and ADeclLine -- i.e. the region is not separated from
+/// ADeclLine by some other declaration that owns it instead.</summary>
+/// <param name="AEndLine">1-based last line of the candidate doc region.</param>
+/// <param name="ADeclLine">1-based declaration line the region might belong to.</param>
+/// <param name="ASymStartLines">Every symbol's 1-based StartLine in the same
+/// file, INCLUDING ADeclLine's own, sorted ASCENDING. The ascending order is
+/// load-bearing: the scan stops at the first entry >= ADeclLine, which both
+/// bounds the cost on symbol-heavy files and is what excludes ADeclLine's own
+/// entry from consideration. An EMPTY array means "no symbol table available"
+/// and the check is vacuously True -- a caller without one must add its own
+/// safeguard (see DRagLint.Doc.Strip.StripSymbolRegion's blank-line fallback).</param>
+/// <returns>True when the gap contains no other declaration.</returns>
+/// <remarks>
+/// Blank lines are never symbol start lines, so a region separated
+/// from its declaration by blank lines alone always passes. This is the guard
+/// added by adp2-docregion-fix, and it is deliberately about DECLARATIONS
+/// rather than blankness: an ordinary comment in the gap is tolerated on
+/// purpose, because the doc comment above it still belongs to ADeclLine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.FindDocRegionAbove (DRagLint.Core.Indexer.pas), DRagLint.Core.Model.DocRegionFitsDecl (DRagLint.Core.Model.pas), DRagLint.Doc.Document.FindDocRegionAbove (DRagLint.Doc.Document.pas)</para>
+/// <para>Returns: True</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function NoDeclarationInGap(AEndLine, ADeclLine: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+
+/// <summary>The full attribution test: DocRegionInGapWindow AND
+/// NoDeclarationInGap. Use this unless you need the two halves apart.</summary>
+/// <param name="AEndLine">1-based last line of the candidate doc region.</param>
+/// <param name="ADeclLine">1-based declaration line the region might belong to.</param>
+/// <param name="AAllowGap">Tolerated intervening lines; 1 everywhere today.</param>
+/// <param name="ASymStartLines">See NoDeclarationInGap -- sorted ascending, and
+/// an empty array makes the declaration half vacuous.</param>
+/// <returns>True when the region should be attributed to ADeclLine.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.DocRegionInGapWindow, DRagLint.Core.Model.NoDeclarationInGap</para>
+/// <para>Returns: DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.DocRegionInGapWindow"/>
+/// <seealso cref="DRagLint.Core.Model.NoDeclarationInGap"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+
+{ v(ADP3 T3i): THE CALL-SITE REF-KIND UNIVERSE. ONE declaration, read by the
+  pass that WRITES resolved call edges and by both queries that read the
+  UNRESOLVED complement of those edges.
+
+  THIS LIST IS THE SINGLE SOURCE FOR WHO READS THE DECLARATION (round 4). Any
+  other comment or test header that needs the readership points HERE and states
+  no count of its own -- the count grew from three sites to six during review
+  round 2, and a copy elsewhere would have been left asserting three.
+  SIX SITES, NINE READ POINTS:
+
+    * DRagLint.Parser.Delphi13                        (emits the kind; x3)
+    * TSQLiteSymbolStore.ResolveCallTargets           (writes call_edges)
+    * TSQLiteSymbolStore.FindUnresolvedNameCallers    (reads the complement)
+    * TSQLiteSymbolStore.GetAmbiguousCalls            (reads the complement)
+    * DRagLint.Lint.ClassMetrics (x2)                 (RFC / feature-envy)
+    * DRagLint.FormsMap.FindFormViaHook               (proc-var hook call sites)
+
+  WHY IT HAS TO BE ONE DECLARATION -- register item E1, the defect this fixes.
+  ResolveCallTargets resolves ONLY kind='call' refs, so a ref of any other kind
+  can never own a call_edges row. Both readers defined "unresolved" as "names a
+  known routine AND has no certain call_edges row" WITHOUT restating the kind
+  restriction, so their complement was taken against a WIDER universe than the
+  writer's: every non-call ref that happens to carry a routine's name fell into
+  the unresolved bucket. After 9d7e641 (member-access on typed receivers) that
+  became systematic -- a dotted call emits BOTH a 'call' ref and a co-located
+  'member-access' ref at the identical span, so EVERY resolved call was also
+  reported as unverified. Symptoms: `ambiguous-calls` listed resolved sites and
+  returned 4 rows for 3 sites; `document`'s Called-from listed a caller that
+  provably calls a DIFFERENT same-named method. type_use refs leaked the same
+  way, which is why a CLASS acquired a "Called from:" line built from mere type
+  mentions -- a fact "Used in units:" already carries properly.
+
+  The complement is only meaningful against the writer's own universe, so the
+  universe is declared once here and every side reads it. This is the T3j/S1
+  lesson applied: a single declaration both sides read removes the drift channel.
+
+  EXACTLY WHAT IS PROVEN, and it is deliberately not phrased as "impossible"
+  (T3i review round 2). Renaming REF_KIND_CALL and rebuilding leaves GREEN:
+  run_ambiguous_calls, run_calledfrom_resolved, run_callsite_kind_universe,
+  run_resolve_targets, run_doc_no_self_caller and run_store_tests -- i.e. the
+  parser, the writer, both complement readers and BOTH ClassMetrics filters are
+  demonstrated to move in lockstep (run_store_tests was independently shown to
+  cover those filters: pointing them at a different literal reddens feature-envy
+  and high-response).
+
+  FormsMap.FindFormViaHook is covered too (T3i review round 3 -- an earlier
+  revision of this comment claimed the opposite and was WRONG). Killing the hook
+  route at the DATA level -- re-kinding the single 'call' ref to ThingHook that
+  the query depends on -- turns run_formsmap's v4 navigation cell from
+  "frmRoot4 -> 'Plan' -> frmHooked4" into "(no path from MAIN)", which its
+  regex at :88 does not match, so the runner goes RED. The query is that route's
+  only data source and the direct fan-in is designed to dead-end, so the check
+  discriminates exactly as its name says.
+
+  Why the earlier claim was wrong is worth keeping: the mutation that "proved"
+  it was applied to a Win64 build, while run_formsmap.ps1 (and run_wiring.ps1)
+  default to src\cli\Win32\Debug\drag-lint.exe, which no Win64 build refreshes.
+  The mutated code was never executed. An under-claim is safer than an
+  over-claim but it is not free -- as written it would have sent a later
+  implementer to build a fixture for a non-problem. Verify a negative result
+  reached the binary under test before recording it.
+
+  DISCLOSED CONSEQUENCE -- CLOSED 2026-08-10 (v20b), but kept in full because the
+  SHAPE of the fix is the point; see the closing note at the end of this block. A
+  paren-less dotted invocation in EXPRESSION position -- `N:= Obj.Func;`,
+  `T:= TThing.Create;` -- emits no 'call' ref at all, only 'member-access'.
+  Such a site is therefore outside this universe, and it was already invisible
+  to every other call-graph surface (Calls:, find-callers --resolved,
+  call-path, call-tree) because ResolveCallTargets never walked it either. It
+  leaked into exactly one bucket by accident, and unreliably: the same kind
+  covers ordinary property and event access, so the leak carried far more
+  noise than signal. Making those sites first-class means EMITTING a call ref
+  for them, which changes what is INDEXED and fixes every surface at once.
+  Name-based discovery (`query find-callers`, FindCallersByName) is kind-blind
+  and still finds them. Pinned by tests/callresolve/run_callsite_kind_universe.ps1.
+
+  HOW IT WAS CLOSED (v20b), and why NOT by the route named just above. Emitting a
+  second 'call' ref for those sites would place a co-located TWIN beside the one a
+  PARENTHESISED dotted call already emits, double-counting every such caller.
+  Instead ResolveCallTargets widens only ITS OWN query to
+  `kind = 'call' OR kind = 'member-access'`, while CallSiteRefKindSql -- the
+  COMPLEMENT universe the unresolved-site queries read -- is left exactly as it
+  was. Widening BOTH is precisely register item E1 above: every resolved call
+  would be reported as unverified again.
+
+  Two guards keep the widening honest, both in ResolveCallTargets:
+    * a member-access ref earns an edge only when its target is a ROUTINE kind --
+      ordinary property/field/event access shares this kind and must not become a
+      fake call site; and
+    * a member-access ref co-located with a real 'call' ref is skipped, so a
+      parenthesised call still yields exactly one edge.
+
+  run_callsite_kind_universe.ps1's ParenlessExpr assertion FLIPPED from EXCLUDES
+  to INCLUDES, and its ambiguous-calls and ReadsProperty/CallsFire checks are the
+  regression fence for the two guards. }
+
+const
+  /// <summary>The refs.kind value that denotes a CALL SITE, and thereby the
+  /// universe ResolveCallTargets resolves and both unresolved-call queries take
+  /// their complement against. Read it instead of writing the literal, so the
+  /// writer and the readers can never disagree about what a call site is.
+  /// <para>Other kinds ('read', 'write', 'type_use', 'member-access',
+  /// 'event-binding', ...) are usage references. They are never resolved to a
+  /// call target, so they must never be counted as unresolved calls either --
+  /// see the block comment above.</para></summary>
+  REF_KIND_CALL = 'call';
+
+/// <summary>The SQL predicate selecting call-site refs, for the queries that
+/// build their WHERE clause as text.</summary>
+/// <param name="ARefAlias">Table alias (or table name) the predicate should
+/// qualify, e.g. 'r' for 'FROM refs r'.</param>
+/// <returns>A fragment of the form '&lt;alias&gt;.kind = ''call'''.</returns>
+/// <exception cref="EArgumentException">Raised when ARefAlias is blank. An
+/// empty alias would silently yield '.kind = ''call''', which is not valid SQL
+/// and would surface as an opaque prepare failure far from the mistake.</exception>
+/// <remarks>
+/// Emits the value of REF_KIND_CALL, so the SQL sites and the Pascal
+/// sites share one declaration. Returns a bare predicate with no AND/WHERE, so
+/// the caller controls where it is spliced.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FormsMap.FindFormViaHook (DRagLint.FormsMap.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindUnresolvedNameCallers (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetAmbiguousCalls (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: QuotedStr, Trim</para>
+/// <para>Returns: ARefAlias + '.kind = ' + QuotedStr(REF_KIND_CALL)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function CallSiteRefKindSql(const ARefAlias: string): string;
+
+/// <summary>Can a symbol of this kind ever be the TARGET of a call? True for
+/// exactly the five ROUTINE kinds.</summary>
+/// <param name="AKind">The symbol's kind.</param>
+/// <returns>True for skProcedure/skFunction/skMethod/skConstructor/skDestructor.</returns>
+/// <remarks>
+/// THE SINGLE SOURCE for this question. Do not write the five kinds out
+/// again anywhere, and do not describe the complement by listing kinds -- the
+/// exempt set is the WHOLE complement, and a comment that enumerates it is
+/// wrong the moment a kind is added. That is not hypothetical: T3i's review
+/// found two comments describing the complement as "class, interface, record,
+/// enum or type alias", a boundary drawn from one caller's coverage rather than
+/// from the semantics, which is the same mistake that had already silently
+/// deleted the Called-from fact for skEnum and skTypeAlias.
+/// It holds because TCallResolver only ever writes a routine into
+/// call_edges.target_symbol_id, so for any other kind "names a known routine but
+/// has no certain call edge" is not evidence of an unresolved call -- it is
+/// evidence the question does not apply.
+/// v(ADP3 T3k, Group 2c item 1): MOVED HERE from DRagLint.Doc.Facts'
+/// implementation section, where it could not be shared. T3i left this open
+/// deliberately -- collapsing the duplicate needed a code change and that round
+/// was comments-only -- and named DRagLint.Doc.SymbolFacts' ComputeCoveredBy as
+/// the one remaining literal copy of the same five kinds asking the same
+/// question. Core.Model rather than Doc.Facts because Doc.Facts already uses
+/// Doc.SymbolFacts (in its implementation section), so exporting from there
+/// would have made the dependency mutual and pointed the lower-level unit at
+/// the higher one. Core.Model owns TSymbolKind, has no uses clause of its own,
+/// and is already where this phase put its other shared declarations
+/// (REF_KIND_CALL, DocRegionFitsDecl, DOC_ALLOW_GAP) for the same reason: a
+/// single declaration read by both sides makes the drift structurally
+/// impossible.
+/// NOT to be confused with the type-like gate that gives a class/interface/
+/// record its "Used in units:" line. Those are two questions and two
+/// declarations on purpose -- sharing one set would ADD a brand-new
+/// "Used in units:" line to every enum and alias. See Doc.Facts' own comment at
+/// that gate.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.Facts.LeafNameIsUnambiguous (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.LeafNameNotAmbiguous (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas) (+2 more)</para>
+/// <para>Returns: AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function CanBeCallTarget(AKind: TSymbolKind): Boolean;
+
+/// <summary>The System-unit declaration of a Delphi COMPILER INTRINSIC, for
+/// display; '' when AName is not a recognized intrinsic.</summary>
+/// <param name="AName">A called identifier as written at the call site.
+/// Matched case-insensitively.</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'function System.Assigned(var P):
+/// Boolean'; 'function System.Length(const S): Integer'; 'procedure System.SetLength(var
+/// S; NewLength: Integer)'; 'procedure System.Inc(var X [; N: Integer])'; 'procedure
+/// System.Dec(var X [; N: Integer])'; 'function System.Ord(X): Integer'.</returns>
+/// <remarks>
+/// The set is deliberately RESTRICTED to names virtually never chosen
+/// for a user-defined routine, which is why Copy / Insert / Delete / Pos are
+/// absent despite being intrinsics: a real method of that name must not be
+/// mislabeled. Widening this list is not a free improvement -- every added name
+/// is a name some project may legitimately declare.
+/// Lives HERE, in the shared base unit, so the hover renderer and the
+/// documentation facts builder share ONE list. It was previously private to
+/// DRagLint.LSP.Server, and a second copy in the doc layer would have been a
+/// second answer to one question -- exactly the drift channel this repo keeps
+/// closing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Model.IsCompilerIntrinsic (DRagLint.Core.Model.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Complexity: 25 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function IntrinsicSignature(const AName: string): string;
+
+/// <summary>Splits 'TBox&lt;T: class&gt;' into ABare='TBox', AParams='T: class'.
+/// Splits on the FIRST '&lt;' and the LAST '&gt;', so nested arguments
+/// ('TDictionary&lt;string, TList&lt;T&gt;&gt;') stay intact. Whitespace is trimmed
+/// on both parts.</summary>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ABare"><!-- drag-lint:auto type -->out string</param>
+/// <param name="AParams"><!-- drag-lint:auto type -->out string</param>
+/// <returns>True when AText carried a parameter list; False (ABare=Trim(AText),
+/// AParams='') otherwise.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Model.StripGenericSegments.FlushSegment (DRagLint.Core.Model.pas), DRagLint.Parser.Delphi13.TryWalkClassOrRecord (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.TryWalkInterface (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.TryWalkOtherTypeDecl (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.TryWalkProcType (DRagLint.Parser.Delphi13.pas) (+4 more)</para>
+/// <para>Calls: Copy, Pos, Trim</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: ABare (out), AParams (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SplitGenericName(const AText: string; out ABare, AParams: string): Boolean;
+
+/// <summary>Number of type PARAMETERS a parameter list declares, or of type
+/// ARGUMENTS an argument list carries. Rule: split the text on top-level ';'
+/// into constrained groups; in each group count the top-level commas BEFORE
+/// the group's first top-level ':' (the whole group when it has no ':') plus
+/// one; sum the groups. Constraint commas are therefore NOT parameters:
+/// 'T: class, constructor' = 1 and 'S: IUnknown; I: IUnknown' = 2. Plain lists
+/// count as before: 'K, V' = 2, 'T' = 1, '' = 0, 'TList&lt;A, B&gt;' = 1. An
+/// argument list never carries ':' or ';', so it is top-level commas + 1
+/// ('string, TList&lt;T&gt;' = 2). Commas nested inside &lt;...&gt; do not
+/// count. Constraints have no parenthesised form, so only '&lt;'/'&gt;' track
+/// depth.</summary>
+/// <param name="AParamsOrArgs"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: 0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.FilterCandidatesByArity (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.PreferArity (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.Model.GenericArity.CloseGroup, Trim</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.GenericArity.CloseGroup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function GenericArity(const AParamsOrArgs: string): Integer;
+
+/// <summary>The last '.'-separated segment of a dotted name, counting only
+/// dots at angle-bracket depth 0, so 'TFoo&lt;T&gt;.Bar&lt;U&gt;' -&gt; 'Bar&lt;U&gt;'
+/// and 'TFoo&lt;Some.Unit.TBase&gt;.Bar' -&gt; 'Bar'. The segment keeps its own
+/// '&lt;...&gt;' list; SplitGenericName takes it apart.</summary>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: Copy(AName, Start, MaxInt).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Parser.Delphi13.WalkDeclProc (DRagLint.Parser.Delphi13.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByQualifiedName (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function LastTopLevelSegment(const AName: string): string;
+
+/// <summary>Every '.'-separated segment (dots at angle-bracket depth 0 only)
+/// with its own '&lt;...&gt;' list removed, dots kept, so an impl header
+/// 'TFoo&lt;T&gt;.Bar&lt;U&gt;' -&gt; 'TFoo.Bar' and a query input
+/// 'Unit.TList&lt;T&gt;.Add' -&gt; 'Unit.TList.Add'. Symbols are stored under
+/// BARE names since schema v23, so any dotted name compared against
+/// qualified_name must pass through this first.</summary>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Context.Bundler.ResolveUniqueName (DRagLint.Context.Bundler.pas), DRagLint.Parser.Delphi13.Walk (DRagLint.Parser.Delphi13.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByQualifiedName (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.Model.StripGenericSegments.FlushSegment, SplitGenericName</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.StripGenericSegments.FlushSegment"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function StripGenericSegments(const AName: string): string;
+
+/// <summary>True when AName is a Delphi compiler intrinsic -- a built-in the
+/// compiler recognizes by name and compiles inline, which is therefore never a
+/// symbol in any index.</summary>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: IntrinsicSignature(AName)
+/// &lt;&gt; ''.</returns>
+/// <remarks>
+/// Callers use this to keep intrinsics out of derived facts. It is
+/// SAFE to drop a bare call to one of these from a "Calls:" list even though a
+/// project could declare a routine of the same name: a real project routine
+/// resolves through call_edges and is rendered QUALIFIED from the resolved
+/// set, so only the unresolved bare-name fallback is filtered here. Since the
+/// unit-level rung landed, a bare call to a project routine resolves across a
+/// uses edge as well, which narrows that gap further.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.IntrinsicSignature</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.IntrinsicSignature"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function IsCompilerIntrinsic(const AName: string): Boolean;
+
+/// <summary>Unit-qualified prefix of a qualified symbol name
+/// ('Vcl.Controls.TWinControl' -&gt; 'Vcl.Controls'); '' when the name carries no
+/// dotted prefix at all.</summary>
+/// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; Copy(AQName, 1, P - 1).</returns>
+/// <remarks>
+/// Known limitation: splits on the LAST dot, so a NESTED type
+/// ('Vcl.Controls.TOuter.TInner') yields 'Vcl.Controls.TOuter' rather than the
+/// declaring unit. Harmless for the leading-namespace question
+/// (UnitFrameworkPrefix still returns 'Vcl'); it does mean a nested type's
+/// declaring "unit" never matches a plain unit name in a uses set.
+/// Lives HERE, in the shared base unit, so the query-time resolver
+/// (DRagLint.Storage.SQLite) and the proptree ancestor climb
+/// (DRagLint.Convert.PropTree) share ONE definition of "which unit declares
+/// this" instead of each hand-rolling its own.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.PreferFrameworkFirst (DRagLint.CLI.pas), DRagLint.Core.Model.CrossesGuiFramework (DRagLint.Core.Model.pas), DRagLint.Storage.SQLite.PickAncestorCandidateByScope (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FrameworkAnchorForFile (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy, LastDelimiter</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DeclaringUnitOfQName(const AQName: string): string;
+
+/// <summary>The leading NAMESPACE SEGMENT of a dotted unit name -- the
+/// substring before the FIRST '.' ('Vcl.Controls' -&gt; 'Vcl'; 'Vcl.StdCtrls'
+/// -&gt; 'Vcl'; 'FMX.Controls.Win' -&gt; 'FMX'; 'Winapi.Windows' -&gt;
+/// 'Winapi').</summary>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+/// <returns>The segment, or '' when AUnitName carries no dot at all.</returns>
+/// <remarks>
+/// An UNDOTTED unit name -- a hermetic-test unit ('VclKit') or real
+/// third-party code ('cxButtons', 'Abcbtn') -- has NO namespace segment, and
+/// must never be treated as sharing one with a dotted name like 'Vcl.Controls'.
+/// Returning '' is what makes BOTH sides skip it rather than substring-match:
+/// the SELECT side (PickAncestorCandidateByScope rule 3, which needs a unique
+/// same-segment candidate) and the REFUSE side (the proptree climb's
+/// cross-GUI-framework guard, CrossesGuiFramework, which refuses only when BOTH
+/// segments are GUI frameworks -- see IsGuiFrameworkPrefix -- and differ). This
+/// is the single definition of that notion; do not re-derive it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.PreferFrameworkFirst (DRagLint.CLI.pas), DRagLint.Core.Model.CrossesGuiFramework (DRagLint.Core.Model.pas), DRagLint.Storage.SQLite.PickAncestorCandidateByScope (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.PickAncestorCandidateByScope.WeakHitFrameworkUnconfirmed (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FrameworkAnchorForFile (DRagLint.Storage.SQLite.pas) (+2 more)</para>
+/// <para>Calls: Copy, Pos</para>
+/// <para>Returns: ''; Copy(AUnitName, 1, P - 1)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function UnitFrameworkPrefix(const AUnitName: string): string;
+
+/// <summary>True when ANamespaceSegment is one of Delphi's two MUTUALLY
+/// EXCLUSIVE GUI framework namespaces -- 'Vcl' or 'FMX' (case-insensitive
+/// compare; '' is never one).</summary>
+/// <param name="ANamespaceSegment">A LEADING namespace segment as returned by
+/// UnitFrameworkPrefix -- not a whole unit name. 'Vcl.Graphics' is NOT a GUI
+/// framework prefix; 'Vcl' is.</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: SameText(ANamespaceSegment,
+/// 'Vcl') or SameText(ANamespaceSegment, 'FMX').</returns>
+/// <remarks>
+/// A Delphi class surface is either VCL or FireMonkey; the two are
+/// parallel, never interchangeable, and a type from one is never a valid
+/// stand-in for a same-named type from the other. Everything else a GUI unit
+/// legitimately reaches -- 'System.*', 'Winapi.*', 'Data.*', 'Soap.*', a
+/// project's own namespace, an undotted legacy unit -- is SHARED ground, not a
+/// competing framework, and is deliberately NOT listed here.
+/// The pair is named explicitly rather than derived, because "which namespaces
+/// are mutually exclusive" is a fact about Delphi's two GUI frameworks, not
+/// something the shape of a unit name can tell you. This is the ONLY place in
+/// src/ that names them: the REFUSE side (DRagLint.Convert.PropTree's
+/// CrossesGuiFramework, design criterion 5) and the SELECT side
+/// (DRagLint.Storage.SQLite's ancestry-derived framework anchor and its
+/// last-segment `uses` guard) both call in here rather than each carrying a
+/// literal. NOT a general "same namespace?" test -- it answers only "is this
+/// segment one of the two conflicting GUI frameworks?".
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.PreferFrameworkFirst (DRagLint.CLI.pas), DRagLint.Core.Model.CrossesGuiFramework (DRagLint.Core.Model.pas), DRagLint.Storage.SQLite.PickAncestorCandidateByScope.WeakHitFrameworkUnconfirmed (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FrameworkAnchorForFile (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GuiFrameworkInUse (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+/// <para>Calls: SameText</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
+
+/// <summary>True when AInheritor and ACandidate are declared in units belonging
+/// to DIFFERENT Delphi GUI frameworks -- one Vcl.*, the other FMX.* -- i.e. the
+/// candidate is never a legitimate ancestor/type for the inheritor.</summary>
+/// <param name="AInheritor">The class the answer would be grafted ONTO.</param>
+/// <param name="ACandidate">The class being considered for it.</param>
+/// <returns>True only when BOTH declaring units carry a GUI framework segment
+/// AND those segments differ. False whenever either side is undotted, is a
+/// shared namespace (System.*, Winapi.*, Data.*), or is the same framework --
+/// so an ordinary RTL reference is never refused.</returns>
+/// <remarks>
+/// v(merge main -&gt; autodoc-phase3): PROMOTED here from a local
+/// function inside DRagLint.Convert.PropTree, because a SECOND site turned out
+/// to need it and a copy is how these two drift. That second site is the
+/// storage-layer late-ancestor resolution in
+/// TSQLiteSymbolStore.GetTransitiveAncestors, which exists only on this branch:
+/// PropTree guarded its OWN walk, so when the branch's late resolution began
+/// answering names PropTree's walk never asked about, criterion 5 was enforced
+/// on one path and not the other. Measured, not theorised -- it reddened
+/// run_proptree_ancestor_climb and run_proptree_prop_type_scope, both of which
+/// pass on main, the moment the two branches met.
+/// <para>Why the refusal is needed at all even though a scope rule exists:
+/// PickCandidate short-circuits on a LONE candidate before any scope rule runs,
+/// so a type name with exactly one -- possibly wrong-framework -- definition is
+/// returned with no scope check. This is the backstop for precisely that.</para>
+/// <para>A Delphi class surface is either VCL or FireMonkey; the two are
+/// parallel, and a type from one is never a stand-in for a same-named type from
+/// the other. The pair itself is named in IsGuiFrameworkPrefix, which is the one
+/// place it is written down.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain.ClimbFrom (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveViaBridgedAncestry.Climb (DRagLint.Convert.PropTree.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.DeclaringUnitOfQName, DRagLint.Core.Model.IsGuiFrameworkPrefix, DRagLint.Core.Model.UnitFrameworkPrefix, SameText</para>
+/// <seealso cref="DRagLint.Core.Model.DeclaringUnitOfQName"/>
+/// <seealso cref="DRagLint.Core.Model.IsGuiFrameworkPrefix"/>
+/// <seealso cref="DRagLint.Core.Model.UnitFrameworkPrefix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
+
+implementation
+
+uses
+  System.SysUtils
+  ;
+
+{ TSymbol }
+
+function TSymbol.DisplayName: string;
+begin
+  if GenericParams <> '' then Result:= Name + '<' + GenericParams + '>'
+  else Result:= Name;
+end;
+
+{ TTypeAncestor }
+
+function TTypeAncestor.MatchesName(const AName: string): Boolean;
+begin
+  if AName = '' then Exit(False);
+  Result:= SameText(Name, AName) or
+           ((ResolvedName <> '') and SameText(ResolvedName, AName));
+end;
+
+function SplitGenericName(const AText: string; out ABare, AParams: string): Boolean;
+var
+  P, Q: Integer;
+begin
+  ABare  := Trim(AText);
+  AParams:= '';
+  Result := False;
+  P:= Pos('<', ABare);
+  if P <= 0 then Exit;
+  Q:= Length(ABare);
+  while (Q > P) and (ABare[Q] <> '>') do Dec(Q);
+  if Q <= P then Exit; // '<' without a closing '>' -- leave the text alone
+  AParams:= Trim(Copy(ABare, P + 1, Q - P - 1));
+  ABare  := Trim(Copy(ABare, 1, P - 1));
+  Result := True;
+end;
+
+function GenericArity(const AParamsOrArgs: string): Integer;
+var
+  I, Depth, GroupStart, GroupCount: Integer;
+  InConstraint: Boolean;
+
+  { A group contributes its name count only when it has text at all, so a
+    stray trailing ';' does not invent a parameter. }
+  procedure CloseGroup(AEnd: Integer);
+  begin
+    if Trim(Copy(AParamsOrArgs, GroupStart, AEnd - GroupStart)) <> '' then
+      Inc(Result, GroupCount);
+    GroupStart  := AEnd + 1;
+    GroupCount  := 1;
+    InConstraint:= False;
+  end;
+
+begin
+  Result      := 0;
+  Depth       := 0;
+  GroupStart  := 1;
+  GroupCount  := 1;
+  InConstraint:= False;
+  for I:= 1 to Length(AParamsOrArgs) do
+    case AParamsOrArgs[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      ':': if Depth <= 0 then InConstraint:= True;
+      ',': if (Depth <= 0) and not InConstraint then Inc(GroupCount);
+      ';': if Depth <= 0 then CloseGroup(I);
+    end;
+  CloseGroup(Length(AParamsOrArgs) + 1);
+end;
+
+function LastTopLevelSegment(const AName: string): string;
+var
+  I, Depth, Start: Integer;
+begin
+  Depth:= 0;
+  Start:= 1;
+  for I:= 1 to Length(AName) do
+    case AName[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      '.': if Depth <= 0 then Start:= I + 1;
+    end;
+  Result:= Copy(AName, Start, MaxInt);
+end;
+
+function StripGenericSegments(const AName: string): string;
+var
+  I, Depth, Start: Integer;
+
+  procedure FlushSegment(AEnd: Integer);
+  var
+    Bare, Params: string;
+  begin
+    SplitGenericName(Copy(AName, Start, AEnd - Start), Bare, Params);
+    if Start > 1 then Result:= Result + '.';
+    Result:= Result + Bare;
+  end;
+
+begin
+  Result:= '';
+  Depth:= 0;
+  Start:= 1;
+  for I:= 1 to Length(AName) do
+    case AName[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      '.': if Depth <= 0 then
+           begin
+             FlushSegment(I);
+             Start:= I + 1;
+           end;
+    end;
+  FlushSegment(Length(AName) + 1);
+end;
+
+function IntrinsicSignature(const AName: string): string;
+begin
+  if SameText(AName, 'Assigned') then Result:= 'function System.Assigned(var P): Boolean'
+  else if SameText(AName, 'Length'   ) then Result:= 'function System.Length(const S): Integer'
+  else if SameText(AName, 'SetLength') then Result:= 'procedure System.SetLength(var S; NewLength: Integer)'
+  else if SameText(AName, 'Inc'      ) then Result:= 'procedure System.Inc(var X [; N: Integer])'
+  else if SameText(AName, 'Dec'      ) then Result:= 'procedure System.Dec(var X [; N: Integer])'
+  else if SameText(AName, 'Ord'      ) then Result:= 'function System.Ord(X): Integer'
+  else if SameText(AName, 'Chr'      ) then Result:= 'function System.Chr(B: Byte): AnsiChar'
+  else if SameText(AName, 'High'     ) then Result:= 'function System.High(X): <ordinal>'
+  else if SameText(AName, 'Low'      ) then Result:= 'function System.Low(X): <ordinal>'
+  else if SameText(AName, 'SizeOf'   ) then Result:= 'function System.SizeOf(X): Integer'
+  else if SameText(AName, 'TypeInfo' ) then Result:= 'function System.TypeInfo(X): Pointer'
+  else if SameText(AName, 'Succ'     ) then Result:= 'function System.Succ(X): <ordinal>'
+  else if SameText(AName, 'Pred'     ) then Result:= 'function System.Pred(X): <ordinal>'
+  else if SameText(AName, 'Trunc'    ) then Result:= 'function System.Trunc(X: Extended): Int64'
+  else if SameText(AName, 'Round'    ) then Result:= 'function System.Round(X: Extended): Int64'
+  else if SameText(AName, 'Frac'     ) then Result:= 'function System.Frac(X: Extended): Extended'
+  else if SameText(AName, 'Abs'      ) then Result:= 'function System.Abs(X): <numeric>'
+  else if SameText(AName, 'Sqr'      ) then Result:= 'function System.Sqr(X): <numeric>'
+  else if SameText(AName, 'Sqrt'     ) then Result:= 'function System.Sqrt(X: Extended): Extended'
+  else if SameText(AName, 'Exit'     ) then Result:= 'procedure System.Exit [(Result)]'
+  else if SameText(AName, 'Break'    ) then Result:= 'procedure System.Break'
+  else if SameText(AName, 'Continue' ) then Result:= 'procedure System.Continue'
+  else if SameText(AName, 'Halt'     ) then Result:= 'procedure System.Halt [(ExitCode: Integer)]'
+  else if SameText(AName, 'Assert'   ) then Result:= 'procedure System.Assert(expr: Boolean [; const msg: string])'
+  else Result:= '';
+end; // function
+
+function IsCompilerIntrinsic(const AName: string): Boolean;
+begin
+  Result:= IntrinsicSignature(AName) <> '';
+end;
+
+function DeclaringUnitOfQName(const AQName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= LastDelimiter('.', AQName);
+  if P > 1 then Result:= Copy(AQName, 1, P - 1);
+end;
+
+function UnitFrameworkPrefix(const AUnitName: string): string;
+var P: Integer;
+begin
+  Result:= '';
+  P:= Pos('.', AUnitName);
+  if P > 0 then Result:= Copy(AUnitName, 1, P - 1);
+end;
+
+function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
+begin
+  Result:= SameText(ANamespaceSegment, 'Vcl') or SameText(ANamespaceSegment, 'FMX');
+end;
+
+function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
+var
+  InhPrefix : string;
+  CandPrefix: string;
+begin
+  InhPrefix := UnitFrameworkPrefix(DeclaringUnitOfQName(AInheritor.QualifiedName));
+  CandPrefix:= UnitFrameworkPrefix(DeclaringUnitOfQName(ACandidate.QualifiedName));
+  Result    := IsGuiFrameworkPrefix(InhPrefix) and IsGuiFrameworkPrefix(CandPrefix) and
+               not SameText(InhPrefix, CandPrefix);
+end;
+
+const
+  KindText: array[TSymbolKind] of string = (
+    'unit', 'program', 'package', 'class', 'interface', 'record', 'enum', 'enum_value', 'procedure', 'function', 'method', 'constructor', 'destructor', 'property', 'field', 'var',
+    'const', 'type', 'form', 'component', 'sql_table', 'sql_column', 'sql_index', 'sql_trigger', 'sql_generator', 'sql_procedure', 'sql_view', 'sql_exception', 'sql_domain',
+    'sql_constraint', 'initialization', 'finalization',
+    'local_var', 'param');   // v14 (D5)
+
+function TSymbolKindHelper.ToText: string;
+begin
+  Result:= KindText[Self];
+end;
+
+function TTypeCategoryHelper.ToText: string;
+begin
+  case Self of
+    tcFloat    : Result:= 'float';
+    tcString   : Result:= 'string';
+    tcChar     : Result:= 'char';
+    tcOrdinal  : Result:= 'ordinal';
+    tcBoolean  : Result:= 'boolean';
+    tcInterface: Result:= 'interface';
+    tcClass    : Result:= 'class';
+    tcRecord   : Result:= 'record';
+    tcPointer  : Result:= 'pointer';
+    tcEnum     : Result:= 'enum';
+    else         Result:= 'unknown';
+  end;
+end;
+
+class function TSymbolKindHelper.FromText(const AText: string): TSymbolKind;
+var
+  K: TSymbolKind;
+begin
+  for K:= Low(TSymbolKind) to High(TSymbolKind) do
+    if SameText(KindText[K], AText) then Exit(K);
+  raise Exception.CreateFmt('Unknown symbol kind: "%s"', [AText]);
+end;
+
+function UnitUseSectionToStr(ASection: TUnitUseSection): string;
+begin
+  case ASection of
+    uusInterface     : Result:= 'interface';
+    uusImplementation: Result:= 'implementation';
+    uusProgram       : Result:= 'program';
+    uusPackage       : Result:= 'package';
+    else Result:= 'unknown';
+  end;
+end;
+
+function StrToUnitUseSection(const AStr: string): TUnitUseSection;
+begin
+  if SameText(AStr, 'interface') then Result:= uusInterface
+  else if SameText(AStr, 'implementation') then Result:= uusImplementation
+  else if SameText(AStr, 'program'       ) then Result:= uusProgram
+  else if SameText(AStr, 'package'       ) then Result:= uusPackage
+  else Result:= uusImplementation;
+end;
+
+function DocFormatToStr(AFormat: TDocFormat): string;
+begin
+  case AFormat of
+    dfXmlDoc : Result:= 'xmldoc';
+    dfPasDoc : Result:= 'pasdoc';
+    dfOneline: Result:= 'oneline';
+    dfLoose  : Result:= 'loose';
+    else Result:= 'unknown';
+  end;
+end;
+
+function JsonEscape(const S: string): string;
+var
+  I: Integer;
+  C: Char   ;
+begin
+  Result:= '';
+  for I:= 1 to Length(S) do
+  begin
+    C:= S[I];
+    case C of
+      '"': Result:= Result + '\"';
+      '\': Result:= Result + '\\';
+      #8 : Result:= Result + '\b';
+      #9 : Result:= Result + '\t';
+      #10: Result:= Result + '\n';
+      #13: Result:= Result + '\r';
+      else if C < #32 then Result:= Result + Format('\u%.4x', [Ord(C)])
+      else Result:= Result + C;
+    end;
+  end; // for
+end; // function
+
+function ParamsToJson(const AParams: TArray<TDocParam>): string;
+var
+  Parts: TArray<string>;
+  I    : Integer       ;
+begin
+  if Length(AParams) = 0 then Exit('');
+  SetLength(Parts, Length(AParams));
+  for I:= 0 to High(AParams) do Parts[I]:= Format('{"name":"%s","desc":"%s"}', [JsonEscape(AParams[I].Name), JsonEscape(AParams[I].Desc)]);
+  Result:= '[' + string.Join(',', Parts) + ']';
+end;
+
+function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
+var
+  Parts: TArray<string>;
+  I    : Integer       ;
+begin
+  if Length(AExceptions) = 0 then Exit('');
+  SetLength(Parts, Length(AExceptions));
+  for I:= 0 to High(AExceptions) do Parts[I]:= Format('{"type":"%s","desc":"%s"}', [JsonEscape(AExceptions[I].TypeName), JsonEscape(AExceptions[I].Desc)]);
+  Result:= '[' + string.Join(',', Parts) + ']';
+end;
+
+function SeeAlsoToJson(const ASeeAlso: TArray<string>): string;
+var
+  Parts: TArray<string>;
+  I    : Integer       ;
+begin
+  if Length(ASeeAlso) = 0 then Exit('');
+  SetLength(Parts, Length(ASeeAlso));
+  for I:= 0 to High(ASeeAlso) do Parts[I]:= Format('"%s"', [JsonEscape(ASeeAlso[I])]);
+  Result:= '[' + string.Join(',', Parts) + ']';
+end;
+
+function DefaultDocConfig: TDocConfig;
+begin
+  Result.CaptureLooseComments:= False;
+  Result.ImplPrecedence      := 'interface';
+  // v(ADP3 T3j review round 2, Important 2): DOC_ALLOW_GAP, not a literal --
+  // this is the default the index-time path uses when no JSON override is set,
+  // so a literal here is one more way the sites could drift apart.
+  Result.AllowBlankLineGap   := DOC_ALLOW_GAP;
+end;
+
+// v(ADP3 T3j review round 1): see the block comment on these three in the
+// interface section for why they live here rather than in any of the three
+// units that call them.
+function DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap: Integer): Boolean;
+begin
+  Result:= (AEndLine >= ADeclLine - 1 - AAllowGap) and (AEndLine <= ADeclLine - 1);
+end;
+
+function NoDeclarationInGap(AEndLine, ADeclLine: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+var
+  L: Integer;
+begin
+  Result:= True;
+  for L in ASymStartLines do
+  begin
+    // Sorted ascending, so nothing further can qualify -- and this is also what
+    // excludes ADeclLine's OWN entry, which the array includes.
+    if L >= ADeclLine then Break;
+    if L > AEndLine then Exit(False);
+  end;
+end;
+
+function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
+  const ASymStartLines: TArray<Integer>): Boolean;
+begin
+  Result:= DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap)
+           and NoDeclarationInGap(AEndLine, ADeclLine, ASymStartLines);
+end;
+
+function CallSiteRefKindSql(const ARefAlias: string): string;
+{ QuotedStr doubles any embedded apostrophe, so the emitted fragment stays
+  well-formed no matter what REF_KIND_CALL is set to.
+  v(ADP3 T3i review round 2): the blank-alias guard is real, not decorative --
+  without it an empty alias yields '.kind = ''call''', which is invalid SQL that
+  fails at prepare time with a message pointing at the whole query rather than
+  at the caller that forgot its alias. }
+begin
+  if Trim(ARefAlias) = '' then
+    raise EArgumentException.Create('CallSiteRefKindSql: ARefAlias must name a table or alias');
+  Result:= ARefAlias + '.kind = ' + QuotedStr(REF_KIND_CALL);
+end;
+
+function CanBeCallTarget(AKind: TSymbolKind): Boolean;
+begin
+  Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
+end;
+
+class function TDocHandlesOptions.Defaults: TDocHandlesOptions;
+begin
+  { The four VCL shapes a Delphi handler shows an error with. A project whose
+    dialog is its own routine lists it in docs.dialog_routines instead; this
+    set is what an ABSENT key means, and an explicit [] means none. }
+  Result.DialogRoutines:= ['ShowMessage', 'MessageDlg', 'Application.MessageBox',
+                           'Application.HandleException'];
+  Result.MaxHandles    := DOC_HANDLES_DEFAULT_CAP;
+end;
+
+end.

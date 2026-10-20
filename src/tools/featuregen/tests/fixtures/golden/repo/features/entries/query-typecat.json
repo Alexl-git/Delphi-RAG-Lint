@@ -1,0 +1,31 @@
+{
+  "id": "query-typecat",
+  "title": "query typecat",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Resolves a type's category -- float, string, class, interface, and so on",
+  "wikiPage": "query-typecat",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "typecat",
+      "usage": "drag-lint query typecat --name <type> [--db ...] [--json] (resolve type category: float/string/class/interface/...)",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<type>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

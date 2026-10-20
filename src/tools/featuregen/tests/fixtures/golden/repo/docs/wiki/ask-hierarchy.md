@@ -1,0 +1,39 @@
+# ask: hierarchy
+
+**Ancestors above, descendants below.** One of the diagram questions of the `ask` verb -- see [Diagrams and Charts](Diagrams-and-Charts) for the model, the bundle and click-to-source.
+
+## Asking it
+
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
+
+From RAD Studio: *drag-lint > Reports > Ancestors and descendants (hierarchy)...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
+
+```
+drag-lint ask --question hierarchy --at <file.pas>:<line>:<col> --db <project.sqlite>
+```
+
+The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). From a terminal, ask it by name:
+
+```
+drag-lint ask hierarchy --target MyApp.Base.TBaseForm --db <project.sqlite>
+```
+
+## You select
+
+A class or interface.
+
+## The chart shows
+
+What the type inherits from (above) and what inherits from it (below). Arrows mean INHERITS FROM and all point upward. It is a DAG, not a tree: a class has one parent but any number of interfaces, so a type is drawn once and edges may converge on it.
+
+## It stands on
+
+Ancestor edges (`query ancestors` / [`query descendants`](query-descendants)); an RTL/VCL ancestor is shown when the platform library index resolves it.
+
+## Parameters
+
+Row cap (default 20).
+
+## Read it carefully
+
+Descendants come only from indexes you passed. A base class used across several projects shows the descendants of THIS project's closure.

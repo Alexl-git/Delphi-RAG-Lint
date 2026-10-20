@@ -1,0 +1,17 @@
+{
+  "id": "drag-lint",
+  "title": "drag-lint",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.2.0-alpha",
+  "summary": "This page documents the \"View > Tool Windows > drag-lint\" menu entry -- the main drag-lint dockable tool window",
+  "wikiPage": "drag-lint",
+  "surfaces": [
+    {
+      "type": "tool-window",
+      "path": "View > Tool Windows > drag-lint"
+    }
+  ],
+  "audience": "both"
+}

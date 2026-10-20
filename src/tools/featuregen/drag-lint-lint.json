@@ -3,12 +3,15 @@
     "drag-lint's lint config for featuregen's own source (found first when walking up from",
     "src\\tools\\featuregen\\_D-RAG\\featuregen.sqlite).",
     "",
-    "local-var-casing is OFF here: the rule wants PascalCase locals, but this tool follows the",
-    "repository's Delphi house style (locals lFoo, parameters pFoo, fields FFoo -- C:\\Projects\\CLAUDE.md",
-    "and every other unit in the repo). It reported 1,406 findings, every one the house prefix,",
-    "none a defect. Renaming 1,400 locals in ported code would only add risk to byte-identical output."
+    "local-var-casing is ON with local_case = camelCase: featuregen's locals are lFoo (an 'l' prefix",
+    "then PascalCase), which the rule's own PascalCase default cannot accept. local_case only knows",
+    "PascalCase | UPPER_CASE | camelCase, not a prefix, so camelCase is the closest honest setting: it",
+    "still flags a PascalCase or UPPER_CASE local, but it cannot check the 'l' prefix itself.",
+    "NOTE: this l-prefix convention is featuregen's own; src\\core, src\\cli and convrules-editor use",
+    "plain PascalCase locals. Whether to rename featuregen's locals to match (about 400 names) or to",
+    "keep the convention is an open owner decision, raised at merge."
   ],
-  "disabled": ["local-var-casing"],
+  "naming": { "local_case": "camelCase" },
   "exclude_paths": [
     "*\\third_party\\*"
   ]

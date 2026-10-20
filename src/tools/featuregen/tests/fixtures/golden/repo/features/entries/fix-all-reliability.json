@@ -1,0 +1,64 @@
+{
+  "id": "fix-all-reliability",
+  "title": "Fix all reliability (1.31.3)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.31.3-alpha",
+  "summary": "Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes",
+  "intro": "Autofix fixes: owner freshness ignores library-root members, IDE busy guard, exception ancestor prefix",
+  "wikiPage": "Fix-all-reliability",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Fix all in unit"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index.sqlite>"
+        },
+        {
+          "name": "--project-rules"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "related": ["fix-all-in-project", "fix-all-in-unit"],
+  "lastVerified": {
+    "date": "2026-10-16",
+    "by": "alexanderl",
+    "build": "1.31.3-alpha"
+  }
+}

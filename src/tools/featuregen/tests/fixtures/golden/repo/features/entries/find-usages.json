@@ -1,0 +1,17 @@
+{
+  "id": "find-usages",
+  "title": "Find Usages",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.33.0-alpha",
+  "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
+  "wikiPage": "Find-Usages",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Find Usages..."
+    }
+  ],
+  "audience": "both"
+}

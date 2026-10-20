@@ -10,6 +10,7 @@ uses
   , System.IOUtils
   , System.Classes
   , System.JSON
+  , Winapi.Windows
   , FeatureGen.Json in '..\FeatureGen.Json.pas'
   , FeatureGen.Model in '..\FeatureGen.Model.pas'
   , FeatureGen.Output in '..\FeatureGen.Output.pas'
@@ -185,7 +186,7 @@ begin
     lW.Free;
   end;
   lNew := TFile.GetLastWriteTime(lFile);
-  Check('Output.WriteOnlyWhenDifferent', (lNew = lOld) and (Length(lR2.Written) = 0) and (Length(lR2.Changed) = 0),  // dl:ok float-equality-comparison@7c33 -- REVIEWED 2026-10-19: the assertion is exactly that the file time did not change
+  Check('Output.WriteOnlyWhenDifferent', (lNew = lOld) and (Length(lR2.Written) = 0) and (Length(lR2.Changed) = 0),
     DateTimeToStr(lNew));  // dl:ok locale-sensitive-conversion@d277 -- REVIEWED 2026-10-19: diagnostic text of a test failure only
 end;
 
@@ -631,7 +632,7 @@ begin
           lLeaf := ReadSiteFile(lOutA, lRel);
           if (lArr.Items[lI].GetValue<string>('id') <> lIds[lI]) or (lArr.Items[lI].GetValue<string>('order') <> lOrders[lI])  // dl:ok boolean-expression-complexity@6b4c -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
             or (lRel <> 'features/' + lIds[lI] + '.md') or (Pos(#10'order: ' + lOrders[lI] + #10, lLeaf) = 0)
-            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)  // dl:ok redundant-parentheses@35ad -- REVIEWED 2026-10-19: the parentheses belong to the generic call GetValue<string>(...)
+            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)  // dl:ok redundant-parentheses@35ad -- REVIEWED 2026-10-20: engine false positive (the parentheses are the generic call argument list), see docs\INBOX-redundant-parentheses-generic-call.md
             or (lArr.Items[lI].GetValue<string>('since') = '') or (lArr.Items[lI].GetValue<string>('group') = '')
             or (lArr.Items[lI].GetValue<string>('summary') = '') then
             Inc(lBad);
@@ -1161,10 +1162,38 @@ end;
 
 const
   MAIN_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';  // dl:ok hardcoded-absolute-path@6bef -- REVIEWED 2026-10-19: test harness: names the main-tree engine and a scratch folder under C:\TEMP\claude on purpose
-  GOLDEN_ENTRY = 'features\entries\featuregen.json';
+  GOLDEN_STUB_NAME = 'golden-engine-stub.exe';
+  STUB_USAGE_EXIT = 2;
+  FROZEN_SUFFIX = '.frozen';
 
 var
   GGoldenRepo: string = '';
+  GGoldenEngine: string = '';
+  GGoldenLive: TLiveSurface = nil;
+
+{ When this exe was copied to golden-engine-stub.exe it plays the engine of the frozen
+  golden repo: `--help` and `rules --json` print the bytes frozen under fixtures\golden\engine
+  (next to the stub), anything else exits 2. The parity tests never need the live engine. }
+procedure RunGoldenEngineStub;
+var
+  lFile: string;
+  lBytes: TBytes;
+  lOut: THandleStream;
+begin
+  if (ParamCount >= 1) and (ParamStr(1) = '--help') then
+    lFile := 'help.txt'
+  else if (ParamCount >= 2) and (ParamStr(1) = 'rules') and (ParamStr(2) = '--json') then
+    lFile := 'rules.json'
+  else
+    Halt(STUB_USAGE_EXIT);
+  lBytes := TFile.ReadAllBytes(TPath.Combine(ExtractFilePath(ParamStr(0)), lFile));
+  lOut := THandleStream.Create(GetStdHandle(STD_OUTPUT_HANDLE));
+  try
+    lOut.WriteBuffer(lBytes[0], Length(lBytes));
+  finally
+    lOut.Free;
+  end;
+end;
 
 procedure CopyFileTo(const pRepo, pDst, pRel: string);
 begin
@@ -1183,66 +1212,77 @@ begin
     'DRAGLINT_VERSION\s*=\s*''([^'']+)''').Groups[1].Value;
 end;
 
-{ A scratch copy of everything the generators read, without featuregen's own entry,
-  with every generated output re-rendered by featuregen so that check D is clean on it. }
+{ The engine of the frozen golden repo: a copy of this exe named GOLDEN_STUB_NAME (see
+  RunGoldenEngineStub) beside the frozen `--help` and `rules --json` outputs. }
+function GoldenEngine(const pRepo: string): string;
+var
+  lDir, lName: string;
+begin
+  if GGoldenEngine <> '' then
+    Exit(GGoldenEngine);
+  lDir := FreshDir('golden-engine');
+  TFile.Copy(ParamStr(0), TPath.Combine(lDir, GOLDEN_STUB_NAME), True);
+  for lName in ['help.txt', 'rules.json'] do
+    TFile.Copy(GoldenFile(pRepo, 'engine\' + lName), TPath.Combine(lDir, lName), True);
+  GGoldenEngine := TPath.Combine(lDir, GOLDEN_STUB_NAME);
+  Result := GGoldenEngine;
+end;
+
+{ A scratch copy of the FROZEN inputs (fixtures\golden\repo: everything the generators read,
+  as it was at the capture, without featuregen's own entry; .pas sources are stored with
+  FROZEN_SUFFIX so no index walks them), with every generated output re-rendered by
+  featuregen against the frozen engine outputs so that check D is clean on it. Nothing here
+  reads the live repository, the live version or the live engine: the parity tests are a
+  permanent regression pin. }
 function GoldenRepo(const pRepo: string): string;
 var
-  lDst, lRel, lIn: string;
+  lDst, lSrc, lFile, lRel: string;
   lW: TOutputWriter;
 begin
   if GGoldenRepo <> '' then
     Exit(GGoldenRepo);
   lDst := FreshDir('golden-repo');
-  for lRel in ['features', 'docs\wiki', 'charts\src', 'tests\autotest\lib', 'WWW\help\dl', 'docs\Images'] do
-    TDirectory.Copy(TPath.Combine(pRepo, lRel), TPath.Combine(lDst, lRel));
-  for lRel in ['README.md', 'CHANGELOG.md', 'docs\AI-USAGE.md', 'build\pack-lint-release.ps1',
-    'tests\autotest\run_docs_sync_guard.ps1',
-    'src\cli\DRagLint.CLI.pas', 'src\mcp\DRagLint.MCP.Server.pas', 'src\core\DRagLint.Core.Model.pas',
-    'src\storage\DRagLint.Storage.Schema.pas', 'src\delphi-plugin\DragLint.Plugin.Editor.pas',
-    'src\delphi-plugin\DragLint.Plugin.AboutForm.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas',
-    'src\delphi-plugin\DragLint.Plugin.StructureForm.pas', 'src\delphi-plugin\DragLint.Plugin.ProjectMenu.pas'] do
-    CopyFileTo(pRepo, lDst, lRel);
-  if TFile.Exists(TPath.Combine(lDst, GOLDEN_ENTRY)) then
-    TFile.Delete(TPath.Combine(lDst, GOLDEN_ENTRY));  // dl:ok stat-gated-destructive@07b5 -- REVIEWED 2026-10-19: deletes a file in a scratch copy of the repository that the test just made
-  // inputs frozen at the capture (an entry the cut-over rewrote), laid over the copy
-  lIn := GoldenFile(pRepo, 'inputs');
-  for lRel in TDirectory.GetFiles(lIn, '*', TSearchOption.soAllDirectories) do
-    CopyFileTo(lIn, lDst, Copy(lRel, Length(lIn) + 2, MaxInt));
+  lSrc := GoldenFile(pRepo, 'repo');
+  for lFile in TDirectory.GetFiles(lSrc, '*', TSearchOption.soAllDirectories) do
+  begin
+    lRel := Copy(lFile, Length(lSrc) + 2, MaxInt);
+    if lRel.EndsWith(FROZEN_SUFFIX) then
+      lRel := Copy(lRel, 1, Length(lRel) - Length(FROZEN_SUFFIX));
+    ForceDirectories(ExtractFilePath(TPath.Combine(lDst, lRel)));
+    TFile.Copy(lFile, TPath.Combine(lDst, lRel), True);
+  end;
   // README.md and docs\AI-USAGE.md as the PowerShell generator left them: check D quotes lines of them, so their prose is frozen too
   CopyFileTo(GoldenFile(pRepo, 'wiki'), lDst, 'README.md');
   CopyFileTo(GoldenFile(pRepo, 'wiki'), lDst, 'docs\AI-USAGE.md');
-  // files the registry entries name; they existed at the capture and some are retired since
-  for lRel in ['charts\README.md', 'tools\feature-registry.ps1', 'tools\build-feature-pages.ps1', 'tools\publish-release.ps1'] do
-    if not TFile.Exists(TPath.Combine(lDst, lRel)) then
-    begin
-      ForceDirectories(ExtractFilePath(TPath.Combine(lDst, lRel)));
-      TFile.WriteAllText(TPath.Combine(lDst, lRel), 'placeholder'#13#10, TEncoding.ASCII);
-    end;  lW := TOutputWriter.Create(lDst, False, False);
+  lW := TOutputWriter.Create(lDst, False, False);
   try
-    BuildWiki(lDst, lW, MAIN_ENGINE);
+    BuildWiki(lDst, lW, GoldenEngine(pRepo));
     lW.Finish;
   finally
     lW.Free;
   end;
-  BuildSiteSet(lDst, MAIN_ENGINE, ProductVersionIn(lDst), False);
+  BuildSiteSet(lDst, GoldenEngine(pRepo), ProductVersionIn(lDst), False);
   GGoldenRepo := lDst;
   Result := lDst;
 end;
 
-{ True when the repo is at the version the golden files were captured at. Past that
-  version the frozen files are history, not a contract: the parity tests then say SKIP
-  (printed, not counted as a pass). Within the version they are binding. }
-function GoldenApplies(const pRepo: string): Boolean;
-var
-  lLine, lCaptured: string;
+{ The live surface of the frozen golden repo, harvested once with the frozen engine. }
+function GoldenLive(const pRepo: string): TLiveSurface;
 begin
-  lCaptured := '';
-  for lLine in TFile.ReadAllLines(GoldenFile(pRepo, 'live\live.txt'), TEncoding.ASCII) do
-    if lLine.StartsWith('version'#9) then
-      lCaptured := lLine.Split([#9, '|'])[1];
-  Result := lCaptured = ProductVersionIn(pRepo);
-  if not Result then
-    Writeln('SKIP golden parity: captured at ', lCaptured, ', repo is at ', ProductVersionIn(pRepo));
+  if GGoldenLive = nil then
+  begin
+    GGoldenLive := TLiveSurface.Create;
+    try
+      GGoldenLive.Harvest(GoldenRepo(pRepo), GoldenEngine(pRepo));
+    except
+      on Exception do
+      begin
+        FreeAndNil(GGoldenLive);
+        raise;
+      end;
+    end;
+  end;
+  Result := GGoldenLive;
 end;
 function ShowLine(const pLine: string): string;
 begin
@@ -1375,18 +1415,13 @@ var
   lBad, lDead: TArray<string>;
   lChecked: Integer;
 begin
-  if not TFile.Exists(MAIN_ENGINE) then
-  begin
-    Check('Parity.WikiOutputsEqualGolden', False, 'engine missing: ' + MAIN_ENGINE);
-    Exit;
-  end;
   lGold := GoldenRepo(pRepo);
   lB := FreshDir('wiki-parity-fg');
   lMsg := '';
   try
     lW := TOutputWriter.Create(lB, False, False);
     try
-      BuildWiki(lGold, lW, MAIN_ENGINE);
+      BuildWiki(lGold, lW, GoldenEngine(pRepo));
       lW.Finish;
     finally
       lW.Free;
@@ -1395,17 +1430,14 @@ begin
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
   end;
-  if GoldenApplies(pRepo) then
-  begin
-    lBad := CompareOutputTrees(GoldenFile(pRepo, 'wiki'), lB, WikiOutputPaths);
-    Check('Parity.WikiOutputsEqualGolden', (lMsg = '') and (Length(lBad) = 0), lMsg + ' ' + string.Join(' | ', lBad));
-  end;
+  lBad := CompareOutputTrees(GoldenFile(pRepo, 'wiki'), lB, WikiOutputPaths);
+  Check('Parity.WikiOutputsEqualGolden', (lMsg = '') and (Length(lBad) = 0), lMsg + ' ' + string.Join(' | ', lBad));
   lCli := TPath.Combine(lB, 'features\generated\cli-reference.md');
   Check('Wiki.CliReferenceIsCliMdWithoutFrontMatter', TFile.Exists(lCli) and ReadBytesText(lCli).StartsWith('# CLI reference'#13#10#13#10)
     and (Pos('## Commands', ReadBytesText(lCli)) > 0), lCli);
   if TFile.Exists(lCli) then
   begin
-    lDead := DeadRelativeLinks(ReadBytesText(lCli), TPath.Combine(pRepo, 'features\generated'), lChecked);
+    lDead := DeadRelativeLinks(ReadBytesText(lCli), TPath.Combine(lGold, 'features\generated'), lChecked);
     Check('Wiki.CliReferenceLinksResolveInRepo', (lChecked > 100) and (Length(lDead) = 0),  // dl:ok magic-literal@8726 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
       IntToStr(lChecked) + ' checked; dead: ' + string.Join(' | ', Copy(lDead, 0, 5)));  // dl:ok magic-literal@4e78 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   end;
@@ -1680,23 +1712,35 @@ begin
   lMsg := '';
   lMine := nil;
   try
-    lLive := SharedLive(pRepo);
-    lMine := LiveLines(lLive);
+    lMine := LiveLines(GoldenLive(pRepo));
   except
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
   end;
-  Writeln('INFO live harvest (Delphi): ', KindCounts(lMine));
-  if GoldenApplies(pRepo) then
-  begin
-    lPsLines := TFile.ReadAllLines(lFile, TEncoding.ASCII);
-    CompareFindingSets(lPsLines, lMine, lMissing, lExtra);
-    Check('Live.HarvestEqualsGolden', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),  // dl:ok magic-literal@c059 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
-      lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));  // dl:ok magic-literal@8005 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+  Writeln('INFO live harvest of the frozen repo (Delphi): ', KindCounts(lMine));
+  lPsLines := TFile.ReadAllLines(lFile, TEncoding.ASCII);
+  CompareFindingSets(lPsLines, lMine, lMissing, lExtra);
+  Check('Live.HarvestEqualsGolden', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),  // dl:ok magic-literal@c059 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+    lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));  // dl:ok magic-literal@8005 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+  // health of the LIVE surface (not a golden comparison): every kind of the real repo is non-empty
+  lMsg := '';
+  lLive := nil;
+  try
+    lLive := SharedLive(pRepo);
+  except
+    on E: Exception do
+      lMsg := E.ClassName + ': ' + E.Message;
   end;
-  if lMsg = '' then
-    Check('Live.HarvestEveryKindNonEmpty', Length(EmptyLiveKinds(lLive)) = 0, string.Join(' ', EmptyLiveKinds(lLive)));
+  Check('Live.HarvestEveryKindNonEmpty', (lMsg = '') and (Length(EmptyLiveKinds(lLive)) = 0), lMsg + ' ' + string.Join(' ', EmptyLiveKinds(lLive)));
 end;
+{ The "add this entry" template inside a B finding carries the date of the day it was
+  rendered ("date": "2026-10-19"); the frozen golden was rendered on its capture day. The
+  date is the one value that is not frozen, so both sides are compared with it scrubbed. }
+function ScrubTodayDate(const pText: string): string;
+begin
+  Result := TRegEx.Replace(pText, '"date": "\d{4}-\d{2}-\d{2}"', '"date": "<today>"');
+end;
+
 { The golden findings carry the PowerShell-era fix hints; the Task 11 hint texts name the
   featuregen commands instead. Everything else in a finding is compared verbatim. }
 function ModernHints(const pText: string): string;
@@ -1706,6 +1750,7 @@ begin
     .Replace('tools\feature-registry.ps1 move-menu', 'featuregen move-menu')
     .Replace('tools\feature-registry.ps1 normalise', 'featuregen normalise')
     .Replace('run tools\build-feature-pages.ps1', 'run featuregen build --all');
+  Result := ScrubTodayDate(Result);
 end;
 function ReadGoldenCheck(const pFile: string; out pNotes: TArray<string>): TArray<string>;
 var
@@ -1837,8 +1882,6 @@ var
   lDropped, lNested, lNewD: Integer;
   lNewDOk: Boolean;
 begin
-  if not GoldenApplies(pRepo) then
-    Exit;
   lName := (if pName <> '' then pName else pLevelName);
   lFile := GoldenFile(pRepo, 'check\' + lName + '.json');
   lPsFail := ReadGoldenCheck(lFile, lPsNotes);
@@ -1846,9 +1889,9 @@ begin
   lMine := nil;
   lNotes := nil;
   try
-    lFindings := RunCheckCommand(pCheckRepo, MAIN_ENGINE, pLevel, lNotes);
+    lFindings := RunCheckCommand(pCheckRepo, GoldenEngine(pRepo), pLevel, lNotes);
     for lF in lFindings do
-      lMine := lMine + [FindingText(lF)];
+      lMine := lMine + [ScrubTodayDate(FindingText(lF))];
   except
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
@@ -1948,7 +1991,7 @@ var
 begin
   lDst := TPath.Combine(FreshDir('d-all-outputs'), 'r');
   TDirectory.Copy(GoldenRepo(pRepo), lDst);
-  lF := RunCheckCommand(lDst, MAIN_ENGINE, clFull, lNotes);
+  lF := RunCheckCommand(lDst, GoldenEngine(pRepo), clFull, lNotes);
   lClean := 0;
   for lFinding in lF do
     if lFinding.Check = 'D' then
@@ -1964,7 +2007,7 @@ begin
   TFile.WriteAllText(TPath.Combine(lDst, 'WWW\help\dl\zz-stale.md'), 'stale'#13#10, TEncoding.ASCII);
   lText := ReadBytesText(TPath.Combine(lDst, 'features\entries\ask.json'));
   TFile.WriteAllText(TPath.Combine(lDst, 'features\entries\ask.json'), lText.Replace(#13#10, #10), TEncoding.ASCII);
-  lF := RunCheckCommand(lDst, MAIN_ENGINE, clFull, lNotes);
+  lF := RunCheckCommand(lDst, GoldenEngine(pRepo), clFull, lNotes);
   lAll := '';
   for lFinding in lF do
     lAll := lAll + FindingText(lFinding) + #10;
@@ -2271,13 +2314,8 @@ begin
   Check('Cmd.Find.noHitsExit1', lExit = 1, lOut);
   RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr'], lOut);
   Check('Cmd.FindIncludesChildrenFlag.without', Pos('rule.unit-not-in-dpr', lOut) = 0, lOut);
-  if TFile.Exists(MAIN_ENGINE) then
-  begin
-    lExit := RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr', '--include-children', '--engine', MAIN_ENGINE], lWith);
-    Check('Cmd.FindIncludesChildrenFlag.with', (lExit = 0) and (Pos('rule.unit-not-in-dpr', lWith) > 0), lWith);
-  end
-  else
-    Writeln('SKIP Cmd.FindIncludesChildrenFlag.with (no engine)');
+  lExit := RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr', '--include-children', '--engine', GoldenEngine(pRepo)], lWith);
+  Check('Cmd.FindIncludesChildrenFlag.with', (lExit = 0) and (Pos('rule.unit-not-in-dpr', lWith) > 0), lWith);
   lExit := RunCmd('find', ['--repo', lCopy, '--text', 'x', '--json'], lOut);
   Check('Cmd.Find.json', (lExit = 0) and lOut.TrimLeft.StartsWith('[') and (Pos('"Id"', lOut) > 0), lOut);
   lExit := RunCmd('blast-radius', ['--repo', lCopy, '--menu-path', 'drag-lint > Reports'], lOut);
@@ -2560,6 +2598,136 @@ begin
   end;
 end;
 
+{ ---- Fix round 1 (I2): assertions of the retired PowerShell runners that had no Delphi twin ---- }
+
+function GoldenCopy(const pRepo, pName: string): string;
+begin
+  Result := TPath.Combine(FreshDir(pName), 'r');
+  TDirectory.Copy(GoldenRepo(pRepo), Result);
+end;
+
+procedure RenderWikiInto(const pRepo, pOut: string);
+var
+  lW: TOutputWriter;
+begin
+  lW := TOutputWriter.Create(pOut, False, False);
+  try
+    BuildWiki(GoldenRepo(pRepo), lW, GoldenEngine(pRepo));
+    lW.Finish;
+  finally
+    lW.Free;
+  end;
+end;
+
+{ run_feature_registry_generate: byte-identical from the repo root and from a foreign CWD. }
+procedure TestWikiCwdIndependent(const pRepo: string);
+var
+  lA, lB, lOld: string;
+  lBad: TArray<string>;
+begin
+  lA := FreshDir('cwd-a');
+  lB := FreshDir('cwd-b');
+  lOld := GetCurrentDir;
+  try
+    RenderWikiInto(pRepo, lA);
+    SetCurrentDir(FreshDir('cwd-foreign'));
+    RenderWikiInto(pRepo, lB);
+  finally
+    SetCurrentDir(lOld);
+  end;
+  lBad := CompareOutputTrees(lA, lB, WikiOutputPaths);
+  Check('Parity.WikiRenderIsCwdIndependent', (Length(WikiOutputPaths) > 0) and (Length(lBad) = 0), string.Join(' | ', lBad));
+end;
+
+{ run_feature_registry_generate: Update-MarkedBlock refuses a file without markers. }
+procedure TestMarkedBlockNoMarkers;
+var
+  lMsg: string;
+begin
+  lMsg := '';
+  try
+    UpdateMarkedBlock('plain text, no markers at all'#13#10, 'x', 'new');
+  except
+    on E: Exception do
+      lMsg := E.Message;
+  end;
+  Check('Wiki.MarkedBlockWithoutMarkersRaises', Pos('markers absent', lMsg) > 0, lMsg);
+end;
+
+{ run_feature_registry_canonical (lone CR), run_feature_registry_families (REPORT_QUESTION_COUNT,
+  emitter SET both ways), on seeded copies of the frozen repo; each with an unseeded control. }
+procedure TestSeededImporterAndFileChecks(const pRepo: string);
+var
+  lDst, lFile, lEngine, lAll: string;
+  lF: TArray<TFinding>;
+  lNotes: TArray<string>;
+begin
+  lEngine := GoldenEngine(pRepo);
+  lDst := GoldenCopy(pRepo, 'seed-clean');
+  lF := RunCheckCommand(lDst, lEngine, clFull, lNotes);
+  Check('Seed.ControlCleanHasNoSeededFindings', (FindingsNaming(lF, 'lone CR') = '') and (FindingsNaming(lF, 'REPORT_QUESTION_COUNT') = '')
+    and (FindingsNaming(lF, 'emitter set drift') = ''), FindingsNaming(lF, 'importer'));
+  // a lone CR in a registry table file (Test-AsciiCrlfFile) is refused, naming the file and the line
+  lDst := GoldenCopy(pRepo, 'seed-lone-cr');
+  lFile := TPath.Combine(lDst, 'features\groups.json');
+  TFile.WriteAllText(lFile, StringReplace(ReadBytesText(lFile), #13#10, #13#13#10, []), TEncoding.ASCII);
+  lF := RunCheckCommand(lDst, lEngine, clWellFormed, lNotes);
+  lAll := FindingsNaming(lF, 'lone CR at line 1');
+  Check('Check.LoneCrRejectedNamingFileAndLine', (Pos('groups.json', lAll) > 0), lAll);
+  // REPORT_QUESTION_COUNT must equal the catalog row count
+  lDst := GoldenCopy(pRepo, 'seed-rqc');
+  ReplaceInFile(TPath.Combine(lDst, 'src\delphi-plugin\DragLint.Plugin.ReportText.pas'), 'REPORT_QUESTION_COUNT = 26;', 'REPORT_QUESTION_COUNT = 27;');
+  lF := RunCheckCommand(lDst, lEngine, clFull, lNotes);
+  lAll := FindingsNaming(lF, 'REPORT_QUESTION_COUNT');
+  Check('Check.ReportQuestionCountMismatchRejected', lAll <> '', lAll);
+  // emitter set: on disk but no child names it
+  lDst := GoldenCopy(pRepo, 'seed-emitter-unnamed');
+  TFile.WriteAllText(TPath.Combine(lDst, 'charts\src\Emit-Zzextra.ps1'), '# probe'#13#10, TEncoding.ASCII);
+  lF := RunCheckCommand(lDst, lEngine, clFull, lNotes);
+  lAll := FindingsNaming(lF, 'emitter set drift');
+  Check('Check.EmitterSetDriftOnDiskUnnamed', Pos('Emit-Zzextra.ps1', lAll) > 0, lAll);
+  // emitter set: a child names a file that is not an Emit-*.ps1 on disk (and the real one goes unnamed)
+  lDst := GoldenCopy(pRepo, 'seed-emitter-ghost');
+  ReplaceInFile(TPath.Combine(lDst, 'features\families\chart-questions.json'), 'charts\\src\\Emit-RoundTrip.ps1', 'charts\\src\\New-DiagramArtifact.ps1');
+  lF := RunCheckCommand(lDst, lEngine, clFull, lNotes);
+  lAll := FindingsNaming(lF, 'emitter set drift');
+  Check('Check.EmitterSetDriftNamedNotOnDisk', (Pos('New-DiagramArtifact.ps1', lAll) > 0) and (Pos('Emit-RoundTrip.ps1', lAll) > 0), lAll);
+end;
+
+{ run_feature_registry_families: a per-child since override is exempt from the CHANGELOG check; the family's own is not. }
+procedure TestSinceOverride(const pRepo: string);
+var
+  lCtx: TCheckContext;
+  lEntry: TJSONObject;
+  lP: string;
+
+  function ChangelogProblems(pOverride: Boolean): Integer;
+  var
+    lS: string;
+  begin
+    Result := 0;
+    for lS in CheckEntry(lEntry, lCtx, 'ask', True, pOverride) do
+      if Pos('CHANGELOG', lS) > 0 then
+        Inc(Result);
+  end;
+
+begin
+  lCtx := TCheckContext.Create(GoldenRepo(pRepo), nil);
+  try
+    lEntry := TJSONObject(TJSONObject.ParseJSONValue(ReadBytesText(TPath.Combine(GoldenRepo(pRepo), 'features\entries\ask.json'))));
+    try
+      lEntry.RemovePair('since').Free;
+      lEntry.AddPair('since', '0.1.0');
+      lP := IntToStr(ChangelogProblems(False)) + '/' + IntToStr(ChangelogProblems(True));
+      Check('Check.ChildSinceNotInChangelogIsAProblem', ChangelogProblems(False) = 1, lP);
+      Check('Check.ChildSinceOverrideIsExempt', ChangelogProblems(True) = 0, lP);
+    finally
+      lEntry.Free;
+    end;
+  finally
+    lCtx.Free;
+  end;
+end;
 procedure TestCommands(const pRepo: string);
 begin
   TestAuditVerify(pRepo);
@@ -2577,6 +2745,11 @@ end;
 var
   lRepo, lSeeded, lGold: string;
 begin
+  if SameText(ExtractFileName(ParamStr(0)), GOLDEN_STUB_NAME) then
+  begin
+    RunGoldenEngineStub;
+    Exit;
+  end;
   try
     lRepo := FindRepoRoot;
     Check('Harness.RepoRootFound', lRepo <> '', ParamStr(0));
@@ -2630,12 +2803,16 @@ begin
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
       TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0);
-      TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, SharedLive(lRepo).McpTools), 0, 0);
+      TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, GoldenLive(lRepo).McpTools), 0, 0);
       lSeeded := SeededRepo(lGold);
       // the seeded copy carries the same MCP server source, so the live tool list is the same
       TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0);  // dl:ok magic-literal@e226 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
-      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, SharedLive(lRepo).McpTools), 1, -1);  // dl:ok magic-literal@f009 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1);  // dl:ok magic-literal@535a -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
       TestCheckDCoversAllOutputs(lRepo);
+      TestWikiCwdIndependent(lRepo);
+      TestMarkedBlockNoMarkers;
+      TestSeededImporterAndFileChecks(lRepo);
+      TestSinceOverride(lRepo);
       TestPositiveControls(lRepo);
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
@@ -2649,6 +2826,7 @@ begin
     end;
   end;
   FreeAndNil(GLive);
+  FreeAndNil(GGoldenLive);
   Writeln(Format('SUMMARY pass=%d fail=%d', [GPass, GFail]));
   if GFail > 0 then
     Halt(1);

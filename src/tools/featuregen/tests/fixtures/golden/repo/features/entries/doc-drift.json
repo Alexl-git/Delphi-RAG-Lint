@@ -1,0 +1,32 @@
+{
+  "id": "doc-drift",
+  "title": "doc-drift",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.93.0-alpha",
+  "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
+  "wikiPage": "doc-drift",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "doc-drift",
+      "usage": "drag-lint doc-drift --qname X --db PATH [--json] (diagnostic: deterministic doc-vs-code drift findings for one symbol)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "X"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

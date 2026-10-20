@@ -1,0 +1,42 @@
+{
+  "id": "class-surface",
+  "title": "Class Surface",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Shows the public surface of a class: its members and signatures, without the method bodies",
+  "wikiPage": "Class-Surface",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Inspect Symbol > Class Surface..."
+    },
+    {
+      "type": "cli",
+      "verb": "surface",
+      "usage": "drag-lint surface --qname <Foo.TBar> [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--include-impl"
+        },
+        {
+          "name": "--all-visibility"
+        },
+        {
+          "name": "--format"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."]
+}

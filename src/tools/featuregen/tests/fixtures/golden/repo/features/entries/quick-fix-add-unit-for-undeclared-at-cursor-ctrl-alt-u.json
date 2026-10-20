@@ -1,0 +1,18 @@
+{
+  "id": "quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u",
+  "title": "Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause",
+  "wikiPage": "Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

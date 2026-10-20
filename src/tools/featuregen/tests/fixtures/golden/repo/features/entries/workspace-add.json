@@ -1,0 +1,25 @@
+{
+  "id": "workspace-add",
+  "title": "workspace add",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it",
+  "wikiPage": "workspace-add",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "workspace",
+      "sub": "add",
+      "usage": "drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]",
+      "flags": [
+        {
+          "name": "--config",
+          "arg": "<.drag-lint-workspace.json>"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

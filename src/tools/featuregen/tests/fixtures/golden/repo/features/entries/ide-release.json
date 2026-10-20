@@ -1,0 +1,33 @@
+{
+  "id": "ide-release",
+  "title": "ide-release",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.13.0-alpha",
+  "summary": "Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request",
+  "wikiPage": "ide-release",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "ide-release",
+      "usage": "drag-lint ide-release [--seconds N] [--resume] [--status] [--json] (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)",
+      "flags": [
+        {
+          "name": "--seconds",
+          "arg": "N"
+        },
+        {
+          "name": "--resume"
+        },
+        {
+          "name": "--status"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

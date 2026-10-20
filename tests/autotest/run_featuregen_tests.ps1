@@ -40,6 +40,8 @@ try {
   $code = $LASTEXITCODE
   $sum = Select-String -LiteralPath $log -Pattern '^SUMMARY ' | Select-Object -Last 1
   Select-String -LiteralPath $log -Pattern '^FAIL|^SKIP' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }
+  $skips = @(Select-String -LiteralPath $log -Pattern '^SKIP')
+  if ($skips.Count -gt 0) { Write-Host ("FEATUREGEN TESTS: FAIL -- $($skips.Count) SKIP line(s): a skipped parity test is a vanished regression pin") -ForegroundColor Red; exit 1 }
   if (-not $sum) { Write-Host 'FEATUREGEN TESTS: FAIL -- no SUMMARY line (the runner crashed)' -ForegroundColor Red; exit 1 }
   Write-Host "  $($sum.Line)"
   if (($code -ne 0) -or ($sum.Line -notmatch 'fail=0\b')) { Write-Host 'FEATUREGEN TESTS: FAIL' -ForegroundColor Red; exit 1 }

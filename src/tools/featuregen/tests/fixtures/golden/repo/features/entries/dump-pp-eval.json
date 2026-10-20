@@ -1,0 +1,18 @@
+{
+  "id": "dump-pp-eval",
+  "title": "dump-pp-eval",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.92.0-alpha",
+  "summary": "Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "dump-pp-eval"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed"
+}

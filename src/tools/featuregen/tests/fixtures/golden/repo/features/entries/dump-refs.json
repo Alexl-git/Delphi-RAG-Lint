@@ -1,0 +1,25 @@
+{
+  "id": "dump-refs",
+  "title": "dump-refs",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.82.0-alpha",
+  "summary": "Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution",
+  "wikiPage": "dump-refs",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "dump-refs",
+      "usage": "drag-lint dump-refs <file> --db PATH (diagnostic: refs + enclosing_symbol_id attribution)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

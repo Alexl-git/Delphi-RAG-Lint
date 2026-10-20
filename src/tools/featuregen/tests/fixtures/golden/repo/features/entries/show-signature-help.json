@@ -1,0 +1,17 @@
+{
+  "id": "show-signature-help",
+  "title": "Show Signature Help",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.21.0-alpha",
+  "summary": "Shows parameter help for the call being typed at the editor caret",
+  "wikiPage": "Show-Signature-Help",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Show Signature Help"
+    }
+  ],
+  "audience": "both"
+}

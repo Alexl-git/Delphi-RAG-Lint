@@ -1,0 +1,43 @@
+{
+  "id": "find-unit",
+  "title": "find-unit",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.69.0-alpha",
+  "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
+  "wikiPage": "find-unit",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "find-unit",
+      "usage": "drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db> - add the declaring unit to uses",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<Symbol>"
+        },
+        {
+          "name": "--in",
+          "arg": "<file>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "pitfalls": ["for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units."]
+}

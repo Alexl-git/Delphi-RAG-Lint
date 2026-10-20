@@ -1,0 +1,17 @@
+{
+  "id": "show-structure",
+  "title": "Show Structure",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.30.0-alpha",
+  "summary": "Shows a structural outline of the current unit",
+  "wikiPage": "Show-Structure",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Show Structure"
+    }
+  ],
+  "audience": "both"
+}

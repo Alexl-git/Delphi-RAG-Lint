@@ -1,0 +1,105 @@
+{
+  "id": "chart-questions",
+  "title": "Chart questions",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.20.2-alpha",
+  "summary": "Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS",
+  "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run `drag-lint ask <id> --target <name> --project <dproj>`; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.",
+  "wikiPage": "Diagrams-and-Charts",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "ask",
+      "example": "drag-lint ask butterfly --target U.TForm.Method --project P.dproj",
+      "usage": "drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]",
+      "flags": [
+        {
+          "name": "--target",
+          "arg": "<T>"
+        },
+        {
+          "name": "--project",
+          "arg": "<P.dproj>"
+        },
+        {
+          "name": "--in",
+          "arg": "<U.pas>"
+        },
+        {
+          "name": "--db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--to",
+          "arg": "<B>"
+        },
+        {
+          "name": "--server-db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--sql-db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--counterpart-db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--cap",
+          "arg": "N"
+        },
+        {
+          "name": "--surface-cap",
+          "arg": "N"
+        },
+        {
+          "name": "--control",
+          "arg": "<C>"
+        },
+        {
+          "name": "--mode"
+        },
+        {
+          "name": "--max-rows",
+          "arg": "N"
+        },
+        {
+          "name": "--out-root",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--pairs-file",
+          "arg": "<f.json>"
+        },
+        {
+          "name": "--allow-stale"
+        },
+        {
+          "name": "--plain"
+        },
+        {
+          "name": "--open"
+        },
+        {
+          "name": "--resolve-only"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index", "graphviz"],
+  "family": "chart-questions",
+  "lastVerified": {
+    "date": "2026-10-06",
+    "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
+    "build": "1.26.1-alpha"
+  },
+  "homeOrder": 44
+}

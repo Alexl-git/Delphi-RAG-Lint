@@ -1,0 +1,18 @@
+{
+  "id": "recover-buffer-compile-files",
+  "title": "Recover Buffer-Compile Files",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)",
+  "wikiPage": "Recover-Buffer-Compile-Files",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Recover Buffer-Compile Files"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

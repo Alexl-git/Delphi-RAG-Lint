@@ -1,0 +1,19 @@
+{
+  "id": "go-to-declaration",
+  "title": "Go to Declaration",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
+  "wikiPage": "Go-to-Declaration",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Go to Declaration"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}
