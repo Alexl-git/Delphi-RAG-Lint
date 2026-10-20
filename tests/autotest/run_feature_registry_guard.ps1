@@ -49,22 +49,18 @@ New-Item -ItemType Directory -Path $WorkDir | Out-Null
 # ---- control first: the tool goes red on a seeded defect, green without it ------------
 Write-Host '-- control' -ForegroundColor Cyan
 $scratch = Join-Path $WorkDir 'repo'
-New-Item -ItemType Directory -Path $scratch | Out-Null
-foreach ($d in 'features', 'docs\wiki', 'tools') {
-  New-Item -ItemType Directory -Path (Split-Path -Parent (Join-Path $scratch $d)) -Force | Out-Null
-  Copy-Item -LiteralPath (Join-Path $Repo $d) -Destination (Join-Path $scratch $d) -Recurse
-}
+New-Item -ItemType Directory -Path (Join-Path $scratch 'docs') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $Repo 'features') -Destination (Join-Path $scratch 'features') -Recurse
+Copy-Item -LiteralPath (Join-Path $Repo 'docs\wiki') -Destination (Join-Path $scratch 'docs\wiki') -Recurse
 Copy-Item -LiteralPath (Join-Path $Repo 'CHANGELOG.md') -Destination $scratch
-New-Item -ItemType Directory -Path (Join-Path $scratch 'charts') | Out-Null
-Copy-Item -LiteralPath (Join-Path $Repo 'charts\README.md') -Destination (Join-Path $scratch 'charts\README.md')
+# The scratch tree has no src\, build\ or tools\, so check A also reports the paths entries name;
+# the control therefore compares the two runs: only the seeded one may name the seeded entry.
 $clean = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
-$cleanExit = $LASTEXITCODE
-if ($cleanExit -ne 0) { Write-Host "GUARD BROKEN: the unseeded scratch copy does not pass check A (exit $cleanExit): $($clean.Trim())" -ForegroundColor Red; exit 1 }
+if ($clean -match 'zz-guard-control') { Write-Host 'GUARD BROKEN: the unseeded scratch copy already names the control entry' -ForegroundColor Red; exit 1 }
 $seed = Join-Path $scratch 'features\entries\zz-guard-control.json'
-[IO.File]::WriteAllText($seed, "{`r`n  `"id`": `"zz-guard-control`",`r`n  `"zzUnknownKey`": 1`r`n}`r`n", [Text.Encoding]::ASCII)
+[IO.File]::WriteAllText($seed, "{`n  `"id`": `"zz-guard-control`",`n  `"zzUnknownKey`": 1`n}`n", [Text.Encoding]::ASCII)
 $red = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
-if (($LASTEXITCODE -ne 1) -or ($red -notmatch 'zz-guard-control\.json')) { Write-Host "GUARD BROKEN: a seeded bad entry did not fail check A naming it (exit $LASTEXITCODE): $($red.Trim())" -ForegroundColor Red; exit 1 }
-Write-Host '  [CTRL] a seeded bad entry fails check A and is named; the unseeded copy passes' -ForegroundColor DarkGray
+if (($LASTEXITCODE -ne 1) -or ($red -notmatch 'zz-guard-control\.json')) { Write-Host "GUARD BROKEN: a seeded bad entry did not fail check A naming it (exit $LASTEXITCODE): $($red.Trim())" -ForegroundColor Red; exit 1 }Write-Host '  [CTRL] a seeded bad entry fails check A and is named; the unseeded copy never names it' -ForegroundColor DarkGray
 
 # ---- the real repo ----------------------------------------------------------------------
 Write-Host '-- checks A-E (check --level full)' -ForegroundColor Cyan
