@@ -3,7 +3,7 @@
   DocsSurfaceHarvest.ps1 -- the ONE definition of how the live CLI verb list and
   the live IDE caption set are harvested. Dot-sourced by
   tests\autotest\run_docs_sync_guard.ps1 (checks 1 and 5) and by
-  tools\FeatureRegistry.psm1 (Get-LiveSurface). Extracted 2026-10-05 so the
+  featuregen (FeatureGen.Live, a port of the retired Get-LiveSurface). Extracted 2026-10-05 so the
   feature registry could not fork the regexes silently; a change here changes
   both guards, which is the point.
 

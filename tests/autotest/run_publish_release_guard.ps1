@@ -46,7 +46,7 @@ Check 'POSITIVE CONTROL: a sabotaged restore is reported, never silent' ($threw 
 $ver = [regex]::Match((Get-Content -LiteralPath (Join-Path $Repo 'src\core\DRagLint.Core.Model.pas') -Raw), "DRAGLINT_VERSION\s*=\s*'([^']+)'").Groups[1].Value
 $out = & pwsh -NoProfile -File $orch -Version $ver -DryRun 2>&1 | Out-String
 Check 'dry run exits 0 on the live version' ($LASTEXITCODE -eq 0) (($out -split "`n" | Select-Object -Last 2) -join ' ')
-$idx = @('build the engine', 'build-feature-pages.ps1 -Check', 'build-manual.ps1', 'run_battery.ps1', 'publish-wiki.ps1', 'Build-Installer.ps1', 'git tag') | ForEach-Object { $out.IndexOf($_) }
+$idx = @('build the engine', 'featuregen-gate.ps1', 'build-manual.ps1', 'run_battery.ps1', 'publish-wiki.ps1', 'Build-Installer.ps1', 'git tag') | ForEach-Object { $out.IndexOf($_) }
 Check 'dry run lists all seven steps' (@($idx | Where-Object { $_ -lt 0 }).Count -eq 0) ($idx -join ',')
 Check 'steps are in order: build, generate -Check, manual, battery, wiki, installer, tag' ((($idx | ForEach-Object { $_ }) -join ',') -eq (($idx | Sort-Object) -join ','))
 Check 'dry run says it is a dry run and ran the -Check gate' (($out -match 'DRY RUN') -and ($out -match 'feature pages: current'))
@@ -71,7 +71,7 @@ function New-StubTree([string]$Root) {
   New-Item -ItemType Directory -Path (Join-Path $Root 'third_party\dll-win64') -Force | Out-Null
   [IO.File]::WriteAllBytes((Join-Path $Root 'third_party\dll-win64\drag-lint.exe'), [byte[]](1..64))
   Write-Ascii (Join-Path $Root 'build\build_draglint_win64.bat') "@echo off`necho build>>`"$log`"`nif exist `"$(Join-Path $Root 'fail-build')`" exit /b 1`nexit /b 0`n"
-  Write-Ascii (Join-Path $Root 'tools\build-feature-pages.ps1') (& $ps 'gate' "Write-Host 'feature pages: current'")
+  Write-Ascii (Join-Path $Root 'tools\featuregen-gate.ps1') (& $ps 'gate' "Write-Host 'feature pages: current'")
   Write-Ascii (Join-Path $Root 'tools\build-manual.ps1') (& $ps 'manual' '')
   Write-Ascii (Join-Path $Root 'tests\run_battery.ps1') (& $ps 'battery' '')
   Write-Ascii (Join-Path $Root 'tools\publish-wiki.ps1') (& $ps 'wiki' '')
@@ -106,7 +106,7 @@ Check 'a dry run executes the gate and nothing else' (($x.Exit -eq 0) -and ($x.S
 
 # --- the migrated gates, executed (the real scripts, copied beside a stub gate) -----
 $g = Join-Path $WorkDir 'gates'
-Write-Ascii (Join-Path $g 'tools\build-feature-pages.ps1') "if (Test-Path -LiteralPath '$(Join-Path $g 'fail-gate')') { Write-Host 'feature pages: 1 output(s) would change'; exit 1 }`nWrite-Host 'feature pages: current'; exit 0`n"
+Write-Ascii (Join-Path $g 'tools\featuregen-gate.ps1') "if (Test-Path -LiteralPath '$(Join-Path $g 'fail-gate')') { Write-Host 'feature pages: 1 output(s) would change'; exit 1 }`nWrite-Host 'feature pages: current'; exit 0`n"
 Copy-Item -LiteralPath (Join-Path $Repo 'tools\publish-wiki.ps1') -Destination (Join-Path $g 'tools\publish-wiki.ps1')
 New-Item -ItemType Directory -Path (Join-Path $g 'build') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $Repo 'build\pack-lint-release.ps1') -Destination (Join-Path $g 'build\pack-lint-release.ps1')
@@ -128,13 +128,20 @@ Check 'POSITIVE CONTROL: pack-lint-release.ps1 passes a current gate through to 
 
 # --- the two migrated scripts carry the gate ---------------------------------------
 $pw = Get-Content -LiteralPath (Join-Path $Repo 'tools\publish-wiki.ps1') -Raw
-Check 'publish-wiki.ps1 runs build-feature-pages.ps1 -Check before cloning' (($pw -match 'build-feature-pages\.ps1') -and ($pw.IndexOf('build-feature-pages.ps1') -lt $pw.IndexOf('git clone')))
+Check 'publish-wiki.ps1 runs featuregen-gate.ps1 before cloning' (($pw -match 'featuregen-gate\.ps1') -and ($pw.IndexOf('featuregen-gate.ps1') -lt $pw.IndexOf('git clone')))
 $pk = Get-Content -LiteralPath (Join-Path $Repo 'build\pack-lint-release.ps1') -Raw
-Check 'pack-lint-release.ps1 runs build-feature-pages.ps1 -Check before msbuild' (($pk -match 'build-feature-pages\.ps1') -and ($pk.IndexOf('build-feature-pages.ps1') -lt $pk.IndexOf('msbuild')))
+Check 'pack-lint-release.ps1 runs featuregen-gate.ps1 before msbuild' (($pk -match 'featuregen-gate\.ps1') -and ($pk.IndexOf('featuregen-gate.ps1') -lt $pk.IndexOf('msbuild')))
 $or = Get-Content -LiteralPath $orch -Raw
 Check 'step 6 invokes installer\Build-Installer.ps1 and builds no zip' (($or -match 'installer\\Build-Installer\.ps1') -and ($or -notmatch 'Invoke-WithEngineBackup') -and ($or -notmatch '(?m)^\s*Invoke-Step[^\r\n]*pack-lint-release'))
 Check 'the plugin build is opt-in (it deploys into the live IDE)' ($or -match '\[switch\]\$BuildPlugin')
 
+# --- the real gate: a missing tool is never a pass ----------------------------------
+$gateScript = Join-Path $Repo 'tools\featuregen-gate.ps1'
+Check 'featuregen-gate.ps1 present' (Test-Path -LiteralPath $gateScript) $gateScript
+$noTool = Join-Path $WorkDir 'no-such-featuregen.exe'
+$env:FEATUREGEN_EXE = $noTool
+try { $o = & pwsh -NoProfile -File $gateScript -Repo $Repo 2>&1 | Out-String; $gateExit = $LASTEXITCODE } finally { Remove-Item Env:\FEATUREGEN_EXE -ErrorAction SilentlyContinue }
+Check 'POSITIVE CONTROL: a missing featuregen.exe fails the gate and names the path' (($gateExit -eq 1) -and ($o.Contains($noTool))) "exit=$gateExit"
 Write-Host ''
 if ($script:Failed) { Write-Host 'PUBLISH RELEASE GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PUBLISH RELEASE GUARD: PASS' -ForegroundColor Green
