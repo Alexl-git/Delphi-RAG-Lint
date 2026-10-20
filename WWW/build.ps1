@@ -3,11 +3,12 @@
 param(
     [string]$Out = (Join-Path $PSScriptRoot '_site'),
     [string]$ArticlesRoot = (Join-Path $PSScriptRoot 'articles'),
+    [string]$ProductsRoot = (Join-Path $PSScriptRoot 'products'),
     [switch]$NoRewrite,
     [scriptblock]$Gh = { param($argv) & gh @argv }
 )
 $ErrorActionPreference = 'Stop'
-foreach ($l in 'Config', 'Releases', 'Articles', 'Render', 'Check') { . (Join-Path $PSScriptRoot "lib\$l.ps1") }
+foreach ($l in 'Config', 'Releases', 'Articles', 'Products', 'Render', 'Check') { . (Join-Path $PSScriptRoot "lib\$l.ps1") }
 
 function Write-SiteFile([string]$RelPath, [string]$Text) {
     $p = Join-Path $Out $RelPath
@@ -20,6 +21,7 @@ try {
     $releases = @($cfg.products | ForEach-Object { Get-ReleaseInfo $_ $Gh })
     $articles = @(Get-Articles $ArticlesRoot)
     if ($articles.Count -eq 0) { throw "no articles under $ArticlesRoot" }
+    $products = @(Get-ProductPages $ProductsRoot $cfg)
 
     if (Test-Path -LiteralPath $Out) { [IO.Directory]::Delete($Out, $true) }
     [void][IO.Directory]::CreateDirectory($Out)
@@ -44,6 +46,13 @@ try {
         if ($a.Image) { Copy-Item -LiteralPath (Join-Path $a.Dir $a.Image) -Destination (Join-Path $Out "articles\$($a.Slug)\") }
     }
 
+    foreach ($p in $products) {
+        $more = @{}
+        if ($p.Image) { $more.Image = "/products/$($p.Id)/$($p.Image)" }
+        Add-Page "/products/$($p.Id)/" $p.Title $p.Summary $p.Body '' $more
+        Get-ChildItem -LiteralPath $p.Dir -File | Where-Object { $_.Extension -in '.png', '.jpg', '.jpeg' } |
+            Copy-Item -Destination (Join-Path $Out "products\$($p.Id)\")
+    }
     $li = foreach ($a in $articles) {
         "<li><a class=""title"" href=""/articles/$($a.Slug)/"">$(ConvertTo-HtmlText $a.Title)</a><span class=""meta"">$($a.Date)</span><p>$(ConvertTo-HtmlText $a.Summary)</p></li>"
     }

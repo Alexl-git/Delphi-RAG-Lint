@@ -18,7 +18,7 @@ Assert-Throws { Read-Article "$art\index.html" } '*image*'
 # the built site: default card shipped, article card copied next to its page, 404 not shared
 $out = New-TestDir
 $fake = { param($argv) $global:LASTEXITCODE = 0; '{"tagName":"v1.2.3-alpha","publishedAt":"2026-10-19T07:00:00Z"}' }
-& "$PSScriptRoot\..\build.ps1" -Out $out -ArticlesRoot "$PSScriptRoot\fixtures\articles" -Gh $fake | Out-Null
+& "$PSScriptRoot\..\build.ps1" -Out $out -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot "$PSScriptRoot\fixtures\products" -Gh $fake | Out-Null
 Assert-Equal 0 $LASTEXITCODE 'build exit'
 Assert-True (Test-Path "$out\assets\share\default.png") 'default card shipped'
 Assert-True (Test-Path "$out\articles\a-one\card.png") 'article card copied'

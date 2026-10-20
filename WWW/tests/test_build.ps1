@@ -1,10 +1,11 @@
 $out = New-TestDir
 $fake = { param($argv) $global:LASTEXITCODE = 0; '{"tagName":"v1.2.3-alpha","publishedAt":"2026-10-19T07:00:00Z"}' }
-& "$PSScriptRoot\..\build.ps1" -Out $out -ArticlesRoot "$PSScriptRoot\fixtures\articles" -Gh $fake | Out-Null
+& "$PSScriptRoot\..\build.ps1" -Out $out -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot "$PSScriptRoot\fixtures\products" -Gh $fake | Out-Null
 Assert-Equal 0 $LASTEXITCODE 'build exit'
 
 foreach ($f in 'index.html', 'articles\index.html', 'articles\newest\index.html', 'articles\a-one\index.html',
                'downloads\index.html', 'help\index.html', 'community\index.html', '404.html', 'sitemap.xml',
+               'products\dl\index.html', 'products\dl\pic.png', 'products\yadf\index.html',
                'robots.txt', 'web.config', '.htaccess', 'assets\style.css', 'assets\releases.js') {
     Assert-True (Test-Path (Join-Path $out $f)) "missing $f"
 }
@@ -28,12 +29,22 @@ Assert-Equal "default-src 'self'; script-src 'self'; style-src 'self'; font-src 
 Assert-True ($null -ne $w.configuration.'system.webServer'.rewrite) 'rewrite present'
 
 $out2 = New-TestDir
-& "$PSScriptRoot\..\build.ps1" -Out $out2 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -Gh $fake -NoRewrite | Out-Null
+& "$PSScriptRoot\..\build.ps1" -Out $out2 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot "$PSScriptRoot\fixtures\products" -Gh $fake -NoRewrite | Out-Null
 [xml]$w2 = [IO.File]::ReadAllText("$out2\web.config")
 Assert-True ($null -eq $w2.configuration.'system.webServer'.rewrite) '-NoRewrite strips rewrite'
 
 # a failing release lookup aborts the build
 $out3 = New-TestDir
 $bad = { param($argv) $global:LASTEXITCODE = 1; '' }
-& "$PSScriptRoot\..\build.ps1" -Out $out3 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -Gh $bad *>$null
+& "$PSScriptRoot\..\build.ps1" -Out $out3 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot "$PSScriptRoot\fixtures\products" -Gh $bad *>$null
 Assert-Equal 1 $LASTEXITCODE 'build fails when gh fails'
+Assert-True ([IO.File]::ReadAllText("$out\sitemap.xml").Contains('<loc>https://www.delphi-rag-lint.com/products/dl/</loc>')) 'sitemap has product page'
+Assert-True ([IO.File]::ReadAllText("$out\products\dl\index.html").Contains('<title>DL fixture - Delphi-RAG-Lint</title>')) 'product page title'
+
+# a product page whose picture is missing fails the build (dangling-link check)
+$pr = New-TestDir
+Copy-Item "$PSScriptRoot\fixtures\products\*" $pr -Recurse
+[IO.File]::Delete("$pr\dl\pic.png")
+$out4 = New-TestDir
+& "$PSScriptRoot\..\build.ps1" -Out $out4 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot $pr -Gh $fake *>$null
+Assert-Equal 1 $LASTEXITCODE 'build fails on a missing product picture'
