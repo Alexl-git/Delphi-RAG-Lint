@@ -2063,8 +2063,17 @@ begin
     finally
       lLive.HelpVerbs := lSaved;
     end;
-    Check('Check.UnregisteredVerbFails', HasFinding(lF, 'B', 'unregistered: ''zz-not-a-verb''')
-      and HasFinding(lF, 'B', 'features\entries\zz-not-a-verb.json'), FindingsNaming(lF, 'zz-'));
+    { A verb only --help lists is NOT compared: a generated --help could never fail that comparison. }
+    Check('Check.HelpOnlyVerbIsNotCompared', not HasFinding(lF, 'B', 'unregistered: ''zz-not-a-verb'''), FindingsNaming(lF, 'zz-'));
+    { P7: B/C compare the registry with the DISPATCH table, never with --help (a generated --help cannot fail). }
+    lSaved := lLive.DispatchVerbs;
+    lLive.DispatchVerbs := lLive.DispatchVerbs + ['zz-dispatch-verb'];
+    try
+      lF := RunChecks(lReg, lLive, clFull, nil, True, lNotes);
+    finally
+      lLive.DispatchVerbs := lSaved;
+    end;
+    Check('Check.DispatchVerbUnregisteredFails', HasFinding(lF, 'B', 'unregistered: ''zz-dispatch-verb'''), FindingsNaming(lF, 'zz-'));
     lSaved := lLive.Captions;
     lLive.Captions := lLive.Captions + ['Zz Not A Real Menu Item'];
     try
@@ -2127,7 +2136,7 @@ begin
     finally
       lE.Free;
     end;
-    Check('Check.ShippedProbeChecksLive', HasFinding(lF, 'C', 'zz-planned-probe: cli verb ''zz-planned-verb'' is not in --help')
+    Check('Check.ShippedProbeChecksLive', HasFinding(lF, 'C', 'zz-planned-probe: cli verb ''zz-planned-verb'' is not dispatched by the CLI')
       and HasFinding(lF, 'C', 'zz-planned-probe: mcp tool ''zz_planned_tool'' is not in HandleToolsList'), FindingsNaming(lF, 'zz-planned'));
   finally
     lReg.Free;

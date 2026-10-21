@@ -1562,11 +1562,11 @@ begin
         end;
       end;
     end;
-    for lV in FLive.HelpVerbs do
+    for lV in FLive.DispatchVerbs do
     begin
       if lRegVerbs.Contains(LowerCase(lV)) or InCI(lV, pCtx.ExemptVerbs) then
         Continue;
-      Fail('B', 'every --help verb is registered -- unregistered: ''' + lV + ''''#10'   ^ no entry claims it. Create features\entries\' + lV
+      Fail('B', 'every dispatched verb is registered -- unregistered: ''' + lV + ''''#10'   ^ no entry claims it. Create features\entries\' + lV
         + '.json (featuregen add --id ' + lV + ' ...), then run featuregen build --all and commit the regenerated pages:'#10
         + Indent3(Skeleton(lV, SurfaceObj(['type', 'cli', 'verb', lV]), pCtx)));
     end;
@@ -1639,7 +1639,7 @@ begin
       if lM.Success then
         lLiveOk := InCI(lM.Groups[1].Value, FLive.SubVerbs) and InCI(lM.Groups[2].Value, FLive.SubMap[lM.Groups[1].Value])
       else
-        lLiveOk := InCI(lK, FLive.HelpVerbs);
+        lLiveOk := InCI(lK, FLive.DispatchVerbs);
       if not lLiveOk then
       begin
         Fail('B', 'exemptions.json verbs: ''' + lK + ''' is no longer a --help verb or subcommand -- delete the exemption');
@@ -1688,8 +1688,8 @@ begin
             if not InCI(lV, FLive.DispatchVerbs) then
               Fail('C', lId + ': internal verb ''' + lV + ''' is not dispatched by the CLI (nearest: ' + JoinS(NearestCandidates(lV, FLive.DispatchVerbs), ', ') + ')');
           end
-          else if not InCI(lV, FLive.HelpVerbs) then
-            Fail('C', lId + ': cli verb ''' + lV + ''' is not in --help (nearest: ' + JoinS(NearestCandidates(lV, FLive.HelpVerbs), ', ')
+          else if not InCI(lV, FLive.DispatchVerbs) then
+            Fail('C', lId + ': cli verb ''' + lV + ''' is not dispatched by the CLI (nearest: ' + JoinS(NearestCandidates(lV, FLive.DispatchVerbs), ', ')
               + ') -- if it was retired, deprecate the entry with removedIn');
           if JHas(lS, 'sub') then
           begin
