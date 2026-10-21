@@ -219,7 +219,10 @@ $roots = [ordered]@{
   # (scratch\, artifacts\, docs\examples\) is gitignored and holds no .ps1.
   # 2026-10-13: installer\ (job R2) holds Build-Installer.ps1 -- our own script,
   # ASCII + CRLF, so it is scanned. drag-lint.iss is not a scannable extension.
-  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools', 'charts', 'installer')
+  # 2026-10-20: WWW\ (the website, feat/www-base) holds our own build / publish /
+  # test PowerShell (build.ps1, publish.ps1, lib\, tests\, tools\), so it is
+  # scanned. The merge left it unaccounted and this guard went RED, as designed.
+  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools', 'charts', 'installer', 'WWW')
   '.pas' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpr' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpk' = @('src', 'tests', 'build', 'tools')
