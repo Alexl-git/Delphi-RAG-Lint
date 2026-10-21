@@ -335,12 +335,14 @@ begin
   if not Supports(BorlandIDEServices, IOTAKeyboardServices, KS) then Exit;
   GBinding:= TDragLintKeyboardBinding.Create;
   GBindingIndex:= KS.AddKeyboardBinding(GBinding);
+  DLExtractMethodHandler:= InvokeExtractMethod;
 end;
 
 procedure UnregisterDragLintKeystrokes;
 var
   KS: IOTAKeyboardServices;
 begin
+  DLExtractMethodHandler:= nil;
   if GBindingIndex < 0 then Exit;
   if Supports(BorlandIDEServices, IOTAKeyboardServices, KS) then KS.RemoveKeyboardBinding(GBindingIndex);
   GBindingIndex:= -1;
