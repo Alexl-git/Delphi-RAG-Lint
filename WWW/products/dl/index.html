@@ -10,13 +10,13 @@ image: share.png
   <p class="standfirst">DL parses every unit you have. It doesn't just search the text. It builds a <b>platform library index</b> from your Delphi library and browsing paths, then a <b>project index</b> for each project. Everything it does after that is deterministic and works offline, on facts it already holds.</p>
   <p>No AI runs inside DL. But it makes an AI assistant far better: it replaces grep with exact answers, so the assistant spends seconds and a few tokens where it used to spend minutes and many.</p>
   <div class="cta"><a class="primary" href="https://github.com/Alexl-git/Delphi-RAG-Lint/releases/latest">Download DL</a><a href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features">Full feature list &rarr;</a><a href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki">Help</a></div>
-  <div class="byline"><span>Free and open source &middot; written in Delphi</span><span>Delphi 13 Florence &middot; RAD Studio 37.0</span><span>Windows &middot; Win32 + Win64 libraries</span></div>
+  <div class="byline"><span>Free and open source &middot; written in Delphi</span><span>RAD Studio 13 Florence (37.0) plugin &middot; the engine indexes older Delphi source too</span><span>Windows &middot; Win32 + Win64 libraries</span></div>
 </header>
 
 <section>
   <div class="sec-head"><span class="sec-num">01 &mdash; How it works</span><h2>Index once, ask anything</h2></div>
   <div class="howit">
-    <div><b>1. Platform library index</b>Your RTL, VCL, DevExpress, Spring4D... from the library and browsing paths. Built once per platform.</div>
+    <div><b>1. Platform library index</b>Your RTL, VCL, DevExpress, Spring4D... from the library and browsing paths. Built per platform; rebuild it when you install new components.</div>
     <div><b>2. Project index</b>Every unit in the project's compile closure, parsed, with symbols, calls, uses, DFM and SQL.</div>
     <div><b>3. Deterministic answers</b>Queries, lint, reports and fixes run offline against both.</div>
   </div>
@@ -26,7 +26,7 @@ image: share.png
   <div class="sec-head"><span class="sec-num">02 &mdash; What it does</span><h2>What it does</h2></div>
   <div class="tiles">
     <div class="tile"><img class="shot" src="find-callers.png" alt="DL find-callers query output" width="1292" height="1272" loading="lazy"><div class="tb"><h3>Find anything</h3><p>Symbols, callers and callees, the unit to add to <code>uses</code>, any message, caption or SQL text across .pas, .dfm and .sql.</p></div><a class="more" href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers">How finding works &rarr;</a></div>
-    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Lint with {{fact:rules}} rules</h3><p>{{fact:categories}} categories, from bug patterns to security and FireDAC. {{fact:fixable}} rules fix the code for you.</p></div><a class="more" href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules">The rules &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Lint with {{fact:rules}} rules</h3><p>{{fact:categories}} categories, from bug patterns to security and FireDAC. {{fact:fixable}} rules can fix the code for you (some only when you opt in).</p></div><a class="more" href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules">The rules &rarr;</a></div>
     <div class="tile"><img class="shot" src="who-uses.png" alt="DL graph of the units that use a unit" width="1102" height="842" loading="lazy"><div class="tb"><h3>Untangle circular units</h3><p>Finds unit cycles and shows you the fix.</p></div><a class="more" href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report">Breaking cycles &rarr;</a></div>
     <div class="tile"><img class="shot" src="docinsight.png" alt="A DL-written doc-comment shown in the RAD Studio editor" width="535" height="199" loading="lazy"><div class="tb"><h3>Document your project</h3><p>Documents your code with more than the IDE can tell you.</p></div><a class="more" href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Auto-Document-Whole-Project">Auto-documentation &rarr;</a></div>
     <div class="tile"><img class="shot" src="deps.png" alt="DL unit dependency chart" width="1622" height="944" loading="lazy"><div class="tb"><h3>Charts and reports</h3><p>Dependencies, call butterflies, change impact: as charts and as text.</p></div><a class="more" href="https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts">Charts gallery &rarr;</a></div>
@@ -40,7 +40,7 @@ image: share.png
   <div class="sec-head"><span class="sec-num">03 &mdash; Where it works</span><h2>Embarcadero RAD Studio 13 Florence, VS Code, plus any editor that speaks LSP or MCP</h2></div>
   <div class="where">
     <div><b>RAD Studio 13 Florence</b><br>Delphi IDE plugin: menus, hints, quick fixes.</div>
-    <div><b>VS Code</b><br>Extension over the DL language server.</div>
+    <div><b>VS Code</b><br>An extension in the repository over the DL language server; build the .vsix from source.</div>
     <div><b>Any LSP editor</b><br><code>drag-lint lsp</code>, standard protocol.</div>
     <div><b>AI assistants</b><br><code>drag-lint serve</code>: an MCP server.</div>
   </div>

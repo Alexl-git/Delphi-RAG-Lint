@@ -7,7 +7,15 @@ $dl = Read-ProductPage (Join-Path $PSScriptRoot '..\products\dl\index.html') $cf
 $b = $dl.Body
 foreach ($s in 'Delphi RAG lint knows your code.',
                'Embarcadero RAD Studio 13 Florence, VS Code, plus any editor that speaks LSP or MCP',
-               '190 rules', '16 categories', '23 rules fix the code for you',
+               '190 rules', '16 categories',
+               # ENGINE fact-check 2026-10-20 (docs\www-dl-page-factcheck-2026-10-20.md):
+               # 7 of the 23 fixable rules are fix_opt_in; the VS Code extension is
+               # source-only; 37.0 binds the plugin, not the engine; the library
+               # index is a snapshot.
+               '23 rules can fix the code for you (some only when you opt in)',
+               'extension in the repository over the DL language server; build the .vsix from source',
+               'RAD Studio 13 Florence (37.0) plugin &middot; the engine indexes older Delphi source too',
+               'Built per platform; rebuild it when you install new components.',
                'href="https://www.htrmicronite.com',
                'It also tells you that there <i>is</i> a needle in there',
                'Free and open source &middot; written in Delphi') {
