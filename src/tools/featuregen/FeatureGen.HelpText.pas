@@ -192,7 +192,7 @@ begin
     lSb.Append('/// <summary>Writes the generated verb reference of --help to standard output.</summary>'#10);
     lSb.Append('procedure WriteVerbReference;'#10#10);
     lSb.Append('implementation'#10#10);
-    lSb.Append('procedure WriteVerbReference;'#10);
+    lSb.Append('procedure WriteVerbReference;  // dl:ok method-too-long@889d -- GENERATED: one Writeln per registry help line; the length follows the verb count'#10);
     lSb.Append('begin'#10);
     for lLine in VerbReferenceLines(pReg) do
       lSb.Append(WritelnStatement(lLine));

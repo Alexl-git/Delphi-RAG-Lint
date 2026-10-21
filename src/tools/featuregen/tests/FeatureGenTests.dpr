@@ -1142,6 +1142,65 @@ begin
   end;
 end;
 
+procedure TestSeedHelpBlocks;
+const
+  ENTRY_ALPHA = '{ "id": "alpha", "surfaces": [ { "type": "cli", "verb": "alpha" } ] }';
+  ENTRY_FEATURE = '{ "id": "a-feature", "surfaces": [ { "type": "cli", "verb": "alpha" } ] }';
+  ENTRY_BETA = '{ "id": "beta", "surfaces": [ { "type": "cli", "verb": "beta" } ] }';
+  HELP_TEXT = 'Usage:'#10'  drag-lint alpha --x'#10'      alpha detail'#10'  drag-lint beta --y';
+var
+  lRepo, lEntries: string;
+  lHelp: TLiveHelp;
+  lCount: Integer;
+  lAlpha, lFeature, lBeta: TJSONObject;
+
+  function Surf(pObj: TJSONObject): TJSONObject;
+  begin
+    Result := (pObj.GetValue('surfaces') as TJSONArray).Items[0] as TJSONObject;
+  end;
+
+  function Load(const pName: string): TJSONObject;
+  begin
+    Result := TJSONObject.ParseJSONValue(TFile.ReadAllText(TPath.Combine(lEntries, pName), TEncoding.ASCII)) as TJSONObject;
+  end;
+
+begin
+  lRepo := TPath.Combine(TPath.GetTempPath, 'fg-seedhelp-' + TGuid.NewGuid.ToString);
+  lEntries := TPath.Combine(lRepo, 'features\entries');
+  TDirectory.CreateDirectory(lEntries);
+  TDirectory.CreateDirectory(TPath.Combine(lRepo, 'features\schema'));
+  TFile.Copy(TPath.Combine(MiniDir, 'features\schema\entry.schema.json'), TPath.Combine(lRepo, 'features\schema\entry.schema.json'));
+  TFile.WriteAllText(TPath.Combine(lEntries, 'a-feature.json'), ENTRY_FEATURE, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lEntries, 'alpha.json'), ENTRY_ALPHA, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lEntries, 'beta.json'), ENTRY_BETA, TEncoding.ASCII);
+  lHelp := TLiveHelp.Create;
+  try
+    lHelp.LoadFromText(HELP_TEXT);
+    lCount := SeedHelpBlocks(lRepo, lHelp, False, nil);
+    lAlpha := Load('alpha.json');
+    lFeature := Load('a-feature.json');
+    lBeta := Load('beta.json');
+    try
+      Check('Seed.ClaimsTwoBlocks', lCount = 2, IntToStr(lCount));
+      Check('Seed.NamedAfterVerbOwnsTheBlock',
+        (Surf(lAlpha).GetValue('help') as TJSONArray).Count = 2, Surf(lAlpha).ToJSON);
+      Check('Seed.SharedUsageLineGetsNoBlock',
+        (Surf(lFeature).GetValue('help') = nil) and (Surf(lFeature).GetValue('helpOrder') = nil), Surf(lFeature).ToJSON);
+      Check('Seed.BlocksFollowHelpOrder',
+        (Surf(lAlpha).GetValue<Integer>('helpOrder', 0) = 1) and (Surf(lBeta).GetValue<Integer>('helpOrder', 0) = 2), Surf(lBeta).ToJSON);
+      Check('Seed.LastBlockEndsAtTail', (Surf(lBeta).GetValue('help') as TJSONArray).Count = 1, Surf(lBeta).ToJSON);
+    finally
+      lAlpha.Free;
+      lFeature.Free;
+      lBeta.Free;
+    end;
+    lCount := SeedHelpBlocks(lRepo, lHelp, True, nil);
+    Check('Seed.RerunIsStable', lCount = 2, IntToStr(lCount));
+  finally
+    lHelp.Free;
+    TDirectory.Delete(lRepo, True);
+  end;
+end;
 procedure TestEntryTextGuardV2;
 var
   lRepo, lMsg, lPath, lTxt: string;
@@ -2871,6 +2930,7 @@ begin
     TestLeafV2;
     TestCliV2;
     TestImport;
+    TestSeedHelpBlocks;
     TestEntryTextGuardV2;
     TestUndocumentedVerbs;
     TestSite;

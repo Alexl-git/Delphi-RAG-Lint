@@ -10,7 +10,7 @@ procedure WriteVerbReference;
 
 implementation
 
-procedure WriteVerbReference;
+procedure WriteVerbReference;  // dl:ok method-too-long@889d -- GENERATED: one Writeln per registry help line; the length follows the verb count
 begin
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');

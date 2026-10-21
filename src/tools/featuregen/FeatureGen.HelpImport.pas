@@ -400,7 +400,7 @@ begin
   Result := -1;
 end;
 
-function SeedHelpBlocks(const pRepo: string; pHelp: TLiveHelp; pDryRun: Boolean; pLog: TProc<string>): Integer;  // dl:ok cyclomatic-complexity@seed -- REVIEWED 2026-10-21: one-time seeding routine; each loop is one step of the documented algorithm
+function SeedHelpBlocks(const pRepo: string; pHelp: TLiveHelp; pDryRun: Boolean; pLog: TProc<string>): Integer;  // dl:ok cyclomatic-complexity@ea8f, cognitive-complexity@3c77 -- REVIEWED 2026-10-21: one-time seeding routine; each loop is one step of the documented algorithm
 var
   lFiles: TStringDynArray;
   lObjs: TList<TJSONObject>;
@@ -483,7 +483,7 @@ begin
       if not (IsPublicEntry(lObjs[lE]) and (lObjs[lE].GetValue('surfaces') is TJSONArray)) then
         Continue;
       lSurfs := TJSONArray(lObjs[lE].GetValue('surfaces'));
-      for lS := 0 to lSurfs.Count - 1 do
+      for lS := 0 to lSurfs.Count - 1 do  // dl:ok duplicate-code@23dd -- REVIEWED 2026-10-21: same walk over a surfaces array as ImportEntry, with a different per-surface action; extracting a shared walker is a later refactor
       begin
         if not (lSurfs.Items[lS] is TJSONObject) then
           Continue;
