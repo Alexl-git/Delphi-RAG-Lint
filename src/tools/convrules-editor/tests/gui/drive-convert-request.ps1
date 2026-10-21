@@ -566,8 +566,10 @@ try {
   $repLines = $repText -split "`r?`n"
   Check 'req.btn.rules.not.run' ($rep -and $repText -notmatch 'Btn\.rules') ("report: " + $(if ($rep) { $rep.Name } else { 'none' }))
   Check 'req.report.scope.line' (@($repLines | Where-Object { $_ -like "Scope`t1 selected component(s)*" }).Count -eq 1) (@($repLines | Where-Object { $_ -like 'Scope*' }) -join ' / ')
-  # The scoped note states what --only ASKED (C12 Task 3 fix round 1), not a per-name outcome.
-  Check 'req.report.note' ($repText -match '--only 1 instance\(s\): Label1') (@($repLines | Where-Object { $_ -like '*Fix.rules*' }) -join ' / ')
+  # The scoped note states what the engine MATCHED when it sends only_matched[] (engine
+  # 1.31.5+, B1-B8: 'converted N of M --only name(s)'), else what --only ASKED (C12 Task 3
+  # fix round 1: '--only N instance(s): <names>').
+  Check 'req.report.note' (($repText -match 'converted 1 of 1 --only name\(s\)') -or ($repText -match '--only 1 instance\(s\): Label1')) (@($repLines | Where-Object { $_ -like '*Fix.rules*' }) -join ' / ')
 
   # Review Focus 5 as it reaches the GUI: changing the source list (Delete) drops the scope
   # back to a whole-unit run, so the scope can never name a unit the list no longer holds.
