@@ -124,16 +124,16 @@
     "version": "1.32.0-alpha"
   },
   "features/convrules-qualify-fix.md": {
-    "hash": "ca136a2f805599d4167c5d530a7cfb018f85c58f965aca1d3c1b70547ff10c06",
-    "version": "1.32.0-alpha"
+    "hash": "eea9174198f6573f7273e57c407ceecfa23c570a024bc410fa48f463b9ef549e",
+    "version": "1.33.0-alpha"
   },
   "features/convrules-reindex-project.md": {
     "hash": "dcde62cdbffdb855aecf8ec4b8c1ca8f1ca5e11514420e26a11bdb1c52a8a1ef",
     "version": "1.32.0-alpha"
   },
   "features/convrules-work-list.md": {
-    "hash": "abaf04fc35482082a96c24aa107d08cfcb105d54943ccd85215e8256c25d5411",
-    "version": "1.32.0-alpha"
+    "hash": "c752cf64573f603a248f29189601fa124d0dce1cd6254386b11b2dff52991aea",
+    "version": "1.33.0-alpha"
   },
   "features/copy-all-diagnostics.md": {
     "hash": "c085f8f9343cc9e0accba71a64642c8554926ff516aaed2225d331f492d5855f",

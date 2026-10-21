@@ -39,8 +39,9 @@ later). With an older engine the tab says `no work list (engine has no pas_uses)
 ## A refused Convert keeps the list
 When Convert is refused before it runs (the pre-flight, no project file, or the
 inherited-instance question answered No) the list keeps the previous run's rows and the
-summary says so: ` -- from the previous run (<unit>, <time>); the last Convert was
-refused`. Before any run there is nothing to keep and the summary does not change.
+summary says so:
+` -- from the previous run (<unit>, <time>); the last Convert was refused`.
+Before any run there is nothing to keep and the summary does not change.
 The next finished run replaces the list as before.
 
 ## Limits

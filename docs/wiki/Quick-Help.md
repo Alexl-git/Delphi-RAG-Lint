@@ -246,6 +246,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Installation: procedure docs\wiki\Installation.md
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Qualify #convert quick fix: menu 'Convert tab > Qualify #convert...' inside ConvRulesEditor.exe
+* Qualify #convert quick fix: menu 'Convert tab > Qualify all...' inside ConvRulesEditor.exe
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
 * Rename across every project that compiles a shared unit: host 'Structure form' (the caption is verified, the host is declared)
 * Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)

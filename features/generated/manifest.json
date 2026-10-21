@@ -3970,10 +3970,21 @@
           "type": "exe",
           "name": "ConvRulesEditor.exe",
           "menu": "Convert tab > Qualify #convert..."
+        },
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Convert tab > Qualify all..."
         }
       ],
       "audience": "both",
-      "related": ["convert-apply", "convrules-editor"]
+      "related": ["convert-apply", "convrules-editor"],
+      "verified": {
+        "date": "2026-10-20",
+        "by": "CONVERTER",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3ee41d2b7ed8fc2e5c283938e6f970487370aa96cf28adac8fa2fbaf0f03f9ad"
+      }
     },
     {
       "id": "convrules-reindex-project",

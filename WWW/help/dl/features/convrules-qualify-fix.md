@@ -7,7 +7,7 @@ group: component-conversion
 order: 60007
 since: 1.31.5-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Qualify #convert quick fix
@@ -74,10 +74,40 @@ A header moved by a `#depth` or unit insert is found again by its text.
 An engine that reports `convert_qualify_fix` in `info --json` (drag-lint 1.28.3 and
 later). Without it the button stays hidden and the Note/report are as before.
 
+### The `#use` alternative (to side)
+Under the candidates the dialog shows the engine's alternative (`or: #use LibA`). For a
+**to** side that alternative is clickable: **Add #use LibA** (the button right of the text)
+turns the fix into a `#use` pick -- the candidate is dropped, the `#convert` line stays as
+it is, and the preview says `will add to the book: #use LibA (the #convert line stays as
+it is)`. Pressing it again (`Remove #use LibA`) or picking a candidate takes it back. The
+alternative follows the candidate highlighted (`#use LibA` / `#use LibB`).
+
+**Apply** inserts `#use LibA` ahead of the first `#convert` (the book's file-level section),
+Unsaved like any edit; the status line ends `; added #use LibA` (or reads `Added #use LibA to
+Fix.rules -- not saved: ...` when only `#use` picks were made). The line numbers it
+names are the numbers AFTER the insert. A unit the book already has is not added twice
+(`line N already has #use LibA`). A **from** side's alternative (`add Vcl.StdCtrls to the
+unit's uses`) is a `.pas` edit the editor cannot make: shown as text, button disabled.
+`#use` is a book-wide decision -- every `#convert` of the book then sees that unit.
+
+### Qualify all
+**Qualify all...** (right of Qualify #convert..., enabled whenever any row of the run
+carries fixes, no row selection needed) fixes every row of the run, book by book. The
+fixes are grouped per book (path compared case-insensitively, first-seen order); a fix
+that several units' rows repeat (same line, header text, side and class name) is listed
+once -- the first row's candidates are the ones shown. For each book the same dialog
+opens (its title names the book), **Apply** edits it exactly as a single Qualify does,
+and the loop moves on. A book other than the open one is opened first through the same
+unsaved-changes guard as File > Open: after the first book's edit the open book is
+unsaved, so the next book asks Save / Don't Save / Cancel. The loop **stops** (the books
+already done stay edited, unsaved) when a dialog is cancelled, when that prompt is
+cancelled, or when a book cannot be opened. The status line ends
+`Qualify all (K of N book(s)[, stopped]): <one status per book, ' | '>`.
+
 ### Limits
-The text alternative (`#use <Unit>`, a uses change) is shown, not applied. One click
-fixes one results row's book; there is no "fix everything in the run" and no undo
-beyond Don't Save. A comment on the `#convert` line itself is dropped when the line is
+A from-side alternative (a uses change) is shown, not applied. One click on
+**Qualify #convert...** fixes one results row's book; **Qualify all...** covers the run
+but one dialog and one save decision per book. No undo beyond Don't Save. A comment on the `#convert` line itself is dropped when the line is
 rewritten (as for any header edit in the editor).
 
 ---
