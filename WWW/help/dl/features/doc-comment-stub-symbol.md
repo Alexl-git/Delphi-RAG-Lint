@@ -7,12 +7,14 @@ group: documentation
 order: 40001
 since: 0.25.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Doc Comment Stub (symbol)
 
 Uses generate-docs to produce a doc-comment stub for one qualified symbol.
+
+Read this when you want to start a DocInsight comment on one specific method, type or property. It produces a doc-comment stub for the chosen qualified symbol.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.2.0-alpha",
   "summary": "This page documents the \"View > Tool Windows > drag-lint\" menu entry -- the main drag-lint dockable tool window",
+  "intro": "Read this to find the main drag-lint dockable panel. It opens from View > Tool Windows > drag-lint, and is the same panel as the one reached through the drag-lint menu.",
   "wikiPage": "drag-lint",
   "surfaces": [
     {
@@ -13,5 +14,11 @@
       "path": "View > Tool Windows > drag-lint"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "b70e1470f8f0e27f161359e0125dc8a4c8b6f434a2b3a013dccd406b85dfd668"
+  }
 }

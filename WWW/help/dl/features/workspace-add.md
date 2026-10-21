@@ -7,12 +7,14 @@ group: editor-integration
 order: 110014
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # workspace add
 
 Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it.
+
+Read this when you add a new project to a multi-project workspace: it registers a project file in the .drag-lint-workspace.json config that workspace index and workspace status use.
 
 ## How to run it
 

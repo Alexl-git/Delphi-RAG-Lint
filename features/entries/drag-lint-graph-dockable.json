@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure",
+  "intro": "Read this when you want the graph viewer to stay docked in the IDE, for example beside the Structure form, instead of floating. Choose drag-lint > drag-lint Graph (dockable); it needs the plugin loaded and drag_lint_graph.exe deployed beside it.",
   "wikiPage": "drag-lint-Graph-dockable",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "9f63d27260fe6d55041a89e0b87995b7e565ca76e9210c347972d933b9593a98"
+  }
 }

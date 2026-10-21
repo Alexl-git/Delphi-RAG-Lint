@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.22.0-alpha",
   "summary": "#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site",
-  "intro": "Member replacement slice 1 (C18): rename methods, events and properties of a converted component in code, or mark them for hand conversion.",
+  "intro": "Read this when a component conversion changes the names of methods, events or properties the code uses. Inside a #convert block, #migrate Old -> New renames the member at every bound access site in the .pas; Old -> DL_NONE marks the site for hand conversion instead.",
   "wikiPage": "convert-apply-migrate",
   "surfaces": [
     {
@@ -65,5 +65,11 @@
     "date": "2026-10-19",
     "by": "alexanderl",
     "build": "1.31.7-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "a889e04c9f32186b93f6d04de0bacf87466fe4ccea36e7e619e7e0e5c55f9584"
   }
 }

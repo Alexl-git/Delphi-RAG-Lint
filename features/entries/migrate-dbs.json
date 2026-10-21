@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "1.3.0-alpha",
   "summary": "Moves project index databases into each project's own D-RAG folder, matching the current index layout",
+  "intro": "Read this after an index layout change, or when index databases are stranded in an old shared folder. It moves each project index into that project own _D-RAG folder; without --apply it only reports what it would move.",
   "wikiPage": "migrate-dbs",
   "surfaces": [
     {
@@ -25,5 +26,16 @@
       "help": ["  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project's _D-RAG folder", "  drag-lint --version", "  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,", "                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS", "                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.", "                               There is no per-verb help TEXT -- one banner answers them all.", ""]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "13dbb320b55ad2ee880d82134b51e9e207927f26a8c8a230b9292d96eb6ab6e7"
+  }
 }

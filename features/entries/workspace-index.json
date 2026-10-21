@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass",
+  "intro": "Read this when you want to (re)build the indexes of every project in a workspace in one pass instead of one project at a time.",
   "wikiPage": "workspace-index",
   "surfaces": [
     {
@@ -24,5 +25,16 @@
     }
   ],
   "audience": "both",
-  "notes": "issued by the plugin from DragLint.Plugin.ProjectNotifier.pas:103"
+  "notes": "issued by the plugin from DragLint.Plugin.ProjectNotifier.pas:103",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "db4afd0474ece949eb777c51d0aab98f32d10c14e86170c52addee3e779ae69d"
+  }
 }

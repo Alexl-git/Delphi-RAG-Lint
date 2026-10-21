@@ -7,12 +7,14 @@ group: linting
 order: 30019
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Run Diagnostics (didSave)
 
 Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification.
+
+Read this to know why drag-lint findings refresh on their own: the diagnostics pass runs on a file each time you save it in the IDE, so there is nothing to invoke by hand.
 
 ## Where to click
 

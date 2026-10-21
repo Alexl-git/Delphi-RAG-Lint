@@ -7,12 +7,14 @@ group: indexing
 order: 10006
 since: 1.20.4-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # register-project
 
 Add a new project to the manifest so index --all and the IDE can see it.
+
+Read this when a new project is not yet known to drag-lint. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.
 
 ## How to run it
 

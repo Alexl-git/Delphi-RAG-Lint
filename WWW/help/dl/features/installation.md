@@ -7,12 +7,14 @@ group: editor-integration
 order: 110008
 since: 0.21.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Installation
 
 Getting the CLI, the IDE plugin, or the LSP running.
+
+Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together.
 
 ## Details
 

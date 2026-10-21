@@ -7,12 +7,14 @@ group: editor-integration
 order: 110002
 since: 0.10.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # drag-lint Graph
 
 This page documents the "View > Tool Windows > drag-lint Graph" menu entry -- the drag-lint graph viewer.
+
+Read this when you want the call/reference graph viewer from RAD Studio standard Tool Windows menu. It opens the same window as drag-lint Graph (dockable), served by the IDE plugin, and needs drag_lint_graph.exe deployed beside the plugin.
 
 ## Where to click
 

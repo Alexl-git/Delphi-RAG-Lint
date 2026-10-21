@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity",
+  "intro": "Read this when you want to review compiler hints and warnings without running a build. Compiler Hints lists the ones already imported into the index, filterable by hint code or severity.",
   "wikiPage": "Compiler-Hints",
   "surfaces": [
     {
@@ -36,5 +37,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "e5a3308c92221479911958a1098bfd8178ea2136b3cb649a80ae810a762f2bb3"
+  }
 }

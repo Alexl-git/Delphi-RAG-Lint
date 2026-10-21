@@ -6,6 +6,7 @@
   "status": "internal",
   "since": "1.13.0-alpha",
   "summary": "Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb",
+  "intro": "Internal: the self-test dispatcher that the test battery calls. It is not a user verb and you do not need it for everyday work.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "agent",
-  "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed"
+  "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "227b9395644e4c8d105f6999b03d75b3b610b1512086232c88c13d62f4a2c1eb"
+  }
 }

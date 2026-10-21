@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "1.10.0-alpha",
   "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
+  "intro": "Read this when one unit is used by more than one project and you want that recorded in the source: shared-unit shows or extends the dl:shared marker, as a dry run until you add --apply.",
   "wikiPage": "shared-unit",
   "surfaces": [
     {
@@ -32,5 +33,16 @@
       "help": ["  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "3c98eb50173c538cfb8819db70eb6da69c01c88d21d7c7bbdd53e3223b0aab69"
+  }
 }

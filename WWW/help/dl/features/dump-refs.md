@@ -7,12 +7,14 @@ group: maintenance
 order: 120006
 since: 0.82.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # dump-refs
 
 Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution.
+
+Read this when a reference-derived answer (callers, doc facts, unused-symbol findings) looks wrong: dump-refs prints every ref in one file with the symbol each was attributed to. Troubleshooting tool; needs a project index (--db).
 
 ## How to run it
 

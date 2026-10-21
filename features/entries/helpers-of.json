@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.94.0-alpha",
   "summary": "Lists record/class helper edges targeting a given type, anywhere in the index",
+  "intro": "Read this to see every record or class helper that extends a type anywhere in the indexed code. helpers-of T --db lists the helper edges targeting T; it is read-only and adds --json for machine output.",
   "wikiPage": "helpers-of",
   "surfaces": [
     {
@@ -27,5 +28,11 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179"
+  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "16b0d3ead572e435728f1a06ab71dc4618191af7bf46d5e6b5b4099c5789a339"
+  }
 }

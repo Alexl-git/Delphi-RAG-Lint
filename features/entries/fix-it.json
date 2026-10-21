@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling",
+  "intro": "Read this when you are looking at one lint finding in the Structure form and want just that one fixed. Right-click the finding node and choose Fix it; an unused unit is removed or moved to the implementation section, verified by compiling.",
   "wikiPage": "Fix-it",
   "surfaces": [
     {
@@ -86,5 +87,11 @@
       "help": ["  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d41e058c0dad7e887e5fa42ce0fae18acd6855bf83a51b2960703a56d54483b8"
+  }
 }

@@ -7,12 +7,14 @@ group: documentation
 order: 40004
 since: 0.93.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # document-all
 
 Documents every public declaration in every indexed unit, with no project scope.
+
+Read this when you want to sweep DocInsight comments across everything in the index rather than one project at a time. document-all documents every public declaration in every indexed unit; the default is facts-only.
 
 ## How to run it
 
@@ -39,7 +41,7 @@ once, rather than one project at a time.
 ### Running it from the CLI
 
 ```text
-drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]
+drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]
 ```
 
 Like the other batch document modes, the default is facts-only: an empty

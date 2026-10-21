@@ -7,12 +7,14 @@ group: search-navigation
 order: 20001
 since: 0.91.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # call-path
 
 Finds the shortest resolved call path from one symbol to another.
+
+Read this when you want to know whether routine A ever reaches routine B and how. call-path prints the shortest resolved call path between two symbols, and exits 1 when there is none.
 
 ## How to run it
 

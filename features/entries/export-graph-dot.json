@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+  "intro": "Read this when you want a picture of the indexed call/reference graph in Graphviz or Mermaid. drag-lint graph writes DOT (or Mermaid) for the whole index or rooted at a name substring; also on the IDE Generate & Export menu.",
   "wikiPage": "Export-Graph-DOT",
   "surfaces": [
     {
@@ -38,5 +39,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0e877648e9e95bc29f72a1412184983695c8be612d4c1c34a46695de46aaa73b"
+  }
 }

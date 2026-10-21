@@ -7,12 +7,14 @@ group: compiler
 order: 90001
 since: 0.43.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Add Missing Units to uses (whole unit)
 
 The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them.
+
+Read this after a large paste or a big refactor leaves several names unresolved in a unit. It resolves every unresolved name at once and adds the units that declare them to uses, instead of fixing one identifier at a time.
 
 ## How to run it
 

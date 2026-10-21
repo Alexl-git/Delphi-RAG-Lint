@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Puts the current file's lint findings onto the clipboard",
+  "intro": "Read this when you want to paste the current file findings elsewhere instead of reading them in the IDE. It puts the file lint findings onto the clipboard.",
   "wikiPage": "Copy-Diagnostics-Current-File",
   "surfaces": [
     {
@@ -52,5 +53,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "e4aa587fd2064887f254624993e9a546994345187f322231e1db17841bdfeb17"
+  }
 }

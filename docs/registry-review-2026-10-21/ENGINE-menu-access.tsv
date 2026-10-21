@@ -1,0 +1,77 @@
+id	verdict	reason
+find-callees	should-have-menu	editor context action next to Find Callers; the IDE has no entry for it
+find-unit	should-have-menu	uses-clause helper, wanted at the cursor
+usages	should-have-menu	same question as Find Usages; confirm it is not already covered by a menu entry
+outline	should-have-menu	unit outline view
+safe-delete	should-have-menu	refactor action
+extract-method	should-have-menu	refactor action
+create-enum-helper	should-have-menu	code-generation action
+document-all	should-have-menu	bulk auto-document; menu entry with confirm
+doc-forget	should-have-menu	pairs with the document actions
+call-path	should-have-menu	graph question; open from the symbol context menu
+butterfly	should-have-menu	graph question (see call-graph-butterfly, which has a menu)
+callgraph	should-have-menu	graph question
+helpers-of	should-have-menu	symbol context action
+effect-summary-legend	should-have-menu	help/legend; link from the Help menu
+ide-menu-reference	should-have-menu	help page; link from the Help menu
+circular-dependency-report	review	workflow-only; a graph/report menu entry may be wanted
+reverse-call-tree-clickable-messages-window	review	surface is cli only but the name is IDE-bound; check
+convert-apply-migrate	review	CONVERTER-facing; ask CONVERTER
+query-find-callers	review	menu twin is the Find Callers entry; keep as cli answer page
+query-ancestors	review	menu twin may exist elsewhere; verify
+query-descendants	review	menu twin may exist elsewhere; verify
+lint-project	review	menu twin is Lint Project; verify the IDE entry carries this verb
+ide-release	cli-only	owner/support command, deliberately not in the IDE
+mcp-server	cli-only	agent-facing
+lsp	cli-only	editor protocol, not a click
+serve	cli-only	engine host
+shutdown	cli-only	engine control
+sql	cli-only	power-user / agent
+schema	cli-only	power-user / agent
+info	cli-only	diagnostic (About covers the same ground)
+query-kind-all	cli-only	agent query
+query-name-like	cli-only	agent query
+query-type-usage	cli-only	agent query
+query-typecat	cli-only	agent query
+query-unit-usage	cli-only	agent query
+dump-call-edges	cli-only	debugging
+dump-refs	cli-only	debugging
+dump-pp-eval	cli-only	internal
+dump-pp-lex	cli-only	internal
+contrast-selftest	cli-only	internal
+doc-facts-selftest	cli-only	internal
+selftest	cli-only	internal
+test-store-freshness	cli-only	internal
+resolve-uses	cli-only	internal
+pp-profile	cli-only	debugging
+preprocess-file	cli-only	debugging
+purge-locals	cli-only	maintenance
+migrate-dbs	cli-only	maintenance
+fb-snapshot	cli-only	tooling
+link-orm	cli-only	tooling
+exceptions-sync	cli-only	tooling
+ghost-check	cli-only	maintenance
+ghost-recover	cli-only	maintenance
+compile-check	cli-only	build tooling
+allow	cli-only	suppression CLI; the IDE has the quick fix
+bench-context	cli-only	benchmark
+context	cli-only	agent bundle
+diff	cli-only	CLI report
+doc-drift	cli-only	CLI report
+ambiguous-calls	cli-only	CLI report
+project-facts	cli-only	CLI report
+lint-rules	cli-only	CLI listing
+lint-tree	cli-only	CLI report
+register-project	cli-only	IDE registers on open
+shared-unit	cli-only	CLI report
+type-name-prefix-origin	cli-only	CLI report
+wiki	cli-only	doc tooling
+wiki-blocks-authoring	cli-only	doc tooling
+workspace-add	cli-only	CLI workspace
+workspace-index	cli-only	CLI workspace
+workspace-status	cli-only	CLI workspace
+drag-lint	has-ui	tool-window surface; no menu needed
+drag-lint-graph	has-ui	tool-window surface
+feature-registry	n/a	repo tooling
+installation	n/a	installer
+maintenance	n/a	workflow doc

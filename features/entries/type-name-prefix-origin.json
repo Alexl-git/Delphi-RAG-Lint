@@ -140,9 +140,20 @@
   ],
   "audience": "both",
   "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
   "lastVerified": {
     "date": "2026-10-17",
     "by": "alexanderl",
     "build": "1.31.4-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "89c47772b02dd25c4899ed95b85d00ce816eb8d6aeeb42e276f581426b09704e"
   }
 }

@@ -7,12 +7,14 @@ group: linting
 order: 30020
 since: 0.61.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Run Lint All (Full Report)
 
 Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check.
+
+Read this when you want an overall health check of a project: it runs the whole rule catalog over the indexed code and reports every surviving finding, optionally limited to one project with --project.
 
 ## How to run it
 

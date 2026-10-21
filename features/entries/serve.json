@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.4.0-alpha",
   "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
+  "intro": "Read this when you want an AI assistant such as Claude or Cursor to query a drag-lint index: serve starts an MCP stdio server over the database you give it. The IDE does not use it; the IDE uses lsp.",
   "wikiPage": "serve",
   "surfaces": [
     {
@@ -23,5 +24,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "ba0b26b250f717eb61594a7b86015fc124397f5edd4676a6c2bc28756958ed76"
+  }
 }

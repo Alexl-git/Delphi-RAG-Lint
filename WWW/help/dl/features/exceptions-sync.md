@@ -7,12 +7,14 @@ group: linting
 order: 30005
 since: 1.8.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # exceptions-sync
 
 Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites.
+
+Read this when a project raises bare Exception.Create with literal messages and you want one named exception class per distinct message. It runs as a dry run, and --apply writes the classes into a managed block in your exceptions unit; the raise sites are then rewritten by lint --fix.
 
 ## How to run it
 

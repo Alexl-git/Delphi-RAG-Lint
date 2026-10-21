@@ -7,12 +7,14 @@ group: editor-integration
 order: 110009
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # lsp
 
 Starts the LSP (Language Server Protocol) stdio server.
+
+Read this when you want hover, completion, go-to-definition and diagnostics in an editor other than RAD Studio. It starts the language server over stdio; the IDE plugin launches it by itself, and it is not the same as the MCP server (serve) used by AI clients.
 
 ## How to run it
 

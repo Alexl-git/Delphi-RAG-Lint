@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Ranks indexed symbols by fan-in -- how many places reference them.
 
+Read this before refactoring a heavily used symbol: top ranks indexed symbols by fan-in, meaning how many places reference them, so you see the most depended-upon ones first.
+
 ## How to run it
 
 Full flag list: [top in the CLI reference](../cli.md#top).

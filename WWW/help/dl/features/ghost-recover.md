@@ -7,12 +7,14 @@ group: compiler
 order: 90008
 since: 0.64.1-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # ghost-recover
 
 Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash.
+
+Read this after a crash during a buffer compile (ghost-check), so no unit is left holding unsaved-buffer content. ghost-recover finds leftover recovery journals under the project D-RAG folder and restores each file; it prints that nothing is pending when all is clean.
 
 ## How to run it
 

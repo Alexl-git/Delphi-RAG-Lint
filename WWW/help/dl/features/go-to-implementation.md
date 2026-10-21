@@ -7,12 +7,14 @@ group: search-navigation
 order: 20012
 since: 0.43.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Go to Implementation
 
 Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node.
+
+Read this when a Structure form node is a declaration (such as an interface method) and you want its implementation body. Right-click the node and choose Go to Implementation; it is an editor jump that needs no index.
 
 ## Where to click
 

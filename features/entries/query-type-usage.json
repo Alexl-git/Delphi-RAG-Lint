@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Answers one question, of a list of type names, about one file",
+  "intro": "Read this when you have a set of type names, such as types you are about to retire, and need to know whether one file really references any of them. Give it the file and the names; it answers for that one file.",
   "wikiPage": "query-type-usage",
   "surfaces": [
     {
@@ -37,5 +38,16 @@
       "help": ["  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]", "                               of these type names, which does THIS file actually REFERENCE? Answers a", "                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create", "                               construction sites and inheritance; a name appearing only in a COMMENT or", "                               a STRING LITERAL is correctly not a reference -- which is the difference", "                               from grep. Name-keyed: a project type sharing an RTL name is", "                               indistinguishable, and the output says so."]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "afa6e8274c8c535c0b52f178b792af6d892e7f9f30c87bd78caabdedacdd4781"
+  }
 }

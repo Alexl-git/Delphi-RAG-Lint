@@ -7,12 +7,14 @@ group: maintenance
 order: 120011
 since: 0.39.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Open Plugin Log
 
 Opens the drag-lint plugin's own log file.
+
+Read this when you are diagnosing the drag-lint plugin itself: choosing it opens the plugin own log file, which shows what it did, what it ran and any errors it hit.
 
 ## Where to click
 

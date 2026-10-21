@@ -7,12 +7,14 @@ group: indexing
 order: 10003
 since: 0.92.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # pp-profile
 
 Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line.
+
+Read this when you need to know which compiler defines are active for a project, platform and configuration, before trusting a preprocess or index result. It prints the resolved define set, one symbol per line, exactly as the indexer sees it.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.99.0-alpha",
   "summary": "Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command",
+  "intro": "Read this when you want both directions of a symbol call graph in one picture. butterfly joins its callers (upward wing) and callees (downward wing) into one chart, as dot, mermaid, text or json, in a single command.",
   "wikiPage": "butterfly",
   "surfaces": [
     {
@@ -38,5 +39,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "41622b0d2d51f754ce50bb9dfea1e306ffd5de6c16319d15e87671be28df0b3c"
+  }
 }

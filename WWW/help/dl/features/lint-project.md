@@ -7,12 +7,14 @@ group: linting
 order: 30013
 since: 0.48.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # lint-project
 
 Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol.
+
+Read this when you want architecture-level findings that need the whole project, such as god-class, circular-uses, unused-public-symbol or layering-violation, rather than per-file diagnostics. It runs those project-scoped rules against an index.
 
 ## How to run it
 
@@ -39,7 +41,7 @@ cross-file architectural findings, not per-file diagnostics.
 ### Running it from the CLI
 
 ```text
-drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]
+drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]
 ```
 
 ### Reaching it in the IDE

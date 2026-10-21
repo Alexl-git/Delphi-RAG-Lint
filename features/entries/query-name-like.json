@@ -6,33 +6,48 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Case-insensitive substring search over symbol names",
+  "intro": "Read this when you do not know the identifier yet. It does a case-insensitive substring search over symbol names, so a fragment such as SVG finds the types that matter.",
   "wikiPage": "query-name-like",
   "surfaces": [
     {
       "type": "cli",
       "verb": "query",
-      "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+      "usage": "drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>",
       "flags": [
         {
-          "name": "--name",
-          "arg": "<symbol-name>"
+          "name": "--name-like",
+          "arg": "<substring>"
         },
         {
-          "name": "--db"
+          "name": "--kind",
+          "arg": "<k>"
+        },
+        {
+          "name": "--limit",
+          "arg": "N"
         },
         {
           "name": "--json"
         },
         {
-          "name": "--case-sensitive"
-        },
-        {
-          "name": "--exact"
+          "name": "--db",
+          "arg": "<file.sqlite>"
         }
       ]
     }
   ],
   "audience": "both",
   "requires": ["index"],
-  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."]
+  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+  }
 }

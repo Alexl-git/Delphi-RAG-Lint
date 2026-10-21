@@ -7,12 +7,14 @@ group: search-navigation
 order: 20003
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Compiler Hints
 
 Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity.
+
+Read this when you want to review compiler hints and warnings without running a build. Compiler Hints lists the ones already imported into the index, filterable by hint code or severity.
 
 ## How to run it
 

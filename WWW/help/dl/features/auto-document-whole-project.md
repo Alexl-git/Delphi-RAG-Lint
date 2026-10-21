@@ -7,12 +7,14 @@ group: indexing
 order: 10001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Auto-Document Whole Project
 
 Writes DocInsight documentation into every public declaration a project owns.
+
+Read this when a whole project needs documentation coverage instead of symbol-by-symbol work. It writes DocInsight comments into every public declaration the project owns, as a batch of reindex, document and reindex.
 
 ## How to run it
 

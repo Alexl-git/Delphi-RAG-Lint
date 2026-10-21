@@ -7,12 +7,14 @@ group: linting
 order: 30007
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Fix all in unit
 
 Applies autofixes for every fixable finding in the current unit, starting from the Structure form.
+
+Read this when one unit has several auto-fixable findings and you want them all fixed at once. Open the Structure form, right-click a node and choose Fix all in unit; the caption shows how many fixes are available.
 
 ## How to run it
 

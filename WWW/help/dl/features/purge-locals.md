@@ -7,12 +7,14 @@ group: indexing
 order: 10004
 since: 0.91.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # purge-locals
 
 A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space.
+
+Read this when an index database has grown larger than you want and you do not need per-local symbol lookups right now. It drops local-variable and parameter symbols and runs VACUUM; the call graph is unchanged and the symbols return on the next index.
 
 ## How to run it
 

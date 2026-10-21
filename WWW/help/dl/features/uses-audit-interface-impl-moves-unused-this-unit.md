@@ -7,12 +7,14 @@ group: refactoring
 order: 50013
 since: 0.43.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Uses Audit -- interface->impl moves + unused (this unit)
 
 For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely.
+
+Read this when tidying the uses clauses of one unit: it reports which entries could move from the interface section to implementation and which are not used at all.
 
 ## How to run it
 

@@ -7,12 +7,14 @@ group: refactoring
 order: 50006
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor
 
 The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope.
+
+Read this when the compiler raises hint H2443 because an inline routine comes from a unit that is not in scope. With the caret on it, this adds the missing unit to the uses clause.
 
 ## Where to click
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.60.0-alpha",
   "summary": "Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query",
+  "intro": "Read this when a query seems to answer from the wrong index: it prints which database(s) drag-lint would use for a project, a file or a platform, without running a real query.",
   "wikiPage": "Show-Resolved-DBs-debug",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."]
+  "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "114b4503d5e5be415d7beb7ce0d7f897905e73234774f281a99b7ad8d555e784"
+  }
 }

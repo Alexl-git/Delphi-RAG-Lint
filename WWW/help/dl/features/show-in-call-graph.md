@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Opens the call graph rooted at the symbol represented by a Structure-tree node.
 
+Read this when you are looking at a symbol in the Structure outline and want to see who calls it or what it calls: right-click the node to open the call graph rooted there.
+
 ## How to run it
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).

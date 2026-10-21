@@ -7,12 +7,14 @@ group: compiler
 order: 90011
 since: 1.20.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # project-facts
 
 Report what the build does: defines that are on and what sets each, imports, output paths and packages.
+
+Read this when you need to know what a build really does: which defines are on and what sets each, the imports, output paths and packages. It reads the .dproj and can flag a post-processor define that has no build step imported.
 
 ## How to run it
 

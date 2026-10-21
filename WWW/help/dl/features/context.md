@@ -7,12 +7,14 @@ group: search-navigation
 order: 20004
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # context
 
 Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers.
+
+Read this before editing or explaining a symbol. context returns a compact bundle, its doc comment, class surface, own body and a capped list of callers, so you read a fraction of what a whole-file read costs.
 
 ## How to run it
 
@@ -43,7 +45,7 @@ a symbol so you read a fraction of the tokens a full-file read would cost.
 
 ### Running it from the CLI
 ```text
-drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--max-callers N] [--context N] [--no-docs]
+drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--max-callers N] [--context N] [--no-docs] [--full-surface]
 ```
 `--task "verb qname"` names the symbol and intended action (e.g. `"modify
 Foo.Bar"`). `--format` selects `md`, `json`, or `raw`. `--max-callers N`

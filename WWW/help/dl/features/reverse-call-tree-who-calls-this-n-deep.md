@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Builds the tree of callers of a chosen symbol, transitively, to a chosen depth.
 
+Read this before changing a routine and you want to know how far the change could ripple back through its callers: it builds the tree of callers to the depth you choose, or the callees with --direction callees.
+
 ## How to run it
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.90.0-alpha",
   "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
+  "intro": "Read this when a whole project needs documentation coverage. Right-click in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration the project owns.",
   "wikiPage": "Document-project",
   "surfaces": [
     {
@@ -41,5 +42,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "ca0c5daf49b9c71753c73c96c5fc474b4ef19e81e432084d1d2a396e3548b15f"
+  }
 }

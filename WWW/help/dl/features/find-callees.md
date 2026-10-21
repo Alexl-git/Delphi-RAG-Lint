@@ -7,12 +7,14 @@ group: search-navigation
 order: 20005
 since: 0.91.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # find-callees
 
 Lists the resolved outgoing calls of one routine.
+
+Read this when you want to know what a routine actually calls, resolved through the index rather than by reading its source. find-callees --qname Foo.Bar lists its outgoing calls; add --json for machine-readable output.
 
 ## How to run it
 

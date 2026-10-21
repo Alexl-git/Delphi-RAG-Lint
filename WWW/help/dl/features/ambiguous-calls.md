@@ -7,12 +7,14 @@ group: maintenance
 order: 120002
 since: 0.91.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # ambiguous-calls
 
 Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls.
+
+Read this when call-graph or find-callees answers seem to be missing edges. It lists the call sites the resolver could not pin to exactly one target, unresolved or ambiguous, for a symbol or a file, so you can see where the index gave up.
 
 ## How to run it
 

@@ -7,10 +7,10 @@ diagnostics for a project, not just whatever happened to go stale.
 
 ## Running it from the CLI
 ```
-drag-lint refresh-findings --project <X.dproj> --db <db> [--full] [--json]
+drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]
 ```
-`--project` is the `.dproj` to check; `--db` is the project's index
-database. Without `--full`, the command only forces a full build once 2
+`--project` is the `.dproj` to check; `--db` is optional and defaults to the project's own
+index database. Without `--full`, the command only forces a full build once 2
 or more units are stale (otherwise it recompiles just the stale ones).
 This action runs the verb with `--full` set, forcing a full recompile
 every time. `--json` selects JSON output.

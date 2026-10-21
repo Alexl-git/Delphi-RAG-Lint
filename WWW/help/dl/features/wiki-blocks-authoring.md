@@ -7,12 +7,14 @@ group: documentation
 order: 40010
 since: 1.7.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # dl:wiki concept blocks
 
 The format of a dl:wiki block -- the concept notes the wiki verb reads.
+
+Read this when you want your team own words for a concept to find the right code: it describes how to write a dl:wiki block inside a DocInsight comment so the wiki verb can read it.
 
 ## How to run it
 

@@ -7,12 +7,14 @@ group: indexing
 order: 10007
 since: 0.3.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # schema
 
 Prints the live schema of an index database: schemaversion, every table and column, and row counts.
+
+Read this when you need to know exactly what an index database contains before you query it: schema prints the schema version, every table and column, and row counts, read-only.
 
 ## How to run it
 

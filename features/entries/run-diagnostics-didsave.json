@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
+  "intro": "Read this to know why drag-lint findings refresh on their own: the diagnostics pass runs on a file each time you save it in the IDE, so there is nothing to invoke by hand.",
   "wikiPage": "Run-Diagnostics-didSave",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "a32fb48a86d29bed15f4168d2f2083a5018a176809a9b6018805edec0dc02a0c"
+  }
 }

@@ -7,12 +7,14 @@ group: search-navigation
 order: 20017
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query descendants
 
 The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases.
+
+Read this to answer what derives from this class. It lists every class that descends from a given ancestor across all scanned indexes; derived interfaces are left out on purpose.
 
 ## How to run it
 

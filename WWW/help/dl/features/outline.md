@@ -7,12 +7,14 @@ group: search-navigation
 order: 20015
 since: 0.86.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # outline
 
 Prints the file-scoped symbol outline for one Pascal unit.
+
+Read this when you want a unit symbol list outside the IDE, or want to see what feeds the Structure tree. Give it a .pas file and it prints that file symbol outline as text or JSON.
 
 ## How to run it
 

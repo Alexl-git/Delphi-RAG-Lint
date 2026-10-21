@@ -7,14 +7,14 @@ group: linting
 order: 30003
 since: 1.28.3-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Copy Selected Diagnostics
 
 Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard.
 
-Select one or several Diagnostics rows in the Structure form and choose Copy or press Ctrl+C. The rows are copied in panel order, one finding per line. Selecting the Diagnostics root copies everything, like Copy All Diagnostics.
+Read this when you want to paste one or two findings, not the whole list. Select Diagnostics rows in the Structure form (Ctrl or Shift click), then choose Copy or press Ctrl+C; selecting the Diagnostics root copies everything.
 
 ## Where to click
 

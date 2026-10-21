@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.21.0-alpha",
   "summary": "Shows parameter help for the call being typed at the editor caret",
+  "intro": "Read this while writing a call and you need the parameter list and order of the routine: it shows signature help at the caret, bound to Ctrl+Alt+S.",
   "wikiPage": "Show-Signature-Help",
   "surfaces": [
     {
@@ -13,5 +14,11 @@
       "path": "drag-lint > Show Signature Help"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "066997dea92a8e1fc2957244beb12d8736895703e4150fe4ce240bef51afd9de"
+  }
 }

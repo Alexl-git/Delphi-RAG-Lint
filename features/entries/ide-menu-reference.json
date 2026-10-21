@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "What every item in the drag-lint menu does",
+  "intro": "Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing.",
   "wikiPage": "IDE-Menu-Reference",
   "surfaces": [
     {
@@ -15,5 +16,11 @@
   ],
   "audience": "both",
   "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+  },
   "homeOrder": 40
 }

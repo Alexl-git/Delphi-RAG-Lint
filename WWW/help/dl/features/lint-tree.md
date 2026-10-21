@@ -7,12 +7,14 @@ group: linting
 order: 30015
 since: 1.11.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # lint-tree
 
 Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?
+
+Read this before you save or commit an edit to a unit that other units use. It checks whether an interface change reaches any dependent, which lint-all cannot show because a removed symbol simply stops being linted.
 
 ## How to run it
 

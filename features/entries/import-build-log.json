@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.8.0-alpha",
   "summary": "Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings",
+  "intro": "Read this when a build ran outside drag-lint, for example on a CI server, and you want its dcc or msbuild errors and warnings to show up as findings in your index. Point it at the log file and the project index.",
   "wikiPage": "Import-Build-Log",
   "surfaces": [
     {
@@ -27,5 +28,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d4f930f65eff0a1737b6cfbe36af97dba450caa334f9e978cd367a8a7acaaf99"
+  }
 }

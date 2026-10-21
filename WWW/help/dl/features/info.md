@@ -7,12 +7,14 @@ group: maintenance
 order: 120008
 since: 0.19.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # info
 
 Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities.
+
+Read this when you need to know which build of drag-lint you are running, or want a script to check the version. It prints the version, build date, license and capabilities, and with --json --db it also tells you whether an index is stale for this engine.
 
 ## How to run it
 

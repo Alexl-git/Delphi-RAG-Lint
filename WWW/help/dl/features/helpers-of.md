@@ -7,12 +7,14 @@ group: search-navigation
 order: 20013
 since: 0.94.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # helpers-of
 
 Lists record/class helper edges targeting a given type, anywhere in the index.
+
+Read this to see every record or class helper that extends a type anywhere in the indexed code. helpers-of T --db lists the helper edges targeting T; it is read-only and adds --json for machine output.
 
 ## How to run it
 

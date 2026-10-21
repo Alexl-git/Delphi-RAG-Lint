@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
+  "intro": "Read this to jump straight to where the symbol under the cursor is defined. Choose drag-lint > Go to Definition; it is served by the IDE plugin with no one-shot command line verb.",
   "wikiPage": "Go-to-Definition",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "2f040de2d045e2ba8f107c75db7c404c8585211c3af12d17a9c400f3d592fe9f"
+  }
 }

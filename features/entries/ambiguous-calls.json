@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.91.0-alpha",
   "summary": "Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls",
+  "intro": "Read this when call-graph or find-callees answers seem to be missing edges. It lists the call sites the resolver could not pin to exactly one target, unresolved or ambiguous, for a symbol or a file, so you can see where the index gave up.",
   "wikiPage": "ambiguous-calls",
   "surfaces": [
     {
@@ -34,5 +35,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "6deed3e6818af0d1162b7a28e41e9da9955222bb103a7cc5b0452a6f7e160ab4"
+  }
 }

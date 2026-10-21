@@ -7,12 +7,14 @@ group: editor-integration
 order: 110001
 since: 0.2.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # drag-lint
 
 This page documents the "View > Tool Windows > drag-lint" menu entry -- the main drag-lint dockable tool window.
+
+Read this to find the main drag-lint dockable panel. It opens from View > Tool Windows > drag-lint, and is the same panel as the one reached through the drag-lint menu.
 
 ## Where to click
 

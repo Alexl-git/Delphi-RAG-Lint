@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
+  "intro": "Read this when you have changed a unit and want to check the units that depend on it right away. It runs that check now instead of waiting for the automatic quiet-period pass.",
   "wikiPage": "Features",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: needs own page; seed: since unknown"
+  "notes": "seed: needs own page; seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "4e75c8e04ee01aaa7b25c2139cad843457dfdbac9908dd1ff8a84cd87f81f637"
+  }
 }

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.92.0-alpha",
   "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
+  "intro": "Read this when you need to know which compiler defines are active for a project, platform and configuration, before trusting a preprocess or index result. It prints the resolved define set, one symbol per line, exactly as the indexer sees it.",
   "wikiPage": "pp-profile",
   "surfaces": [
     {
@@ -28,5 +29,16 @@
       "help": ["  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "fbddd135d0b83191195de3f33fee93bc9fc38de47103ecfa150cacd2a99b14fd"
+  }
 }

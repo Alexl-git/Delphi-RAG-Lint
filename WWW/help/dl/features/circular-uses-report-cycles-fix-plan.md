@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
+Read this when the compiler complains about circular references or a project dependency graph feels tangled. It finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
+
 ## How to run it
 
 Full flag list: [cycles in the CLI reference](../cli.md#cycles).

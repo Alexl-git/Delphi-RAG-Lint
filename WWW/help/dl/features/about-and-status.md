@@ -7,12 +7,14 @@ group: maintenance
 order: 120001
 since: 0.15.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # About and Status
 
 The plugin's status window -- versions, connection health, and which indexes are actually in use.
+
+Read this when hover or go-to-definition seems to answer from the wrong place, or you need to know what is running. The status window shows the versions in use, whether each component is reachable, which index files are actually being used, misconfigured settings and how much memory the IDE holds.
 
 ## How to run it
 

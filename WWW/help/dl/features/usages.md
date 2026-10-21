@@ -7,12 +7,14 @@ group: search-navigation
 order: 20030
 since: 0.33.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # usages
 
 Finds usage sites of a named symbol, with a choice of report width.
+
+Read this when you want every place a symbol is used, outside the IDE: usages lists the usage sites of a named symbol, with a narrow, wide or very-wide report width.
 
 ## How to run it
 

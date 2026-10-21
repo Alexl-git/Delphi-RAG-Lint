@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.95.0-alpha",
   "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
+  "intro": "Read this when you are auditing which external units or libraries a codebase depends on. deps-report rolls up the third-party dependencies from one or more indexes, as text, json or csv.",
   "wikiPage": "deps-report",
   "surfaces": [
     {
@@ -48,5 +49,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "dc7ee7f410ba8c00dcacd85c9fb166fc671152320aa27447ac7fbb1a5da095b5"
+  }
 }

@@ -7,12 +7,14 @@ group: linting
 order: 30001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Copy All Diagnostics
 
 Puts every lint finding for the current unit onto the clipboard, starting from the Structure form.
+
+Read this when you want to paste a unit full list of findings into a chat, issue or note. Right-click in the Structure form and choose Copy All Diagnostics to put every lint finding for the current unit on the clipboard.
 
 ## How to run it
 

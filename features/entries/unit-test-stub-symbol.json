@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.27.0-alpha",
   "summary": "Uses generate-test to produce a unit-test skeleton for one qualified symbol",
+  "intro": "Read this when a routine has no test yet: generate-test produces a unit-test skeleton for one qualified symbol, in DUnitX or DUnit style.",
   "wikiPage": "Unit-Test-Stub-symbol",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0711c74e54f178093f9b8ba98f3277dba3b92f3fcd79c609ee75f967463f3a86"
+  }
 }

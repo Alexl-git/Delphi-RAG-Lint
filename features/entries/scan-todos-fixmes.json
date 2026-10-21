@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.12.0-alpha",
   "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
+  "intro": "Read this when you want to see the outstanding work left in code: it lists TODO, FIXME, HACK, XXX, REVIEW and NOTE markers in a path, as text or JSON.",
   "wikiPage": "Scan-TODOs-FIXMEs",
   "surfaces": [
     {
@@ -20,5 +21,11 @@
       "help": ["  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "de83bded61f3f19135f10e7ade2d9a5730f32449aad80679b3bf95707caeab96"
+  }
 }

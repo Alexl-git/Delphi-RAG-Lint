@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.40.5-alpha",
   "summary": "Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both",
+  "intro": "Read this when you want queries that cross from Delphi code into the SQL schema it talks to. It links a project index to a SQL index so ORM-style relationships between code symbols and SQL objects can be resolved across both.",
   "wikiPage": "link-orm",
   "surfaces": [
     {
@@ -23,5 +24,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "5fd258380950196939a5e77d666f95ccab96eb5486cffaee8411c68595d60bcc"
+  }
 }

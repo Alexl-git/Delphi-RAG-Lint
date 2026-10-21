@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Shows the public surface of a class: its members and signatures, without the method bodies",
+  "intro": "Read this when you want to know what a class exposes without reading the whole unit. Class Surface shows its members and signatures, without the method bodies.",
   "wikiPage": "Class-Surface",
   "surfaces": [
     {
@@ -40,5 +41,11 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."]
+  "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "33468bcf47a4aa5ed6f13f368b9c77b9820ef9bb367b4364629cf946590d86fc"
+  }
 }

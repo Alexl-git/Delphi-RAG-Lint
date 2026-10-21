@@ -7,12 +7,14 @@ group: search-navigation
 order: 20019
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query --kind --all
 
 Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap.
+
+Read this when you need the complete set of one kind of symbol, for example every unit in a project or library index to fill a picker. It lists them all with no name and no row cap.
 
 ## How to run it
 
@@ -22,11 +24,11 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--name` | `<symbol-name>` |  |  |
+| `--kind` | `<k>` |  |  |
+| `--all` |  |  |  |
+| `--public` |  |  |  |
 | `--db` |  |  |  |
 | `--json` |  |  |  |
-| `--case-sensitive` |  |  |  |
-| `--exact` |  |  |  |
 
 ## Pitfalls
 

@@ -7,12 +7,14 @@ group: refactoring
 order: 50012
 since: 0.27.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Unit Test Stub (symbol)
 
 Uses generate-test to produce a unit-test skeleton for one qualified symbol.
+
+Read this when a routine has no test yet: generate-test produces a unit-test skeleton for one qualified symbol, in DUnitX or DUnit style.
 
 ## How to run it
 

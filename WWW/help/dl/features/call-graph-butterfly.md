@@ -7,12 +7,14 @@ group: graphs-reports
 order: 70002
 since: 0.96.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Call Graph (Butterfly)
 
 Shows callers and callees of one symbol together in a single "butterfly" view.
+
+Read this when you want to see who calls a symbol and what it calls together, in one butterfly view, from the IDE menu. The same chart is available from the CLI with the butterfly verb.
 
 ## How to run it
 

@@ -7,12 +7,14 @@ group: refactoring
 order: 50009
 since: 1.18.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Reconcile Project Members (.dpr/.dproj)
 
 Compares a project file's declared member list against what is on disk and in the compile closure.
+
+Read this after moving or adding units by hand. It compares the project file declared members against what is on disk and in the compile closure, and with --apply it syncs the list; without --apply it only reports.
 
 ## How to run it
 

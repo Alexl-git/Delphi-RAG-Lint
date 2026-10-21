@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.2.0-alpha",
   "summary": "Shows the catalog of lint rules in the context of a specific project",
+  "intro": "Read this when you want the lint rule catalog starting from the Project Manager: right-click a project and choose drag-lint: Project Rules.... From the command line the same list comes from drag-lint rules, and no index is needed.",
   "wikiPage": "drag-lint-Project-Rules",
   "surfaces": [
     {
@@ -34,5 +35,11 @@
       "help": ["  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "cce28cd9d20d0c66576aa389d40f2de98612906a73e20524ae0eae1eaa52a659"
+  }
 }

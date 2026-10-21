@@ -7,12 +7,14 @@ group: search-navigation
 order: 20027
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Symbol Search
 
 Searches symbols by name across the indexed projects.
+
+Read this when you know or can guess a symbol name but not its file: Symbol Search finds types, methods and fields by name across the indexed projects, bound to Ctrl+Alt+T.
 
 ## How to run it
 

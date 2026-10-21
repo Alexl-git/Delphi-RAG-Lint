@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.94.0-alpha",
   "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
+  "intro": "Read this when you have an enum and want the usual conversion helpers without writing them by hand. Right-click the enum in the Structure form and choose Create helper class to generate a Byte-family record helper with ToByte, FromByte, ToInteger, FromInteger, ToString and FromString.",
   "wikiPage": "Create-helper-class",
   "surfaces": [
     {
@@ -45,5 +46,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "a17b830e6a8e025e2abad2940ce4e5ae2f7593c8d25740a8ca8fbba89a210c1a"
+  }
 }

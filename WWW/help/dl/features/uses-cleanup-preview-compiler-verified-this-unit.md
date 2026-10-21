@@ -7,12 +7,14 @@ group: refactoring
 order: 50014
 since: 0.43.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Uses Cleanup Preview (compiler-verified, this unit)
 
 The removals a Uses Audit suggests, but verified by actually compiling.
+
+Read this before applying a Uses Audit: it previews the same removals but verifies them by compiling, so a unit needed only by an inline routine or an IF branch is not stripped by mistake.
 
 ## How to run it
 

@@ -7,12 +7,14 @@ group: refactoring
 order: 50005
 since: 0.85.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # extract-method
 
 Pulls a run of statements out of a routine into a new method.
+
+Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; the usage lists --apply and --no-backup for writing the change.
 
 ## How to run it
 

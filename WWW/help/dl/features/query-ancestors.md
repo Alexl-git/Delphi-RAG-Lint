@@ -7,12 +7,14 @@ group: search-navigation
 order: 20016
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query ancestors
 
 Resolves the transitive class/interface hierarchy of a type.
+
+Read this to see everything a class or interface descends from, or to check whether it descends from one specific ancestor. The answer comes straight from the index.
 
 ## How to run it
 

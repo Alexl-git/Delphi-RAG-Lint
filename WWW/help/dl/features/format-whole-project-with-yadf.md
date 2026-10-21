@@ -7,12 +7,14 @@ group: linting
 order: 30010
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Format Whole Project with YADF
 
 Runs YADF formatting across a project's files, with indexing involved as part of the same action.
+
+Read this when you want a whole project brought to house style in one action instead of file by file. Choose drag-lint > Format Whole Project with YADF...; from the command line there is no single verb, only format per file and index.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "internal",
   "since": "0.41.0-alpha",
   "summary": "The diagnostic behind check-unit --resolve-uses; not a verb of its own",
+  "intro": "This is not a command of its own: it is the diagnostic behind the --resolve-uses option of check-unit. Read the Maintenance page if you need to understand how unit references are resolved.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "agent",
-  "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed"
+  "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "b7e71d41448879b30e1e12defd0282071cc232bacd941f17f0ea05a91972d486"
+  }
 }

@@ -6,6 +6,7 @@
   "status": "internal",
   "since": "0.0.0",
   "summary": "Self-test for the doc-facts renderer, driven by test runners",
+  "intro": "Maintenance self-test for the doc-facts renderer, run by test runners. You will not need it for normal work.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "agent",
-  "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown"
+  "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "f972cd161d5f8941eb68cd16d089453d4ca6a1b04cde9196635d0bab9b70cd3c"
+  }
 }

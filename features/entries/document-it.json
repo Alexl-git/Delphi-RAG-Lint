@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.90.0-alpha",
   "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
+  "intro": "Read this when one declaration needs a doc comment and you do not want to touch the rest of the unit. Right-click the symbol in the Structure form and choose Document it to generate or repair its managed DocInsight comment.",
   "wikiPage": "Document-it",
   "surfaces": [
     {
@@ -41,5 +42,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "ce9006423b4e73d27870db7f5d6a7c21c1ce666f93b55fb6e31fdb7fd1a2994c"
+  }
 }

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.31.0-alpha",
   "summary": "Runs drag-lint's AST-level checks against a file",
+  "intro": "Read this when you want to validate a single file against drag-lint AST-level checks: you get the issues found in the parse tree, as text or JSON.",
   "wikiPage": "Run-AST-Checks",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "15dbfbd9a3674b0bb56e8437ae8bf98fd49bafe382e7636419d1a325fdbb1e94"
+  }
 }

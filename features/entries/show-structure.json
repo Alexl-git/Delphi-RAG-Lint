@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.30.0-alpha",
   "summary": "Shows a structural outline of the current unit",
+  "intro": "Read this when you want a unit as a navigable outline of its types and members instead of scrolling the source: Show Structure opens that tree for the current unit.",
   "wikiPage": "Show-Structure",
   "surfaces": [
     {
@@ -13,5 +14,11 @@
       "path": "drag-lint > Show Structure"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "2c75ee51617a729f96f29cd89590e628b2e02d06c819c59f0d5b7bcf9305b426"
+  }
 }

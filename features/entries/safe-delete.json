@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.69.0-alpha",
   "summary": "Deletes a symbol if and only if it has zero references in the index",
+  "intro": "Read this when you want to remove dead code without breaking a live caller: safe-delete deletes a symbol only if the index shows zero references to it.",
   "wikiPage": "safe-delete",
   "surfaces": [
     {
@@ -36,5 +37,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d966c478642eaf88302b487f12c4c1a9f127c7aefc2e7bf80d7b71bfa49b8881"
+  }
 }

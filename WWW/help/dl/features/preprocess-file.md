@@ -7,12 +7,14 @@ group: compiler
 order: 90010
 since: 0.92.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # preprocess-file
 
 Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set.
+
+Read this when you need to see what the preprocessor makes of a file. It prints the IFDEF-resolved source under the defines you give it, without running a full compile; it is a diagnostic, not a daily tool.
 
 ## How to run it
 

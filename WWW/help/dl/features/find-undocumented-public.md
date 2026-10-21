@@ -7,12 +7,14 @@ group: search-navigation
 order: 20006
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Find Undocumented (public)
 
 Uses query find to list indexed symbols filtered by documentation state, kind, or visibility.
+
+Read this when you want to know which public symbols still lack a DocInsight comment. query find with --no-docs and --public lists them; --doc-tag and --doc-contains filter by comment content instead. Also under drag-lint > Code Quality in the IDE.
 
 ## How to run it
 

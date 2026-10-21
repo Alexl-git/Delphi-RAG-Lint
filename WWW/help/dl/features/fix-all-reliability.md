@@ -7,14 +7,14 @@ group: linting
 order: 30008
 since: 1.31.3-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Fix all reliability (1.31.3)
 
 Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes.
 
-Autofix fixes: owner freshness ignores library-root members, IDE busy guard, exception ancestor prefix
+Read this if Fix all used to drop renames, ran twice, or flagged E-prefixed exception classes. Since 1.31.3-alpha library-root members no longer make an owner stale, the IDE shows a wait cursor and refuses a second fix while one runs, and exception classes keep their E prefix.
 
 ## How to run it
 

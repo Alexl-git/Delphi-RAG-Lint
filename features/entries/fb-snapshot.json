@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.40.5-alpha",
   "summary": "Connects to a Firebird database and captures a snapshot into a sqlite index",
+  "intro": "Read this when you want a drag-lint index of a Firebird database itself. fb-snapshot connects with a FireDAC-style connection string and captures a snapshot into the sqlite file named by --db. Command line only.",
   "wikiPage": "fb-snapshot",
   "surfaces": [
     {
@@ -26,5 +27,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "6a00e72aeca666ab9c2031528f6606e8ad8fa6aaf6a9f5ce18175d21d2292e14"
+  }
 }

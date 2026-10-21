@@ -71,9 +71,20 @@
     }
   ],
   "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
   "lastVerified": {
     "date": "2026-10-19",
     "by": "agent-task9",
     "build": "1.32.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "571f67ee00609eb5090ddcc08c35e1ada4d9f2c50a5b8b3b1b7d1a4624cfae1e"
   }
 }

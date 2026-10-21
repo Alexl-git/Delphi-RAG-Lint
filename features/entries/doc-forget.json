@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "1.17.0-alpha",
   "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
+  "intro": "Read this when documentation facts carry the wrong project tag, or tags need cleaning up. doc-forget removes or renames project tags on inbound doc facts for a file or folder, and is a dry run unless you pass --apply.",
   "wikiPage": "Features",
   "surfaces": [
     {
@@ -43,5 +44,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: needs own page"
+  "notes": "seed: needs own page",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "9ac29719038e99e39e46f6a55cf308c53c9e9d3c88305b819f6c78d09ec29328"
+  }
 }

@@ -7,12 +7,14 @@ group: linting
 order: 30012
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Lint Buffer (Unsaved)
 
 Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first.
+
+Read this when you want lint findings for edits you have not saved yet. The IDE lints the in-memory editor buffer directly, without writing it to disk first; the command line lints saved files.
 
 ## How to run it
 

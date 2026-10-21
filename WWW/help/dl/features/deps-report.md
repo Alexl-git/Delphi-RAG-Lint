@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on.
 
+Read this when you are auditing which external units or libraries a codebase depends on. deps-report rolls up the third-party dependencies from one or more indexes, as text, json or csv.
+
 ## How to run it
 
 Full flag list: [deps-report in the CLI reference](../cli.md#deps-report).

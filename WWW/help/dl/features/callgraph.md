@@ -7,12 +7,14 @@ group: graphs-reports
 order: 70003
 since: 0.91.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # callgraph
 
 Prints an N-deep resolved call tree for a symbol, in either direction.
+
+Read this when you want to know who calls a routine, or what it calls, several levels deep. callgraph prints an N-deep resolved call tree for a symbol in either direction, guarded against cycles.
 
 ## How to run it
 

@@ -6,35 +6,47 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
+  "intro": "Read this when you need the complete set of one kind of symbol, for example every unit in a project or library index to fill a picker. It lists them all with no name and no row cap.",
   "wikiPage": "query-kind-all",
   "surfaces": [
     {
       "type": "cli",
       "verb": "query",
       "example": "drag-lint query --kind <k> --all",
-      "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+      "usage": "drag-lint query --kind <k> --all [--public] [--db ...] [--json]",
       "flags": [
         {
-          "name": "--name",
-          "arg": "<symbol-name>"
+          "name": "--kind",
+          "arg": "<k>"
+        },
+        {
+          "name": "--all"
+        },
+        {
+          "name": "--public"
         },
         {
           "name": "--db"
         },
         {
           "name": "--json"
-        },
-        {
-          "name": "--case-sensitive"
-        },
-        {
-          "name": "--exact"
         }
       ],
       "helpOrder": 2,
-      "help": ["  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]", "  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]", "                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);", "                               --case-sensitive restores byte-exact matching.", "                               --name also accepts a QUALIFIED name (falls back to --qname on a dotted value).", "                               --exact suppresses the fuzzy fallback, so 0 rows means \"no such symbol\".", "                               JSON rows carry \"match_kind\": \"exact\" | \"fuzzy\" | \"substring\" (--name-like) -- reject \"fuzzy\" unless", "                               you want suggestions; a fuzzy row does NOT carry the name you asked for.", "                               --quiet suppresses the \"(loaded defaults from ...)\" stderr banner.", "  drag-lint query              --text \"<phrase>\" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]", "       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).", "         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception", "         narrows it; --kind literal reproduces the pre-comment behaviour exactly.", "                               searches STRING LITERALS ONLY -- string constants, resourcestrings,", "                               DFM captions, SQL exception messages. NOT source text: identifiers,", "                               property assignments and type names are not in this corpus, so 0", "                               matches for those is correct, not a missing index. COMMENTS: doc", "                               comments ARE searchable -- `query find --doc-contains \"<phrase>\"`.", "                               Only BODY-INLINE comments need grep. (INBOX 2.7; the old line here", "                               sent people to grep for prose the index already had.)"]
+      "help": ["  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)"]
     }
   ],
   "audience": "both",
-  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."]
+  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+  }
 }

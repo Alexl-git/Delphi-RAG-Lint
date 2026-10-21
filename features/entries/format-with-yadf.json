@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.16.0-alpha",
   "summary": "Reformats one Pascal unit by driving the external YADF formatter",
+  "intro": "Read this when you want one unit reformatted by the YADF formatter. Careful: drag-lint format rewrites the file in place; try --diff (formats a copy and prints the diff) or --dry-run first, and commit before running it for real.",
   "wikiPage": "Format-with-YADF",
   "surfaces": [
     {
@@ -30,5 +31,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "3dd753659ed7f83d128677ae6575fa52915c2d61bd6b5d2195c71be4fd490970"
+  }
 }

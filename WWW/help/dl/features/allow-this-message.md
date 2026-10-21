@@ -7,12 +7,14 @@ group: refactoring
 order: 50002
 since: 0.54.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Allow this message
 
 Records a dl:ok review of one finding, so it stops being reported without being fixed.
+
+Read this when a finding in the Structure form is a deliberate, reviewed exception rather than something to change. Right-click the finding and choose Allow this message to record a dl:ok review so it stops being reported.
 
 ## How to run it
 

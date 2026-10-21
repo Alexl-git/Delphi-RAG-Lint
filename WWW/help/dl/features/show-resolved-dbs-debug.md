@@ -7,12 +7,14 @@ group: indexing
 order: 10008
 since: 0.60.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Show Resolved DBs (debug)
 
 Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query.
+
+Read this when a query seems to answer from the wrong index: it prints which database(s) drag-lint would use for a project, a file or a platform, without running a real query.
 
 ## How to run it
 

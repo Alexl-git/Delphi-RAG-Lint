@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.15.0-alpha",
   "summary": "The plugin's status window -- versions, connection health, and which indexes are actually in use",
+  "intro": "Read this when hover or go-to-definition seems to answer from the wrong place, or you need to know what is running. The status window shows the versions in use, whether each component is reachable, which index files are actually being used, misconfigured settings and how much memory the IDE holds.",
   "wikiPage": "About-and-Status",
   "surfaces": [
     {
@@ -76,5 +77,11 @@
     }
   ],
   "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "cb3db7489723f53586c20f3eed91d49c4579b1d2c106eea91c4c4702e7f4232f"
+  },
   "homeOrder": 60
 }

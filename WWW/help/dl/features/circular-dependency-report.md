@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 A worked example: a real four-unit uses cycle, and the report drag-lint produces for it.
 
+Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index.
+
 ## Details
 
 A worked example: a real four-unit `uses` cycle, and the report `drag-lint`

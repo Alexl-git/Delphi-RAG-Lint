@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Walks a project's .dproj compile closure and (re)builds its index",
+  "intro": "Read this after adding or moving units, or when hover, Find Usages or lint results feel stale. It walks the project .dproj compile closure and rebuilds the index for that project.",
   "wikiPage": "Rebuild-Index-for-This-Project",
   "surfaces": [
     {
@@ -15,11 +16,24 @@
     {
       "type": "cli",
       "verb": "index",
-      "usage": "drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]",
+      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]",
       "flags": [
+        {
+          "name": "--project",
+          "arg": "<file.dproj>"
+        },
         {
           "name": "--db",
           "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--recompile"
+        },
+        {
+          "name": "--rebuild"
+        },
+        {
+          "name": "--dry-run"
         },
         {
           "name": "--watch"
@@ -27,36 +41,15 @@
         {
           "name": "--interval",
           "arg": "N"
-        },
-        {
-          "name": "--library-db",
-          "arg": "<lib.sqlite>",
-          "summary": "consult another index for calls THIS one cannot resolve."
-        },
-        {
-          "name": "--max-file-kb",
-          "arg": "N"
-        },
-        {
-          "name": "--no-use-ignore"
-        },
-        {
-          "name": "--no-sql-ms"
-        },
-        {
-          "name": "--deep"
-        },
-        {
-          "name": "--shallow"
-        },
-        {
-          "name": "--exclude-under"
-        },
-        {
-          "name": "--include-only"
         }
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "3fa7babcf81b5ab9acab511b7f62873c3df29c88e9b01c6a70bb98f479d93621"
+  }
 }

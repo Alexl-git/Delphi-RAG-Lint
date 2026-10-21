@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
+  "intro": "Read this before refactoring a heavily used symbol: top ranks indexed symbols by fan-in, meaning how many places reference them, so you see the most depended-upon ones first.",
   "wikiPage": "Top-Symbols-fan-in",
   "surfaces": [
     {
@@ -37,5 +38,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "383d753d8f34c3dfa4d4990140ec74e5479b7a7ab8e22e1f6549df16231fbfe3"
+  }
 }

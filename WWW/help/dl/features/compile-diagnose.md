@@ -7,12 +7,14 @@ group: compiler
 order: 90005
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Compile & Diagnose
 
 Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings.
+
+Read this when you want compiler errors and warnings for the current file or project inside the IDE. It compiles the project or unit and folds the compiler messages into drag-lint findings.
 
 ## Where to click
 

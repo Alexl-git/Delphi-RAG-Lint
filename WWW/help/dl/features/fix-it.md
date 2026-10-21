@@ -7,12 +7,14 @@ group: linting
 order: 30009
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Fix it
 
 Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling.
+
+Read this when you are looking at one lint finding in the Structure form and want just that one fixed. Right-click the finding node and choose Fix it; an unused unit is removed or moved to the implementation section, verified by compiling.
 
 ## How to run it
 

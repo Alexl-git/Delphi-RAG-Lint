@@ -7,12 +7,14 @@ group: maintenance
 order: 120010
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Maintenance
 
 Indexes, the manifest, reindexing, and what to do when something looks wrong.
+
+Read this when drag-lint gives a wrong answer, because that is almost always a stale or mis-scoped index. It explains where indexes live, how to keep them fresh and how to recognise a bad one.
 
 ## Details
 

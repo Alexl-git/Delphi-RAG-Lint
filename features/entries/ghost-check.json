@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "1.8.0-alpha",
   "summary": "Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged",
+  "intro": "Read this when you want compiler diagnostics for edits you have not saved. ghost-check compiles the project with chosen units temporarily replaced by their buffers, then restores the original files unchanged.",
   "wikiPage": "ghost-check",
   "surfaces": [
     {
@@ -40,5 +41,16 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's \"Compile Buffer (unsaved)\". Restores the original on exit."]
+  "pitfalls": ["compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's \"Compile Buffer (unsaved)\". Restores the original on exit."],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "e8260b219ba744784b72fff7a07d943d1e056997539bfd14dc223e44a0af0089"
+  }
 }

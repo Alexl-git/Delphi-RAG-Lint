@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.40.5-alpha",
   "summary": "Exports the project's unit-dependency data as a CSV file",
+  "intro": "Read this when you need the uses graph outside the IDE, in a spreadsheet or another tool: it exports the unit-dependency data of the project as a CSV file.",
   "wikiPage": "Uses-Report-CSV",
   "surfaces": [
     {
@@ -43,5 +44,11 @@
       "help": ["  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "afc13cbba541c0ce9d159b0010daef7018426e2b740bbf5f4b3061f1693cb50f"
+  }
 }

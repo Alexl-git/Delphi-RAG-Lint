@@ -7,12 +7,14 @@ group: compiler
 order: 90002
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Compile Buffer (unsaved)
 
 Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged.
+
+Read this when you want compiler diagnostics for edits you have not saved yet. It compiles the project with the current editor buffer substituted for its file on disk, then restores the original file unchanged.
 
 ## Where to click
 

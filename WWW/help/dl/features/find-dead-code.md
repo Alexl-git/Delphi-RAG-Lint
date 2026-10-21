@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Scans the index for code with no references -- candidates to delete.
 
+Read this before a cleanup pass or before deleting something you suspect is unused: find-deadcode scans the index for symbols with no references and lists them as candidates. Filter with --kind, add --include-private for private members; also under drag-lint > Code Quality.
+
 ## How to run it
 
 Full flag list: [find-deadcode in the CLI reference](../cli.md#find-deadcode).

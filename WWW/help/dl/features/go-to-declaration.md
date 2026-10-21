@@ -7,12 +7,14 @@ group: search-navigation
 order: 20010
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Go to Declaration
 
 Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node.
+
+Read this when you are browsing the Structure form and want to land on where a symbol is declared. Right-click the tree node and choose Go to Declaration; it is an editor jump with no command line equivalent and needs no index.
 
 ## Where to click
 

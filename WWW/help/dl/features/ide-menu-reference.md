@@ -7,12 +7,14 @@ group: editor-integration
 order: 110006
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # IDE Menu Reference
 
 What every item in the drag-lint menu does.
+
+Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing.
 
 ## Details
 

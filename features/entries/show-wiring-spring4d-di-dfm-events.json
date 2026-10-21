@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.21.0-alpha",
   "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
+  "intro": "Read this when you are tracing how an interface gets resolved or which handler a DFM event really calls: it shows the Spring4D container registrations and DFM event hookups the compiler does not make obvious.",
   "wikiPage": "Show-Wiring-Spring4D-DI-DFM-events",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)", "  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "2ef1be7d0b519e9023b5a153a4822e903ba0daf6cc6e5ba3420a7e91ba92f82d"
+  }
 }

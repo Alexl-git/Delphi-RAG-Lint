@@ -7,12 +7,14 @@ group: editor-integration
 order: 110007
 since: 1.13.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # ide-release
 
 Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request.
+
+Read this when an engine build fails to copy drag-lint.exe because the Delphi IDE is open. ide-release writes a hold (default 120 s) so the plugin stops respawning the engine; --resume clears it and --status reports it. It frees nothing by itself.
 
 ## How to run it
 

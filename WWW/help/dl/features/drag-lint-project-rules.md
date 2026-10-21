@@ -7,12 +7,14 @@ group: linting
 order: 30004
 since: 0.2.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # drag-lint: Project Rules
 
 Shows the catalog of lint rules in the context of a specific project.
+
+Read this when you want the lint rule catalog starting from the Project Manager: right-click a project and choose drag-lint: Project Rules.... From the command line the same list comes from drag-lint rules, and no index is needed.
 
 ## How to run it
 

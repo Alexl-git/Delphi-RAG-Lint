@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Starts the LSP (Language Server Protocol) stdio server",
+  "intro": "Read this when you want hover, completion, go-to-definition and diagnostics in an editor other than RAD Studio. It starts the language server over stdio; the IDE plugin launches it by itself, and it is not the same as the MCP server (serve) used by AI clients.",
   "wikiPage": "lsp",
   "surfaces": [
     {
@@ -41,5 +42,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297"
+  "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "b78201a4bcfc17a2919a35dcbf61dc903a1dbf0bea1e801e56a04ba7a725bd56"
+  }
 }

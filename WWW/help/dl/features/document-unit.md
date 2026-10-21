@@ -7,12 +7,14 @@ group: documentation
 order: 40007
 since: 0.90.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Document unit
 
 Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only).
+
+Read this when a whole unit needs documentation, not just one symbol. Right-click the unit in the Structure form and choose Document unit to generate or repair managed DocInsight comments for its public declarations.
 
 ## How to run it
 

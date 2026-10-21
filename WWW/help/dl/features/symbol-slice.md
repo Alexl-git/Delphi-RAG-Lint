@@ -7,12 +7,14 @@ group: search-navigation
 order: 20028
 since: 0.17.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Symbol Slice
 
 Shows the slice of code relevant to one symbol: its declaration, body, and immediate context.
+
+Read this when you want only the code that matters for one symbol instead of the whole file: it shows the symbol declaration, body and immediate context.
 
 ## How to run it
 

@@ -7,12 +7,14 @@ group: maintenance
 order: 120004
 since: 0.13.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # diff
 
 Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor.
+
+Read this when you want to know what changed between two index snapshots, for example before and after a refactor. diff compares two index databases and reports the symbol and reference level delta.
 
 ## How to run it
 

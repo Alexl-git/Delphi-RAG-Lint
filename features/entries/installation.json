@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.21.0-alpha",
   "summary": "Getting the CLI, the IDE plugin, or the LSP running",
+  "intro": "Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together.",
   "wikiPage": "Installation",
   "surfaces": [
     {
@@ -18,5 +19,16 @@
     }
   ],
   "audience": "both",
+  "access": "repo-tooling",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "86743e3e74f44bf4836c5ed3fab9f985a7d5563d712795c9fb85db304b2c874d"
+  },
   "homeOrder": 20
 }

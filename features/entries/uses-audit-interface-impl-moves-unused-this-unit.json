@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.43.0-alpha",
   "summary": "For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely",
+  "intro": "Read this when tidying the uses clauses of one unit: it reports which entries could move from the interface section to implementation and which are not used at all.",
   "wikiPage": "Uses-Audit-interface-impl-moves-unused-this-unit",
   "surfaces": [
     {
@@ -30,5 +31,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "01b4e38ce5db60cafa99593b0e82b8566c53c01db6b05fe28896e988728c5f48"
+  }
 }

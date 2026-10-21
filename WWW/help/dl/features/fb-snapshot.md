@@ -7,12 +7,14 @@ group: database
 order: 100001
 since: 0.40.5-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # fb-snapshot
 
 Connects to a Firebird database and captures a snapshot into a sqlite index.
+
+Read this when you want a drag-lint index of a Firebird database itself. fb-snapshot connects with a FireDAC-style connection string and captures a snapshot into the sqlite file named by --db. Command line only.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Answers one question, about one unit and one file",
+  "intro": "Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. It tells you whether one file references anything a given unit exports; an empty answer means the uses entry is a dead import.",
   "wikiPage": "query-unit-usage",
   "surfaces": [
     {
@@ -34,5 +35,16 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["omit --in for the project-wide answer; add --in `<F.pas>` to ask about ONE file.", "for an RTL/VCL/third-party unit pass the platform library DB too (--db `<proj>` --db `<library>`) for the reference breakdown. With the project DB alone you still get the importer list; only the --in form exits 2."]
+  "pitfalls": ["omit --in for the project-wide answer; add --in `<F.pas>` to ask about ONE file.", "for an RTL/VCL/third-party unit pass the platform library DB too (--db `<proj>` --db `<library>`) for the reference breakdown. With the project DB alone you still get the importer list; only the --in form exits 2."],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "44e4e30e2283257467bc89293b7dfdfc0a85ced9267ed19c86c6b342f552818c"
+  }
 }

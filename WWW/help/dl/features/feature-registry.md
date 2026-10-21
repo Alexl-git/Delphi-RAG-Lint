@@ -7,14 +7,14 @@ group: maintenance
 order: 120007
 since: 1.22.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Feature registry
 
 The machine-checked master list of every feature, and the generator of the index pages.
 
-Register a feature with featuregen add, regenerate the pages with featuregen build --all, and let the battery guard name what is missing. Needs a repository clone and a built featuregen.exe (see the featuregen page); the publish scripts need PowerShell 7.3.
+Read this when you add or change a drag-lint feature: register it with featuregen add, regenerate the pages with featuregen build --all, and let the registry guard name what is still missing. Needs a repository clone and a built featuregen.exe.
 
 **Needs:** powershell7, repo-clone
 

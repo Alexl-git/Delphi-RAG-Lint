@@ -7,12 +7,14 @@ group: maintenance
 order: 120013
 since: 0.40.5-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # sql
 
 Runs one read-only SQL statement against an index database and prints the result set.
+
+Read this when your question has no verb of its own: sql runs one read-only SQL statement against an index database, for example a join across symbols, refs and files, with row and time caps.
 
 ## How to run it
 

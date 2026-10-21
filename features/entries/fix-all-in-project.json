@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.61.0-alpha",
   "summary": "Applies autofixes for every fixable finding across the whole project, starting from the Structure form",
+  "intro": "Read this when you want every auto-fixable finding in the whole project resolved in one action. Open the Structure form, right-click a node and choose Fix all in project; it is not on the main menu and runs lint-all with the fix flags.",
   "wikiPage": "Fix-all-in-project",
   "surfaces": [
     {
@@ -65,5 +66,11 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."]
+  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "6296e05a77c0254a896cbe25c15656879121dc0c38d879652cf4b23ae0dd765a"
+  }
 }

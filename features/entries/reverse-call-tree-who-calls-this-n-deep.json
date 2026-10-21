@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.96.0-alpha",
   "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
+  "intro": "Read this before changing a routine and you want to know how far the change could ripple back through its callers: it builds the tree of callers to the depth you choose, or the callees with --direction callees.",
   "wikiPage": "Reverse-Call-Tree-who-calls-this-N-deep",
   "surfaces": [
     {
@@ -42,5 +43,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "cbb4a90a85c37c48c7640d1ab7d42a13c228897047bf17fdee3c485e42041dad"
+  }
 }

@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Reports what would be affected if a chosen symbol changes -- the set of code to retest.
 
+Read this before changing a widely used method or type: it lists what would be affected if that symbol changes, so you know which code to retest. Give it the qualified name and, optionally, how many levels out to trace.
+
 ## How to run it
 
 Full flag list: [impact in the CLI reference](../cli.md#impact).

@@ -7,12 +7,14 @@ group: indexing
 order: 10002
 since: 1.3.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # migrate-dbs
 
 Moves project index databases into each project's own D-RAG folder, matching the current index layout.
+
+Read this after an index layout change, or when index databases are stranded in an old shared folder. It moves each project index into that project own _D-RAG folder; without --apply it only reports what it would move.
 
 ## How to run it
 

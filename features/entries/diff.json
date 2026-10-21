@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.13.0-alpha",
   "summary": "Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor",
+  "intro": "Read this when you want to know what changed between two index snapshots, for example before and after a refactor. diff compares two index databases and reports the symbol and reference level delta.",
   "wikiPage": "diff",
   "surfaces": [
     {
@@ -27,5 +28,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "notes": "seed: group guessed"
+  "notes": "seed: group guessed",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "5cccca9c2dd1c3abe3265486df5df48fa0a5edee9295f2bbc6894cd11d4dae72"
+  }
 }

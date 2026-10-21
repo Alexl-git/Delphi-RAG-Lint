@@ -7,12 +7,14 @@ group: documentation
 order: 40002
 since: 0.93.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # doc-drift
 
 Diagnostic that computes deterministic doc-vs-code drift findings for one symbol.
+
+Read this when you want to know why an existing doc comment is considered out of date. doc-drift prints the deterministic doc-versus-code drift findings for one symbol.
 
 ## How to run it
 

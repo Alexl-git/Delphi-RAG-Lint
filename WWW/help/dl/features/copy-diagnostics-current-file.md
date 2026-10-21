@@ -7,12 +7,14 @@ group: linting
 order: 30002
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Copy Diagnostics (Current File)
 
 Puts the current file's lint findings onto the clipboard.
+
+Read this when you want to paste the current file findings elsewhere instead of reading them in the IDE. It puts the file lint findings onto the clipboard.
 
 ## How to run it
 

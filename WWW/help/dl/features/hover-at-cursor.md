@@ -7,12 +7,14 @@ group: search-navigation
 order: 20014
 since: 0.7.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Hover at Cursor
 
 Shows a hover card for the symbol under the editor caret: signature, documentation, and callers.
+
+Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.17.0-alpha",
   "summary": "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context",
+  "intro": "Read this when you want only the code that matters for one symbol instead of the whole file: it shows the symbol declaration, body and immediate context.",
   "wikiPage": "Symbol-Slice",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "032aa60f48a1e3446b8651dfaa80c24ebe153afa00633ec041ed954d79fc74ce"
+  }
 }

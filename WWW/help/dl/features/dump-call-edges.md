@@ -7,12 +7,14 @@ group: maintenance
 order: 120005
 since: 0.91.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # dump-call-edges
 
 Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows.
+
+Read this when callgraph, find-callees or call-path give a surprising answer and you want the raw material: it prints every resolved call edge in the index as ref_id|target_qname|confidence rows. Troubleshooting tool; needs a project index (--db).
 
 ## How to run it
 

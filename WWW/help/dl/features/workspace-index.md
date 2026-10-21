@@ -7,12 +7,14 @@ group: editor-integration
 order: 110015
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # workspace index
 
 Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass.
+
+Read this when you want to (re)build the indexes of every project in a workspace in one pass instead of one project at a time.
 
 ## How to run it
 

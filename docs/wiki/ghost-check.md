@@ -7,7 +7,7 @@ saving them to disk.
 
 ## Running it from the CLI
 ```
-drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--format json|text]
+drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]
 ```
 `<dproj>` is the project to compile. Give either a single
 `--unit <real.pas> --buffer <buf>` pair, or an `--overlays <manifest>` file

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.85.0-alpha",
   "summary": "Pulls a run of statements out of a routine into a new method",
+  "intro": "Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; the usage lists --apply and --no-backup for writing the change.",
   "wikiPage": "extract-method",
   "surfaces": [
     {
@@ -44,5 +45,11 @@
     }
   ],
   "audience": "both",
-  "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319"
+  "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "b51d3401b7089b31fc97e4085380b6e1b13f4c6f97c55493e69671626dac71c3"
+  }
 }

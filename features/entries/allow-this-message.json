@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.54.0-alpha",
   "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+  "intro": "Read this when a finding in the Structure form is a deliberate, reviewed exception rather than something to change. Right-click the finding and choose Allow this message to record a dl:ok review so it stops being reported.",
   "wikiPage": "Allow-this-message",
   "surfaces": [
     {
@@ -54,5 +55,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "229cbc7819d98e8ca8685ed2fcc0f223a39ca32062d7e73e3b7b5ad211c2756f"
+  }
 }

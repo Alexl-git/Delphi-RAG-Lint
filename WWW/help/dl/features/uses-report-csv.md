@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Exports the project's unit-dependency data as a CSV file.
 
+Read this when you need the uses graph outside the IDE, in a spreadsheet or another tool: it exports the unit-dependency data of the project as a CSV file.
+
 ## How to run it
 
 Full flag list: [uses-report in the CLI reference](../cli.md#uses-report).

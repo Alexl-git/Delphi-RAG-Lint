@@ -7,12 +7,14 @@ group: compiler
 order: 90012
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Recover Buffer-Compile Files
 
 Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash).
+
+Read this if a Compile Buffer (unsaved) run was interrupted, for example by a crash. It restores any file left holding the unsaved-buffer content so no unit keeps overlaid text instead of its saved original; the IDE can run it for you.
 
 ## Where to click
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Lists callers of a routine by name, with an option to restrict results to precise, resolved callers",
+  "intro": "Read this to see who calls a routine. Give it the bare member name; with --resolved it keeps only precise, resolved callers and also shows who reads or writes a property or field.",
   "wikiPage": "query-find-callers",
   "surfaces": [
     {
@@ -39,5 +40,11 @@
   ],
   "audience": "both",
   "pitfalls": ["the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites."],
-  "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466"
+  "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "bdfa7053d64354f1d75decc456cca46315c4a31e99256218e25fe6f8592b5f51"
+  }
 }

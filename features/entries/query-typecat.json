@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Resolves a type's category -- float, string, class, interface, and so on",
+  "intro": "Read this when you need to know what kind of type a name is, such as float, string, class or interface, before writing code against it. Give it the type name and it resolves the category from the index.",
   "wikiPage": "query-typecat",
   "surfaces": [
     {
@@ -29,5 +30,16 @@
       "help": ["  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "190e547ee68725bff739735252e3d2075cdf218916299061998d22229052f07e"
+  }
 }

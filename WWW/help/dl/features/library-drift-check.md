@@ -7,12 +7,14 @@ group: maintenance
 order: 120009
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Library Drift Check
 
 Flags registered library roots that have source on disk but nothing in the index.
+
+Read this when a library index may have gone stale or was never built. It checks the registered library roots and flags any that have source on disk but nothing in the index; it exits 2 when it finds drift.
 
 ## How to run it
 

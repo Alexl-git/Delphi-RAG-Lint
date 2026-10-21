@@ -7,12 +7,14 @@ group: documentation
 order: 40009
 since: 1.10.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # shared-unit
 
 Reads or extends the dl:shared marker on a unit, recording which projects share it.
+
+Read this when one unit is used by more than one project and you want that recorded in the source: shared-unit shows or extends the dl:shared marker, as a dry run until you add --apply.
 
 ## How to run it
 

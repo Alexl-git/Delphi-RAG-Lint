@@ -7,12 +7,14 @@ group: search-navigation
 order: 20025
 since: 0.21.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Show Signature Help
 
 Shows parameter help for the call being typed at the editor caret.
+
+Read this while writing a call and you need the parameter list and order of the routine: it shows signature help at the caret, bound to Ctrl+Alt+S.
 
 ## Where to click
 

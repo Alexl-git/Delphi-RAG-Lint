@@ -7,12 +7,14 @@ group: documentation
 order: 40006
 since: 0.90.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Document project
 
 Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project.
+
+Read this when a whole project needs documentation coverage. Right-click in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration the project owns.
 
 ## How to run it
 

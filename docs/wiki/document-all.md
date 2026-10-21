@@ -7,7 +7,7 @@ once, rather than one project at a time.
 ## Running it from the CLI
 
 ```
-drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]
+drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]
 ```
 
 Like the other batch document modes, the default is facts-only: an empty

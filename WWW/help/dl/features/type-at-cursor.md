@@ -7,12 +7,14 @@ group: search-navigation
 order: 20029
 since: 0.19.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Type at Cursor
 
 Resolves the static type of the expression under the editor caret.
+
+Read this when you are not sure what type an expression has: Type at Cursor resolves the static type of the expression under the editor caret.
 
 ## How to run it
 

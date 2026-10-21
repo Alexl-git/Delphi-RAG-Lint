@@ -7,12 +7,14 @@ group: graphs-reports
 order: 70001
 since: 0.99.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # butterfly
 
 Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command.
+
+Read this when you want both directions of a symbol call graph in one picture. butterfly joins its callers (upward wing) and callees (downward wing) into one chart, as dot, mermaid, text or json, in a single command.
 
 ## How to run it
 

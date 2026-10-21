@@ -6,6 +6,7 @@
   "status": "internal",
   "since": "0.92.0-alpha",
   "summary": "Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex",
+  "intro": "Read this only when debugging why a conditional-compilation branch was taken or skipped: it dumps how the preprocessor evaluated its expressions, and pairs with dump-pp-lex. Diagnostic verb, not part of the documented preprocessor workflow.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "agent",
-  "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed"
+  "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
+  }
 }

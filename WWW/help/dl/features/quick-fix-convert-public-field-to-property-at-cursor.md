@@ -7,12 +7,14 @@ group: refactoring
 order: 50008
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Quick-Fix: Convert Public Field to Property at Cursor
 
 Rewrites a public field under the caret as a property.
+
+Read this when you are tightening a class public surface. With the caret on a public field, this rewrites it as a property.
 
 ## Where to click
 

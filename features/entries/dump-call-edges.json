@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.91.0-alpha",
   "summary": "Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows",
+  "intro": "Read this when callgraph, find-callees or call-path give a surprising answer and you want the raw material: it prints every resolved call edge in the index as ref_id|target_qname|confidence rows. Troubleshooting tool; needs a project index (--db).",
   "wikiPage": "dump-call-edges",
   "surfaces": [
     {
@@ -23,5 +24,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "62c4461cdfa3aefef42ca5c7bf6364c980d541e37290f80e54501f819cc31f00"
+  }
 }

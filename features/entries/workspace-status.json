@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Reports the status of every project registered in a .drag-lint-workspace.json workspace config",
+  "intro": "Read this when you want to see at a glance which projects of a workspace are indexed, stale or missing.",
   "wikiPage": "workspace-status",
   "surfaces": [
     {
@@ -23,5 +24,16 @@
       "help": ["  drag-lint workspace status [--config <.drag-lint-workspace.json>]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "914757e99e0decf7ce7bc9436a79c93311547616431328c67f81998aa295eb99"
+  }
 }

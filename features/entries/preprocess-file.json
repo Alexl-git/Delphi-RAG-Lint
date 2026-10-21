@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.92.0-alpha",
   "summary": "Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set",
+  "intro": "Read this when you need to see what the preprocessor makes of a file. It prints the IFDEF-resolved source under the defines you give it, without running a full compile; it is a diagnostic, not a daily tool.",
   "wikiPage": "preprocess-file",
   "surfaces": [
     {
@@ -39,5 +40,16 @@
       "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "5d546080815dd4cd618f9b24ee2831584c0715cf471eaf0d04ae757510d2a268"
+  }
 }

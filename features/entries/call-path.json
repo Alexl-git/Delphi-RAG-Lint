@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.91.0-alpha",
   "summary": "Finds the shortest resolved call path from one symbol to another",
+  "intro": "Read this when you want to know whether routine A ever reaches routine B and how. call-path prints the shortest resolved call path between two symbols, and exits 1 when there is none.",
   "wikiPage": "call-path",
   "surfaces": [
     {
@@ -38,5 +39,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "49514102a76bcb9c9f2898e1abfa44664423b77a67e5a3f5dd382915cae4d921"
+  }
 }

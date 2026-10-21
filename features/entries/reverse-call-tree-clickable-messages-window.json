@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.96.0-alpha",
   "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
+  "intro": "Read this when you want to click through the callers of a symbol instead of reading a flat report: the IDE shows the reverse call tree in the Messages window, and each line jumps to the caller.",
   "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",
   "surfaces": [
     {
@@ -39,5 +40,11 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window"
+  "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c15ca947dc8222256da52b4b5a0fba52510111c4a62d5e6d09859407fabc8a00"
+  }
 }

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Writes DocInsight documentation into every public declaration a project owns",
+  "intro": "Read this when a whole project needs documentation coverage instead of symbol-by-symbol work. It writes DocInsight comments into every public declaration the project owns, as a batch of reindex, document and reindex.",
   "wikiPage": "Auto-Document-Whole-Project",
   "surfaces": [
     {
@@ -89,5 +90,11 @@
       "help": ["  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment", "  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)", "  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)", "                                 scope: the compile closure restricted to the project's own roots (_D-RAG\\drag-lint-project.json, same declaration lint-all reads).", "                                 Vendored roots are named and skipped; --document-third-party writes to them too."]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c1433343d20f55bacf35ac6eec768a68f533ac3994cd7e522aee20f9304d1749"
+  }
 }

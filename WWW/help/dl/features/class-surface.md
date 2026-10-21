@@ -7,12 +7,14 @@ group: search-navigation
 order: 20002
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Class Surface
 
 Shows the public surface of a class: its members and signatures, without the method bodies.
+
+Read this when you want to know what a class exposes without reading the whole unit. Class Surface shows its members and signatures, without the method bodies.
 
 ## How to run it
 

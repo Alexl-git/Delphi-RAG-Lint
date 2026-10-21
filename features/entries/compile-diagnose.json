@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
+  "intro": "Read this when you want compiler errors and warnings for the current file or project inside the IDE. It compiles the project or unit and folds the compiler messages into drag-lint findings.",
   "wikiPage": "Compile-Diagnose",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "fbb63edce818cb3fcf658606909ac93c1684c8edbbe5aa87364b6c65faf4be1c"
+  }
 }

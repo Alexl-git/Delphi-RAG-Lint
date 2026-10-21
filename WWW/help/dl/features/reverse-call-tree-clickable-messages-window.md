@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller.
 
+Read this when you want to click through the callers of a symbol instead of reading a flat report: the IDE shows the reverse call tree in the Messages window, and each line jumps to the caller.
+
 ## How to run it
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).

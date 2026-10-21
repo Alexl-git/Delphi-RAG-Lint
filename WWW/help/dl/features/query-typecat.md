@@ -7,12 +7,14 @@ group: search-navigation
 order: 20022
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query typecat
 
 Resolves a type's category -- float, string, class, interface, and so on.
+
+Read this when you need to know what kind of type a name is, such as float, string, class or interface, before writing code against it. Give it the type name and it resolves the category from the index.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.25.0-alpha",
   "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",
+  "intro": "Read this when you want to start a DocInsight comment on one specific method, type or property. It produces a doc-comment stub for the chosen qualified symbol.",
   "wikiPage": "Doc-Comment-Stub-symbol",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "842f3c85dac814164f2094eac345f8cb517426619a705f4cede9fb124a0dced4"
+  }
 }

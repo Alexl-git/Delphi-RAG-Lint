@@ -7,12 +7,14 @@ group: documentation
 order: 40005
 since: 0.90.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Document it
 
 Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node.
+
+Read this when one declaration needs a doc comment and you do not want to touch the rest of the unit. Right-click the symbol in the Structure form and choose Document it to generate or repair its managed DocInsight comment.
 
 ## How to run it
 

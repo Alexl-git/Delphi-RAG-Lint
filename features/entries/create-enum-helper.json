@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.94.0-alpha",
   "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
+  "intro": "Read this when you have an enum and want the usual conversion helpers without writing them by hand. create-enum-helper generates a Byte-family record helper with ToByte, FromByte, ToInteger, FromInteger, ToString and FromString; it is a preview unless you pass --apply.",
   "wikiPage": "create-enum-helper",
   "surfaces": [
     {
@@ -43,5 +44,11 @@
     }
   ],
   "audience": "both",
-  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226"
+  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "62bd794e7361fe4a80c698b54589d793b7b49d9643362609bbe8354eb3f7bf04"
+  }
 }

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.95.0-alpha",
   "summary": "The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog",
+  "intro": "Read this when you want to see which lint rules exist, which are on by default and which have an auto-fix, or to turn rules on and off. Open it from the drag-lint menu; it loads the catalog the same way as drag-lint rules --json.",
   "wikiPage": "drag-lint-Options",
   "surfaces": [
     {
@@ -13,5 +14,11 @@
       "path": "drag-lint > drag-lint Options..."
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0d0fae9b811328f06e081c70594d77e6e809fdcb36128d567c6ac5446fefb71b"
+  }
 }

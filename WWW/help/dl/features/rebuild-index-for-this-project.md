@@ -7,12 +7,14 @@ group: indexing
 order: 10005
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Rebuild Index for This Project
 
 Walks a project's .dproj compile closure and (re)builds its index.
+
+Read this after adding or moving units, or when hover, Find Usages or lint results feel stale. It walks the project .dproj compile closure and rebuilds the index for that project.
 
 ## How to run it
 
@@ -22,17 +24,13 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
+| `--project` | `<file.dproj>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
+| `--recompile` |  |  |  |
+| `--rebuild` |  |  |  |
+| `--dry-run` |  |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
-| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
-| `--max-file-kb` | `N` |  |  |
-| `--no-use-ignore` |  |  |  |
-| `--no-sql-ms` |  |  |  |
-| `--deep` |  |  |  |
-| `--shallow` |  |  |  |
-| `--exclude-under` |  |  |  |
-| `--include-only` |  |  |  |
 
 ## Where to click
 

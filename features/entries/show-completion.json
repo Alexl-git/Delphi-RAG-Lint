@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.21.0-alpha",
   "summary": "Shows an index-backed completion list at the editor caret",
+  "intro": "Read this when you want to know what you can type next at the editor caret: it shows an index-backed completion list, bound to Ctrl+Alt+C.",
   "wikiPage": "Show-Completion",
   "surfaces": [
     {
@@ -13,5 +14,11 @@
       "path": "drag-lint > Show Completion"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "36c12cd452ce25fb7b38bc8866c3e1df191b0e73d34725fa92fb41bdc65feb42"
+  }
 }

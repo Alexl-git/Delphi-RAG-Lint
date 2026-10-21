@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.82.0-alpha",
   "summary": "Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution",
+  "intro": "Read this when a reference-derived answer (callers, doc facts, unused-symbol findings) looks wrong: dump-refs prints every ref in one file with the symbol each was attributed to. Troubleshooting tool; needs a project index (--db).",
   "wikiPage": "dump-refs",
   "surfaces": [
     {
@@ -23,5 +24,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d4a070974443246aa8a821f604a21cdc813d0f43bdbd81c03ba1a10042631d97"
+  }
 }

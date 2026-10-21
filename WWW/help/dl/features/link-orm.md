@@ -7,12 +7,14 @@ group: database
 order: 100002
 since: 0.40.5-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # link-orm
 
 Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both.
+
+Read this when you want queries that cross from Delphi code into the SQL schema it talks to. It links a project index to a SQL index so ORM-style relationships between code symbols and SQL objects can be resolved across both.
 
 ## How to run it
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.90.0-alpha",
   "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
+  "intro": "Read this when a whole unit needs documentation, not just one symbol. Right-click the unit in the Structure form and choose Document unit to generate or repair managed DocInsight comments for its public declarations.",
   "wikiPage": "Document-unit",
   "surfaces": [
     {
@@ -41,5 +42,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d8c3ce4dded9eb28eb0dc79bbf264950e0501c23e4c0edd83ea8debe8177e36d"
+  }
 }

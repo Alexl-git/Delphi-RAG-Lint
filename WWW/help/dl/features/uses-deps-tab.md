@@ -7,12 +7,14 @@ group: refactoring
 order: 50015
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Uses & Deps Tab
 
 Open the Uses & Deps tab to review uses-clause fixes and apply them.
+
+Read this when you want to review uses-clause fixes in one place: the Uses & Deps tab lists them and lets you apply the ones you accept.
 
 ## Where to click
 

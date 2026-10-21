@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.40.5-alpha",
   "summary": "Runs one read-only SQL statement against an index database and prints the result set",
+  "intro": "Read this when your question has no verb of its own: sql runs one read-only SQL statement against an index database, for example a join across symbols, refs and files, with row and time caps.",
   "wikiPage": "sql",
   "surfaces": [
     {
@@ -49,5 +50,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "notes": "seed: group guessed"
+  "notes": "seed: group guessed",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "62cc4fd79410b4a066185676d88535b83f84d2841535227c8e7a71b66dd40d14"
+  }
 }

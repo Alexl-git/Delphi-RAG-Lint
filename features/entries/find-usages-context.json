@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.33.0-alpha",
   "summary": "Lists references to the symbol represented by a Structure-tree node",
+  "intro": "Read this when you are browsing the Structure form and want the usages of a symbol without first opening it in the editor. Right-click the tree node and choose Find Usages; it uses the usages verb behind the scenes.",
   "wikiPage": "Find-Usages-context",
   "surfaces": [
     {
@@ -42,5 +43,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0171c1cbf204531cd8b99084ae20f20d81abb59498852aad14d9374ed88bb955"
+  }
 }

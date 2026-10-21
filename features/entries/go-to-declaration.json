@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
+  "intro": "Read this when you are browsing the Structure form and want to land on where a symbol is declared. Right-click the tree node and choose Go to Declaration; it is an editor jump with no command line equivalent and needs no index.",
   "wikiPage": "Go-to-Declaration",
   "surfaces": [
     {
@@ -15,5 +16,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "2aa72f4dc4986c278fd02c7f3a87aa5302f6d30e94f99ee7bf83895c53c6384c"
+  }
 }

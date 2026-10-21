@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
+  "intro": "Read this when you want to review uses-clause fixes in one place: the Uses & Deps tab lists them and lets you apply the ones you accept.",
   "wikiPage": "Features",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: needs own page; seed: since unknown"
+  "notes": "seed: needs own page; seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0bf3538cc94f5ecde760f03ee0fea048fe0414b596efd2894f2b9fb2e9524f9e"
+  }
 }

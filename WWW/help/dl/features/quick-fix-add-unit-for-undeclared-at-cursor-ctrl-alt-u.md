@@ -7,12 +7,14 @@ group: refactoring
 order: 50007
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
 
 Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause.
+
+Read this when the compiler would report an undeclared identifier. Put the caret on it (Ctrl+Alt+U) and drag-lint finds the unit that declares it and adds that unit to your uses clause.
 
 ## Where to click
 

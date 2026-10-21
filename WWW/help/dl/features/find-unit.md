@@ -7,12 +7,14 @@ group: search-navigation
 order: 20007
 since: 0.69.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # find-unit
 
 Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause.
+
+Read this when a symbol is undeclared and you need the unit to add to uses. find-unit --name X --in file looks the declaring unit up in the index and can add it to the file (--apply, with a backup unless --no-backup).
 
 ## How to run it
 

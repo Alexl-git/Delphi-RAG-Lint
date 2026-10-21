@@ -7,12 +7,14 @@ group: linting
 order: 30011
 since: 0.16.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Format with YADF
 
 Reformats one Pascal unit by driving the external YADF formatter.
+
+Read this when you want one unit reformatted by the YADF formatter. Careful: drag-lint format rewrites the file in place; try --diff (formats a copy and prints the diff) or --dry-run first, and commit before running it for real.
 
 ## How to run it
 

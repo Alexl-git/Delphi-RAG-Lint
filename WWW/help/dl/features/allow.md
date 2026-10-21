@@ -7,12 +7,14 @@ group: refactoring
 order: 50001
 since: 0.54.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # allow
 
 Records a dl:ok review of one finding, so it stops being reported without being fixed.
+
+Read this when a lint finding is a deliberate, reviewed exception that you do not intend to fix. allow records a dl:ok review for that one finding (identified by file, line and rule) so it stops being reported; without --apply it is a dry run.
 
 ## How to run it
 

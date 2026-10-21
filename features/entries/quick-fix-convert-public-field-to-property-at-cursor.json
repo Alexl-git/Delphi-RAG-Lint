@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Rewrites a public field under the caret as a property",
+  "intro": "Read this when you are tightening a class public surface. With the caret on a public field, this rewrites it as a property.",
   "wikiPage": "Quick-Fix-Convert-Public-Field-to-Property-at-Cursor",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown"
+  "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "4ff8916a3ab17cdaa89d32d6307e282c5a9f702b06734c01bb7e90feae73b9bd"
+  }
 }

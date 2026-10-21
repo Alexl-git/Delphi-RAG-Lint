@@ -7,12 +7,14 @@ group: refactoring
 order: 50004
 since: 0.94.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Create helper class
 
 Generates a Byte-family record helper for an enum type represented by a Structure-tree node.
+
+Read this when you have an enum and want the usual conversion helpers without writing them by hand. Right-click the enum in the Structure form and choose Create helper class to generate a Byte-family record helper with ToByte, FromByte, ToInteger, FromInteger, ToString and FromString.
 
 ## How to run it
 

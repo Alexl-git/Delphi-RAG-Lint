@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.48.0-alpha",
   "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
+  "intro": "Read this when you want architecture-level findings that need the whole project, such as god-class, circular-uses, unused-public-symbol or layering-violation, rather than per-file diagnostics. It runs those project-scoped rules against an index.",
   "wikiPage": "lint-project",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c023c73ff36c9cd8b953a042a5388ea2576aa1843535b78057be5a7125e73038"
+  }
 }

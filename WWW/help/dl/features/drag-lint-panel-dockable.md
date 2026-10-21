@@ -7,12 +7,14 @@ group: editor-integration
 order: 110005
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # drag-lint Panel (dockable)
 
 Opens the main drag-lint dockable tool window inside the IDE.
+
+Read this when you want the main drag-lint tool window docked beside your editor instead of as a separate window. Choose drag-lint > drag-lint Panel (dockable); it only needs the IDE plugin loaded.
 
 ## Where to click
 

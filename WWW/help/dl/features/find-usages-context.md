@@ -7,12 +7,14 @@ group: search-navigation
 order: 20009
 since: 0.33.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Find Usages
 
 Lists references to the symbol represented by a Structure-tree node.
+
+Read this when you are browsing the Structure form and want the usages of a symbol without first opening it in the editor. Right-click the tree node and choose Find Usages; it uses the usages verb behind the scenes.
 
 ## How to run it
 

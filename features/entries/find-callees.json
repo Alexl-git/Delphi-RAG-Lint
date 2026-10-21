@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.91.0-alpha",
   "summary": "Lists the resolved outgoing calls of one routine",
+  "intro": "Read this when you want to know what a routine actually calls, resolved through the index rather than by reading its source. find-callees --qname Foo.Bar lists its outgoing calls; add --json for machine-readable output.",
   "wikiPage": "find-callees",
   "surfaces": [
     {
@@ -30,5 +31,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "6ee99913606d7ea5f33c9a0e3ed461ec2a1f5c8047aae9409864a4d5ca304294"
+  }
 }

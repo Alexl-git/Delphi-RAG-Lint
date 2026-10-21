@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.10.0-alpha",
   "summary": "This page documents the \"View > Tool Windows > drag-lint Graph\" menu entry -- the drag-lint graph viewer",
+  "intro": "Read this when you want the call/reference graph viewer from RAD Studio standard Tool Windows menu. It opens the same window as drag-lint Graph (dockable), served by the IDE plugin, and needs drag_lint_graph.exe deployed beside the plugin.",
   "wikiPage": "drag-lint-Graph",
   "surfaces": [
     {
@@ -13,5 +14,11 @@
       "path": "View > Tool Windows > drag-lint Graph"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "fe2ecaa02235194b48e14031ea7aacf721c7f6eb777d61f4762d39560fe8e749"
+  }
 }

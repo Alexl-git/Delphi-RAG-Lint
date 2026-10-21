@@ -7,12 +7,14 @@ group: documentation
 order: 40008
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Effect Summary Legend
 
 The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index.
+
+Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields) and `p<k>` (writes through parameter k, counted from 0).
 
 ## Details
 

@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations.
 
+Read this when you need the enum types of a project as Delphi const declarations, for interop or code generation. Run drag-lint export enums --format delphi-const against the project index, or use drag-lint > Generate & Export in the IDE.
+
 ## How to run it
 
 Full flag list: [export in the CLI reference](../cli.md#export).

@@ -7,12 +7,14 @@ group: search-navigation
 order: 20026
 since: 0.30.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Show Structure
 
 Shows a structural outline of the current unit.
+
+Read this when you want a unit as a navigable outline of its types and members instead of scrolling the source: Show Structure opens that tree for the current unit.
 
 ## Where to click
 

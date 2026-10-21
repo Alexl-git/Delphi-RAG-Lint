@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.43.0-alpha",
   "summary": "Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node",
+  "intro": "Read this when a Structure form node is a declaration (such as an interface method) and you want its implementation body. Right-click the node and choose Go to Implementation; it is an editor jump that needs no index.",
   "wikiPage": "Go-to-Implementation",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
       "caption": "Go to Implementation"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c6ccf13a8d21380271d66a881edd1e92085d1e3bc670d18e7a779b441070c2e4"
+  }
 }

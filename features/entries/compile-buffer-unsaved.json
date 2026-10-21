@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
+  "intro": "Read this when you want compiler diagnostics for edits you have not saved yet. It compiles the project with the current editor buffer substituted for its file on disk, then restores the original file unchanged.",
   "wikiPage": "Compile-Buffer-unsaved",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "23434adeb49f37ca5b342c763cf57dce718fc1c5a000d6b4774de49acbfb02b1"
+  }
 }

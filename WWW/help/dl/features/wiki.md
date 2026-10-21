@@ -7,12 +7,14 @@ group: search-navigation
 order: 20031
 since: 1.7.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # wiki
 
 Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it.
+
+Read this when you have a human phrase such as the scheduler and want the code behind it: wiki routes the phrase to the symbol that a team has marked with a dl:wiki block, and can list or check all topics.
 
 ## How to run it
 

@@ -7,12 +7,14 @@ group: maintenance
 order: 120003
 since: 0.18.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # bench-context
 
 Benchmarks the context command by building context bundles for a sample of symbols against a database.
+
+Read this when you want to measure what building context bundles costs. bench-context runs the context command over a sample of symbols in a database (--n sets the sample size); it is a benchmark, not a way to inspect one symbol.
 
 ## How to run it
 

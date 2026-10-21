@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.93.0-alpha",
   "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
+  "intro": "Read this when you want to know why an existing doc comment is considered out of date. doc-drift prints the deterministic doc-versus-code drift findings for one symbol.",
   "wikiPage": "doc-drift",
   "surfaces": [
     {
@@ -30,5 +31,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "e7129abd51f83d6c910608813277b6334776faf78f049f08c54738b8a63f15b2"
+  }
 }

@@ -7,7 +7,7 @@ compile-style verification of one target without a full project build.
 ## Running it from the CLI
 
 ```
-drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]
+drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]
 ```
 
 ## Reaching it in the IDE

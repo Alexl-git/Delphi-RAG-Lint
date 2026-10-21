@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.7.0-alpha",
   "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+  "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card.",
   "wikiPage": "Hover-at-Cursor",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
+  }
 }

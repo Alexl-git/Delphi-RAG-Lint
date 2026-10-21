@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "1.11.0-alpha",
   "summary": "Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?",
+  "intro": "Read this before you save or commit an edit to a unit that other units use. It checks whether an interface change reaches any dependent, which lint-all cannot show because a removed symbol simply stops being linted.",
   "wikiPage": "lint-tree",
   "surfaces": [
     {
@@ -55,5 +56,16 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["does an interface edit to `<B.pas>` reach any dependent? Exits 0 whether or not it found anything; 2 means it could NOT run. --baseline pins the OLD side to an edit-episode capture -- without it the OLD side is the live index, which is CLI/manual use only."]
+  "pitfalls": ["does an interface edit to `<B.pas>` reach any dependent? Exits 0 whether or not it found anything; 2 means it could NOT run. --baseline pins the OLD side to an edit-episode capture -- without it the OLD side is the live index, which is CLI/manual use only."],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "8669b8cdce32045d3abe557243097a7bc4dd21a96f8c0bd8adc538419d4f755e"
+  }
 }

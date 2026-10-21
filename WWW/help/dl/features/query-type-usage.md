@@ -7,12 +7,14 @@ group: search-navigation
 order: 20021
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query type-usage
 
 Answers one question, of a list of type names, about one file.
+
+Read this when you have a set of type names, such as types you are about to retire, and need to know whether one file really references any of them. Give it the file and the names; it answers for that one file.
 
 ## How to run it
 

@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers.
 
+Read this when you want to see the outstanding work left in code: it lists TODO, FIXME, HACK, XXX, REVIEW and NOTE markers in a path, as text or JSON.
+
 ## How to run it
 
 Full flag list: [todos in the CLI reference](../cli.md#todos).

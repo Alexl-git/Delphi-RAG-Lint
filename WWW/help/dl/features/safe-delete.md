@@ -7,12 +7,14 @@ group: refactoring
 order: 50011
 since: 0.69.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # safe-delete
 
 Deletes a symbol if and only if it has zero references in the index.
+
+Read this when you want to remove dead code without breaking a live caller: safe-delete deletes a symbol only if the index shows zero references to it.
 
 ## How to run it
 

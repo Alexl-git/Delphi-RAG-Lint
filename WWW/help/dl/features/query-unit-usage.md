@@ -7,12 +7,14 @@ group: search-navigation
 order: 20023
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query unit-usage
 
 Answers one question, about one unit and one file.
+
+Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. It tells you whether one file references anything a given unit exports; an empty answer means the uses entry is a dead import.
 
 ## How to run it
 

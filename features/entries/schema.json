@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.3.0-alpha",
   "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
+  "intro": "Read this when you need to know exactly what an index database contains before you query it: schema prints the schema version, every table and column, and row counts, read-only.",
   "wikiPage": "schema",
   "surfaces": [
     {
@@ -30,5 +31,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "3be8eb2ba2052cfe4b7ba610687f689f8494e18d725a205aec8f2f7ce803409b"
+  }
 }

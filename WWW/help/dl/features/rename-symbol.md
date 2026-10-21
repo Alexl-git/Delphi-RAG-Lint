@@ -7,12 +7,14 @@ group: refactoring
 order: 50010
 since: 0.24.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Rename Symbol
 
 Renames a symbol across the whole indexed project.
+
+Read this instead of a text find and replace when a symbol appears in many units. It renames the symbol and every reference the index knows about across the indexed project in one step (Ctrl+Alt+R in the IDE).
 
 ## How to run it
 

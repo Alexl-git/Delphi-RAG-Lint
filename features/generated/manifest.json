@@ -106,6 +106,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Writes DocInsight documentation into every public declaration a project owns",
+      "intro": "Read this when a whole project needs documentation coverage instead of symbol-by-symbol work. It writes DocInsight comments into every public declaration the project owns, as a batch of reindex, document and reindex.",
       "wikiPage": "Auto-Document-Whole-Project",
       "surfaces": [
         {
@@ -189,7 +190,13 @@
           "help": ["  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment", "  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)", "  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)", "                                 scope: the compile closure restricted to the project's own roots (_D-RAG\\drag-lint-project.json, same declaration lint-all reads).", "                                 Vendored roots are named and skipped; --document-third-party writes to them too."]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c1433343d20f55bacf35ac6eec768a68f533ac3994cd7e522aee20f9304d1749"
+      }
     },
     {
       "id": "migrate-dbs",
@@ -199,6 +206,7 @@
       "status": "shipped",
       "since": "1.3.0-alpha",
       "summary": "Moves project index databases into each project's own D-RAG folder, matching the current index layout",
+      "intro": "Read this after an index layout change, or when index databases are stranded in an old shared folder. It moves each project index into that project own _D-RAG folder; without --apply it only reports what it would move.",
       "wikiPage": "migrate-dbs",
       "surfaces": [
         {
@@ -218,7 +226,18 @@
           "help": ["  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project's _D-RAG folder", "  drag-lint --version", "  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,", "                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS", "                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.", "                               There is no per-verb help TEXT -- one banner answers them all.", ""]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "13dbb320b55ad2ee880d82134b51e9e207927f26a8c8a230b9292d96eb6ab6e7"
+      }
     },
     {
       "id": "pp-profile",
@@ -228,6 +247,7 @@
       "status": "shipped",
       "since": "0.92.0-alpha",
       "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
+      "intro": "Read this when you need to know which compiler defines are active for a project, platform and configuration, before trusting a preprocess or index result. It prints the resolved define set, one symbol per line, exactly as the indexer sees it.",
       "wikiPage": "pp-profile",
       "surfaces": [
         {
@@ -250,7 +270,18 @@
           "help": ["  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "fbddd135d0b83191195de3f33fee93bc9fc38de47103ecfa150cacd2a99b14fd"
+      }
     },
     {
       "id": "purge-locals",
@@ -260,6 +291,7 @@
       "status": "shipped",
       "since": "0.91.0-alpha",
       "summary": "A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space",
+      "intro": "Read this when an index database has grown larger than you want and you do not need per-local symbol lookups right now. It drops local-variable and parameter symbols and runs VACUUM; the call graph is unchanged and the symbols return on the next index.",
       "wikiPage": "purge-locals",
       "surfaces": [
         {
@@ -280,7 +312,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d3c4ee5ab229b6860c96e0cf43da2f0e8f6b0656de9e4e73e4bf4310b2f3823b"
+      }
     },
     {
       "id": "rebuild-index-for-this-project",
@@ -290,6 +333,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Walks a project's .dproj compile closure and (re)builds its index",
+      "intro": "Read this after adding or moving units, or when hover, Find Usages or lint results feel stale. It walks the project .dproj compile closure and rebuilds the index for that project.",
       "wikiPage": "Rebuild-Index-for-This-Project",
       "surfaces": [
         {
@@ -299,11 +343,24 @@
         {
           "type": "cli",
           "verb": "index",
-          "usage": "drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]",
+          "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]",
           "flags": [
+            {
+              "name": "--project",
+              "arg": "<file.dproj>"
+            },
             {
               "name": "--db",
               "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--recompile"
+            },
+            {
+              "name": "--rebuild"
+            },
+            {
+              "name": "--dry-run"
             },
             {
               "name": "--watch"
@@ -311,38 +368,17 @@
             {
               "name": "--interval",
               "arg": "N"
-            },
-            {
-              "name": "--library-db",
-              "arg": "<lib.sqlite>",
-              "summary": "consult another index for calls THIS one cannot resolve."
-            },
-            {
-              "name": "--max-file-kb",
-              "arg": "N"
-            },
-            {
-              "name": "--no-use-ignore"
-            },
-            {
-              "name": "--no-sql-ms"
-            },
-            {
-              "name": "--deep"
-            },
-            {
-              "name": "--shallow"
-            },
-            {
-              "name": "--exclude-under"
-            },
-            {
-              "name": "--include-only"
             }
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3fa7babcf81b5ab9acab511b7f62873c3df29c88e9b01c6a70bb98f479d93621"
+      }
     },
     {
       "id": "register-project",
@@ -352,6 +388,7 @@
       "status": "shipped",
       "since": "1.20.4-alpha",
       "summary": "Add a new project to the manifest so index --all and the IDE can see it",
+      "intro": "Read this when a new project is not yet known to drag-lint. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -375,7 +412,18 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page"
+      "notes": "seed: needs own page",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "4caeb5467c27dc1118726ace2ce053ad97a7adc4c79a7110df17756bb42caa55"
+      }
     },
     {
       "id": "schema",
@@ -385,6 +433,7 @@
       "status": "shipped",
       "since": "0.3.0-alpha",
       "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
+      "intro": "Read this when you need to know exactly what an index database contains before you query it: schema prints the schema version, every table and column, and row counts, read-only.",
       "wikiPage": "schema",
       "surfaces": [
         {
@@ -409,7 +458,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3be8eb2ba2052cfe4b7ba610687f689f8494e18d725a205aec8f2f7ce803409b"
+      }
     },
     {
       "id": "show-resolved-dbs-debug",
@@ -419,6 +479,7 @@
       "status": "shipped",
       "since": "0.60.0-alpha",
       "summary": "Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query",
+      "intro": "Read this when a query seems to answer from the wrong index: it prints which database(s) drag-lint would use for a project, a file or a platform, without running a real query.",
       "wikiPage": "Show-Resolved-DBs-debug",
       "surfaces": [
         {
@@ -446,7 +507,13 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."]
+      "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "114b4503d5e5be415d7beb7ce0d7f897905e73234774f281a99b7ad8d555e784"
+      }
     },
     {
       "id": "call-path",
@@ -456,6 +523,7 @@
       "status": "shipped",
       "since": "0.91.0-alpha",
       "summary": "Finds the shortest resolved call path from one symbol to another",
+      "intro": "Read this when you want to know whether routine A ever reaches routine B and how. call-path prints the shortest resolved call path between two symbols, and exits 1 when there is none.",
       "wikiPage": "call-path",
       "surfaces": [
         {
@@ -488,7 +556,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "49514102a76bcb9c9f2898e1abfa44664423b77a67e5a3f5dd382915cae4d921"
+      }
     },
     {
       "id": "class-surface",
@@ -498,6 +572,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Shows the public surface of a class: its members and signatures, without the method bodies",
+      "intro": "Read this when you want to know what a class exposes without reading the whole unit. Class Surface shows its members and signatures, without the method bodies.",
       "wikiPage": "Class-Surface",
       "surfaces": [
         {
@@ -532,7 +607,13 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."]
+      "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "33468bcf47a4aa5ed6f13f368b9c77b9820ef9bb367b4364629cf946590d86fc"
+      }
     },
     {
       "id": "compiler-hints",
@@ -542,6 +623,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity",
+      "intro": "Read this when you want to review compiler hints and warnings without running a build. Compiler Hints lists the ones already imported into the index, filterable by hint code or severity.",
       "wikiPage": "Compiler-Hints",
       "surfaces": [
         {
@@ -572,7 +654,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "e5a3308c92221479911958a1098bfd8178ea2136b3cb649a80ae810a762f2bb3"
+      }
     },
     {
       "id": "context",
@@ -582,6 +670,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers",
+      "intro": "Read this before editing or explaining a symbol. context returns a compact bundle, its doc comment, class surface, own body and a capped list of callers, so you read a fraction of what a whole-file read costs.",
       "wikiPage": "context",
       "surfaces": [
         {
@@ -620,7 +709,18 @@
       ],
       "audience": "both",
       "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work."],
-      "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633"
+      "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "1969d373cece10036a4eac6e514e280e8162d03221a8a4f892a2127f77804a23"
+      }
     },
     {
       "id": "find-undocumented-public",
@@ -630,6 +730,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Uses query find to list indexed symbols filtered by documentation state, kind, or visibility",
+      "intro": "Read this when you want to know which public symbols still lack a DocInsight comment. query find with --no-docs and --public lists them; --doc-tag and --doc-contains filter by comment content instead. Also under drag-lint > Code Quality in the IDE.",
       "wikiPage": "Find-Undocumented-public",
       "surfaces": [
         {
@@ -681,7 +782,13 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["--no-docs is a FILTER (UNDOCUMENTED symbols only), not \"hide the docs\" -- to list them all use query --kind `<k>` --all", "--decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`) -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.", "case-insensitive, over /// blocks and harvested // above a declaration.", "declaration clauses the index does not model. `query --text` sees string literals and comment prose, not declaring lines -- this reads the declaring line instead."]
+      "pitfalls": ["--no-docs is a FILTER (UNDOCUMENTED symbols only), not \"hide the docs\" -- to list them all use query --kind `<k>` --all", "--decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`) -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.", "case-insensitive, over /// blocks and harvested // above a declaration.", "declaration clauses the index does not model. `query --text` sees string literals and comment prose, not declaring lines -- this reads the declaring line instead."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "1224ed621509a6e90deef495b421e73d62eb689ee0c3af7e15bb93be92315f01"
+      }
     },
     {
       "id": "find-usages",
@@ -691,6 +798,7 @@
       "status": "shipped",
       "since": "0.33.0-alpha",
       "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
+      "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); it is served by the IDE plugin and has no one-shot command line verb.",
       "wikiPage": "Find-Usages",
       "surfaces": [
         {
@@ -698,7 +806,13 @@
           "path": "drag-lint > Find Usages..."
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9002cd9fe23ab0cff78aa754409d8ffbf6c163a63c1816ac99ab8fba2fb3f61d"
+      }
     },
     {
       "id": "find-usages-context",
@@ -708,6 +822,7 @@
       "status": "shipped",
       "since": "0.33.0-alpha",
       "summary": "Lists references to the symbol represented by a Structure-tree node",
+      "intro": "Read this when you are browsing the Structure form and want the usages of a symbol without first opening it in the editor. Right-click the tree node and choose Find Usages; it uses the usages verb behind the scenes.",
       "wikiPage": "Find-Usages-context",
       "surfaces": [
         {
@@ -744,7 +859,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0171c1cbf204531cd8b99084ae20f20d81abb59498852aad14d9374ed88bb955"
+      }
     },
     {
       "id": "find-callees",
@@ -754,6 +875,7 @@
       "status": "shipped",
       "since": "0.91.0-alpha",
       "summary": "Lists the resolved outgoing calls of one routine",
+      "intro": "Read this when you want to know what a routine actually calls, resolved through the index rather than by reading its source. find-callees --qname Foo.Bar lists its outgoing calls; add --json for machine-readable output.",
       "wikiPage": "find-callees",
       "surfaces": [
         {
@@ -778,7 +900,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "6ee99913606d7ea5f33c9a0e3ed461ec2a1f5c8047aae9409864a4d5ca304294"
+      }
     },
     {
       "id": "find-unit",
@@ -788,6 +916,7 @@
       "status": "shipped",
       "since": "0.69.0-alpha",
       "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
+      "intro": "Read this when a symbol is undeclared and you need the unit to add to uses. find-unit --name X --in file looks the declaring unit up in the index and can add it to the file (--apply, with a backup unless --no-backup).",
       "wikiPage": "find-unit",
       "surfaces": [
         {
@@ -823,7 +952,13 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "pitfalls": ["for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units."]
+      "pitfalls": ["for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "159e0be3619814e297937f0dbf7709e894e199f967f5e4d389472e72aa824bf5"
+      }
     },
     {
       "id": "go-to-declaration",
@@ -833,6 +968,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
+      "intro": "Read this when you are browsing the Structure form and want to land on where a symbol is declared. Right-click the tree node and choose Go to Declaration; it is an editor jump with no command line equivalent and needs no index.",
       "wikiPage": "Go-to-Declaration",
       "surfaces": [
         {
@@ -842,7 +978,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "2aa72f4dc4986c278fd02c7f3a87aa5302f6d30e94f99ee7bf83895c53c6384c"
+      }
     },
     {
       "id": "go-to-definition",
@@ -852,6 +994,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
+      "intro": "Read this to jump straight to where the symbol under the cursor is defined. Choose drag-lint > Go to Definition; it is served by the IDE plugin with no one-shot command line verb.",
       "wikiPage": "Go-to-Definition",
       "surfaces": [
         {
@@ -860,7 +1003,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "2f040de2d045e2ba8f107c75db7c404c8585211c3af12d17a9c400f3d592fe9f"
+      }
     },
     {
       "id": "go-to-implementation",
@@ -870,6 +1019,7 @@
       "status": "shipped",
       "since": "0.43.0-alpha",
       "summary": "Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node",
+      "intro": "Read this when a Structure form node is a declaration (such as an interface method) and you want its implementation body. Right-click the node and choose Go to Implementation; it is an editor jump that needs no index.",
       "wikiPage": "Go-to-Implementation",
       "surfaces": [
         {
@@ -878,7 +1028,13 @@
           "caption": "Go to Implementation"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c6ccf13a8d21380271d66a881edd1e92085d1e3bc670d18e7a779b441070c2e4"
+      }
     },
     {
       "id": "helpers-of",
@@ -888,6 +1044,7 @@
       "status": "shipped",
       "since": "0.94.0-alpha",
       "summary": "Lists record/class helper edges targeting a given type, anywhere in the index",
+      "intro": "Read this to see every record or class helper that extends a type anywhere in the indexed code. helpers-of T --db lists the helper edges targeting T; it is read-only and adds --json for machine output.",
       "wikiPage": "helpers-of",
       "surfaces": [
         {
@@ -909,7 +1066,13 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179"
+      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "16b0d3ead572e435728f1a06ab71dc4618191af7bf46d5e6b5b4099c5789a339"
+      }
     },
     {
       "id": "hover-at-cursor",
@@ -919,6 +1082,7 @@
       "status": "shipped",
       "since": "0.7.0-alpha",
       "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card.",
       "wikiPage": "Hover-at-Cursor",
       "surfaces": [
         {
@@ -946,7 +1110,13 @@
           "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
+      }
     },
     {
       "id": "outline",
@@ -956,6 +1126,7 @@
       "status": "shipped",
       "since": "0.86.0-alpha",
       "summary": "Prints the file-scoped symbol outline for one Pascal unit",
+      "intro": "Read this when you want a unit symbol list outside the IDE, or want to see what feeds the Structure tree. Give it a .pas file and it prints that file symbol outline as text or JSON.",
       "wikiPage": "outline",
       "surfaces": [
         {
@@ -979,7 +1150,13 @@
           "help": ["  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0496d31c647b221d9c9f4ac076293605f3b372a1af9485d046057c78b60110be"
+      }
     },
     {
       "id": "query-kind-all",
@@ -989,37 +1166,49 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
+      "intro": "Read this when you need the complete set of one kind of symbol, for example every unit in a project or library index to fill a picker. It lists them all with no name and no row cap.",
       "wikiPage": "query-kind-all",
       "surfaces": [
         {
           "type": "cli",
           "verb": "query",
           "example": "drag-lint query --kind <k> --all",
-          "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+          "usage": "drag-lint query --kind <k> --all [--public] [--db ...] [--json]",
           "flags": [
             {
-              "name": "--name",
-              "arg": "<symbol-name>"
+              "name": "--kind",
+              "arg": "<k>"
+            },
+            {
+              "name": "--all"
+            },
+            {
+              "name": "--public"
             },
             {
               "name": "--db"
             },
             {
               "name": "--json"
-            },
-            {
-              "name": "--case-sensitive"
-            },
-            {
-              "name": "--exact"
             }
           ],
           "helpOrder": 2,
-          "help": ["  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]", "  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]", "                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);", "                               --case-sensitive restores byte-exact matching.", "                               --name also accepts a QUALIFIED name (falls back to --qname on a dotted value).", "                               --exact suppresses the fuzzy fallback, so 0 rows means \"no such symbol\".", "                               JSON rows carry \"match_kind\": \"exact\" | \"fuzzy\" | \"substring\" (--name-like) -- reject \"fuzzy\" unless", "                               you want suggestions; a fuzzy row does NOT carry the name you asked for.", "                               --quiet suppresses the \"(loaded defaults from ...)\" stderr banner.", "  drag-lint query              --text \"<phrase>\" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]", "       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).", "         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception", "         narrows it; --kind literal reproduces the pre-comment behaviour exactly.", "                               searches STRING LITERALS ONLY -- string constants, resourcestrings,", "                               DFM captions, SQL exception messages. NOT source text: identifiers,", "                               property assignments and type names are not in this corpus, so 0", "                               matches for those is correct, not a missing index. COMMENTS: doc", "                               comments ARE searchable -- `query find --doc-contains \"<phrase>\"`.", "                               Only BODY-INLINE comments need grep. (INBOX 2.7; the old line here", "                               sent people to grep for prose the index already had.)"]
+          "help": ["  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)"]
         }
       ],
       "audience": "both",
-      "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."]
+      "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+      }
     },
     {
       "id": "query-name-like",
@@ -1029,35 +1218,50 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Case-insensitive substring search over symbol names",
+      "intro": "Read this when you do not know the identifier yet. It does a case-insensitive substring search over symbol names, so a fragment such as SVG finds the types that matter.",
       "wikiPage": "query-name-like",
       "surfaces": [
         {
           "type": "cli",
           "verb": "query",
-          "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+          "usage": "drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>",
           "flags": [
             {
-              "name": "--name",
-              "arg": "<symbol-name>"
+              "name": "--name-like",
+              "arg": "<substring>"
             },
             {
-              "name": "--db"
+              "name": "--kind",
+              "arg": "<k>"
+            },
+            {
+              "name": "--limit",
+              "arg": "N"
             },
             {
               "name": "--json"
             },
             {
-              "name": "--case-sensitive"
-            },
-            {
-              "name": "--exact"
+              "name": "--db",
+              "arg": "<file.sqlite>"
             }
           ]
         }
       ],
       "audience": "both",
       "requires": ["index"],
-      "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."]
+      "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+      }
     },
     {
       "id": "query-ancestors",
@@ -1067,6 +1271,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Resolves the transitive class/interface hierarchy of a type",
+      "intro": "Read this to see everything a class or interface descends from, or to check whether it descends from one specific ancestor. The answer comes straight from the index.",
       "wikiPage": "query-ancestors",
       "surfaces": [
         {
@@ -1094,7 +1299,13 @@
           "help": ["  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9d544b8c733518e0c0edb3f7502b8b1da659caf957aca0041ed1127ef8f06568"
+      }
     },
     {
       "id": "query-descendants",
@@ -1104,6 +1315,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases",
+      "intro": "Read this to answer what derives from this class. It lists every class that descends from a given ancestor across all scanned indexes; derived interfaces are left out on purpose.",
       "wikiPage": "query-descendants",
       "surfaces": [
         {
@@ -1127,7 +1339,13 @@
           "help": ["  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor's class pickers. exit 1 = no such ancestor)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3c69a7029d759a388d9ce19950dac7c0c0415a4df60e80b0e353e6ffee07070b"
+      }
     },
     {
       "id": "query-find-callers",
@@ -1137,6 +1355,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Lists callers of a routine by name, with an option to restrict results to precise, resolved callers",
+      "intro": "Read this to see who calls a routine. Give it the bare member name; with --resolved it keeps only precise, resolved callers and also shows who reads or writes a property or field.",
       "wikiPage": "query-find-callers",
       "surfaces": [
         {
@@ -1170,7 +1389,13 @@
       ],
       "audience": "both",
       "pitfalls": ["the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites."],
-      "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466"
+      "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "bdfa7053d64354f1d75decc456cca46315c4a31e99256218e25fe6f8592b5f51"
+      }
     },
     {
       "id": "query-type-usage",
@@ -1180,6 +1405,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Answers one question, of a list of type names, about one file",
+      "intro": "Read this when you have a set of type names, such as types you are about to retire, and need to know whether one file really references any of them. Give it the file and the names; it answers for that one file.",
       "wikiPage": "query-type-usage",
       "surfaces": [
         {
@@ -1211,7 +1437,18 @@
           "help": ["  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]", "                               of these type names, which does THIS file actually REFERENCE? Answers a", "                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create", "                               construction sites and inheritance; a name appearing only in a COMMENT or", "                               a STRING LITERAL is correctly not a reference -- which is the difference", "                               from grep. Name-keyed: a project type sharing an RTL name is", "                               indistinguishable, and the output says so."]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "afa6e8274c8c535c0b52f178b792af6d892e7f9f30c87bd78caabdedacdd4781"
+      }
     },
     {
       "id": "query-typecat",
@@ -1221,6 +1458,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Resolves a type's category -- float, string, class, interface, and so on",
+      "intro": "Read this when you need to know what kind of type a name is, such as float, string, class or interface, before writing code against it. Give it the type name and it resolves the category from the index.",
       "wikiPage": "query-typecat",
       "surfaces": [
         {
@@ -1244,7 +1482,18 @@
           "help": ["  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "190e547ee68725bff739735252e3d2075cdf218916299061998d22229052f07e"
+      }
     },
     {
       "id": "query-unit-usage",
@@ -1254,6 +1503,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Answers one question, about one unit and one file",
+      "intro": "Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. It tells you whether one file references anything a given unit exports; an empty answer means the uses entry is a dead import.",
       "wikiPage": "query-unit-usage",
       "surfaces": [
         {
@@ -1282,7 +1532,18 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["omit --in for the project-wide answer; add --in `<F.pas>` to ask about ONE file.", "for an RTL/VCL/third-party unit pass the platform library DB too (--db `<proj>` --db `<library>`) for the reference breakdown. With the project DB alone you still get the importer list; only the --in form exits 2."]
+      "pitfalls": ["omit --in for the project-wide answer; add --in `<F.pas>` to ask about ONE file.", "for an RTL/VCL/third-party unit pass the platform library DB too (--db `<proj>` --db `<library>`) for the reference breakdown. With the project DB alone you still get the importer list; only the --in form exits 2."],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "44e4e30e2283257467bc89293b7dfdfc0a85ced9267ed19c86c6b342f552818c"
+      }
     },
     {
       "id": "show-completion",
@@ -1292,6 +1553,7 @@
       "status": "shipped",
       "since": "0.21.0-alpha",
       "summary": "Shows an index-backed completion list at the editor caret",
+      "intro": "Read this when you want to know what you can type next at the editor caret: it shows an index-backed completion list, bound to Ctrl+Alt+C.",
       "wikiPage": "Show-Completion",
       "surfaces": [
         {
@@ -1299,7 +1561,13 @@
           "path": "drag-lint > Show Completion"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "36c12cd452ce25fb7b38bc8866c3e1df191b0e73d34725fa92fb41bdc65feb42"
+      }
     },
     {
       "id": "show-signature-help",
@@ -1309,6 +1577,7 @@
       "status": "shipped",
       "since": "0.21.0-alpha",
       "summary": "Shows parameter help for the call being typed at the editor caret",
+      "intro": "Read this while writing a call and you need the parameter list and order of the routine: it shows signature help at the caret, bound to Ctrl+Alt+S.",
       "wikiPage": "Show-Signature-Help",
       "surfaces": [
         {
@@ -1316,7 +1585,13 @@
           "path": "drag-lint > Show Signature Help"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "066997dea92a8e1fc2957244beb12d8736895703e4150fe4ce240bef51afd9de"
+      }
     },
     {
       "id": "show-structure",
@@ -1326,6 +1601,7 @@
       "status": "shipped",
       "since": "0.30.0-alpha",
       "summary": "Shows a structural outline of the current unit",
+      "intro": "Read this when you want a unit as a navigable outline of its types and members instead of scrolling the source: Show Structure opens that tree for the current unit.",
       "wikiPage": "Show-Structure",
       "surfaces": [
         {
@@ -1333,7 +1609,13 @@
           "path": "drag-lint > Show Structure"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "2c75ee51617a729f96f29cd89590e628b2e02d06c819c59f0d5b7bcf9305b426"
+      }
     },
     {
       "id": "symbol-search",
@@ -1343,6 +1625,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Searches symbols by name across the indexed projects",
+      "intro": "Read this when you know or can guess a symbol name but not its file: Symbol Search finds types, methods and fields by name across the indexed projects, bound to Ctrl+Alt+T.",
       "wikiPage": "Symbol-Search",
       "surfaces": [
         {
@@ -1374,7 +1657,13 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."]
+      "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "89e3eaefa499eea3df21d43bf338dc4e85b25faf5494c3ed92e5b8ddbe5fbf59"
+      }
     },
     {
       "id": "symbol-slice",
@@ -1384,6 +1673,7 @@
       "status": "shipped",
       "since": "0.17.0-alpha",
       "summary": "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context",
+      "intro": "Read this when you want only the code that matters for one symbol instead of the whole file: it shows the symbol declaration, body and immediate context.",
       "wikiPage": "Symbol-Slice",
       "surfaces": [
         {
@@ -1411,7 +1701,13 @@
           "help": ["  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "032aa60f48a1e3446b8651dfaa80c24ebe153afa00633ec041ed954d79fc74ce"
+      }
     },
     {
       "id": "type-at-cursor",
@@ -1421,6 +1717,7 @@
       "status": "shipped",
       "since": "0.19.0-alpha",
       "summary": "Resolves the static type of the expression under the editor caret",
+      "intro": "Read this when you are not sure what type an expression has: Type at Cursor resolves the static type of the expression under the editor caret.",
       "wikiPage": "Type-at-Cursor",
       "surfaces": [
         {
@@ -1444,7 +1741,13 @@
           "help": ["  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "42a2985a0cd3b716fb4b342d41394fbbe74319a5abb1f22a04c9ce5d700f2cba"
+      }
     },
     {
       "id": "usages",
@@ -1454,6 +1757,7 @@
       "status": "shipped",
       "since": "0.33.0-alpha",
       "summary": "Finds usage sites of a named symbol, with a choice of report width",
+      "intro": "Read this when you want every place a symbol is used, outside the IDE: usages lists the usage sites of a named symbol, with a narrow, wide or very-wide report width.",
       "wikiPage": "usages",
       "surfaces": [
         {
@@ -1487,7 +1791,13 @@
           "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view."]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "97f5e5e0036d1d3357befa830f6a822e7e7927f2054e2cf541b0beefd446084b"
+      }
     },
     {
       "id": "wiki",
@@ -1497,6 +1807,7 @@
       "status": "shipped",
       "since": "1.7.0-alpha",
       "summary": "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it",
+      "intro": "Read this when you have a human phrase such as the scheduler and want the code behind it: wiki routes the phrase to the symbol that a team has marked with a dl:wiki block, and can list or check all topics.",
       "wikiPage": "wiki",
       "surfaces": [
         {
@@ -1526,7 +1837,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "2face26acb4b8666d6a782bbebdc06a025638f796b3b19b8e66532efcf73179a"
+      }
     },
     {
       "id": "copy-all-diagnostics",
@@ -1536,6 +1858,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Puts every lint finding for the current unit onto the clipboard, starting from the Structure form",
+      "intro": "Read this when you want to paste a unit full list of findings into a chat, issue or note. Right-click in the Structure form and choose Copy All Diagnostics to put every lint finding for the current unit on the clipboard.",
       "wikiPage": "Copy-All-Diagnostics",
       "surfaces": [
         {
@@ -1585,7 +1908,13 @@
           "help": ["  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ad775764fd6c9ace32d17f3a601a35ea1ad0e14cd1d563ed6fc14d2ef890eed3"
+      }
     },
     {
       "id": "copy-diagnostics-current-file",
@@ -1595,6 +1924,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Puts the current file's lint findings onto the clipboard",
+      "intro": "Read this when you want to paste the current file findings elsewhere instead of reading them in the IDE. It puts the file lint findings onto the clipboard.",
       "wikiPage": "Copy-Diagnostics-Current-File",
       "surfaces": [
         {
@@ -1641,7 +1971,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "e4aa587fd2064887f254624993e9a546994345187f322231e1db17841bdfeb17"
+      }
     },
     {
       "id": "copy-selected-diagnostics",
@@ -1651,7 +1987,7 @@
       "status": "shipped",
       "since": "1.28.3-alpha",
       "summary": "Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard",
-      "intro": "Select one or several Diagnostics rows in the Structure form and choose Copy or press Ctrl+C. The rows are copied in panel order, one finding per line. Selecting the Diagnostics root copies everything, like Copy All Diagnostics.",
+      "intro": "Read this when you want to paste one or two findings, not the whole list. Select Diagnostics rows in the Structure form (Ctrl or Shift click), then choose Copy or press Ctrl+C; selecting the Diagnostics root copies everything.",
       "wikiPage": "Copy-Selected-Diagnostics",
       "surfaces": [
         {
@@ -1660,7 +1996,13 @@
           "caption": "Copy"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "6f1fce4cd47e1cacf0c4c1584782da2592f7ec22f0f6a0505c91167a9a834c53"
+      }
     },
     {
       "id": "drag-lint-project-rules",
@@ -1670,6 +2012,7 @@
       "status": "shipped",
       "since": "0.2.0-alpha",
       "summary": "Shows the catalog of lint rules in the context of a specific project",
+      "intro": "Read this when you want the lint rule catalog starting from the Project Manager: right-click a project and choose drag-lint: Project Rules.... From the command line the same list comes from drag-lint rules, and no index is needed.",
       "wikiPage": "drag-lint-Project-Rules",
       "surfaces": [
         {
@@ -1698,7 +2041,13 @@
           "help": ["  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "cce28cd9d20d0c66576aa389d40f2de98612906a73e20524ae0eae1eaa52a659"
+      }
     },
     {
       "id": "exceptions-sync",
@@ -1708,6 +2057,7 @@
       "status": "shipped",
       "since": "1.8.0-alpha",
       "summary": "Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites",
+      "intro": "Read this when a project raises bare Exception.Create with literal messages and you want one named exception class per distinct message. It runs as a dry run, and --apply writes the classes into a managed block in your exceptions unit; the raise sites are then rewritten by lint --fix.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -1735,7 +2085,18 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page"
+      "notes": "seed: needs own page",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "96d32fdb560ebad248e0f3f0f134fa47a4a4c1c9ee8249d8dea6fe3822b564a8"
+      }
     },
     {
       "id": "fix-all-in-project",
@@ -1745,6 +2106,7 @@
       "status": "shipped",
       "since": "0.61.0-alpha",
       "summary": "Applies autofixes for every fixable finding across the whole project, starting from the Structure form",
+      "intro": "Read this when you want every auto-fixable finding in the whole project resolved in one action. Open the Structure form, right-click a node and choose Fix all in project; it is not on the main menu and runs lint-all with the fix flags.",
       "wikiPage": "Fix-all-in-project",
       "surfaces": [
         {
@@ -1804,7 +2166,13 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."]
+      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "6296e05a77c0254a896cbe25c15656879121dc0c38d879652cf4b23ae0dd765a"
+      }
     },
     {
       "id": "fix-all-in-unit",
@@ -1814,6 +2182,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Applies autofixes for every fixable finding in the current unit, starting from the Structure form",
+      "intro": "Read this when one unit has several auto-fixable findings and you want them all fixed at once. Open the Structure form, right-click a node and choose Fix all in unit; the caption shows how many fixes are available.",
       "wikiPage": "Fix-all-in-unit",
       "surfaces": [
         {
@@ -1861,7 +2230,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "cdf7603c42e7887bffd7cb942da1d4c140401f456907fd842fc0104b64fa88ba"
+      }
     },
     {
       "id": "fix-all-reliability",
@@ -1871,7 +2246,7 @@
       "status": "shipped",
       "since": "1.31.3-alpha",
       "summary": "Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes",
-      "intro": "Autofix fixes: owner freshness ignores library-root members, IDE busy guard, exception ancestor prefix",
+      "intro": "Read this if Fix all used to drop renames, ran twice, or flagged E-prefixed exception classes. Since 1.31.3-alpha library-root members no longer make an owner stale, the IDE shows a wait cursor and refuses a second fix while one runs, and exception classes keep their E prefix.",
       "wikiPage": "Fix-all-reliability",
       "surfaces": [
         {
@@ -1920,7 +2295,13 @@
         }
       ],
       "audience": "both",
-      "related": ["fix-all-in-project", "fix-all-in-unit"]
+      "related": ["fix-all-in-project", "fix-all-in-unit"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "cdf7603c42e7887bffd7cb942da1d4c140401f456907fd842fc0104b64fa88ba"
+      }
     },
     {
       "id": "fix-it",
@@ -1930,6 +2311,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling",
+      "intro": "Read this when you are looking at one lint finding in the Structure form and want just that one fixed. Right-click the finding node and choose Fix it; an unused unit is removed or moved to the implementation section, verified by compiling.",
       "wikiPage": "Fix-it",
       "surfaces": [
         {
@@ -2010,7 +2392,13 @@
           "help": ["  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d41e058c0dad7e887e5fa42ce0fae18acd6855bf83a51b2960703a56d54483b8"
+      }
     },
     {
       "id": "format-whole-project-with-yadf",
@@ -2020,6 +2408,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Runs YADF formatting across a project's files, with indexing involved as part of the same action",
+      "intro": "Read this when you want a whole project brought to house style in one action instead of file by file. Choose drag-lint > Format Whole Project with YADF...; from the command line there is no single verb, only format per file and index.",
       "wikiPage": "Format-Whole-Project-with-YADF",
       "surfaces": [
         {
@@ -2091,7 +2480,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a39b08a3cd303ae285f67b349713238e2d44889636cf7a675aad07f36640251a"
+      }
     },
     {
       "id": "format-with-yadf",
@@ -2101,6 +2496,7 @@
       "status": "shipped",
       "since": "0.16.0-alpha",
       "summary": "Reformats one Pascal unit by driving the external YADF formatter",
+      "intro": "Read this when you want one unit reformatted by the YADF formatter. Careful: drag-lint format rewrites the file in place; try --diff (formats a copy and prints the diff) or --dry-run first, and commit before running it for real.",
       "wikiPage": "Format-with-YADF",
       "surfaces": [
         {
@@ -2125,7 +2521,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3dd753659ed7f83d128677ae6575fa52915c2d61bd6b5d2195c71be4fd490970"
+      }
     },
     {
       "id": "lint-buffer-unsaved",
@@ -2135,6 +2537,7 @@
       "status": "shipped",
       "since": "0.1.0-alpha",
       "summary": "Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first",
+      "intro": "Read this when you want lint findings for edits you have not saved yet. The IDE lints the in-memory editor buffer directly, without writing it to disk first; the command line lints saved files.",
       "wikiPage": "Lint-Buffer-Unsaved",
       "surfaces": [
         {
@@ -2181,7 +2584,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9cf7211fba46bc3bf6f6753381310ae825d7f3252ff82d450641b40d3a4b20c3"
+      }
     },
     {
       "id": "lint-rules",
@@ -2191,6 +2600,7 @@
       "status": "shipped",
       "since": "0.2.0-alpha",
       "summary": "Every lint rule the engine ships, imported from rules --json",
+      "intro": "Read this to see every lint rule drag-lint can check, with its category and whether it is on by default or fixable. You can filter the list by category or get it as JSON.",
       "wikiPage": "rules",
       "surfaces": [
         {
@@ -2214,7 +2624,18 @@
       ],
       "audience": "both",
       "notes": "issued by the plugin from DragLint.Plugin.LintOptionsFrame.pas:88",
-      "family": "lint-rules"
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "family": "lint-rules",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "24f0fa153a4d6847545dfaabc80f851eaed458dfa6bb009d8b811fc6f9ba7289"
+      }
     },
     {
       "id": "lint-project",
@@ -2224,6 +2645,7 @@
       "status": "shipped",
       "since": "0.48.0-alpha",
       "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
+      "intro": "Read this when you want architecture-level findings that need the whole project, such as god-class, circular-uses, unused-public-symbol or layering-violation, rather than per-file diagnostics. It runs those project-scoped rules against an index.",
       "wikiPage": "lint-project",
       "surfaces": [
         {
@@ -2251,7 +2673,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c023c73ff36c9cd8b953a042a5388ea2576aa1843535b78057be5a7125e73038"
+      }
     },
     {
       "id": "lint-tree",
@@ -2261,6 +2689,7 @@
       "status": "shipped",
       "since": "1.11.0-alpha",
       "summary": "Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?",
+      "intro": "Read this before you save or commit an edit to a unit that other units use. It checks whether an interface change reaches any dependent, which lint-all cannot show because a removed symbol simply stops being linted.",
       "wikiPage": "lint-tree",
       "surfaces": [
         {
@@ -2310,7 +2739,18 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["does an interface edit to `<B.pas>` reach any dependent? Exits 0 whether or not it found anything; 2 means it could NOT run. --baseline pins the OLD side to an edit-episode capture -- without it the OLD side is the live index, which is CLI/manual use only."]
+      "pitfalls": ["does an interface edit to `<B.pas>` reach any dependent? Exits 0 whether or not it found anything; 2 means it could NOT run. --baseline pins the OLD side to an edit-episode capture -- without it the OLD side is the live index, which is CLI/manual use only."],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "8669b8cdce32045d3abe557243097a7bc4dd21a96f8c0bd8adc538419d4f755e"
+      }
     },
     {
       "id": "multi-project-rename",
@@ -2375,7 +2815,13 @@
         }
       ],
       "audience": "both",
-      "related": ["fix-all-in-unit", "fix-it", "rename-symbol"]
+      "related": ["fix-all-in-unit", "fix-it", "rename-symbol"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3767539f0d8aa8dc7e3ed8e6c1cdbc2537928739a85d38dea267d1fd04280f6f"
+      }
     },
     {
       "id": "rescan-this-unit",
@@ -2396,11 +2842,24 @@
         {
           "type": "cli",
           "verb": "index",
-          "usage": "drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]",
+          "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]",
           "flags": [
+            {
+              "name": "--project",
+              "arg": "<file.dproj>"
+            },
             {
               "name": "--db",
               "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--recompile"
+            },
+            {
+              "name": "--rebuild"
+            },
+            {
+              "name": "--dry-run"
             },
             {
               "name": "--watch"
@@ -2408,38 +2867,17 @@
             {
               "name": "--interval",
               "arg": "N"
-            },
-            {
-              "name": "--library-db",
-              "arg": "<lib.sqlite>",
-              "summary": "consult another index for calls THIS one cannot resolve."
-            },
-            {
-              "name": "--max-file-kb",
-              "arg": "N"
-            },
-            {
-              "name": "--no-use-ignore"
-            },
-            {
-              "name": "--no-sql-ms"
-            },
-            {
-              "name": "--deep"
-            },
-            {
-              "name": "--shallow"
-            },
-            {
-              "name": "--exclude-under"
-            },
-            {
-              "name": "--include-only"
             }
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "1d22ae2d34cfdb987bfc0783ee41fc8d462df481401d98ae849e6d00856ae193"
+      }
     },
     {
       "id": "run-ast-checks",
@@ -2449,6 +2887,7 @@
       "status": "shipped",
       "since": "0.31.0-alpha",
       "summary": "Runs drag-lint's AST-level checks against a file",
+      "intro": "Read this when you want to validate a single file against drag-lint AST-level checks: you get the issues found in the parse tree, as text or JSON.",
       "wikiPage": "Run-AST-Checks",
       "surfaces": [
         {
@@ -2476,7 +2915,13 @@
           "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "15dbfbd9a3674b0bb56e8437ae8bf98fd49bafe382e7636419d1a325fdbb1e94"
+      }
     },
     {
       "id": "run-diagnostics-didsave",
@@ -2486,6 +2931,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
+      "intro": "Read this to know why drag-lint findings refresh on their own: the diagnostics pass runs on a file each time you save it in the IDE, so there is nothing to invoke by hand.",
       "wikiPage": "Run-Diagnostics-didSave",
       "surfaces": [
         {
@@ -2494,7 +2940,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a32fb48a86d29bed15f4168d2f2083a5018a176809a9b6018805edec0dc02a0c"
+      }
     },
     {
       "id": "run-lint-all-full-report",
@@ -2504,6 +2956,7 @@
       "status": "shipped",
       "since": "0.61.0-alpha",
       "summary": "Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check",
+      "intro": "Read this when you want an overall health check of a project: it runs the whole rule catalog over the indexed code and reports every surviving finding, optionally limited to one project with --project.",
       "wikiPage": "Run-Lint-All-Full-Report",
       "surfaces": [
         {
@@ -2560,7 +3013,13 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."]
+      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9ae81a3aa119de3fc5bbafd92f7349c672ed719450167b9a1e09e51e504ceec7"
+      }
     },
     {
       "id": "type-name-prefix-origin",
@@ -2703,7 +3162,18 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."]
+      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "89c47772b02dd25c4899ed95b85d00ce816eb8d6aeeb42e276f581426b09704e"
+      }
     },
     {
       "id": "wiki-blocks-authoring",
@@ -2713,6 +3183,7 @@
       "status": "shipped",
       "since": "1.7.0-alpha",
       "summary": "The format of a dl:wiki block -- the concept notes the wiki verb reads",
+      "intro": "Read this when you want your team own words for a concept to find the right code: it describes how to write a dl:wiki block inside a DocInsight comment so the wiki verb can read it.",
       "wikiPage": "Wiki-Blocks-Authoring",
       "surfaces": [
         {
@@ -2744,7 +3215,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "30e073867914380c13da25a124d8cc0edd5676e67b1eae4c1595f69c5ce00fcc"
+      }
     },
     {
       "id": "doc-comment-stub-symbol",
@@ -2754,6 +3236,7 @@
       "status": "shipped",
       "since": "0.25.0-alpha",
       "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",
+      "intro": "Read this when you want to start a DocInsight comment on one specific method, type or property. It produces a doc-comment stub for the chosen qualified symbol.",
       "wikiPage": "Doc-Comment-Stub-symbol",
       "surfaces": [
         {
@@ -2781,7 +3264,13 @@
           "help": ["  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "842f3c85dac814164f2094eac345f8cb517426619a705f4cede9fb124a0dced4"
+      }
     },
     {
       "id": "doc-drift",
@@ -2791,6 +3280,7 @@
       "status": "shipped",
       "since": "0.93.0-alpha",
       "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
+      "intro": "Read this when you want to know why an existing doc comment is considered out of date. doc-drift prints the deterministic doc-versus-code drift findings for one symbol.",
       "wikiPage": "doc-drift",
       "surfaces": [
         {
@@ -2815,7 +3305,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "e7129abd51f83d6c910608813277b6334776faf78f049f08c54738b8a63f15b2"
+      }
     },
     {
       "id": "doc-forget",
@@ -2825,6 +3326,7 @@
       "status": "shipped",
       "since": "1.17.0-alpha",
       "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
+      "intro": "Read this when documentation facts carry the wrong project tag, or tags need cleaning up. doc-forget removes or renames project tags on inbound doc facts for a file or folder, and is a dry run unless you pass --apply.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -2862,7 +3364,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page"
+      "notes": "seed: needs own page",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9ac29719038e99e39e46f6a55cf308c53c9e9d3c88305b819f6c78d09ec29328"
+      }
     },
     {
       "id": "document-it",
@@ -2872,6 +3380,7 @@
       "status": "shipped",
       "since": "0.90.0-alpha",
       "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
+      "intro": "Read this when one declaration needs a doc comment and you do not want to touch the rest of the unit. Right-click the symbol in the Structure form and choose Document it to generate or repair its managed DocInsight comment.",
       "wikiPage": "Document-it",
       "surfaces": [
         {
@@ -2907,7 +3416,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ce9006423b4e73d27870db7f5d6a7c21c1ce666f93b55fb6e31fdb7fd1a2994c"
+      }
     },
     {
       "id": "document-project",
@@ -2917,6 +3432,7 @@
       "status": "shipped",
       "since": "0.90.0-alpha",
       "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
+      "intro": "Read this when a whole project needs documentation coverage. Right-click in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration the project owns.",
       "wikiPage": "Document-project",
       "surfaces": [
         {
@@ -2952,7 +3468,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ca0c5daf49b9c71753c73c96c5fc474b4ef19e81e432084d1d2a396e3548b15f"
+      }
     },
     {
       "id": "document-unit",
@@ -2962,6 +3484,7 @@
       "status": "shipped",
       "since": "0.90.0-alpha",
       "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
+      "intro": "Read this when a whole unit needs documentation, not just one symbol. Right-click the unit in the Structure form and choose Document unit to generate or repair managed DocInsight comments for its public declarations.",
       "wikiPage": "Document-unit",
       "surfaces": [
         {
@@ -2997,7 +3520,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d8c3ce4dded9eb28eb0dc79bbf264950e0501c23e4c0edd83ea8debe8177e36d"
+      }
     },
     {
       "id": "document-all",
@@ -3007,6 +3536,7 @@
       "status": "shipped",
       "since": "0.93.0-alpha",
       "summary": "Documents every public declaration in every indexed unit, with no project scope",
+      "intro": "Read this when you want to sweep DocInsight comments across everything in the index rather than one project at a time. document-all documents every public declaration in every indexed unit; the default is facts-only.",
       "wikiPage": "document-all",
       "surfaces": [
         {
@@ -3041,7 +3571,13 @@
           "help": ["  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "f60e1a49224965606bc2516796b4b23dfe52f753528d87439b61a92808e4a4e1"
+      }
     },
     {
       "id": "effect-summary-legend",
@@ -3051,6 +3587,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index",
+      "intro": "Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields) and `p<k>` (writes through parameter k, counted from 0).",
       "wikiPage": "Effect-Summary-Legend",
       "surfaces": [
         {
@@ -3059,7 +3596,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
     },
     {
       "id": "shared-unit",
@@ -3069,6 +3612,7 @@
       "status": "shipped",
       "since": "1.10.0-alpha",
       "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
+      "intro": "Read this when one unit is used by more than one project and you want that recorded in the source: shared-unit shows or extends the dl:shared marker, as a dry run until you add --apply.",
       "wikiPage": "shared-unit",
       "surfaces": [
         {
@@ -3095,7 +3639,18 @@
           "help": ["  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3c98eb50173c538cfb8819db70eb6da69c01c88d21d7c7bbdd53e3223b0aab69"
+      }
     },
     {
       "id": "allow-this-message",
@@ -3105,6 +3660,7 @@
       "status": "shipped",
       "since": "0.54.0-alpha",
       "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+      "intro": "Read this when a finding in the Structure form is a deliberate, reviewed exception rather than something to change. Right-click the finding and choose Allow this message to record a dl:ok review so it stops being reported.",
       "wikiPage": "Allow-this-message",
       "surfaces": [
         {
@@ -3153,7 +3709,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "229cbc7819d98e8ca8685ed2fcc0f223a39ca32062d7e73e3b7b5ad211c2756f"
+      }
     },
     {
       "id": "allow",
@@ -3163,6 +3725,7 @@
       "status": "shipped",
       "since": "0.54.0-alpha",
       "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+      "intro": "Read this when a lint finding is a deliberate, reviewed exception that you do not intend to fix. allow records a dl:ok review for that one finding (identified by file, line and rule) so it stops being reported; without --apply it is a dry run.",
       "wikiPage": "allow",
       "surfaces": [
         {
@@ -3209,7 +3772,18 @@
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061"
+      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "4f6ecc0acddb27a4f5b8e096b1c668322ab7caf91ca4bc36b0867b1c6ab6f28a"
+      }
     },
     {
       "id": "create-helper-class",
@@ -3219,6 +3793,7 @@
       "status": "shipped",
       "since": "0.94.0-alpha",
       "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
+      "intro": "Read this when you have an enum and want the usual conversion helpers without writing them by hand. Right-click the enum in the Structure form and choose Create helper class to generate a Byte-family record helper with ToByte, FromByte, ToInteger, FromInteger, ToString and FromString.",
       "wikiPage": "Create-helper-class",
       "surfaces": [
         {
@@ -3258,7 +3833,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a17b830e6a8e025e2abad2940ce4e5ae2f7593c8d25740a8ca8fbba89a210c1a"
+      }
     },
     {
       "id": "create-enum-helper",
@@ -3268,6 +3849,7 @@
       "status": "shipped",
       "since": "0.94.0-alpha",
       "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
+      "intro": "Read this when you have an enum and want the usual conversion helpers without writing them by hand. create-enum-helper generates a Byte-family record helper with ToByte, FromByte, ToInteger, FromInteger, ToString and FromString; it is a preview unless you pass --apply.",
       "wikiPage": "create-enum-helper",
       "surfaces": [
         {
@@ -3305,7 +3887,13 @@
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226"
+      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "62bd794e7361fe4a80c698b54589d793b7b49d9643362609bbe8354eb3f7bf04"
+      }
     },
     {
       "id": "extract-method",
@@ -3315,6 +3903,7 @@
       "status": "shipped",
       "since": "0.85.0-alpha",
       "summary": "Pulls a run of statements out of a routine into a new method",
+      "intro": "Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; the usage lists --apply and --no-backup for writing the change.",
       "wikiPage": "extract-method",
       "surfaces": [
         {
@@ -3353,7 +3942,13 @@
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319"
+      "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "b51d3401b7089b31fc97e4085380b6e1b13f4c6f97c55493e69671626dac71c3"
+      }
     },
     {
       "id": "quick-fix-add-unit-for-inline-hint-h2443-at-cursor",
@@ -3363,6 +3958,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope",
+      "intro": "Read this when the compiler raises hint H2443 because an inline routine comes from a unit that is not in scope. With the caret on it, this adds the missing unit to the uses clause.",
       "wikiPage": "Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor",
       "surfaces": [
         {
@@ -3371,7 +3967,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ec8ce5d07f5b0068cd8006d0a3f575cb609245d2c8d27b3ef41a541424d45595"
+      }
     },
     {
       "id": "quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u",
@@ -3381,6 +3983,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause",
+      "intro": "Read this when the compiler would report an undeclared identifier. Put the caret on it (Ctrl+Alt+U) and drag-lint finds the unit that declares it and adds that unit to your uses clause.",
       "wikiPage": "Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U",
       "surfaces": [
         {
@@ -3389,7 +3992,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d7a0b613f44087b5121cf9ff996cf7190407e8670f7b2e02052981aad8d3fa2d"
+      }
     },
     {
       "id": "quick-fix-convert-public-field-to-property-at-cursor",
@@ -3399,6 +4008,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Rewrites a public field under the caret as a property",
+      "intro": "Read this when you are tightening a class public surface. With the caret on a public field, this rewrites it as a property.",
       "wikiPage": "Quick-Fix-Convert-Public-Field-to-Property-at-Cursor",
       "surfaces": [
         {
@@ -3407,7 +4017,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown"
+      "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "4ff8916a3ab17cdaa89d32d6307e282c5a9f702b06734c01bb7e90feae73b9bd"
+      }
     },
     {
       "id": "reconcile-project-members-dpr-dproj",
@@ -3417,6 +4033,7 @@
       "status": "shipped",
       "since": "1.18.0-alpha",
       "summary": "Compares a project file's declared member list against what is on disk and in the compile closure",
+      "intro": "Read this after moving or adding units by hand. It compares the project file declared members against what is on disk and in the compile closure, and with --apply it syncs the list; without --apply it only reports.",
       "wikiPage": "Reconcile-Project-Members-dpr-dproj",
       "surfaces": [
         {
@@ -3454,7 +4071,13 @@
           "help": ["  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed", "                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d83891abec6981107f5bdec31f300f06afffbc168df48f4e5961e9316d4d26a2"
+      }
     },
     {
       "id": "rename-symbol",
@@ -3464,6 +4087,7 @@
       "status": "shipped",
       "since": "0.24.0-alpha",
       "summary": "Renames a symbol across the whole indexed project",
+      "intro": "Read this instead of a text find and replace when a symbol appears in many units. It renames the symbol and every reference the index knows about across the indexed project in one step (Ctrl+Alt+R in the IDE).",
       "wikiPage": "Rename-Symbol",
       "surfaces": [
         {
@@ -3505,7 +4129,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "92115d3a46966ce85706d01bd7b4bf2ebc2a4b8c581f012be046a2db1970ee22"
+      }
     },
     {
       "id": "safe-delete",
@@ -3515,6 +4145,7 @@
       "status": "shipped",
       "since": "0.69.0-alpha",
       "summary": "Deletes a symbol if and only if it has zero references in the index",
+      "intro": "Read this when you want to remove dead code without breaking a live caller: safe-delete deletes a symbol only if the index shows zero references to it.",
       "wikiPage": "safe-delete",
       "surfaces": [
         {
@@ -3545,7 +4176,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d966c478642eaf88302b487f12c4c1a9f127c7aefc2e7bf80d7b71bfa49b8881"
+      }
     },
     {
       "id": "unit-test-stub-symbol",
@@ -3555,6 +4192,7 @@
       "status": "shipped",
       "since": "0.27.0-alpha",
       "summary": "Uses generate-test to produce a unit-test skeleton for one qualified symbol",
+      "intro": "Read this when a routine has no test yet: generate-test produces a unit-test skeleton for one qualified symbol, in DUnitX or DUnit style.",
       "wikiPage": "Unit-Test-Stub-symbol",
       "surfaces": [
         {
@@ -3582,7 +4220,13 @@
           "help": ["  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0711c74e54f178093f9b8ba98f3277dba3b92f3fcd79c609ee75f967463f3a86"
+      }
     },
     {
       "id": "uses-deps-tab",
@@ -3592,6 +4236,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
+      "intro": "Read this when you want to review uses-clause fixes in one place: the Uses & Deps tab lists them and lets you apply the ones you accept.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -3600,7 +4245,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page; seed: since unknown"
+      "notes": "seed: needs own page; seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0bf3538cc94f5ecde760f03ee0fea048fe0414b596efd2894f2b9fb2e9524f9e"
+      }
     },
     {
       "id": "uses-audit-interface-impl-moves-unused-this-unit",
@@ -3610,6 +4261,7 @@
       "status": "shipped",
       "since": "0.43.0-alpha",
       "summary": "For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely",
+      "intro": "Read this when tidying the uses clauses of one unit: it reports which entries could move from the interface section to implementation and which are not used at all.",
       "wikiPage": "Uses-Audit-interface-impl-moves-unused-this-unit",
       "surfaces": [
         {
@@ -3634,7 +4286,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "01b4e38ce5db60cafa99593b0e82b8566c53c01db6b05fe28896e988728c5f48"
+      }
     },
     {
       "id": "uses-cleanup-preview-compiler-verified-this-unit",
@@ -3644,6 +4302,7 @@
       "status": "shipped",
       "since": "0.43.0-alpha",
       "summary": "The removals a Uses Audit suggests, but verified by actually compiling",
+      "intro": "Read this before applying a Uses Audit: it previews the same removals but verifies them by compiling, so a unit needed only by an inline routine or an IF branch is not stripped by mistake.",
       "wikiPage": "Uses-Cleanup-Preview-compiler-verified-this-unit",
       "surfaces": [
         {
@@ -3683,7 +4342,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "78e36ac66c8d8639272b41e0286209f6951b72cf3d116e67f6df761beb1c1c75"
+      }
     },
     {
       "id": "convrules-convert-progress",
@@ -3719,7 +4384,7 @@
       "status": "shipped",
       "since": "1.22.0-alpha",
       "summary": "#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site",
-      "intro": "Member replacement slice 1 (C18): rename methods, events and properties of a converted component in code, or mark them for hand conversion.",
+      "intro": "Read this when a component conversion changes the names of methods, events or properties the code uses. Inside a #convert block, #migrate Old -> New renames the member at every bound access site in the .pas; Old -> DL_NONE marks the site for hand conversion instead.",
       "wikiPage": "convert-apply-migrate",
       "surfaces": [
         {
@@ -3773,7 +4438,13 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "related": ["convert-apply"]
+      "related": ["convert-apply"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a889e04c9f32186b93f6d04de0bacf87466fe4ccea36e7e619e7e0e5c55f9584"
+      }
     },
     {
       "id": "convert-apply",
@@ -4282,6 +4953,7 @@
       "status": "shipped",
       "since": "0.99.0-alpha",
       "summary": "Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command",
+      "intro": "Read this when you want both directions of a symbol call graph in one picture. butterfly joins its callers (upward wing) and callees (downward wing) into one chart, as dot, mermaid, text or json, in a single command.",
       "wikiPage": "butterfly",
       "surfaces": [
         {
@@ -4314,7 +4986,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "41622b0d2d51f754ce50bb9dfea1e306ffd5de6c16319d15e87671be28df0b3c"
+      }
     },
     {
       "id": "call-graph-butterfly",
@@ -4324,6 +5002,7 @@
       "status": "shipped",
       "since": "0.96.0-alpha",
       "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
+      "intro": "Read this when you want to see who calls a symbol and what it calls together, in one butterfly view, from the IDE menu. The same chart is available from the CLI with the butterfly verb.",
       "wikiPage": "Call-Graph-Butterfly",
       "surfaces": [
         {
@@ -4362,7 +5041,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c4f979c316bc5ebd1802da4c21a3955568e851ca16b4761ee5ac53c162a1ddf3"
+      }
     },
     {
       "id": "callgraph",
@@ -4372,6 +5057,7 @@
       "status": "shipped",
       "since": "0.91.0-alpha",
       "summary": "Prints an N-deep resolved call tree for a symbol, in either direction",
+      "intro": "Read this when you want to know who calls a routine, or what it calls, several levels deep. callgraph prints an N-deep resolved call tree for a symbol in either direction, guarded against cycles.",
       "wikiPage": "callgraph",
       "surfaces": [
         {
@@ -4403,7 +5089,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d15814944487c9d5bf640e176c9de5004a606e44acd3472ce1a5849321f5059f"
+      }
     },
     {
       "id": "circular-dependency-report",
@@ -4413,6 +5105,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it",
+      "intro": "Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index.",
       "wikiPage": "Circular-Dependency-Report",
       "surfaces": [
         {
@@ -4421,7 +5114,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
     },
     {
       "id": "circular-uses-report-cycles-fix-plan",
@@ -4431,6 +5130,7 @@
       "status": "shipped",
       "since": "0.43.0-alpha",
       "summary": "Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them",
+      "intro": "Read this when the compiler complains about circular references or a project dependency graph feels tangled. It finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.",
       "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
       "surfaces": [
         {
@@ -4464,7 +5164,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "4289e5ac451e1cf2cae70b75a29ba072610221f1475bf80c9e89343beff842c9"
+      }
     },
     {
       "id": "cycles-fix",
@@ -4605,6 +5311,7 @@
       "status": "shipped",
       "since": "0.95.0-alpha",
       "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
+      "intro": "Read this when you are auditing which external units or libraries a codebase depends on. deps-report rolls up the third-party dependencies from one or more indexes, as text, json or csv.",
       "wikiPage": "deps-report",
       "surfaces": [
         {
@@ -4647,7 +5354,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "dc7ee7f410ba8c00dcacd85c9fb166fc671152320aa27447ac7fbb1a5da095b5"
+      }
     },
     {
       "id": "export-enums-delphi-const",
@@ -4657,6 +5370,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations",
+      "intro": "Read this when you need the enum types of a project as Delphi const declarations, for interop or code generation. Run drag-lint export enums --format delphi-const against the project index, or use drag-lint > Generate & Export in the IDE.",
       "wikiPage": "Export-Enums-Delphi-const",
       "surfaces": [
         {
@@ -4686,7 +5400,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "07c5a2c4989a469c90014ef9916e39440617f381b5bf65d62fe4ae1357aea1fa"
+      }
     },
     {
       "id": "export-graph-dot",
@@ -4696,6 +5416,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+      "intro": "Read this when you want a picture of the indexed call/reference graph in Graphviz or Mermaid. drag-lint graph writes DOT (or Mermaid) for the whole index or rooted at a name substring; also on the IDE Generate & Export menu.",
       "wikiPage": "Export-Graph-DOT",
       "surfaces": [
         {
@@ -4728,7 +5449,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0e877648e9e95bc29f72a1412184983695c8be612d4c1c34a46695de46aaa73b"
+      }
     },
     {
       "id": "export-to-obsidian",
@@ -4738,6 +5465,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages",
+      "intro": "Read this when you want a browsable wiki of your project symbols in an Obsidian vault. drag-lint export obsidian writes markdown pages into the folder you name with --output-dir; also on the IDE Generate & Export menu.",
       "wikiPage": "Export-to-Obsidian",
       "surfaces": [
         {
@@ -4767,7 +5495,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "214ecc8e5001112a07d688b87aad8de55dd7cbe638cf97c8d217620df157ebb8"
+      }
     },
     {
       "id": "find-dead-code",
@@ -4777,6 +5511,7 @@
       "status": "shipped",
       "since": "0.25.0-alpha",
       "summary": "Scans the index for code with no references -- candidates to delete",
+      "intro": "Read this before a cleanup pass or before deleting something you suspect is unused: find-deadcode scans the index for symbols with no references and lists them as candidates. Filter with --kind, add --include-private for private members; also under drag-lint > Code Quality.",
       "wikiPage": "Find-Dead-Code",
       "surfaces": [
         {
@@ -4803,7 +5538,13 @@
           "help": ["  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "156cb7acb1d09ae868f0b3545e18bb81c3a70432c2c6627f7e7d49f983f5bce0"
+      }
     },
     {
       "id": "generate-test-helper-csv",
@@ -4874,6 +5615,7 @@
       "status": "shipped",
       "since": "0.17.0-alpha",
       "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
+      "intro": "Read this before changing a widely used method or type: it lists what would be affected if that symbol changes, so you know which code to retest. Give it the qualified name and, optionally, how many levels out to trace.",
       "wikiPage": "Impact-Blast-Radius-symbol",
       "surfaces": [
         {
@@ -4905,7 +5647,13 @@
           "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9ff33aa762b192d127f29364855c7f133a588b606981cb87302133bc1c2e2e99"
+      }
     },
     {
       "id": "reverse-call-tree-clickable-messages-window",
@@ -4915,6 +5663,7 @@
       "status": "shipped",
       "since": "0.96.0-alpha",
       "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
+      "intro": "Read this when you want to click through the callers of a symbol instead of reading a flat report: the IDE shows the reverse call tree in the Messages window, and each line jumps to the caller.",
       "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",
       "surfaces": [
         {
@@ -4948,7 +5697,13 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window"
+      "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c15ca947dc8222256da52b4b5a0fba52510111c4a62d5e6d09859407fabc8a00"
+      }
     },
     {
       "id": "reverse-call-tree-who-calls-this-n-deep",
@@ -4958,6 +5713,7 @@
       "status": "shipped",
       "since": "0.96.0-alpha",
       "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
+      "intro": "Read this before changing a routine and you want to know how far the change could ripple back through its callers: it builds the tree of callers to the depth you choose, or the callees with --direction callees.",
       "wikiPage": "Reverse-Call-Tree-who-calls-this-N-deep",
       "surfaces": [
         {
@@ -4994,7 +5750,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "cbb4a90a85c37c48c7640d1ab7d42a13c228897047bf17fdee3c485e42041dad"
+      }
     },
     {
       "id": "scan-todos-fixmes",
@@ -5004,6 +5766,7 @@
       "status": "shipped",
       "since": "0.12.0-alpha",
       "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
+      "intro": "Read this when you want to see the outstanding work left in code: it lists TODO, FIXME, HACK, XXX, REVIEW and NOTE markers in a path, as text or JSON.",
       "wikiPage": "Scan-TODOs-FIXMEs",
       "surfaces": [
         {
@@ -5018,7 +5781,13 @@
           "help": ["  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "de83bded61f3f19135f10e7ade2d9a5730f32449aad80679b3bf95707caeab96"
+      }
     },
     {
       "id": "show-in-call-graph",
@@ -5028,6 +5797,7 @@
       "status": "shipped",
       "since": "0.96.0-alpha",
       "summary": "Opens the call graph rooted at the symbol represented by a Structure-tree node",
+      "intro": "Read this when you are looking at a symbol in the Structure outline and want to see who calls it or what it calls: right-click the node to open the call graph rooted there.",
       "wikiPage": "Show-in-Call-Graph",
       "surfaces": [
         {
@@ -5065,7 +5835,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3e2981fe8d2ab29c4caaf037e99996c05b489ffff0bcd00827c00f55b2fc72af"
+      }
     },
     {
       "id": "show-wiring-spring4d-di-dfm-events",
@@ -5075,6 +5851,7 @@
       "status": "shipped",
       "since": "0.21.0-alpha",
       "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
+      "intro": "Read this when you are tracing how an interface gets resolved or which handler a DFM event really calls: it shows the Spring4D container registrations and DFM event hookups the compiler does not make obvious.",
       "wikiPage": "Show-Wiring-Spring4D-DI-DFM-events",
       "surfaces": [
         {
@@ -5102,7 +5879,13 @@
           "help": ["  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)", "  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "2ef1be7d0b519e9023b5a153a4822e903ba0daf6cc6e5ba3420a7e91ba92f82d"
+      }
     },
     {
       "id": "top-symbols-fan-in",
@@ -5112,6 +5895,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
+      "intro": "Read this before refactoring a heavily used symbol: top ranks indexed symbols by fan-in, meaning how many places reference them, so you see the most depended-upon ones first.",
       "wikiPage": "Top-Symbols-fan-in",
       "surfaces": [
         {
@@ -5143,7 +5927,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "383d753d8f34c3dfa4d4990140ec74e5479b7a7ab8e22e1f6549df16231fbfe3"
+      }
     },
     {
       "id": "uses-report-csv",
@@ -5153,6 +5943,7 @@
       "status": "shipped",
       "since": "0.40.5-alpha",
       "summary": "Exports the project's unit-dependency data as a CSV file",
+      "intro": "Read this when you need the uses graph outside the IDE, in a spreadsheet or another tool: it exports the unit-dependency data of the project as a CSV file.",
       "wikiPage": "Uses-Report-CSV",
       "surfaces": [
         {
@@ -5190,7 +5981,13 @@
           "help": ["  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "afc13cbba541c0ce9d159b0010daef7018426e2b740bbf5f4b3061f1693cb50f"
+      }
     },
     {
       "id": "ask",
@@ -5665,6 +6462,7 @@
       "status": "shipped",
       "since": "0.43.0-alpha",
       "summary": "The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them",
+      "intro": "Read this after a large paste or a big refactor leaves several names unresolved in a unit. It resolves every unresolved name at once and adds the units that declare them to uses, instead of fixing one identifier at a time.",
       "wikiPage": "Add-Missing-Units-to-uses-whole-unit",
       "surfaces": [
         {
@@ -5702,7 +6500,13 @@
           "help": ["  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "4f0fbb8577b2959b10fe1da6ba4022ac2f0c6a688306b1e8b482510dca597295"
+      }
     },
     {
       "id": "compile-diagnose",
@@ -5712,6 +6516,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
+      "intro": "Read this when you want compiler errors and warnings for the current file or project inside the IDE. It compiles the project or unit and folds the compiler messages into drag-lint findings.",
       "wikiPage": "Compile-Diagnose",
       "surfaces": [
         {
@@ -5720,7 +6525,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "fbb63edce818cb3fcf658606909ac93c1684c8edbbe5aa87364b6c65faf4be1c"
+      }
     },
     {
       "id": "compile-buffer-unsaved",
@@ -5730,6 +6541,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
+      "intro": "Read this when you want compiler diagnostics for edits you have not saved yet. It compiles the project with the current editor buffer substituted for its file on disk, then restores the original file unchanged.",
       "wikiPage": "Compile-Buffer-unsaved",
       "surfaces": [
         {
@@ -5738,7 +6550,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "23434adeb49f37ca5b342c763cf57dce718fc1c5a000d6b4774de49acbfb02b1"
+      }
     },
     {
       "id": "compile-dependents",
@@ -5748,6 +6566,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
+      "intro": "Read this when you have changed a unit and want to check the units that depend on it right away. It runs that check now instead of waiting for the automatic quiet-period pass.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -5756,7 +6575,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page; seed: since unknown"
+      "notes": "seed: needs own page; seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "4e75c8e04ee01aaa7b25c2139cad843457dfdbac9908dd1ff8a84cd87f81f637"
+      }
     },
     {
       "id": "compile-check",
@@ -5766,6 +6591,7 @@
       "status": "shipped",
       "since": "0.26.0-alpha",
       "summary": "Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result",
+      "intro": "Read this when you want a compiler-backed check of one project or one source file without a full build. compile-check takes a .dproj or .pas target and reports the result as text or json.",
       "wikiPage": "compile-check",
       "surfaces": [
         {
@@ -5790,7 +6616,18 @@
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037"
+      "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "69e250155e50c9e6cbc027dd98ea1b024fd84da3242bda8153f4cae1be3bfd61"
+      }
     },
     {
       "id": "full-compile-sweep",
@@ -5800,6 +6637,7 @@
       "status": "shipped",
       "since": "1.2.0-alpha",
       "summary": "Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold",
+      "intro": "Read this when you want a complete, current set of compiler diagnostics for a project rather than only what went stale. Choose drag-lint > Full Compile Sweep; it recompiles everything and refreshes the stored findings, like refresh-findings --full.",
       "wikiPage": "Full-Compile-Sweep",
       "surfaces": [
         {
@@ -5831,7 +6669,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9a9b329fc39a272f47b089a5f0e91d610fad0cd88d4fbe7289122c05ac1e03c8"
+      }
     },
     {
       "id": "ghost-check",
@@ -5841,6 +6685,7 @@
       "status": "shipped",
       "since": "1.8.0-alpha",
       "summary": "Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged",
+      "intro": "Read this when you want compiler diagnostics for edits you have not saved. ghost-check compiles the project with chosen units temporarily replaced by their buffers, then restores the original files unchanged.",
       "wikiPage": "ghost-check",
       "surfaces": [
         {
@@ -5875,7 +6720,18 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's \"Compile Buffer (unsaved)\". Restores the original on exit."]
+      "pitfalls": ["compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's \"Compile Buffer (unsaved)\". Restores the original on exit."],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "e8260b219ba744784b72fff7a07d943d1e056997539bfd14dc223e44a0af0089"
+      }
     },
     {
       "id": "ghost-recover",
@@ -5885,6 +6741,7 @@
       "status": "shipped",
       "since": "0.64.1-alpha",
       "summary": "Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash",
+      "intro": "Read this after a crash during a buffer compile (ghost-check), so no unit is left holding unsaved-buffer content. ghost-recover finds leftover recovery journals under the project D-RAG folder and restores each file; it prints that nothing is pending when all is clean.",
       "wikiPage": "ghost-recover",
       "surfaces": [
         {
@@ -5895,7 +6752,18 @@
           "help": ["  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)", "                               Safe to run any time: prints \"nothing pending.\" when there is nothing to do."]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "44ea89a5c4f5b770632083fb39c2c72d44c4ad98f5603146e310e8baeb2e4365"
+      }
     },
     {
       "id": "import-build-log",
@@ -5905,6 +6773,7 @@
       "status": "shipped",
       "since": "0.8.0-alpha",
       "summary": "Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings",
+      "intro": "Read this when a build ran outside drag-lint, for example on a CI server, and you want its dcc or msbuild errors and warnings to show up as findings in your index. Point it at the log file and the project index.",
       "wikiPage": "Import-Build-Log",
       "surfaces": [
         {
@@ -5926,7 +6795,13 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d4f930f65eff0a1737b6cfbe36af97dba450caa334f9e978cd367a8a7acaaf99"
+      }
     },
     {
       "id": "preprocess-file",
@@ -5936,6 +6811,7 @@
       "status": "shipped",
       "since": "0.92.0-alpha",
       "summary": "Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set",
+      "intro": "Read this when you need to see what the preprocessor makes of a file. It prints the IFDEF-resolved source under the defines you give it, without running a full compile; it is a diagnostic, not a daily tool.",
       "wikiPage": "preprocess-file",
       "surfaces": [
         {
@@ -5969,7 +6845,18 @@
           "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "5d546080815dd4cd618f9b24ee2831584c0715cf471eaf0d04ae757510d2a268"
+      }
     },
     {
       "id": "project-facts",
@@ -5979,6 +6866,7 @@
       "status": "shipped",
       "since": "1.20.0-alpha",
       "summary": "Report what the build does: defines that are on and what sets each, imports, output paths and packages",
+      "intro": "Read this when you need to know what a build really does: which defines are on and what sets each, the imports, output paths and packages. It reads the .dproj and can flag a post-processor define that has no build step imported.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -6009,7 +6897,18 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page"
+      "notes": "seed: needs own page",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "5a2453d7609d4f43aa33d05dd123b4c8b6c0ea3c09911c36042f39b03c9fe3e1"
+      }
     },
     {
       "id": "recover-buffer-compile-files",
@@ -6019,6 +6918,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)",
+      "intro": "Read this if a Compile Buffer (unsaved) run was interrupted, for example by a crash. It restores any file left holding the unsaved-buffer content so no unit keeps overlaid text instead of its saved original; the IDE can run it for you.",
       "wikiPage": "Recover-Buffer-Compile-Files",
       "surfaces": [
         {
@@ -6027,7 +6927,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "62d5ef9ff43c9561439cf267dc117d351a28f150a750c198381be9d101ea7ed5"
+      }
     },
     {
       "id": "fb-snapshot",
@@ -6037,6 +6943,7 @@
       "status": "shipped",
       "since": "0.40.5-alpha",
       "summary": "Connects to a Firebird database and captures a snapshot into a sqlite index",
+      "intro": "Read this when you want a drag-lint index of a Firebird database itself. fb-snapshot connects with a FireDAC-style connection string and captures a snapshot into the sqlite file named by --db. Command line only.",
       "wikiPage": "fb-snapshot",
       "surfaces": [
         {
@@ -6057,7 +6964,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "6a00e72aeca666ab9c2031528f6606e8ad8fa6aaf6a9f5ce18175d21d2292e14"
+      }
     },
     {
       "id": "link-orm",
@@ -6067,6 +6985,7 @@
       "status": "shipped",
       "since": "0.40.5-alpha",
       "summary": "Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both",
+      "intro": "Read this when you want queries that cross from Delphi code into the SQL schema it talks to. It links a project index to a SQL index so ORM-style relationships between code symbols and SQL objects can be resolved across both.",
       "wikiPage": "link-orm",
       "surfaces": [
         {
@@ -6084,7 +7003,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "5fd258380950196939a5e77d666f95ccab96eb5486cffaee8411c68595d60bcc"
+      }
     },
     {
       "id": "drag-lint-graph-dockable",
@@ -6094,6 +7024,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure",
+      "intro": "Read this when you want the graph viewer to stay docked in the IDE, for example beside the Structure form, instead of floating. Choose drag-lint > drag-lint Graph (dockable); it needs the plugin loaded and drag_lint_graph.exe deployed beside it.",
       "wikiPage": "drag-lint-Graph-dockable",
       "surfaces": [
         {
@@ -6102,7 +7033,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9f63d27260fe6d55041a89e0b87995b7e565ca76e9210c347972d933b9593a98"
+      }
     },
     {
       "id": "drag-lint-graph",
@@ -6112,6 +7049,7 @@
       "status": "shipped",
       "since": "0.10.0-alpha",
       "summary": "This page documents the \"View > Tool Windows > drag-lint Graph\" menu entry -- the drag-lint graph viewer",
+      "intro": "Read this when you want the call/reference graph viewer from RAD Studio standard Tool Windows menu. It opens the same window as drag-lint Graph (dockable), served by the IDE plugin, and needs drag_lint_graph.exe deployed beside the plugin.",
       "wikiPage": "drag-lint-Graph",
       "surfaces": [
         {
@@ -6119,7 +7057,13 @@
           "path": "View > Tool Windows > drag-lint Graph"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "fe2ecaa02235194b48e14031ea7aacf721c7f6eb777d61f4762d39560fe8e749"
+      }
     },
     {
       "id": "drag-lint-options",
@@ -6129,6 +7073,7 @@
       "status": "shipped",
       "since": "0.95.0-alpha",
       "summary": "The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog",
+      "intro": "Read this when you want to see which lint rules exist, which are on by default and which have an auto-fix, or to turn rules on and off. Open it from the drag-lint menu; it loads the catalog the same way as drag-lint rules --json.",
       "wikiPage": "drag-lint-Options",
       "surfaces": [
         {
@@ -6136,7 +7081,13 @@
           "path": "drag-lint > drag-lint Options..."
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0d0fae9b811328f06e081c70594d77e6e809fdcb36128d567c6ac5446fefb71b"
+      }
     },
     {
       "id": "drag-lint-panel-dockable",
@@ -6146,6 +7097,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Opens the main drag-lint dockable tool window inside the IDE",
+      "intro": "Read this when you want the main drag-lint tool window docked beside your editor instead of as a separate window. Choose drag-lint > drag-lint Panel (dockable); it only needs the IDE plugin loaded.",
       "wikiPage": "drag-lint-Panel-dockable",
       "surfaces": [
         {
@@ -6154,7 +7106,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0fac7a5a1a6818a175691b1d634c70e6ed91fadd27ac3ff9bae847dc854809e3"
+      }
     },
     {
       "id": "drag-lint",
@@ -6164,6 +7122,7 @@
       "status": "shipped",
       "since": "0.2.0-alpha",
       "summary": "This page documents the \"View > Tool Windows > drag-lint\" menu entry -- the main drag-lint dockable tool window",
+      "intro": "Read this to find the main drag-lint dockable panel. It opens from View > Tool Windows > drag-lint, and is the same panel as the one reached through the drag-lint menu.",
       "wikiPage": "drag-lint",
       "surfaces": [
         {
@@ -6171,7 +7130,13 @@
           "path": "View > Tool Windows > drag-lint"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "b70e1470f8f0e27f161359e0125dc8a4c8b6f434a2b3a013dccd406b85dfd668"
+      }
     },
     {
       "id": "ide-menu-reference",
@@ -6181,6 +7146,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "What every item in the drag-lint menu does",
+      "intro": "Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing.",
       "wikiPage": "IDE-Menu-Reference",
       "surfaces": [
         {
@@ -6190,6 +7156,12 @@
       ],
       "audience": "both",
       "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      },
       "homeOrder": 40
     },
     {
@@ -6200,6 +7172,7 @@
       "status": "shipped",
       "since": "1.13.0-alpha",
       "summary": "Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request",
+      "intro": "Read this when an engine build fails to copy drag-lint.exe because the Delphi IDE is open. ide-release writes a hold (default 120 s) so the plugin stops respawning the engine; --resume clears it and --status reports it. It frees nothing by itself.",
       "wikiPage": "ide-release",
       "surfaces": [
         {
@@ -6225,7 +7198,18 @@
           "help": ["  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "91ba03806964c647daf8e4884913a59f712742abbdbe271defe8962fd21f3055"
+      }
     },
     {
       "id": "installation",
@@ -6235,6 +7219,7 @@
       "status": "shipped",
       "since": "0.21.0-alpha",
       "summary": "Getting the CLI, the IDE plugin, or the LSP running",
+      "intro": "Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together.",
       "wikiPage": "Installation",
       "surfaces": [
         {
@@ -6247,6 +7232,17 @@
         }
       ],
       "audience": "both",
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "86743e3e74f44bf4836c5ed3fab9f985a7d5563d712795c9fb85db304b2c874d"
+      },
       "homeOrder": 20
     },
     {
@@ -6257,6 +7253,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Starts the LSP (Language Server Protocol) stdio server",
+      "intro": "Read this when you want hover, completion, go-to-definition and diagnostics in an editor other than RAD Studio. It starts the language server over stdio; the IDE plugin launches it by itself, and it is not the same as the MCP server (serve) used by AI clients.",
       "wikiPage": "lsp",
       "surfaces": [
         {
@@ -6292,7 +7289,18 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297"
+      "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "b78201a4bcfc17a2919a35dcbf61dc903a1dbf0bea1e801e56a04ba7a725bd56"
+      }
     },
     {
       "id": "mcp-server",
@@ -6366,7 +7374,18 @@
           "tool": "run_compile_check"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "571f67ee00609eb5090ddcc08c35e1ada4d9f2c50a5b8b3b1b7d1a4624cfae1e"
+      }
     },
     {
       "id": "mcp-config-writer",
@@ -6462,6 +7481,7 @@
       "status": "shipped",
       "since": "0.4.0-alpha",
       "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
+      "intro": "Read this when you want an AI assistant such as Claude or Cursor to query a drag-lint index: serve starts an MCP stdio server over the database you give it. The IDE does not use it; the IDE uses lsp.",
       "wikiPage": "serve",
       "surfaces": [
         {
@@ -6479,7 +7499,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ba0b26b250f717eb61594a7b86015fc124397f5edd4676a6c2bc28756958ed76"
+      }
     },
     {
       "id": "setup-installer",
@@ -6524,6 +7555,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it",
+      "intro": "Read this when you add a new project to a multi-project workspace: it registers a project file in the .drag-lint-workspace.json config that workspace index and workspace status use.",
       "wikiPage": "workspace-add",
       "surfaces": [
         {
@@ -6541,7 +7573,18 @@
           "help": ["  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ca1f0d0eefb6b148bfabefee60f927bdf5daf68fe3ab07c7e26aeb08a07f7a81"
+      }
     },
     {
       "id": "workspace-index",
@@ -6551,6 +7594,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass",
+      "intro": "Read this when you want to (re)build the indexes of every project in a workspace in one pass instead of one project at a time.",
       "wikiPage": "workspace-index",
       "surfaces": [
         {
@@ -6569,7 +7613,18 @@
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.ProjectNotifier.pas:103"
+      "notes": "issued by the plugin from DragLint.Plugin.ProjectNotifier.pas:103",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "db4afd0474ece949eb777c51d0aab98f32d10c14e86170c52addee3e779ae69d"
+      }
     },
     {
       "id": "workspace-status",
@@ -6579,6 +7634,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Reports the status of every project registered in a .drag-lint-workspace.json workspace config",
+      "intro": "Read this when you want to see at a glance which projects of a workspace are indexed, stale or missing.",
       "wikiPage": "workspace-status",
       "surfaces": [
         {
@@ -6596,7 +7652,18 @@
           "help": ["  drag-lint workspace status [--config <.drag-lint-workspace.json>]"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "914757e99e0decf7ce7bc9436a79c93311547616431328c67f81998aa295eb99"
+      }
     },
     {
       "id": "about-and-status",
@@ -6606,6 +7673,7 @@
       "status": "shipped",
       "since": "0.15.0-alpha",
       "summary": "The plugin's status window -- versions, connection health, and which indexes are actually in use",
+      "intro": "Read this when hover or go-to-definition seems to answer from the wrong place, or you need to know what is running. The status window shows the versions in use, whether each component is reachable, which index files are actually being used, misconfigured settings and how much memory the IDE holds.",
       "wikiPage": "About-and-Status",
       "surfaces": [
         {
@@ -6676,6 +7744,12 @@
         }
       ],
       "audience": "both",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "cb3db7489723f53586c20f3eed91d49c4579b1d2c106eea91c4c4702e7f4232f"
+      },
       "homeOrder": 60
     },
     {
@@ -6686,6 +7760,7 @@
       "status": "shipped",
       "since": "0.91.0-alpha",
       "summary": "Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls",
+      "intro": "Read this when call-graph or find-callees answers seem to be missing edges. It lists the call sites the resolver could not pin to exactly one target, unresolved or ambiguous, for a symbol or a file, so you can see where the index gave up.",
       "wikiPage": "ambiguous-calls",
       "surfaces": [
         {
@@ -6714,7 +7789,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "6deed3e6818af0d1162b7a28e41e9da9955222bb103a7cc5b0452a6f7e160ab4"
+      }
     },
     {
       "id": "bench-context",
@@ -6724,6 +7810,7 @@
       "status": "shipped",
       "since": "0.18.0-alpha",
       "summary": "Benchmarks the context command by building context bundles for a sample of symbols against a database",
+      "intro": "Read this when you want to measure what building context bundles costs. bench-context runs the context command over a sample of symbols in a database (--n sets the sample size); it is a benchmark, not a way to inspect one symbol.",
       "wikiPage": "bench-context",
       "surfaces": [
         {
@@ -6745,7 +7832,18 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: group guessed"
+      "notes": "seed: group guessed",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0a260e05445f9cf9b87c717b1a300fdfb5e8d65a2b705cc95f5aa861ecf44c5f"
+      }
     },
     {
       "id": "contrast-selftest",
@@ -6755,6 +7853,7 @@
       "status": "internal",
       "since": "0.0.0",
       "summary": "Self-test for the hover contrast computation, driven by a test runner",
+      "intro": "Maintenance self-test for the hover contrast computation, run by a test runner. You will not need it for normal work.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -6763,7 +7862,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown"
+      "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c95fc84e6dffddd5ff019a313955dd75a2ef9e53c50fe130be028d85f1a8af4c"
+      }
     },
     {
       "id": "diff",
@@ -6773,6 +7878,7 @@
       "status": "shipped",
       "since": "0.13.0-alpha",
       "summary": "Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor",
+      "intro": "Read this when you want to know what changed between two index snapshots, for example before and after a refactor. diff compares two index databases and reports the symbol and reference level delta.",
       "wikiPage": "diff",
       "surfaces": [
         {
@@ -6794,7 +7900,18 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "notes": "seed: group guessed"
+      "notes": "seed: group guessed",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "5cccca9c2dd1c3abe3265486df5df48fa0a5edee9295f2bbc6894cd11d4dae72"
+      }
     },
     {
       "id": "doc-facts-selftest",
@@ -6804,6 +7921,7 @@
       "status": "internal",
       "since": "0.0.0",
       "summary": "Self-test for the doc-facts renderer, driven by test runners",
+      "intro": "Maintenance self-test for the doc-facts renderer, run by test runners. You will not need it for normal work.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -6812,7 +7930,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown"
+      "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "f972cd161d5f8941eb68cd16d089453d4ca6a1b04cde9196635d0bab9b70cd3c"
+      }
     },
     {
       "id": "dump-call-edges",
@@ -6822,6 +7946,7 @@
       "status": "shipped",
       "since": "0.91.0-alpha",
       "summary": "Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows",
+      "intro": "Read this when callgraph, find-callees or call-path give a surprising answer and you want the raw material: it prints every resolved call edge in the index as ref_id|target_qname|confidence rows. Troubleshooting tool; needs a project index (--db).",
       "wikiPage": "dump-call-edges",
       "surfaces": [
         {
@@ -6839,7 +7964,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "62c4461cdfa3aefef42ca5c7bf6364c980d541e37290f80e54501f819cc31f00"
+      }
     },
     {
       "id": "dump-pp-eval",
@@ -6849,6 +7985,7 @@
       "status": "internal",
       "since": "0.92.0-alpha",
       "summary": "Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex",
+      "intro": "Read this only when debugging why a conditional-compilation branch was taken or skipped: it dumps how the preprocessor evaluated its expressions, and pairs with dump-pp-lex. Diagnostic verb, not part of the documented preprocessor workflow.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -6857,7 +7994,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed"
+      "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
+      }
     },
     {
       "id": "dump-pp-lex",
@@ -6867,6 +8010,7 @@
       "status": "internal",
       "since": "0.92.0-alpha",
       "summary": "Diagnostic dump of the preprocessor lexer; the documented preprocessor verbs are preprocess-file and pp-profile",
+      "intro": "Read this only when debugging preprocessor handling of a source file: dump-pp-lex --file PATH dumps the preprocessor lexer output. It is a diagnostic; the documented preprocessor verbs are preprocess-file and pp-profile.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -6875,7 +8019,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed"
+      "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "b02944f9cf3a99666155c5d3b86d955740509e94a734f5a3d330c5dff215c34d"
+      }
     },
     {
       "id": "dump-refs",
@@ -6885,6 +8035,7 @@
       "status": "shipped",
       "since": "0.82.0-alpha",
       "summary": "Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution",
+      "intro": "Read this when a reference-derived answer (callers, doc facts, unused-symbol findings) looks wrong: dump-refs prints every ref in one file with the symbol each was attributed to. Troubleshooting tool; needs a project index (--db).",
       "wikiPage": "dump-refs",
       "surfaces": [
         {
@@ -6902,7 +8053,18 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d4a070974443246aa8a821f604a21cdc813d0f43bdbd81c03ba1a10042631d97"
+      }
     },
     {
       "id": "feature-registry",
@@ -6912,7 +8074,7 @@
       "status": "shipped",
       "since": "1.22.0-alpha",
       "summary": "The machine-checked master list of every feature, and the generator of the index pages",
-      "intro": "Register a feature with featuregen add, regenerate the pages with featuregen build --all, and let the battery guard name what is missing. Needs a repository clone and a built featuregen.exe (see the featuregen page); the publish scripts need PowerShell 7.3.",
+      "intro": "Read this when you add or change a drag-lint feature: register it with featuregen add, regenerate the pages with featuregen build --all, and let the registry guard name what is still missing. Needs a repository clone and a built featuregen.exe.",
       "wikiPage": "Feature-Registry",
       "surfaces": [
         {
@@ -6927,7 +8089,18 @@
       ],
       "audience": "both",
       "requires": ["powershell7", "repo-clone"],
-      "aliases": ["blast radius", "feature list", "quick help", "registry"]
+      "aliases": ["blast radius", "feature list", "quick help", "registry"],
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "b41479756108579c845073fcbb97bd7ddf62171ca7ec6b65f80d93992108f5c0"
+      }
     },
     {
       "id": "featuregen",
@@ -6986,6 +8159,7 @@
       "status": "shipped",
       "since": "0.19.0-alpha",
       "summary": "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities",
+      "intro": "Read this when you need to know which build of drag-lint you are running, or want a script to check the version. It prints the version, build date, license and capabilities, and with --json --db it also tells you whether an index is stale for this engine.",
       "wikiPage": "info",
       "surfaces": [
         {
@@ -7006,7 +8180,18 @@
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.About.pas:217"
+      "notes": "issued by the plugin from DragLint.Plugin.About.pas:217",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "40266d03772d546272e6450e9663196066b10587d4fd30b401eaaefe9f28b68e"
+      }
     },
     {
       "id": "library-drift-check",
@@ -7016,6 +8201,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Flags registered library roots that have source on disk but nothing in the index",
+      "intro": "Read this when a library index may have gone stale or was never built. It checks the registered library roots and flags any that have source on disk but nothing in the index; it exits 2 when it finds drift.",
       "wikiPage": "Library-Drift-Check",
       "surfaces": [
         {
@@ -7044,7 +8230,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown"
+      "notes": "seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "dee01c5d781c59a86d8e20ab10145493102d02073a4f663511cfc014c3409914"
+      }
     },
     {
       "id": "maintenance",
@@ -7054,6 +8246,7 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Indexes, the manifest, reindexing, and what to do when something looks wrong",
+      "intro": "Read this when drag-lint gives a wrong answer, because that is almost always a stale or mis-scoped index. It explains where indexes live, how to keep them fresh and how to recognise a bad one.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -7063,6 +8256,17 @@
       ],
       "audience": "both",
       "notes": "seed: since unknown",
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      },
       "homeOrder": 30
     },
     {
@@ -7073,6 +8277,7 @@
       "status": "shipped",
       "since": "0.39.0-alpha",
       "summary": "Opens the drag-lint plugin's own log file",
+      "intro": "Read this when you are diagnosing the drag-lint plugin itself: choosing it opens the plugin own log file, which shows what it did, what it ran and any errors it hit.",
       "wikiPage": "Open-Plugin-Log",
       "surfaces": [
         {
@@ -7081,7 +8286,13 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: group guessed"
+      "notes": "seed: group guessed",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "0b00ecdb1d821ab35463d3bab7d64bb3749f7cac8abb0285ab0f7ba244578614"
+      }
     },
     {
       "id": "resolve-uses",
@@ -7091,6 +8302,7 @@
       "status": "internal",
       "since": "0.41.0-alpha",
       "summary": "The diagnostic behind check-unit --resolve-uses; not a verb of its own",
+      "intro": "This is not a command of its own: it is the diagnostic behind the --resolve-uses option of check-unit. Read the Maintenance page if you need to understand how unit references are resolved.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -7099,7 +8311,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed"
+      "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "b7e71d41448879b30e1e12defd0282071cc232bacd941f17f0ea05a91972d486"
+      }
     },
     {
       "id": "selftest",
@@ -7109,6 +8327,7 @@
       "status": "internal",
       "since": "1.13.0-alpha",
       "summary": "Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb",
+      "intro": "Internal: the self-test dispatcher that the test battery calls. It is not a user verb and you do not need it for everyday work.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -7117,7 +8336,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed"
+      "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "227b9395644e4c8d105f6999b03d75b3b610b1512086232c88c13d62f4a2c1eb"
+      }
     },
     {
       "id": "shutdown",
@@ -7127,6 +8352,7 @@
       "status": "shipped",
       "since": "0.6.0-alpha",
       "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
+      "intro": "Read this when you need to rebuild an index that running engines hold open: shutdown asks the running lsp engines to close their stores and stand down, without killing them.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -7157,7 +8383,18 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page"
+      "notes": "seed: needs own page",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "79b21c85841d45de1e634588ee8fbd5c00aae1fc2e95b1a777267681e3c3e26d"
+      }
     },
     {
       "id": "sql",
@@ -7167,6 +8404,7 @@
       "status": "shipped",
       "since": "0.40.5-alpha",
       "summary": "Runs one read-only SQL statement against an index database and prints the result set",
+      "intro": "Read this when your question has no verb of its own: sql runs one read-only SQL statement against an index database, for example a join across symbols, refs and files, with row and time caps.",
       "wikiPage": "sql",
       "surfaces": [
         {
@@ -7210,7 +8448,18 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "notes": "seed: group guessed"
+      "notes": "seed: group guessed",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "62cc4fd79410b4a066185676d88535b83f84d2841535227c8e7a71b66dd40d14"
+      }
     },
     {
       "id": "test-store-freshness",
@@ -7220,6 +8469,7 @@
       "status": "internal",
       "since": "0.0.0",
       "summary": "Store-freshness probe used by a test runner; it needs --db and does nothing else",
+      "intro": "Internal: a store-freshness probe used by a test runner; it needs --db and does nothing else. It is not a user verb.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -7228,7 +8478,13 @@
         }
       ],
       "audience": "agent",
-      "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown"
+      "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "233a758c69f464298b1cf5f57e96d6f6be4fbd8f197a6e4d8e041a8c7c7967c1"
+      }
     }
   ],
   "families": {

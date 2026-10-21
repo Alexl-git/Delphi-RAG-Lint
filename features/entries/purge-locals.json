@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.91.0-alpha",
   "summary": "A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space",
+  "intro": "Read this when an index database has grown larger than you want and you do not need per-local symbol lookups right now. It drops local-variable and parameter symbols and runs VACUUM; the call graph is unchanged and the symbols return on the next index.",
   "wikiPage": "purge-locals",
   "surfaces": [
     {
@@ -26,5 +27,16 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d3c4ee5ab229b6860c96e0cf43da2f0e8f6b0656de9e4e73e4bf4310b2f3823b"
+  }
 }

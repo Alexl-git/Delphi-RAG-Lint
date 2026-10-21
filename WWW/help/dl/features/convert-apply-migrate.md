@@ -7,14 +7,14 @@ group: component-conversion
 order: 60002
 since: 1.22.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # convert-apply #migrate (member rename / DL_NONE)
 
 #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site.
 
-Member replacement slice 1 (C18): rename methods, events and properties of a converted component in code, or mark them for hand conversion.
+Read this when a component conversion changes the names of methods, events or properties the code uses. Inside a #convert block, #migrate Old -> New renames the member at every bound access site in the .pas; Old -> DL_NONE marks the site for hand conversion instead.
 
 ## How to run it
 

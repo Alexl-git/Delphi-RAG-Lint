@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Opens the main drag-lint dockable tool window inside the IDE",
+  "intro": "Read this when you want the main drag-lint tool window docked beside your editor instead of as a separate window. Choose drag-lint > drag-lint Panel (dockable); it only needs the IDE plugin loaded.",
   "wikiPage": "drag-lint-Panel-dockable",
   "surfaces": [
     {
@@ -14,5 +15,11 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: since unknown"
+  "notes": "seed: since unknown",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0fac7a5a1a6818a175691b1d634c70e6ed91fadd27ac3ff9bae847dc854809e3"
+  }
 }

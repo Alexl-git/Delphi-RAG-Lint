@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.22.0-alpha",
   "summary": "The machine-checked master list of every feature, and the generator of the index pages",
-  "intro": "Register a feature with featuregen add, regenerate the pages with featuregen build --all, and let the battery guard name what is missing. Needs a repository clone and a built featuregen.exe (see the featuregen page); the publish scripts need PowerShell 7.3.",
+  "intro": "Read this when you add or change a drag-lint feature: register it with featuregen add, regenerate the pages with featuregen build --all, and let the registry guard name what is still missing. Needs a repository clone and a built featuregen.exe.",
   "wikiPage": "Feature-Registry",
   "surfaces": [
     {
@@ -22,9 +22,20 @@
   "audience": "both",
   "requires": ["powershell7", "repo-clone"],
   "aliases": ["blast radius", "feature list", "quick help", "registry"],
+  "access": "repo-tooling",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
   "lastVerified": {
     "date": "2026-10-05",
     "by": "claude-task9",
     "build": "1.21.1-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "b41479756108579c845073fcbb97bd7ddf62171ca7ec6b65f80d93992108f5c0"
   }
 }

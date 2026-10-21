@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it",
+  "intro": "Read this when you add a new project to a multi-project workspace: it registers a project file in the .drag-lint-workspace.json config that workspace index and workspace status use.",
   "wikiPage": "workspace-add",
   "surfaces": [
     {
@@ -23,5 +24,16 @@
       "help": ["  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "ca1f0d0eefb6b148bfabefee60f927bdf5daf68fe3ab07c7e26aeb08a07f7a81"
+  }
 }

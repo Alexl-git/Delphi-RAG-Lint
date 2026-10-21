@@ -7,12 +7,14 @@ group: refactoring
 order: 50003
 since: 0.94.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # create-enum-helper
 
 Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type.
+
+Read this when you have an enum and want the usual conversion helpers without writing them by hand. create-enum-helper generates a Byte-family record helper with ToByte, FromByte, ToInteger, FromInteger, ToString and FromString; it is a preview unless you pass --apply.
 
 ## How to run it
 

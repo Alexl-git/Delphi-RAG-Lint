@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.54.0-alpha",
   "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+  "intro": "Read this when a lint finding is a deliberate, reviewed exception that you do not intend to fix. allow records a dl:ok review for that one finding (identified by file, line and rule) so it stops being reported; without --apply it is a dry run.",
   "wikiPage": "allow",
   "surfaces": [
     {
@@ -52,5 +53,16 @@
     }
   ],
   "audience": "both",
-  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061"
+  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "4f6ecc0acddb27a4f5b8e096b1c668322ab7caf91ca4bc36b0867b1c6ab6f28a"
+  }
 }

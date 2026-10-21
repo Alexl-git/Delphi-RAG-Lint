@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.18.0-alpha",
   "summary": "Benchmarks the context command by building context bundles for a sample of symbols against a database",
+  "intro": "Read this when you want to measure what building context bundles costs. bench-context runs the context command over a sample of symbols in a database (--n sets the sample size); it is a benchmark, not a way to inspect one symbol.",
   "wikiPage": "bench-context",
   "surfaces": [
     {
@@ -27,5 +28,16 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: group guessed"
+  "notes": "seed: group guessed",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "0a260e05445f9cf9b87c717b1a300fdfb5e8d65a2b705cc95f5aa861ecf44c5f"
+  }
 }

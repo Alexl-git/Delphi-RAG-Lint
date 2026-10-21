@@ -14,6 +14,8 @@ updated: 1.33.0-alpha
 
 Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type.
 
+Read this when you are tracing how an interface gets resolved or which handler a DFM event really calls: it shows the Spring4D container registrations and DFM event hookups the compiler does not make obvious.
+
 ## How to run it
 
 Full flag list: [wiring in the CLI reference](../cli.md#wiring).

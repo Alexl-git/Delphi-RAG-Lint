@@ -7,12 +7,14 @@ group: linting
 order: 30006
 since: 0.61.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Fix all in project
 
 Applies autofixes for every fixable finding across the whole project, starting from the Structure form.
+
+Read this when you want every auto-fixable finding in the whole project resolved in one action. Open the Structure form, right-click a node and choose Fix all in project; it is not on the main menu and runs lint-all with the fix flags.
 
 ## How to run it
 

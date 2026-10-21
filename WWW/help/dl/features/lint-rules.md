@@ -7,12 +7,14 @@ group: linting
 order: 30014
 since: 0.2.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Lint rules
 
 Every lint rule the engine ships, imported from rules --json.
+
+Read this to see every lint rule drag-lint can check, with its category and whether it is on by default or fixable. You can filter the list by category or get it as JSON.
 
 ## How to run it
 
@@ -33,7 +35,7 @@ category, and its default enabled/fixable status. Reach for it to see what a
 lint run can find, or to filter by category.
 
 The catalog currently holds 190 rules -- 160 enabled by default, 23 marked
-fixable -- across 16 categories. Of the 189, 137 are built-in and 53 are
+fixable -- across 16 categories. Of the 190, 137 are built-in and 53 are
 external `.scm` rule files.
 
 ### Running it from the CLI

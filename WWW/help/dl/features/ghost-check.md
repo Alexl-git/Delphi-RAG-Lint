@@ -7,12 +7,14 @@ group: compiler
 order: 90007
 since: 1.8.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # ghost-check
 
 Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged.
+
+Read this when you want compiler diagnostics for edits you have not saved. ghost-check compiles the project with chosen units temporarily replaced by their buffers, then restores the original files unchanged.
 
 ## How to run it
 
@@ -42,7 +44,7 @@ saving them to disk.
 
 ### Running it from the CLI
 ```text
-drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--format json|text]
+drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]
 ```
 `<dproj>` is the project to compile. Give either a single
 `--unit <real.pas> --buffer <buf>` pair, or an `--overlays <manifest>` file

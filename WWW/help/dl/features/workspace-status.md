@@ -7,12 +7,14 @@ group: editor-integration
 order: 110016
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # workspace status
 
 Reports the status of every project registered in a .drag-lint-workspace.json workspace config.
+
+Read this when you want to see at a glance which projects of a workspace are indexed, stale or missing.
 
 ## How to run it
 

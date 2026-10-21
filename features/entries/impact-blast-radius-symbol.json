@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.17.0-alpha",
   "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
+  "intro": "Read this before changing a widely used method or type: it lists what would be affected if that symbol changes, so you know which code to retest. Give it the qualified name and, optionally, how many levels out to trace.",
   "wikiPage": "Impact-Blast-Radius-symbol",
   "surfaces": [
     {
@@ -37,5 +38,11 @@
       "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "9ff33aa762b192d127f29364855c7f133a588b606981cb87302133bc1c2e2e99"
+  }
 }

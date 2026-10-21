@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.25.0-alpha",
   "summary": "Scans the index for code with no references -- candidates to delete",
+  "intro": "Read this before a cleanup pass or before deleting something you suspect is unused: find-deadcode scans the index for symbols with no references and lists them as candidates. Filter with --kind, add --include-private for private members; also under drag-lint > Code Quality.",
   "wikiPage": "Find-Dead-Code",
   "surfaces": [
     {
@@ -32,5 +33,11 @@
       "help": ["  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "156cb7acb1d09ae868f0b3545e18bb81c3a70432c2c6627f7e7d49f983f5bce0"
+  }
 }

@@ -7,12 +7,14 @@ group: linting
 order: 30018
 since: 0.31.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Run AST Checks
 
 Runs drag-lint's AST-level checks against a file.
+
+Read this when you want to validate a single file against drag-lint AST-level checks: you get the issues found in the parse tree, as text or JSON.
 
 ## How to run it
 

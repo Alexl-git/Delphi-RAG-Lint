@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.69.0-alpha",
   "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
+  "intro": "Read this when a symbol is undeclared and you need the unit to add to uses. find-unit --name X --in file looks the declaring unit up in the index and can add it to the file (--apply, with a backup unless --no-backup).",
   "wikiPage": "find-unit",
   "surfaces": [
     {
@@ -41,5 +42,11 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "pitfalls": ["for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units."]
+  "pitfalls": ["for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units."],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "159e0be3619814e297937f0dbf7709e894e199f967f5e4d389472e72aa824bf5"
+  }
 }

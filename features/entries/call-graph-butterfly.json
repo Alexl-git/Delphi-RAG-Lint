@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.96.0-alpha",
   "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
+  "intro": "Read this when you want to see who calls a symbol and what it calls together, in one butterfly view, from the IDE menu. The same chart is available from the CLI with the butterfly verb.",
   "wikiPage": "Call-Graph-Butterfly",
   "surfaces": [
     {
@@ -44,5 +45,11 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c4f979c316bc5ebd1802da4c21a3955568e851ca16b4761ee5ac53c162a1ddf3"
+  }
 }

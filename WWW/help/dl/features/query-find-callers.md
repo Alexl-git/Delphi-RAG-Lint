@@ -7,12 +7,14 @@ group: search-navigation
 order: 20018
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query find-callers
 
 Lists callers of a routine by name, with an option to restrict results to precise, resolved callers.
+
+Read this to see who calls a routine. Give it the bare member name; with --resolved it keeps only precise, resolved callers and also shows who reads or writes a property or field.
 
 ## How to run it
 

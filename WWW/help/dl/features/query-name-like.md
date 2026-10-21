@@ -7,12 +7,14 @@ group: search-navigation
 order: 20020
 since: 0.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # query --name-like
 
 Case-insensitive substring search over symbol names.
+
+Read this when you do not know the identifier yet. It does a case-insensitive substring search over symbol names, so a fragment such as SVG finds the types that matter.
 
 ## How to run it
 
@@ -22,11 +24,11 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--name` | `<symbol-name>` |  |  |
-| `--db` |  |  |  |
+| `--name-like` | `<substring>` |  |  |
+| `--kind` | `<k>` |  |  |
+| `--limit` | `N` |  |  |
 | `--json` |  |  |  |
-| `--case-sensitive` |  |  |  |
-| `--exact` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
 
 **Needs:** index
 

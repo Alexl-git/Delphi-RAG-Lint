@@ -7,12 +7,14 @@ group: search-navigation
 order: 20011
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Go to Definition
 
 Jumps the editor caret to the declaration of the symbol under the cursor.
+
+Read this to jump straight to where the symbol under the cursor is defined. Choose drag-lint > Go to Definition; it is served by the IDE plugin with no one-shot command line verb.
 
 ## Where to click
 

@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers",
+  "intro": "Read this before editing or explaining a symbol. context returns a compact bundle, its doc comment, class surface, own body and a capped list of callers, so you read a fraction of what a whole-file read costs.",
   "wikiPage": "context",
   "surfaces": [
     {
@@ -44,5 +45,16 @@
   ],
   "audience": "both",
   "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work."],
-  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633"
+  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "1969d373cece10036a4eac6e514e280e8162d03221a8a4f892a2127f77804a23"
+  }
 }

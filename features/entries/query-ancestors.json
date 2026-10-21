@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Resolves the transitive class/interface hierarchy of a type",
+  "intro": "Read this to see everything a class or interface descends from, or to check whether it descends from one specific ancestor. The answer comes straight from the index.",
   "wikiPage": "query-ancestors",
   "surfaces": [
     {
@@ -33,5 +34,11 @@
       "help": ["  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)"]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "9d544b8c733518e0c0edb3f7502b8b1da659caf957aca0041ed1127ef8f06568"
+  }
 }

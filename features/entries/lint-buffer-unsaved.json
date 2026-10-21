@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first",
+  "intro": "Read this when you want lint findings for edits you have not saved yet. The IDE lints the in-memory editor buffer directly, without writing it to disk first; the command line lints saved files.",
   "wikiPage": "Lint-Buffer-Unsaved",
   "surfaces": [
     {
@@ -52,5 +53,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-21",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "9cf7211fba46bc3bf6f6753381310ae825d7f3252ff82d450641b40d3a4b20c3"
+  }
 }

@@ -7,7 +7,7 @@ group: linting
 order: 30017
 since: 1.28.3-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Rescan this unit
@@ -24,17 +24,13 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
+| `--project` | `<file.dproj>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
+| `--recompile` |  |  |  |
+| `--rebuild` |  |  |  |
+| `--dry-run` |  |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
-| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
-| `--max-file-kb` | `N` |  |  |
-| `--no-use-ignore` |  |  |  |
-| `--no-sql-ms` |  |  |  |
-| `--deep` |  |  |  |
-| `--shallow` |  |  |  |
-| `--exclude-under` |  |  |  |
-| `--include-only` |  |  |  |
 
 ## Where to click
 
