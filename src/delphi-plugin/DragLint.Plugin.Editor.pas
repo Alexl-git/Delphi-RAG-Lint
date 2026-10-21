@@ -6121,6 +6121,81 @@ begin
   DLRunReport(Format('helpers-of "%s" --db "%s"', [T, Db]), 'drag-lint-helpers-of.txt');
 end;
 
+/// <summary>Lists the full transitive ancestor chain of a class or interface
+/// (query ancestors); the name box is pre-filled with the identifier at the caret.</summary>
+procedure InvokeQueryAncestors(Sender: TObject);
+var
+  T, Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskText('Type name (list everything it descends from):', IdentifierAtCursor, T) then Exit;
+  DLRunReport(Format('query ancestors --name "%s" --db "%s"', [T, Db]), 'drag-lint-ancestors.txt');
+end;
+
+/// <summary>Lists every class that descends from the named ancestor
+/// (query descendants; derived interfaces are left out by the engine).</summary>
+procedure InvokeQueryDescendants(Sender: TObject);
+var
+  T, Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskText('Ancestor class (list every class derived from it):', IdentifierAtCursor, T) then Exit;
+  DLRunReport(Format('query descendants --of "%s" --db "%s"', [T, Db]), 'drag-lint-descendants.txt');
+end;
+
+/// <summary>Runs the project-scoped structural rules (god-class, unused public
+/// symbol, layering and the rest) over the project index (lint-project, text).
+/// Complements Run Lint All, which reports per-file findings.</summary>
+procedure InvokeLintProject(Sender: TObject);
+var
+  Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  DLRunReport(Format('lint-project --db "%s"', [Db]), 'drag-lint-lint-project.txt', DL_LONG_JOB_MS);
+end;
+
+/// <summary>Reruns a saved report, forms CSV, chart (.dot) or bundle folder
+/// against the current index and shows before / delta / after (compare). Yes
+/// picks a file, No picks a bundle folder, Cancel does nothing.</summary>
+procedure InvokeCompareReport(Sender: TObject);
+var
+  Old: string;
+  Dlg: TFileOpenDialog;
+  Fil: TOpenDialog;
+begin
+  Old:= '';
+  case MessageDlg('Compare a saved report with the current code.' + sLineBreak + sLineBreak +
+                  'Yes = pick a report (.txt), forms CSV or chart (.dot) file' + sLineBreak +
+                  'No  = pick a chart bundle folder',
+                  mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+    mrYes:
+      begin
+        Fil:= TOpenDialog.Create(nil);
+        try
+          Fil.Title  := 'drag-lint: report to compare';
+          Fil.Filter := 'Reports (*.txt;*.csv;*.dot)|*.txt;*.csv;*.dot|All files (*.*)|*.*';
+          Fil.Options:= [ofFileMustExist, ofPathMustExist];
+          if Fil.Execute then Old:= Fil.FileName;
+        finally
+          Fil.Free;
+        end;
+      end;
+    mrNo:
+      begin
+        Dlg:= TFileOpenDialog.Create(nil);
+        try
+          Dlg.Title  := 'drag-lint: chart bundle folder to compare';
+          Dlg.Options:= [fdoPickFolders, fdoPathMustExist];
+          if Dlg.Execute then Old:= Dlg.FileName;
+        finally
+          Dlg.Free;
+        end;
+      end;
+  end;
+  if Old = '' then Exit;
+  DLRunReport(Format('compare --old "%s" --format text', [Old]), 'drag-lint-compare.txt', DL_LONG_JOB_MS);
+end;
+
 /// <summary>Documents every public declaration of every unit in the project
 /// index (document-all, no project scope). Unlike Auto-Document Whole Project
 /// it is not limited to the compile closure's own units, so apply asks first.</summary>
@@ -6600,6 +6675,8 @@ begin
   AddSeparator(SubReports);
   AddSectionHeader(SubReports, 'For testers');
   AddWrappedItem(SubReports, 'Forms for testers (CSV)...', InvokeGenerateFormsCsv);
+  AddSectionHeader(SubReports, 'Is a saved report still true?');
+  AddWrappedItem(SubReports, 'Compare a Saved Report or Chart with Current Code...', InvokeCompareReport);
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);
@@ -6609,6 +6686,8 @@ begin
   AddWrappedItem(SubInspect, 'Symbol Slice...' , InvokeSymbolSlice );
   AddWrappedItem(SubInspect, 'Type at Cursor'  , InvokeTypeAtCursor);
   AddWrappedItem(SubInspect, 'Helpers of Type...', InvokeHelpersOf );
+  AddWrappedItem(SubInspect, 'Ancestors of Type (full chain)...', InvokeQueryAncestors  );
+  AddWrappedItem(SubInspect, 'Descendants of Class...', InvokeQueryDescendants);
 
   { v0.46: Code Quality submenu }
   var SubQuality: TMenuItem:= TMenuItem.Create(RootMenu);
@@ -6620,6 +6699,7 @@ begin
   AddWrappedItem(SubQuality, 'Scan TODOs / FIXMEs...'       , InvokeScanTodos       );
   AddWrappedItem(SubQuality, 'Compiler Hints...'            , InvokeCompilerHints   );
   AddWrappedItem(SubQuality, 'Top Symbols (fan-in)...'      , InvokeTopSymbols      );
+  AddWrappedItem(SubQuality, 'Project Structure Rules (god-class, layering...)...', InvokeLintProject);
 
   { v0.46: Generate / Export submenu }
   var SubGen: TMenuItem:= TMenuItem.Create(RootMenu);
