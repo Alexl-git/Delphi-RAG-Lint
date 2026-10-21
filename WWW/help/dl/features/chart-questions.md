@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80003
 since: 1.20.2-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Chart questions
@@ -64,7 +64,7 @@ formal question about one selected symbol into a clickable diagram: who calls
 this, what breaks if I change it, which tests reach it, what does this form
 wire, where does this protocol command travel. **In RAD Studio, ask from
 drag-lint > Reports** with the caret on the symbol. Outside the IDE the
-questions are answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](chart-engine-dot-lookup.md)).
+questions are answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](charts-and-the-ide.md)).
 The engine verb `drag-lint ask` ships; the full call design is below.
 
 drag-lint is not a model, and these charts are not drawn from prose. Every

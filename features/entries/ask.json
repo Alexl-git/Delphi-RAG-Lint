@@ -96,14 +96,35 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Reports"
+      "path": "drag-lint > Reports",
+      "steps": ["Put the caret on the routine, field, type or unit you are asking about", "drag-lint > Reports, then pick the question", "The chart opens in the browser; the DocInsight text answer is the block drag-lint ask prints"]
     }
   ],
   "audience": "both",
   "requires": ["index", "graphviz"],
+  "questions": [
+    {
+      "ask": "Who writes this field? (the answer as text)",
+      "command": "drag-lint ask who-writes --target <U.TForm.FField> --project <P.dproj>"
+    },
+    {
+      "ask": "The same answer without the DocInsight wrapping",
+      "command": "drag-lint ask who-writes --target <U.TForm.FField> --project <P.dproj> --plain"
+    },
+    {
+      "ask": "Which questions can I ask?",
+      "command": "drag-lint ask --help"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-06",
     "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
     "build": "1.26.1-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "ac8bef600f9010352311eed8a310e026b586f703edc61e47dc6817808c9fa238"
   }
 }

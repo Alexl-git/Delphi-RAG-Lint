@@ -32,6 +32,9 @@ Full flag list: [forms-csv in the CLI reference](../cli.md#forms-csv).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Reports > Forms for testers (CSV)...**
+   1. Open the project in RAD Studio (its index must be fresh)
+   2. drag-lint > Reports > Forms for testers (CSV)...
+   3. Open the CSV: one row per form, with the menu, ribbon or tab path that reaches it
 
 **Needs:** index
 

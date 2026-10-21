@@ -63,9 +63,29 @@
   "audience": "both",
   "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "mcp setup", "mcp.json"],
   "related": ["serve"],
+  "questions": [
+    {
+      "ask": "What would it change? (writes nothing)",
+      "command": "drag-lint mcp-config --all --dry-run"
+    },
+    {
+      "ask": "Let Claude Code and VS Code start drag-lint's MCP server",
+      "command": "drag-lint mcp-config --all"
+    },
+    {
+      "ask": "Take the entry out again",
+      "command": "drag-lint mcp-config --all --remove"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-14",
     "by": "alexanderl",
     "build": "1.31.1-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "9c32b4245dcad99ed4b7866127fc25a69e346e3de5b2ec653a524583e8a1a584"
   }
 }

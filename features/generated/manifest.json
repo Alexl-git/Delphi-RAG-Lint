@@ -4830,7 +4830,8 @@
       "surfaces": [
         {
           "type": "ide-menu",
-          "path": "drag-lint > Reports > Forms for testers (CSV)..."
+          "path": "drag-lint > Reports > Forms for testers (CSV)...",
+          "steps": ["Open the project in RAD Studio (its index must be fresh)", "drag-lint > Reports > Forms for testers (CSV)...", "Open the CSV: one row per form, with the menu, ribbon or tab path that reaches it"]
         },
         {
           "type": "cli",
@@ -4859,7 +4860,23 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "How does a tester reach every form?",
+          "command": "drag-lint forms-csv --project <X.dproj> --db <file.sqlite> --output <forms.csv>"
+        },
+        {
+          "ask": "Start the paths from a different main form",
+          "command": "drag-lint forms-csv --project <X.dproj> --db <file.sqlite> --root <TfrmMAIN>"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "5726cad68640b75d9afd14830fcc11049ad2d51ddfba88bb6b6ff0c2d2aac24c"
+      }
     },
     {
       "id": "impact-blast-radius-symbol",
@@ -5285,11 +5302,32 @@
         },
         {
           "type": "ide-menu",
-          "path": "drag-lint > Reports"
+          "path": "drag-lint > Reports",
+          "steps": ["Put the caret on the routine, field, type or unit you are asking about", "drag-lint > Reports, then pick the question", "The chart opens in the browser; the DocInsight text answer is the block drag-lint ask prints"]
         }
       ],
       "audience": "both",
-      "requires": ["index", "graphviz"]
+      "requires": ["index", "graphviz"],
+      "questions": [
+        {
+          "ask": "Who writes this field? (the answer as text)",
+          "command": "drag-lint ask who-writes --target <U.TForm.FField> --project <P.dproj>"
+        },
+        {
+          "ask": "The same answer without the DocInsight wrapping",
+          "command": "drag-lint ask who-writes --target <U.TForm.FField> --project <P.dproj> --plain"
+        },
+        {
+          "ask": "Which questions can I ask?",
+          "command": "drag-lint ask --help"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ac8bef600f9010352311eed8a310e026b586f703edc61e47dc6817808c9fa238"
+      }
     },
     {
       "id": "chart-questions",
@@ -5388,7 +5426,27 @@
       ],
       "audience": "both",
       "requires": ["index", "graphviz"],
+      "questions": [
+        {
+          "ask": "Who calls this routine, as a chart?",
+          "command": "drag-lint ask who-calls --target <U.TClass.Method> --project <P.dproj> --open"
+        },
+        {
+          "ask": "Where does this field's value go after an edit?",
+          "command": "drag-lint ask round-trip --target <U.TForm.FField> --project <P.dproj> --open"
+        },
+        {
+          "ask": "Which questions are there?",
+          "command": "drag-lint ask --help"
+        }
+      ],
       "family": "chart-questions",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "64233cfde5704bd1dda6e27ba2a24525f4a6ab66e1cf312735eb4d4a996d5fd1"
+      },
       "homeOrder": 44
     },
     {
@@ -5399,7 +5457,7 @@
       "status": "shipped",
       "since": "1.20.1-alpha",
       "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
-      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or a script, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a repository clone and PowerShell 7.",
+      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it). No PowerShell is needed.",
       "wikiPage": "Charts-and-the-IDE",
       "surfaces": [
         {
@@ -5408,6 +5466,27 @@
         }
       ],
       "audience": "both",
+      "requires": ["index", "graphviz"],
+      "questions": [
+        {
+          "ask": "Ask a chart question and open the chart",
+          "command": "drag-lint ask round-trip --target <U.TForm.FField> --project <P.dproj> --open"
+        },
+        {
+          "ask": "Make a chart row open its line in RAD Studio (once per user)",
+          "command": "drag-lint protocol register"
+        },
+        {
+          "ask": "Is the draglint:// link registered?",
+          "command": "drag-lint protocol status"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      },
       "homeOrder": 45
     },
     {
@@ -5448,7 +5527,27 @@
       ],
       "audience": "both",
       "aliases": ["Open-DragLintUri", "Register-DragLintProtocol", "draglint://"],
-      "related": ["ask", "charts-and-the-ide"]
+      "related": ["ask", "charts-and-the-ide"],
+      "questions": [
+        {
+          "ask": "Make a chart row open its line in RAD Studio",
+          "command": "drag-lint protocol register"
+        },
+        {
+          "ask": "Is it registered, and to what?",
+          "command": "drag-lint protocol status"
+        },
+        {
+          "ask": "Remove the registration",
+          "command": "drag-lint protocol unregister"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "ea31c2322857b76f1c489e7705bf9e89f057e47580617d4bde2b161bfd06d127"
+      }
     },
     {
       "id": "compare",
@@ -5516,27 +5615,59 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Is the report under the caret still true?",
+          "command": "drag-lint compare --in <U.pas> --line <L>"
+        },
+        {
+          "ask": "Compare a saved report with today's answer",
+          "command": "drag-lint compare --old <report.txt> --project <P.dproj>"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "68554eeacbd4fd9d8efeec8c7041d7b500b2f96b279d5909b0850e30b35790b7"
+      }
     },
     {
       "id": "chart-engine-dot-lookup",
-      "title": "Where the charts find the engine and Graphviz",
+      "title": "Where the charts find Graphviz",
       "group": "diagrams-charts",
       "owner": "CHARTS",
       "status": "shipped",
       "since": "1.26.1-alpha",
-      "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default",
-      "intro": "Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared default.",
-      "wikiPage": "Charts-and-the-IDE",
+      "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default",
+      "intro": "Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then dot.exe on PATH, then the shared default.",
+      "wikiPage": "Chart-Graphviz-Lookup",
       "surfaces": [
         {
           "type": "workflow",
-          "doc": "charts\\README.md"
+          "doc": "docs\\wiki\\Chart-Graphviz-Lookup.md"
         }
       ],
       "audience": "both",
       "aliases": ["DRAGLINT_DOT", "DRAGLINT_ENGINE", "settings.json"],
-      "related": ["chart-questions"]
+      "related": ["chart-questions"],
+      "questions": [
+        {
+          "ask": "Use a different Graphviz for this session",
+          "command": "$env:DRAGLINT_DOT = 'C:\\Graphviz\\bin\\dot.exe'"
+        },
+        {
+          "ask": "Use a different Graphviz for good",
+          "command": "add \"dot\": \"C:\\\\Graphviz\\\\bin\\\\dot.exe\" to %APPDATA%\\drag-lint\\settings.json"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
     },
     {
       "id": "add-missing-units-to-uses-whole-unit",
@@ -6313,7 +6444,27 @@
       ],
       "audience": "both",
       "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "mcp setup", "mcp.json"],
-      "related": ["serve"]
+      "related": ["serve"],
+      "questions": [
+        {
+          "ask": "What would it change? (writes nothing)",
+          "command": "drag-lint mcp-config --all --dry-run"
+        },
+        {
+          "ask": "Let Claude Code and VS Code start drag-lint's MCP server",
+          "command": "drag-lint mcp-config --all"
+        },
+        {
+          "ask": "Take the entry out again",
+          "command": "drag-lint mcp-config --all --remove"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "9c32b4245dcad99ed4b7866127fc25a69e346e3de5b2ec653a524583e8a1a584"
+      }
     },
     {
       "id": "serve",
@@ -6349,7 +6500,7 @@
       "owner": "CHARTS",
       "status": "experimental",
       "since": "1.28.3-alpha",
-      "summary": "One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
+      "summary": "One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
       "intro": "`drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote.",
       "wikiPage": "Setup-Installer",
       "surfaces": [
@@ -6359,7 +6510,23 @@
         }
       ],
       "audience": "both",
-      "related": ["installation"]
+      "related": ["installation"],
+      "questions": [
+        {
+          "ask": "Install the whole tool set",
+          "command": "drag-lint-setup-<version>.exe"
+        },
+        {
+          "ask": "Remove it again",
+          "command": "Windows Settings > Apps > drag-lint > Uninstall"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CHARTS",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
     },
     {
       "id": "workspace-add",

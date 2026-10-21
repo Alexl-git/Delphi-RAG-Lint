@@ -1,7 +1,7 @@
 # Setup installer
 
 `drag-lint-setup-<version>.exe` installs the whole drag-lint tool set in one go:
-the engine, its rules and parser DLLs, the chart scripts, Graphviz `dot`, the
+the engine, its rules and parser DLLs, the `draglint://` helper, Graphviz `dot`, the
 RAD Studio plugin, ConvRulesEditor, drag-lint-graph and YADF. It is an Inno
 Setup 6 installer; **status: experimental** until it has passed a clean-machine
 test.

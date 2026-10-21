@@ -1,25 +1,41 @@
 {
   "id": "chart-engine-dot-lookup",
-  "title": "Where the charts find the engine and Graphviz",
+  "title": "Where the charts find Graphviz",
   "group": "diagrams-charts",
   "owner": "CHARTS",
   "status": "shipped",
   "since": "1.26.1-alpha",
-  "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default",
-  "intro": "Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared default.",
-  "wikiPage": "Charts-and-the-IDE",
+  "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default",
+  "intro": "Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then dot.exe on PATH, then the shared default.",
+  "wikiPage": "Chart-Graphviz-Lookup",
   "surfaces": [
     {
       "type": "workflow",
-      "doc": "charts\\README.md"
+      "doc": "docs\\wiki\\Chart-Graphviz-Lookup.md"
     }
   ],
   "audience": "both",
   "aliases": ["DRAGLINT_DOT", "DRAGLINT_ENGINE", "settings.json"],
   "related": ["chart-questions"],
+  "questions": [
+    {
+      "ask": "Use a different Graphviz for this session",
+      "command": "$env:DRAGLINT_DOT = 'C:\\Graphviz\\bin\\dot.exe'"
+    },
+    {
+      "ask": "Use a different Graphviz for good",
+      "command": "add \"dot\": \"C:\\\\Graphviz\\\\bin\\\\dot.exe\" to %APPDATA%\\drag-lint\\settings.json"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-06",
     "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
     "build": "1.26.1-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
   }
 }

@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.20.1-alpha",
   "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
-  "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or a script, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a repository clone and PowerShell 7.",
+  "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it). No PowerShell is needed.",
   "wikiPage": "Charts-and-the-IDE",
   "surfaces": [
     {
@@ -15,10 +15,31 @@
     }
   ],
   "audience": "both",
+  "requires": ["index", "graphviz"],
+  "questions": [
+    {
+      "ask": "Ask a chart question and open the chart",
+      "command": "drag-lint ask round-trip --target <U.TForm.FField> --project <P.dproj> --open"
+    },
+    {
+      "ask": "Make a chart row open its line in RAD Studio (once per user)",
+      "command": "drag-lint protocol register"
+    },
+    {
+      "ask": "Is the draglint:// link registered?",
+      "command": "drag-lint protocol status"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-06",
     "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
     "build": "1.26.1-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
   },
   "homeOrder": 45
 }

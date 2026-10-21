@@ -20,8 +20,8 @@
     "version": "1.32.0-alpha"
   },
   "features/ask.md": {
-    "hash": "17ebaae3b5971ac04611f973090a712af10ae85de860854642e2a79c1b5119d0",
-    "version": "1.32.0-alpha"
+    "hash": "58ba82ce17f0cf9db5aaa73c24d0ad75376aa695daaa5d0b0a984294dae14584",
+    "version": "1.33.0-alpha"
   },
   "features/auto-document-whole-project.md": {
     "hash": "6f860e99b374094baf94a8561b18e8ffdc073bc68d32a29e1e93d4fb7a9d967d",
@@ -48,16 +48,16 @@
     "version": "1.32.0-alpha"
   },
   "features/chart-engine-dot-lookup.md": {
-    "hash": "3068388244d4a1757d44618fe831aaf19d8ebd7672182bf839fa75fa0698e0b7",
-    "version": "1.32.0-alpha"
+    "hash": "e9d939fca498ce46d2f201ab07f8de7446d8111976cfe0cfce76055d30ab1c89",
+    "version": "1.33.0-alpha"
   },
   "features/chart-questions.md": {
-    "hash": "870a18817d7bc20eb0740d20dd4dbdefd84f74efdc6d35fae7a48abfa1d6c35d",
-    "version": "1.32.0-alpha"
+    "hash": "03057ccb90d4c0caa3a03ba238ee16e88680c271af0fd4be5c6f9d93d752515d",
+    "version": "1.33.0-alpha"
   },
   "features/charts-and-the-ide.md": {
-    "hash": "6098ed1a15d00ef6ddb5242f5e65ae578000edd76db484bf2ac91614c8a3ac15",
-    "version": "1.32.0-alpha"
+    "hash": "3a3000f88d7104297688e8e21106dfca4f2f871bf3b32cb15f31957f13253105",
+    "version": "1.33.0-alpha"
   },
   "features/circular-dependency-report.md": {
     "hash": "746aaad94d3812fea56cc13a40ee08638f8ba8c1a73f56bbaa81b2a092316df5",
@@ -312,7 +312,7 @@
     "version": "1.32.0-alpha"
   },
   "features/generate-test-helper-csv.md": {
-    "hash": "83498db8ce518429b354cc9b4ead2f9de83cff264dcee27d9ee5b0fc7136c79b",
+    "hash": "a90656bc9715c575333639689999e3ec33447f147872030d98d7e38381479b52",
     "version": "1.33.0-alpha"
   },
   "features/ghost-check.md": {
@@ -444,8 +444,8 @@
     "version": "1.33.0-alpha"
   },
   "features/protocol-handler.md": {
-    "hash": "f8758222a4248a813021c53ed4491684aac2df91870b3fe4ad385a5a2963e19e",
-    "version": "1.32.0-alpha"
+    "hash": "49d725e52803be0772b3b30540d4626f6dc3a52861e599a9ea67c4350366c097",
+    "version": "1.33.0-alpha"
   },
   "features/purge-locals.md": {
     "hash": "cae0ea9635a0ef852c41c90118fd9ba321d15b33e95290c0581994252555688a",
@@ -556,8 +556,8 @@
     "version": "1.32.0-alpha"
   },
   "features/setup-installer.md": {
-    "hash": "9268e96a1262c805eb37dd7090bc3f8be0d6e2130f2196bfc0180db7bfe0c549",
-    "version": "1.32.0-alpha"
+    "hash": "f98d40fe12171b8959fdd09b5f4f15bbe640b5572181d2d06967befa0ab6454f",
+    "version": "1.33.0-alpha"
   },
   "features/shared-unit.md": {
     "hash": "7ab24c70a2b99dce8296f9e7d56efdc1516d1a181d519fe987c781c1eabdbf7f",

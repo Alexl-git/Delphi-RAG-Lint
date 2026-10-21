@@ -65,9 +65,25 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Is the report under the caret still true?",
+      "command": "drag-lint compare --in <U.pas> --line <L>"
+    },
+    {
+      "ask": "Compare a saved report with today's answer",
+      "command": "drag-lint compare --old <report.txt> --project <P.dproj>"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-11",
     "by": "alexanderl",
     "build": "1.26.7-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "68554eeacbd4fd9d8efeec8c7041d7b500b2f96b279d5909b0850e30b35790b7"
   }
 }

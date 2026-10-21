@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Reports > Forms for testers (CSV)..."
+      "path": "drag-lint > Reports > Forms for testers (CSV)...",
+      "steps": ["Open the project in RAD Studio (its index must be fresh)", "drag-lint > Reports > Forms for testers (CSV)...", "Open the CSV: one row per form, with the menu, ribbon or tab path that reaches it"]
     },
     {
       "type": "cli",
@@ -41,9 +42,25 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How does a tester reach every form?",
+      "command": "drag-lint forms-csv --project <X.dproj> --db <file.sqlite> --output <forms.csv>"
+    },
+    {
+      "ask": "Start the paths from a different main form",
+      "command": "drag-lint forms-csv --project <X.dproj> --db <file.sqlite> --root <TfrmMAIN>"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-06",
     "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
     "build": "1.26.1-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "5726cad68640b75d9afd14830fcc11049ad2d51ddfba88bb6b6ff0c2d2aac24c"
   }
 }

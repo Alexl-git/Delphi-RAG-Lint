@@ -144,11 +144,11 @@ One line per feature, grouped as on [Features](Features), with the short help an
 
 * **ask** -- Ask one report question and print the answer as text. Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed. [More](ask)
 * **Chart questions** -- 26 questions. Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS. [More](Diagrams-and-Charts)
-* **Charts and the IDE** -- Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio. Read this when you first ask a chart question: how to ask one from drag-lint > Reports or a script, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a repository clone and PowerShell 7. [More](Charts-and-the-IDE)
+* **Charts and the IDE** -- Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio. Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it). No PowerShell is needed. [More](Charts-and-the-IDE)
 * **Click-to-source: the draglint:// handler** -- Registers draglint:// so a chart row opens its line in RAD Studio; a GUI helper exe, no PowerShell. Run drag-lint protocol register once per user (the installer does it); status says what is registered; unregister undoes it. The handler drag-lint-open.exe validates the link before anything else and writes to the plugin's pipe; with no IDE running it opens the file in Notepad. [More](Draglint-Protocol-Handler)
   aliases: Open-DragLintUri, Register-DragLintProtocol, draglint://
 * **Compare a report with current code** -- Reruns a saved or pasted report and shows before / delta / after. Read this when a DocInsight report, a tester sheet or a chart may have gone stale: compare reruns its COMMAND against the current index and diffs the normalised text, a forms CSV by row, or a chart by nodes and edges. [More](compare)
-* **Where the charts find the engine and Graphviz** -- The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default. Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\drag-lint\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared default. [More](Charts-and-the-IDE)
+* **Where the charts find Graphviz** -- The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default. Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\drag-lint\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then dot.exe on PATH, then the shared default. [More](Chart-Graphviz-Lookup)
   aliases: DRAGLINT_DOT, DRAGLINT_ENGINE, settings.json
 
 ## Compiler integration
@@ -186,7 +186,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Register the MCP server (Claude Code, VS Code)** -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable. Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again. [More](Register-MCP-Server)
   aliases: Set-DragLintMcpConfig, claude mcp add, mcp setup, mcp.json
 * **serve** -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index. [More](serve)
-* **Setup installer** (experimental) -- One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF. `drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote. [More](Setup-Installer)
+* **Setup installer** (experimental) -- One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF. `drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote. [More](Setup-Installer)
 * **workspace add** -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it. [More](workspace-add)
 * **workspace index** -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass. [More](workspace-index)
 * **workspace status** -- Reports the status of every project registered in a .drag-lint-workspace.json workspace config. [More](workspace-status)
@@ -252,7 +252,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)
 * Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
-* Where the charts find the engine and Graphviz: procedure charts\README.md
+* Where the charts find Graphviz: procedure docs\wiki\Chart-Graphviz-Lookup.md
 * Work list: menu 'View > Work list' inside ConvRulesEditor.exe
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md
 * drag-lint: Project Rules: host 'Project Manager' (the caption is verified, the host is declared)

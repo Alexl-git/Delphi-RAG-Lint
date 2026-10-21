@@ -37,9 +37,29 @@
   "audience": "both",
   "aliases": ["Open-DragLintUri", "Register-DragLintProtocol", "draglint://"],
   "related": ["ask", "charts-and-the-ide"],
+  "questions": [
+    {
+      "ask": "Make a chart row open its line in RAD Studio",
+      "command": "drag-lint protocol register"
+    },
+    {
+      "ask": "Is it registered, and to what?",
+      "command": "drag-lint protocol status"
+    },
+    {
+      "ask": "Remove the registration",
+      "command": "drag-lint protocol unregister"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-14",
     "by": "alexanderl",
     "build": "1.31.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "ea31c2322857b76f1c489e7705bf9e89f057e47580617d4bde2b161bfd06d127"
   }
 }

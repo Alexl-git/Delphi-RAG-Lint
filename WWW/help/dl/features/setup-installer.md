@@ -1,25 +1,25 @@
 ---
 id: setup-installer
 title: Setup installer
-summary: One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF
+summary: One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF
 product: DL
 group: editor-integration
 order: 110013
 since: 1.28.3-alpha
 status: experimental
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Setup installer
 
-One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF.
+One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF.
 
 `drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote.
 
 ## Details
 
 `drag-lint-setup-<version>.exe` installs the whole drag-lint tool set in one go:
-the engine, its rules and parser DLLs, the chart scripts, Graphviz `dot`, the
+the engine, its rules and parser DLLs, the `draglint://` helper, Graphviz `dot`, the
 RAD Studio plugin, ConvRulesEditor, drag-lint-graph and YADF. It is an Inno
 Setup 6 installer; **status: experimental** until it has passed a clean-machine
 test.

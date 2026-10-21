@@ -5,7 +5,7 @@
   "owner": "CHARTS",
   "status": "experimental",
   "since": "1.28.3-alpha",
-  "summary": "One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
+  "summary": "One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
   "intro": "`drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote.",
   "wikiPage": "Setup-Installer",
   "surfaces": [
@@ -16,9 +16,25 @@
   ],
   "audience": "both",
   "related": ["installation"],
+  "questions": [
+    {
+      "ask": "Install the whole tool set",
+      "command": "drag-lint-setup-<version>.exe"
+    },
+    {
+      "ask": "Remove it again",
+      "command": "Windows Settings > Apps > drag-lint > Uninstall"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-13",
     "by": "alexanderl",
     "build": "1.28.3-alpha"
+  },
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CHARTS",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
   }
 }

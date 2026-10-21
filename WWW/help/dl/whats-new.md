@@ -41,7 +41,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) -- Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard.
 * [Rescan this unit](features/rescan-this-unit.md) -- Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed.
-* [Setup installer](features/setup-installer.md) -- One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF.
+* [Setup installer](features/setup-installer.md) -- One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF.
 
 ## 1.28.2-alpha
 
@@ -58,7 +58,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.26.1-alpha
 
-* [Where the charts find the engine and Graphviz](features/chart-engine-dot-lookup.md) -- The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default.
+* [Where the charts find Graphviz](features/chart-engine-dot-lookup.md) -- The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default.
 * [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable.
 
 ## 1.22.0-alpha

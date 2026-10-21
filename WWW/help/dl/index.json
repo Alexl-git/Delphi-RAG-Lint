@@ -1054,8 +1054,8 @@
   },
   {
     "id": "chart-engine-dot-lookup",
-    "title": "Where the charts find the engine and Graphviz",
-    "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default",
+    "title": "Where the charts find Graphviz",
+    "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default",
     "group": "diagrams-charts",
     "order": 80002,
     "since": "1.26.1-alpha",
@@ -1334,7 +1334,7 @@
   {
     "id": "setup-installer",
     "title": "Setup installer",
-    "summary": "One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
+    "summary": "One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
     "group": "editor-integration",
     "order": 110013,
     "since": "1.28.3-alpha",

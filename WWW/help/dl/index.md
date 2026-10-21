@@ -181,7 +181,7 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [ask](features/ask.md) | Ask one report question and print the answer as text | 1.30.0-alpha |
-| [Where the charts find the engine and Graphviz](features/chart-engine-dot-lookup.md) | The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default | 1.26.1-alpha |
+| [Where the charts find Graphviz](features/chart-engine-dot-lookup.md) | The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default | 1.26.1-alpha |
 | [Chart questions](features/chart-questions.md) | Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS | 1.20.2-alpha |
 | [Charts and the IDE](features/charts-and-the-ide.md) | Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio | 1.20.1-alpha |
 | [Compare a report with current code](features/compare.md) | Reruns a saved or pasted report and shows before / delta / after | 1.28.0-alpha |
@@ -233,7 +233,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 15 tools | 0.4.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |
-| [Setup installer](features/setup-installer.md) | One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF | 1.28.3-alpha |
+| [Setup installer](features/setup-installer.md) | One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF | 1.28.3-alpha |
 | [workspace add](features/workspace-add.md) | Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it | 0.6.0-alpha |
 | [workspace index](features/workspace-index.md) | Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass | 0.6.0-alpha |
 | [workspace status](features/workspace-status.md) | Reports the status of every project registered in a .drag-lint-workspace.json workspace config | 0.6.0-alpha |

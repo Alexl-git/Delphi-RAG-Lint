@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80001
 since: 1.30.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # ask
@@ -48,6 +48,9 @@ Full flag list: [ask in the CLI reference](../cli.md#ask).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Reports**
+   1. Put the caret on the routine, field, type or unit you are asking about
+   2. drag-lint > Reports, then pick the question
+   3. The chart opens in the browser; the DocInsight text answer is the block drag-lint ask prints
 
 **Needs:** index, graphviz
 
@@ -143,7 +146,7 @@ drag-lint ask deps --target uPipeSessionBuilder --in C:\Projects\DB\ORM3\SERVER\
 ### Related
 
 - [compare](compare.md) -- rerun a saved answer and see what changed.
-- [Charts and the IDE](chart-engine-dot-lookup.md) -- the Reports menu, bundles, clickable rows.
+- [Charts and the IDE](charts-and-the-ide.md) -- the Reports menu, bundles, clickable rows.
 
 ---
 

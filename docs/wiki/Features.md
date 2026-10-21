@@ -267,7 +267,7 @@ Ask a question about a symbol and get a clickable chart.
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare` |  |
-| [Where the charts find the engine and Graphviz](Charts-and-the-IDE) | procedure: `charts\README.md` |  |
+| [Where the charts find Graphviz](Chart-Graphviz-Lookup) | procedure: `docs\wiki\Chart-Graphviz-Lookup.md` |  |
 
 ## Compiler integration
 

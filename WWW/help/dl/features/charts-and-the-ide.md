@@ -7,14 +7,16 @@ group: diagrams-charts
 order: 80004
 since: 1.20.1-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Charts and the IDE
 
 Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio.
 
-Read this when you first ask a chart question: how to ask one from drag-lint > Reports or a script, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a repository clone and PowerShell 7.
+Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it). No PowerShell is needed.
+
+**Needs:** index, graphviz
 
 ## Details
 

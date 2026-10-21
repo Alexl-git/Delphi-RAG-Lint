@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80006
 since: 1.31.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Click-to-source: the draglint:// handler
@@ -40,7 +40,7 @@ Full flag list: [protocol in the CLI reference](../cli.md#protocol).
 
 ## Details
 
-**Makes a click on a chart row or a trace anchor open its line in RAD Studio.** A browser cannot write to the IDE plugin's named pipe, so one per-user registry key hands the `draglint://` link to `drag-lint-open.exe`, a small GUI helper (no console window, no PowerShell), which checks the link and passes it on. Part of [Charts and the IDE](chart-engine-dot-lookup.md).
+**Makes a click on a chart row or a trace anchor open its line in RAD Studio.** A browser cannot write to the IDE plugin's named pipe, so one per-user registry key hands the `draglint://` link to `drag-lint-open.exe`, a small GUI helper (no console window, no PowerShell), which checks the link and passes it on. Part of [Charts and the IDE](charts-and-the-ide.md).
 
 ### Running it
 
@@ -80,7 +80,7 @@ Earlier builds registered `charts\src\Register-DragLintProtocol.ps1`, which copi
 
 ### Related
 
-[Charts and the IDE](chart-engine-dot-lookup.md), [ask](ask.md). Guards: `tests\autotest\run_protocol_verb.ps1`.
+[Charts and the IDE](charts-and-the-ide.md), [ask](ask.md). Guards: `tests\autotest\run_protocol_verb.ps1`.
 
 ---
 
