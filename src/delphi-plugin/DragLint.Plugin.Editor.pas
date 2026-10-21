@@ -182,6 +182,12 @@ procedure InvokeFindUsages  (Sender: TObject);
 procedure InvokeSymbolSearch(Sender: TObject);
 procedure InvokeOpenLog       (Sender: TObject);
 
+var
+  /// <summary>Extract Method entry point, set by DragLint.Plugin.Keyboard while
+  /// its keystrokes are registered (that unit uses this one, so the menu cannot
+  /// call it directly). Nil when Keyboard is not loaded.</summary>
+  DLExtractMethodHandler: TProcedure = nil;
+
 { v0.40.3: lint the active editor BUFFER (unsaved changes included).
   Snapshots the in-memory text to %TEMP%\drag-lint-buffer-<n>.pas and
   runs drag-lint lint <tempfile> --json. Findings are merged into the
@@ -5877,6 +5883,339 @@ begin
   DLRunReport('library-drift', 'drag-lint-library-drift.txt');
 end;
 
+{ ---- Menu access for verbs that had none (owner ruling 2026-10-21) ----
+  Registry verdicts: docs\registry-review-2026-10-21\ENGINE-menu-access.tsv.
+  Every handler here only BUILDS an engine command line and hands it to
+  DLRunReport (async, report opens in an editor buffer) or to the job queue
+  (maintenance, which needs the LSP's DB handle released). None computes
+  anything itself. }
+
+const
+  { Longest a DB-mutating maintenance job or whole-index documenting run may take. }
+  DL_LONG_JOB_MS = 600000;
+  { Hop limit passed to call-path. }
+  DL_CALLPATH_MAX_DEPTH = 8;
+  { Wiki page root for the two Help entries; the page names are the registry
+    entries' wikiPage values. }
+  DL_WIKI_BASE_URL = 'https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/';
+
+/// <summary>Prompts for one free-text argument and rejects a double quote,
+/// which would break the quoted engine argument.</summary>
+/// <param name="pPrompt">Prompt shown in the input box.</param>
+/// <param name="pDefault">Initial value (for example the identifier at the caret).</param>
+/// <param name="pValue">Receives the trimmed text when the result is True.</param>
+/// <returns>True when the user confirmed a non-empty, quote-free value.</returns>
+function DLAskText(const pPrompt, pDefault: string; out pValue: string): Boolean;
+begin
+  pValue:= pDefault;
+  Result:= InputQuery('drag-lint', pPrompt, pValue) and (Trim(pValue) <> '');
+  if Result then pValue:= Trim(pValue);
+  if Result and (Pos('"', pValue) > 0) then
+  begin
+    ShowMessage('drag-lint: the value must not contain a double-quote (").');
+    Result:= False;
+  end;
+end;
+
+/// <summary>Asks whether a source-changing command should be applied or only
+/// previewed. Cancel means do nothing.</summary>
+/// <param name="pWhat">One-line description of what the command changes.</param>
+/// <param name="pApply">True for apply, False for a dry-run preview.</param>
+/// <returns>False when the user cancelled (nothing must run).</returns>
+function DLAskApply(const pWhat: string; out pApply: Boolean): Boolean;
+begin
+  pApply:= False;
+  Result:= True;
+  case MessageDlg(pWhat + sLineBreak + sLineBreak +
+                  'Yes = apply now (the engine keeps backup copies)' + sLineBreak +
+                  'No  = preview only (dry run, nothing is changed)',
+                  mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+    mrYes: pApply:= True;
+    mrNo : pApply:= False;
+  else
+    Result:= False;
+  end;
+end;
+
+/// <summary>Command-line suffix for an apply decision.</summary>
+/// <param name="pApply">True to emit the apply flag.</param>
+/// <returns>' --apply' or an empty string.</returns>
+function DLApplyArg(pApply: Boolean): string;
+begin
+  Result:= '';
+  if pApply then Result:= ' --apply';
+end;
+
+/// <summary>Saves all modified modules before an apply, because the engine
+/// edits files on disk. Does nothing for a preview.</summary>
+/// <param name="pApply">True when the command will change files.</param>
+procedure DLSaveAllIfApply(pApply: Boolean);
+var
+  MS: IOTAModuleServices;
+begin
+  if pApply and Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+end;
+
+/// <summary>Resolves the project index or tells the user there is none.</summary>
+/// <param name="pDb">Receives the index path.</param>
+/// <returns>True when an index database was found.</returns>
+function DLNeedDb(out pDb: string): Boolean;
+begin
+  pDb:= ResolvePrimaryIndexDb;
+  Result:= pDb <> '';
+  if not Result then ShowMessage('drag-lint: no project index.');
+end;
+
+{ Runs a DB-mutating maintenance command through the job queue with the LSP
+  stopped first (a live LSP connection holds the DB's WAL lock). Same shape as
+  InvokeAutoDocumentProject; the report lands in an editor buffer. }
+procedure DLRunMaintenanceJob(const pTitle, pCmdTail, pOutBase, pKey: string);
+var
+  OutPath: string;
+  Job    : TDragLintJob;
+begin
+  OutPath:= TPath.Combine(TPath.GetTempPath, pOutBase);
+  DLT('menu', 'enqueue(maintenance): ' + pCmdTail);
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkReindex;
+  Job.Title      := pTitle;
+  Job.CoalesceKey:= pKey;
+  Job.CmdLine    := Format('"%s" %s', [DLExe64, pCmdTail]);
+  Job.TimeoutMs  := DL_LONG_JOB_MS;
+  Job.OnPreRun   :=
+    procedure
+    begin
+      if GLspClient <> nil then
+      begin
+        GLspClient.Stop;
+        FreeAndNil(GLspClient);
+      end;
+    end;
+  Job.OnDone     :=
+    procedure(AExit: Integer; AOut: string)
+    var S: string;
+    begin
+      S:= AOut;
+      if Trim(S) = '' then S:= '(no output)';
+      if AExit <> 0 then S:= Format('[%s exited %d]'#13#10, [pTitle, AExit]) + S;
+      try TFile.WriteAllText(OutPath, S);
+      except on E: Exception do DLT('menu', 'maintenance report write failed: ' + E.Message); end;
+      DLOpenInEditor(OutPath);
+    end;
+  JobQueue.Enqueue(Job);
+end;
+
+/// <summary>Lists the resolved outgoing calls of the routine named in the prompt
+/// (find-callees), the counterpart of Find Callers for the other direction.</summary>
+procedure InvokeFindCallees(Sender: TObject);
+var
+  Q, Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskQName(Q) then Exit;
+  DLRunReport(Format('find-callees --qname "%s" --db "%s"', [Q, Db]), 'drag-lint-find-callees.txt');
+end;
+
+/// <summary>N-deep resolved call tree of a routine, callers or callees
+/// (callgraph, cycle-guarded, depth 3).</summary>
+procedure InvokeCallGraphTree(Sender: TObject);
+var
+  Q, Db, Dir: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskQName(Q) then Exit;
+  case MessageDlg('Call tree direction?' + sLineBreak + sLineBreak +
+                  'Yes = callers (who calls it)' + sLineBreak +
+                  'No  = callees (what it calls)',
+                  mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+    mrYes: Dir:= 'callers';
+    mrNo : Dir:= 'callees';
+  else
+    Exit;
+  end;
+  DLRunReport(Format('callgraph --qname "%s" --direction %s --depth 3 --db "%s"', [Q, Dir, Db]),
+    'drag-lint-callgraph.txt');
+end;
+
+/// <summary>Shortest resolved call path from one routine to another
+/// (call-path); the "from" box is pre-filled with the identifier at the caret.</summary>
+procedure InvokeCallPath(Sender: TObject);
+var
+  A, B, Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskText('Call path FROM (qualified name):', IdentifierAtCursor, A) then Exit;
+  if not DLAskText('Call path TO (qualified name):', '', B) then Exit;
+  DLRunReport(Format('call-path --from "%s" --to "%s" --max-depth %d --db "%s"', [A, B, DL_CALLPATH_MAX_DEPTH, Db]),
+    'drag-lint-call-path.txt');
+end;
+
+/// <summary>Finds the unit that declares a symbol and, on request, adds it to
+/// the active unit's uses clause (find-unit). Saves all modules first because
+/// the engine edits the file on disk.</summary>
+procedure InvokeFindUnit(Sender: TObject);
+var
+  Sym, Pas, Db: string;
+  Apply       : Boolean;
+begin
+  if not DLActivePas(Pas) then
+  begin
+    ShowMessage('drag-lint: open a .pas unit first.');
+    Exit;
+  end;
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskText('Symbol to find the declaring unit of:', IdentifierAtCursor, Sym) then Exit;
+  if not DLAskApply('Add the declaring unit of "' + Sym + '" to the uses clause of ' +
+                    ExtractFileName(Pas) + '?', Apply) then Exit;
+  DLSaveAllIfApply(Apply);
+  DLRunReport(Format('find-unit --name "%s" --in "%s"%s --db "%s"', [Sym, Pas, DLApplyArg(Apply), Db]),
+    'drag-lint-find-unit.txt');
+end;
+
+/// <summary>Deletes a symbol only when the index shows zero references
+/// (safe-delete); preview by default, apply on explicit confirmation.</summary>
+procedure InvokeSafeDelete(Sender: TObject);
+var
+  Q, Db: string;
+  Apply: Boolean;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskQName(Q) then Exit;
+  if not DLAskApply('Delete "' + Q + '" if and only if it has no references?', Apply) then Exit;
+  DLSaveAllIfApply(Apply);
+  DLRunReport(Format('safe-delete --name "%s"%s --db "%s"', [Q, DLApplyArg(Apply), Db]),
+    'drag-lint-safe-delete.txt');
+end;
+
+/// <summary>Opens the Extract Method dialog for the current selection. The
+/// implementation lives in DragLint.Plugin.Keyboard (it needs the key-binding
+/// reload path); Keyboard registers it in DLExtractMethodHandler on load.</summary>
+procedure InvokeExtractMethodMenu(Sender: TObject);
+begin
+  if Assigned(DLExtractMethodHandler) then DLExtractMethodHandler
+  else ShowMessage('drag-lint: Extract Method is not available (keystroke module not loaded).');
+end;
+
+/// <summary>Generates a Byte-family record helper for an enum type
+/// (create-enum-helper); preview by default.</summary>
+procedure InvokeCreateEnumHelper(Sender: TObject);
+var
+  Q, Db: string;
+  Apply: Boolean;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskQName(Q) then Exit;
+  if not DLAskApply('Generate a record helper for enum "' + Q + '"?', Apply) then Exit;
+  DLSaveAllIfApply(Apply);
+  DLRunReport(Format('create-enum-helper --qname "%s"%s --db "%s"', [Q, DLApplyArg(Apply), Db]),
+    'drag-lint-enum-helper.txt');
+end;
+
+/// <summary>Lists the record/class helpers that target a type (helpers-of).</summary>
+procedure InvokeHelpersOf(Sender: TObject);
+var
+  T, Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskText('Type name (helpers that target it):', IdentifierAtCursor, T) then Exit;
+  DLRunReport(Format('helpers-of "%s" --db "%s"', [T, Db]), 'drag-lint-helpers-of.txt');
+end;
+
+/// <summary>Documents every public declaration of every unit in the project
+/// index (document-all, no project scope). Unlike Auto-Document Whole Project
+/// it is not limited to the compile closure's own units, so apply asks first.</summary>
+procedure InvokeDocumentAll(Sender: TObject);
+var
+  Db   : string;
+  Apply: Boolean;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if not DLAskApply('Document EVERY public declaration of EVERY unit in this index (' +
+                    ExtractFileName(Db) + ')?', Apply) then Exit;
+  DLSaveAllIfApply(Apply);
+  DLRunReport(Format('document-all%s --db "%s"', [DLApplyArg(Apply), Db]),
+    'drag-lint-document-all.txt', DL_LONG_JOB_MS);
+end;
+
+{ The active project's folder, or '' (with a message) when none is open. }
+function DLNeedProjectDir(out pDir: string): Boolean;
+var
+  Proj: string;
+begin
+  Proj:= GetActiveProjectFile;
+  pDir:= '';
+  if Proj <> '' then pDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
+  Result:= pDir <> '';
+  if not Result then ShowMessage('drag-lint: no active project.');
+end;
+
+/// <summary>Lists the project tags carried by the documentation facts under the
+/// active project's folder (doc-forget --list-tags, read-only).</summary>
+procedure InvokeDocTagsList(Sender: TObject);
+var
+  Dir: string;
+begin
+  if not DLNeedProjectDir(Dir) then Exit;
+  DLRunReport(Format('doc-forget --scope "%s" --list-tags', [Dir]), 'drag-lint-doc-tags.txt');
+end;
+
+/// <summary>Reaps one project tag from the inbound documentation facts under the
+/// active project's folder (doc-forget --project), preview by default.</summary>
+procedure InvokeDocForget(Sender: TObject);
+var
+  Dir, Tag: string;
+  Apply   : Boolean;
+begin
+  if not DLNeedProjectDir(Dir) then Exit;
+  if not DLAskText('Project tag to forget (see "List Documentation Project Tags"):', '', Tag) then Exit;
+  if not DLAskApply('Reap tag "' + Tag + '" from the documentation facts under ' + Dir + '?', Apply) then Exit;
+  DLRunReport(Format('doc-forget --scope "%s" --project "%s"%s', [Dir, Tag, DLApplyArg(Apply)]),
+    'drag-lint-doc-forget.txt');
+end;
+
+/// <summary>Drops local-variable and parameter symbols from the project index and
+/// vacuums it (purge-locals). A size escape hatch: the call graph is unchanged
+/// and the next index run re-creates the rows. Runs through the job queue with
+/// the LSP stopped.</summary>
+procedure InvokePurgeLocals(Sender: TObject);
+var
+  Db: string;
+begin
+  if not DLNeedDb(Db) then Exit;
+  if MessageDlg('Shrink ' + ExtractFileName(Db) + '?' + sLineBreak + sLineBreak +
+                'This drops local-variable and parameter symbols and vacuums the file. ' +
+                'The call graph is unchanged; the next index run restores the rows.',
+                mtConfirmation, [mbOK, mbCancel], 0) <> mrOk then Exit;
+  DLRunMaintenanceJob('Purge locals', Format('purge-locals --db "%s"', [Db]),
+    'drag-lint-purge-locals.txt', 'purge-locals:' + LowerCase(Db));
+end;
+
+/// <summary>Moves project index databases into each project's own _D-RAG folder
+/// (migrate-dbs); preview by default, apply through the job queue.</summary>
+procedure InvokeMigrateDbs(Sender: TObject);
+var
+  Apply: Boolean;
+begin
+  if not DLAskApply('Move project index databases into each project''s _D-RAG folder?', Apply) then Exit;
+  if Apply then
+    DLRunMaintenanceJob('Migrate DBs', 'migrate-dbs --apply', 'drag-lint-migrate-dbs.txt', 'migrate-dbs')
+  else
+    DLRunReport('migrate-dbs', 'drag-lint-migrate-dbs.txt');
+end;
+
+/// <summary>Opens the IDE Menu Reference wiki page in the browser.</summary>
+procedure InvokeHelpMenuReference(Sender: TObject);
+begin
+  ShellExecute(0, 'open', PChar(DL_WIKI_BASE_URL + 'IDE-Menu-Reference'), nil, nil, SW_SHOWNORMAL);
+end;
+
+/// <summary>Opens the Effect Summary Legend wiki page (what the purity tokens
+/// in a routine's effect summary mean) in the browser.</summary>
+procedure InvokeHelpEffectLegend(Sender: TObject);
+begin
+  ShellExecute(0, 'open', PChar(DL_WIKI_BASE_URL + 'Effect-Summary-Legend'), nil, nil, SW_SHOWNORMAL);
+end;
+
 const
   LINTALL_MSG_CAP = 2000; { max clickable findings posted per run (avoid flooding the pane) }
   LINTALL_GROUP_NAME = 'drag-lint lint-all';
@@ -6182,6 +6521,10 @@ begin
     field to a property is a refactor and has nothing to do with uses. It
     lived on that submenu only because it was built as a 'Quick-Fix'. }
   AddWrappedItem(RootMenu, 'Convert Public Field to Property at Cursor', InvokeConvertFieldToProperty);
+  { Refactors beside Rename (2026-10-21): Extract Method has Ctrl+Alt+M; Safe
+    Delete previews first and applies only on an explicit Yes. }
+  AddWrappedItem(RootMenu, 'Extract Method (selection)... (Ctrl+Alt+M)', InvokeExtractMethodMenu);
+  AddWrappedItem(RootMenu, 'Safe Delete Symbol...'      , InvokeSafeDelete      );
   AddWrappedItem(RootMenu, 'Format with YADF'           , InvokeFormatYadf      );
   AddWrappedItem(RootMenu, 'Format Whole Project with YADF...', InvokeFormatProjectYadf);
   AddWrappedItem(RootMenu, 'drag-lint Options...'       , InvokeOptionsDialog   );
@@ -6215,10 +6558,14 @@ begin
   AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...'                  , InvokeSuggestUses     );
   AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)'  , InvokeQuickFixUses    );
   AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor'      , InvokeQuickFixInlineHintUses);
+  AddWrappedItem(SubUses, 'Find Unit for Symbol (add to uses)...'                      , InvokeFindUnit        );
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...'                          , InvokeImpact          );
   AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...'                  , InvokeWiring          );
   AddWrappedItem(SubUses, 'Reverse Call Tree (who calls this, N-deep)...'              , InvokeReverseCallTreeChoose);
   AddWrappedItem(SubUses, 'Call Graph (Butterfly)...'                                  , InvokeButterfly       );
+  AddWrappedItem(SubUses, 'Call Tree (callers or callees, N-deep)...'                  , InvokeCallGraphTree   );
+  AddWrappedItem(SubUses, 'What This Routine Calls (callees)...'                       , InvokeFindCallees     );
+  AddWrappedItem(SubUses, 'Call Path Between Two Routines...'                          , InvokeCallPath        );
   AddSeparator(SubUses);
   AddSectionHeader(SubUses, 'This project');
   AddWrappedItem(SubUses, 'Circular Uses Report (cycles + fix plan)...'                , InvokeCircularUses    );
@@ -6261,6 +6608,7 @@ begin
   AddWrappedItem(SubInspect, 'Class Surface...', InvokeClassSurface);
   AddWrappedItem(SubInspect, 'Symbol Slice...' , InvokeSymbolSlice );
   AddWrappedItem(SubInspect, 'Type at Cursor'  , InvokeTypeAtCursor);
+  AddWrappedItem(SubInspect, 'Helpers of Type...', InvokeHelpersOf );
 
   { v0.46: Code Quality submenu }
   var SubQuality: TMenuItem:= TMenuItem.Create(RootMenu);
@@ -6279,6 +6627,10 @@ begin
   RootMenu.Add(SubGen);
   AddWrappedItem(SubGen, 'Doc Comment Stub (symbol)...'  , InvokeGenerateDocs  );
   AddWrappedItem(SubGen, 'Auto-Document Whole Project...', InvokeAutoDocumentProject);
+  AddWrappedItem(SubGen, 'Auto-Document Every Indexed Unit...', InvokeDocumentAll);
+  AddWrappedItem(SubGen, 'List Documentation Project Tags', InvokeDocTagsList);
+  AddWrappedItem(SubGen, 'Forget Documentation Project Tag...', InvokeDocForget);
+  AddWrappedItem(SubGen, 'Enum Record Helper (symbol)...', InvokeCreateEnumHelper);
   AddWrappedItem(SubGen, 'Unit Test Stub (symbol)...'    , InvokeGenerateTest  );
   AddWrappedItem(SubGen, 'Export Enums (Delphi const)...', InvokeExportEnums   );
   AddWrappedItem(SubGen, 'Export Graph (DOT)...'         , InvokeExportGraphDot);
@@ -6295,6 +6647,8 @@ begin
   AddWrappedItem(SubMaint, 'Rebuild Index for This Project', InvokeReindexProject);
   AddWrappedItem(SubMaint, 'Show Resolved DBs (debug)...', InvokeResolveDbs    );
   AddWrappedItem(SubMaint, 'Library Drift Check...'      , InvokeLibraryDrift  );
+  AddWrappedItem(SubMaint, 'Shrink Index (purge locals)...', InvokePurgeLocals );
+  AddWrappedItem(SubMaint, 'Migrate Index DBs to _D-RAG...', InvokeMigrateDbs  );
 
   { ---- Compile & Analysis (daily use) ---- }
   AddSeparator(RootMenu);
@@ -6309,6 +6663,11 @@ begin
 
   { ---- About & Help ---- }
   AddSeparator(RootMenu);
+  var SubHelp: TMenuItem:= TMenuItem.Create(RootMenu);
+  SubHelp.Caption:= 'Help';
+  RootMenu.Add(SubHelp);
+  AddWrappedItem(SubHelp, 'IDE Menu Reference (wiki)', InvokeHelpMenuReference);
+  AddWrappedItem(SubHelp, 'Effect Summary Legend (wiki)', InvokeHelpEffectLegend);
   AddWrappedItem(RootMenu, 'About'                          , InvokeAbout          );
 
   { v0.42: also surface the dockable panel under View > Tool Windows. This item
