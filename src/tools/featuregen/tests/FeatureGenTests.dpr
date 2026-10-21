@@ -2671,6 +2671,8 @@ begin
     lHelpA.LoadFromText(HELP_A);
     lHelpB.LoadFromText(HELP_B);
     lLive.ProductVersion := '9.9.9-test';
+    // 'ask' is verified against the REAL help in the live registry; re-stamp it against this test's help so only 'outline' changes.
+    VerifyEntryWith(lCopy, 'ask', 'tester', '2026-10-19', lLive, lHelpA);
     lFile := VerifyEntryWith(lCopy, 'outline', 'tester', '2026-10-19', lLive, lHelpA);
     lVal := ReadJsonFile(lFile);
     try
