@@ -19,12 +19,8 @@
   "related": ["convrules-editor"],
   "questions": [
     {
-      "ask": "W",
-      "command": "h"
-    },
-    {
-      "ask": "C",
-      "command": "o"
+      "ask": "What is left to convert by hand after the last run?",
+      "command": "ConvRulesEditor.exe > View > Work list"
     }
   ],
   "lastVerified": {

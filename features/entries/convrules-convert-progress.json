@@ -19,12 +19,8 @@
   "related": ["convrules-editor"],
   "questions": [
     {
-      "ask": "W",
-      "command": "h"
-    },
-    {
-      "ask": "W",
-      "command": "a"
+      "ask": "Why is my conversion taking so long, and which unit is it on?",
+      "command": "Watch the Convert tab progress line in ConvRulesEditor.exe"
     }
   ],
   "lastVerified": {

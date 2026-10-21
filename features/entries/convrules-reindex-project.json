@@ -19,12 +19,8 @@
   "related": ["convrules-editor"],
   "questions": [
     {
-      "ask": "H",
-      "command": "o"
-    },
-    {
-      "ask": "C",
-      "command": "o"
+      "ask": "How do I refresh the index after editing in the IDE?",
+      "command": "ConvRulesEditor.exe > Conversion > Reindex project"
     }
   ],
   "lastVerified": {
