@@ -10,6 +10,7 @@ function ConvertTo-HtmlText([string]$Text) {
     # Raw text in, safe HTML text out; every non-ASCII character becomes a numeric entity
     # (HtmlEncode alone leaves characters above U+00FF, e.g. smart quotes, as they are).
     $e = [Net.WebUtility]::HtmlEncode($Text)
+    if ($e -notmatch '[^\x00-\x7F]') { return $e }
     [regex]::Replace($e, '[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\x00-\x7F]', { param($m) "&#$([char]::ConvertToUtf32($m.Value, 0));" })
 }
 

@@ -397,3 +397,10 @@ footer.site-foot{max-width:1360px;margin:64px auto 0;display:flex;flex-wrap:wrap
   body{padding:0 16px 72px}
   .topbar{margin:0 -16px;padding:0 16px}
 }
+
+/* help: begin */
+.tablewrap{overflow-x:auto;margin:0 0 18px}
+.help h1{margin-bottom:12px}
+.help .facts{margin:0 0 22px}
+.help pre{overflow-x:auto}
+/* help: end */

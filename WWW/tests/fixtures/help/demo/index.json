@@ -1,0 +1,1 @@
+{"product":"demo","groups":[{"id":"g1","title":"Group & one","order":10}],"options":[{"id":"alpha","title":"Alpha & Co","summary":"The alpha option.","group":"g1","order":10,"since":"1.0.0.0","file":"options/alpha.md"},{"id":"beta","title":"Beta","summary":"The beta option.","group":"g1","order":20,"since":"1.0.0.0","file":"options/beta.md"}]}

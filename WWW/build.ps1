@@ -4,11 +4,12 @@ param(
     [string]$Out = (Join-Path $PSScriptRoot '_site'),
     [string]$ArticlesRoot = (Join-Path $PSScriptRoot 'articles'),
     [string]$ProductsRoot = (Join-Path $PSScriptRoot 'products'),
+    [string]$HelpRoot = (Join-Path $PSScriptRoot 'help'),
     [switch]$NoRewrite,
     [scriptblock]$Gh = { param($argv) & gh @argv }
 )
 $ErrorActionPreference = 'Stop'
-foreach ($l in 'Config', 'Releases', 'Articles', 'Products', 'Render', 'Check') { . (Join-Path $PSScriptRoot "lib\$l.ps1") }
+foreach ($l in 'Config', 'Releases', 'Articles', 'Products', 'Render', 'Help', 'Check') { . (Join-Path $PSScriptRoot "lib\$l.ps1") }
 
 function Write-SiteFile([string]$RelPath, [string]$Text) {
     $p = Join-Path $Out $RelPath
@@ -70,7 +71,18 @@ try {
     }
     Add-Page '/downloads/' 'Downloads' 'Latest releases of DL (drag-lint) and YADF.' "<div class=""page""><h1>Downloads</h1>$($prod -join "`n")</div>"
 
-    $hl = foreach ($h in $cfg.help) { "<li><a class=""title"" href=""$($h.url)"">$(ConvertTo-HtmlText $h.title)</a></li>" }
+    $trees = @(Get-HelpTrees $HelpRoot)
+    foreach ($t in $trees) {
+        foreach ($pg in $t.Pages) { Add-Page $pg.Path $pg.Title $pg.Summary $pg.Main }
+        foreach ($f in $t.Files) {
+            $dest = Join-Path $Out ('help\' + $f.Rel.Replace('/', '\'))
+            [void][IO.Directory]::CreateDirectory((Split-Path $dest -Parent))
+            Copy-Item -LiteralPath $f.SrcFull -Destination $dest
+        }
+    }
+    $hl = @(foreach ($t in $trees) {
+        "<li><a class=""title"" href=""/help/$($t.Product)/"">$(ConvertTo-HtmlText $t.Title)</a>$(if ($t.Summary) { '<p>' + (ConvertTo-HtmlText $t.Summary) + '</p>' })</li>"
+    }) + @(foreach ($h in $cfg.help) { "<li><a class=""title"" href=""$($h.url)"">$(ConvertTo-HtmlText $h.title)</a></li>" })
     Add-Page '/help/' 'Help' 'Manuals and wikis.' "<div class=""page""><h1>Help</h1><ul class=""list"">$($hl -join "`n")</ul></div>"
 
     $cl = foreach ($p in $cfg.products) {

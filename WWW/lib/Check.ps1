@@ -10,7 +10,7 @@ function Test-SiteOutput([string]$Dir, $Config) {
         $rel = $f.FullName.Substring($root.Length + 1)
         if ($f.Name -like '_shoot*') { $problems.Add("${rel}: screenshot copy left by tools\shoot.ps1 (delete it)"); continue }
         $bytes = [IO.File]::ReadAllBytes($f.FullName)
-        if (@($bytes | Where-Object { $_ -gt 0x7F } | Select-Object -First 1).Count) {
+        if ([Array]::FindIndex($bytes, [Predicate[byte]]{ param($b) $b -gt 0x7F }) -ge 0) {
             $problems.Add("${rel}: non-ASCII byte"); continue
         }
         if ($f.Extension -ne '.html') { continue }
