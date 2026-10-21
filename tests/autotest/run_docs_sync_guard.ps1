@@ -1206,7 +1206,12 @@ Check 'check 9: --help flag set is populated' ($helpSet.Count -gt 100) `
 $phSpan = [regex]::Match($cliSrc, '(?s)procedure PrintHelp.*?function ParseArgs')
 Check 'check 9: the PrintHelp span was located' $phSpan.Success 'cannot compare source help against the exe'
 if ($phSpan.Success) {
-  $srcHelpSet = Get-FlagSet $phSpan.Value $FlagRx
+  # P7: the verb reference of --help is GENERATED into DRagLint.CLI.HelpText.pas (featuregen); the source help is both files.
+  $helpUnit = Join-Path $Repo 'src\cli\DRagLint.CLI.HelpText.pas'
+  Check 'check 9: the generated help unit is present' (Test-Path -LiteralPath $helpUnit) 'src\cli\DRagLint.CLI.HelpText.pas -- run featuregen build --all'
+  $srcHelpText = $phSpan.Value
+  if (Test-Path -LiteralPath $helpUnit) { $srcHelpText += [IO.File]::ReadAllText($helpUnit) }
+  $srcHelpSet = Get-FlagSet $srcHelpText $FlagRx
   $f0Src = @($srcHelpSet | Where-Object { -not $helpSet.Contains($_) }) | Sort-Object
   $f0Exe = @($helpSet    | Where-Object { -not $srcHelpSet.Contains($_) }) | Sort-Object
   Check 'F0 the deployed exe''s --help matches PrintHelp in source' `
