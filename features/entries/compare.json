@@ -61,6 +61,11 @@
       ],
       "helpOrder": 7,
       "help": ["  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]", "                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]", "                               [--format text|json|html] [--output <file>] [--open]", "  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)", "  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page", "  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot", "                               Reruns the old report's COMMAND in-process (no PowerShell) and diffs the normalised", "                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,", "                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping."]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Reports > Compare a Saved Report or Chart with Current Code...",
+      "steps": ["drag-lint > Reports > Compare a Saved Report or Chart with Current Code...", "Yes picks a saved report .txt, forms .csv or chart .dot; No picks a chart bundle folder", "Read before / delta / after in drag-lint-compare.txt (an empty delta means the report is still true)"]
     }
   ],
   "audience": "both",
@@ -84,6 +89,6 @@
     "date": "2026-10-21",
     "by": "CHARTS",
     "build": "1.33.0-alpha",
-    "surfaceHash": "68554eeacbd4fd9d8efeec8c7041d7b500b2f96b279d5909b0850e30b35790b7"
+    "surfaceHash": "18699c1e8e901671e898fbd04aa168ac184bf0dacb576a0a940fba54623eef41"
   }
 }
