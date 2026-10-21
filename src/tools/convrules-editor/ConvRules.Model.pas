@@ -210,22 +210,22 @@ type
 
       // rnkWarn
       /// <summary>The source property path a #warn watches (first token after the directive).</summary>
-      WarnPath: string;  // dl:ok public-field@w1 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      WarnPath: string;  // dl:ok public-field@8ae1 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
       /// <summary>The warning text: everything from the first to the last double quote, quotes excluded, no escaping
       /// (the engine's rule). '' when the line is malformed.</summary>
-      WarnText: string;  // dl:ok public-field@w2 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      WarnText: string;  // dl:ok public-field@d561 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
       /// <summary>True when the line is '#warn &lt;path&gt; "&lt;text&gt;"'. A malformed line keeps its Raw text verbatim
       /// (Emit returns Raw even when Dirty); the engine's validator names the fault.</summary>
-      WarnValid: Boolean;  // dl:ok public-field@w3 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      WarnValid: Boolean;  // dl:ok public-field@cf62 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
 
       // rnkCheckRef
       /// <summary>The target property path whose converted value is checked.</summary>
-      CheckRefPath: string;  // dl:ok public-field@c1 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      CheckRefPath: string;  // dl:ok public-field@2b86 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
       /// <summary>The '&lt;Class&gt;.&lt;Prop&gt;' names, in source order, trimmed.</summary>
-      CheckRefTargets: TArray<string>;  // dl:ok public-field@c2 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      CheckRefTargets: TArray<string>;  // dl:ok public-field@38db -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
       /// <summary>True when there is a path and at least one target, each a '&lt;Class&gt;.&lt;Prop&gt;' split at its last dot
       /// with both halves non-empty. A malformed line keeps its Raw text verbatim (Emit returns Raw even when Dirty).</summary>
-      CheckRefValid: Boolean;  // dl:ok public-field@c3 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      CheckRefValid: Boolean;  // dl:ok public-field@0a99 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
 
       /// <summary>Validation marks on this line (session state; see TRuleMark).
       /// Emit ignores them, so they never reach a file, Snapshot or Dirty.</summary>
@@ -871,7 +871,7 @@ begin
   Result:= ANode;
 end;
 
-function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@87fa, too-many-exit-points@94ac, cyclomatic-complexity@0f40, cognitive-complexity@383b -- REVIEWED 2026-10-11 (re-read after the C10 G-expression split moved it to 255 lines; first reviewed 2026-09-30): a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth, with its engine-identical digits-only check, took it to 257 lines / 20 exits / cyclomatic 44 / cognitive 103 -- and splitting the arms apart is a refactor outside this change
+function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@0046, too-many-exit-points@b53b, cyclomatic-complexity@fb8b, cognitive-complexity@5462 -- (re-read after the C10 G-expression split moved it to 255 lines; first reviewed 2026-09-30): a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth, with its engine-identical digits-only check, took it to 257 lines / 20 exits / cyclomatic 44 / cognitive 103, and #warn + #check-ref (B9, re-read 2026-10-20) to 295 lines / 22 exits / cyclomatic 52 / cognitive 123 -- and splitting the arms apart is a refactor outside this change
 var
   N     : TRuleNode;
   T     : string   ;

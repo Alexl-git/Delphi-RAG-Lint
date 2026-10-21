@@ -2353,7 +2353,11 @@ begin
   var lb: Integer:= Pos('[', AOutput);
   var rb: Integer:= 0               ;
   for var i:= Length(AOutput) downto 1 do
-    if AOutput[i] = ']' then begin rb:= i; Break; end;
+    if AOutput[i] = ']' then
+    begin
+      rb:= i;
+      Break;
+    end;
   if (lb <= 0) or (rb <= lb) then
     Exit;
   Root:= TJSONObject.ParseJSONValue(Copy(AOutput, lb, rb - lb + 1));
