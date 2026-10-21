@@ -73,6 +73,11 @@
       "command": "drag-lint proptree --qname <Unit.TType> --depth 3 --min-visibility published --db <file.sqlite>"
     }
   ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CONVERTER"
+  },
   "verified": {
     "date": "2026-10-21",
     "by": "CONVERTER",

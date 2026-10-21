@@ -46,6 +46,11 @@
     }
   ],
   "notes": "own page written 2026-10-21",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CONVERTER"
+  },
   "verified": {
     "date": "2026-10-21",
     "by": "CONVERTER",

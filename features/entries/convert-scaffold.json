@@ -62,6 +62,11 @@
       "command": "drag-lint convert-scaffold --from <FromType> --to <ToType> --depth 6 --output <book.rules> --db <file.sqlite>"
     }
   ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CONVERTER"
+  },
   "verified": {
     "date": "2026-10-21",
     "by": "CONVERTER",

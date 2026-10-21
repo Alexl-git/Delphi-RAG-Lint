@@ -52,11 +52,11 @@
     "version": "1.33.0-alpha"
   },
   "features/chart-questions.md": {
-    "hash": "03057ccb90d4c0caa3a03ba238ee16e88680c271af0fd4be5c6f9d93d752515d",
+    "hash": "a0d58bf943362001baaa6545d1283887bc6725972cab9a1f02510fdef107ec20",
     "version": "1.33.0-alpha"
   },
   "features/charts-and-the-ide.md": {
-    "hash": "3a3000f88d7104297688e8e21106dfca4f2f871bf3b32cb15f31957f13253105",
+    "hash": "fb7b1b41940bf8cb149cab40131ae1ec758280b6d116ed805c115d73f5d6d3af",
     "version": "1.33.0-alpha"
   },
   "features/circular-dependency-report.md": {

@@ -44,7 +44,7 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Symbol Slice...](features/symbol-slice.md)
     * [Type at Cursor](features/type-at-cursor.md)
   * [Rename Symbol...](features/rename-symbol.md)
-  * [Reports](features/ask.md)
+  * Reports: [ask](features/ask.md), [Chart questions](features/chart-questions.md), [Charts and the IDE](features/charts-and-the-ide.md)
     * [Forms for testers (CSV)...](features/generate-test-helper-csv.md)
   * [Show Completion](features/show-completion.md)
   * [Show Signature Help](features/show-signature-help.md)

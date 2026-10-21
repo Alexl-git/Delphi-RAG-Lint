@@ -30,5 +30,10 @@
       "command": "Open the Convert tab in ConvRulesEditor.exe (see the manual, section Composing the rules for one job)"
     }
   ],
-  "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+  "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown",
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CONVERTER"
+  }
 }

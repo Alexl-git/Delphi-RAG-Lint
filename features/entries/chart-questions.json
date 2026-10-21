@@ -91,6 +91,11 @@
           "name": "--resolve-only"
         }
       ]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Reports",
+      "steps": ["Put the caret on the routine, field, type or unit you are asking about", "drag-lint > Reports, then pick the question from its group", "The chart opens in the browser; a chart row opens its line in RAD Studio"]
     }
   ],
   "audience": "both",
@@ -119,7 +124,7 @@
     "date": "2026-10-21",
     "by": "CHARTS",
     "build": "1.33.0-alpha",
-    "surfaceHash": "64233cfde5704bd1dda6e27ba2a24525f4a6ab66e1cf312735eb4d4a996d5fd1"
+    "surfaceHash": "ac8bef600f9010352311eed8a310e026b586f703edc61e47dc6817808c9fa238"
   },
   "homeOrder": 44
 }

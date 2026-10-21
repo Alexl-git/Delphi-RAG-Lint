@@ -263,8 +263,8 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask](ask) | `ask`; drag-lint > Reports |  |
-| [Chart questions](Diagrams-and-Charts) | 26 questions; `ask` |  |
-| [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
+| [Chart questions](Diagrams-and-Charts) | 26 questions; `ask`; drag-lint > Reports |  |
+| [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md`; drag-lint > Reports |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare` |  |
 | [Where the charts find Graphviz](Chart-Graphviz-Lookup) | procedure: `docs\wiki\Chart-Graphviz-Lookup.md` |  |

@@ -1,0 +1,11 @@
+ask	CHARTS	no-steps
+ask	CHARTS	no-questions
+chart-engine-dot-lookup	CHARTS	no-questions
+chart-questions	CHARTS	no-questions
+charts-and-the-ide	CHARTS	no-questions
+compare	CHARTS	no-questions
+generate-test-helper-csv	CHARTS	no-steps
+generate-test-helper-csv	CHARTS	no-questions
+mcp-config-writer	CHARTS	no-questions
+protocol-handler	CHARTS	no-questions
+setup-installer	CHARTS	no-questions

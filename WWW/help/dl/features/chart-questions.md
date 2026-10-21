@@ -55,6 +55,13 @@ Full flag list: [ask in the CLI reference](../cli.md#ask).
 | `--open` |  |  |  |
 | `--resolve-only` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Reports**
+   1. Put the caret on the routine, field, type or unit you are asking about
+   2. drag-lint > Reports, then pick the question from its group
+   3. The chart opens in the browser; a chart row opens its line in RAD Studio
+
 **Needs:** index, graphviz
 
 ## Details

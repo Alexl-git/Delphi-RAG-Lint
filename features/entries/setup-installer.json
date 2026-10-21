@@ -26,6 +26,11 @@
       "command": "Windows Settings > Apps > drag-lint > Uninstall"
     }
   ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CHARTS"
+  },
   "lastVerified": {
     "date": "2026-10-13",
     "by": "alexanderl",

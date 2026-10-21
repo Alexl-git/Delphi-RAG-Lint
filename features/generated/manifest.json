@@ -4374,7 +4374,12 @@
           "ask": "Why is my conversion taking so long, and which unit is it on?",
           "command": "Watch the Convert tab progress line in ConvRulesEditor.exe"
         }
-      ]
+      ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      }
     },
     {
       "id": "convert-apply-migrate",
@@ -4523,6 +4528,11 @@
           "command": "drag-lint convert-apply --unit <F.pas> --rules <book.rules> --db <file.sqlite> --only Name1,Name2 --apply"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CONVERTER",
@@ -4612,6 +4622,11 @@
           "command": "drag-lint convert-scaffold --from <FromType> --to <ToType> --depth 6 --output <book.rules> --db <file.sqlite>"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CONVERTER",
@@ -4674,6 +4689,11 @@
           "command": "drag-lint convert-validate --rules <book.rules> --print-parsed"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CONVERTER",
@@ -4713,7 +4733,12 @@
           "command": "Open the Convert tab in ConvRulesEditor.exe (see the manual, section Composing the rules for one job)"
         }
       ],
-      "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+      "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown",
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      }
     },
     {
       "id": "glyph-vacuum",
@@ -4763,6 +4788,11 @@
         }
       ],
       "notes": "own page written 2026-10-21",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CONVERTER",
@@ -4845,6 +4875,11 @@
           "command": "drag-lint proptree --qname <Unit.TType> --depth 3 --min-visibility published --db <file.sqlite>"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CONVERTER",
@@ -4886,6 +4921,11 @@
           "command": "ConvRulesEditor.exe > Convert tab > Qualify all..."
         }
       ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      },
       "verified": {
         "date": "2026-10-20",
         "by": "CONVERTER",
@@ -4917,7 +4957,12 @@
           "ask": "How do I refresh the index after editing in the IDE?",
           "command": "ConvRulesEditor.exe > Conversion > Reindex project"
         }
-      ]
+      ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      }
     },
     {
       "id": "convrules-work-list",
@@ -4943,7 +4988,12 @@
           "ask": "What is left to convert by hand after the last run?",
           "command": "ConvRulesEditor.exe > View > Work list"
         }
-      ]
+      ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CONVERTER"
+      }
     },
     {
       "id": "butterfly",
@@ -6207,6 +6257,11 @@
               "name": "--resolve-only"
             }
           ]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Reports",
+          "steps": ["Put the caret on the routine, field, type or unit you are asking about", "drag-lint > Reports, then pick the question from its group", "The chart opens in the browser; a chart row opens its line in RAD Studio"]
         }
       ],
       "audience": "both",
@@ -6230,7 +6285,7 @@
         "date": "2026-10-21",
         "by": "CHARTS",
         "build": "1.33.0-alpha",
-        "surfaceHash": "64233cfde5704bd1dda6e27ba2a24525f4a6ab66e1cf312735eb4d4a996d5fd1"
+        "surfaceHash": "ac8bef600f9010352311eed8a310e026b586f703edc61e47dc6817808c9fa238"
       },
       "homeOrder": 44
     },
@@ -6248,6 +6303,11 @@
         {
           "type": "workflow",
           "doc": "docs\\wiki\\Charts-and-the-IDE.md"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Reports",
+          "steps": ["Put the caret on a routine, field, type or unit", "drag-lint > Reports, then pick a question", "Click a chart row to jump to its line (needs drag-lint protocol register once)"]
         }
       ],
       "audience": "both",
@@ -6270,7 +6330,7 @@
         "date": "2026-10-21",
         "by": "CHARTS",
         "build": "1.33.0-alpha",
-        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+        "surfaceHash": "664eca395a70f798e284bd2243de9400021810653438802d51be9ae24fc5497c"
       },
       "homeOrder": 45
     },
@@ -6327,6 +6387,11 @@
           "command": "drag-lint protocol unregister"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CHARTS"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CHARTS",
@@ -6447,6 +6512,11 @@
           "command": "add \"dot\": \"C:\\\\Graphviz\\\\bin\\\\dot.exe\" to %APPDATA%\\drag-lint\\settings.json"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CHARTS"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CHARTS",
@@ -7466,6 +7536,11 @@
           "command": "drag-lint mcp-config --all --remove"
         }
       ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CHARTS"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CHARTS",
@@ -7540,6 +7615,11 @@
           "command": "Windows Settings > Apps > drag-lint > Uninstall"
         }
       ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "CHARTS"
+      },
       "verified": {
         "date": "2026-10-21",
         "by": "CHARTS",

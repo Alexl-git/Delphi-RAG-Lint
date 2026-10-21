@@ -51,6 +51,11 @@
       "command": "drag-lint protocol unregister"
     }
   ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CHARTS"
+  },
   "lastVerified": {
     "date": "2026-10-14",
     "by": "alexanderl",

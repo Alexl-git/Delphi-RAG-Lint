@@ -1,0 +1,10 @@
+id	verdict	reason
+ask	has-ui	drag-lint > Reports (every question)
+chart-questions	has-ui	the 26 questions of drag-lint > Reports (family children carry the menu paths)
+generate-test-helper-csv	has-ui	drag-lint > Reports > Forms for testers (CSV)...
+compare	should-have-menu	'Is this report still true?' at the caret in a DocInsight remarks block; the plugin has no Compare item yet (owner step 2)
+charts-and-the-ide	n/a	workflow page; the IDE part is Reports (ask / chart-questions)
+chart-engine-dot-lookup	n/a	configuration (DRAGLINT_DOT / settings.json), nothing to click
+mcp-config-writer	cli-only	one-time setup, also an optional installer task
+protocol-handler	cli-only	one-time per-user registration, done by the installer; status/unregister are support commands
+setup-installer	n/a	the installer exe itself

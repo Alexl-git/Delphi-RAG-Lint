@@ -32,6 +32,11 @@
       "command": "ConvRulesEditor.exe > Convert tab > Qualify all..."
     }
   ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CONVERTER"
+  },
   "lastVerified": {
     "date": "2026-10-19",
     "by": "alexanderl",

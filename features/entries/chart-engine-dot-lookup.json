@@ -27,6 +27,11 @@
       "command": "add \"dot\": \"C:\\\\Graphviz\\\\bin\\\\dot.exe\" to %APPDATA%\\drag-lint\\settings.json"
     }
   ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CHARTS"
+  },
   "lastVerified": {
     "date": "2026-10-06",
     "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",

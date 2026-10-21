@@ -16,6 +16,13 @@ Ask a chart question, open the answer, read a round-trip trace, jump to RAD Stud
 
 Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it). No PowerShell is needed.
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Reports**
+   1. Put the caret on a routine, field, type or unit
+   2. drag-lint > Reports, then pick a question
+   3. Click a chart row to jump to its line (needs drag-lint protocol register once)
+
 **Needs:** index, graphviz
 
 ## Details

@@ -23,6 +23,11 @@
       "command": "Watch the Convert tab progress line in ConvRulesEditor.exe"
     }
   ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "CONVERTER"
+  },
   "lastVerified": {
     "date": "2026-10-11",
     "by": "alexanderl",

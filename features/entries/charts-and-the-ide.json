@@ -12,6 +12,11 @@
     {
       "type": "workflow",
       "doc": "docs\\wiki\\Charts-and-the-IDE.md"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Reports",
+      "steps": ["Put the caret on a routine, field, type or unit", "drag-lint > Reports, then pick a question", "Click a chart row to jump to its line (needs drag-lint protocol register once)"]
     }
   ],
   "audience": "both",
@@ -39,7 +44,7 @@
     "date": "2026-10-21",
     "by": "CHARTS",
     "build": "1.33.0-alpha",
-    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+    "surfaceHash": "664eca395a70f798e284bd2243de9400021810653438802d51be9ae24fc5497c"
   },
   "homeOrder": 45
 }

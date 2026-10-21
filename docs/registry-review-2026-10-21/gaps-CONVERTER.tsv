@@ -1,0 +1,16 @@
+convert-apply	CONVERTER	no-questions
+convert-reemit	CONVERTER	no-usage
+convert-reemit	CONVERTER	no-flags
+convert-reemit	CONVERTER	no-questions
+convert-scaffold	CONVERTER	no-questions
+convert-validate	CONVERTER	no-questions
+convrules-convert-progress	CONVERTER	no-questions
+convrules-editor	CONVERTER	thin-leaf
+convrules-editor	CONVERTER	no-questions
+convrules-qualify-fix	CONVERTER	no-questions
+convrules-reindex-project	CONVERTER	no-questions
+convrules-work-list	CONVERTER	no-questions
+featuregen	CONVERTER	no-questions
+glyph-vacuum	CONVERTER	thin-leaf
+glyph-vacuum	CONVERTER	no-questions
+proptree	CONVERTER	no-questions
