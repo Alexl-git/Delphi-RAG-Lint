@@ -282,6 +282,15 @@ Both are also reachable from the top of the `drag-lint` menu. The plugin removes
 any stale entries of the same name on load, so an earlier install cannot leave a
 dead item that calls into an unloaded package.
 
+### Added later on 2026-10-21 (second batch)
+
+| Item | What it does |
+|---|---|
+| **Inspect Symbol > Ancestors of Type (full chain)...** *(index)* | Everything a class or interface descends from (`query ancestors`). Name box is pre-filled from the caret. |
+| **Inspect Symbol > Descendants of Class...** *(index)* | Every class derived from an ancestor (`query descendants`; derived interfaces are left out). |
+| **Code Quality > Project Structure Rules (god-class, layering...)...** *(index)* | The project-scoped structural rules over the whole index (`lint-project`), as a text report. |
+| **Reports > Compare a Saved Report or Chart with Current Code...** *(index)* | Reruns a saved report, forms CSV, chart (`.dot`) or bundle folder against the current index and shows before / delta / after (`compare`). |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

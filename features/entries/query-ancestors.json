@@ -32,6 +32,10 @@
       ],
       "helpOrder": 11,
       "help": ["  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Inspect Symbol > Ancestors of Type (full chain)..."
     }
   ],
   "audience": "both",
@@ -39,6 +43,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "9d544b8c733518e0c0edb3f7502b8b1da659caf957aca0041ed1127ef8f06568"
+    "surfaceHash": "7a383532991ecc3a8f8b292b6a208b784a2242dbd21506fce8021de06ace95ae"
   }
 }

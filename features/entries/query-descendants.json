@@ -28,6 +28,10 @@
       ],
       "helpOrder": 12,
       "help": ["  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor's class pickers. exit 1 = no such ancestor)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Inspect Symbol > Descendants of Class..."
     }
   ],
   "audience": "both",
@@ -35,6 +39,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "3c69a7029d759a388d9ce19950dac7c0c0415a4df60e80b0e353e6ffee07070b"
+    "surfaceHash": "c153459c27cc909884c16bd94b262b6eea72bf47a405d0980f792b089dba0cf6"
   }
 }

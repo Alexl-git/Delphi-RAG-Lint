@@ -30,6 +30,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--db` |  |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Find Usages...**
+
 ## Pitfalls
 
 * the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites.

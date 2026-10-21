@@ -28,6 +28,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--db` |  |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Inspect Symbol > Descendants of Class...**
+
 ## Details
 
 The reverse of [`query ancestors`](query-ancestors.md): lists every **class**

@@ -36,6 +36,10 @@
           "arg": "PATH"
         }
       ]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
     }
   ],
   "audience": "both",
@@ -45,6 +49,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "c15ca947dc8222256da52b4b5a0fba52510111c4a62d5e6d09859407fabc8a00"
+    "surfaceHash": "e742a582c5f98baf14bc01a5c2c31c583027592895226a429d5f0771e5fd2e30"
   }
 }

@@ -15,6 +15,10 @@
       "usage": "drag-lint ghost-recover <dproj> (restore any file left overlaid by an INTERRUPTED ghost-check)",
       "helpOrder": 66,
       "help": ["  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)", "                               Safe to run any time: prints \"nothing pending.\" when there is nothing to do."]
+    },
+    {
+      "type": "ide-about",
+      "caption": "Recover Buffer-Compile Files"
     }
   ],
   "audience": "both",
@@ -27,6 +31,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "44ea89a5c4f5b770632083fb39c2c72d44c4ad98f5603146e310e8baeb2e4365"
+    "surfaceHash": "ce217d8cb4fe040453398b524f62d7c5009f82a4079e263383b6a58f4f046db3"
   }
 }

@@ -20,6 +20,10 @@ Read this after a crash during a buffer compile (ghost-check), so no unit is lef
 
 Full flag list: [ghost-recover in the CLI reference](../cli.md#ghost-recover).
 
+## Where to click
+
+* drag-lint About window, button **Recover Buffer-Compile Files**
+
 ## Details
 
 Scans a project's hidden `_D-RAG` folder for recovery journals left behind

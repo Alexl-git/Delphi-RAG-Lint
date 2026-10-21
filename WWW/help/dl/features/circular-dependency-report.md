@@ -16,6 +16,10 @@ A worked example: a real four-unit uses cycle, and the report drag-lint produces
 
 Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index.
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...**
+
 ## Details
 
 A worked example: a real four-unit `uses` cycle, and the report `drag-lint`

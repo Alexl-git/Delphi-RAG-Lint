@@ -61,6 +61,11 @@
   "audience": "both",
   "requires": ["index"],
   "related": ["convert-apply"],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-21",
+    "by": "ENGINE"
+  },
   "lastVerified": {
     "date": "2026-10-19",
     "by": "alexanderl",

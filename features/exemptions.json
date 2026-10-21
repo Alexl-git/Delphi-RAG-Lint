@@ -3,6 +3,7 @@
     "-": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "All resolved components look healthy.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "Code Quality": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Is a saved report still true?": "structural: non-clickable Reports section header added 2026-10-21 above the Compare item; no feature of its own",
     "Help": "structural: Help submenu container added 2026-10-21 (IDE Menu Reference, Effect Summary Legend); no feature of its own",
     "Compile & Analysis": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "Diagnose report copied to the clipboard.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",

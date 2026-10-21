@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80005
 since: 1.28.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Compare a report with current code
@@ -36,6 +36,13 @@ Full flag list: [compare in the CLI reference](../cli.md#compare).
 | `--format` |  |  |  |
 | `--output` | `<file>` |  |  |
 | `--open` |  |  |  |
+
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Reports > Compare a Saved Report or Chart with Current Code...**
+   1. drag-lint > Reports > Compare a Saved Report or Chart with Current Code...
+   2. Yes picks a saved report .txt, forms .csv or chart .dot; No picks a chart bundle folder
+   3. Read before / delta / after in drag-lint-compare.txt (an empty delta means the report is still true)
 
 **Needs:** index
 

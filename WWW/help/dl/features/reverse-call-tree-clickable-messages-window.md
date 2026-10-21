@@ -31,6 +31,10 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 | `--json` |  |  |  |
 | `--db` | `PATH` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...**
+
 **Needs:** index
 
 ## Details

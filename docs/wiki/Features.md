@@ -106,9 +106,9 @@ Find symbols, callers, callees, text and types in the index.
 | [outline](outline) | `outline`; drag-lint > Show Structure |  |
 | [query --kind --all](query-kind-all) | `query` |  |
 | [query --name-like](query-name-like) | `query` |  |
-| [query ancestors](query-ancestors) | `query ancestors` |  |
-| [query descendants](query-descendants) | `query descendants` |  |
-| [query find-callers](query-find-callers) | `query find-callers` |  |
+| [query ancestors](query-ancestors) | `query ancestors`; drag-lint > Inspect Symbol > Ancestors of Type (full chain)... |  |
+| [query descendants](query-descendants) | `query descendants`; drag-lint > Inspect Symbol > Descendants of Class... |  |
+| [query find-callers](query-find-callers) | `query find-callers`; drag-lint > Find Usages... |  |
 | [query type-usage](query-type-usage) | `query type-usage` |  |
 | [query typecat](query-typecat) | `query typecat` |  |
 | [query unit-usage](query-unit-usage) | `query unit-usage` |  |
@@ -162,7 +162,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules](rules) | 190 rules, 23 fixable; `rules` |  |
-| [lint-project](lint-project) | `lint-project` |  |
+| [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
@@ -238,7 +238,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [butterfly](butterfly) | `butterfly`; drag-lint > Uses & Dependencies > Call Graph (Butterfly)... |  |
 | [Call Graph (Butterfly)](Call-Graph-Butterfly) | drag-lint > Uses & Dependencies > Call Graph (Butterfly)...; `reverse-calltree` |  |
 | [callgraph](callgraph) | `callgraph`; drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... |  |
-| [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md` |  |
+| [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md`; drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)... |  |
 | [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
 | [Cycles fix (mechanical, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles`; drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...; View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix); Structure form: Fix this cycle (dry run)...; Structure form: Apply cycle fix...; `charts\src\Emit-Cycles.ps1` |  |
 | [deps-report](deps-report) | `deps-report`; drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)... |  |
@@ -248,7 +248,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
-| [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree` |  |
+| [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree`; drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... |  |
 | [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
 | [Scan TODOs / FIXMEs](Scan-TODOs-FIXMEs) | drag-lint > Code Quality > Scan TODOs / FIXMEs...; `todos` |  |
 | [Show in Call Graph](Show-in-Call-Graph) | Structure form: Show in Call Graph; `reverse-calltree` |  |
@@ -266,7 +266,7 @@ Ask a question about a symbol and get a clickable chart.
 | [Chart questions](Diagrams-and-Charts) | 26 questions; `ask`; drag-lint > Reports |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md`; drag-lint > Reports |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
-| [Compare a report with current code](compare) | `compare` |  |
+| [Compare a report with current code](compare) | `compare`; drag-lint > Reports > Compare a Saved Report or Chart with Current Code... |  |
 | [Where the charts find Graphviz](Chart-Graphviz-Lookup) | procedure: `docs\wiki\Chart-Graphviz-Lookup.md` |  |
 
 ## Compiler integration
@@ -282,7 +282,7 @@ Compile, fold compiler output into findings, preprocess.
 | [compile-check](compile-check) | `compile-check` |  |
 | [Full Compile Sweep](Full-Compile-Sweep) | drag-lint > Full Compile Sweep; `refresh-findings` |  |
 | [ghost-check](ghost-check) | `ghost-check`; drag-lint > Compile Buffer (unsaved) |  |
-| [ghost-recover](ghost-recover) | `ghost-recover` |  |
+| [ghost-recover](ghost-recover) | `ghost-recover`; About window: Recover Buffer-Compile Files |  |
 | [Import Build Log](Import-Build-Log) | About window: Import Build Log...; `import-log` |  |
 | [preprocess-file](preprocess-file) | `preprocess-file` |  |
 | [project-facts](Features) | `project-facts` |  |

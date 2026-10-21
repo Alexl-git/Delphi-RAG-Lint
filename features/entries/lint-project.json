@@ -31,6 +31,10 @@
       ],
       "helpOrder": 18,
       "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Project Structure Rules (god-class, layering...)..."
     }
   ],
   "audience": "both",
@@ -39,6 +43,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "c023c73ff36c9cd8b953a042a5388ea2576aa1843535b78057be5a7125e73038"
+    "surfaceHash": "dddbf924e5ab48b57aee206aaf17d53b383e3daaf07bcc55147029b09233d20d"
   }
 }

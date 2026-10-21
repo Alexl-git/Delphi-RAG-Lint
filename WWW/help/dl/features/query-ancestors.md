@@ -29,6 +29,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--db` |  |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Inspect Symbol > Ancestors of Type (full chain)...**
+
 ## Details
 
 Resolves the transitive class/interface hierarchy of a type. Reach for it

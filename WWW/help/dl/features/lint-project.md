@@ -29,6 +29,10 @@ Full flag list: [lint-project in the CLI reference](../cli.md#lint-project).
 | `--layers` | `<f.json>` |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Code Quality > Project Structure Rules (god-class, layering...)...**
+
 **Needs:** index
 
 ## Details

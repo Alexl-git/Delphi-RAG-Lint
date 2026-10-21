@@ -12,6 +12,10 @@
     {
       "type": "workflow",
       "doc": "docs\\wiki\\Circular-Dependency-Report.md"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."
     }
   ],
   "audience": "both",
@@ -20,6 +24,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+    "surfaceHash": "1b4a26d4192b324b3b2e2cf4395ca551c0fa5a5087d524eb6acfee90357d6b70"
   }
 }

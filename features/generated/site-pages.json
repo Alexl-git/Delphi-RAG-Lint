@@ -60,7 +60,7 @@
     "version": "1.33.0-alpha"
   },
   "features/circular-dependency-report.md": {
-    "hash": "067041b87e190205715cdf6cc2a74d0c87101028ae8c71d213d06facd944aa8d",
+    "hash": "93e148f2ae379c4b8eca0a11a3129c75489b1c7305bba3b1f71edaa479c49cf0",
     "version": "1.33.0-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
@@ -72,8 +72,8 @@
     "version": "1.33.0-alpha"
   },
   "features/compare.md": {
-    "hash": "7f8b94262f70c36e9c8dd81d8f164bbd4db9ef1eb933bd300847b8c8dc19597b",
-    "version": "1.32.0-alpha"
+    "hash": "b177484d0d96fb56989a49ca1684463b0b4f7ccfbca80bd7740c315c29cbfc51",
+    "version": "1.33.0-alpha"
   },
   "features/compile-buffer-unsaved.md": {
     "hash": "4f839d4b133682b628eaf8310d85edae7dc9296939a2cf69e8c9589ec0fbb805",
@@ -320,7 +320,7 @@
     "version": "1.33.0-alpha"
   },
   "features/ghost-recover.md": {
-    "hash": "7494c37779c50ccfa66cfa773e3ac42118e71784c5f773c92bbb7367e1bd09fe",
+    "hash": "fe23f591de3994513b05034a1c372789f63bedf3853900eda6aa9ca349ac980c",
     "version": "1.33.0-alpha"
   },
   "features/glyph-vacuum.md": {
@@ -348,7 +348,7 @@
     "version": "1.33.0-alpha"
   },
   "features/ide-menu-reference.md": {
-    "hash": "f76d5f30b687de1667d5d950240fa92981ccea7046231aba09655a5f1aea4a21",
+    "hash": "a99d72de46b2d495f6191e9736908f0255da80321ed33244e1f5a6ae4d6d46d5",
     "version": "1.33.0-alpha"
   },
   "features/ide-release.md": {
@@ -384,7 +384,7 @@
     "version": "1.33.0-alpha"
   },
   "features/lint-project.md": {
-    "hash": "60b3c7b7bdc4ecca61348ab03e316f5eeda73c86abb932e9c54f59a63f520bca",
+    "hash": "999e17c88301e68b2e32d337ec40ebd869a5f4c0a3325d094af33d738191b71c",
     "version": "1.33.0-alpha"
   },
   "features/lint-rules.md": {
@@ -452,15 +452,15 @@
     "version": "1.33.0-alpha"
   },
   "features/query-ancestors.md": {
-    "hash": "fa7fad39b91b7d262e56d6b592e9d15fa1cd73f2502de9829d5e2f84e97bc95f",
+    "hash": "b4ad4991141faca2a4c2abe94afed442d9df69bfc5f19ee9eaa23c793d26734b",
     "version": "1.33.0-alpha"
   },
   "features/query-descendants.md": {
-    "hash": "984fd1d7ee6b7e9c5adba19d31d3c7d14dc92336bb6c66d5d19e98da290af441",
+    "hash": "626c1e25375a2ebfb23564757523a8cc61c9175ca79b9e56246c805b65a61a33",
     "version": "1.33.0-alpha"
   },
   "features/query-find-callers.md": {
-    "hash": "c7ab559de69bf3738f654b38acfb744cccb130c4809f3e582e25d740f1608c22",
+    "hash": "1c22893e42232457af49fc7d717b8cf7665dfed6fa11973b8247bec276ede997",
     "version": "1.33.0-alpha"
   },
   "features/query-kind-all.md": {
@@ -520,7 +520,7 @@
     "version": "1.33.0-alpha"
   },
   "features/reverse-call-tree-clickable-messages-window.md": {
-    "hash": "c9916481bc26ee336a9ebbc58767a3cade4cf11102bfe7510b9366cabc0c9952",
+    "hash": "f821a0c397c8cd85e03e89fcb1ee869703021372e338d3a03f670eeb7a2a6073",
     "version": "1.33.0-alpha"
   },
   "features/reverse-call-tree-who-calls-this-n-deep.md": {
