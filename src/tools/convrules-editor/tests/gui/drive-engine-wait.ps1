@@ -310,24 +310,29 @@ try {
   # descendants` runs, ~1 s each on the shared box, started AFTER the window shows)
   # must be finished first: overlapping them made the fast load take >400 ms and
   # counted an extra child (measured 2026-09-30, Task 5 fix round 1).
-  $t0 = Get-Date
-  while (((Get-Date) - $t0).TotalSeconds -lt 60 -and @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)").Count -gt 0) { Start-Sleep -Milliseconds 200 }
-  Start-Sleep -Milliseconds 500
-  function WaitIdle { $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and (@(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)").Count -gt 0 -or ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }))) { Start-Sleep -Milliseconds 200 }; Start-Sleep -Milliseconds 500 }
-  $e1 = OpenClass $main 'TNoSuchClassXyz'; WaitIdle   # first load: uncached, not asserted
-  $e2 = OpenClass $main 'TOtherXyz'; WaitIdle         # move off the block
+  # Children are matched by parent PID AND a creation time after the editor started:
+  # a process whose dead parent once had the editor's PID would otherwise hold
+  # WaitIdle for its whole 60 s (the reused-PID trap, editor CLAUDE.md; D2).
+  $edStart = $p.StartTime
+  function Kids { @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)" | Where-Object { $_.CreationDate -ge $edStart }) }
+  # WaitIdle notes a timeout and what was still running, so a FAIL names its cause.
+  $script:idleNote = ''
+  function WaitIdle($what) { $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and ((Kids).Count -gt 0 -or ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }))) { Start-Sleep -Milliseconds 200 }; if (((Get-Date) - $t1).TotalSeconds -ge 60) { $script:idleNote += "; idle TIMEOUT after $what (still: " + ((Kids | ForEach-Object { '{0}#{1}' -f $_.Name, $_.ProcessId }) -join ',') + ')' }; Start-Sleep -Milliseconds 500 }
+  WaitIdle 'start-up'
+  $e1 = OpenClass $main 'TNoSuchClassXyz'; WaitIdle 'first load'   # first load: uncached, not asserted
+  $e2 = OpenClass $main 'TOtherXyz'; WaitIdle 'move off'           # move off the block
   [ChildWatch]::Start($engineExe)
   $e = OpenClass $main 'TNoSuchClassXyz'              # the re-load under test
   # No StatusText inside the loop: WM_GETTEXT blocks while the editor's UI thread
   # waits on the engine, which would stall the window poll for the whole call.
-  $t0 = Get-Date; $seen = $false; $loaded = $false
+  $t0 = Get-Date; $seen = $false; $loaded = $false; $seenAt = -1
   while (((Get-Date) - $t0).TotalSeconds -lt 5) {
-    if ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }) { $seen = $true }
+    if ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }) { if (-not $seen) { $seenAt = [int]((Get-Date) - $t0).TotalMilliseconds }; $seen = $true }
     Start-Sleep -Milliseconds 10
   }
   $kids = [ChildWatch]::Stop()
   $st = StatusText $main; if ($st -match 'Loaded TNoSuchClassXyz') { $loaded = $true }
-  Check 'wait.reload.no.window' ($loaded -and ($kids -ge 1) -and -not $seen) ("load ran: $loaded; engine children: $kids; window seen: $seen; $e1 $e2 $e $st")
+  Check 'wait.reload.no.window' ($loaded -and ($kids -ge 1) -and -not $seen) ("load ran: $loaded; engine children: $kids; window seen: $seen (at $seenAt ms)$script:idleNote; $e1 $e2 $e $st")
   Check 'wait.reload.query.cached' ($kids -eq 1) ("engine children on the re-load: $kids (1 = proptree only)")
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }[IO.Directory]::Delete($tmp, $true)
 "RESULT pass=$script:pass fail=$script:fail"

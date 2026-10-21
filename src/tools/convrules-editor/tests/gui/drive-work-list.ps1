@@ -495,9 +495,13 @@ try {
   [W]::SelectRow($lv, 0)
   [void][W]::PostMessage($lv, 0x0203, [IntPtr]1, [W]::RowClientPoint($lv, 0))
   $st = WaitLike $main 'Copied *' 10
-  $clip = Get-Clipboard -Raw
+  $clip = $null; $clipBusy = $false
+  for ($i = 0; $i -lt 10; $i++) {
+    try { $clip = Get-Clipboard -Raw -ErrorAction Stop; $clipBusy = $false; break }
+    catch { if ($_.Exception.Message -match 'Cannot open clipboard') { $clipBusy = $true; Start-Sleep -Milliseconds 200 } else { throw } }
+  }
   Check 'worklist.dblclick.status' ($st -eq "Copied FixUnit.pas($line0) to the clipboard -- line $line0") $st
-  Check 'worklist.dblclick.clipboard' ($clip -eq "$pas($line0)") "clipboard: $clip"
+  Check 'worklist.dblclick.clipboard' (-not $clipBusy -and ($clip -eq "$pas($line0)")) $(if ($clipBusy) { 'clipboard busy (another process holds it)' } else { "clipboard: $clip" })
 
   # --- 5. the same double-click with the file gone: a status-bar error, never an exception ---
   $off = $pas + '.off'

@@ -293,3 +293,4 @@ finally {
   [IO.Directory]::Delete($tmp)
   "gui-file: $script:pass pass / $script:fail fail"
 }
+if ($script:fail -gt 0) { exit 1 }
