@@ -10,6 +10,7 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Standing task lists (not handoffs)
 
+- 2026-10-21 | engine | registry review DONE + pushed (main 20ffb523), menus merged, engine + plugin BPL deployed; owner tests IDE next; the CONVERTER item-F wait on ENGINE is resolved | open | [HANDOFF-2026-10-21-engine-registry-review-menus-deployed](HANDOFF-2026-10-21-engine-registry-review-menus-deployed.md)
 - 2026-10-21 | converter | featuregen item F: CONVERTER/CHARTS done, access field added, waits on ENGINE fix of dropped query --name help block + IDE-menu rebuild | open | [HANDOFF-2026-10-21-converter-item-f-engine-fix-pending](HANDOFF-2026-10-21-converter-item-f-engine-fix-pending.md)
 - 2026-10-21 | converter | featuregen T12 MERGED (main 4addffe0, pushed) + DEPLOYED to dll-win64; owed: verify deployed --help, lint, SeedHelpBlocks test, registry docs | open | [HANDOFF-2026-10-21-converter-featuregen-t12-deployed-owed.md](HANDOFF-2026-10-21-converter-featuregen-t12-deployed-owed.md)
 - 2026-10-21 | converter | featuregen T12 (P7): --help verb reference generated from the registry on branch feat/featuregen-t12-cli-help (7 commits, byte-identical --help, not merged/deployed) | resumed | [HANDOFF-2026-10-21-converter-featuregen-t12-help-generated.md](HANDOFF-2026-10-21-converter-featuregen-t12-help-generated.md)
