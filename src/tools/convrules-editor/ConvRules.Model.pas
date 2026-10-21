@@ -62,6 +62,10 @@ type
     rnkTag, // #tag Name    (label the enclosing #convert, for job selection)
     // #depth N  (book-scope property-tree depth, before the first #convert)
     rnkDepth,
+    // #warn <FromPath> "<text>"  (engine 1.26.5: a book-authored warning, block-scoped)
+    rnkWarn,
+    // #check-ref <ToPath> <Class>.<Prop>[, ...]  (engine 1.26.5: dangling-reference check, block-scoped)
+    rnkCheckRef,
     rnkUnknown // anything else (kept verbatim, never dropped)
   );
 
@@ -203,6 +207,25 @@ type
       /// IsDecimalDigits: no sign, no '$' or '0x' hex) valued BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.
       /// An invalid line keeps its Raw text verbatim; the engine's validator names it.</summary>
       DepthValid: Boolean;  // dl:ok public-field@85bc -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+
+      // rnkWarn
+      /// <summary>The source property path a #warn watches (first token after the directive).</summary>
+      WarnPath: string;  // dl:ok public-field@w1 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>The warning text: everything from the first to the last double quote, quotes excluded, no escaping
+      /// (the engine's rule). '' when the line is malformed.</summary>
+      WarnText: string;  // dl:ok public-field@w2 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>True when the line is '#warn &lt;path&gt; "&lt;text&gt;"'. A malformed line keeps its Raw text verbatim
+      /// (Emit returns Raw even when Dirty); the engine's validator names the fault.</summary>
+      WarnValid: Boolean;  // dl:ok public-field@w3 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+
+      // rnkCheckRef
+      /// <summary>The target property path whose converted value is checked.</summary>
+      CheckRefPath: string;  // dl:ok public-field@c1 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>The '&lt;Class&gt;.&lt;Prop&gt;' names, in source order, trimmed.</summary>
+      CheckRefTargets: TArray<string>;  // dl:ok public-field@c2 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>True when there is a path and at least one target, each a '&lt;Class&gt;.&lt;Prop&gt;' split at its last dot
+      /// with both halves non-empty. A malformed line keeps its Raw text verbatim (Emit returns Raw even when Dirty).</summary>
+      CheckRefValid: Boolean;  // dl:ok public-field@c3 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
 
       /// <summary>Validation marks on this line (session state; see TRuleMark).
       /// Emit ignores them, so they never reach a file, Snapshot or Dirty.</summary>
@@ -813,6 +836,10 @@ begin
       Result:= DIRECTIVE_TAG + ' ' + TagName;
     rnkDepth:
       Result:= Format('#depth %d', [DepthValue]);
+    rnkWarn:
+      Result:= if WarnValid then Format('#warn %s "%s"', [WarnPath, WarnText]) else Raw;
+    rnkCheckRef:
+      Result:= if CheckRefValid then Format('#check-ref %s %s', [CheckRefPath, string.Join(', ', CheckRefTargets)]) else Raw;
     else
       // rnkMigrate, rnkPcre, rnkComment, rnkBlank, rnkUnknown: edited via Raw.
       Result:= Raw;
@@ -1124,6 +1151,46 @@ begin
         N.DepthValue:= 0;
       Exit(N);
     end;
+
+    if Dir = '#warn' then
+    begin
+      N.Kind:= rnkWarn;
+      // <FromPath> "<text>": the path is the first token, the text runs from the first to the LAST double quote.
+      P:= Pos(' ', Body);
+      if P > 0 then
+      begin
+        N.WarnPath:= Copy(Body, 1, P - 1);
+        Rest      := Trim(Copy(Body, P + 1, MaxInt));
+        ColonP    := LastDelimiter('"', Rest);
+        if (Rest.StartsWith('"')) and (ColonP > 1) then
+        begin
+          N.WarnText := Copy(Rest, 2, ColonP - 2);
+          N.WarnValid:= True;
+        end; // if
+      end; // if
+      Exit(N);
+    end; // if
+
+    if Dir = '#check-ref' then
+    begin
+      N.Kind:= rnkCheckRef;
+      // <ToPath> <Class>.<Prop>[, <Class>.<Prop> ...]: a target splits at its LAST dot.
+      P:= Pos(' ', Body);
+      if P > 0 then
+      begin
+        N.CheckRefPath:= Copy(Body, 1, P - 1);
+        N.CheckRefValid:= True;
+        for var LTarget: string in Copy(Body, P + 1, MaxInt).Split([',']) do
+        begin
+          var LName: string:= Trim(LTarget);
+          ColonP:= LastDelimiter('.', LName);
+          N.CheckRefTargets:= N.CheckRefTargets + [LName];
+          if (ColonP <= 1) or (ColonP >= Length(LName)) then
+            N.CheckRefValid:= False;
+        end; // for
+      end; // if
+      Exit(N);
+    end; // if
 
     // unknown '#directive'
     N.Kind:= rnkUnknown;

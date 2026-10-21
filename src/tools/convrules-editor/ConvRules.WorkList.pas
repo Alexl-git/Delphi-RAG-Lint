@@ -128,10 +128,11 @@ type
   TWorkListState = (wlsNoRun, wlsNoCapability, wlsNoConverted, wlsRows);
 
   /// <summary>One run's Work list, handed from the Convert tab to the host.</summary>
-  /// <remarks>Known limit (deferred to the final review): a Convert that is refused
-  /// before it runs (Preflight, a gate) hands no TWorkRun, so the Work list keeps the
-  /// previous run's rows. Two books on one unit that report the same use give ONE row
-  /// (WorkRunOf): the later book's line numbers win.</remarks>
+  /// <remarks>A Convert that is refused before it runs (Preflight, the project file, the
+  /// inherited-instance gate) hands no new TWorkRun: the host marks the previous one with
+  /// MarkRefused, which keeps its rows and makes WorkRunSummary say so (owner decision C-2).
+  /// Two books on one unit that report the same use give ONE row (WorkRunOf): the later
+  /// book's line numbers win.</remarks>
   TWorkRun = record
     /// <summary>The Convert tab's run counter; every row carries it.</summary>
     RunId: Integer;
@@ -140,6 +141,13 @@ type
     /// <summary>The pas_uses rows of every converted unit, stamped with RunId and the
     /// unit's full path; [] unless State is wlsRows.</summary>
     Rows : TArray<TPasUseRow>;
+    /// <summary>The run's units as RunUnitLabel names them; '' when the run did not say.</summary>
+    UnitLabel: string;
+    /// <summary>When the run finished (the Convert tab stamps Now); 0 = unknown.</summary>
+    At   : TDateTime;
+    /// <summary>True after MarkRefused: a later Convert was refused and these rows are
+    /// from the run named by UnitLabel and At.</summary>
+    Refused: Boolean;
   end;
 
   /// <summary>The outcome of a double-click on a Work list row.</summary>
@@ -241,6 +249,26 @@ function WorkColumns: TArray<string>;
 /// WORK_NO_CAPABILITY or WORK_NO_CONVERTED.</returns>
 function WorkListSummary(const ARows: TArray<TPasUseRow>; AState: TWorkListState = wlsRows): string;
 
+/// <summary>PURE: names a run's units for the Work list's "previous run" note.</summary>
+/// <param name="AUnits">The run's unit paths.</param>
+/// <returns>'' for none; the file name of the first for one; '&lt;first&gt; +N more' for
+/// several.</returns>
+function RunUnitLabel(const AUnits: TArray<string>): string;
+
+/// <summary>PURE: the Work list after a Convert that was refused before it ran.</summary>
+/// <param name="ARun">The list shown so far.</param>
+/// <returns>ARun with its rows kept and Refused set when it holds a run (State is not
+/// wlsNoRun); ARun unchanged otherwise -- with no earlier run there is nothing to call
+/// stale.</returns>
+function MarkRefused(const ARun: TWorkRun): TWorkRun;
+
+/// <summary>PURE: the summary line of a shown run.</summary>
+/// <param name="ARun">The shown run (its Rows are the merged, shown rows).</param>
+/// <returns>WorkListSummary(ARun.Rows, ARun.State); when ARun.Refused, then ' -- from the
+/// previous run (&lt;UnitLabel or "unknown unit"&gt;, &lt;yyyy-mm-dd hh:nn:ss or "time
+/// unknown"&gt;); the last Convert was refused'.</returns>
+function WorkRunSummary(const ARun: TWorkRun): string;
+
 /// <summary>PURE: the rows a new run leaves on the Work list.</summary>
 /// <param name="AOld">The rows shown so far (an earlier run).</param>
 /// <param name="ANew">The new run's rows.</param>
@@ -290,6 +318,10 @@ const
   SUMMARY_FMT  = '%d to work on (%d unmapped, %d global, %d cast-refused, %d not-rewritten), %d mapped / same-name';
   PAIR_FMT     = '%s -> %s';
   OTHER_FMT    = ', %d other';
+  REFUSED_FMT  = ' -- from the previous run (%s, %s); the last Convert was refused';
+  LABEL_MORE_FMT = '%s +%d more';
+  LABEL_UNKNOWN  = 'unknown unit';
+  TIME_UNKNOWN   = 'time unknown';
   GOTO_FMT     = '%s(%d)';
   COPIED_FMT   = 'Copied %s to the clipboard -- line %d';
   // DeclaredInText / RowDisplay: an unresolved row's cells -- never a guessed unit.
@@ -601,6 +633,29 @@ begin
   for var LRow: TPasUseRow in AOld + ANew do
     if LRow.RunId = ANewRunId then
       Result:= Result + [LRow];
+end;
+
+function RunUnitLabel(const AUnits: TArray<string>): string;
+begin
+  if Length(AUnits) = 0 then
+    Exit('');
+  Result:= ExtractFileName(AUnits[0]);
+  if Length(AUnits) > 1 then
+    Result:= Format(LABEL_MORE_FMT, [Result, Length(AUnits) - 1]);
+end;
+
+function MarkRefused(const ARun: TWorkRun): TWorkRun;
+begin
+  Result:= ARun;
+  Result.Refused:= ARun.State <> wlsNoRun;
+end;
+
+function WorkRunSummary(const ARun: TWorkRun): string;
+begin
+  Result:= WorkListSummary(ARun.Rows, ARun.State);
+  if ARun.Refused then
+    Result:= Result + Format(REFUSED_FMT, [if ARun.UnitLabel = '' then LABEL_UNKNOWN else ARun.UnitLabel,
+      if ARun.At = 0 then TIME_UNKNOWN else FormatDateTime('yyyy-mm-dd hh:nn:ss', ARun.At)]);
 end;
 
 function WorkUnits(const ARows: TArray<TPasUseRow>): TArray<string>;

@@ -83,6 +83,10 @@ type
     /// converted unit, keyed by the run's id), once per run, from RunFinished on the UI
     /// thread; may be nil.</summary>
     WorkListReady : TProc<TWorkRun>;
+    /// <summary>A Convert was refused before it ran (Preflight, no project file, the
+    /// inherited-instance gate): the Work list keeps the previous run's rows and says so
+    /// (owner decision C-2); may be nil.</summary>
+    WorkListRefused: TProc;
     /// <summary>Writes the Qualify dialog's picks into a book (engine 1.28.3 qualify_fixes[]):
     /// (book path, picks) -> the status text. The host opens the book first when it is not the
     /// open one (the unsaved-changes guard applies), edits its model and leaves it unsaved. May
@@ -128,6 +132,8 @@ type
       FRunInheritedOk : Boolean;            // FInheritedOk when Convert was pressed: the report follows the run
       FRetypeOk       : Boolean;            // engine reports inherited_retype (C8 N2): the notes stop warning that a descendant breaks
       FRunRetypeOk    : Boolean;            // FRetypeOk when Convert was pressed
+  FCodeUncOk      : Boolean;            // engine reports inherited_code_unconverted (1.26.7): it lists unconverted-ancestor code uses itself
+  FRunCodeUncOk   : Boolean;            // FCodeUncOk when Convert was pressed
       FApplyFeatures  : TApplyFeatures;     // engine 1.27.0 apply/1 features (ApplyFeaturesOf the same probe); [] = an older engine
       FRunId          : Integer;            // the session's run counter: TConvertJob.RunId, the Work list's key
       FScope          : TConvertScope;      // C12: the IDE request's scope; Default = whole unit
@@ -147,7 +153,8 @@ type
       FBtnClearScope  : TButton;            // C12 E4: 'Clear scope'
       FBtnConvert     : TButton;
       FBtnCancel      : TButton;
-      FBtnQualify     : TButton;            // 'Qualify #convert...' (BtnQualify): shown with the capability, enabled on a row that has fixes
+      FBtnQualifyAll  : TButton;            // 'Qualify all...' (BtnQualifyAll): every fix of the run, book by book
+      FBtnQualify     : TButton;           // 'Qualify #convert...' (BtnQualify): shown with the capability, enabled on a row that has fixes
       FProgress       : TProgressBar;
       FLblRunStep     : TLabel;             // C16: the run's progress line (named LblRunStep), '' when no run
       FStepTimer      : TTimer;             // C16: re-renders the progress line once a second while a run is in progress
@@ -194,11 +201,20 @@ type
       function SelectedRunRow: Integer;
       /// <summary>Qualify #convert... is enabled only outside a run, on a row with qualify fixes.</summary>
       procedure UpdateQualifyButton;
+      /// <summary>D6: the run's qualify fixes grouped per book (GroupQualifyFixes over FRunRows).</summary>
+      /// <returns>One entry per book that has fixes; empty before a run or when none has.</returns>
+      function QualifyGroups: TArray<TQualifyBookFixes>;
+      /// <summary>D6: Qualify all... -- one Qualify dialog per book of the run, each applied through the host.</summary>
+      /// <param name="Sender">FBtnQualifyAll.</param>
+      /// <remarks>Stops at a cancelled dialog or when QualifyBook reports QualifyIsAborted; the books already
+      /// done stay edited and unsaved. Ends with QualifyAllStatusText in the status line.</remarks>
+      procedure QualifyAllClick(Sender: TObject);
       procedure ResultsSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
       /// <summary>Opens the Qualify dialog for the selected row and hands its picks to the host.</summary>
       /// <param name="Sender">FBtnQualify, or FResults (double-click).</param>
       procedure QualifyClick(Sender: TObject);
       procedure SetRunning(ARunning: Boolean);
+      procedure KeepWorkListRefused;
       /// <summary>Appends one results-grid row.</summary>
       /// <param name="ACells">Book, Unit, Status, Edits, Remaining, Backup, Backup .dfm, Note -- the grid's columns in order.</param>
       procedure AddResultRow(const ACells: array of string);
@@ -367,6 +383,7 @@ const
   BTN_WIDTH       = 75;
   CANCEL_WIDTH    = 170;  // fits 'Cancelling after this unit...'
   QUALIFY_WIDTH   = 140;  // fits 'Qualify #convert...'
+  QUALIFY_ALL_WIDTH = 110; // fits 'Qualify all...'
   ROW_HEIGHT      = 31;   // a one-button row
   COL_BOOK_W      = 110;
   COL_UNIT_W      = 110;
@@ -541,7 +558,17 @@ begin
   FBtnQualify.Visible         := False; // RefreshBooks shows it once the engine reports convert_qualify_fix
   FBtnQualify.Enabled         := False;
   FBtnQualify.OnClick         := QualifyClick;
-  FProgress:= TProgressBar.Create(Self);
+  FBtnQualifyAll:= TButton.Create(Self);
+  FBtnQualifyAll.Parent          := LRow;
+  FBtnQualifyAll.Name            := 'BtnQualifyAll';
+  FBtnQualifyAll.SetBounds(High(Word), 0, QUALIFY_ALL_WIDTH, FBtnQualifyAll.Height); // right of Qualify (see NewButton)
+  FBtnQualifyAll.Align           := alLeft;
+  FBtnQualifyAll.AlignWithMargins:= True;
+  FBtnQualifyAll.Caption         := 'Qualify all...';
+  FBtnQualifyAll.Visible         := False; // shown with BtnQualify
+  FBtnQualifyAll.Enabled         := False;
+  FBtnQualifyAll.OnClick         := QualifyAllClick;
+  FProgress:=TProgressBar.Create(Self);
   FProgress.Parent          := LRow;
   FProgress.Align           := alClient;
   FProgress.AlignWithMargins:= True;
@@ -640,9 +667,11 @@ begin
     FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
     FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
     FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
+    FCodeUncOk  := MatchText(CAPABILITY_INHERITED_CODE_UNCONVERTED, LCaps);
     FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
     FApplyFeatures:= ApplyFeaturesOf(LCaps);
     FBtnQualify.Visible:= (afQualifyFix in FApplyFeatures) and Assigned(FHost.QualifyBook);
+    FBtnQualifyAll.Visible:= FBtnQualify.Visible;
     FProbed     := True;
   end;
   Folder:= FHost.GetRulesFolder();
@@ -1227,7 +1256,7 @@ begin
   // the run (RunFinished reanalyses only after every row is in). An ancestor this run
   // converted earlier converted them too (R4). An engine with inherited_retype lists
   // code-only uses in inherited[] itself (authoritative, C8 M4): no second note then.
-  if CodeUseNoteDue(LRow, FRunRows, FRunRetypeOk) then
+  if CodeUseNoteDue(LRow, FRunRows, FRunRetypeOk, FRunCodeUncOk) then
   begin
     var LLeft: string:= CodeUseLeftNote(InheritanceOf(LRow.UnitPas), UnitsConvertedIn(FRunRows));
     if LLeft <> '' then
@@ -1287,6 +1316,13 @@ begin
     RenderStep(False);
 end;
 
+// A Convert refused before it ran hands the Work list no run: it keeps the previous rows and says so.
+procedure TConvertTab.KeepWorkListRefused;
+begin
+  if Assigned(FHost.WorkListRefused) then
+    FHost.WorkListRefused();
+end;
+
 procedure TConvertTab.SetRunning(ARunning: Boolean);
 begin
   FRunning:= ARunning;
@@ -1317,6 +1353,54 @@ procedure TConvertTab.UpdateQualifyButton;
 begin
   var LAt: Integer:= SelectedRunRow;
   FBtnQualify.Enabled:= (not FRunning) and (LAt >= 0) and (Length(FRunRows[LAt].Apply.QualifyFixes) > 0);
+  FBtnQualifyAll.Enabled:= (not FRunning) and (Length(QualifyGroups) > 0);
+end;
+
+function TConvertTab.QualifyGroups: TArray<TQualifyBookFixes>;
+var
+  LRows: TArray<TQualifyBookFixes>;
+begin
+  SetLength(LRows, Length(FRunRows));
+  for var I: Integer:= 0 to High(FRunRows) do
+  begin
+    LRows[I].Book := FRunRows[I].Book;
+    LRows[I].Fixes:= FRunRows[I].Apply.QualifyFixes;
+  end;
+  Result:= GroupQualifyFixes(LRows);
+end;
+
+procedure TConvertTab.QualifyAllClick(Sender: TObject);
+var
+  LGroups  : TArray<TQualifyBookFixes>;
+  LPicks   : TArray<TQualifyPick>;
+  LStatuses: TArray<string>;
+  LStatus  : string;
+  LStopped : Boolean;
+begin
+  UpdateQualifyButton;
+  if not (FBtnQualifyAll.Visible and FBtnQualifyAll.Enabled) then
+    Exit;
+  LGroups  := QualifyGroups;
+  LStatuses:= nil;
+  LStopped := False;
+  // D6: one dialog per book, each applied through the host's QualifyBook (the open / ConfirmDiscard path of a
+  // single Qualify); a cancelled dialog or an aborted open ends the loop, the books done stay edited (unsaved).
+  for var LGroup: TQualifyBookFixes in LGroups do
+  begin
+    if not TQualifyForm.Run(Self, LGroup.Book, LGroup.Fixes, LPicks) then
+    begin
+      LStopped:= True;
+      Break;
+    end;
+    LStatus  := FHost.QualifyBook(LGroup.Book, LPicks);
+    LStatuses:= LStatuses + [LStatus];
+    if QualifyIsAborted(LStatus) then
+    begin
+      LStopped:= True;
+      Break;
+    end;
+  end;
+  FHost.SetStatus(QualifyAllStatusText(LStatuses, Length(LGroups), LStopped), False);
 end;
 
 procedure TConvertTab.ResultsSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
@@ -1450,6 +1534,7 @@ begin
   if not Pre.Ok or (LScopeErr <> '') then
   begin
     FHost.SetStatus('Convert refused: ' + Trim(LScopeErr + ' ' + string.Join(' ', Pre.Problems)), True);
+    KeepWorkListRefused;
     Exit;
   end;
   Job:= Default(TConvertJob); // Scope (managed fields) starts as the whole unit
@@ -1462,11 +1547,15 @@ begin
   if (Job.ProjectFile = '') or not TFile.Exists(Job.ProjectFile) then
   begin
     FHost.SetStatus('Convert refused: ' + NoProjectFileText(Job.ProjectDb, Job.ProjectFile) + '.', True);
+    KeepWorkListRefused;
     Exit;
   end;
   // C8: re-check, gate, refusal notes and the E7 order warning (after Preflight).
   if not InheritanceChecksPass(Units) then
+  begin
+    KeepWorkListRefused;
     Exit;
+  end;
   Job.Books      := Pre.Runnable;
   Job.Units      := Units;
   Job.Dbs        := FHost.GetDbs();
@@ -1482,6 +1571,7 @@ begin
   FRunRulesFolder:= FHost.GetRulesFolder();
   FRunInheritedOk:= FInheritedOk;
   FRunRetypeOk   := FRetypeOk;
+  FRunCodeUncOk  := FCodeUncOk;
   FRunScope      := FScope;
   // The worker builds its own adapter: the castlib is read HERE, on the UI thread,
   // and only an existing file is passed and named in the report.
@@ -1687,7 +1777,12 @@ begin
   FHost.FeedHarvest(AJob.Units);
   // Task 3 (1.27.0): the Work list -- replaced by this run's rows, whatever the run did.
   if Assigned(FHost.WorkListReady) then
-    FHost.WorkListReady(WorkRunOf(FRunRows, AJob.RunId, afPasUses in AJob.ApplyFeatures));
+  begin
+    var LWork: TWorkRun:= WorkRunOf(FRunRows, AJob.RunId, afPasUses in AJob.ApplyFeatures);
+    LWork.UnitLabel:= RunUnitLabel(AJob.Units);
+    LWork.At       := Now;
+    FHost.WorkListReady(LWork);
+  end;
   // Red when the run went wrong, a re-read after it failed (C8), or units hold glyph to-dos (C10).
   var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Tally.ConfigErrors + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
   var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');

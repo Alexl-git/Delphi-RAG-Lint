@@ -699,9 +699,33 @@ When Convert refuses a unit, or warns, because a `#convert` line names a class b
 name that is ambiguous (`#convert TLabel -> TSolo` with two `TSolo`), the row's Note ends
 with `; N #convert side(s) to qualify`. Select the row and press **Qualify #convert...**
 (or double-click it): pick a candidate per fix, **Apply**. The qualified class is written into
-the open book -- unsaved -- so File > Save, then Convert again. Needs an engine reporting
+the open book -- unsaved -- so File > Save, then Convert again. For a `to` side the dialog's
+**Add #use <Unit>** button takes the engine's `#use` alternative instead of a candidate: the
+unit is added to the book as `#use <Unit>` and the `#convert` line stays unqualified.
+**Qualify all...** walks every book of the run in turn (one dialog each, the unsaved-changes
+prompt between books) and stops at the first Cancel. Needs an engine reporting
 `convert_qualify_fix`. Details and the skipped-fix texts:
 [Qualify #convert quick fix](../wiki/convrules-editor-qualify-fix.md).
+
+## Reading a Convert result row
+
+A converted row's Note reads `N edit(s), M remaining for manual work`, then one part per
+thing the engine reported (each is also a line in the run report, saved with the run):
+
+| Note part | Meaning | Engine |
+|---|---|---|
+| `converted N of M --only name(s); not found: a, b` | A scoped run: how many of the `--only` names matched an instance. A name that matched nothing is listed. | `only_matched[]` / `only_unmatched[]` |
+| `also converted, nested: child in parent` | `--only` named the parent; the nested child converts with it. | `only_included[]` |
+| `N dropped source property(ies), no #link: Type.Path` | The book has no `#link` (or `#ignore`) for it; the conversion dropped it. Add a `#link`. | `unlinked[]` |
+| `N descendant instance(s) still on the old type: Unit.Name` | A descendant form still streams the converted instance as the old type; convert that unit next. | `descendants[]`, capability `descendant_warnings` |
+
+These parts are not counted again in "remaining for manual work". A refused unit whose reason
+says `index gap` is not the book's fault: the note ends `reindex the project (or report the
+gap), then convert again`.
+
+A unit is restored from its backup when the engine says ok but exits non-zero (the engine
+applies a unit all-or-nothing: exit 0 means every edit is written). The row reads
+`FAILED -- restored` with `engine said ok but exited N`.
 
 ## Troubleshooting
 

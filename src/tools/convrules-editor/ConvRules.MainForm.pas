@@ -3570,26 +3570,39 @@ begin
     begin
       FWorkListTab.ShowRun(ARun);
     end;
+  LHost.WorkListRefused:= procedure
+    begin
+      FWorkListTab.MarkLastRefused;
+    end;
   // A2: the Qualify #convert dialog's picks edit the model of the row's book and leave it unsaved.
   LHost.QualifyBook:= function(ABook: string; APicks: TArray<TQualifyPick>): string
     var
       LOutcomes: TArray<TQualifyOutcome>;
       LSelected: Boolean;
+      LActive  : TRuleNode;
     begin
       if not SameText(ABook, FFilePath) then
       begin
         if not ConfirmDiscard then
-          Exit('Qualify cancelled -- the open book was not saved');
+          Exit(QualifyNotSavedText);
         LoadFile(ABook);
         if not QualifyBookIsOpen(FFilePath, ABook) then
           Exit(QualifyBookMissingText(ABook));
       end;
+      // D4: a `#use` pick inserts a unit node ahead of every #convert header and shifts their indexes,
+      // so the active header is held by NODE across the call and re-found after it (InsertUnitNode's rule).
+      LActive:= nil;
+      if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
+        LActive:= FBook.Nodes[FActiveHdr];
       LOutcomes:= ApplyQualifyPicks(FBook, APicks);
+      if LActive <> nil then
+        FActiveHdr:= FBook.Nodes.IndexOf(LActive);
       RefreshRulesList;
+      RefreshUnitList;
       SyncRawFromModel;
       LSelected:= False;
       for var LOut: TQualifyOutcome in LOutcomes do
-        if LOut.Applied and not LSelected then
+        if LOut.Applied and (LOut.UseUnit = '') and not LSelected then
           for var k: Integer:= 0 to FRules.Items.Count - 1 do
             if Integer(FRules.Items[k].Data) = LOut.NodeIndex then
             begin

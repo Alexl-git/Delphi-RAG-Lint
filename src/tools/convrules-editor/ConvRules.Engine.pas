@@ -76,6 +76,11 @@ const
   /// Without it (1.22.0) an inherited instance under a converted ancestor stays the From
   /// type, so the descendant may fail to compile or load.</summary>
   CAPABILITY_INHERITED_RETYPE = 'inherited_retype';
+  /// <summary>info --json capability: convert-apply also lists code that uses an UNCONVERTED
+  /// ancestor's field (no .dfm block) in inherited[] (action skipped, ancestor_state
+  /// unconverted; engine 1.26.7). Without it only a CONVERTED ancestor's code uses are
+  /// listed, so the editor-side code-use note still has a job.</summary>
+  CAPABILITY_INHERITED_CODE_UNCONVERTED = 'inherited_code_unconverted';
   /// <summary>The words every C8 read's failure text carries when the engine marked
   /// its answer "stale" (a file changed on disk since it was indexed).</summary>
   /// <remarks>ConvRules.InheritanceEngine.IsStaleIndexError matches on it to decide
@@ -106,6 +111,9 @@ const
   /// class the engine could not resolve, the qualified #convert line(s) that would
   /// (engine 1.28.3).</summary>
   CAPABILITY_CONVERT_QUALIFY_FIX = 'convert_qualify_fix';
+  /// <summary>info --json capability: apply/1 sends descendants[] (a descendant form
+  /// that still streams a converted instance as the old type; engine 1.25.0).</summary>
+  CAPABILITY_DESCENDANT_WARNINGS = 'descendant_warnings';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -212,6 +220,28 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
+
+/// <summary>PURE: the file of the unit a `query --name --json` answer names.</summary>
+/// <param name="AOutput">The engine's stdout (a JSON array, possibly with a trailer).</param>
+/// <returns>The file of the kind=unit row, else of the first row that has one; '' when none.
+/// A wrong-typed kind / file member reads as absent (no JSON-type conversion).</returns>
+function ParseUnitFileJson(const AOutput: string): string;
+
+type
+  /// <summary>One sql --json answer: its POSITIONAL rows as strings, and the engine's own
+  /// freshness verdict ("stale": a file changed on disk since it was indexed).</summary>
+  TSqlAnswer = record
+    Rows      : TArray<TArray<string>>;
+    Stale     : Boolean;
+    StaleFiles: Integer;
+  end;
+
+/// <summary>PURE: sql --json's rows, POSITIONAL arrays one per row, as strings; a JSON null reads as ''.</summary>
+/// <param name="ASqlJson">The engine's stdout.</param>
+/// <param name="AAnswer">The rows and the engine's freshness verdict; stale / truncated are read type-checked
+/// (a non-boolean reads as absent, a non-integer stale_files as 0).</param>
+/// <returns>False for unparseable output and for an answer the engine marked truncated.</returns>
+function ParseSqlRows(const ASqlJson: string; out AAnswer: TSqlAnswer): Boolean;
 
 /// <summary>PURE: pick the row that actually IS AWantedName.</summary>
 /// <param name="ASyms">Rows as returned by ParseQuerySymbols.</param>
@@ -1305,6 +1335,36 @@ uses
   , Winapi.Windows {$ENDIF}
   ;
 
+// Type-checked scalar reads. System.JSON's GetValue<T> / TryGetValue<T> CONVERT across JSON
+// types on Delphi 13 ("3" -> 3, 1 -> True, 5 -> '5'); these treat a member of another JSON
+// type as absent. AVal is cleared on a miss, as TryGetValue's out argument is.
+function JsonStrOf(AObj: TJSONObject; const AKey: string; out AVal: string): Boolean;
+var
+  LVal: TJSONValue;
+begin
+  LVal  := AObj.Values[AKey];
+  Result:= (LVal is TJSONString) and not (LVal is TJSONNumber);
+  AVal  := if Result then LVal.Value else '';
+end;
+
+function JsonBoolOf(AObj: TJSONObject; const AKey: string; out AVal: Boolean): Boolean;
+var
+  LVal: TJSONValue;
+begin
+  LVal  := AObj.Values[AKey];
+  Result:= LVal is TJSONBool;
+  AVal  := Result and TJSONBool(LVal).AsBoolean;
+end;
+
+function JsonIntOf(AObj: TJSONObject; const AKey: string; out AVal: Integer): Boolean;
+var
+  LVal: TJSONValue;
+begin
+  LVal  := AObj.Values[AKey];
+  Result:= (LVal is TJSONNumber) and TryStrToInt(LVal.Value, AVal);
+  if not Result then
+    AVal:= 0;
+end;
 // Slice the first balanced brace-object out of AText, ignoring any preamble or
 // trailing lines the CLI may print around the JSON (e.g. a loaded-defaults note).
 // Returns empty if no object is found. A string-literal-aware brace scanner, so
@@ -1368,9 +1428,9 @@ begin
   if Root = nil then
     raise Exception.Create('proptree: response is not a JSON object');
   try
-    Root.TryGetValue<string>('qname'    , Result.Qname   );
-    Root.TryGetValue<string>('root_type', Result.RootType);
-    if not Root.TryGetValue<Boolean>('truncated', Result.Truncated) then
+    JsonStrOf(Root, 'qname', Result.Qname);
+    JsonStrOf(Root, 'root_type', Result.RootType);
+    if not JsonBoolOf(Root, 'truncated', Result.Truncated) then
       Result.Truncated:= False;
 
     List:= TList<TPropLeaf>.Create;
@@ -1388,16 +1448,16 @@ begin
             // when the read returns False; is_writable is read via BVal so its default
             // survives.
             Leaf.IsWritable:= True;
-            Obj.TryGetValue<string>('path'       , Leaf.Path      );
-            Obj.TryGetValue<string>('type'       , Leaf.TypeName  );
-            Obj.TryGetValue<string>('declared_in', Leaf.DeclaredIn);
-            Obj.TryGetValue<string>('kind'       , Leaf.Kind      );
-            if Obj.TryGetValue<Boolean>('is_class_typed', BVal) then
+            JsonStrOf(Obj, 'path', Leaf.Path);
+            JsonStrOf(Obj, 'type', Leaf.TypeName);
+            JsonStrOf(Obj, 'declared_in', Leaf.DeclaredIn);
+            JsonStrOf(Obj, 'kind', Leaf.Kind);
+            if JsonBoolOf(Obj, 'is_class_typed', BVal) then
               Leaf.IsClassType:= BVal;
-            if Obj.TryGetValue<Boolean>('is_writable', BVal) then
+            if JsonBoolOf(Obj, 'is_writable', BVal) then
               Leaf.IsWritable:= BVal;
-            Obj.TryGetValue<string>('visibility', Leaf.Visibility);
-            if not Obj.TryGetValue<string>('member_kind', Leaf.MemberKind) then
+            JsonStrOf(Obj, 'visibility', Leaf.Visibility);
+            if not JsonStrOf(Obj, 'member_kind', Leaf.MemberKind) then
               Leaf.MemberKind:= 'property';
             List.Add(Leaf);
           end; // if
@@ -1972,15 +2032,6 @@ const
   // The failure text of a read that needs a fresh index and got a stale one.
   SQL_STALE_TEXT = '%s failed for %s: ' + INDEX_STALE_MARKER + ' (%d file(s) changed since it was indexed) -- reindex the project first';
 
-type
-  { One `sql --json` answer: its POSITIONAL rows as strings, and the engine's own
-    freshness verdict ("stale": a file changed on disk since it was indexed). }
-  TSqlAnswer = record
-    Rows      : TArray<TArray<string>>;
-    Stale     : Boolean;
-    StaleFiles: Integer;
-  end;
-
 { `sql --json`'s rows, POSITIONAL arrays one per row ([["Ap"], ["uMain"], ...]),
   as strings; a JSON null reads as ''. False for unparseable output and for an
   answer the engine marked "truncated" (an incomplete answer is not an answer).
@@ -1996,12 +2047,12 @@ begin
   LRoot:= TJSONObject.ParseJSONValue(SliceJsonObject(ASqlJson));
   try
     Result:= (LRoot is TJSONObject) and TJSONObject(LRoot).TryGetValue<TJSONArray>('rows', LRows)
-      and not (TJSONObject(LRoot).TryGetValue<Boolean>('truncated', LTruncated) and LTruncated);
+      and not (JsonBoolOf(TJSONObject(LRoot), 'truncated', LTruncated) and LTruncated);
     if not Result then
       Exit;
-    if not TJSONObject(LRoot).TryGetValue<Boolean>('stale', AAnswer.Stale) then
+    if not JsonBoolOf(TJSONObject(LRoot), 'stale', AAnswer.Stale) then
       AAnswer.Stale:= False;
-    if not TJSONObject(LRoot).TryGetValue<Integer>('stale_files', AAnswer.StaleFiles) then
+    if not JsonIntOf(TJSONObject(LRoot), 'stale_files', AAnswer.StaleFiles) then
       AAnswer.StaleFiles:= 0;
     for var LRow: TJSONValue in LRows do
       if LRow is TJSONArray then
@@ -2287,16 +2338,49 @@ begin
     AError:= Format(NOT_INDEXED_TEXT, [LWhat, ADb, AUnitPas]);
 end;
 
-function TEngineAdapter.ResolveUnitFile(const AUnit: string): string;
+function ParseUnitFileJson(const AOutput: string): string;
 var
-  Output: string     ;
-  Code  : Integer    ;
   Root  : TJSONValue ;
   Arr   : TJSONArray ;
   V     : TJSONValue ;
   Obj   : TJSONObject;
   Kind  : string     ;
   FileP : string     ;
+begin
+  Result:= '';
+  // `query --json` prints a JSON array; it may be followed by a "(loaded
+  // defaults ...)" trailer, so slice from the first '[' to its matching ']'.
+  var lb: Integer:= Pos('[', AOutput);
+  var rb: Integer:= 0               ;
+  for var i:= Length(AOutput) downto 1 do
+    if AOutput[i] = ']' then begin rb:= i; Break; end;
+  if (lb <= 0) or (rb <= lb) then
+    Exit;
+  Root:= TJSONObject.ParseJSONValue(Copy(AOutput, lb, rb - lb + 1));
+  if not (Root is TJSONArray) then begin Root.Free; Exit; end;
+  try
+    Arr:= Root as TJSONArray;
+    // Prefer the kind=unit row; fall back to the first row that has a file.
+    for V in Arr do
+      if V is TJSONObject then
+      begin
+        Obj:= V as TJSONObject;
+        JsonStrOf(Obj, 'kind', Kind);
+        if SameText(Kind, 'unit') and JsonStrOf(Obj, 'file', FileP) then
+          Exit(FileP);
+      end;
+    for V in Arr do
+      if (V is TJSONObject) and JsonStrOf((V as TJSONObject), 'file', FileP) then
+        Exit(FileP);
+  finally
+    Root.Free;
+  end; // try
+end; // function
+
+function TEngineAdapter.ResolveUnitFile(const AUnit: string): string;
+var
+  Output: string ;
+  Code  : Integer;
 begin
   Result:= '';
   // A BROWSED unit is not in any index, and never will be. The From Unit box
@@ -2315,33 +2399,7 @@ begin
   Code:= RunCapture(Format('query --name "%s" --json%s', [AUnit, DbArgs]), Output);
   if Code = 2 then
     Exit;
-  // `query --json` prints a JSON array; it may be followed by a "(loaded
-  // defaults ...)" trailer, so slice from the first '[' to its matching ']'.
-  var lb: Integer:= Pos('[', Output);
-  var rb: Integer:= 0               ;
-  for var i:= Length(Output) downto 1 do
-    if Output[i] = ']' then begin rb:= i; Break; end;
-  if (lb <= 0) or (rb <= lb) then
-    Exit;
-  Root:= TJSONObject.ParseJSONValue(Copy(Output, lb, rb - lb + 1));
-  if not (Root is TJSONArray) then begin Root.Free; Exit; end;
-  try
-    Arr:= Root as TJSONArray;
-    // Prefer the kind=unit row; fall back to the first row that has a file.
-    for V in Arr do
-      if V is TJSONObject then
-      begin
-        Obj:= V as TJSONObject;
-        Obj.TryGetValue<string>('kind', Kind);
-        if SameText(Kind, 'unit') and Obj.TryGetValue<string>('file', FileP) then
-          Exit(FileP);
-      end;
-    for V in Arr do
-      if (V is TJSONObject) and (V as TJSONObject).TryGetValue<string>('file', FileP) then
-        Exit(FileP);
-  finally
-    Root.Free;
-  end; // try
+  Result:= ParseUnitFileJson(Output);
 end; // function
 
 function TEngineAdapter.ResolveClassQName(const AName: string): string;
@@ -2602,14 +2660,14 @@ begin
       begin
         Obj:= V as TJSONObject;
         Sym:= Default(TQuerySymbol);
-        Obj.TryGetValue<string>('kind'          , Sym.Kind         );
-        Obj.TryGetValue<string>('name'          , Sym.Name         );
-        Obj.TryGetValue<string>('qualified_name', Sym.QualifiedName);
-        Obj.TryGetValue<string>('file'          , Sym.FilePath     );
+        JsonStrOf(Obj, 'kind', Sym.Kind);
+        JsonStrOf(Obj, 'name', Sym.Name);
+        JsonStrOf(Obj, 'qualified_name', Sym.QualifiedName);
+        JsonStrOf(Obj, 'file', Sym.FilePath);
         // "start_line" / "end_line" -- there is no "line" field.
-        if Obj.TryGetValue<Integer>('start_line', n) then
+        if JsonIntOf(Obj, 'start_line', n) then
           Sym.StartLine:= n;
-        if Obj.TryGetValue<Integer>('end_line', n) then
+        if JsonIntOf(Obj, 'end_line', n) then
           Sym.EndLine:= n;
         List.Add(Sym);
       end; // if
@@ -3312,8 +3370,8 @@ begin
       Obj := TJSONObject(Arr.Items[i]);
       Kind:= '';
       Nm  := '';
-      Obj.TryGetValue<string>('kind', Kind);
-      Obj.TryGetValue<string>('name', Nm  );
+      JsonStrOf(Obj, 'kind', Kind);
+      JsonStrOf(Obj, 'name', Nm);
       if not SameText(Kind, 'class') then
         Continue;
       if Trim(Nm) = '' then

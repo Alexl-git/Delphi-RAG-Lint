@@ -36,6 +36,13 @@ gone, or a line past its end, is reported on the status bar instead.
 An engine that reports `pas_uses` in `info --json` (drag-lint 1.27.0 and
 later). With an older engine the tab says `no work list (engine has no pas_uses)`. A run in which no unit converted says `no work list (no unit converted)`; before any run it says `no work list yet -- run Convert first`.
 
+## A refused Convert keeps the list
+When Convert is refused before it runs (the pre-flight, no project file, or the
+inherited-instance question answered No) the list keeps the previous run's rows and the
+summary says so: ` -- from the previous run (<unit>, <time>); the last Convert was
+refused`. Before any run there is nothing to keep and the summary does not change.
+The next finished run replaces the list as before.
+
 ## Limits
 The list is what the engine reported for the units that CONVERTED; a failed,
 refused or rolled-back unit contributes nothing. "Declared in" names a unit only

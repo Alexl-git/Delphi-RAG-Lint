@@ -42,7 +42,7 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests:** `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 2224 pass / 0 fail / 19 skip** after the 1.31.5 apply-field work (B1/B3/B6/B7/B8, C-2). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.31.5 pin:
   **2281 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture

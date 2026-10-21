@@ -16,7 +16,11 @@
 #   status.qualified, book.unsaved, file.line.qualified, run2.converted and run2.no.qualify.note must then FAIL,
 #   which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-param([string]$Exe, [switch]$ProofNoFix)
+# -UseAlt (D4, UNRUN): fix 1 (to TSolo) takes its '#use LibA' alternative via BtnUse instead of the LibA.TSolo candidate;
+#   adds dialog.use.* checks, the status ends '; added #use LibA' (line 2), the book's lines 1-2 are '#use LibA' and
+#   '#convert Vcl.StdCtrls.TLabel -> TSolo', and run 2 must still convert (the #use makes TSolo unambiguous).
+#   Combine with -ProofNoFix for the same negative control.
+param([string]$Exe, [switch]$ProofNoFix, [switch]$UseAlt)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -525,6 +529,16 @@ try {
   [Q]::Pick($dlgQ, $lbFixes, 1); Start-Sleep -Milliseconds 400
   Check 'dialog.refused.unselected' (([Q]::Count($lbCand) -eq 2) -and ([Q]::CurSel($lbCand) -eq -1)) ("candidates=" + ([CT]::Items($lbCand) -join ' | ') + " cursel=$([Q]::CurSel($lbCand))")
   [Q]::Pick($dlgQ, $lbCand, 0); Start-Sleep -Milliseconds 400   # LibA.TSolo
+  if ($UseAlt) {
+    # D4: the to side's alternative '#use LibA' is clickable; pressing BtnUse replaces the candidate pick.
+    $btnUse = @(Find $dlgQ 'TButton' 'Add #use LibA')[0]
+    Check 'dialog.use.button' (($null -ne $btnUse) -and [Q]::IsWindowEnabled($btnUse)) ("BtnUse: $(if ($btnUse) { 'found' } else { 'missing' }); " + (TopsNow $p.Id))
+    if ($btnUse) { Click $btnUse; Start-Sleep -Milliseconds 400 }
+    Check 'dialog.use.candidate.dropped' ([Q]::CurSel($lbCand) -eq -1) "cursel=$([Q]::CurSel($lbCand))"
+    Check 'dialog.use.button.toggles' ($null -ne @(Find $dlgQ 'TButton' 'Remove #use LibA')[0]) (TopsNow $p.Id)
+    [Q]::Pick($dlgQ, $lbFixes, 0); Start-Sleep -Milliseconds 400
+    Check 'dialog.use.from.disabled' (-not [Q]::IsWindowEnabled(@(Find $dlgQ 'TButton' 'Add #use')[0])) 'the from side offers no #use'
+  }
   $before = Status $main
   if ($ProofNoFix) {
     "NOTE  -ProofNoFix: Cancel is pressed instead of Apply; the checks that need the fix are expected to FAIL"
@@ -533,7 +547,11 @@ try {
     Click (@(Find $dlgQ 'TButton' 'Apply')[0])
   }
   $st = WaitStatus $main $before 30
-  Check 'status.qualified' ($st -eq 'Qualified 2 #convert side(s) in Fix.rules (line 1) -- not saved: File > Save, then Convert again') $st
+  if ($UseAlt) {
+    Check 'status.qualified' ($st -eq 'Qualified 1 #convert side(s) in Fix.rules (line 2) -- not saved: File > Save, then Convert again; added #use LibA') $st
+  } else {
+    Check 'status.qualified' ($st -eq 'Qualified 2 #convert side(s) in Fix.rules (line 1) -- not saved: File > Save, then Convert again') $st
+  }
 
   # --- 5. the edit is unsaved: File > Exit asks (Cancel keeps the editor) ---
   if ($ProofNoFix) {
@@ -554,7 +572,12 @@ try {
   Start-Sleep -Seconds 2
   Check 'book.saved' $saved "invoked=$saved; status: $(Status $main)"
   $first = (Get-Content -LiteralPath $book -TotalCount 1)
-  Check 'file.line.qualified' ($first -eq '#convert Vcl.StdCtrls.TLabel -> LibA.TSolo') "first line: $first"
+  if ($UseAlt) {
+    $second = @(Get-Content -LiteralPath $book -TotalCount 2)[1]
+    Check 'file.line.qualified' (($first -eq '#use LibA') -and ($second -eq '#convert Vcl.StdCtrls.TLabel -> TSolo')) "first lines: $first | $second"
+  } else {
+    Check 'file.line.qualified' ($first -eq '#convert Vcl.StdCtrls.TLabel -> LibA.TSolo') "first line: $first"
+  }
 
   # --- 7. run 2: the unit now converts ---
   # The save starts the scoped validation of the changed block; a Convert click that lands in it is lost. Wait for a quiet status line, and click again if no run starts.

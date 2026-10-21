@@ -20,6 +20,17 @@ type
     Fix      : TQualifyFix;
     /// <summary>The qualified class picked, one of Fix.Suggestions[].Candidate; '' = no pick (the fix is skipped).</summary>
     Candidate: string;
+    /// <summary>D4: a unit to add to the book as `#use <Unit>` INSTEAD of editing the header ('' = none).
+    /// Honoured only when Candidate = ''; the header then stays as it is.</summary>
+    UseUnit  : string;
+  end;
+
+  /// <summary>D6: the fixes of one book, gathered over a whole run.</summary>
+  TQualifyBookFixes = record
+    /// <summary>The .rules path (a Convert row's Book).</summary>
+    Book : string;
+    /// <summary>That book's qualify_fixes[], engine order.</summary>
+    Fixes: TArray<TQualifyFix>;
   end;
 
   /// <summary>How a fix relates to the open book.</summary>
@@ -51,7 +62,12 @@ type
     After    : string;
     /// <summary>Why it was not applied; '' when applied.</summary>
     Reason   : string;
+    /// <summary>D4: the unit of a `#use` pick ('' for a header edit). For a use outcome NodeIndex is the
+    /// index of the `#use` node (inserted, or the existing one when not applied as a duplicate), Before = ''
+    /// and After = the `#use` line.</summary>
+    UseUnit  : string;
   end;
+
 
 /// <summary>PURE (reads the book, never changes it): the header in ABook that AFix names.</summary>
 /// <param name="ABook">The open rule book; not nil.</param>
@@ -82,7 +98,11 @@ function ApplyQualifyPick(ABook: TRuleBook; const APick: TQualifyPick): TQualify
 /// <remarks>M1 rule: the two sides of one line share RuleLine and Current, and the first
 /// pick changes the line, so the second could no longer find it by text. A pick whose fix
 /// has the same RuleLine and Current as an EARLIER APPLIED pick of the same call is
-/// re-targeted to that outcome's NodeIndex directly; only the side and name are checked.</remarks>
+/// re-targeted to that outcome's NodeIndex directly; only the side and name are checked.
+/// D4: a pick with Candidate = '' and UseUnit set inserts `#use <UseUnit>` (ahead of the first #convert,
+/// else appended; Dirty) AFTER all header picks, then moves every earlier outcome's NodeIndex that sits at
+/// or behind the insert -- a unit insert shifts every #convert index. A unit the book already has is not
+/// added twice (outcome not applied, Reason 'line N already has #use X').</remarks>
 function ApplyQualifyPicks(ABook: TRuleBook; const APicks: TArray<TQualifyPick>): TArray<TQualifyOutcome>;
 
 /// <summary>PURE: the suggestion the dialog preselects.</summary>
@@ -129,6 +149,43 @@ function QualifyBookIsOpen(const AOpenPath, ABook: string): Boolean;
 /// <returns>'Qualify cancelled -- could not open the run''s book: &lt;file&gt;'.</returns>
 function QualifyBookMissingText(const ABook: string): string;
 
+/// <summary>D4, PURE: the unit a fix's `#use` alternative would add to the book.</summary>
+/// <param name="AFix">An engine fix.</param>
+/// <param name="AAlternative">The alternative text of the candidate shown (suggestion or fix level).</param>
+/// <returns>The unit name when AFix is a `to` side and AAlternative reads `#use <Unit>` (directive
+/// case-insensitive, outer blanks ignored, exactly one word after it); '' otherwise. A `from` side's
+/// alternative ("add X to the unit's uses") is a .pas edit the editor cannot make, so it is never
+/// clickable.</returns>
+function QualifyUseUnit(const AFix: TQualifyFix; const AAlternative: string): string;
+
+/// <summary>D4, PURE: the dialog preview of a `#use` pick.</summary>
+/// <param name="AUnit">The unit to add; not empty.</param>
+/// <returns>'will add to the book: #use &lt;Unit&gt; (the #convert line stays as it is)'.</returns>
+function QualifyUsePreviewText(const AUnit: string): string;
+
+/// <summary>D6, PURE: gathers a run's fixes per book for the Qualify-all loop.</summary>
+/// <param name="ARows">One entry per Convert results row (Book + its qualify_fixes[]); rows with no book or no fix are ignored.</param>
+/// <returns>One entry per distinct book (path compared case-insensitively), in first-seen order. Within
+/// a book a fix repeated by another unit's row (same RuleLine, Current, Side and Name, case-insensitive on
+/// Name and Side) is kept once -- the FIRST row's fix wins, including its suggestions.</returns>
+function GroupQualifyFixes(const ARows: TArray<TQualifyBookFixes>): TArray<TQualifyBookFixes>;
+
+/// <summary>D6, PURE: the status text when the open book had to be left unsaved.</summary>
+/// <returns>'Qualify cancelled -- the open book was not saved'.</returns>
+function QualifyNotSavedText: string;
+
+/// <summary>D6, PURE: whether a QualifyBook status means the Qualify-all loop must stop.</summary>
+/// <param name="AStatus">QualifyBook's result.</param>
+/// <returns>True for QualifyNotSavedText and QualifyBookMissingText (both begin 'Qualify cancelled'); False for an applied or skipped status.</returns>
+function QualifyIsAborted(const AStatus: string): Boolean;
+
+/// <summary>D6, PURE: the status-bar text of a finished Qualify-all loop.</summary>
+/// <param name="AStatuses">QualifyBook's status per book handled, in order.</param>
+/// <param name="ABooks">How many books the run had.</param>
+/// <param name="AStopped">True when the loop ended early (dialog cancelled or QualifyIsAborted).</param>
+/// <returns>'Qualify all (K of N book(s)[, stopped])' then ': status | status' when K &gt; 0.</returns>
+function QualifyAllStatusText(const AStatuses: TArray<string>; ABooks: Integer; AStopped: Boolean): string;
+
 implementation
 
 uses
@@ -141,6 +198,9 @@ const
   NOT_FOUND       = -1;
   LIST_SEPARATOR  = ', ';
   REASON_SEPARATOR = '; ';
+  USE_DIRECTIVE   = '#use';
+  USE_WORDS       = 2;
+  CANCELLED_PREFIX = 'Qualify cancelled';
 
 function SideOf(ANode: TRuleNode; const ASide: string): string;
 begin
@@ -293,13 +353,74 @@ begin
   end;
 end;
 
+function IsUsePick(const APick: TQualifyPick): Boolean;
+begin
+  Result:= (APick.Candidate = '') and (APick.UseUnit <> '');
+end;
+
+// Index of the `#use AUnit` node, or NOT_FOUND.
+function FindUseNode(ABook: TRuleBook; const AUnit: string): Integer;
+begin
+  Result:= NOT_FOUND;
+  for var I: Integer:= 0 to ABook.Nodes.Count - 1 do
+    if (ABook.Nodes[I].Kind = rnkUse) and SameText(Trim(ABook.Nodes[I].UseUnit), AUnit) then
+      Exit(I);
+end;
+
+// Inserts `#use AUnit` ahead of the first #convert (the file-level section, as the Unit Rules tab does), or
+// appends it when the book has no header. Every outcome flagged in AShift whose node sits at or behind the
+// insert moves down one (their NodeIndex stays the node's index).
+function ApplyUse(ABook: TRuleBook; const AUnit: string; var AOutcomes: TArray<TQualifyOutcome>; const AShift: TArray<Boolean>): TQualifyOutcome;
+var
+  LNode : TRuleNode;
+  LHeads: TArray<Integer>;
+  LAt   : Integer;
+begin
+  Result:= Default(TQualifyOutcome);
+  Result.UseUnit  := AUnit;
+  Result.NodeIndex:= FindUseNode(ABook, AUnit);
+  if Result.NodeIndex <> NOT_FOUND then
+  begin
+    Result.Before:= ABook.Nodes[Result.NodeIndex].Emit;
+    Result.After := Result.Before;
+    Result.Reason:= Format('line %d already has %s %s', [Result.NodeIndex + 1, USE_DIRECTIVE, AUnit]);
+    Exit;
+  end;
+  LNode:= TRuleNode.Create;
+  LNode.Kind   := rnkUse;
+  LNode.UseUnit:= AUnit;
+  LNode.Dirty  := True;
+  LHeads:= ABook.ConvertHeaders;
+  if Length(LHeads) = 0 then
+  begin
+    ABook.Add(LNode);
+    LAt:= ABook.Nodes.Count - 1;
+  end
+  else
+  begin
+    LAt:= LHeads[0];
+    ABook.Nodes.Insert(LAt, LNode);
+  end;
+  for var J: Integer:= 0 to High(AOutcomes) do
+    if AShift[J] and (AOutcomes[J].NodeIndex >= LAt) then
+      Inc(AOutcomes[J].NodeIndex);
+  Result.NodeIndex:= LAt;
+  Result.After    := LNode.Emit;
+  Result.Applied  := True;
+end;
+
 function ApplyQualifyPicks(ABook: TRuleBook; const APicks: TArray<TQualifyPick>): TArray<TQualifyOutcome>;
 var
   LRetarget: Integer;
+  LDone    : TArray<Boolean>;
 begin
   SetLength(Result, Length(APicks));
+  SetLength(LDone, Length(APicks));
   for var I: Integer:= 0 to High(APicks) do
   begin
+    if IsUsePick(APicks[I]) then
+      Continue;
+    LDone[I]:= True;
     LRetarget:= NOT_FOUND;
     for var J: Integer:= 0 to I - 1 do
       if Result[J].Applied and (APicks[J].Fix.RuleLine = APicks[I].Fix.RuleLine) and (APicks[J].Fix.Current = APicks[I].Fix.Current) then
@@ -309,6 +430,13 @@ begin
     else
       Result[I]:= ApplyQualifyPick(ABook, APicks[I]);
   end;
+  // The #use inserts come last: they shift every node behind them, and the header picks above found theirs first.
+  for var I: Integer:= 0 to High(APicks) do
+    if IsUsePick(APicks[I]) then
+    begin
+      Result[I]:= ApplyUse(ABook, APicks[I].UseUnit, Result, LDone);
+      LDone[I]:= True;
+    end;
 end;
 
 function DefaultCandidateIndex(const AFix: TQualifyFix): Integer;
@@ -375,7 +503,85 @@ end;
 
 function QualifyBookMissingText(const ABook: string): string;
 begin
-  Result:= 'Qualify cancelled -- could not open the run''s book: ' + ExtractFileName(ABook);
+  Result:= CANCELLED_PREFIX + ' -- could not open the run''s book: ' + ExtractFileName(ABook);
+end;
+
+function QualifyUseUnit(const AFix: TQualifyFix; const AAlternative: string): string;
+var
+  LWords: TArray<string>;
+begin
+  Result:= '';
+  if not SameText(AFix.Side, SIDE_TO) then
+    Exit;
+  LWords:= Trim(AAlternative).Split([' '], TStringSplitOptions.ExcludeEmpty);
+  if (Length(LWords) = USE_WORDS) and SameText(LWords[0], USE_DIRECTIVE) then
+    Result:= LWords[1];
+end;
+
+function QualifyUsePreviewText(const AUnit: string): string;
+begin
+  Result:= Format('will add to the book: %s %s (the #convert line stays as it is)', [USE_DIRECTIVE, AUnit]);
+end;
+
+function SameFix(const A, B: TQualifyFix): Boolean;
+begin
+  Result:= (A.RuleLine = B.RuleLine) and (A.Current = B.Current) and SameText(A.Side, B.Side) and SameText(A.Name, B.Name);
+end;
+
+// Index of the group for ABook, or NOT_FOUND.
+function GroupOf(const AGroups: TArray<TQualifyBookFixes>; const ABook: string): Integer;
+begin
+  Result:= NOT_FOUND;
+  for var I: Integer:= 0 to High(AGroups) do
+    if SameText(AGroups[I].Book, ABook) then
+      Exit(I);
+end;
+
+function HasFix(const AFixes: TArray<TQualifyFix>; const AFix: TQualifyFix): Boolean;
+begin
+  Result:= False;
+  for var LFix: TQualifyFix in AFixes do
+    Result:= Result or SameFix(LFix, AFix);
+end;
+
+function GroupQualifyFixes(const ARows: TArray<TQualifyBookFixes>): TArray<TQualifyBookFixes>;
+var
+  LAt: Integer;
+begin
+  Result:= nil;
+  for var LRow: TQualifyBookFixes in ARows do
+  begin
+    if (LRow.Book = '') or (Length(LRow.Fixes) = 0) then
+      Continue;
+    LAt:= GroupOf(Result, LRow.Book);
+    if LAt = NOT_FOUND then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      LAt:= High(Result);
+      Result[LAt].Book := LRow.Book;
+      Result[LAt].Fixes:= nil;
+    end;
+    for var LFix: TQualifyFix in LRow.Fixes do
+      if not HasFix(Result[LAt].Fixes, LFix) then
+        Result[LAt].Fixes:= Result[LAt].Fixes + [LFix];
+  end;
+end;
+
+function QualifyNotSavedText: string;
+begin
+  Result:= CANCELLED_PREFIX + ' -- the open book was not saved';
+end;
+
+function QualifyIsAborted(const AStatus: string): Boolean;
+begin
+  Result:= StartsText(CANCELLED_PREFIX, AStatus);
+end;
+
+function QualifyAllStatusText(const AStatuses: TArray<string>; ABooks: Integer; AStopped: Boolean): string;
+begin
+  Result:= Format('Qualify all (%d of %d book(s)%s)', [Length(AStatuses), ABooks, if AStopped then ', stopped' else '']);
+  if Length(AStatuses) > 0 then
+    Result:= Result + ': ' + string.Join(' | ', AStatuses);
 end;
 
 function QualifyStatusText(const ABookPath: string; const AOutcomes: TArray<TQualifyOutcome>): string;
@@ -385,13 +591,17 @@ var
   LApplied: Integer;
   LSkipped: Integer;
   LLine   : string;
+  LUses   : string;
 begin
   LLines  := '';
   LReasons:= '';
   LApplied:= 0;
   LSkipped:= 0;
+  LUses   := '';
   for var LOut: TQualifyOutcome in AOutcomes do
-    if LOut.Applied then
+    if LOut.Applied and (LOut.UseUnit <> '') then
+      LUses:= LUses + (if LUses = '' then '' else LIST_SEPARATOR) + LOut.UseUnit
+    else if LOut.Applied then
     begin
       Inc(LApplied);
       LLine:= IntToStr(LOut.NodeIndex + 1);
@@ -403,10 +613,17 @@ begin
       Inc(LSkipped);
       LReasons:= LReasons + (if LReasons = '' then '' else REASON_SEPARATOR) + LOut.Reason;
     end;
-  if LApplied = 0 then
+  if (LApplied = 0) and (LUses = '') then
     Exit(Format('Nothing qualified in %s: %s', [ExtractFileName(ABookPath), LReasons]));
-  Result:= Format('Qualified %d #convert side(s) in %s (line%s %s) -- not saved: File > Save, then Convert again',
-    [LApplied, ExtractFileName(ABookPath), if Pos(LIST_SEPARATOR, LLines) > 0 then 's' else '', LLines]);
+  if LApplied = 0 then
+    Result:= Format('Added %s %s to %s -- not saved: File > Save, then Convert again', [USE_DIRECTIVE, LUses, ExtractFileName(ABookPath)])
+  else
+  begin
+    Result:= Format('Qualified %d #convert side(s) in %s (line%s %s) -- not saved: File > Save, then Convert again',
+      [LApplied, ExtractFileName(ABookPath), if Pos(LIST_SEPARATOR, LLines) > 0 then 's' else '', LLines]);
+    if LUses <> '' then
+      Result:= Result + Format('; added %s %s', [USE_DIRECTIVE, LUses]);
+  end;
   if LSkipped > 0 then
     Result:= Result + Format('; %d skipped: %s', [LSkipped, LReasons]);
 end;

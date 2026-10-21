@@ -39,6 +39,14 @@ const
   /// <summary>The run report's Status column on a uses[] line is this + the row's action
   /// ('uses add', 'uses kept', ...); an unresolved entry is 'uses unresolved'.</summary>
   REPORT_STATUS_USES = 'uses ';
+  /// <summary>The run report's Status column on an --only name the engine matched no
+  /// instance for (only_unmatched[]), a nested instance converted along (only_included[]),
+  /// a dropped source property (unlinked[]) and a descendant left on the old type
+  /// (descendants[]); ApplyItemReportLines.</summary>
+  REPORT_STATUS_ONLY_UNMATCHED = 'only unmatched';
+  REPORT_STATUS_ONLY_INCLUDED  = 'only included';
+  REPORT_STATUS_UNLINKED       = 'dropped property';
+  REPORT_STATUS_DESCENDANT     = 'descendant left';
   /// <summary>convert-apply's exit code for a CONFIGURATION error -- an unusable cast
   /// library (engine 1.28.0; 2 stays write failure / rollback, 1 a unit failure). It
   /// stops the whole run: every later apply would fail the same way.</summary>
@@ -379,14 +387,18 @@ function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
 
 /// <summary>PURE: True when ARow should carry the editor-side code-use "left" note:
 /// it is csConverted and no EARLIER csConverted row is for the same unit (one note per
-/// unit, not one per book), and the run's engine does NOT report inherited_retype.</summary>
+/// unit, not one per book), and the run's engine does NOT report BOTH inherited_retype and
+/// inherited_code_unconverted (together they make inherited[] list every code-only use).</summary>
 /// <param name="ARow">The row about to be shown.</param>
 /// <param name="AEarlier">The run's rows before it.</param>
 /// <param name="ARetypeSupported">The run's engine reports inherited_retype (1.26.0 on):
 /// its inherited[] then lists code-only uses itself (action 'code', authoritative,
-/// ruling C8 M4), so the editor-side note would say the same thing twice.</param>
+/// ruling C8 M4), so the editor-side note would say the same thing twice -- but only for a
+/// CONVERTED ancestor unless ACodeUnconvertedSupported.</param>
+/// <param name="ACodeUnconvertedSupported">The run's engine reports inherited_code_unconverted (1.26.7
+/// on): inherited[] also lists code uses of an UNCONVERTED ancestor's field (action skipped).</param>
 /// <returns>See summary; units compared by path, case-insensitively.</returns>
-function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported: Boolean): Boolean;
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported, ACodeUnconvertedSupported: Boolean): Boolean;
 
 /// <summary>PURE: the run report's E10 lines for one row: one per inherited instance
 /// the engine says the converted unit left, UNFILTERED (controller ruling M4: the
@@ -565,9 +577,9 @@ begin
     end;
 end;
 
-function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported: Boolean): Boolean;
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported, ACodeUnconvertedSupported: Boolean): Boolean;
 begin
-  Result:= (ARow.Status = csConverted) and not ARetypeSupported;
+  Result:= (ARow.Status = csConverted) and not (ARetypeSupported and ACodeUnconvertedSupported);
   for var LRow: TConvertRow in AEarlier do
     if Result and (LRow.Status = csConverted) and SameText(LRow.UnitPas, ARow.UnitPas) then
       Result:= False;
@@ -613,6 +625,14 @@ begin
     Result:= Result + [Line(REPORT_STATUS_USES + LUses.Action, UsesReportNote(LUses))];
   for var LText: string in ARow.Apply.UsesUnresolved do
     Result:= Result + [Line(REPORT_STATUS_USES + 'unresolved', LText)];
+  for var LName: string in ARow.Apply.OnlyUnmatched do
+    Result:= Result + [Line(REPORT_STATUS_ONLY_UNMATCHED, LName)];
+  for var LInc: TOnlyIncluded in ARow.Apply.OnlyIncluded do
+    Result:= Result + [Line(REPORT_STATUS_ONLY_INCLUDED, LInc.Name + ' converts too -- nested in ' + LInc.Parent)];
+  for var LUnl: TUnlinkedProp in ARow.Apply.Unlinked do
+    Result:= Result + [Line(REPORT_STATUS_UNLINKED, Format('%s.%s: no #link; dropped on %d instance(s), %d site(s)', [LUnl.FromType, LUnl.Path, LUnl.Instances, LUnl.Sites]))];
+  for var LDesc: TDescendantLeft in ARow.Apply.Descendants do
+    Result:= Result + [Line(REPORT_STATUS_DESCENDANT, Format('%s: %s %s line %d (%s) -- convert it next', [LDesc.UnitName, LDesc.Name, LDesc.TypeName, LDesc.Line, LDesc.Reason]))];
 end;
 
 function QualifyReportLines(const ARow: TConvertRow): TArray<string>;
@@ -1097,6 +1117,8 @@ var
         // The E10 hint only on a scoped run: an unscoped run never asked for --only.
         LReason:= if ApplyEditSetRefused(Row.Apply) then EditSetRefusedNote(Row.Apply) else Row.Apply.Error;
         LReason:= LReason + QualifyFixNote(Row.Apply);
+        if Row.Apply.Refused then
+          LReason:= LReason + IndexGapHint(Row.Apply.Error); // an index gap is the index's fault, not the book's
         if LScoped and Row.Apply.Refused then
           LReason:= LReason + RefusalHint(LReason)
         else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) and not Row.Apply.Unparsed then
@@ -1107,9 +1129,15 @@ var
       end;
       Exit(False);
     end;
-    // ok=true and exit 0, but the engine refused one file's edit set and wrote the
-    // other: a half-converted unit is a failure, never a conversion (stop-gap until
-    // the engine applies all-or-nothing; see ApplyHalfWritten).
+    // The engine's all-or-nothing contract (1.25.1+): ok=true goes with exit 0. A
+    // non-zero exit under ok=true is not a conversion to trust -- restore the unit.
+    if ApplyExitBroken(Row.Apply, LCode) then
+    begin
+      FailUnit(ExitBrokenNote(LCode), csFailedRestored);
+      Exit(False);
+    end;
+    // Legacy fallback for an engine up to 1.25.0, which said ok=true and exit 0 but
+    // refused one file's edit set and wrote the other (only its stderr text says so).
     if ApplyHalfWritten(Row.Apply) then
     begin
       FailUnit(HalfWrittenNote(Row.Apply), csFailedRestored);
@@ -1126,8 +1154,11 @@ var
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
     Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs) + QualifyFixNote(Row.Apply);
+    // A scoped row says what the engine matched (only_matched[] / only_unmatched[]); an
+    // engine that sends neither falls back to what was asked.
     if LScoped then
-      Row.Note:= ScopedConvertedNote(LOnly, Row.Note);
+      Row.Note:= if ScopedMatchText(Row.Apply) <> '' then ScopedMatchText(Row.Apply) + '; ' + Row.Note
+        else ScopedConvertedNote(LOnly, Row.Note);
     Add;
   end;
 

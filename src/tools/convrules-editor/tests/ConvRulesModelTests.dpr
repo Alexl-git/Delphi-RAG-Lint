@@ -9801,7 +9801,7 @@ begin
   Row.Status:= csConverted;
   Row.Apply := A;
   Row.Note  := ConvertedRowNote(A, True, True);
-  if CodeUseNoteDue(Row, [], True) then
+  if CodeUseNoteDue(Row, [], True, True) then
     Row.Note:= Row.Note + '; 1 inherited code use(s) left: ancestor Base not converted';
   Check('inh.action.code.once', Length(Row.Note.Split(['code use(s) left'])) = CODE_NOTE_PARTS, Row.Note);
   Check('inh.action.gated', ConvertedRowNote(A, False, True) = '5 edit(s), 0 remaining for manual work', ConvertedRowNote(A, False, True));
@@ -10129,15 +10129,17 @@ begin
   Row.Status := csConverted;
   Earlier:= Row;
   Earlier.Book:= 'B1.rules';
-  Check('tab.note.due.first', CodeUseNoteDue(Row, [], False));
+  Check('tab.note.due.first', CodeUseNoteDue(Row, [], False, False));
   // An engine with inherited_retype lists code uses in inherited[] itself (C8 M4).
-  Check('tab.note.due.not.with.retype', not CodeUseNoteDue(Row, [], True));
-  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier], False));
+  Check('tab.note.due.not.with.retype', not CodeUseNoteDue(Row, [], True, True));
+  // Retype alone: the engine lists code uses of a CONVERTED ancestor only, so the unconverted-ancestor gap keeps the note.
+  Check('tab.note.due.retype.without.code.unconverted', CodeUseNoteDue(Row, [], True, False));
+  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier], False, False));
   Earlier.UnitPas:= 'x\Other.pas';
-  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier], False));
-  Check('tab.note.due.other.unit.not.with.retype', not CodeUseNoteDue(Row, [Earlier], True));
+  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier], False, False));
+  Check('tab.note.due.other.unit.not.with.retype', not CodeUseNoteDue(Row, [Earlier], True, True));
   Row.Status:= csRefused;
-  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, [], False));
+  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, [], False, False));
 
   Row:= Default(TConvertRow);
   Row.UnitPas:= 'x\Desc.pas';
@@ -10933,6 +10935,248 @@ begin
   Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\' + AName)));
 end;
 
+{ Engine 1.31.5 apply/1 keys the editor used to drop (B1, B3, B6, B7, B8). REAL captures,
+  fixtures\apply1270\*-1315.json: apply-batch (2 units, --only Label1,Label9,Nope), apply-skip
+  (descendants + three unlinked), apply-desc (inherited skipped), apply-gap (index-gap refusal). }
+procedure TestApply1315Fields;
+var
+  LBatch: TApplyBatch;
+  LRow  : TApplyRow;
+  LOff  : TApplyRow;
+  LConv : TConvertRow;
+  LLines: string;
+begin
+  // --- B-batch: apply-batch/1 ---
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('apply-batch-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1315.batch.header', LBatch.Valid and LBatch.Ok and (LBatch.ExitCode = 0) and (LBatch.UnitsCount = 2) and (LBatch.OkCount = 2)
+    and (LBatch.RefusedCount = 0) and (LBatch.FailedCount = 0) and (LBatch.ClassesBuilt = 2) and (Length(LBatch.Units) = 2), BatchSummaryText(LBatch));
+  Check('f1315.batch.summary', BatchSummaryText(LBatch) = 'batch: 2 unit(s) -- 2 ok, 0 refused, 0 failed; 2 class(es) built; exit 0', BatchSummaryText(LBatch));
+  Check('f1315.batch.consistent', not BatchContractBroken(LBatch));
+  Check('f1315.batch.single.doc.invalid', not ParseApplyBatchJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL).Valid);
+  Check('f1315.batch.garbage.no.raise', not ParseApplyBatchJson('[1,2', APPLY_FEATURES_ALL).Valid and (BatchSummaryText(ParseApplyBatchJson('', APPLY_FEATURES_ALL)) = ''));
+  Check('f1315.batch.bad.shapes.no.raise', ParseApplyBatchJson('{"schema":"apply-batch/1","ok":"yes","exit_code":"0","units":[1,"x",null,{"ok":true}]}', APPLY_FEATURES_ALL).Valid
+    and (Length(ParseApplyBatchJson('{"schema":"apply-batch/1","units":[1,"x",null,{"ok":true}]}', APPLY_FEATURES_ALL).Units) = 1));
+  // The exit contract over the counts: exit 0 with a failed unit, or exit 1 with none refused/failed.
+  LBatch.FailedCount:= 1;
+  Check('f1315.batch.exit0.with.failed.is.broken', BatchContractBroken(LBatch));
+  LBatch.FailedCount:= 0;
+  LBatch.ExitCode:= 1;
+  Check('f1315.batch.exit1.all.ok.is.broken', BatchContractBroken(LBatch));
+  LBatch.RefusedCount:= 1;
+  Check('f1315.batch.exit1.with.refused.is.consistent', not BatchContractBroken(LBatch));
+
+  // --- B1: only_matched / only_unmatched ---
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('apply-batch-1315.json'), APPLY_FEATURES_ALL);
+  LRow:= LBatch.Units[0];
+  Check('f1315.only.read', (string.Join(',', LRow.OnlyMatched) = 'Label1') and (string.Join(',', LRow.OnlyUnmatched) = 'Label9,Nope'),
+    string.Join(',', LRow.OnlyMatched) + ' / ' + string.Join(',', LRow.OnlyUnmatched));
+  Check('f1315.only.text', ScopedMatchText(LRow) = 'converted 1 of 3 --only name(s); not found: Label9, Nope', ScopedMatchText(LRow));
+  Check('f1315.only.text.second.unit', ScopedMatchText(LBatch.Units[1]) = 'converted 1 of 3 --only name(s); not found: Label1, Nope', ScopedMatchText(LBatch.Units[1]));
+  Check('f1315.only.text.all.matched', ScopedMatchText(ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL)) = 'converted 1 of 1 --only name(s)');
+  Check('f1315.only.text.unscoped.empty', ScopedMatchText(ParseApplyJson(Apply1270Fixture('apply-desc-1315.json'), APPLY_FEATURES_ALL)) = '');
+
+  // --- B6: descendants[] on the ancestor's row, gated on descendant_warnings ---
+  Check('f1315.desc.read', (Length(LRow.Descendants) = 1) and (LRow.Descendants[0].UnitName = 'DescUnit') and (LRow.Descendants[0].Name = 'Label1')
+    and (LRow.Descendants[0].TypeName = 'TLabel') and (LRow.Descendants[0].Line = 4) and (LRow.Descendants[0].Reason = 'both'));
+  Check('f1315.desc.note', DescendantNote(LRow) = '; 1 descendant instance(s) still on the old type: DescUnit.Label1', DescendantNote(LRow));
+  Check('f1315.desc.in.row.note', Pos('DescUnit.Label1', ConvertedRowNote(LRow, True, True)) > 0, ConvertedRowNote(LRow, True, True));
+  LOff:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL - [afDescendants]);
+  Check('f1315.desc.gated.off', (Length(LOff.Descendants) = 0) and (DescendantNote(LOff) = ''));
+  // Counted once: the descendant warnings[] line is the note's, not the manual remainder's.
+  LOff:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1315.desc.not.in.remainder', string.Join('|', LOff.Remainder).Contains('descendant') = False, string.Join('|', LOff.Remainder));
+  LOff:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL - [afDescendants]);
+  Check('f1315.desc.gated.off.stays.in.remainder', string.Join('|', LOff.Remainder).Contains('descendant DescUnit'), string.Join('|', LOff.Remainder));
+
+  // --- B7: unlinked[] (dropped properties), only_included[] ---
+  LRow:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1315.unlinked.read', (Length(LRow.Unlinked) = 3) and (LRow.Unlinked[0].FromType = 'TLabel') and (LRow.Unlinked[0].Path = 'Hint')
+    and (LRow.Unlinked[0].Sites = 1) and (LRow.Unlinked[0].Instances = 1), IntToStr(Length(LRow.Unlinked)));
+  Check('f1315.unlinked.note', UnlinkedNote(LRow) = '; 3 dropped source property(ies), no #link: TLabel.Hint, TLabel.Left, TLabel.Top', UnlinkedNote(LRow));
+  Check('f1315.unlinked.not.in.remainder', string.Join('|', LRow.Remainder).Contains('no #link') = False, string.Join('|', LRow.Remainder));
+  Check('f1315.unlinked.remainder.keeps.reemit', Length(LRow.Remainder) = 3, string.Join('|', LRow.Remainder)); // the three 'dropped X' reemit notes
+  LRow:= ParseApplyJson('{"schema":"apply/1","ok":true,"only_included":[{"name":"Child","parent":"Panel1"},7,{"name":5}],"unlinked":[3,{"path":"P","sites":"x"}],"descendants":"no"}', APPLY_FEATURES_ALL);
+  Check('f1315.included.read', (Length(LRow.OnlyIncluded) = 2) and (LRow.OnlyIncluded[0].Name = 'Child') and (LRow.OnlyIncluded[0].Parent = 'Panel1') and (LRow.OnlyIncluded[1].Name = ''));
+  Check('f1315.included.note', OnlyIncludedNote(LRow) = '; also converted, nested: Child in Panel1,  in ', OnlyIncludedNote(LRow));
+  Check('f1315.bad.shapes.no.raise', (Length(LRow.Unlinked) = 1) and (LRow.Unlinked[0].Sites = 0) and (Length(LRow.Descendants) = 0) and (Length(LRow.OnlyMatched) = 0));
+  Check('f1315.included.empty', (OnlyIncludedNote(ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL)) = ''));
+
+  // --- run report lines ---
+  LConv:= Default(TConvertRow);
+  LConv.Book  := 'Fix.rules';
+  LConv.UnitPas:= 'FixUnit.pas';
+  LConv.Status:= csConverted;
+  LConv.Apply := ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
+  LLines:= string.Join(sLineBreak, ApplyItemReportLines(LConv));
+  Check('f1315.report.unlinked', (Pos(#9 + 'dropped property' + #9, LLines) > 0) and (Pos('TLabel.Hint: no #link; dropped on 1 instance(s), 1 site(s)', LLines) > 0), LLines);
+  Check('f1315.report.descendant', Pos(#9 + 'descendant left' + #9, LLines) > 0, LLines);
+  LConv.Apply := ParseApplyBatchJson(Apply1270Fixture('apply-batch-1315.json'), APPLY_FEATURES_ALL).Units[0];
+  LLines:= string.Join(sLineBreak, ApplyItemReportLines(LConv));
+  Check('f1315.report.only.unmatched', (Pos(#9 + 'only unmatched' + #9, LLines) > 0) and (Pos('Nope', LLines) > 0), LLines);
+  LConv.Status:= csRolledBack;
+  Check('f1315.report.rolled.back.none', Length(ApplyItemReportLines(LConv)) = 0);
+
+  // --- B3: index-gap refusal ---
+  LRow:= ParseApplyJson(Apply1270Fixture('apply-gap-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1315.gap.refused', LRow.Refused and (not LRow.Ok) and (Pos('index gap', LRow.Error) > 0), LRow.Error);
+  Check('f1315.gap.hint', IndexGapHint(LRow.Error) = ' -- not a book fault: reindex the project (or report the gap), then convert again', IndexGapHint(LRow.Error));
+  Check('f1315.gap.hint.other.reason.none', IndexGapHint('#unuse X would leave 1 unconverted instance(s) of TTable -- unit not changed') = '');
+
+  // --- B8: the exit contract ---
+  LRow:= ParseApplyJson(Apply1270Fixture('apply-desc-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1315.exit.ok.exit0.fine', LRow.Ok and not ApplyExitBroken(LRow, 0));
+  Check('f1315.exit.ok.exit2.broken', ApplyExitBroken(LRow, 2) and ApplyExitBroken(LRow, 1));
+  Check('f1315.exit.not.ok.not.this.guard', not ApplyExitBroken(ParseApplyJson(Apply1270Fixture('apply-gap-1315.json'), APPLY_FEATURES_ALL), 1));
+  Check('f1315.exit.note', ExitBrokenNote(2) = 'engine said ok but exited 2 -- against its all-or-nothing contract; restored from backup', ExitBrokenNote(2));
+
+  // --- B10: inherited_code_unconverted (engine 1.26.7 on). DescUnit alone: the engine itself lists the code use of the
+  // UNCONVERTED ancestor's field (inherited[] action skipped / ancestor_state unconverted), so the editor-side note is
+  // redundant only when the engine reports BOTH inherited_retype and inherited_code_unconverted.
+  LRow:= ParseApplyJson(Apply1270Fixture('apply-desc-1315.json'), APPLY_FEATURES_ALL);
+  LConv:= Default(TConvertRow);
+  LConv.UnitPas:= 'x\DescUnit.pas';
+  LConv.Status := csConverted;
+  LConv.Apply  := LRow;
+  Check('f1315.codeunconv.engine.lists.it', (Length(LRow.InheritedLeft) = 1) and SameText(LRow.InheritedLeft[0].Action, 'skipped')
+    and SameText(LRow.InheritedLeft[0].AncestorState, 'unconverted'));
+  Check('f1315.codeunconv.note.not.due.with.both', not CodeUseNoteDue(LConv, [], True, True));
+  Check('f1315.codeunconv.note.due.retype.only', CodeUseNoteDue(LConv, [], True, False));
+  Check('f1315.codeunconv.note.due.neither', CodeUseNoteDue(LConv, [], False, False));
+  Check('f1315.codeunconv.note.due.code.only', CodeUseNoteDue(LConv, [], False, True));
+  Check('f1315.codeunconv.capability.name', CAPABILITY_INHERITED_CODE_UNCONVERTED = 'inherited_code_unconverted');
+end;
+
+{ Standing trap: every apply/1 read is type-checked and never raises. A wrong-typed
+  top-level ok / edits_count / refused / reason / error, or a malformed rule_errors[] /
+  string array, degrades to False / 0 / '' -- it must not cost the whole row. }
+procedure TestApplyBadShapes;
+
+  function Parse(const AJson: string; out ARow: TApplyRow): string;
+  begin
+    try
+      ARow:= ParseApplyJson(AJson, APPLY_FEATURES_ALL);
+      Result:= '';
+    except
+      on E: Exception do
+      begin
+        ARow:= Default(TApplyRow);
+        Result:= E.ClassName + ': ' + E.Message;
+      end;
+    end; // try
+  end;
+
+var
+  LRow: TApplyRow;
+  LErr: string;
+begin
+  LErr:= Parse('{"schema":"apply/1","ok":"yes","edits_count":"3"}', LRow);
+  Check('badshape.ok.string', (LErr = '') and not LRow.Ok and (LRow.EditsCount = 0) and (LRow.Error = 'convert-apply reported ok=false with no reason'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":1,"edits_count":2.5}', LRow);
+  Check('badshape.ok.number', (LErr = '') and not LRow.Ok and (LRow.EditsCount = 0), LErr);
+  LErr:= Parse('{"schema":"apply/1","ok":null,"edits_count":null}', LRow);
+  Check('badshape.ok.null', (LErr = '') and not LRow.Ok and (LRow.EditsCount = 0), LErr);
+  LErr:= Parse('{"schema":"apply/1","ok":true,"edits_count":"4"}', LRow);
+  Check('badshape.edits.string.ok.kept', (LErr = '') and LRow.Ok and (LRow.EditsCount = 0), LErr);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"refused":"true","reason":"r"}', LRow);
+  Check('badshape.refused.string', (LErr = '') and not LRow.Refused and (LRow.Error = 'convert-apply reported ok=false with no reason'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"refused":true,"reason":5}', LRow);
+  Check('badshape.reason.number', (LErr = '') and LRow.Refused and (LRow.Error = 'convert-apply refused the unit and gave no reason'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"refused":true,"reason":{"a":1}}', LRow);
+  Check('badshape.reason.object', (LErr = '') and LRow.Refused and (LRow.Error = 'convert-apply refused the unit and gave no reason'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"error":7}', LRow);
+  Check('badshape.error.number', (LErr = '') and (LRow.Error = 'convert-apply reported ok=false with no reason'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"error":"E","rule_errors":[{"line":"4","message":9}]}', LRow);
+  Check('badshape.rule.error.fields', (LErr = '') and (LRow.RuleErrorCount = 1) and (LRow.Error = 'line 0: '), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"error":"E","rule_errors":["x",{"line":3,"message":"m"}]}', LRow);
+  Check('badshape.rule.error.not.object', (LErr = '') and (LRow.RuleErrorCount = 2) and (LRow.Error = 'E'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":false,"error":"E","rule_errors":"x"}', LRow);
+  Check('badshape.rule.errors.not.array', (LErr = '') and (LRow.RuleErrorCount = 0) and (LRow.Error = 'E'), LErr + LRow.Error);
+  LErr:= Parse('{"schema":"apply/1","ok":true,"converted":"X","todos":[{"a":1},3,"t"],"warnings":7,"reemit_notes":[null]}', LRow);
+  Check('badshape.string.arrays', (LErr = '') and LRow.Ok and (Length(LRow.Converted) = 0) and (string.Join('|', LRow.Remainder) = 't'),
+    LErr + string.Join('|', LRow.Remainder));
+end;
+
+{ B1/B3/B8 through the runner (fake engine seams, no real engine). }
+procedure TestRunner1315;
+const
+  ORIG = 'unit F; interface implementation end.';
+var
+  Dir  : string;
+  LPas : string;
+  LRows: TArray<TConvertRow>;
+  Index: TIndexFn;
+  Scope: TScopeFn;
+
+  function Answer(const AJson: string; ACode: Integer): TApplyOnlyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson2: string): Integer
+      begin
+        TFile.WriteAllText(AUnitPas, 'CONVERTED', TEncoding.ASCII);
+        AJson2:= AJson;
+        Result:= ACode;
+      end;
+  end;
+
+  function AnswerPlain(const AJson: string; ACode: Integer): TApplyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; out AJson2: string): Integer
+      begin
+        TFile.WriteAllText(AUnitPas, 'CONVERTED', TEncoding.ASCII);
+        AJson2:= AJson;
+        Result:= ACode;
+      end;
+  end;
+
+  procedure WriteUnit;
+  begin
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(LPas, '.dfm'), 'object F: TF' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'conv1315-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    LPas:= TPath.Combine(Dir, 'F.pas');
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result:= 0;
+      end;
+    Scope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        ANames:= ['Label1'];
+        Result:= True;
+      end;
+    // B8: ok=true under exit 2 -- restored, whatever the text says.
+    WriteUnit;
+    LRows:= RunConversionUnits([LPas], ['A.rules'], AnswerPlain('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1}', 2),
+      Index, nil, nil);
+    Check('runner1315.exit.broken.restored', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (TFile.ReadAllText(LPas) = ORIG)
+      and (Pos('exited 2', LRows[0].Note) > 0), IfThen(Length(LRows) > 0, LRows[0].Note, 'no rows'));
+    // B8: the old text-only case (ok=true, exit 0, only the refusal line says so) is still handled.
+    WriteUnit;
+    LRows:= RunConversionUnits([LPas], ['A.rules'], AnswerPlain(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE, 0), Index, nil, nil);
+    Check('runner1315.text.only.legacy.restored', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (TFile.ReadAllText(LPas) = ORIG)
+      and (Pos('half-converted', LRows[0].Note) > 0), IfThen(Length(LRows) > 0, LRows[0].Note, 'no rows'));
+    // B3: the index-gap refusal names the index.
+    WriteUnit;
+    LRows:= RunConversionUnits([LPas], ['A.rules'], AnswerPlain(Apply1270Fixture('apply-gap-1315.json'), 1), Index, nil, nil);
+    Check('runner1315.gap.refused.note', (Length(LRows) = 1) and (LRows[0].Status = csRefused) and (Pos('not a book fault: reindex', LRows[0].Note) > 0),
+      IfThen(Length(LRows) > 0, LRows[0].Note, 'no rows'));
+    // B1: a scoped row says what the engine matched.
+    WriteUnit;
+    LRows:= RunConversionUnits([LPas], ['A.rules'], Answer(Apply1270Fixture('apply-skip-1315.json'), 0), Index, Scope, nil, nil);
+    Check('runner1315.scoped.match.note', (Length(LRows) = 1) and (LRows[0].Status = csConverted) and (Pos('converted 1 of 1 --only name(s); ', LRows[0].Note) = 1)
+      and (Pos('--only 1 instance(s)', LRows[0].Note) = 0), IfThen(Length(LRows) > 0, LRows[0].Note, 'no rows'));
+    // B1: an engine that sends neither array keeps the asked-for note.
+    WriteUnit;
+    LRows:= RunConversionUnits([LPas], ['A.rules'], Answer('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1}', 0), Index, Scope, nil, nil);
+    Check('runner1315.scoped.asked.fallback', (Length(LRows) = 1) and (Pos('--only 1 instance(s): Label1; ', LRows[0].Note) = 1), IfThen(Length(LRows) > 0, LRows[0].Note, 'no rows'));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
 procedure TestApply1270Items;
 const
   VALUE_CASTS = 3;
@@ -11109,8 +11353,8 @@ begin
   Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Row.Apply:= Cast;
   Lines:= ApplyItemReportLines(Row);
-  Check('apply1270.report.cast.count', (Length(Lines) = 2) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
-  if (Length(Lines) = 2) and (Length(Cast.CastSites) = 1) then
+  Check('apply1270.report.cast.count', (Length(Lines) = 2 + 5) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
+  if (Length(Lines) = 2 + 5) and (Length(Cast.CastSites) = 1) then
     Check('apply1270.report.cast', (Lines[0] = HEAD + 'cast site'#9#9#9#9#9 + Cast.CastSites[0].Text)
       and (Lines[1] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
   Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'), APPLY_FEATURES_ALL);
@@ -11305,16 +11549,16 @@ end;
   the manual remainder (real 1.27.0 captures). }
 procedure TestApply1270Remainder;
 const
-  CAST_REMAINDER  = 11; // 5 reemit_notes + 7 warnings - the 1 cast-site warning
+  CAST_REMAINDER  = 6; // 5 reemit_notes + 7 warnings - the 1 cast-site warning - the 5 unlinked warnings (UnlinkedNote's)
   STRIP_REMAINDER = 27; // 11 reemit_notes + 17 warnings - the 1 value-check warning
-  CAST_ALL        = 12;
+  CAST_ALL        = 7; // 5 reemit_notes + 7 warnings - the 5 unlinked warnings (unlinked[] is not feature-gated)
   STRIP_ALL       = 28;
 var
   A: TApplyRow;
 begin
   A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.remainder.cast.once', Length(A.Remainder) = CAST_REMAINDER, IntToStr(Length(A.Remainder)));
-  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 11 remaining for manual work; 1 cast site(s) to convert by hand',
+  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 6 remaining for manual work; 1 cast site(s) to convert by hand; 5 dropped source property(ies), no #link: TBitBtn.Height, TBitBtn.Left, TBitBtn.TabOrder, TBitBtn.Top, TBitBtn.Width',
     ConvertedRowNote(A, True, True));
   Check('apply1270.remainder.cast.gated', Length(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), []).Remainder) = CAST_ALL);
   A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
@@ -12979,6 +13223,42 @@ begin
   Check('worklist.replace.drops.stale.rows', WorkKeys(Merged) = 'New', WorkKeys(Merged));
 end;
 
+{ C-2 (owner decision): a Convert refused before it ran keeps the previous Work list and
+  says so on the summary. MarkRefused / WorkRunSummary / RunUnitLabel are pure. }
+procedure TestWorkListRefused;
+var
+  Run : TWorkRun;
+  Kept: TWorkRun;
+  When: TDateTime;
+begin
+  When:= EncodeDate(2026, 10, 19) + EncodeTime(14, 5, 9, 0);
+  Run:= Default(TWorkRun);
+  Run.RunId    := 4;
+  Run.State    := wlsRows;
+  Run.Rows     := [WorkRow('A.pas', 'X', 'Kind', PAS_USE_UNMAPPED, 4)];
+  Run.UnitLabel:= 'A.pas';
+  Run.At       := When;
+  Check('worklist.refused.label.none', RunUnitLabel(nil) = '');
+  Check('worklist.refused.label.one', RunUnitLabel(['C:\p\U1.pas']) = 'U1.pas', RunUnitLabel(['C:\p\U1.pas']));
+  Check('worklist.refused.label.many', RunUnitLabel(['C:\p\U1.pas', 'C:\p\U2.pas', 'C:\p\U3.pas']) = 'U1.pas +2 more', RunUnitLabel(['C:\p\U1.pas', 'C:\p\U2.pas', 'C:\p\U3.pas']));
+  Check('worklist.refused.not.stale.by.default', (not Run.Refused) and (WorkRunSummary(Run) = WorkListSummary(Run.Rows, wlsRows)), WorkRunSummary(Run));
+  Kept:= MarkRefused(Run);
+  Check('worklist.refused.keeps.rows', Kept.Refused and (Length(Kept.Rows) = 1) and (Kept.Rows[0].Member = 'Kind') and (Kept.RunId = 4) and (Kept.State = wlsRows));
+  Check('worklist.refused.summary', WorkRunSummary(Kept) = WorkListSummary(Run.Rows, wlsRows) + ' -- from the previous run (A.pas, 2026-10-19 14:05:09); the last Convert was refused', WorkRunSummary(Kept));
+  Kept:= MarkRefused(Kept);
+  Check('worklist.refused.idempotent', Kept.Refused and (Length(Kept.Rows) = 1));
+  Run.UnitLabel:= '';
+  Run.At       := 0;
+  Check('worklist.refused.unknown.parts', Pos('(unknown unit, time unknown); the last Convert was refused', WorkRunSummary(MarkRefused(Run))) > 0, WorkRunSummary(MarkRefused(Run)));
+  // With no earlier run there is nothing to call stale.
+  Kept:= Default(TWorkRun);
+  Kept.State:= wlsNoRun;
+  Check('worklist.refused.no.run.unchanged', (not MarkRefused(Kept).Refused) and (WorkRunSummary(MarkRefused(Kept)) = WORK_NO_RUN), WorkRunSummary(MarkRefused(Kept)));
+  // A run without capability / converted units is a run too: refused says so.
+  Kept.State:= wlsNoConverted;
+  Check('worklist.refused.no.converted', Pos(WORK_NO_CONVERTED + ' -- from the previous run', WorkRunSummary(MarkRefused(Kept))) = 1, WorkRunSummary(MarkRefused(Kept)));
+end;
+
 procedure TestWorkListRunGoTo;
 const
   RUN_A      = 4;
@@ -13421,6 +13701,13 @@ begin
     Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(FixB, 'LibA.TNope')]);
     Check('qualify.apply.retarget.wrong.side', (Length(Outs) = 2) and Outs[0].Applied and (not Outs[1].Applied)
       and (Pos('not "TNope"', Outs[1].Reason) > 0) and (Book.Nodes[0].ToType = 'TSolo'), Outs[1].Reason);
+    // A refused pick (Applied False) must NOT be a re-target source even though it carries a NodeIndex: pick 0 is refused
+    // as already qualified (NodeIndex 0), so pick 1 on the same line goes through ApplyQualifyPick and is refused the same way,
+    // not ApplyAt(0) (which would say the from side reads the qualified name).
+    Book:= Make('#convert Vcl.StdCtrls.TLabel -> TSolo');
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel')]);
+    Check('qualify.apply.retarget.skips.refused', (Length(Outs) = 2) and (not Outs[0].Applied) and (not Outs[1].Applied)
+      and (Outs[0].NodeIndex = 0) and (Pos('already qualified', Outs[1].Reason) > 0), Outs[1].Reason);
     // Two different headers: the lines are listed, plural.
     Book:= Make(HDR + CRLF + '#link A <- B' + CRLF + '#link C <- D' + CRLF + '#convert TButton -> TSolo');
     FixB:= F0;
@@ -13433,6 +13720,422 @@ begin
     Check('qualify.status.none', StartsText('Nothing qualified in Fix.rules', StatusOf(Outs)), StatusOf(Outs));
   finally
     FreeAndNil(Books);
+  end;
+end;
+
+{ D4: the `#use <Unit>` alternative of a `to` side, applied as a book edit. }
+procedure TestQualifyUse;
+const
+  CRLF = #13#10;
+  HDR  = '#convert TLabel -> TSolo';
+  VCL  = 'Vcl.StdCtrls.TLabel';
+  USE_A = '#use LibA';
+var
+  Books: TObjectList<TRuleBook>;
+  Both : TApplyRow;
+  F0   : TQualifyFix;
+  F1   : TQualifyFix;
+  Book : TRuleBook;
+  Outs : TArray<TQualifyOutcome>;
+  UseA : TQualifyPick;
+  UseB : TQualifyPick;
+  Stat : string;
+
+  function Make(const AText: string): TRuleBook;
+  begin
+    Result:= TRuleBook.Create;
+    Books.Add(Result);
+    Result.LoadFromString(AText);
+  end;
+
+  function UsePick(const AFix: TQualifyFix; const AUnit: string): TQualifyPick;
+  begin
+    Result:= QualifyPickOf(AFix, '');
+    Result.UseUnit:= AUnit;
+  end;
+
+begin
+  Books:= TObjectList<TRuleBook>.Create(True);
+  try
+    Both:= QualifyBothRow;
+    if Length(Both.QualifyFixes) < 2 then
+    begin
+      Check('qualify.use.fixtures.loaded', False);
+      Exit;
+    end;
+    F0:= Both.QualifyFixes[0];
+    F1:= Both.QualifyFixes[1];
+    Check('qualify.use.unit.to', QualifyUseUnit(F1, F1.Alternative) = 'LibA', QualifyUseUnit(F1, F1.Alternative));
+    Check('qualify.use.unit.to.second', QualifyUseUnit(F1, F1.Suggestions[1].Alternative) = 'LibB');
+    Check('qualify.use.unit.from.never', (QualifyUseUnit(F0, F0.Alternative) = '') and (QualifyUseUnit(F0, '#use LibA') = ''),
+      QualifyUseUnit(F0, '#use LibA'));
+    Check('qualify.use.unit.lenient', (QualifyUseUnit(F1, '  #USE   LibA ') = 'LibA'));
+    Check('qualify.use.unit.shapes', (QualifyUseUnit(F1, '') = '') and (QualifyUseUnit(F1, '#use') = '') and (QualifyUseUnit(F1, '#use A B') = '')
+      and (QualifyUseUnit(F1, 'add LibA to the unit''s uses') = '') and (QualifyUseUnit(F1, '#useful LibA') = ''));
+    Check('qualify.use.preview', QualifyUsePreviewText('LibA') = 'will add to the book: #use LibA (the #convert line stays as it is)', QualifyUsePreviewText('LibA'));
+
+    // The header pick is found by text; the #use goes in before the first header and shifts it.
+    UseA:= UsePick(F1, 'LibA');
+    Book:= Make('#depth 3' + CRLF + HDR + CRLF + '#link A <- B');
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, VCL), UseA]);
+    Check('qualify.use.applied', (Length(Outs) = 2) and Outs[0].Applied and Outs[1].Applied and (Outs[1].UseUnit = 'LibA') and (Outs[1].After = USE_A),
+      Outs[1].Reason);
+    Check('qualify.use.node', (Book.Nodes.Count = 4) and (Book.Nodes[1].Kind = rnkUse) and (Book.Nodes[1].UseUnit = 'LibA') and Book.Nodes[1].Dirty
+      and (Outs[1].NodeIndex = 1), IntToStr(Book.Nodes.Count));
+    Check('qualify.use.shifts.header', (Outs[0].NodeIndex = 2) and (Book.Nodes[2].Kind = rnkConvert) and (Book.Nodes[2].FromType = VCL), IntToStr(Outs[0].NodeIndex));
+    Check('qualify.use.header.untouched', (Book.Nodes[2].ToType = 'TSolo'));
+    // Two uses: both land ahead of the header, in pick order; the earlier use keeps its index.
+    Book:= Make(HDR);
+    UseB:= UsePick(F1, 'LibB');
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, VCL), UseA, UseB]);
+    Check('qualify.use.two', (Book.Nodes.Count = 3) and (Book.Nodes[0].UseUnit = 'LibA') and (Book.Nodes[1].UseUnit = 'LibB') and (Book.Nodes[2].Kind = rnkConvert)
+      and (Outs[0].NodeIndex = 2) and (Outs[1].NodeIndex = 0) and (Outs[2].NodeIndex = 1), IntToStr(Outs[2].NodeIndex));
+    // A book with no header: appended.
+    Book:= Make('#link A <- B');
+    Outs:= ApplyQualifyPicks(Book, [UseA]);
+    Check('qualify.use.no.header', Outs[0].Applied and (Book.Nodes.Count = 2) and (Book.Nodes[1].Kind = rnkUse), Outs[0].Reason);
+    // Already there: refused, nothing inserted.
+    Book:= Make('#use liba' + CRLF + HDR);
+    Outs:= ApplyQualifyPicks(Book, [UseA]);
+    Check('qualify.use.duplicate', (not Outs[0].Applied) and (Outs[0].NodeIndex = 0) and (Pos('already', Outs[0].Reason) > 0) and (Book.Nodes.Count = 2), Outs[0].Reason);
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [UseA, UseA]);
+    Check('qualify.use.duplicate.in.call', Outs[0].Applied and (not Outs[1].Applied) and (Book.Nodes.Count = 2), Outs[1].Reason);
+    // A candidate wins over a use on the same pick.
+    UseB:= QualifyPickOf(F1, 'LibA.TSolo');
+    UseB.UseUnit:= 'LibA';
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [UseB]);
+    Check('qualify.use.candidate.wins', Outs[0].Applied and (Outs[0].UseUnit = '') and (Book.Nodes.Count = 1) and (Book.Nodes[0].ToType = 'LibA.TSolo'), Outs[0].Reason);
+    // No candidate and no use is still the old refusal.
+    Outs:= ApplyQualifyPicks(Make(HDR), [QualifyPickOf(F1, '')]);
+    Check('qualify.use.none', (not Outs[0].Applied) and (Pos('pick a candidate', Outs[0].Reason) > 0), Outs[0].Reason);
+
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [UseA]);
+    Stat:= QualifyStatusText('books\Fix.rules', Outs);
+    Check('qualify.use.status.only', Stat = 'Added #use LibA to Fix.rules -- not saved: File > Save, then Convert again', Stat);
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, VCL), UseA, UseB]);
+    Stat:= QualifyStatusText('books\Fix.rules', Outs);
+    Check('qualify.use.status.mixed', Stat = 'Qualified 2 #convert side(s) in Fix.rules (line 2) -- not saved: File > Save, then Convert again; added #use LibA', Stat);
+    Book:= Make('#use LibA' + CRLF + HDR);
+    Outs:= ApplyQualifyPicks(Book, [UseA]);
+    Stat:= QualifyStatusText('books\Fix.rules', Outs);
+    Check('qualify.use.status.duplicate', StartsText('Nothing qualified in Fix.rules: ', Stat) and (Pos('already', Stat) > 0), Stat);
+  finally
+    FreeAndNil(Books);
+  end;
+end;
+
+function BookFixesOf(const ABook: string; const AFixes: TArray<TQualifyFix>): TQualifyBookFixes;
+begin
+  Result.Book := ABook;
+  Result.Fixes:= AFixes;
+end;
+
+{ D6: Qualify all -- a run's fixes grouped per book, and the loop's pure decisions. }
+procedure TestQualifyAll;
+const
+  CRLF = #13#10;
+  HDR  = '#convert TLabel -> TSolo';
+var
+  Both  : TApplyRow;
+  Inf   : TApplyRow;
+  F0    : TQualifyFix;
+  F1    : TQualifyFix;
+  Groups: TArray<TQualifyBookFixes>;
+  Other : TQualifyFix;
+  BookA : TRuleBook;
+  BookB : TRuleBook;
+  Outs  : TArray<TQualifyOutcome>;
+begin
+  Both:= QualifyBothRow;
+  Inf := QualifyInferredRow;
+  if (Length(Both.QualifyFixes) < 2) or (Length(Inf.QualifyFixes) < 1) then
+  begin
+    Check('qualify.all.fixtures.loaded', False);
+    Exit;
+  end;
+  F0:= Both.QualifyFixes[0];
+  F1:= Both.QualifyFixes[1];
+  // Three units against book A (the same two fixes each), one against B, a bookless row, a fixless row.
+  Groups:= GroupQualifyFixes([BookFixesOf('c:\b\A.rules', [F0, F1]), BookFixesOf('c:\b\B.rules', [F0]), BookFixesOf('C:\B\a.RULES', [F0, F1]),
+    BookFixesOf('', [F0]), BookFixesOf('c:\b\C.rules', nil), BookFixesOf('c:\b\A.rules', [F0, F1])]);
+  Check('qualify.all.group.books', (Length(Groups) = 2) and (Groups[0].Book = 'c:\b\A.rules') and (Groups[1].Book = 'c:\b\B.rules'),
+    IntToStr(Length(Groups)));
+  Check('qualify.all.group.dedupe', (Length(Groups) = 2) and (Length(Groups[0].Fixes) = 2) and (Length(Groups[1].Fixes) = 1),
+    IntToStr(Length(Groups[0].Fixes)));
+  Check('qualify.all.group.order', (Length(Groups[0].Fixes) = 2) and (Groups[0].Fixes[0].Side = 'from') and (Groups[0].Fixes[1].Side = 'to'));
+  // A different line, side or name is a different fix.
+  Other:= F0;
+  Other.RuleLine:= 4;
+  Groups:= GroupQualifyFixes([BookFixesOf('A.rules', [F0, Other, F1])]);
+  Check('qualify.all.group.distinct', (Length(Groups) = 1) and (Length(Groups[0].Fixes) = 3), IntToStr(Length(Groups[0].Fixes)));
+  Other:= F0;
+  Other.Name:= 'TLABEL';
+  Other.Side:= 'FROM';
+  Groups:= GroupQualifyFixes([BookFixesOf('A.rules', [F0, Other])]);
+  Check('qualify.all.group.case', (Length(Groups) = 1) and (Length(Groups[0].Fixes) = 1), IntToStr(Length(Groups[0].Fixes)));
+  // The first row's fix wins (its suggestions are kept).
+  Other:= F0;
+  Other.Suggestions:= nil;
+  Groups:= GroupQualifyFixes([BookFixesOf('A.rules', [F0]), BookFixesOf('A.rules', [Other])]);
+  Check('qualify.all.group.first.wins', (Length(Groups) = 1) and (Length(Groups[0].Fixes[0].Suggestions) = 2));
+  Check('qualify.all.group.none', (Length(GroupQualifyFixes(nil)) = 0) and (Length(GroupQualifyFixes([BookFixesOf('A.rules', nil)])) = 0));
+
+  // Two books, two edits: the grouped fixes apply to each book on its own.
+  Groups:= GroupQualifyFixes([BookFixesOf('A.rules', [F0, F1]), BookFixesOf('B.rules', [F0, F1]), BookFixesOf('A.rules', [F0, F1])]);
+  BookA:= TRuleBook.Create;
+  BookB:= TRuleBook.Create;
+  try
+    BookA.LoadFromString(HDR + CRLF + '#link A <- B');
+    BookB.LoadFromString(HDR);
+    Outs:= ApplyQualifyPicks(BookA, [QualifyPickOf(Groups[0].Fixes[0], 'Vcl.StdCtrls.TLabel'), QualifyPickOf(Groups[0].Fixes[1], 'LibA.TSolo')]);
+    Check('qualify.all.apply.a', (Length(Outs) = 2) and Outs[0].Applied and Outs[1].Applied and (BookA.Nodes[0].Emit = '#convert Vcl.StdCtrls.TLabel -> LibA.TSolo'));
+    Outs:= ApplyQualifyPicks(BookB, [QualifyPickOf(Groups[1].Fixes[0], 'Vcl.StdCtrls.TLabel'), QualifyPickOf(Groups[1].Fixes[1], 'LibB.TSolo')]);
+    Check('qualify.all.apply.b', (Length(Outs) = 2) and Outs[0].Applied and Outs[1].Applied and (BookB.Nodes[0].Emit = '#convert Vcl.StdCtrls.TLabel -> LibB.TSolo'));
+  finally
+    BookA.Free;
+    BookB.Free;
+  end;
+
+  Check('qualify.all.notsaved.text', QualifyNotSavedText = 'Qualify cancelled -- the open book was not saved', QualifyNotSavedText);
+  Check('qualify.all.aborted.notsaved', QualifyIsAborted(QualifyNotSavedText));
+  Check('qualify.all.aborted.missing', QualifyIsAborted(QualifyBookMissingText('c:\b\A.rules')));
+  Check('qualify.all.aborted.not', (not QualifyIsAborted('Qualified 2 #convert side(s) in A.rules (line 1) -- not saved: File > Save, then Convert again'))
+    and (not QualifyIsAborted('Nothing qualified in A.rules: line 1 no longer reads "x"')) and (not QualifyIsAborted('')));
+  Check('qualify.all.status.done', QualifyAllStatusText(['s1', 's2'], 2, False) = 'Qualify all (2 of 2 book(s)): s1 | s2', QualifyAllStatusText(['s1', 's2'], 2, False));
+  Check('qualify.all.status.stopped', QualifyAllStatusText(['s1'], 3, True) = 'Qualify all (1 of 3 book(s), stopped): s1', QualifyAllStatusText(['s1'], 3, True));
+  Check('qualify.all.status.stopped.none', QualifyAllStatusText(nil, 2, True) = 'Qualify all (0 of 2 book(s), stopped)', QualifyAllStatusText(nil, 2, True));
+end;
+
+{ Standing trap: Delphi 13's GetValue<T> / TryGetValue<T> CONVERT across JSON types ("3" -> 3, 1 -> True, 5 -> '5').
+  Every engine JSON read in ConvRules.Engine is type-checked: a wrong-typed member reads as absent. One bad shape per read. }
+procedure TestEngineJsonShapes;
+const
+  PROP_BAD = '{"qname":5,"root_type":true,"truncated":"true","properties":[{"path":7,"type":1,"declared_in":false,"kind":2,'
+    + '"is_class_typed":1,"is_writable":"false","visibility":3,"member_kind":4}]}';
+  PROP_OK  = '{"qname":"Q","root_type":"R","truncated":true,"properties":[{"path":"p","type":"t","declared_in":"d","kind":"k",'
+    + '"is_class_typed":true,"is_writable":false,"visibility":"v","member_kind":"m"}]}';
+  SQL_TRUNC = '{"rows":[["a"]],"truncated":1}';
+  SQL_BAD  = '{"rows":[["a"]],"stale":1,"stale_files":"3"}';
+  SQL_OK   = '{"rows":[["a"]],"stale":true,"stale_files":3}';
+  SYM_BAD  = '[{"kind":5,"name":true,"qualified_name":1,"file":2,"start_line":"3","end_line":"4"}]';
+  SYM_OK   = '[{"kind":"k","name":"n","qualified_name":"q","file":"f","start_line":3,"end_line":4}]';
+  SYM_LINE = 3;
+  SYM_END  = 4;
+  STALE_N  = 3;
+var
+  Tree  : TProptree;
+  Leaf  : TPropLeaf;
+  Ans   : TSqlAnswer;
+  Syms  : TArray<TQuerySymbol>;
+  Sym   : TQuerySymbol;
+  Okay  : Boolean;
+begin
+  // ParseProptreeJson: root qname / root_type / truncated, then each leaf's path ... member_kind.
+  Tree:= ParseProptreeJson(PROP_BAD);
+  Check('engjson.proptree.qname.number', Tree.Qname = '', Tree.Qname);
+  Check('engjson.proptree.root_type.bool', Tree.RootType = '', Tree.RootType);
+  Check('engjson.proptree.truncated.string', not Tree.Truncated);
+  Okay:= Length(Tree.Leaves) = 1;
+  Check('engjson.proptree.leaf.kept', Okay);
+  if Okay then
+  begin
+    Leaf:= Tree.Leaves[0];
+    Check('engjson.proptree.path.number', Leaf.Path = '', Leaf.Path);
+    Check('engjson.proptree.type.number', Leaf.TypeName = '', Leaf.TypeName);
+    Check('engjson.proptree.declared_in.bool', Leaf.DeclaredIn = '', Leaf.DeclaredIn);
+    Check('engjson.proptree.kind.number', Leaf.Kind = '', Leaf.Kind);
+    Check('engjson.proptree.is_class_typed.number', not Leaf.IsClassType);
+    Check('engjson.proptree.is_writable.string.keeps.default', Leaf.IsWritable);
+    Check('engjson.proptree.visibility.number', Leaf.Visibility = '', Leaf.Visibility);
+    Check('engjson.proptree.member_kind.number.defaults', Leaf.MemberKind = 'property', Leaf.MemberKind);
+  end;
+  // Positive control: the same keys with the right types are read.
+  Tree:= ParseProptreeJson(PROP_OK);
+  Check('engjson.proptree.control', (Tree.Qname = 'Q') and (Tree.RootType = 'R') and Tree.Truncated and (Length(Tree.Leaves) = 1)
+    and (Tree.Leaves[0].Path = 'p') and (Tree.Leaves[0].TypeName = 't') and (Tree.Leaves[0].DeclaredIn = 'd') and (Tree.Leaves[0].Kind = 'k')
+    and Tree.Leaves[0].IsClassType and (not Tree.Leaves[0].IsWritable) and (Tree.Leaves[0].Visibility = 'v') and (Tree.Leaves[0].MemberKind = 'm'));
+
+  // ParseSqlRows: truncated / stale / stale_files.
+  Okay:= ParseSqlRows(SQL_TRUNC, Ans);
+  Check('engjson.sql.truncated.number.not.truncated', Okay);
+  Okay:= ParseSqlRows(SQL_BAD, Ans);
+  Check('engjson.sql.bad.shapes.still.rows', Okay and (Length(Ans.Rows) = 1));
+  Check('engjson.sql.stale.number', not Ans.Stale);
+  Check('engjson.sql.stale_files.string', Ans.StaleFiles = 0, IntToStr(Ans.StaleFiles));
+  Okay:= ParseSqlRows(SQL_OK, Ans);
+  Check('engjson.sql.control', Okay and Ans.Stale and (Ans.StaleFiles = STALE_N));
+
+  // ParseQuerySymbols: kind / name / qualified_name / file / start_line / end_line.
+  Syms:= ParseQuerySymbols(SYM_BAD);
+  Okay:= Length(Syms) = 1;
+  Check('engjson.query.row.kept', Okay);
+  if Okay then
+  begin
+    Sym:= Syms[0];
+    Check('engjson.query.kind.number', Sym.Kind = '', Sym.Kind);
+    Check('engjson.query.name.bool', Sym.Name = '', Sym.Name);
+    Check('engjson.query.qualified_name.number', Sym.QualifiedName = '', Sym.QualifiedName);
+    Check('engjson.query.file.number', Sym.FilePath = '', Sym.FilePath);
+    Check('engjson.query.start_line.string', Sym.StartLine = 0, IntToStr(Sym.StartLine));
+    Check('engjson.query.end_line.string', Sym.EndLine = 0, IntToStr(Sym.EndLine));
+  end;
+  Syms:= ParseQuerySymbols(SYM_OK);
+  Check('engjson.query.control', (Length(Syms) = 1) and (Syms[0].Kind = 'k') and (Syms[0].Name = 'n') and (Syms[0].QualifiedName = 'q')
+    and (Syms[0].FilePath = 'f') and (Syms[0].StartLine = SYM_LINE) and (Syms[0].EndLine = SYM_END));
+
+  // ParseOutlineClassNames: kind / name.
+  Check('engjson.outline.name.number', Length(ParseOutlineClassNames('[{"kind":"class","name":5}]')) = 0);
+  Check('engjson.outline.kind.number', Length(ParseOutlineClassNames('[{"kind":5,"name":"TX"}]')) = 0);
+  Check('engjson.outline.control', string.Join(',', ParseOutlineClassNames('[{"kind":"class","name":"TX"}]')) = 'TX');
+
+  // ParseUnitFileJson (ResolveUnitFile's reader): kind / file.
+  Check('engjson.unitfile.file.number', ParseUnitFileJson('[{"kind":"unit","file":5}]') = '', ParseUnitFileJson('[{"kind":"unit","file":5}]'));
+  Check('engjson.unitfile.control', ParseUnitFileJson('[{"kind":"class","file":"x.pas"},{"kind":"unit","file":"u.pas"}]') = 'u.pas');
+end;
+
+{ B9 (engine 1.26.5): `#warn <FromPath> "<text>"` and `#check-ref <ToPath> <Class>.<Prop>[, ...]`.
+  Both are BLOCK-scoped like every property rule (a copy before the first #convert applies in every block, by
+  position only), so they are NOT in BlockFile's FILE_SCOPE_DIRECTIVES: a body line stays with its #convert. Before
+  the typed kinds they parsed as rnkUnknown and round-tripped through Raw, so the typed-field checks (kind, path,
+  text, targets, validity, Dirty rebuild) are what these tests add. }
+procedure TestWarnCheckRefDirectives;
+const
+  WARN_TEXT  = 'index <value> must exist on table {TableName} in the target database';
+  WARN_LINE  = '#warn IndexName "' + WARN_TEXT + '"';
+  REF_LINE   = '#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName';
+  REF_TWO    = 2;
+  NODE_WARN  = 1;
+  NODE_REF   = 2;
+  BLOCKS_N   = 3;
+var
+  B     : TRuleBook;
+  N     : TRuleNode;
+  Body  : TArray<TRuleNode>;
+  Src   : string;
+  Blocks: TRuleBlocks;
+begin
+  B:= TRuleBook.Create;
+  try
+    N:= B.ParseLine(WARN_LINE);
+    try
+      Check('warn.parse.kind', N.Kind = rnkWarn);
+      Check('warn.parse.path', N.WarnPath = 'IndexName', N.WarnPath);
+      Check('warn.parse.text', N.WarnText = WARN_TEXT, N.WarnText);
+      Check('warn.parse.valid', N.WarnValid);
+      Check('warn.emit.untouched.is.raw', N.Emit = WARN_LINE);
+      N.Dirty:= True;
+      Check('warn.emit.dirty.rebuilds', N.Emit = WARN_LINE, N.Emit);
+    finally
+      N.Free;
+    end;
+    // The text runs from the FIRST to the LAST double quote (no escaping).
+    N:= B.ParseLine('#warn P "say "hi" now"');
+    try
+      Check('warn.parse.text.inner.quotes', (N.WarnPath = 'P') and (N.WarnText = 'say "hi" now') and N.WarnValid, N.WarnText);
+    finally
+      N.Free;
+    end;
+    // Directive names are case-insensitive; odd spacing survives untouched and is normalised only when Dirty.
+    N:= B.ParseLine('#WARN   P    "x"');
+    try
+      Check('warn.parse.case.spacing', (N.Kind = rnkWarn) and (N.WarnPath = 'P') and (N.WarnText = 'x') and (N.Emit = '#WARN   P    "x"'));
+      N.Dirty:= True;
+      Check('warn.emit.dirty.normalises', N.Emit = '#warn P "x"', N.Emit);
+    finally
+      N.Free;
+    end;
+    // Malformed (the engine's validator says `#warn needs <FromPath> "<text>"`): still a warn node, flagged, Raw kept.
+    for var LBad: string in ['#warn', '#warn OnlyPath', '#warn P no quotes here', '#warn P "unterminated', '#warn "just text"'] do
+    begin
+      N:= B.ParseLine(LBad);
+      try
+        Check('warn.parse.invalid.' + LBad, (N.Kind = rnkWarn) and (not N.WarnValid) and (N.Emit = LBad), N.WarnPath + '|' + N.WarnText);
+      finally
+        N.Free;
+      end;
+    end;
+    // Look-alikes are not it.
+    N:= B.ParseLine('#warning x "y"');
+    try
+      Check('warn.prefix.not.matched', N.Kind = rnkUnknown);
+    finally
+      N.Free;
+    end;
+
+    N:= B.ParseLine(REF_LINE);
+    try
+      Check('checkref.parse.kind', N.Kind = rnkCheckRef);
+      Check('checkref.parse.path', N.CheckRefPath = 'ConnectionName', N.CheckRefPath);
+      Check('checkref.parse.targets', (Length(N.CheckRefTargets) = REF_TWO) and (N.CheckRefTargets[0] = 'TDatabase.DatabaseName')
+        and (N.CheckRefTargets[1] = 'TFDConnection.ConnectionName'));
+      Check('checkref.parse.valid', N.CheckRefValid);
+      Check('checkref.emit.untouched.is.raw', N.Emit = REF_LINE);
+      N.Dirty:= True;
+      Check('checkref.emit.dirty.rebuilds', N.Emit = REF_LINE, N.Emit);
+    finally
+      N.Free;
+    end;
+    N:= B.ParseLine('#CHECK-REF  P   A.B,C.D  ');
+    try
+      Check('checkref.parse.case.spacing', (N.Kind = rnkCheckRef) and (N.CheckRefPath = 'P') and (Length(N.CheckRefTargets) = REF_TWO)
+        and (N.CheckRefTargets[1] = 'C.D') and N.CheckRefValid);
+      N.Dirty:= True;
+      Check('checkref.emit.dirty.normalises', N.Emit = '#check-ref P A.B, C.D', N.Emit);
+    finally
+      N.Free;
+    end;
+    // Malformed: no path, no target, or a target that is not <Class>.<Prop>.
+    for var LBad: string in ['#check-ref', '#check-ref P', '#check-ref P NoDot', '#check-ref P A.B, NoDot', '#check-ref P .Prop', '#check-ref P Class.'] do
+    begin
+      N:= B.ParseLine(LBad);
+      try
+        Check('checkref.parse.invalid.' + LBad, (N.Kind = rnkCheckRef) and (not N.CheckRefValid) and (N.Emit = LBad), N.CheckRefPath);
+      finally
+        N.Free;
+      end;
+    end;
+    N:= B.ParseLine('#check-reference P A.B');
+    try
+      Check('checkref.prefix.not.matched', N.Kind = rnkUnknown);
+    finally
+      N.Free;
+    end;
+  finally
+    B.Free;
+  end; // try
+
+  // Book round trip, block ownership, and BlockFile scope: a preamble copy, then a body that carries both lines.
+  Src:= '#warn Preamble "applies in every block"'#13#10 + '#convert A.TFrom -> B.TTo'#13#10 + WARN_LINE + #13#10 + REF_LINE + #13#10
+    + '#link P <- Q'#13#10 + '#remove Stale'#13#10;
+  B:= TRuleBook.Create;
+  try
+    B.LoadFromString(Src);
+    Check('warnref.book.roundtrip', B.SaveToString = Src, B.SaveToString);
+    Check('warnref.book.kinds', (B.Nodes[0].Kind = rnkWarn) and (B.Nodes[NODE_WARN + 1].Kind = rnkWarn) and (B.Nodes[NODE_REF + 1].Kind = rnkCheckRef));
+    Body:= B.NodesInBlock(1);
+    Check('warnref.book.owned.by.block', (Length(Body) >= REF_TWO) and (B.Nodes[NODE_WARN + 1].Kind = rnkWarn), IntToStr(Length(Body)));
+    Check('warnref.book.warn.only.block.maps.nothing', not TRuleBook.BlockMapsSomething([B.Nodes[NODE_WARN + 1], B.Nodes[NODE_REF + 1]]));
+    // Dirty the whole book: every typed line rebuilds to the same bytes.
+    for N in B.Nodes do
+      N.Dirty:= True;
+    Check('warnref.book.dirty.rebuild', B.SaveToString = Src, B.SaveToString);
+  finally
+    B.Free;
+  end; // try
+
+  Blocks:= SplitRulesBlocks(Src);
+  Check('warnref.blockfile.blocks', Length(Blocks) = BLOCKS_N, IntToStr(Length(Blocks)));
+  if Length(Blocks) = BLOCKS_N then
+  begin
+    Check('warnref.blockfile.preamble.holds.warn', (Blocks[0].Kind = rbkPreamble) and (Pos('#warn Preamble', Blocks[0].RawText) > 0));
+    Check('warnref.blockfile.body.keeps.both', (Blocks[1].Kind = rbkConvert) and (Pos(WARN_LINE, Blocks[1].RawText) > 0) and (Pos(REF_LINE, Blocks[1].RawText) > 0)
+      and (Pos('#remove', Blocks[1].RawText) = 0));
+    Check('warnref.blockfile.tail.only.remove', (Blocks[2].Kind = rbkTrailing) and (Pos('#remove Stale', Blocks[2].RawText) > 0)
+      and (Pos('#warn', Blocks[2].RawText) = 0) and (Pos('#check-ref', Blocks[2].RawText) = 0));
   end;
 end;
 
@@ -13901,6 +14604,11 @@ begin
     TestScopeForUnit;
     TestRunnerLiveOnly;
     TestApply1270Items;
+  TestApply1315Fields;
+  TestApplyBadShapes;
+  TestEngineJsonShapes;
+  TestWarnCheckRefDirectives;
+  TestRunner1315;
     TestApply1270Uses;
     TestApply1270Notes;
     TestApply1270Report;
@@ -13910,11 +14618,14 @@ begin
     TestWorkListParse;
     TestWorkListSortFilter;
     TestWorkListSummaryMerge;
+  TestWorkListRefused;
     TestWorkListRunGoTo;
     TestWorkListResolution;
     TestQualifyParse;
     TestQualifyNotes;
     TestQualifyFix;
+    TestQualifyUse;
+    TestQualifyAll;
     TestQualifyRunner;
     TestConverterMinorsA;
     TestConverterMinorsB;

@@ -61,6 +61,9 @@ type
     /// <remarks>Filters are kept; the unit filter falls back to All when its unit is
     /// not in the new run.</remarks>
     procedure ShowRun(const ARun: TWorkRun);
+    /// <summary>A Convert was refused before it ran: keeps the shown rows and says on the summary
+    /// that they are from the previous run (MarkRefused, WorkRunSummary); nothing when no run was shown.</summary>
+    procedure MarkLastRefused;
     /// <summary>The summary line (WorkListSummary of the shown run) plus the shown
     /// row count when the filter hides rows.</summary>
     /// <returns>The text the tab's summary label shows.</returns>
@@ -249,7 +252,7 @@ end;
 
 function TWorkListTab.SummaryText: string;
 begin
-  Result:= WorkListSummary(FRun.Rows, FRun.State);
+  Result:= WorkRunSummary(FRun);
   if (FRun.State = wlsRows) and (Length(FShown) <> Length(FRun.Rows)) then
     Result:= Format(SHOWN_FMT, [Result, Length(FShown)]);
 end;
@@ -259,8 +262,15 @@ begin
   var LRows: TArray<TPasUseRow>:= MergeRun(FRun.Rows, ARun.Rows, ARun.RunId); // only this run's rows, ever
   FRun:= ARun;
   FRun.Rows:= LRows;
+  FRun.Refused:= False; // a finished run is current
   RefreshUnits;
   RefreshGrid;
+end;
+
+procedure TWorkListTab.MarkLastRefused;
+begin
+  FRun:= MarkRefused(FRun);
+  FSummary.Caption:= SummaryText;
 end;
 
 procedure TWorkListTab.FilterChanged(Sender: TObject);

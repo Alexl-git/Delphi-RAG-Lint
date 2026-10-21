@@ -1,4 +1,4 @@
-unit ConvRules.ConvertRun;
+unit ConvRules.ConvertRun;  // dl:ok unit-too-large@f984 -- REVIEWED 2026-10-19 the unit holds only pure Convert decisions and crossed 2000 lines with the 1.31.5 apply fields; the batch-runner work (CONVERTER-BACKLOG B4) is the natural point to split the note builders out
 
 { Pure decisions behind the Convert tab (spec 2026-09-29, part 2): backup
   names, what a rule book contains, book order, which source units a dropped
@@ -144,10 +144,49 @@ type
   /// uses_reindex); afPasUses: pas_uses (pas_uses[]); afPasUsesResolution:
   /// pas_uses_resolution (engine 1.28.2: each pas_uses[] row's resolution and
   /// candidates[]; without it both are cleared); afQualifyFix: convert_qualify_fix
-  /// (engine 1.28.3: qualify_fixes[]).</remarks>
-  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix);
+  /// (engine 1.28.3: qualify_fixes[]); afDescendants: descendant_warnings (engine 1.25.0:
+  /// descendants[]). only_matched[], only_unmatched[], only_included[] and unlinked[] have
+  /// no capability of their own and are read whatever the engine.</remarks>
+  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix, afDescendants);
   /// <summary>The apply/1 features the run's engine reported.</summary>
   TApplyFeatures = set of TApplyFeature;
+
+  /// <summary>One apply/1 only_included[] entry: an instance converted too because
+  /// --only named the instance it is nested in.</summary>
+  TOnlyIncluded = record
+    /// <summary>name -- the nested instance.</summary>
+    Name  : string;
+    /// <summary>parent -- the instance --only named.</summary>
+    Parent: string;
+  end;
+
+  /// <summary>One apply/1 unlinked[] entry: a source property no #link carries and no
+  /// #ignore acknowledges, dropped by the conversion.</summary>
+  TUnlinkedProp = record
+    /// <summary>from_type.</summary>
+    FromType : string;
+    /// <summary>path -- the property (a collection property is the whole collection).</summary>
+    Path     : string;
+    /// <summary>sites -- how many places carried it.</summary>
+    Sites    : Integer;
+    /// <summary>instances -- how many converted instances carried it.</summary>
+    Instances: Integer;
+  end;
+
+  /// <summary>One apply/1 descendants[] entry (engine 1.25.0): an instance of a
+  /// descendant form that still streams the converted instance as the old type.</summary>
+  TDescendantLeft = record
+    /// <summary>unit -- the descendant's unit name.</summary>
+    UnitName: string;
+    /// <summary>name -- the instance.</summary>
+    Name    : string;
+    /// <summary>type -- the old type it still has.</summary>
+    TypeName: string;
+    /// <summary>line -- the descendant .dfm block, else its first code reference; 0 when absent.</summary>
+    Line    : Integer;
+    /// <summary>reason -- dfm, code or both; '' when absent.</summary>
+    Reason  : string;
+  end;
 
   /// <summary>One convert-apply run, read from its apply/1 JSON.</summary>
   TApplyRow = record
@@ -223,6 +262,42 @@ type
     /// <summary>qualify_fixes[] (afQualifyFix): the #convert sides to qualify, on a converted AND a
     /// refused row; [] without the feature.</summary>
     QualifyFixes: TArray<TQualifyFix>;
+    /// <summary>only_matched[] -- the --only names that matched an instance (case as
+    /// the engine wrote them); [] for an unscoped run or an engine that sends none.</summary>
+    OnlyMatched  : TArray<string>;
+    /// <summary>only_unmatched[] -- the --only names that matched no #convert instance.</summary>
+    OnlyUnmatched: TArray<string>;
+    /// <summary>only_included[] -- nested instances converted along with their parent.</summary>
+    OnlyIncluded : TArray<TOnlyIncluded>;
+    /// <summary>unlinked[] -- source properties the conversion dropped; [] when none.</summary>
+    Unlinked     : TArray<TUnlinkedProp>;
+    /// <summary>descendants[] (afDescendants) -- descendant instances still on the old
+    /// type; [] without the feature. The engine's matching warnings[] / items[] line is
+    /// left out of Remainder when this holds it.</summary>
+    Descendants  : TArray<TDescendantLeft>;
+  end;
+
+  /// <summary>An apply-batch/1 document (convert-apply with several --unit): one apply/1
+  /// per unit plus the batch's own counts.</summary>
+  TApplyBatch = record
+    /// <summary>False when the text held no apply-batch/1 object; every other field is then empty.</summary>
+    Valid       : Boolean;
+    /// <summary>The batch's own ok flag.</summary>
+    Ok          : Boolean;
+    /// <summary>exit_code -- the engine's exit contract: 0 only when every unit is ok.</summary>
+    ExitCode    : Integer;
+    /// <summary>units_count.</summary>
+    UnitsCount  : Integer;
+    /// <summary>ok_count.</summary>
+    OkCount     : Integer;
+    /// <summary>refused_count -- units the engine declined, untouched.</summary>
+    RefusedCount: Integer;
+    /// <summary>failed_count -- units whose write failed (rolled back).</summary>
+    FailedCount : Integer;
+    /// <summary>classes_built.</summary>
+    ClassesBuilt: Integer;
+    /// <summary>units[] -- one ParseApplyJson reading per unit, in order.</summary>
+    Units       : TArray<TApplyRow>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -361,6 +436,71 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
 /// (ConvRules.Engine CAPABILITY_*).</returns>
 function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
 
+/// <summary>Reads convert-apply's apply-batch/1 document (several --unit, engine 1.23.0).</summary>
+/// <param name="AJson">The engine's merged stdout+stderr; framed as for ParseApplyJson.</param>
+/// <param name="AFeatures">As for ParseApplyJson; applied to every unit.</param>
+/// <returns>See TApplyBatch. Valid is False for text that is no apply-batch/1 object
+/// (a single apply/1 document included). Every read is type-checked: a wrong shape
+/// reads as 0 / '' / empty and a non-object units[] entry is skipped; never raises.</returns>
+function ParseApplyBatchJson(const AJson: string; AFeatures: TApplyFeatures): TApplyBatch;  // dl:ok unused-public-symbol@f010 -- REVIEWED 2026-10-19 apply-batch/1 reader and its contract checks are pinned by the model tests; the batch runner (CONVERTER-BACKLOG B4, needs a backup/restore/reindex design) wires them
+
+/// <summary>PURE: the one-line result of a batch.</summary>
+/// <param name="ABatch">ParseApplyBatchJson's reading.</param>
+/// <returns>'batch: N unit(s) -- A ok, R refused, F failed; K class(es) built; exit E';
+/// '' when ABatch is not Valid.</returns>
+function BatchSummaryText(const ABatch: TApplyBatch): string;  // dl:ok unused-public-symbol@278d -- REVIEWED 2026-10-19 apply-batch/1 reader and its contract checks are pinned by the model tests; the batch runner (CONVERTER-BACKLOG B4, needs a backup/restore/reindex design) wires them
+
+/// <summary>PURE: True when a batch breaks the engine's all-or-nothing exit contract:
+/// exit 0 with a refused or failed unit counted, or a non-zero exit with every unit ok.</summary>
+/// <param name="ABatch">ParseApplyBatchJson's reading.</param>
+/// <returns>False for an invalid batch and for a consistent one.</returns>
+function BatchContractBroken(const ABatch: TApplyBatch): Boolean;  // dl:ok unused-public-symbol@efbe -- REVIEWED 2026-10-19 apply-batch/1 reader and its contract checks are pinned by the model tests; the batch runner (CONVERTER-BACKLOG B4, needs a backup/restore/reindex design) wires them
+
+/// <summary>PURE: the converted row's scoped part, from the engine's own answer.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'converted N of M --only name(s)' (N = OnlyMatched, M = OnlyMatched +
+/// OnlyUnmatched), then '; not found: a, b' when names were unmatched; '' when the
+/// engine named none (an unscoped run, or an engine without the arrays).</returns>
+function ScopedMatchText(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the row's nested-instance part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; also converted, nested: child in parent, ...' (OnlyIncluded); '' when none.</returns>
+function OnlyIncludedNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the row's dropped-properties part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; N dropped source property(ies), no #link: Type.Path, ...' (Unlinked); '' when none.</returns>
+function UnlinkedNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the ancestor row's descendant part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; N descendant instance(s) still on the old type: Unit.Name, ...'
+/// (Descendants, afDescendants); '' when none.</returns>
+function DescendantNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the hint for an index-gap refusal (engine 1.31.x).</summary>
+/// <param name="AReason">The apply/1 reason of a refused row.</param>
+/// <returns>' -- not a book fault: reindex the project (or report the gap), then convert again'
+/// when AReason holds 'index gap'; else ''.</returns>
+function IndexGapHint(const AReason: string): string;
+
+/// <summary>PURE: True when a row the engine calls ok contradicts the exit code it ended with.</summary>
+/// <param name="ARow">ParseApplyJson's reading of the run.</param>
+/// <param name="ACode">The engine's exit code.</param>
+/// <returns>ARow.Ok and ACode &gt; 0 (never the config exit: the caller handles that first).</returns>
+/// <remarks>The engine applies a unit all-or-nothing (1.25.1+): a write that fails part-way
+/// is rolled back, exit 2, ok=false; a refusal is exit 1, ok=false. ok=true with a non-zero
+/// exit is therefore not a conversion the editor can trust, and the unit is restored. This
+/// is the guard; ApplyHalfWritten (the engine's stderr text) remains only as the fallback
+/// for an engine that predates the contract.</remarks>
+function ApplyExitBroken(const ARow: TApplyRow; ACode: Integer): Boolean;
+
+/// <summary>PURE: the note of a row ApplyExitBroken fails.</summary>
+/// <param name="ACode">The engine's exit code.</param>
+/// <returns>'engine said ok but exited N -- against its all-or-nothing contract; restored from backup'.</returns>
+function ExitBrokenNote(ACode: Integer): string;
+
 /// <summary>PURE: the converted row's StripDB part.</summary>
 /// <param name="ARow">The book's apply/1 answer.</param>
 /// <returns>'; StripDB: N value(s) changed, M to check by hand' (N = ValueCasts, M =
@@ -406,7 +546,9 @@ function UsesReportNote(const ARow: TUsesRow): string;
 /// <param name="ARow">ParseApplyJson's reading of the run.</param>
 /// <returns>ARow.Ok and ARow.EditRefusals is not empty. False for a row that is not
 /// Ok (failed or refused): it fails on its own already.</returns>
-/// <remarks>Engine defect, every version up to 1.25.0: a nested converted component
+/// <remarks>LEGACY FALLBACK (engine up to 1.25.0, text only): ApplyExitBroken is the
+/// guard from the engine's exit contract; this stays for an engine that predates it.
+/// Engine defect, every version up to 1.25.0: a nested converted component
 /// makes the .dfm re-emit plan overlapping deletes; the applier refuses that file's
 /// edits whole ('overlapping delete ranges'), writes the .pas anyway, and the run
 /// still reports ok=true, exit 0. No apply/1 key carries it -- only the stderr line.
@@ -618,7 +760,20 @@ const
   APPLY_KIND_CAST_SITE   = 'cast-not-applied';
   APPLY_KIND_VALUE_CAST  = 'value-cast-applied';
   APPLY_KIND_VALUE_CHECK = 'value-cast-check';
-  USES_ACTION_ADD        = 'add';
+  // Engine 1.25.0 / 1.31.5 items[] kinds whose text is also a warnings[] line.
+  APPLY_KIND_DESCENDANT  = 'descendant-not-converted';
+  APPLY_KIND_UNLINKED    = 'unlinked-source-property';
+  BATCH_SCHEMA           = 'apply-batch/1';
+  MATCH_FMT              = 'converted %d of %d --only name(s)';
+  MATCH_NOT_FOUND        = '; not found: ';
+  INCLUDED_FMT           = '; also converted, nested: ';
+  UNLINKED_FMT           = '; %d dropped source property(ies), no #link: ';
+  DESCENDANT_FMT         = '; %d descendant instance(s) still on the old type: ';
+  INDEX_GAP_WORDS        = 'index gap';
+  INDEX_GAP_HINT         = ' -- not a book fault: reindex the project (or report the gap), then convert again';
+  EXIT_BROKEN_FMT        = 'engine said ok but exited %d -- against its all-or-nothing contract; restored from backup';
+  BATCH_FMT              = 'batch: %d unit(s) -- %d ok, %d refused, %d failed; %d class(es) built; exit %d';
+  USES_ACTION_ADD       = 'add';
   USES_ACTION_REMOVE     = 'remove';
   USES_ACTION_MOVED      = 'moved';
   USES_REINDEX_FAILED    = 'failed';
@@ -968,6 +1123,8 @@ begin
     Include(Result, afPasUsesResolution);
   if MatchText(CAPABILITY_CONVERT_QUALIFY_FIX, ACapNames) then
     Include(Result, afQualifyFix);
+  if MatchText(CAPABILITY_DESCENDANT_WARNINGS, ACapNames) then
+    Include(Result, afDescendants);
 end;
 
 function ValueCastNote(const ARow: TApplyRow): string;
@@ -1054,6 +1211,12 @@ begin
   Result:= if (LVal is TJSONString) and not (LVal is TJSONNumber) then LVal.Value else '';
 end;
 
+// True only for a JSON true member; False for false, absent or any other JSON type ("true", 1, null).
+function JsonTrue(AObj: TJSONObject; const AKey: string): Boolean;
+begin
+  Result:= (AObj.Values[AKey] is TJSONBool) and TJSONBool(AObj.Values[AKey]).AsBoolean;
+end;
+
 // A JSON number member holding an integer; 0 for anything else ("25", 3.5, true).
 function JsonInt(AObj: TJSONObject; const AKey: string): Integer;
 var
@@ -1092,6 +1255,77 @@ begin
     O.RuleLine:= JsonInt(LItem, 'rule_line');
     Result:= Result + [O];
   end;
+end;
+
+// The string entries of an array member (a number or object entry is skipped); [] when
+// the member is absent or no array.
+function JsonStrings(AObj: TJSONObject; const AKey: string): TArray<string>;
+begin
+  Result:= nil;
+  if not (AObj.Values[AKey] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values[AKey]) do
+    if (LVal is TJSONString) and not (LVal is TJSONNumber) then
+      Result:= Result + [LVal.Value];
+end;
+
+// only_included[] {name, parent}; a non-object entry is skipped.
+function OnlyIncludedOf(AObj: TJSONObject): TArray<TOnlyIncluded>;
+var
+  LItem: TOnlyIncluded;
+begin
+  Result:= nil;
+  if not (AObj.Values['only_included'] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values['only_included']) do
+    if LVal is TJSONObject then
+    begin
+      LItem:= Default(TOnlyIncluded);
+      LItem.Name  := JsonStr(TJSONObject(LVal), 'name');
+      LItem.Parent:= JsonStr(TJSONObject(LVal), 'parent');
+      Result:= Result + [LItem];
+    end;
+end;
+
+// unlinked[] {from_type, path, sites, instances}; a non-object entry is skipped.
+function UnlinkedOf(AObj: TJSONObject): TArray<TUnlinkedProp>;  // dl:ok duplicate-code@0770 -- REVIEWED 2026-10-19 the same type-checked array-of-objects / note-builder shape as its siblings on purpose: each apply/1 array reads its own keys, a shared generic reader would hide which keys each contract takes
+var
+  LItem: TUnlinkedProp;
+begin
+  Result:= nil;
+  if not (AObj.Values['unlinked'] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values['unlinked']) do
+    if LVal is TJSONObject then
+    begin
+      LItem:= Default(TUnlinkedProp);
+      LItem.FromType := JsonStr(TJSONObject(LVal), 'from_type');
+      LItem.Path     := JsonStr(TJSONObject(LVal), 'path');
+      LItem.Sites    := JsonInt(TJSONObject(LVal), 'sites');
+      LItem.Instances:= JsonInt(TJSONObject(LVal), 'instances');
+      Result:= Result + [LItem];
+    end;
+end;
+
+// descendants[] {unit, name, type, line, reason}; a non-object entry is skipped.
+function DescendantsOf(AObj: TJSONObject): TArray<TDescendantLeft>;  // dl:ok duplicate-code@eeca -- REVIEWED 2026-10-19 the same type-checked array-of-objects / note-builder shape as its siblings on purpose: each apply/1 array reads its own keys, a shared generic reader would hide which keys each contract takes
+var
+  LItem: TDescendantLeft;
+begin
+  Result:= nil;
+  if not (AObj.Values['descendants'] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values['descendants']) do
+    if LVal is TJSONObject then
+    begin
+      LItem:= Default(TDescendantLeft);
+      LItem.UnitName:= JsonStr(TJSONObject(LVal), 'unit');
+      LItem.Name    := JsonStr(TJSONObject(LVal), 'name');
+      LItem.TypeName:= JsonStr(TJSONObject(LVal), 'type');
+      LItem.Line    := JsonInt(TJSONObject(LVal), 'line');
+      LItem.Reason  := JsonStr(TJSONObject(LVal), 'reason');
+      Result:= Result + [LItem];
+    end;
 end;
 
 // The `name` of each object entry of AArr (needed_by[], candidates[] use AKey 'unit').
@@ -1183,14 +1417,10 @@ end;
 
 function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyRow;
 
+  // A string array member, type-checked (JsonStrings): a non-string entry is skipped.
   function Strings(AObj: TJSONObject; const AKey: string): TArray<string>;
-  var
-    Arr: TJSONArray;
   begin
-    Result:= nil;
-    if AObj.TryGetValue<TJSONArray>(AKey, Arr) then
-      for var LVal: TJSONValue in Arr do
-        Result:= Result + [LVal.Value];
+    Result:= JsonStrings(AObj, AKey);
   end;
 
   // A JSON string member's text; '' when absent or of another JSON type
@@ -1340,6 +1570,7 @@ var
   Obj : TJSONObject;
   Errs: TJSONArray;
   Text: string;
+  LOwnItems: TArray<TApplyItem>;
 begin
   Result:= Default(TApplyRow);
   Errs:= nil;
@@ -1360,8 +1591,9 @@ begin
       Exit;
     end;
     Obj:= TJSONObject(Root);
-    Result.Ok        := Obj.GetValue<Boolean>('ok', False);
-    Result.EditsCount:= Obj.GetValue<Integer>('edits_count', 0);
+    // Type-checked, never GetValue<T>: it coerces ("3" -> 3, 1 -> True) on a wrong type.
+    Result.Ok        := JsonTrue(Obj, 'ok');
+    Result.EditsCount:= JsonInt(Obj, 'edits_count');
     Result.Converted := Strings(Obj, 'converted');
     Result.InheritedLeft:= InheritedItems(Obj);
     Result.ComponentPart:= Str(Obj, 'component_part');
@@ -1395,19 +1627,37 @@ begin
     // Each to-do is counted ONCE, in its own note part (controller ruling: items[] is
     // the union the six arrays partition). A cast site / value check is also a
     // warnings[] line, so it leaves the manual remainder when its array holds it.
+    // 1.31.5 keys: the three arrays are always present on an engine that sends them; only
+    // descendants[] has a capability. Their warnings[] lines are the notes' (counted once).
+    Result.OnlyMatched  := JsonStrings(Obj, 'only_matched');
+    Result.OnlyUnmatched:= JsonStrings(Obj, 'only_unmatched');
+    Result.OnlyIncluded := OnlyIncludedOf(Obj);
+    Result.Unlinked     := UnlinkedOf(Obj);
+    LOwnItems:= Result.CastSites + Result.ValueChecks;
+    if Length(Result.Unlinked) > 0 then
+      LOwnItems:= LOwnItems + ApplyItems(Obj, APPLY_KIND_UNLINKED);
+    if afDescendants in AFeatures then
+    begin
+      Result.Descendants:= DescendantsOf(Obj);
+      if Length(Result.Descendants) > 0 then
+        LOwnItems:= LOwnItems + ApplyItems(Obj, APPLY_KIND_DESCENDANT);
+    end;
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes')
-      + WithoutItemTexts(OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0), Result.CastSites + Result.ValueChecks);
+      + WithoutItemTexts(OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0), LOwnItems);
     // The applier's refusal reaches us on stderr, outside the document (no apply/1
     // key carries it, up to engine 1.25.0); warnings[] / error are read as well.
     AddRefusals(AJson.Split([#10]), Result.EditRefusals);
     AddRefusals(Strings(Obj, 'warnings'), Result.EditRefusals);
     AddRefusals([Str(Obj, 'error')], Result.EditRefusals);
-    if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
+    if Obj.Values['rule_errors'] is TJSONArray then
+    begin
+      Errs:= TJSONArray(Obj.Values['rule_errors']);
       Result.RuleErrorCount:= Errs.Count;
-    Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);
+    end;
+    Result.Refused:= (not Result.Ok) and JsonTrue(Obj, 'refused');
     if Result.Refused then
     begin
-      Result.Error:= Obj.GetValue<string>('reason', '');
+      Result.Error:= JsonStr(Obj, 'reason');
       if Result.Error = '' then
         Result.Error:= 'convert-apply refused the unit and gave no reason';
     end
@@ -1415,16 +1665,125 @@ begin
     begin
       // The first rule error is more useful than the generic "conversion rules
       // failed validation" the engine puts in 'error'.
-      if Result.RuleErrorCount > 0 then
-        Result.Error:= Format('line %d: %s', [Errs.Items[0].GetValue<Integer>('line', 0), Errs.Items[0].GetValue<string>('message', '')])
+      if (Result.RuleErrorCount > 0) and (Errs.Items[0] is TJSONObject) then
+        Result.Error:= Format('line %d: %s', [JsonInt(TJSONObject(Errs.Items[0]), 'line'), JsonStr(TJSONObject(Errs.Items[0]), 'message')])
       else
-        Result.Error:= Obj.GetValue<string>('error', '');
+        Result.Error:= JsonStr(Obj, 'error');
       if Result.Error = '' then
         Result.Error:= 'convert-apply reported ok=false with no reason';
     end;
   finally
     Root.Free;
   end; // try
+end;
+
+function ParseApplyBatchJson(const AJson: string; AFeatures: TApplyFeatures): TApplyBatch;
+var
+  Root: TJSONValue;
+  Obj : TJSONObject;
+  Text: string;
+begin
+  Result:= Default(TApplyBatch);  // dl:ok duplicate-code@6398 -- REVIEWED 2026-10-19 the same type-checked array-of-objects / note-builder shape as its siblings on purpose: each apply/1 array reads its own keys, a shared generic reader would hide which keys each contract takes
+  Text:= Trim(AJson);
+  if (Text <> '') and (Text[1] <> '{') and (Pos('{', Text) > 0) then
+    Text:= Copy(Text, Pos('{', Text), MaxInt);
+  if (Text <> '') and (Text[1] = '{') then
+    Text:= Copy(Text, 1, LastDelimiter('}', Text));
+  Root:= TJSONObject.ParseJSONValue(Text);
+  try
+    if not (Root is TJSONObject) then
+      Exit;
+    Obj:= TJSONObject(Root);
+    if JsonStr(Obj, 'schema') <> BATCH_SCHEMA then
+      Exit;
+    Result.Valid       := True;
+    Result.Ok          := JsonTrue(Obj, 'ok');
+    Result.ExitCode    := JsonInt(Obj, 'exit_code');
+    Result.UnitsCount  := JsonInt(Obj, 'units_count');
+    Result.OkCount     := JsonInt(Obj, 'ok_count');
+    Result.RefusedCount:= JsonInt(Obj, 'refused_count');
+    Result.FailedCount := JsonInt(Obj, 'failed_count');
+    Result.ClassesBuilt:= JsonInt(Obj, 'classes_built');
+    if Obj.Values['units'] is TJSONArray then
+      for var LVal: TJSONValue in TJSONArray(Obj.Values['units']) do
+        if LVal is TJSONObject then
+          Result.Units:= Result.Units + [ParseApplyJson(LVal.ToJSON, AFeatures)];
+  finally
+    Root.Free;
+  end; // try
+end;
+
+function BatchSummaryText(const ABatch: TApplyBatch): string;
+begin
+  if not ABatch.Valid then
+    Exit('');
+  Result:= Format(BATCH_FMT, [ABatch.UnitsCount, ABatch.OkCount, ABatch.RefusedCount, ABatch.FailedCount, ABatch.ClassesBuilt, ABatch.ExitCode]);
+end;
+
+function BatchContractBroken(const ABatch: TApplyBatch): Boolean;
+begin
+  Result:= ABatch.Valid and (((ABatch.ExitCode = 0) and (ABatch.RefusedCount + ABatch.FailedCount > 0))
+    or ((ABatch.ExitCode <> 0) and (ABatch.RefusedCount + ABatch.FailedCount = 0)));
+end;
+
+function ScopedMatchText(const ARow: TApplyRow): string;
+begin
+  if Length(ARow.OnlyMatched) + Length(ARow.OnlyUnmatched) = 0 then
+    Exit('');
+  Result:= Format(MATCH_FMT, [Length(ARow.OnlyMatched), Length(ARow.OnlyMatched) + Length(ARow.OnlyUnmatched)]);
+  if Length(ARow.OnlyUnmatched) > 0 then
+    Result:= Result + MATCH_NOT_FOUND + string.Join(', ', ARow.OnlyUnmatched);
+end;
+
+function OnlyIncludedNote(const ARow: TApplyRow): string;
+var
+  LParts: TArray<string>;
+begin
+  if Length(ARow.OnlyIncluded) = 0 then
+    Exit('');
+  LParts:= nil;
+  for var LItem: TOnlyIncluded in ARow.OnlyIncluded do
+    LParts:= LParts + [LItem.Name + ' in ' + LItem.Parent];
+  Result:= INCLUDED_FMT + string.Join(', ', LParts);
+end;
+
+function UnlinkedNote(const ARow: TApplyRow): string;
+var
+  LParts: TArray<string>;
+begin
+  if Length(ARow.Unlinked) = 0 then
+    Exit('');
+  LParts:= nil;
+  for var LItem: TUnlinkedProp in ARow.Unlinked do
+    LParts:= LParts + [LItem.FromType + '.' + LItem.Path];
+  Result:= Format(UNLINKED_FMT, [Length(ARow.Unlinked)]) + string.Join(', ', LParts);
+end;
+
+function DescendantNote(const ARow: TApplyRow): string;  // dl:ok duplicate-code@8f09 -- REVIEWED 2026-10-19 the same type-checked array-of-objects / note-builder shape as its siblings on purpose: each apply/1 array reads its own keys, a shared generic reader would hide which keys each contract takes
+var
+  LParts: TArray<string>;
+begin
+  if Length(ARow.Descendants) = 0 then
+    Exit('');
+  LParts:= nil;
+  for var LItem: TDescendantLeft in ARow.Descendants do
+    LParts:= LParts + [LItem.UnitName + '.' + LItem.Name];
+  Result:= Format(DESCENDANT_FMT, [Length(ARow.Descendants)]) + string.Join(', ', LParts);
+end;
+
+function IndexGapHint(const AReason: string): string;
+begin
+  Result:= if ContainsText(AReason, INDEX_GAP_WORDS) then INDEX_GAP_HINT else '';
+end;
+
+function ApplyExitBroken(const ARow: TApplyRow; ACode: Integer): Boolean;
+begin
+  Result:= ARow.Ok and (ACode > 0);
+end;
+
+function ExitBrokenNote(ACode: Integer): string;
+begin
+  Result:= Format(EXIT_BROKEN_FMT, [ACode]);
 end;
 
 function ApplyHalfWritten(const ARow: TApplyRow): Boolean;
@@ -1651,6 +2010,8 @@ begin
     Result:= Result + '; ' + LLeft;
   // Engine 1.27.0: each part is '' when its arrays are empty (feature off, or nothing to say).
   Result:= Result + ValueCastNote(AApply) + CastSiteNote(AApply) + UsesNote(AApply);
+  // Engine 1.31.5: nested instances converted along, dropped properties, descendants left.
+  Result:= Result + OnlyIncludedNote(AApply) + UnlinkedNote(AApply) + DescendantNote(AApply);
 end;
 function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 begin

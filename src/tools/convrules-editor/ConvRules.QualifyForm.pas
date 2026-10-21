@@ -19,16 +19,21 @@ uses
 type
   /// <summary>The Qualify #convert dialog.</summary>
   /// <remarks>Controls carry stable names for the GUI driver: LbFixes, LbCandidates,
-  /// LblCurrent, LblAlternative, LblPreview, BtnApply, BtnCancel. An inferred fix starts
-  /// with the engine's chosen candidate picked; a refused fix starts with none.</remarks>
+  /// LblCurrent, LblAlternative, BtnUse, LblPreview, BtnApply, BtnCancel. An inferred fix starts
+  /// with the engine's chosen candidate picked; a refused fix starts with none. D4: BtnUse
+  /// ('Add #use Unit' / 'Remove #use Unit') is enabled when the alternative of the candidate
+  /// shown (else the fix's) is a #use of a "to" side (QualifyUseUnit); pressing it makes the fix a
+  /// #use pick (no candidate), and picking a candidate again drops it.</remarks>
   TQualifyForm = class(TForm)
     private
       FFixes      : TArray<TQualifyFix>;
       FPicks      : TArray<string>;
+      FUse        : TArray<string>;
       FLbFixes    : TListBox;
       FLbCandidates: TListBox;
       FLblCurrent : TLabel;
       FLblAlternative: TLabel;
+      FBtnUse     : TButton;
       FLblPreview : TLabel;
       FBtnApply   : TButton;
       procedure Build(const ABook: string);
@@ -37,6 +42,9 @@ type
       function NewButton(const AName, ACaption: string; ALeft: Integer): TButton;
       procedure FixSelected(Sender: TObject);
       procedure CandidateClicked(Sender: TObject);
+      procedure UseClicked(Sender: TObject);
+      function AlternativeOf(AFix: Integer): string;
+      procedure ShowAlternative;
       procedure ShowPreview;
       function PicksOf(AIndex: Integer): TArray<TQualifyPick>;
     public
@@ -63,6 +71,7 @@ const
   MARGIN     = 12;
   LABEL_H    = 20;
   ALT_H      = 36;
+  USE_W      = 150;
   INNER_W    = DLG_W - MARGIN - MARGIN;
   FIXES_TOP  = 40;
   FIXES_H    = 80;
@@ -147,6 +156,12 @@ begin
   FLbFixes   := NewList('LbFixes', FIXES_TOP, FIXES_H, FixSelected);
   FLbCandidates:= NewList('LbCandidates', CAND_TOP, CAND_H, CandidateClicked);
   FLblAlternative:= NewLabel('LblAlternative', ALT_TOP, ALT_H);
+  FLblAlternative.Width:= INNER_W - USE_W - MARGIN;
+  FBtnUse:= NewButton('BtnUse', 'Add #use', MARGIN + INNER_W - USE_W);
+  FBtnUse.Top    := ALT_TOP;
+  FBtnUse.Width  := USE_W;
+  FBtnUse.Enabled:= False;
+  FBtnUse.OnClick:= UseClicked;
   FLblPreview:= NewLabel('LblPreview', PREVIEW_TOP, PREVIEW_H);
   FBtnApply:= NewButton('BtnApply', 'Apply', APPLY_LEFT);
   FBtnApply.Default:= True;
@@ -155,6 +170,7 @@ begin
   LCancel.Cancel     := True;
   LCancel.ModalResult:= mrCancel;
   SetLength(FPicks, Length(FFixes));
+  SetLength(FUse, Length(FFixes));
   for var I: Integer:= 0 to High(FFixes) do
   begin
     FLbFixes.Items.Add(QualifyFixRowText(FFixes[I]));
@@ -174,6 +190,37 @@ begin
   SetLength(Result, 1);
   Result[0].Fix      := FFixes[AIndex];
   Result[0].Candidate:= FPicks[AIndex];
+  Result[0].UseUnit  := FUse[AIndex];
+end;
+
+// The alternative text of the candidate shown for fix AFix (else the fix's own).
+function TQualifyForm.AlternativeOf(AFix: Integer): string;
+begin
+  if FUse[AFix] <> '' then
+    Exit('#use ' + FUse[AFix]); // the pick made stays shown whatever candidate is highlighted
+  Result:= FFixes[AFix].Alternative;
+  if (FLbCandidates.ItemIndex <> NO_SELECTION) and (FFixes[AFix].Suggestions[FLbCandidates.ItemIndex].Alternative <> '') then
+    Result:= FFixes[AFix].Suggestions[FLbCandidates.ItemIndex].Alternative;
+end;
+
+// LblAlternative and BtnUse for the selected fix; the button needs a clickable #use.
+procedure TQualifyForm.ShowAlternative;
+var
+  LAt  : Integer;
+  LAlt : string;
+  LUnit: string;
+begin
+  LAt:= FLbFixes.ItemIndex;
+  if LAt = NO_SELECTION then
+    Exit;
+  LAlt := AlternativeOf(LAt);
+  LUnit:= QualifyUseUnit(FFixes[LAt], LAlt);
+  FLblAlternative.Caption:= if LAlt = '' then '' else 'or: ' + LAlt;
+  FBtnUse.Enabled:= LUnit <> '';
+  if LUnit = '' then
+    FBtnUse.Caption:= 'Add #use'
+  else
+    FBtnUse.Caption:= (if SameText(FUse[LAt], LUnit) then 'Remove #use ' else 'Add #use ') + LUnit;
 end;
 
 procedure TQualifyForm.FixSelected(Sender: TObject);
@@ -190,7 +237,7 @@ begin
   for var I: Integer:= 0 to High(FFixes[LAt].Suggestions) do
     if SameText(FFixes[LAt].Suggestions[I].Candidate, FPicks[LAt]) then
       FLbCandidates.ItemIndex:= I;
-  FLblAlternative.Caption:= if FFixes[LAt].Alternative = '' then '' else 'or: ' + FFixes[LAt].Alternative;
+  ShowAlternative;
   ShowPreview;
 end;
 
@@ -202,6 +249,32 @@ begin
   if (LAt = NO_SELECTION) or (FLbCandidates.ItemIndex = NO_SELECTION) then
     Exit;
   FPicks[LAt]:= FFixes[LAt].Suggestions[FLbCandidates.ItemIndex].Candidate;
+  FUse[LAt]  := '';
+  ShowAlternative;
+  ShowPreview;
+end;
+
+// BtnUse: the fix becomes (or stops being) a #use pick; the candidate it replaces is dropped.
+procedure TQualifyForm.UseClicked(Sender: TObject);
+var
+  LAt  : Integer;
+  LUnit: string;
+begin
+  LAt:= FLbFixes.ItemIndex;
+  if LAt = NO_SELECTION then
+    Exit;
+  LUnit:= QualifyUseUnit(FFixes[LAt], AlternativeOf(LAt));
+  if LUnit = '' then
+    Exit;
+  if SameText(FUse[LAt], LUnit) then
+    FUse[LAt]:= ''
+  else
+  begin
+    FUse[LAt]  := LUnit;
+    FPicks[LAt]:= '';
+    FLbCandidates.ItemIndex:= NO_SELECTION;
+  end;
+  ShowAlternative;
   ShowPreview;
 end;
 
@@ -220,6 +293,8 @@ begin
       LPicks:= LPicks + PicksOf(I);
   FLblCurrent.Caption:= FFixes[LAt].Current;
   FLblPreview.Caption:= 'will read: ' + QualifyPreviewText(FFixes[LAt].Current, LPicks);
+  if FUse[LAt] <> '' then
+    FLblPreview.Caption:= FLblPreview.Caption + sLineBreak + QualifyUsePreviewText(FUse[LAt]);
 end;
 
 end.
