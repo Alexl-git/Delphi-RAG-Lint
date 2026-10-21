@@ -27,6 +27,10 @@ Full flag list: [migrate-dbs in the CLI reference](../cli.md#migrate-dbs).
 | `--config` | `<drag-lint.json>` |  |  |
 | `--apply` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG...**
+
 ## Details
 
 Moves project index databases into each project's own `_D-RAG` folder,

@@ -31,6 +31,10 @@ Full flag list: [find-unit in the CLI reference](../cli.md#find-unit).
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)...**
+
 **Needs:** index
 
 ## Pitfalls

@@ -32,6 +32,10 @@ Full flag list: [create-enum-helper in the CLI reference](../cli.md#create-enum-
 | `--tostring` |  |  |  |
 | `--db` | `PATH` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Generate & Export > Enum Record Helper (symbol)...**
+
 ## Details
 
 Generates a Byte-family record helper (ToByte/FromByte/ToInteger/

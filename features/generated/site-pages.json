@@ -32,7 +32,7 @@
     "version": "1.33.0-alpha"
   },
   "features/butterfly.md": {
-    "hash": "c161b64788891904b72df91f82d8d2f95a1bfbfd379fc9158016c9ef0f5661f6",
+    "hash": "9b3ef545461c9df0b08df80e55377e8986e460f9a8e93fbf778004b72bf5b845",
     "version": "1.33.0-alpha"
   },
   "features/call-graph-butterfly.md": {
@@ -40,11 +40,11 @@
     "version": "1.33.0-alpha"
   },
   "features/call-path.md": {
-    "hash": "d86a8e01977e8e57672670ec235141606f9360f00312ebd5a0969cd1f1cbc514",
+    "hash": "82cd5ae90153c545bb27cf3d58fb01ebcb0a22774cc4ba32f75f7cbc66fbf182",
     "version": "1.33.0-alpha"
   },
   "features/callgraph.md": {
-    "hash": "4cc12e8362f22230a49b8a4baa86afae55e5f4db8344ac6cd383c76cd04191b0",
+    "hash": "fc05d3833e75a0cba791ee618c64f7daba9d7e8419244526bafda519e2b21d74",
     "version": "1.33.0-alpha"
   },
   "features/chart-engine-dot-lookup.md": {
@@ -148,7 +148,7 @@
     "version": "1.33.0-alpha"
   },
   "features/create-enum-helper.md": {
-    "hash": "60acf1f10f5d22e14fe47e1e4efd3a38d88ba8d555047f7ebf51c1c3274546ee",
+    "hash": "1dd62dd4be3f0cc157ba6583bc87dc8f2e11ae3c368cd08f3b4de2839101c48f",
     "version": "1.33.0-alpha"
   },
   "features/create-helper-class.md": {
@@ -176,11 +176,11 @@
     "version": "1.33.0-alpha"
   },
   "features/doc-forget.md": {
-    "hash": "1a0f38032c90b65ffb3c5ded7d0ba97260777fed201a093c108ac5cebc4cf7e5",
+    "hash": "1b47b72300b3949f63059648ae9931e287762e2abe24db0fba7de117709ae123",
     "version": "1.33.0-alpha"
   },
   "features/document-all.md": {
-    "hash": "38205e6db5a466c3e779eab87eee3bd6da518b8600b6aedda92a64bd54277c54",
+    "hash": "2d3d555ccb541cd030762e90081c88492ddf8adbacdbc5707e2ea3787cc6ab88",
     "version": "1.33.0-alpha"
   },
   "features/document-it.md": {
@@ -228,7 +228,7 @@
     "version": "1.33.0-alpha"
   },
   "features/effect-summary-legend.md": {
-    "hash": "551095b9437798aade1fbb6b5e924aab4fc178c1d19825297cc4dbb4932188b4",
+    "hash": "0b356d9c21981fef19a2845c05d279eb4452a8a649a57643beb94ceb94ba5d34",
     "version": "1.33.0-alpha"
   },
   "features/exceptions-sync.md": {
@@ -248,7 +248,7 @@
     "version": "1.33.0-alpha"
   },
   "features/extract-method.md": {
-    "hash": "4ca514b72e620e15f39e92b926435e6fb145571a83552c1747e4857c215c6792",
+    "hash": "f5b05a5d2c3d6439a0cd2f1a1d54f49eea2486011a2fea17f7a13e1ec16f9744",
     "version": "1.33.0-alpha"
   },
   "features/fb-snapshot.md": {
@@ -260,7 +260,7 @@
     "version": "1.33.0-alpha"
   },
   "features/find-callees.md": {
-    "hash": "c753a1b8cc06171d9dc305f39637df1e95e0284a7b5daf9ccf4a65e22a2bcf44",
+    "hash": "4819910fc415184c311459a690636358bf4a9b7c4c2f69b65cd5cd5f99419f29",
     "version": "1.33.0-alpha"
   },
   "features/find-dead-code.md": {
@@ -272,7 +272,7 @@
     "version": "1.33.0-alpha"
   },
   "features/find-unit.md": {
-    "hash": "a7b38dc0a2a0139ab78c09d6798a64f2acadc919af303eb934bc8d6770741255",
+    "hash": "84cacb24de5b9afdae587c8514da19ba7badd9dee08a7d9aec5a6f24b811b761",
     "version": "1.33.0-alpha"
   },
   "features/find-usages-context.md": {
@@ -316,7 +316,7 @@
     "version": "1.33.0-alpha"
   },
   "features/ghost-check.md": {
-    "hash": "f1e56678bb5402ff56c8b7941cbcc4e92d94b8fa7d8abf8aaf4b1f2b1c86ef5b",
+    "hash": "e59fdc9e0e90f906740f0441954a53921b0396f14d368e145f8304ecac89419f",
     "version": "1.33.0-alpha"
   },
   "features/ghost-recover.md": {
@@ -340,7 +340,7 @@
     "version": "1.33.0-alpha"
   },
   "features/helpers-of.md": {
-    "hash": "68dbf52e9d13e2fff533982577ec1a85737fd49993c86027541ceadfd1e7ae4e",
+    "hash": "bc22526911ec79595b917f8c00060988ca2dfeaab1de20becdf9ba5b86c3e549",
     "version": "1.33.0-alpha"
   },
   "features/hover-at-cursor.md": {
@@ -348,7 +348,7 @@
     "version": "1.33.0-alpha"
   },
   "features/ide-menu-reference.md": {
-    "hash": "c3c4df354331bec0b44ff0f62b4369d999b412d7842d0178845991e7bd47810d",
+    "hash": "f76d5f30b687de1667d5d950240fa92981ccea7046231aba09655a5f1aea4a21",
     "version": "1.33.0-alpha"
   },
   "features/ide-release.md": {
@@ -412,7 +412,7 @@
     "version": "1.32.0-alpha"
   },
   "features/migrate-dbs.md": {
-    "hash": "6a6d76e9e5a1cf7162cf093e51b02cf243258355bec50e86e207b6ead8f11ca3",
+    "hash": "05c4998bbbfb17763a13c1ba9ad6a8d9e31405af3e8f14e5a7b7ac1278cab243",
     "version": "1.33.0-alpha"
   },
   "features/multi-project-rename.md": {
@@ -424,7 +424,7 @@
     "version": "1.33.0-alpha"
   },
   "features/outline.md": {
-    "hash": "52c687538683bc3361d69234c267efee14e57e673572e649212b887d638ddbf5",
+    "hash": "f75ec9a12448bdcb35ff7b345e20e2cedd107d63bef64f078462b843e5f4496e",
     "version": "1.33.0-alpha"
   },
   "features/pp-profile.md": {
@@ -448,7 +448,7 @@
     "version": "1.33.0-alpha"
   },
   "features/purge-locals.md": {
-    "hash": "9fff278a7e61a5d7a40be6f37e66d2c430e62f41d5ae36d2c76edb2ecac17bb5",
+    "hash": "fa870e7b2f7801a595ddecdcc0f55df7e4c36d155c96deee7f92d4b00b900f05",
     "version": "1.33.0-alpha"
   },
   "features/query-ancestors.md": {
@@ -464,11 +464,11 @@
     "version": "1.33.0-alpha"
   },
   "features/query-kind-all.md": {
-    "hash": "8fc28dbea4096cd064630b25c815e2d780fe619437f8cd7f0f131744ce624aac",
+    "hash": "fa893c2c62a5c3b365e32eca9bd84b9908e8d8c59efda1eaa518baf5efbe4da4",
     "version": "1.33.0-alpha"
   },
   "features/query-name-like.md": {
-    "hash": "0aa095bdebba2c1386f998388f3dc55d59f3d4ba090df08ef549b7b581985187",
+    "hash": "b62fe946b913358ed653ff109d1ee3dbcc7ebddda0b40de5a25e209e0e2ecb36",
     "version": "1.33.0-alpha"
   },
   "features/query-type-usage.md": {
@@ -540,7 +540,7 @@
     "version": "1.33.0-alpha"
   },
   "features/safe-delete.md": {
-    "hash": "67552add4e8da33e2a1e98ad050f1627be8ffbe9f060dbba506b9d724ced2de6",
+    "hash": "e44ecb2178afa925d95e5a52d5f9a559f7fd644349d9131f67fc2cf6d709023f",
     "version": "1.33.0-alpha"
   },
   "features/scan-todos-fixmes.md": {
@@ -620,7 +620,7 @@
     "version": "1.33.0-alpha"
   },
   "features/usages.md": {
-    "hash": "59e36ebd361f78458f71c523f1ee2d2990ed1e294a2c68397bc1cabe292f7f47",
+    "hash": "f4628c1e1677220b2b8f751742a48d5af2c58eaf77c30f5748abdf37cebba1a2",
     "version": "1.33.0-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {

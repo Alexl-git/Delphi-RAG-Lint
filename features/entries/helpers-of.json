@@ -24,6 +24,10 @@
       ],
       "helpOrder": 58,
       "help": ["  drag-lint helpers-of <T> [--json] --db <db>   - list record/class helper edges targeting type T anywhere in the index"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Inspect Symbol > Helpers of Type..."
     }
   ],
   "audience": "both",
@@ -33,6 +37,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "16b0d3ead572e435728f1a06ab71dc4618191af7bf46d5e6b5b4099c5789a339"
+    "surfaceHash": "63b1c165c1f4705c63789ae451d96bb79c0a3a8e6a8d670ea8d1342d6cde958c"
   }
 }

@@ -30,6 +30,10 @@ Full flag list: [butterfly in the CLI reference](../cli.md#butterfly).
 | `--output` | `F` |  |  |
 | `--db` | `PATH` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Graph (Butterfly)...**
+
 **Needs:** index
 
 ## Details

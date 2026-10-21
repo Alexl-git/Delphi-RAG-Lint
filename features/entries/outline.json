@@ -28,6 +28,10 @@
       ],
       "helpOrder": 6,
       "help": ["  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Show Structure"
     }
   ],
   "audience": "both",
@@ -35,6 +39,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "0496d31c647b221d9c9f4ac076293605f3b372a1af9485d046057c78b60110be"
+    "surfaceHash": "403cc97d8b5859a7a5f24acd6ebdb949aaf72f2958dd8a4d8a937d744ea96109"
   }
 }

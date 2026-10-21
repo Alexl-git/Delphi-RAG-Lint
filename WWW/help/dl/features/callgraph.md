@@ -30,6 +30,10 @@ Full flag list: [callgraph in the CLI reference](../cli.md#callgraph).
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...**
+
 **Needs:** index
 
 ## Details

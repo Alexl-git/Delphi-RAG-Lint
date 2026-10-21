@@ -75,9 +75,9 @@ Build and maintain the per-project and library indexes.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
-| [migrate-dbs](migrate-dbs) | `migrate-dbs` |  |
+| [migrate-dbs](migrate-dbs) | `migrate-dbs`; drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG... |  |
 | [pp-profile](pp-profile) | `pp-profile` |  |
-| [purge-locals](purge-locals) | `purge-locals` |  |
+| [purge-locals](purge-locals) | `purge-locals`; drag-lint > Index & Maintenance > Shrink Index (purge locals)... |  |
 | [Rebuild Index for This Project](Rebuild-Index-for-This-Project) | drag-lint > Index & Maintenance > Rebuild Index for This Project; `index` |  |
 | [register-project](Features) | `register-project` |  |
 | [schema](schema) | `schema` |  |
@@ -89,21 +89,21 @@ Find symbols, callers, callees, text and types in the index.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [call-path](call-path) | `call-path` |  |
+| [call-path](call-path) | `call-path`; drag-lint > Uses & Dependencies > Call Path Between Two Routines... |  |
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |
 | [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
 | [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
-| [find-callees](find-callees) | `find-callees` |  |
-| [find-unit](find-unit) | `find-unit` |  |
+| [find-callees](find-callees) | `find-callees`; drag-lint > Uses & Dependencies > What This Routine Calls (callees)... |  |
+| [find-unit](find-unit) | `find-unit`; drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)... |  |
 | [Go to Declaration](Go-to-Declaration) | Structure form: Go to Declaration |  |
 | [Go to Definition](Go-to-Definition) | drag-lint > Go to Definition |  |
 | [Go to Implementation](Go-to-Implementation) | Structure form: Go to Implementation |  |
-| [helpers-of](helpers-of) | `helpers-of` |  |
+| [helpers-of](helpers-of) | `helpers-of`; drag-lint > Inspect Symbol > Helpers of Type... |  |
 | [Hover at Cursor](Hover-at-Cursor) | drag-lint > Hover at Cursor; `hover` |  |
-| [outline](outline) | `outline` |  |
+| [outline](outline) | `outline`; drag-lint > Show Structure |  |
 | [query --kind --all](query-kind-all) | `query` |  |
 | [query --name-like](query-name-like) | `query` |  |
 | [query ancestors](query-ancestors) | `query ancestors` |  |
@@ -118,7 +118,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Symbol Search](Symbol-Search) | drag-lint > Symbol Search...; `query` |  |
 | [Symbol Slice](Symbol-Slice) | drag-lint > Inspect Symbol > Symbol Slice...; `slice` |  |
 | [Type at Cursor](Type-at-Cursor) | drag-lint > Inspect Symbol > Type at Cursor; `typeat` |  |
-| [usages](usages) | `usages` |  |
+| [usages](usages) | `usages`; drag-lint > Find Usages... |  |
 | [wiki](wiki) | `wiki` |  |
 
 ## Linting
@@ -180,12 +180,12 @@ DocInsight comments generated from the index, and drift detection.
 | [dl:wiki concept blocks](Wiki-Blocks-Authoring) | `wiki`; procedure: `docs\wiki\Wiki-Blocks-Authoring.md` |  |
 | [Doc Comment Stub (symbol)](Doc-Comment-Stub-symbol) | drag-lint > Generate & Export > Doc Comment Stub (symbol)...; `generate-docs` |  |
 | [doc-drift](doc-drift) | `doc-drift` |  |
-| [doc-forget](Features) | `doc-forget` |  |
+| [doc-forget](Features) | `doc-forget`; drag-lint > Generate & Export > Forget Documentation Project Tag...; drag-lint > Generate & Export > List Documentation Project Tags |  |
 | [Document it](Document-it) | Structure form: Document it; `document` |  |
 | [Document project](Document-project) | Structure form: Document project; `document` |  |
 | [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
-| [document-all](document-all) | `document-all` |  |
-| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md` |  |
+| [document-all](document-all) | `document-all`; drag-lint > Generate & Export > Auto-Document Every Indexed Unit... |  |
+| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend (wiki) |  |
 | [shared-unit](shared-unit) | `shared-unit` |  |
 
 ## Refactoring and code generation
@@ -197,14 +197,14 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Allow this message](Allow-this-message) | Structure form: Allow this message; `allow` |  |
 | [allow](allow) | `allow` |  |
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
-| [create-enum-helper](create-enum-helper) | `create-enum-helper` |  |
-| [extract-method](extract-method) | `extract-method` |  |
+| [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
+| [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor |  |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U) |  |
 | [Quick-Fix: Convert Public Field to Property at Cursor](Quick-Fix-Convert-Public-Field-to-Property-at-Cursor) | drag-lint > Convert Public Field to Property at Cursor |  |
 | [Reconcile Project Members (.dpr/.dproj)](Reconcile-Project-Members-dpr-dproj) | drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...; `reconcile-project` |  |
 | [Rename Symbol](Rename-Symbol) | drag-lint > Rename Symbol...; `rename` |  |
-| [safe-delete](safe-delete) | `safe-delete` |  |
+| [safe-delete](safe-delete) | `safe-delete`; drag-lint > Safe Delete Symbol... |  |
 | [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
 | [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
 | [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...; `uses-audit` |  |
@@ -235,9 +235,9 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [butterfly](butterfly) | `butterfly` |  |
+| [butterfly](butterfly) | `butterfly`; drag-lint > Uses & Dependencies > Call Graph (Butterfly)... |  |
 | [Call Graph (Butterfly)](Call-Graph-Butterfly) | drag-lint > Uses & Dependencies > Call Graph (Butterfly)...; `reverse-calltree` |  |
-| [callgraph](callgraph) | `callgraph` |  |
+| [callgraph](callgraph) | `callgraph`; drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... |  |
 | [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md` |  |
 | [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
 | [Cycles fix (mechanical, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles`; drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...; View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix); Structure form: Fix this cycle (dry run)...; Structure form: Apply cycle fix...; `charts\src\Emit-Cycles.ps1` |  |
@@ -281,7 +281,7 @@ Compile, fold compiler output into findings, preprocess.
 | [Compile Dependents](Features) | drag-lint > Compile Dependents |  |
 | [compile-check](compile-check) | `compile-check` |  |
 | [Full Compile Sweep](Full-Compile-Sweep) | drag-lint > Full Compile Sweep; `refresh-findings` |  |
-| [ghost-check](ghost-check) | `ghost-check` |  |
+| [ghost-check](ghost-check) | `ghost-check`; drag-lint > Compile Buffer (unsaved) |  |
 | [ghost-recover](ghost-recover) | `ghost-recover` |  |
 | [Import Build Log](Import-Build-Log) | About window: Import Build Log...; `import-log` |  |
 | [preprocess-file](preprocess-file) | `preprocess-file` |  |
@@ -308,7 +308,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Options](drag-lint-Options) | drag-lint > drag-lint Options... |  |
 | [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
 | [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
-| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md` |  |
+| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference (wiki) |  |
 | [ide-release](ide-release) | `ide-release` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [lsp](lsp) | `lsp` |  |

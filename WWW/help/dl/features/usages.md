@@ -31,6 +31,10 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 | `--format` |  |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Find Usages...**
+
 ## Details
 
 Finds usage sites of a named symbol, with a choice of report width. Reach for

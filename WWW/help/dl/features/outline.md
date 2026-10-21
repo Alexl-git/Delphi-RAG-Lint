@@ -28,6 +28,10 @@ Full flag list: [outline in the CLI reference](../cli.md#outline).
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Show Structure**
+
 ## Details
 
 Prints the file-scoped symbol outline for one Pascal unit. Reach for it when

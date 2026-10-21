@@ -36,6 +36,10 @@
       ],
       "helpOrder": 79,
       "help": ["  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Call Path Between Two Routines..."
     }
   ],
   "audience": "both",
@@ -44,6 +48,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "49514102a76bcb9c9f2898e1abfa44664423b77a67e5a3f5dd382915cae4d921"
+    "surfaceHash": "86109acb83a18b5048858c4ce221e2cb2706486551e61a6480f0dbf4d2b087ca"
   }
 }

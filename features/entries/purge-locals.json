@@ -24,6 +24,10 @@
       ],
       "helpOrder": 88,
       "help": ["  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Index & Maintenance > Shrink Index (purge locals)..."
     }
   ],
   "audience": "both",
@@ -37,6 +41,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "d3c4ee5ab229b6860c96e0cf43da2f0e8f6b0656de9e4e73e4bf4310b2f3823b"
+    "surfaceHash": "2dc175e79dc1d88ff73c26d0b6d1696ad281dce30861609a0745d76ce2b13af0"
   }
 }

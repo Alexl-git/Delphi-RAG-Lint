@@ -30,6 +30,10 @@ Full flag list: [safe-delete in the CLI reference](../cli.md#safe-delete).
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Safe Delete Symbol...**
+
 **Needs:** index
 
 ## Details

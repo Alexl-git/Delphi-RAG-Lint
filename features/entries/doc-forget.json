@@ -41,6 +41,14 @@
       ],
       "helpOrder": 56,
       "help": ["  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts", "     --project removes that tag (entries whose set empties go); --rename renames it; --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Forget Documentation Project Tag..."
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > List Documentation Project Tags"
     }
   ],
   "audience": "both",
@@ -49,6 +57,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "9ac29719038e99e39e46f6a55cf308c53c9e9d3c88305b819f6c78d09ec29328"
+    "surfaceHash": "cce9d62a0bd3dd03c69c9ef8cd0e9019680b440f770c16985d98dbaae6edb5c6"
   }
 }

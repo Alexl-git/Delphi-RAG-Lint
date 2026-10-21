@@ -38,6 +38,10 @@
       ],
       "helpOrder": 5,
       "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view."]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Find Usages..."
     }
   ],
   "audience": "both",
@@ -45,6 +49,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "97f5e5e0036d1d3357befa830f6a822e7e7927f2054e2cf541b0beefd446084b"
+    "surfaceHash": "49c04262fe8263d0117c1a77b7f12eb470dc65ebafe0099897d3503881ff2787"
   }
 }

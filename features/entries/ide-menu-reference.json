@@ -12,6 +12,10 @@
     {
       "type": "workflow",
       "doc": "docs\\wiki\\IDE-Menu-Reference.md"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Help > IDE Menu Reference (wiki)"
     }
   ],
   "audience": "both",
@@ -20,7 +24,7 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+    "surfaceHash": "694ccb28834a28c4550e8393e2dfc654f9a80e30ece04869ceca050471590fec"
   },
   "homeOrder": 40
 }

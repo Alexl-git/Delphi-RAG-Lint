@@ -32,6 +32,10 @@ Full flag list: [document-all in the CLI reference](../cli.md#document-all).
 | `--migrate-pure` |  |  |  |
 | `--db` | `PATH` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Generate & Export > Auto-Document Every Indexed Unit...**
+
 ## Details
 
 Documents every public declaration in every indexed unit, with no project

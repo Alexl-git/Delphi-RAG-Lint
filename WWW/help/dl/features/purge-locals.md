@@ -27,6 +27,10 @@ Full flag list: [purge-locals in the CLI reference](../cli.md#purge-locals).
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Index & Maintenance > Shrink Index (purge locals)...**
+
 **Needs:** index
 
 ## Details

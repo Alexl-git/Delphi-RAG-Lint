@@ -38,6 +38,10 @@
       ],
       "helpOrder": 59,
       "help": ["  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)..."
     }
   ],
   "audience": "both",
@@ -47,6 +51,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "159e0be3619814e297937f0dbf7709e894e199f967f5e4d389472e72aa824bf5"
+    "surfaceHash": "40d24c8ad62169300ce5e93a76eef22d493a18b2f45355ba34292ef0eeaa7c2f"
   }
 }

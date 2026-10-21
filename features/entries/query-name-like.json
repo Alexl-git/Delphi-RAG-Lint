@@ -12,26 +12,23 @@
     {
       "type": "cli",
       "verb": "query",
-      "usage": "drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>",
+      "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
       "flags": [
         {
-          "name": "--name-like",
-          "arg": "<substring>"
+          "name": "--name",
+          "arg": "<symbol-name>"
         },
         {
-          "name": "--kind",
-          "arg": "<k>"
-        },
-        {
-          "name": "--limit",
-          "arg": "N"
+          "name": "--db"
         },
         {
           "name": "--json"
         },
         {
-          "name": "--db",
-          "arg": "<file.sqlite>"
+          "name": "--case-sensitive"
+        },
+        {
+          "name": "--exact"
         }
       ]
     }

@@ -24,11 +24,11 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--name-like` | `<substring>` |  |  |
-| `--kind` | `<k>` |  |  |
-| `--limit` | `N` |  |  |
+| `--name` | `<symbol-name>` |  |  |
+| `--db` |  |  |  |
 | `--json` |  |  |  |
-| `--db` | `<file.sqlite>` |  |  |
+| `--case-sensitive` |  |  |  |
+| `--exact` |  |  |  |
 
 **Needs:** index
 

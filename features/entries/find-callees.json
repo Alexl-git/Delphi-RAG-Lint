@@ -28,6 +28,10 @@
       ],
       "helpOrder": 77,
       "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > What This Routine Calls (callees)..."
     }
   ],
   "audience": "both",
@@ -36,6 +40,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "6ee99913606d7ea5f33c9a0e3ed461ec2a1f5c8047aae9409864a4d5ca304294"
+    "surfaceHash": "b3998e6800368f6c9f191af5c2d3b51b3696ad30dc5bcd7d3b8e8482458ddc83"
   }
 }

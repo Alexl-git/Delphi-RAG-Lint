@@ -27,6 +27,10 @@ Full flag list: [helpers-of in the CLI reference](../cli.md#helpers-of).
 | `--json` |  |  |  |
 | `--db` | `<db>` |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Inspect Symbol > Helpers of Type...**
+
 **Needs:** index
 
 ## Details

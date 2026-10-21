@@ -42,6 +42,10 @@
       ],
       "helpOrder": 61,
       "help": ["  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)"
     }
   ],
   "audience": "both",
@@ -50,6 +54,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "b51d3401b7089b31fc97e4085380b6e1b13f4c6f97c55493e69671626dac71c3"
+    "surfaceHash": "4d3a8f3f01c7fc8edb6ac589a8252c9c51c2ce36650f58eb18f0e75e7c42f134"
   }
 }

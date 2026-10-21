@@ -31,6 +31,10 @@ Full flag list: [ghost-check in the CLI reference](../cli.md#ghost-check).
 | `--in-place` |  |  |  |
 | `--format` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Compile Buffer (unsaved)**
+
 ## Pitfalls
 
 * compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's "Compile Buffer (unsaved)". Restores the original on exit.

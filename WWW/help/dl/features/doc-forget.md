@@ -36,6 +36,11 @@ Full flag list: [doc-forget in the CLI reference](../cli.md#doc-forget).
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Generate & Export > Forget Documentation Project Tag...**
+* RAD Studio main menu: **drag-lint > Generate & Export > List Documentation Project Tags**
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

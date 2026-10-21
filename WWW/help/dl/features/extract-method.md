@@ -32,6 +32,10 @@ Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Extract Method (selection)... (Ctrl+Alt+M)**
+
 ## Details
 
 Pulls a run of statements out of a routine into a new method. Reach for it

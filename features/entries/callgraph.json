@@ -35,6 +35,10 @@
       ],
       "helpOrder": 80,
       "help": ["  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)..."
     }
   ],
   "audience": "both",
@@ -43,6 +47,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "d15814944487c9d5bf640e176c9de5004a606e44acd3472ce1a5849321f5059f"
+    "surfaceHash": "ffe27bf5ea9c67b4f435dc1b9949649ece906554e8f16d0dab7a50d41d6020db"
   }
 }

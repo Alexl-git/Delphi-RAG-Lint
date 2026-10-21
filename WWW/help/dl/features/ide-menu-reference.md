@@ -16,6 +16,10 @@ What every item in the drag-lint menu does.
 
 Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing.
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Help > IDE Menu Reference (wiki)**
+
 ## Details
 
 The plugin adds a top-level **`drag-lint`** menu to the RAD Studio menu bar (it
@@ -57,6 +61,8 @@ look thin or stale, see [Maintenance](maintenance.md).
 | **Symbol Search...** *(index)* | Search symbols by name across the indexed projects. |
 | **Show Structure** | Structural outline of the current unit. |
 | **Rename Symbol...** *(index)* | Index-backed rename across the project. Review the preview: a rename is a source-wide edit. |
+| **Extract Method (selection)... (Ctrl+Alt+M)** | Moves the selected run of statements into a new method. Name prompt, dry-run preview, then apply; the unit is reloaded from disk afterwards. |
+| **Safe Delete Symbol...** *(index)* | Deletes a symbol only if the index shows zero references. Asks Yes (apply) / No (preview) / Cancel; the engine keeps a `.bak`. |
 | **Format with YADF** | Formats the current unit with YADF. |
 | **Format Whole Project with YADF...** | Formats every unit in the project. |
 | **drag-lint Options...** | The plugin's own options page (rule enablement, profiles, paths). |
@@ -76,6 +82,7 @@ Everything about what a unit depends on and what depends on it.
 | **Uses Report (CSV)...** | The dependency data as CSV. |
 | **Quick-Fix: Add Unit for Undeclared at Cursor** (`Ctrl+Alt+U`) | The identifier under the caret is undeclared: finds which unit declares it and adds that unit to `uses`. |
 | **Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor** | Same, for the inline-expansion hint -- an inline routine whose unit is not in scope. |
+| **Find Unit for Symbol (add to uses)...** *(index)* | Names the unit that declares a symbol and, on Yes, adds it to the active unit's `uses` clause (`find-unit`). No previews a dry run. |
 | **Quick-Fix: Convert Public Field to Property at Cursor** | Rewrites a public field as a property. |
 | **Add Missing Units to uses (whole unit)...** | The whole-unit form: every unresolved name at once. |
 | **Impact / Blast Radius (symbol)...** *(index)* | What is affected if this symbol changes -- the set to retest. |
@@ -83,6 +90,9 @@ Everything about what a unit depends on and what depends on it.
 | **Reverse Call Tree (who calls this, N-deep)...** *(index)* | Callers, transitively, to a chosen depth. |
 | **Reverse Call Tree (clickable, Messages window)...** *(index)* | The same tree in the IDE Messages window, so each line navigates. |
 | **Call Graph (Butterfly)...** *(index)* | Callers and callees of one symbol together -- the butterfly view. |
+| **Call Tree (callers or callees, N-deep)...** *(index)* | The resolved call tree of a routine in the direction you pick, three levels deep (`callgraph`, cycle-guarded). |
+| **What This Routine Calls (callees)...** *(index)* | The resolved outgoing calls of one routine (`find-callees`). |
+| **Call Path Between Two Routines...** *(index)* | The shortest resolved call path from routine A to routine B (`call-path`); reports no path when none exists. |
 
 ### Reports
 
@@ -179,6 +189,7 @@ job; ask again when it finishes.
 | **Class Surface...** *(index)* | The public surface of a class: members and signatures, without the bodies. |
 | **Symbol Slice...** *(index)* | The slice of code relevant to one symbol -- declaration, body, and its immediate context. |
 | **Type at Cursor** *(index)* | Resolves the static type of the expression under the caret. |
+| **Helpers of Type...** *(index)* | Lists the record/class helpers that target a type (`helpers-of`). |
 
 ### Code Quality
 
@@ -197,6 +208,10 @@ job; ask again when it finishes.
 |---|---|
 | **Doc Comment Stub (symbol)...** *(index)* | A DocInsight comment skeleton for one symbol, with index-grounded facts. |
 | **Auto-Document Whole Project...** *(index)* | Generates or refreshes managed documentation blocks across the project. **Writes to source files** -- commit or stash first. |
+| **Auto-Document Every Indexed Unit...** *(index)* | `document-all`: documents every public declaration of every unit in the index, not just the project's closure. Asks Yes (apply, **writes to source files**) / No (preview) / Cancel. |
+| **List Documentation Project Tags** | Lists the project tags carried by the documentation facts under the project folder (`doc-forget --list-tags`, read-only). |
+| **Forget Documentation Project Tag...** | Reaps one project tag from those facts (`doc-forget --project`); preview first, apply on Yes. |
+| **Enum Record Helper (symbol)...** *(index)* | Generates a Byte-family record helper for an enum type (`create-enum-helper`); preview first, apply on Yes. |
 | **Unit Test Stub (symbol)...** | A test skeleton for the symbol. |
 | **Export Enums (Delphi const)...** | Enumerations as Delphi constant declarations. |
 | **Export Graph (DOT)...** *(index)* | The dependency/call graph in Graphviz DOT. |
@@ -209,6 +224,8 @@ job; ask again when it finishes.
 | **Rebuild Index for This Project** | **Destructive by design.** Clears this project's index and re-parses its whole compile closure. Named "Rebuild", not "Reindex", so it cannot be confused with an incremental refresh. |
 | **Show Resolved DBs (debug)...** | Which databases this project resolves to. The first thing to check when results come from somewhere unexpected. |
 | **Library Drift Check...** | Compares the library index against the current Library/Browsing paths and reports what has moved -- run it after a third-party suite update. |
+| **Shrink Index (purge locals)...** | Size escape hatch: drops local-variable and parameter symbols and vacuums the index (`purge-locals`). The call graph is unchanged; the next index run restores the rows. Runs as a queued job with the LSP stopped. |
+| **Migrate Index DBs to _D-RAG...** | Moves project index databases into each project's own `_D-RAG` folder (`migrate-dbs`). Yes applies (queued job, LSP stopped); No previews. |
 
 ---
 
@@ -223,6 +240,13 @@ on the menu rather than behind the About window.
 | **Compile Buffer (unsaved)** | Compiles the unsaved buffer -- the "ghost check", for errors that only exist in what you are typing. |
 
 ---
+
+### Help
+
+| Item | What it does |
+|---|---|
+| **IDE Menu Reference (wiki)** | Opens this page in the browser. |
+| **Effect Summary Legend (wiki)** | Opens the page that explains the purity tokens in a routine's effect summary. |
 
 ### About
 

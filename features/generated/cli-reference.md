@@ -1218,7 +1218,7 @@ Described in [purge-locals](../../docs/wiki/purge-locals.md).
 Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity.
 
 ```text
-drag-lint query --kind <k> --all [--public] [--db ...] [--json]
+drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]
 drag-lint query hints --db <file.sqlite> [--name <code>] [--rule <severity>]
 drag-lint query find [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]
 drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json] (transitive class/interface hierarchy)
@@ -1245,14 +1245,11 @@ drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--jso
 | `--json` |  |  |  |
 | `--context` | `N` |  |  |
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
-| `--all` |  |  |  |
-| `--name-like` | `<substring>` |  |  |
-| `--limit` | `N` |  |  |
+| `--case-sensitive` |  |  |  |
+| `--exact` |  |  |  |
 | `--in` | `<file.pas>` |  |  |
 | `--names` | `A` |  |  |
 | `--names-file` | `<f>` |  |  |
-| `--case-sensitive` |  |  |  |
-| `--exact` |  |  |  |
 
 Described in:
 

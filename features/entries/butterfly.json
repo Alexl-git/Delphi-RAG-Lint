@@ -36,6 +36,10 @@
       ],
       "helpOrder": 87,
       "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
     }
   ],
   "audience": "both",
@@ -44,6 +48,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "41622b0d2d51f754ce50bb9dfea1e306ffd5de6c16319d15e87671be28df0b3c"
+    "surfaceHash": "dcb48864388d7967b51de30c1e98f913c646c85e0d0c6b288f363f777527c1c3"
   }
 }

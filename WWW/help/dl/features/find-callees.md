@@ -28,6 +28,10 @@ Full flag list: [find-callees in the CLI reference](../cli.md#find-callees).
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > What This Routine Calls (callees)...**
+
 **Needs:** index
 
 ## Details

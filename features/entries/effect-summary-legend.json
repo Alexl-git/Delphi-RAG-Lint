@@ -12,6 +12,10 @@
     {
       "type": "workflow",
       "doc": "docs\\wiki\\Effect-Summary-Legend.md"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Help > Effect Summary Legend (wiki)"
     }
   ],
   "audience": "both",
@@ -20,6 +24,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+    "surfaceHash": "d261f7dcd6ae515c05763ce672928a34fa0562da923bdd2a21008c154899cfc2"
   }
 }

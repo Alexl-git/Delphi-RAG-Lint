@@ -41,6 +41,10 @@
       ],
       "helpOrder": 57,
       "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Enum Record Helper (symbol)..."
     }
   ],
   "audience": "both",
@@ -49,6 +53,6 @@
     "date": "2026-10-21",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "62bd794e7361fe4a80c698b54589d793b7b49d9643362609bbe8354eb3f7bf04"
+    "surfaceHash": "e3001d6f5644dc9545cb7aff184afde45ca697daa8978faaaa79c4a3a47a5b63"
   }
 }

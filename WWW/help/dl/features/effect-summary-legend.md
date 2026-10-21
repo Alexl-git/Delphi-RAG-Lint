@@ -16,6 +16,10 @@ The purity analysis writes a short token string for every routine it judges -- s
 
 Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields) and `p<k>` (writes through parameter k, counted from 0).
 
+## Where to click
+
+* RAD Studio main menu: **drag-lint > Help > Effect Summary Legend (wiki)**
+
 ## Details
 
 The purity analysis writes a short token string for every routine it judges --
