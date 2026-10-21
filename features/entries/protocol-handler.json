@@ -25,7 +25,9 @@
         {
           "name": "--force"
         }
-      ]
+      ],
+      "helpOrder": 24,
+      "help": ["  drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]   (HKCU\\Software\\Classes\\draglint -> the handler; --force accepts a *-wt\\ path or replaces a foreign registration)", "  drag-lint protocol unregister [--dry-run] [--force]   (removes the key when it is ours or the legacy PowerShell one; foreign needs --force)", "  drag-lint protocol status [--json]   (prints the registered command and ours|legacy-powershell|foreign|none; exit 0 only when ours)"]
     },
     {
       "type": "exe",

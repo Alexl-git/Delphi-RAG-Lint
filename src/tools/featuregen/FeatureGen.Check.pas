@@ -201,7 +201,7 @@ function SurfaceRules: TArray<TSurfaceRule>;
 
 begin
   Result := [
-    R('cli', ['type', 'verb', 'sub', 'example', 'usage', 'flags'], ['verb']),
+    R('cli', ['type', 'verb', 'sub', 'example', 'usage', 'flags', 'helpOrder', 'help'], ['verb']),
     R('ide-menu', ['type', 'path', 'steps'], ['path']),
     R('ide-context', ['type', 'host', 'caption', 'steps'], ['host', 'caption']),
     R('ide-about', ['type', 'caption', 'steps'], ['caption']),

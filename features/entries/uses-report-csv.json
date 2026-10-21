@@ -38,7 +38,9 @@
           "name": "--name",
           "arg": "<pattern>"
         }
-      ]
+      ],
+      "helpOrder": 42,
+      "help": ["  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)"]
     }
   ],
   "audience": "both"

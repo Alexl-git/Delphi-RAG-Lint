@@ -20,7 +20,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 88,
+      "help": ["  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)"]
     }
   ],
   "audience": "both",

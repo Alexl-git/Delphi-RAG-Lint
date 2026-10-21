@@ -28,7 +28,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 34,
+      "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]"]
     }
   ],
   "audience": "both"

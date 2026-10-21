@@ -32,7 +32,9 @@
           "name": "--db",
           "arg": "PATH"
         }
-      ]
+      ],
+      "helpOrder": 87,
+      "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
     }
   ],
   "audience": "both",

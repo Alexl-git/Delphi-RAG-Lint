@@ -27,7 +27,9 @@
         {
           "name": "--diff"
         }
-      ]
+      ],
+      "helpOrder": 72,
+      "help": ["  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))"]
     },
     {
       "type": "cli",

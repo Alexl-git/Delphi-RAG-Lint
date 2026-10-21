@@ -17,7 +17,9 @@
           "name": "--db",
           "arg": "PATH"
         }
-      ]
+      ],
+      "helpOrder": 76,
+      "help": ["  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)"]
     }
   ],
   "audience": "both",

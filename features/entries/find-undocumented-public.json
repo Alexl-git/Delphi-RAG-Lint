@@ -51,7 +51,9 @@
         {
           "name": "--db"
         }
-      ]
+      ],
+      "helpOrder": 4,
+      "help": ["  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]", "       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not \"hide the docs\" -- to list them all use query --kind <k> --all", "       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)", "         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate."]
     }
   ],
   "audience": "both",

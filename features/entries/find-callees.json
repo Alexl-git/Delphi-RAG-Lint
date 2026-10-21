@@ -24,7 +24,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 77,
+      "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)"]
     }
   ],
   "audience": "both",

@@ -27,7 +27,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 17,
+      "help": ["  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)"]
     }
   ],
   "audience": "both"

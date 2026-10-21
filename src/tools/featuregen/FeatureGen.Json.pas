@@ -104,7 +104,7 @@ end;
 function SurfaceOrder(const pType: string): TArray<string>;  // dl:ok cognitive-complexity@b9fa -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
 begin
   if pType = 'cli' then
-    Result := ['type', 'verb', 'sub', 'example', 'usage', 'flags']
+    Result := ['type', 'verb', 'sub', 'example', 'usage', 'flags', 'helpOrder', 'help']
   else if pType = 'ide-menu' then
     Result := ['type', 'path', 'steps']
   else if pType = 'ide-context' then

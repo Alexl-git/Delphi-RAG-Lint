@@ -17,7 +17,9 @@
           "name": "--db",
           "arg": "<file.sqlite>"
         }
-      ]
+      ],
+      "helpOrder": 22,
+      "help": ["  drag-lint serve              --db <file.sqlite>    (MCP stdio server)"]
     }
   ],
   "audience": "both",

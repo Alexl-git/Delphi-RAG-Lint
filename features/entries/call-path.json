@@ -32,7 +32,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 79,
+      "help": ["  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)"]
     }
   ],
   "audience": "both",

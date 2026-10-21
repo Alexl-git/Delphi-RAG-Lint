@@ -27,7 +27,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 21,
+      "help": ["  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project's derived exception classes)", "                               Harvests every bare `raise Exception.Create('literal')` in the project and declares one class per", "                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.", "                               Opt in with an \"exceptions\" block in drag-lint-lint.json -- an empty one is enough; key \"unit\" names", "                               the unit (default uExceptionDefinitions, created if absent) and key \"root\" the ancestor (default Exception).", "                               Each declaration carries its message in a same-line // comment, and THAT COMMENT IS THE KEY: rename a", "                               generated class freely, but edit its comment and the next run adds a second class for the old message.", "                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE", "                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`."]
     }
   ],
   "audience": "both",

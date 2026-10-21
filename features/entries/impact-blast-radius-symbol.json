@@ -32,7 +32,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 35,
+      "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]"]
     }
   ],
   "audience": "both"

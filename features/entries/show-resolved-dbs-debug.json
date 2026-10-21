@@ -27,7 +27,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 97,
+      "help": ["  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)", "  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)", "                               exits 2 and names the sections when none or SEVERAL claim the project,", "                               rather than guessing: `index --rebuild` against a wrongly-picked db", "                               clears an index that was never meant to be touched.", "  drag-lint resolve-dbs --in <file.pas> [--project <file.dproj>] [--config <path>] [--json]", "                               the READ list (what hover / Find Usages / the LSP would open for that", "                               file): the ACTIVE PROJECT's db first, then the folder-matched db.", "                               Omit --project to model \"no project active\". Same resolution the IDE", "                               uses, so this is how it is verified without an IDE.", "                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr."]
     }
   ],
   "audience": "both",

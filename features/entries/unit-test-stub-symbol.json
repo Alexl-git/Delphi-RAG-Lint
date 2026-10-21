@@ -28,7 +28,9 @@
           "name": "--db",
           "arg": "PATH"
         }
-      ]
+      ],
+      "helpOrder": 71,
+      "help": ["  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]"]
     }
   ],
   "audience": "both"

@@ -42,7 +42,9 @@
           "name": "--output",
           "arg": "<file>"
         }
-      ]
+      ],
+      "helpOrder": 47,
+      "help": ["  drag-lint sql --query \"SELECT ...\" | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)"]
     }
   ],
   "audience": "both",

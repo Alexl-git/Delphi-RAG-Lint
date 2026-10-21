@@ -22,6 +22,8 @@
                         "usage": { "type": "string" },
                         "flags": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name"],
                                    "properties": { "name": { "type": "string" }, "arg": { "type": "string" }, "summary": { "type": "string" }, "default": { "type": "string" } } } },
+                        "helpOrder": { "type": "integer", "minimum": 1 },
+                        "help": { "type": "array", "items": { "type": "string" } },
                         "steps": { "type": "array", "items": { "type": "string" } } } } },
     "audience":     { "type": "string", "enum": ["human", "agent", "both"] },
     "requires":     { "type": "array", "items": { "type": "string",

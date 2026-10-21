@@ -47,6 +47,10 @@ type
     Usage: string;
     /// <summary>cli: every flag the verb accepts (schema v2).</summary>
     Flags: TArray<TFlag>;
+    /// <summary>cli: position of this surface's block in the --help verb reference (1-based); 0 when it has none (P7).</summary>
+    HelpOrder: Integer;
+    /// <summary>cli: the verbatim --help lines of this surface's block, first line (the usage line, original spacing) included (P7).</summary>
+    Help: TArray<string>;
     /// <summary>ide-menu / ide-context / ide-about / tool-window: click-by-click steps (schema v2).</summary>
     Steps: TArray<string>;
   end;
@@ -207,6 +211,8 @@ begin
   Result.Doc := Prop(pObj, 'doc');
   Result.Usage := Prop(pObj, 'usage');
   Result.Steps := StrList(pObj, 'steps');
+  Result.Help := StrList(pObj, 'help');
+  Result.HelpOrder := StrToIntDef(Prop(pObj, 'helpOrder'), 0);
   lItems := ObjList(pObj, 'flags');
   SetLength(Result.Flags, Length(lItems));
   for i := 0 to High(lItems) do

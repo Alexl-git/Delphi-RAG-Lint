@@ -21,7 +21,9 @@
           "name": "--db",
           "arg": "<file.sqlite>"
         }
-      ]
+      ],
+      "helpOrder": 32,
+      "help": ["  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)"]
     }
   ],
   "audience": "both",

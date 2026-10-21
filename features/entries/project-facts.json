@@ -30,7 +30,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 91,
+      "help": ["  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)", "", "  Output/CI (lint, lint-all, check-ast):", "    --format sarif            emit SARIF 2.1.0 (in addition to text|json)", "    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)", "    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)", "    --enable id1,id2          re-include disabled / off-by-default rules", "    --profile <name>          merge a named enable/disable set from the config", "    --baseline <file>         report only findings absent from the baseline", "    --write-baseline <file>   record current findings as the baseline and exit 0"]
     }
   ],
   "audience": "both",

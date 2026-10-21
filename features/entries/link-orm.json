@@ -17,7 +17,9 @@
           "name": "--db",
           "arg": "<projDb.sqlite>"
         }
-      ]
+      ],
+      "helpOrder": 51,
+      "help": ["  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>"]
     }
   ],
   "audience": "both",

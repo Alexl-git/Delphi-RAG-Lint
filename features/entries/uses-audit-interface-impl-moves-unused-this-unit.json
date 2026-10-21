@@ -24,7 +24,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 69,
+      "help": ["  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)"]
     }
   ],
   "audience": "both",

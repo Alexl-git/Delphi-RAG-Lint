@@ -28,7 +28,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 78,
+      "help": ["  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)"]
     }
   ],
   "audience": "both",

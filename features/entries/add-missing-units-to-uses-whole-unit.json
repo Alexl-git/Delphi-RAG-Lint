@@ -38,7 +38,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 67,
+      "help": ["  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]"]
     }
   ],
   "audience": "both"

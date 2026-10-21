@@ -11,7 +11,9 @@
     {
       "type": "cli",
       "verb": "ghost-recover",
-      "usage": "drag-lint ghost-recover <dproj> (restore any file left overlaid by an INTERRUPTED ghost-check)"
+      "usage": "drag-lint ghost-recover <dproj> (restore any file left overlaid by an INTERRUPTED ghost-check)",
+      "helpOrder": 66,
+      "help": ["  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)", "                               Safe to run any time: prints \"nothing pending.\" when there is nothing to do."]
     }
   ],
   "audience": "both"

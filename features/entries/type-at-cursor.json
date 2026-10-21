@@ -24,7 +24,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 41,
+      "help": ["  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]"]
     }
   ],
   "audience": "both"

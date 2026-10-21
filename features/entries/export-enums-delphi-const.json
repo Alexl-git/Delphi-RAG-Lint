@@ -29,7 +29,9 @@
           "name": "--output",
           "arg": "<file>"
         }
-      ]
+      ],
+      "helpOrder": 26,
+      "help": ["  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]"]
     }
   ],
   "audience": "both",

@@ -20,7 +20,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 31,
+      "help": ["  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]"]
     }
   ],
   "audience": "both",

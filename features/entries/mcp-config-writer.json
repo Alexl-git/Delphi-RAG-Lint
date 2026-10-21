@@ -55,7 +55,9 @@
         {
           "name": "--appdata-dir"
         }
-      ]
+      ],
+      "helpOrder": 23,
+      "help": ["  drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]", "                               writes {\"type\":\"stdio\",\"command\":\"<engine>\",\"args\":[\"serve\"[,\"--db\",\"<index>\"]]} (+ \"env\":{} for Claude Code) into", "                               ~\\.claude.json \"mcpServers\" / %APPDATA%\\Code\\User\\mcp.json \"servers\": merged, backed up (<file>.bak-<stamp>), idempotent;", "                               --remove takes only its own entry out; an entry by that name that runs something else is refused; --dry-run writes nothing;", "                               --home-dir / --appdata-dir move where the default files are looked for (tests)"]
     }
   ],
   "audience": "both",

@@ -26,7 +26,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 46,
+      "help": ["  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)"]
     }
   ],
   "audience": "both"

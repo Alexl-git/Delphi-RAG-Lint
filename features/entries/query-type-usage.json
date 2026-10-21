@@ -32,7 +32,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 9,
+      "help": ["  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]", "                               of these type names, which does THIS file actually REFERENCE? Answers a", "                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create", "                               construction sites and inheritance; a name appearing only in a COMMENT or", "                               a STRING LITERAL is correctly not a reference -- which is the difference", "                               from grep. Name-keyed: a project type sharing an RTL name is", "                               indistinguishable, and the output says so."]
     }
   ],
   "audience": "both"

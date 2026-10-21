@@ -34,7 +34,9 @@
           "name": "--db",
           "arg": "<db>"
         }
-      ]
+      ],
+      "helpOrder": 59,
+      "help": ["  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses"]
     }
   ],
   "audience": "both",

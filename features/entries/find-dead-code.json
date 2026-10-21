@@ -27,7 +27,9 @@
           "name": "--db",
           "arg": "PATH"
         }
-      ]
+      ],
+      "helpOrder": 62,
+      "help": ["  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]"]
     }
   ],
   "audience": "both"

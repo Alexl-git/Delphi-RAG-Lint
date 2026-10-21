@@ -29,7 +29,9 @@
           "name": "--rules-dir",
           "arg": "<dir>"
         }
-      ]
+      ],
+      "helpOrder": 14,
+      "help": ["  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)"]
     }
   ],
   "audience": "both"

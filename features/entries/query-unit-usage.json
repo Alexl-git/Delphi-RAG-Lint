@@ -28,7 +28,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 10,
+      "help": ["  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]", "                               WITH --in: of that unit's exports, which does THIS file reference? Empty = dead import.", "                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.", "                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry."]
     }
   ],
   "audience": "both",

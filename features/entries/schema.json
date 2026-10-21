@@ -24,7 +24,9 @@
           "name": "--output",
           "arg": "<file>"
         }
-      ]
+      ],
+      "helpOrder": 44,
+      "help": ["  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)", "  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)"]
     }
   ],
   "audience": "both",

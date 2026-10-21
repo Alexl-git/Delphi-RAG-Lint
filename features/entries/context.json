@@ -37,7 +37,9 @@
           "name": "--context",
           "arg": "N"
         }
-      ]
+      ],
+      "helpOrder": 39,
+      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs]"]
     }
   ],
   "audience": "both",

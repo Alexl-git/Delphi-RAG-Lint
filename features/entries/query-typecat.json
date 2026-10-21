@@ -24,7 +24,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 13,
+      "help": ["  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)"]
     }
   ],
   "audience": "both"

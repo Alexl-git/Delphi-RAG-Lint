@@ -31,7 +31,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 64,
+      "help": ["  drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project's own DB)"]
     }
   ],
   "audience": "both",

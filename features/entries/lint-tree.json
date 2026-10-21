@@ -49,7 +49,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 20,
+      "help": ["  drag-lint lint-tree          --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--project <.dproj>]", "                               [--baseline <f.json>] [--write-baseline <f.json>] [--platform win32|win64]", "                               [--with-rules] [--compile] [--format json|text]", "                               ^ does an interface edit to <B.pas> reach any dependent? Exits 0 whether or", "                                 not it found anything; 2 means it could NOT run. --baseline pins the OLD", "                                 side to an edit-episode capture -- without it the OLD side is the live", "                                 index, which is CLI/manual use only."]
     }
   ],
   "audience": "both",

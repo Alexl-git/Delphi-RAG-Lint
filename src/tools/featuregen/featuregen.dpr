@@ -37,7 +37,7 @@ begin
   Writeln('      the per-page "updated" map (not written with --out);');
   Writeln('      --all: both (--out not allowed);');
   Writeln('      --check writes nothing and exits 1 when any file would change.');
-  Writeln('  import-help [--dry-run] [--repo <dir>] [--engine <exe>]');
+  Writeln('  import-help [--blocks] [--dry-run] [--repo <dir>] [--engine <exe>]');
   Writeln('      seeds usage / flags / pitfalls of cli surfaces that lack them from the engine --help;');
   Writeln('      never overwrites a present field and never writes verified.');
   Writeln('  check [--level wellformed|full] [--repo <dir>] [--engine <exe>]');
@@ -232,8 +232,10 @@ var
   lFmt: TSiteFormat;
   lHelp: TLiveHelp;
   lTotals: TImportTotals;
+  lBlocks: Boolean;
 begin
   lDry := False;
+  lBlocks := False;
   lRepo := '';
   lEngine := '';
   lI := 0;
@@ -242,6 +244,8 @@ begin
     lArg := pArgs[lI];
     if lArg = '--dry-run' then
       lDry := True
+    else if lArg = '--blocks' then
+      lBlocks := True
     else if (lArg = '--repo') or (lArg = '--engine') then
     begin
       Inc(lI);
@@ -279,6 +283,11 @@ begin
     lHelp := TLiveHelp.Create;
     try
       lHelp.Load(lEngine);
+      if lBlocks then
+      begin
+        Writeln(Format('%sblocks=%d', [IfThen(lDry, 'dry-run: ', ''), SeedHelpBlocks(lRepo, lHelp, lDry, procedure(pLine: string) begin Writeln(pLine); end)]));
+        Exit(0);
+      end;
       lTotals := ImportHelp(lRepo, lHelp, lDry,
         procedure(pLine: string)
         begin

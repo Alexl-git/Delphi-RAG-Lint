@@ -34,7 +34,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 5,
+      "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view."]
     }
   ],
   "audience": "both"

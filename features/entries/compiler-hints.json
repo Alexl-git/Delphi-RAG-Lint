@@ -30,7 +30,9 @@
           "name": "--rule",
           "arg": "<severity>"
         }
-      ]
+      ],
+      "helpOrder": 33,
+      "help": ["  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]"]
     }
   ],
   "audience": "both",

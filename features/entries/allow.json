@@ -46,7 +46,9 @@
           "name": "--stand-in-for",
           "arg": "<realpath>"
         }
-      ]
+      ],
+      "helpOrder": 16,
+      "help": ["  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)"]
     }
   ],
   "audience": "both",

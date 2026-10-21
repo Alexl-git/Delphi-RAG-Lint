@@ -28,7 +28,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 73,
+      "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
     }
   ],
   "audience": "both"

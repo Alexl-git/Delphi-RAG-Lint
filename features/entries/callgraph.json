@@ -31,7 +31,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 80,
+      "help": ["  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)"]
     }
   ],
   "audience": "both",

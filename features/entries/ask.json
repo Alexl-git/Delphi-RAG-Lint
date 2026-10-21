@@ -90,7 +90,9 @@
         {
           "name": "--resolve-only"
         }
-      ]
+      ],
+      "helpOrder": 8,
+      "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (26 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index."]
     },
     {
       "type": "ide-menu",

@@ -23,7 +23,9 @@
         {
           "name": "--json"
         }
-      ]
+      ],
+      "helpOrder": 96,
+      "help": ["  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)"]
     }
   ],
   "audience": "both",

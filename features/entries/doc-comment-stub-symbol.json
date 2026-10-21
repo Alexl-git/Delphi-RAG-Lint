@@ -28,7 +28,9 @@
           "name": "--db",
           "arg": "PATH"
         }
-      ]
+      ],
+      "helpOrder": 53,
+      "help": ["  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]"]
     }
   ],
   "audience": "both"

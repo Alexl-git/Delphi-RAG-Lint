@@ -23,7 +23,9 @@
         {
           "name": "--config"
         }
-      ]
+      ],
+      "helpOrder": 90,
+      "help": ["  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)"]
     }
   ],
   "audience": "both"

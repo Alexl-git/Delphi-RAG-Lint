@@ -29,7 +29,9 @@
         {
           "name": "--open"
         }
-      ]
+      ],
+      "helpOrder": 27,
+      "help": ["  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]"]
     }
   ],
   "audience": "both",

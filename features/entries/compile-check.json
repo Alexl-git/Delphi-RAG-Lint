@@ -24,7 +24,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 63,
+      "help": ["  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project's unique manifest owner, else reports uncached)"]
     }
   ],
   "audience": "both",

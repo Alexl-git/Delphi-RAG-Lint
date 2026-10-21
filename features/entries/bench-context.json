@@ -21,7 +21,9 @@
           "name": "--n",
           "arg": "N"
         }
-      ]
+      ],
+      "helpOrder": 40,
+      "help": ["  drag-lint bench-context      [--db <file.sqlite>] [--n N]"]
     }
   ],
   "audience": "both",

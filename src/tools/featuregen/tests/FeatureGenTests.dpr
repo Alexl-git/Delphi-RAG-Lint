@@ -2050,6 +2050,31 @@ begin
   Result := pA.Replace(#13#10, #10) = pB.Replace(#13#10, #10);
 end;
 
+{ P7: the verb reference frozen from the hand-written banner (1.33.0) must be the PREFIX of what the registry generates, line for line;
+  new verbs may follow it. Returns '' or the first problem. }
+function FrozenBannerPrefixProblem(const pRepo: string): string;
+var
+  lReg: TRegistry;
+  lGen: TArray<string>;
+  lFrozen: TArray<string>;
+  lI: Integer;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lGen := VerbReferenceLines(lReg);
+  finally
+    lReg.Free;
+  end;
+  lFrozen := TFile.ReadAllText(TPath.Combine(pRepo, 'src\tools\featuregen\tests\fixtures\help-verb-reference-1.33.0.txt'), TEncoding.ASCII)
+    .Replace(#13#10, #10).TrimRight([#10]).Split([#10]);
+  if Length(lGen) < Length(lFrozen) then
+    Exit(Format('generated %d line(s), frozen banner has %d', [Length(lGen), Length(lFrozen)]));
+  for lI := 0 to High(lFrozen) do
+    if lGen[lI] <> lFrozen[lI] then
+      Exit(Format('line %d differs: frozen [%s] generated [%s]', [lI + 1, lFrozen[lI], lGen[lI]]));
+  Result := '';
+end;
 procedure TestHelpText(const pRepo: string);
 var
   lReg: TRegistry;
@@ -2065,7 +2090,8 @@ begin
   lDisk := TFile.ReadAllText(TPath.Combine(pRepo, HELPTEXT_UNIT_PATH), TEncoding.ASCII);
   Check('Help.GeneratedUnitMatchesRegistry', SameLf(lGen, lDisk), 'run featuregen build --all');
   Check('Help.GeneratedUnitDetectsDrift', not SameLf(lGen, lDisk.Replace('drag-lint outline', 'drag-lint outlinX')), 'positive control');
-  Check('Help.GeneratedUnitCarriesOutline', Pos('''  drag-lint outline --file', lGen) > 0, 'usage line of a known verb');
+  Check('Help.GeneratedUnitCarriesOutline', Pos('''  drag-lint outline  ', lGen) > 0, 'usage line of a known verb');
+  Check('Help.FrozenBannerPreserved', FrozenBannerPrefixProblem(pRepo) = '', FrozenBannerPrefixProblem(pRepo));
   Check('Help.GeneratedUnitIsAscii', not TRegEx.IsMatch(lGen, '[^\x00-\x7F]'), 'non-ASCII in the generated unit');
 end;
 { Runs the full check with one extra live item; the live surface is restored after. }

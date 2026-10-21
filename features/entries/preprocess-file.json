@@ -34,7 +34,9 @@
         {
           "name": "--tolerances"
         }
-      ]
+      ],
+      "helpOrder": 89,
+      "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
     }
   ],
   "audience": "both"

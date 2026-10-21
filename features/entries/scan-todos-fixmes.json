@@ -15,7 +15,9 @@
     {
       "type": "cli",
       "verb": "todos",
-      "usage": "drag-lint todos [<path>] (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])"
+      "usage": "drag-lint todos [<path>] (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])",
+      "helpOrder": 30,
+      "help": ["  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])"]
     }
   ],
   "audience": "both"

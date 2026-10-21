@@ -24,7 +24,9 @@
         {
           "name": "--format"
         }
-      ]
+      ],
+      "helpOrder": 6,
+      "help": ["  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
     }
   ],
   "audience": "both"

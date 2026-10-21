@@ -20,7 +20,9 @@
           "name": "--db",
           "arg": "<db>"
         }
-      ]
+      ],
+      "helpOrder": 58,
+      "help": ["  drag-lint helpers-of <T> [--json] --db <db>   - list record/class helper edges targeting type T anywhere in the index"]
     }
   ],
   "audience": "both",
