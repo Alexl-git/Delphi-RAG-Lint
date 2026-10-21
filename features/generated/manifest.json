@@ -3703,7 +3703,17 @@
         }
       ],
       "audience": "both",
-      "related": ["convrules-editor"]
+      "related": ["convrules-editor"],
+      "questions": [
+        {
+          "ask": "W",
+          "command": "h"
+        },
+        {
+          "ask": "W",
+          "command": "a"
+        }
+      ]
     },
     {
       "id": "convert-apply-migrate",
@@ -3777,6 +3787,7 @@
       "status": "shipped",
       "since": "1.2.0-alpha",
       "summary": "Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add",
+      "intro": "Convert the forms and units that use an old component to its replacement, by the rules in a conversion-rules book. Preview first; add --apply to write.",
       "wikiPage": "convert-apply",
       "surfaces": [
         {
@@ -3830,7 +3841,27 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Which units would the conversion change? (preview, writes nothing)",
+          "command": "drag-lint convert-apply --unit <F.pas> --rules <book.rules> --db <file.sqlite>"
+        },
+        {
+          "ask": "Convert this unit now, keeping a backup",
+          "command": "drag-lint convert-apply --unit <F.pas> --rules <book.rules> --db <file.sqlite> --apply"
+        },
+        {
+          "ask": "Convert only some components of the form",
+          "command": "drag-lint convert-apply --unit <F.pas> --rules <book.rules> --db <file.sqlite> --only Name1,Name2 --apply"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CONVERTER",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "a889e04c9f32186b93f6d04de0bacf87466fe4ccea36e7e619e7e0e5c55f9584"
+      }
     },
     {
       "id": "convert-reemit",
@@ -3858,6 +3889,7 @@
       "status": "shipped",
       "since": "1.1.0-alpha",
       "summary": "Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type",
+      "intro": "Generate a starting conversion-rules book for a pair of component classes, from their real property trees, instead of typing every rule.",
       "wikiPage": "convert-scaffold",
       "surfaces": [
         {
@@ -3902,7 +3934,23 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Create a starter rules book from TOldGrid to TNewGrid",
+          "command": "drag-lint convert-scaffold --from <FromType> --to <ToType> --output <book.rules> --db <file.sqlite>"
+        },
+        {
+          "ask": "Go deeper into nested properties when scaffolding",
+          "command": "drag-lint convert-scaffold --from <FromType> --to <ToType> --depth 6 --output <book.rules> --db <file.sqlite>"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CONVERTER",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "1c57e4601e73c9deae43772d89177447fa6ffaba198d6f4af3cc41e3ba5ee0c7"
+      }
     },
     {
       "id": "convert-validate",
@@ -3912,6 +3960,7 @@
       "status": "shipped",
       "since": "1.1.0-alpha",
       "summary": "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees",
+      "intro": "Check a conversion-rules book before you convert: syntax, and that every #link and #default path exists on the real classes.",
       "wikiPage": "convert-validate",
       "surfaces": [
         {
@@ -3943,7 +3992,27 @@
           "help": ["  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book's #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header ('#convert TFoo -> ' or '#convert TFoo': '#convert TFoo has no To type'; '#useswap X -> ': '#useswap X has no replacement unit'); and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; 'line N: warning:' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: 'line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility' -- only a segment naming no member is \"not found\" (exit 1); without BOTH --from and --to the book is only PARSED -- no path is checked -- and a 'NOTE:' line on stderr says so; a #warn path or {Prop} placeholder, or a #check-ref ToPath, naming no member is a line N error, and so is a malformed #warn / #check-ref (1.26.5); no JSON mode)"]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Is my conversion-rules book valid?",
+          "command": "drag-lint convert-validate --rules <book.rules> --db <file.sqlite>"
+        },
+        {
+          "ask": "Check the book against one class pair only",
+          "command": "drag-lint convert-validate --rules <book.rules> --from <FromType> --to <ToType> --db <file.sqlite>"
+        },
+        {
+          "ask": "Show how the book was parsed",
+          "command": "drag-lint convert-validate --rules <book.rules> --print-parsed"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CONVERTER",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "bed45b800507d758bab7903f52df6df17da92cf2c99b3079d52800d269a9050b"
+      }
     },
     {
       "id": "convrules-editor",
@@ -3953,7 +4022,8 @@
       "status": "shipped",
       "since": "0.0.0",
       "summary": "Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)",
-      "wikiPage": "Features",
+      "intro": "Edit conversion-rules books visually, run a conversion and see what is left to do by hand.",
+      "wikiPage": "convrules-editor",
       "surfaces": [
         {
           "type": "exe",
@@ -3966,7 +4036,17 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+      "questions": [
+        {
+          "ask": "How do I edit a conversion-rules book without a text editor?",
+          "command": "ConvRulesEditor.exe <book.rules>"
+        },
+        {
+          "ask": "How do I see what a conversion would change before running it?",
+          "command": "Open the Convert tab in ConvRulesEditor.exe (see the manual, section Composing the rules for one job)"
+        }
+      ],
+      "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
     },
     {
       "id": "glyph-vacuum",
@@ -3976,7 +4056,8 @@
       "status": "shipped",
       "since": "1.15.0-alpha",
       "summary": "Measure every streamed glyph or picture under a tree before writing a glyph rule",
-      "wikiPage": "Features",
+      "intro": "Before you write a glyph rule, measure every image embedded in your forms: size, format and how many images each list holds.",
+      "wikiPage": "glyph-vacuum",
       "surfaces": [
         {
           "type": "cli",
@@ -4004,7 +4085,23 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page"
+      "questions": [
+        {
+          "ask": "What glyphs and pictures do my forms stream, and how big are they?",
+          "command": "drag-lint glyph-vacuum --root <dir> --output <outdir>"
+        },
+        {
+          "ask": "Add a second tree to an existing measurement",
+          "command": "drag-lint glyph-vacuum --root <dir2> --output <outdir> --append"
+        }
+      ],
+      "notes": "own page written 2026-10-21",
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CONVERTER",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "1f2b54af23642285c57752b058e26e10874cfc770b97c4a1d4d2b9e9e92ffdbc"
+      }
     },
     {
       "id": "proptree",
@@ -4014,6 +4111,7 @@
       "status": "shipped",
       "since": "1.1.0-alpha",
       "summary": "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties",
+      "intro": "List every property of a class, including inherited and nested ones, as dotted paths; the raw material for writing conversion rules.",
       "wikiPage": "proptree",
       "surfaces": [
         {
@@ -4065,7 +4163,27 @@
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Which properties does this class have, nested ones included?",
+          "command": "drag-lint proptree --qname <Unit.TType> --db <file.sqlite>"
+        },
+        {
+          "ask": "Give me the property tree as JSON",
+          "command": "drag-lint proptree --qname <Unit.TType> --json --db <file.sqlite>"
+        },
+        {
+          "ask": "Only published properties, three levels deep",
+          "command": "drag-lint proptree --qname <Unit.TType> --depth 3 --min-visibility published --db <file.sqlite>"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-21",
+        "by": "CONVERTER",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "5d6feeb2fe1ed7af5cd7d9b975cc5799d05e13eb02977ac9f1fcc8f09e73f645"
+      }
     },
     {
       "id": "convrules-qualify-fix",
@@ -4091,6 +4209,16 @@
       ],
       "audience": "both",
       "related": ["convert-apply", "convrules-editor"],
+      "questions": [
+        {
+          "ask": "The engine says a #convert class is ambiguous. How do I fix the line?",
+          "command": "ConvRulesEditor.exe > Convert tab > Qualify #convert..."
+        },
+        {
+          "ask": "Qualify every ambiguous class in one go",
+          "command": "ConvRulesEditor.exe > Convert tab > Qualify all..."
+        }
+      ],
       "verified": {
         "date": "2026-10-20",
         "by": "CONVERTER",
@@ -4116,7 +4244,17 @@
         }
       ],
       "audience": "both",
-      "related": ["convrules-editor"]
+      "related": ["convrules-editor"],
+      "questions": [
+        {
+          "ask": "H",
+          "command": "o"
+        },
+        {
+          "ask": "C",
+          "command": "o"
+        }
+      ]
     },
     {
       "id": "convrules-work-list",
@@ -4136,7 +4274,17 @@
         }
       ],
       "audience": "both",
-      "related": ["convrules-editor"]
+      "related": ["convrules-editor"],
+      "questions": [
+        {
+          "ask": "W",
+          "command": "h"
+        },
+        {
+          "ask": "C",
+          "command": "o"
+        }
+      ]
     },
     {
       "id": "butterfly",
@@ -6658,6 +6806,16 @@
       ],
       "audience": "human",
       "aliases": ["build-feature-pages", "feature registry tool", "registry generator"],
+      "questions": [
+        {
+          "ask": "How do I regenerate every doc page from the registry?",
+          "command": "featuregen build --all"
+        },
+        {
+          "ask": "Does the registry match the code?",
+          "command": "featuregen check --level full"
+        }
+      ],
       "verified": {
         "date": "2026-10-21",
         "by": "CONVERTER",

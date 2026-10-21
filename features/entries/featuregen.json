@@ -30,6 +30,16 @@
   ],
   "audience": "human",
   "aliases": ["build-feature-pages", "feature registry tool", "registry generator"],
+  "questions": [
+    {
+      "ask": "How do I regenerate every doc page from the registry?",
+      "command": "featuregen build --all"
+    },
+    {
+      "ask": "Does the registry match the code?",
+      "command": "featuregen check --level full"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-19",
     "by": "CONVERTER",

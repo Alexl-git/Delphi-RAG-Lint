@@ -22,6 +22,16 @@
   ],
   "audience": "both",
   "related": ["convert-apply", "convrules-editor"],
+  "questions": [
+    {
+      "ask": "The engine says a #convert class is ambiguous. How do I fix the line?",
+      "command": "ConvRulesEditor.exe > Convert tab > Qualify #convert..."
+    },
+    {
+      "ask": "Qualify every ambiguous class in one go",
+      "command": "ConvRulesEditor.exe > Convert tab > Qualify all..."
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-19",
     "by": "alexanderl",

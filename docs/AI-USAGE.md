@@ -812,7 +812,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `generate-test` | [Unit Test Stub (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Unit-Test-Stub-symbol) | Uses generate-test to produce a unit-test skeleton for one qualified symbol |  |
 | `ghost-check` | [ghost-check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) | Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged |  |
 | `ghost-recover` | [ghost-recover](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-recover) | Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash |  |
-| `glyph-vacuum` | [glyph-vacuum](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Measure every streamed glyph or picture under a tree before writing a glyph rule |  |
+| `glyph-vacuum` | [glyph-vacuum](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/glyph-vacuum) | Measure every streamed glyph or picture under a tree before writing a glyph rule |  |
 | `graph` | [Export Graph (DOT)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Export-Graph-DOT) | Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring | index |
 | `helpers-of` | [helpers-of](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) | Lists record/class helper edges targeting a given type, anywhere in the index | index |
 | `hover` | [Hover at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Hover-at-Cursor) | Shows a hover card for the symbol under the editor caret: signature, documentation, and callers |  |

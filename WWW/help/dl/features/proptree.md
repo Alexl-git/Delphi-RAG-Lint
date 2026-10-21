@@ -7,12 +7,14 @@ group: component-conversion
 order: 60011
 since: 1.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # proptree
 
 Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties.
+
+List every property of a class, including inherited and nested ones, as dotted paths; the raw material for writing conversion rules.
 
 ## How to run it
 

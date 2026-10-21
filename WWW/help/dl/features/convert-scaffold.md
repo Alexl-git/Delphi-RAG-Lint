@@ -7,12 +7,14 @@ group: component-conversion
 order: 60003
 since: 1.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # convert-scaffold
 
 Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type.
+
+Generate a starting conversion-rules book for a pair of component classes, from their real property trees, instead of typing every rule.
 
 ## How to run it
 

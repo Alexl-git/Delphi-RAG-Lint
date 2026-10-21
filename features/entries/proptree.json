@@ -6,6 +6,7 @@
   "status": "shipped",
   "since": "1.1.0-alpha",
   "summary": "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties",
+  "intro": "List every property of a class, including inherited and nested ones, as dotted paths; the raw material for writing conversion rules.",
   "wikiPage": "proptree",
   "surfaces": [
     {
@@ -57,5 +58,25 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which properties does this class have, nested ones included?",
+      "command": "drag-lint proptree --qname <Unit.TType> --db <file.sqlite>"
+    },
+    {
+      "ask": "Give me the property tree as JSON",
+      "command": "drag-lint proptree --qname <Unit.TType> --json --db <file.sqlite>"
+    },
+    {
+      "ask": "Only published properties, three levels deep",
+      "command": "drag-lint proptree --qname <Unit.TType> --depth 3 --min-visibility published --db <file.sqlite>"
+    }
+  ],
+  "verified": {
+    "date": "2026-10-21",
+    "by": "CONVERTER",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "5d6feeb2fe1ed7af5cd7d9b975cc5799d05e13eb02977ac9f1fcc8f09e73f645"
+  }
 }

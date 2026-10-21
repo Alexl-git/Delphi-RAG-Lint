@@ -751,7 +751,7 @@ drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db
 | `--append` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [glyph-vacuum](../../docs/wiki/Features.md).
+Described in [glyph-vacuum](../../docs/wiki/glyph-vacuum.md).
 
 ### graph
 

@@ -17,6 +17,16 @@
   ],
   "audience": "both",
   "related": ["convrules-editor"],
+  "questions": [
+    {
+      "ask": "W",
+      "command": "h"
+    },
+    {
+      "ask": "C",
+      "command": "o"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-11",
     "by": "alexanderl",

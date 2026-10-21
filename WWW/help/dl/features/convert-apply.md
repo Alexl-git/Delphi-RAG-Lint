@@ -7,12 +7,14 @@ group: component-conversion
 order: 60001
 since: 1.2.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # convert-apply
 
 Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add.
+
+Convert the forms and units that use an old component to its replacement, by the rules in a conversion-rules book. Preview first; add --apply to write.
 
 ## How to run it
 

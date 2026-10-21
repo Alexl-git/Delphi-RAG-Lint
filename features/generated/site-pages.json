@@ -104,24 +104,24 @@
     "version": "1.32.0-alpha"
   },
   "features/convert-apply.md": {
-    "hash": "5eeed38f1e843ac6f02de1d165c8f96bb56a895d5347a151e17630cb3301749e",
-    "version": "1.32.0-alpha"
+    "hash": "84c84fa96a074f17b709d7a115b3e927abe8dfde5626152cb67c9953535f64e9",
+    "version": "1.33.0-alpha"
   },
   "features/convert-scaffold.md": {
-    "hash": "a01d74cf7abca454f793dbafe57da4dbc544cf4c94a77a9a19492c81134ada69",
-    "version": "1.32.0-alpha"
+    "hash": "ae58ab106872ed1e2255893173293cac50b94d7a50f293dc2f50e12ed12ccfd4",
+    "version": "1.33.0-alpha"
   },
   "features/convert-validate.md": {
-    "hash": "81d355c88cd8890310ed626c3dcc3b5ffa4205b9923844bc4236b31ccde7e788",
-    "version": "1.32.0-alpha"
+    "hash": "b6e99697e306c3a0adcf9be5a6b218a4713022c7e033b036271c9b408d6a9a17",
+    "version": "1.33.0-alpha"
   },
   "features/convrules-convert-progress.md": {
     "hash": "bded8eb6cb82429c70e9e1b24fecdd62f5344b465b1cb1e0c78ef398db303c2a",
     "version": "1.32.0-alpha"
   },
   "features/convrules-editor.md": {
-    "hash": "a5a48762461ccc561184fd2e2ee45be2338140a7d69d6ea33216c4d7d709f51c",
-    "version": "1.32.0-alpha"
+    "hash": "314f6e107a0dde02111645b5c0426cfaa2ea43a8798978e3faf4c53e33c2a069",
+    "version": "1.33.0-alpha"
   },
   "features/convrules-qualify-fix.md": {
     "hash": "eea9174198f6573f7273e57c407ceecfa23c570a024bc410fa48f463b9ef549e",
@@ -324,8 +324,8 @@
     "version": "1.32.0-alpha"
   },
   "features/glyph-vacuum.md": {
-    "hash": "5ef4f7b2aa98b74e1321625f50de72914aca8b8fa7831f6b9f1c7651e326b236",
-    "version": "1.32.0-alpha"
+    "hash": "bd8bab1ee4b0dcba927d7cc99fab75125b2699aefd2752eebd99bec56df15b31",
+    "version": "1.33.0-alpha"
   },
   "features/go-to-declaration.md": {
     "hash": "570937cbceae4f7c3edb7319fe1f1b07397c7301917cd7fd13da341e434d62d6",
@@ -440,8 +440,8 @@
     "version": "1.32.0-alpha"
   },
   "features/proptree.md": {
-    "hash": "7a4c0c73c9503c20572ab902a50ba45b7f58da0d64d885354c6b5eb869b3a5fe",
-    "version": "1.32.0-alpha"
+    "hash": "c98fcc0e2a5f270e48e6941f9a8da81569697aafe54be8aefd1966223a08a691",
+    "version": "1.33.0-alpha"
   },
   "features/protocol-handler.md": {
     "hash": "f8758222a4248a813021c53ed4491684aac2df91870b3fe4ad385a5a2963e19e",

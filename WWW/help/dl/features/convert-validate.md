@@ -7,12 +7,14 @@ group: component-conversion
 order: 60004
 since: 1.1.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # convert-validate
 
 Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees.
+
+Check a conversion-rules book before you convert: syntax, and that every #link and #default path exists on the real classes.
 
 ## How to run it
 

@@ -6,7 +6,8 @@
   "status": "shipped",
   "since": "0.0.0",
   "summary": "Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)",
-  "wikiPage": "Features",
+  "intro": "Edit conversion-rules books visually, run a conversion and see what is left to do by hand.",
+  "wikiPage": "convrules-editor",
   "surfaces": [
     {
       "type": "exe",
@@ -19,5 +20,15 @@
     }
   ],
   "audience": "both",
-  "notes": "seed: needs own page (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+  "questions": [
+    {
+      "ask": "How do I edit a conversion-rules book without a text editor?",
+      "command": "ConvRulesEditor.exe <book.rules>"
+    },
+    {
+      "ask": "How do I see what a conversion would change before running it?",
+      "command": "Open the Convert tab in ConvRulesEditor.exe (see the manual, section Composing the rules for one job)"
+    }
+  ],
+  "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
 }
