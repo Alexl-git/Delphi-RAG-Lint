@@ -20,6 +20,7 @@ uses
   , FeatureGen.Markdown in 'FeatureGen.Markdown.pas'
   , FeatureGen.Site in 'FeatureGen.Site.pas'
   , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
+  , FeatureGen.HelpText in 'FeatureGen.HelpText.pas'
   , FeatureGen.Wiki in 'FeatureGen.Wiki.pas'
   , FeatureGen.Check in 'FeatureGen.Check.pas'
   , FeatureGen.Audit in 'FeatureGen.Audit.pas'

@@ -80,6 +80,7 @@ uses
   , FeatureGen.Live
   , FeatureGen.SiteFormat
   , FeatureGen.Site
+  , FeatureGen.HelpText
   ;
 
 const
@@ -1339,6 +1340,7 @@ begin
     lFmt.Help := lHelp;
     lReg.Load(pRepo);
     pWriter.Put('features\generated\cli-reference.md', CliReferenceMd(lFmt, lReg, pRepo), 'features\generated\cli-reference.md');
+    pWriter.Put(HELPTEXT_UNIT_PATH, RenderHelpTextUnit(lReg), HELPTEXT_UNIT_PATH);
   finally
     lReg.Free;
     lHelp.Free;

@@ -19,6 +19,7 @@ uses
   , FeatureGen.Markdown in '..\FeatureGen.Markdown.pas'
   , FeatureGen.Site in '..\FeatureGen.Site.pas'
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
+  , FeatureGen.HelpText in '..\FeatureGen.HelpText.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
   , FeatureGen.Check in '..\FeatureGen.Check.pas'  // dl:ok uses-global-census@b1db -- REVIEWED 2026-10-19: the test program names the checker constants it asserts on
   , FeatureGen.Audit in '..\FeatureGen.Audit.pas'
@@ -1818,7 +1819,7 @@ const
 function IsNewDOutput(const pItem: string): Boolean;
 begin
   Result := pItem.StartsWith('D: ') and (pItem.StartsWith('D: features\generated\cli-reference.md ')
-    or pItem.StartsWith('D: features\generated\site-pages.json ') or pItem.StartsWith('D: WWW\help\dl\'));
+    or pItem.StartsWith('D: features\generated\site-pages.json ') or pItem.StartsWith('D: src\cli\DRagLint.CLI.HelpText.pas ') or pItem.StartsWith('D: WWW\help\dl\'));
 end;
 
 { Splits off the Delphi-only classes; returns the rest. }
@@ -2042,6 +2043,30 @@ begin
   Check('Check.DFailsOnStrayFileInSiteRoot', HasFinding(lF, 'D', 'WWW\help\dl\zz-stale.md differs'), lAll);
   Check('Check.HintsNameFeaturegen', HasFinding(lF, 'D', 'run featuregen build --all') and HasFinding(lF, 'A', 'run featuregen normalise')
     and (Pos('build-feature-pages', lAll) = 0) and (Pos('feature-registry.ps1', lAll) = 0), lAll);
+end;
+{ P7: the generated verb reference must be what the registry says; a stale unit on disk fails. }
+function SameLf(const pA, pB: string): Boolean;
+begin
+  Result := pA.Replace(#13#10, #10) = pB.Replace(#13#10, #10);
+end;
+
+procedure TestHelpText(const pRepo: string);
+var
+  lReg: TRegistry;
+  lGen, lDisk: string;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lGen := RenderHelpTextUnit(lReg);
+  finally
+    lReg.Free;
+  end;
+  lDisk := TFile.ReadAllText(TPath.Combine(pRepo, HELPTEXT_UNIT_PATH), TEncoding.ASCII);
+  Check('Help.GeneratedUnitMatchesRegistry', SameLf(lGen, lDisk), 'run featuregen build --all');
+  Check('Help.GeneratedUnitDetectsDrift', not SameLf(lGen, lDisk.Replace('drag-lint outline', 'drag-lint outlinX')), 'positive control');
+  Check('Help.GeneratedUnitCarriesOutline', Pos('''  drag-lint outline --file', lGen) > 0, 'usage line of a known verb');
+  Check('Help.GeneratedUnitIsAscii', not TRegEx.IsMatch(lGen, '[^\x00-\x7F]'), 'non-ASCII in the generated unit');
 end;
 { Runs the full check with one extra live item; the live surface is restored after. }
 procedure TestPositiveControls(const pRepo: string);
@@ -2861,6 +2886,7 @@ begin
       TestSeededImporterAndFileChecks(lRepo);
       TestSinceOverride(lRepo);
       TestPositiveControls(lRepo);
+      TestHelpText(lRepo);
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
       TestCommands(lRepo);
