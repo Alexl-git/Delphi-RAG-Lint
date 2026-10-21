@@ -86,6 +86,8 @@ type
     WikiPage: string;
     Audience: string;
     Notes: string;
+    /// <summary>Review record for an entry with no IDE surface: cli-only, repo-tooling or standalone-app; empty = not reviewed.</summary>
+    Access: string;
     SupersededBy: string;
     RemovedIn: string;
     Family: string;
@@ -242,6 +244,7 @@ begin
   Result.WikiPage := Prop(pObj, 'wikiPage');
   Result.Audience := Prop(pObj, 'audience');
   Result.Notes := Prop(pObj, 'notes');
+  Result.Access := Prop(pObj, 'access');
   Result.SupersededBy := Prop(pObj, 'supersededBy');
   Result.RemovedIn := Prop(pObj, 'removedIn');
   Result.Family := Prop(pObj, 'family');

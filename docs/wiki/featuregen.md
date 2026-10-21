@@ -30,7 +30,8 @@ read the live surface take `--engine <drag-lint.exe>` (default
 | `deprecate` | mark an entry deprecated, optionally superseded |
 | `normalise` | rewrite entries into canonical JSON |
 | `import-help` | seed usage / flags / pitfalls of cli entries from the engine `--help`; never overwrites a field, never verifies; `--blocks` freezes each verb's help lines into its entry (`help`, `helpOrder`; see below), `--dry-run` previews |
-| `audit` | one line per gap: thin entries, stale verification, changed surface |
+| `audit` | one line per gap: thin entries, stale verification, changed surface; `no-access` = a shipped or experimental entry with no IDE surface (ide-menu, ide-context, ide-about, tool-window) and no `access` review |
+| `review-access` | record that an entry with no IDE surface was reviewed: `--id a,b --access cli-only\|repo-tooling\|standalone-app --by <TEAM>` sets `access` and `accessReviewed {date, by}`; every id is checked before the first write |
 | `verify` | stamp an entry as verified: `--id <id> --by <TEAM>` records date, who, build and a hash of its live surface |
 
 Outputs are 7-bit ASCII with CRLF line ends, written only when the bytes differ, with no
@@ -73,6 +74,11 @@ claimed gives the second entry NO block) and writes `help` / `helpOrder`. It for
 is repeatable. Only public entries (not `internal` / `planned` / removed) take blocks. Guard:
 `FeatureGenTests` pins the claim order, and the frozen fixture
 `src\tools\featuregen\tests\fixtures\help-verb-reference-1.33.0.txt` is compared with the deployed exe's output.
+
+## Entries with no IDE surface (ccess)
+
+A shipped or experimental entry that no IDE menu, context menu, About button or tool window reaches must say WHY, so a missing menu is a decision and not an oversight. eaturegen review-access sets two optional entry fields: ccess (cli-only = a verb only, epo-tooling = a script or gate run from a clone, standalone-app = a separate program with its own UI) and ccessReviewed {date, by}. udit reports 
+o-access until one is set. An entry that gets an IDE surface later drops the field.
 
 ## This entry
 

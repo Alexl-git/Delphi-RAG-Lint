@@ -18,7 +18,7 @@ type
   TAuditFinding = record
     Id: string;
     Owner: string;
-    /// <summary>thin-leaf, no-usage, no-flags, no-steps, no-questions, stale-verified, surface-changed or no-wiki-page.</summary>
+    /// <summary>thin-leaf, no-usage, no-flags, no-steps, no-questions, no-access, stale-verified, surface-changed or no-wiki-page.</summary>
     Kind: string;
   end;
 
@@ -52,7 +52,7 @@ function SurfaceHash(const pEntry: TFeatureEntry; const pLive: TLiveSurface; con
 /// <param name="pLive">Live surface for surface-changed; nil: that kind is not reported.</param>
 /// <param name="pHelp">Engine help for surface-changed (see SurfaceHash).</param>
 /// <param name="pToday">The date stale-verified counts from.</param>
-/// <returns>Findings ordered by entry id (ordinal), then in the order thin-leaf, no-usage, no-flags, no-steps, no-questions,
+/// <returns>Findings ordered by entry id (ordinal), then in the order thin-leaf, no-usage, no-flags, no-steps, no-questions, no-access,
 /// stale-verified, surface-changed, no-wiki-page. no-usage / no-flags concern cli surfaces; no-steps concerns ide-menu,
 /// ide-context, ide-about and tool-window surfaces. surface-changed needs a stored verified.surfaceHash.</returns>
 function AuditRegistry(const pReg: TRegistry; const pRepo: string; const pLive: TLiveSurface; const pHelp: TLiveHelp;
@@ -219,7 +219,7 @@ var
   lList: TList<TAuditFinding>;
   lE: TFeatureEntry;
   lS: TSurface;
-  lNoUsage, lNoFlags, lNoSteps: Boolean;
+  lNoUsage, lNoFlags, lNoSteps, lHasIde: Boolean;
   lAge: Integer;
   lFmt: TSiteFormat;
   lHasFmt: Boolean;
@@ -248,6 +248,7 @@ begin
       lNoUsage := False;
       lNoFlags := False;
       lNoSteps := False;
+      lHasIde := False;
       for lS in lE.Surfaces do
       begin
         if lS.Kind = 'cli' then
@@ -256,7 +257,10 @@ begin
           lNoFlags := lNoFlags or (Length(lS.Flags) = 0);
         end
         else if (lS.Kind = 'ide-menu') or (lS.Kind = 'ide-context') or (lS.Kind = 'ide-about') or (lS.Kind = 'tool-window') then
+        begin
+          lHasIde := True;
           lNoSteps := lNoSteps or (Length(lS.Steps) = 0);
+        end;
       end;
       if (lE.Intro = '') and (WikiBodyLength(lE, pRepo, lHasFmt, lFmt) < AUDIT_THIN_CHARS) then
         Add('thin-leaf');
@@ -268,6 +272,8 @@ begin
         Add('no-steps');
       if Length(lE.Questions) = 0 then
         Add('no-questions');
+      if (not lHasIde) and (lE.Access = '') and ((lE.Status = 'shipped') or (lE.Status = 'experimental')) then
+        Add('no-access');
       if VerifiedAgeDays(lE.VerifiedDate, pToday, lAge) and (lAge > AUDIT_STALE_DAYS) then
         Add('stale-verified');
       if (pLive <> nil) and (lE.VerifiedSurfaceHash <> '') and (lE.VerifiedSurfaceHash <> SurfaceHash(lE, pLive, pHelp)) then

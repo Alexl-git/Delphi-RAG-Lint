@@ -343,6 +343,8 @@ begin
           AppendArray(pSb, ArrayItems(TJSONArray(lV)), pLevel + 1, cxExample)
         else if (lName = 'lastVerified') and (lV is TJSONObject) then
           AppendObject(pSb, TJSONObject(lV), pLevel + 1, cxLastVerified, nil)
+        else if (lName = 'accessReviewed') and (lV is TJSONObject) then
+          AppendObject(pSb, TJSONObject(lV), pLevel + 1, cxLastVerified, nil)
         else if (lName = 'verified') and (lV is TJSONObject) then
           AppendObject(pSb, TJSONObject(lV), pLevel + 1, cxVerified, nil)
         else if (lName = 'questions') and (lV is TJSONArray) then

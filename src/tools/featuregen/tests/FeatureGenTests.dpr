@@ -2355,8 +2355,7 @@ begin
   Check('Cmd.AddRefusesExisting', (lExit = 1) and (Pos('already exists', lOut) > 0), lOut);
 end;
 
-procedure TestCmdAddRefusals(const pRepo: string);
-var
+procedure TestCmdAddRefusals(const pRepo: string);var
   lCopy, lOut: string;
   lExit: Integer;
   lArgs: TArray<string>;
@@ -2619,6 +2618,34 @@ begin
     and (Pos(#9'CHARTS'#9, lOut) = 0), lOut);
   lExit := RunCmd('audit', ['--repo', lCopy, '--json'], lOut);
   Check('Audit.CommandJson', (lExit = 0) and (Pos('{"id":"thin","owner":"ENGINE","kind":"thin-leaf"}', lOut) > 0), lOut);
+  Check('Audit.NoAccessForCliOnlyEntry', HasKind(lF, 'gen-bare', 'no-access'));
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\has-menu.json'),
+    '{ "id": "has-menu", "title": "Has menu", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "Reachable from the IDE", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "ide-menu", "path": "drag-lint > Has menu" } ], "audience": "both" }', TEncoding.ASCII);
+  lF := AuditOf(lCopy, nil, nil, Date);
+  Check('Audit.NoAccessPositiveControl', not HasKind(lF, 'has-menu', 'no-access'));
+end;
+
+procedure TestCmdReviewAccess(const pRepo: string);
+var
+  lCopy, lOut, lRaw: string;
+  lExit: Integer;
+  lF: TArray<TAuditFinding>;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-review-access');
+  RunCmd('add', AddProbeArgs(lCopy) + ['--status', 'shipped'], lOut);
+  lF := AuditOf(lCopy, nil, nil, Date);
+  Check('ReviewAccess.GapBeforeReview', HasKind(lF, 'zz-probe', 'no-access'), lOut);
+  lExit := RunCmd('review-access', ['--repo', lCopy, '--id', 'zz-probe', '--access', 'cli-only', '--by', 'tester'], lOut);
+  lF := AuditOf(lCopy, nil, nil, Date);
+  lRaw := ReadBytesText(TPath.Combine(lCopy, 'features\entries\zz-probe.json'));
+  Check('ReviewAccess.StampsAndClearsGap', (lExit = 0) and not HasKind(lF, 'zz-probe', 'no-access')
+    and (Pos('"access": "cli-only"', lRaw) > 0) and (Pos('"accessReviewed": {', lRaw) > 0) and (Pos('"by": "tester"', lRaw) > 0), lOut + lRaw);
+  lExit := RunCmd('review-access', ['--repo', lCopy, '--id', 'zz-probe', '--access', 'bogus', '--by', 'tester'], lOut);
+  Check('ReviewAccess.RefusesUnknownValue', lExit <> 0, lOut);
+  lExit := RunCmd('review-access', ['--repo', lCopy, '--id', 'zz-probe,zz-nope', '--access', 'repo-tooling', '--by', 'tester'], lOut);
+  lRaw := ReadBytesText(TPath.Combine(lCopy, 'features\entries\zz-probe.json'));
+  Check('ReviewAccess.UnknownIdChangesNothing', (lExit <> 0) and (Pos('"access": "cli-only"', lRaw) > 0), lOut);
 end;
 
 procedure TestAuditVerify(const pRepo: string);
@@ -2889,6 +2916,7 @@ begin
   TestCmdHomeOrderAndNull(pRepo);
   TestCmdMoveMenuSibling(pRepo);
   TestCmdAdd(pRepo);
+  TestCmdReviewAccess(pRepo);
   TestCmdAddRefusals(pRepo);
   TestCmdUpdate(pRepo);
   TestCmdUpdateNormalisesHandEdits(pRepo);

@@ -74,7 +74,7 @@ uses
   ;
 
 const
-  VERBS: array[0..8] of string = ('add', 'update', 'find', 'blast-radius', 'move-menu', 'deprecate', 'normalise', 'verify', 'audit');
+  VERBS: array[0..9] of string = ('add', 'update', 'find', 'blast-radius', 'move-menu', 'deprecate', 'normalise', 'verify', 'audit', 'review-access');
   SURFACE_TYPES: array[0..10] of string = ('cli', 'ide-menu', 'ide-context', 'ide-about', 'tool-window', 'shortcut', 'lsp',
     'mcp', 'script', 'exe', 'workflow');
   ASCII_MAX = 127;
@@ -222,7 +222,9 @@ begin
   pOut('  normalise [--repo <dir>] [--json]   (entries canonical; groups/teams one row per line; other files bytes only)');
   pOut('  verify --id <id> --by <who> [--engine <exe>] [--repo <dir>] [--json]   (stamps verified: date, by, build, surfaceHash of the live surface)');
   pOut('  audit [--owner <team>] [--engine <exe>] [--repo <dir>] [--json]   (one "id<TAB>owner<TAB>kind" line per gap: thin-leaf, no-usage,');
-  pOut('      no-flags, no-steps, no-questions, stale-verified, surface-changed, no-wiki-page; exit 0 always)');
+  pOut('      no-flags, no-steps, no-questions, no-access, stale-verified, surface-changed, no-wiki-page; exit 0 always)');
+  pOut('  review-access --id <id>[,<id>...] --access cli-only|repo-tooling|standalone-app --by <who> [--repo <dir>] [--json]');
+  pOut('      (records that an entry with no IDE surface was reviewed: sets access and accessReviewed {date, by}; clears the no-access audit gap)');
 end;
 
 { ---- small helpers ---- }
@@ -1053,6 +1055,65 @@ begin
   end;
 end;
 
+procedure DoReviewAccess(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut);
+const
+  ACCESS_VALUES: array[0..2] of string = ('cli-only', 'repo-tooling', 'standalone-app');
+var
+  lIds: TArray<string>;
+  lId, lAccess, lBy, lFile: string;
+  lReg: TRegistry;
+  lE: TFeatureEntry;
+  lFound, lKnown: Boolean;
+  lSet: TArray<TSetItem>;
+  lRev: TJSONObject;
+  lV: string;
+begin
+  lAccess := pArgs.Get('access');
+  lBy := Trim(pArgs.Get('by'));
+  lKnown := False;
+  for lV in ACCESS_VALUES do
+    lKnown := lKnown or (lV = lAccess);
+  if not lKnown then
+    raise ECommand.Create('review-access: --access must be cli-only, repo-tooling or standalone-app');
+  if lBy = '' then
+    raise ECommand.Create('review-access: --by is required');
+  lIds := pArgs.Get('id').Split([',']);
+  if (Length(lIds) = 0) or (Trim(lIds[0]) = '') then
+    raise ECommand.Create('review-access: --id is required');
+  // every id is checked before the first write, so a typo changes nothing
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    for lId in lIds do
+    begin
+      lFound := False;
+      for lE in lReg.Entries do
+        lFound := lFound or (lE.Id = Trim(lId));
+      if not lFound then
+        raise ECommand.CreateFmt('review-access: no entry ''%s''', [Trim(lId)]);
+    end;
+  finally
+    lReg.Free;
+  end;
+  for lId in lIds do
+  begin
+    lRev := TJSONObject.Create;
+    lRev.AddPair('date', FormatDateTime('yyyy-mm-dd', Date));
+    lRev.AddPair('by', lBy);
+    SetLength(lSet, 2);
+    lSet[0].Key := 'access';
+    lSet[0].Value := TJSONString.Create(lAccess);
+    lSet[1].Key := 'accessReviewed';
+    lSet[1].Value := lRev;
+    try
+      lFile := UpdateEntry(pRepo, Trim(lId), lSet);
+    finally
+      FreeSet(lSet);
+    end;
+    EmitText(pJson, 'access ' + lAccess + ' recorded in ' + lFile, pOut);
+  end;
+end;
+
 procedure DoAudit(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut);
 var
   lReg: TRegistry;
@@ -1690,6 +1751,8 @@ begin
     Result := ['id', 'by', 'engine', 'repo']
   else if pVerb = 'audit' then
     Result := ['owner', 'engine', 'repo']
+  else if pVerb = 'review-access' then
+    Result := ['id', 'access', 'by', 'repo']
   else
     Result := ['repo'];
 end;
@@ -1745,6 +1808,8 @@ begin
         DoVerify(lArgs, lRepo, lJson, pOut)
       else if pVerb = 'audit' then
         DoAudit(lArgs, lRepo, lJson, pOut)
+      else if pVerb = 'review-access' then
+        DoReviewAccess(lArgs, lRepo, lJson, pOut)
       else if pVerb = 'find' then
         Exit(DoFind(lArgs, lRepo, lJson, pOut))
       else if pVerb = 'blast-radius' then
