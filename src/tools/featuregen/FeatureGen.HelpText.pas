@@ -156,6 +156,28 @@ begin
   end;
 end;
 
+const
+  /// <summary>Longest raw chunk of one Writeln literal; dcc refuses a source line over 1023 characters (F2069).</summary>
+  MAX_LITERAL_CHUNK = 800;
+
+{ One Writeln statement for pLine; a long line becomes a concatenation of quoted chunks, one per source line. }
+function WriteLnStatement(const pLine: string): string;
+var
+  lPos: Integer;
+begin
+  if Length(pLine) <= MAX_LITERAL_CHUNK then
+    Exit('  Writeln(''' + pLine.Replace('''', '''''') + ''');'#10);
+  Result := '  Writeln(';
+  lPos := 1;
+  while lPos <= Length(pLine) do
+  begin
+    if lPos > 1 then
+      Result := Result + ' +'#10'    ';
+    Result := Result + '''' + Copy(pLine, lPos, MAX_LITERAL_CHUNK).Replace('''', '''''') + '''';
+    Inc(lPos, MAX_LITERAL_CHUNK);
+  end;
+  Result := Result + ');'#10;
+end;
 function RenderHelpTextUnit(const pReg: TRegistry): string;
 var
   lSb: TStringBuilder;
@@ -173,7 +195,7 @@ begin
     lSb.Append('procedure WriteVerbReference;'#10);
     lSb.Append('begin'#10);
     for lLine in VerbReferenceLines(pReg) do
-      lSb.Append('  Writeln(''').Append(lLine.Replace('''', '''''')).Append(''');'#10);
+      lSb.Append(WritelnStatement(lLine));
     lSb.Append('end;'#10#10);
     lSb.Append('end.'#10);
     Result := lSb.ToString;
