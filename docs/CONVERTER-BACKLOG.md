@@ -19,6 +19,23 @@ before working on an item.**
   `fix/converter-testkit` (D1, N5); worktrees `C:\Projects\Delphi-RAG-lint-wt\conv-apply-fields`
   and `conv-testkit`.
 
+## F. Feature-registry review (owner request 2026-10-20, via www-2a) -- after E18 + next release
+
+CONVERTER owns the coordination (featuregen is ours); each team (ENGINE, CONVERTER, CHARTS,
+YADF) reviews its OWN entries. Start only after ENGINE E18 is merged AND the next release is
+published. Not urgent. Review every entry for:
+
+* (a) outdated features (owner saw at least one stale item on the GitHub wiki);
+* (b) features with no IDE menu access;
+* (c) features needing 2-3 IDE clicks: spell out "where to click"; owner wants unique help ids
+  at that granularity (one page per id, maybe anchors per click path).
+
+**Registry ids are now PUBLIC URLs** (www-2a renders `WWW\help\dl\features\<id>.md` at
+`https://www.delphi-rag-lint.com/help/<id>/`): treat ids as permanent; a rename needs a
+redirect. www-2a uses `featuregen build --site` and will ask before relying on front-matter
+beyond id/title/summary/group/order/since/status/updated. ENGINE separately owns an IDE help
+framework keyed by the registry help id.
+
 ## A. Queued work, in order
 
 1. **Re-pin to 1.32.0 + baseline** -- S, session. After "re-parse done". Procedure: editor
