@@ -29,7 +29,7 @@ read the live surface take `--engine <drag-lint.exe>` (default
 | `move-menu` | rename a menu prefix everywhere (use `--what-if` first) |
 | `deprecate` | mark an entry deprecated, optionally superseded |
 | `normalise` | rewrite entries into canonical JSON |
-| `import-help` | seed usage / flags / pitfalls of cli entries from the engine `--help`; never overwrites a field, never verifies |
+| `import-help` | seed usage / flags / pitfalls of cli entries from the engine `--help`; never overwrites a field, never verifies; `--blocks` freezes each verb's help lines into its entry (`help`, `helpOrder`; see below), `--dry-run` previews |
 | `audit` | one line per gap: thin entries, stale verification, changed surface |
 | `verify` | stamp an entry as verified: `--id <id> --by <TEAM>` records date, who, build and a hash of its live surface |
 
@@ -52,6 +52,27 @@ questions, wiki page) and runs `featuregen verify --id <its id> --by <TEAM>`. Ne
 team's entry; report it to its owner instead. `verify` records the build version and a hash
 of the live surface, so `featuregen audit` reports "surface changed since verified" when the
 help line or flags move afterwards.
+
+## The `--help` verb reference (P7)
+
+The verb reference of `drag-lint --help` (everything under `Usage:`) is generated from the registry,
+not typed into the CLI source. Each `cli` surface may carry two fields:
+
+* `help` -- the verbatim help lines of that verb (usage line, flag lines, notes), as an array of strings;
+* `helpOrder` -- its position in the reference (1 = first block under `Usage:`).
+
+`featuregen build --all` renders them into `src\cli\DRagLint.CLI.HelpText.pas` (`WriteVerbReference`, one
+`Writeln` per line, literals split under the compiler's 1023-character limit). The COMMON QUESTIONS banner and
+the trailer (Databases, Defaults, ...) stay hand-written in `DRagLint.CLI.pas`. The generated unit is never
+edited by hand; the generator marks `WriteVerbReference` with a reviewed `method-too-long` marker because its
+length follows the verb count.
+
+Seeding: `featuregen import-help --blocks` reads the live `--help`, claims each usage line for one entry (an entry
+whose id is the verb, or `verb-sub`, wins over a feature entry that merely runs the verb; a usage line already
+claimed gives the second entry NO block) and writes `help` / `helpOrder`. It forgets earlier blocks first, so it
+is repeatable. Only public entries (not `internal` / `planned` / removed) take blocks. Guard:
+`FeatureGenTests` pins the claim order, and the frozen fixture
+`src\tools\featuregen\tests\fixtures\help-verb-reference-1.33.0.txt` is compared with the deployed exe's output.
 
 ## This entry
 
