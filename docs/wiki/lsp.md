@@ -49,3 +49,5 @@ none. Exit 0 = done, 1 = already in that state, 2 = VS Code (`Code.exe`) is runn
 (file untouched), 3 = failure (e.g. no backup and no template). Workspace file only:
 the user-level registration in `state.vscdb` is not read or written. Guard:
 `tests\autotest\run_lsp_switch_vscode_guard.ps1`.
+
+Limits: a mcp.json containing comments (JSONC) cannot be parsed, so the tool exits 3 and leaves the file untouched. The rewritten file is JSON-equal to the original, not byte-equal (indentation is normalised to 2 spaces); the untouched original is kept in the .bak.

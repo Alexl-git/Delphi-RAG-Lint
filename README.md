@@ -850,6 +850,8 @@ buffer) for a symbol index. Proxying removes the either/or. Add
 transparent: byte-for-byte identical to talking to DelphiLSP directly, with
 merging of drag-lint's own answers still to come.
 
+`drag-lint-switch --vscode --status|--on|--off` toggles the `delphi-lsp` entry in a workspace's `.vscode\mcp.json` (backup on `--off`, restore on `--on`; refuses while VS Code runs).
+
 See **[docs/EDITORS.md](docs/EDITORS.md)**.
 
 ### CLI

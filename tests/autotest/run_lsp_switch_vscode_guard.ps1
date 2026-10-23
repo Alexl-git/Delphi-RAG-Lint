@@ -128,8 +128,21 @@ Check 'entry from template' ($n2.servers.'delphi-lsp'.command -eq 'C:\y\srv.exe'
 Check 'other kept' ($n2.servers.other.url -eq 'http://x')
 
 Write-Host ''
+Write-Host 'CASE 7: no .vscode directory at all (clean exit, nothing created)' -ForegroundColor Cyan
+$ws3 = Join-Path $WorkDir 'ws3'; New-Item -ItemType Directory $ws3 | Out-Null
+$r = Run-Switch @('--vscode','--on','--workspace',$ws3,'--assume-host-stopped')
+Check '--on without .vscode exit 3' ($r.Code -eq 3) "exit=$($r.Code) $($r.Out.Trim())"
+Check 'clean message, no exception' (($r.Out -match 'no backup to restore -- pass --template') -and ($r.Out -notmatch 'EDirectoryNotFound|Exception'))
+Check 'no .vscode created' (-not (Test-Path (Join-Path $ws3 '.vscode')))
+$r = Run-Switch @('--vscode','--off','--workspace',$ws3,'--assume-host-stopped')
+Check '--off without mcp.json exit 1' ($r.Code -eq 1) "exit=$($r.Code)"
+$r = Run-Switch @('--vscode','--status','--workspace',$ws3,'--assume-host-stopped')
+Check '--status without mcp.json exit 0' ($r.Code -eq 0) "exit=$($r.Code)"
+Check '--status says mcp.json absent and delphi-lsp absent' (($r.Out -match 'mcp\.json: absent') -and ($r.Out -match 'delphi-lsp: absent')) $r.Out.Trim()
+
+Write-Host ''
 Write-Host 'SAFETY: nothing outside the scratch workspace was created' -ForegroundColor Cyan
-Check 'no stray files beside ws' ((Get-ChildItem $WorkDir | Where-Object Name -notin 'ws','ws2','tpl.json').Count -eq 0)
+Check 'no stray files beside ws' ((Get-ChildItem $WorkDir | Where-Object Name -notin 'ws','ws2','ws3','tpl.json').Count -eq 0)
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

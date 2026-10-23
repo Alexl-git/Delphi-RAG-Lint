@@ -331,6 +331,7 @@ end;
 
 const
   VSC_SERVER = 'delphi-lsp';
+  BACKUP_CLASH_WAIT_MS = 1100;   { just over the 1 s granularity of the backup file name }
 
 function VSCodeMcpPath: string;
 begin
@@ -379,6 +380,7 @@ var
   I    : Integer;
 begin
   Result:= '';
+  if not TDirectory.Exists(TPath.GetDirectoryName(AMcpPath)) then Exit;
   Files:= TDirectory.GetFiles(TPath.GetDirectoryName(AMcpPath), 'mcp.json.draglint-*.bak');
   for I:= 0 to High(Files) do
     if CompareText(Files[I], Result) > 0 then Result:= Files[I];
@@ -422,7 +424,7 @@ begin
     Bak:= BackupName(Path);
     if TFile.Exists(Bak) then
     begin
-      Sleep(1100);   { names are second-granular; a clash would overwrite a backup }
+      Sleep(BACKUP_CLASH_WAIT_MS);   { names are second-granular; a clash would overwrite a backup }
       Bak:= BackupName(Path);
     end;
     TFile.Copy(Path, Bak, False);
@@ -486,7 +488,6 @@ begin
     Writeln('BLOCKED: VS Code (Code.exe) is running. Close it first.');
     Exit(EXIT_BLOCKED);
   end;
-  Root:= nil;
   if TFile.Exists(Path) then
   begin
     Root:= ParseObject(TFile.ReadAllText(Path));
@@ -590,8 +591,16 @@ begin
       else if (A = '--exe') and (I < ParamCount) then begin Inc(I); ExePath  := ParamStr(I); end
       else if (A = '--params') and (I < ParamCount) then begin Inc(I); Params   := ParamStr(I); end
       else if (A = '--backup-dir') and (I < ParamCount) then begin Inc(I); BackupDir:= ParamStr(I); end
-      else if (A = '--workspace') and (I < ParamCount) then begin Inc(I); GWorkspace:= ParamStr(I); end
-      else if (A = '--template') and (I < ParamCount) then begin Inc(I); Template:= ParamStr(I); end
+      else if (A = '--workspace') and (I < ParamCount) then
+      begin
+        Inc(I);
+        GWorkspace:= ParamStr(I);
+      end
+      else if (A = '--template') and (I < ParamCount) then
+      begin
+        Inc(I);
+        Template:= ParamStr(I);
+      end
       else if A = '--assume-host-running' then GAssumeRunning:= True
       else if A = '--assume-host-stopped' then GAssumeStopped:= True
       else if (A = '--reg-root') and (I < ParamCount) then begin Inc(I); GRegLspRoot:= ParamStr(I); end
