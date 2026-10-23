@@ -15,6 +15,10 @@
     tests\fixtures\T2..T7 *.exe              run_v021_doctests.bat (dcc64)
     src\cli\_D-RAG\drag-lint.sqlite          self-index several guards query
         = engine `index --project src\cli\drag-lint.dproj` (slow: minutes)
+    src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite
+                                             run_menu_drift_guard (plugin self-index)
+        = engine `index --project src\delphi-plugin\dclDragLintWizard.dproj`; refreshed
+          INCREMENTALLY on every run (a stale one makes that guard GUARD BROKEN)
 
   The ENGINE (src\cli\Win64\Debug\drag-lint.exe) is NOT built here -- run
   build\build_draglint_win64.bat first. Without it the two engine-made
@@ -105,6 +109,18 @@ if (-not $SkipSelfIndex) {
       if (-not (Test-Path -LiteralPath $self)) { Say ('  engine output tail: ' + (($o -split "`n" | Select-Object -Last 3) -join ' | ')) }
     } else { Say "  engine not built: $Exe" }
   }
+  # Plugin self-index (run_menu_drift_guard). Unlike the artifacts above it is
+  # refreshed on EVERY run, incrementally (seconds when nothing changed): an
+  # existing-but-stale index would make the guard refuse with exit 3.
+  $plug = Join-Path $root 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite'
+  if (Test-Path -LiteralPath $Exe) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $plug) | Out-Null
+    Say 'refreshing src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite (plugin self-index, incremental)'
+    $o = & $Exe index --project (Join-Path $root 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plug 2>&1 | Out-String
+    if (-not (Test-Path -LiteralPath $plug)) { Say ('  engine output tail: ' + (($o -split "`n" | Select-Object -Last 3) -join ' | ')) }
+  } else { Say "  engine not built: $Exe" }
+  if (Test-Path -LiteralPath $plug) { Say 'ok      plugin self-index' }
+  else { Say "MISSING plugin self-index ($plug)"; $script:missing.Add('plugin self-index') }
 }
 
 if (Test-Path -LiteralPath $work) { [IO.Directory]::Delete($work, $true) }

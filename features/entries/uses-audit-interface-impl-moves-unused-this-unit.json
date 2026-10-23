@@ -11,8 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...",
-      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...", "Read the suggested moves and the unused entries", "From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`"]
+      "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...",
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...", "Read the suggested moves and the unused entries", "From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`"]
     },
     {
       "type": "cli",
@@ -44,9 +44,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "01b4e38ce5db60cafa99593b0e82b8566c53c01db6b05fe28896e988728c5f48"
+    "surfaceHash": "f091b0c4b210d9e5851f2dfeb1358127a0936511c8984ffd1035e480a56611ec"
   }
 }

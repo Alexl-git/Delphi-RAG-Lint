@@ -1,0 +1,7 @@
+{
+  "id": "advanced-report",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture > Catalog > Advanced Report..." }
+  ]
+}
