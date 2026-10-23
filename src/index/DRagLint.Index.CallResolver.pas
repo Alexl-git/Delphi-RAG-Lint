@@ -4321,7 +4321,12 @@ begin
   if Rcv <> '' then
     Result:= LookupMemberOnType(TypeReceiver(ARef, Rcv), Leaf).Signature
   else if SameText(Leaf, 'Result') then
-    Result:= SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature)
+  begin
+    { Review 2026-10-23 (W5-res2): inside an anonymous method Result is ITS
+      result, not the enclosing routine's -- unknown here, so ''. }
+    if not InsideAnonymousMethod(ARef) then
+      Result:= SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature);
+  end
   else
   begin
     Scratch:= TList<TSymbol>.Create;

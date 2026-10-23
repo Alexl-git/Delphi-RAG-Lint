@@ -19,6 +19,11 @@
     NEG-LOCAL  a procedure's LOCAL `Result: TOtherJob` -- binds TOtherJob.Streaming,
                never TJob's (POSITIVE CONTROL: a by-name join of `Streaming`
                would pick either class)
+    NEG-ANON / POS-AFTER-ANON   Result inside / after an anonymous method
+    RCV-DUP-* / RCV-LATE        a local receiver is typed from the nearest
+               in-scope same-name declaration, never the first or a later one
+    PV-ANON-CALL / PV-OUTER-ADDR  the proc-value check types an anonymous
+               method's Result from the anonymous method, not the routine
 
   Usage: pwsh -File tests\callresolve\run_result_receiver_bind.ps1 [-Exe <drag-lint.exe>]
 #>
@@ -115,6 +120,25 @@ Check 'RCV-LATE GPeer before the inline GPeer is declared never binds TOtherJob.
 $r = At 'RCV-INNER-LATE' 'member-access' 'Streaming'
 Check 'RCV-INNER-LATE the inline GPeer: TOtherJob binds TOtherJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1) (Show $r)
+
+# review 2026-10-23 (W5-res2): the proc-value check types `Result := GetNum`
+# from the assignment target. Inside an anonymous method `Result` is ITS result
+# (Integer here), so the parenless GetNum is a CALL there; outside it the
+# enclosing MakeNumFn returns the procedural TNumFn, so GetNum is its address.
+# Positive control: AssignedTypeText typed the anonymous Result as TNumFn and
+# declined PV-ANON-CALL as a proc value (no edge).
+function EdgesAt([string]$Marker, [string]$Name) {
+  $line = LineOf $Marker
+  return @(Sql ("SELECT t.qualified_name AS tq FROM refs r JOIN call_edges ce ON ce.ref_id = r.id " +
+                "JOIN symbols t ON t.id = ce.target_symbol_id WHERE r.name_text = '$Name' AND r.start_line = $line") |
+           Where-Object { $_ })
+}
+$r = EdgesAt 'PV-ANON-CALL' 'GetNum'
+Check 'PV-ANON-CALL Result := GetNum inside an anonymous function: Integer is a call edge to GetNum' `
+  (@($r | Where-Object { $_.tq -eq 'uResRecv.GetNum' }).Count -eq 1) "edges=$($r.Count)"
+$r = EdgesAt 'PV-OUTER-ADDR' 'GetNum'
+Check 'PV-OUTER-ADDR Result := GetNum in a function returning TNumFn is no call edge (address)' `
+  ($r.Count -eq 0) "edges=$($r.Count)"
 
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
 } finally {

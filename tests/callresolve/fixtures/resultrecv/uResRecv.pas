@@ -20,6 +20,13 @@ function MakeWithAnon: TJob;
 procedure TwoInline;
 procedure LateLocal;
 
+type
+  TNumFn = function: Integer;
+  TIntFn = reference to function: Integer;
+
+function GetNum: Integer;
+function MakeNumFn: TNumFn;
+
 var
   GPeer: TJob;
 
@@ -80,6 +87,22 @@ begin
     var GPeer: TOtherJob := nil;
     GPeer.Streaming := False; // RCV-INNER-LATE
   end;
+end;
+
+function GetNum: Integer;
+begin
+  Result := 1;
+end;
+
+function MakeNumFn: TNumFn;
+var
+  F: TIntFn;
+begin
+  F := function: Integer
+    begin
+      Result := GetNum; // PV-ANON-CALL
+    end;
+  Result := GetNum; // PV-OUTER-ADDR
 end;
 
 end.
