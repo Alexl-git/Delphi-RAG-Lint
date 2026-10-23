@@ -413,8 +413,10 @@ end;
 
 { Merge plan P0: forwards one complete frame through GInterceptor. FAIL OPEN:
   an interceptor that answers False or raises gets the original bytes
-  forwarded; True forwards AReplacement instead (an empty replacement forwards
-  nothing). Either way the trace records exactly the bytes written. }
+  forwarded; True forwards AReplacement instead. True with an EMPTY replacement
+  is a decline, not a swallow: the original is forwarded, so a handler that
+  leaves the buffer unset on one branch cannot drop a frame (fix round 1).
+  Either way the trace records exactly the bytes written. }
 function ForwardIntercepted(ADst: THandle; const ABuf: TBytes; ATotal: Integer;
   const ADir: string): Boolean;
 var
@@ -429,7 +431,7 @@ begin
   except  // dl:ok bare-except@67c3 -- fail-open by design: any merge exception forwards the original frame
     Use:= False;   { swallowed on purpose: a merge bug must not cost the session }
   end;
-  if Use then
+  if Use and (Length(Repl) > 0) then
   begin
     TraceFrame(ADir, Repl, Length(Repl));
     Result:= WriteAll(ADst, Repl, 0, Length(Repl));
@@ -640,6 +642,9 @@ begin
     `initialize`, which carries initializationOptions -- is captured. Empty
     leaves tracing off, which is the default. }
   GTracePath:= AOptions.TraceFile;
+  { A second in-process call with merge OFF must not inherit the first call's
+    interceptor. }
+  GInterceptor:= nil;
   Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe);
   if Exe = '' then
   begin

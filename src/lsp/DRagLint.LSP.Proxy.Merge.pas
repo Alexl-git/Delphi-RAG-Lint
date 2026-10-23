@@ -40,7 +40,9 @@ type
   /// <param name="AReplacement">The bytes to forward instead, when the result
   /// is True. A replacement must itself be a complete frame.</param>
   /// <returns>True to substitute AReplacement; False (or any exception) means
-  /// forward the original bytes unchanged.</returns>
+  /// forward the original bytes unchanged. True with an EMPTY AReplacement is
+  /// treated as False (the original is forwarded): an interceptor can never drop
+  /// a frame by leaving the replacement unset.</returns>
   TFrameInterceptor = reference to function(ADir: TMergeDirection; const AFrame: TBytes;
     ALen: Integer; out AReplacement: TBytes): Boolean;
 
@@ -72,9 +74,14 @@ type
     FBusy       : Boolean;
     FJobFailed  : Boolean;
     FWorker     : TThread;
+    FTestEmptyReplacement: Boolean;
     procedure WorkerLoop;
   public
     /// <summary>Copies the options and starts the merge worker thread.</summary>
+    /// <remarks>Test seam: with the environment variable
+    /// DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT=1 Intercept answers True with an
+    /// EMPTY replacement for every frame, so a guard can prove the relay
+    /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f).</remarks>
     /// <param name="AOptions">The proxy options; Merge*, MergeBudgetMs and
     /// DbPaths are the fields this class reads.</param>
     constructor Create(const AOptions: TLspProxyOptions);
@@ -87,7 +94,8 @@ type
     /// <param name="ALen">Byte length of the frame.</param>
     /// <param name="AReplacement">Replacement frame when the result is True.</param>
     /// <returns>False for every frame in P0 -- the relay forwards the
-    /// original bytes; handlers arrive in later tasks.</returns>
+    /// original bytes; handlers arrive in later tasks. Under the test seam (see
+    /// Create): True with an empty replacement.</returns>
     function Intercept(ADir: TMergeDirection; const AFrame: TBytes; ALen: Integer;
       out AReplacement: TBytes): Boolean;
     /// <summary>Runs AWork on the single merge worker thread and waits at most
@@ -211,6 +219,7 @@ begin
   FJobReady  := TEvent.Create(nil, False, False, '');
   FJobDone   := TEvent.Create(nil, True , False, '');
   FWorker    := TMergeWorker.Create(Self);
+  FTestEmptyReplacement:= GetEnvironmentVariable('DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT') = '1';
 end;
 
 destructor TProxyMergeEngine.Destroy;
@@ -327,7 +336,7 @@ function TProxyMergeEngine.Intercept(ADir: TMergeDirection; const AFrame: TBytes
 begin
   { P0: the seam only. Every frame is forwarded as received. }
   AReplacement:= nil;
-  Result:= False;
+  Result:= FTestEmptyReplacement;
 end;
 
 end.

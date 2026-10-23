@@ -26,6 +26,10 @@
     (e) `lsp --proxy --merge-diagnostics --merge-budget-ms 0` is ACCEPTED (the
         stub's exit code 42, not 3); positive control: an unknown --merge-bogus
         IS rejected with 3, so the check can fail.
+    (f) an interceptor answering True with an EMPTY replacement is declined: the
+        relay forwards the ORIGINAL frame (merge fix round 1). Driven by the
+        engine's test seam DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT=1; RED on an
+        engine that swallows (output shorter than the plain relay's).
 
   The proxy guards default -Exe to dll-win64; a lane passes its own engine.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
@@ -185,6 +189,13 @@ $mOff = Invoke-Raw $Exe $proxyArgs ([byte[]]$eFrame)
 Check 'merge ON relays the same bytes as merge OFF (frames intercepted, all declined)' (($mOn.Out.Length -gt 0) -and ($null -eq (Compare-Object $mOn.Out $mOff.Out -SyncWindow 0))) ("on=$($mOn.Out.Length) off=$($mOff.Out.Length)")
 $bogus = Invoke-Raw $Exe @('lsp', '--proxy', '--merge-bogus', '--delphi-lsp', $stub) ([byte[]]@())
 Check 'positive control: --merge-bogus IS rejected with 3' ($bogus.Code -eq 3) ("code=$($bogus.Code)")
+
+# --- (f) True + EMPTY replacement = decline ---------------------------------
+Write-Host ''
+Write-Host '(f) an empty replacement forwards the original frame' -ForegroundColor Cyan
+$mEmpty = Invoke-Raw $Exe @('lsp', '--proxy', '--merge-diagnostics', '--delphi-lsp', $stub) ([byte[]]$eFrame) @{ DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT = '1' }
+Check 'True + empty replacement relays the same bytes as merge OFF (no frame dropped)' (($mEmpty.Out.Length -gt 0) -and ($null -eq (Compare-Object $mEmpty.Out $mOff.Out -SyncWindow 0))) ("empty=$($mEmpty.Out.Length) off=$($mOff.Out.Length)")
+Check 'the echoed hover frame came back' ((Ascii $mEmpty.Out).Contains('textDocument/hover')) ''
 
 # --- (d) the four shipped guards, env vars unset ----------------------------
 Write-Host ''
