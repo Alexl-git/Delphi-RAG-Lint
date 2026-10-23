@@ -1,5 +1,5 @@
 # Driven GUI check for the Qualify #convert quick fix (feat/convert-qualify-fix, A2, 2026-10-19).
-# Usage: pwsh -NoProfile -File drive-qualify-fix.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoFix]
+# Usage: pwsh -NoProfile -File drive-qualify-fix.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoFix] [-UseAlt] [-QualifyAll] [-ProofNoQualifyAll]
 #        A FROZEN drag-lint.exe must sit beside the exe (the fixture index is built with THAT engine, the
 #        editor finds its engine the same way), never a live dll-win64 build. Its Win64 library index must
 #        answer (the conversion resolves Vcl.StdCtrls.TLabel there). The engine must report convert_qualify_fix (1.28.3+).
@@ -16,11 +16,17 @@
 #   status.qualified, book.unsaved, file.line.qualified, run2.converted and run2.no.qualify.note must then FAIL,
 #   which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-# -UseAlt (D4, UNRUN): fix 1 (to TSolo) takes its '#use LibA' alternative via BtnUse instead of the LibA.TSolo candidate;
+# -UseAlt (D4): fix 1 (to TSolo) takes its '#use LibA' alternative via BtnUse instead of the LibA.TSolo candidate;
 #   adds dialog.use.* checks, the status ends '; added #use LibA' (line 2), the book's lines 1-2 are '#use LibA' and
 #   '#convert Vcl.StdCtrls.TLabel -> TSolo', and run 2 must still convert (the #use makes TSolo unambiguous).
 #   Combine with -ProofNoFix for the same negative control.
-param([string]$Exe, [switch]$ProofNoFix, [switch]$UseAlt)
+# -QualifyAll (D6): the row is not selected for Qualify #convert...; the 'Qualify all...' button (BtnQualifyAll) is
+#   clicked instead. The fixture has ONE book, so exactly one TQualifyForm must open (and no second one after Apply);
+#   the closing status must read 'Qualify all (1 of 1 book(s)): ' + the per-book status. -ProofNoQualifyAll skips the
+#   button click (handler skipped): qualifyall.dialog must then FAIL, which is the proof it can.
+# Check counts: default 21; -QualifyAll 23; -UseAlt 25; -QualifyAll -UseAlt 27. -ProofNoFix = 16 pass / 5 fail;
+#   -QualifyAll -ProofNoQualifyAll = 10 pass / 2 fail (qualifyall.dialog, qualify.dialog).
+param([string]$Exe, [switch]$ProofNoFix, [switch]$UseAlt, [switch]$QualifyAll, [switch]$ProofNoQualifyAll)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -486,6 +492,7 @@ try {
   $add = @(Find $tab 'TButton' 'Add...')[0]
   $src = @(Find ([CT]::Parent([CT]::Parent($add))) 'TListBox' $null)[0]
   $qbtn = @(Find ([CT]::Parent($conv)) 'TButton' 'Qualify #convert...')[0]
+  $qall = @(Find ([CT]::Parent($conv)) 'TButton' 'Qualify all...')[0]
   Check 'tab.controls' ($null -ne $lv -and $null -ne $checkAll -and $null -ne $books -and $null -ne $add -and $null -ne $src -and $null -ne $qbtn) `
     ("lv={0} checkAll={1} books={2} add={3} sources={4} qualify={5}" -f ($null -ne $lv), ($null -ne $checkAll), ($null -ne $books), ($null -ne $add), ($null -ne $src), ($null -ne $qbtn))
   if ($null -eq $lv -or $null -eq $checkAll -or $null -eq $books -or $null -eq $add -or $null -eq $src -or $null -eq $qbtn) { return }
@@ -496,8 +503,9 @@ try {
   Click $checkAll
   Start-Sleep -Milliseconds 500
   $e = AddViaDialog $p.Id $add $pas
+  # Wait on the CONDITION (the unit is in the source list), not a sleep: the list fills after the project index read.
   $items = [CT]::Items($src)
-  Check 'fixunit.added' (($e -eq '') -and ($items -contains $pas)) ("$e items: " + ($items -join ' | ') + '; status: ' + (Status $main))
+  $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 60 -and -not ($items -contains $pas)) { Start-Sleep -Milliseconds 500; $items = [CT]::Items($src) }  Check 'fixunit.added' (($e -eq '') -and ($items -contains $pas)) ("$e items: " + ($items -join ' | ') + '; status: ' + (Status $main))
 
   # --- 3. run 1: the bare TLabel / TSolo make the unit REFUSED, with the qualify note ---
   # Adding a unit starts an analysis behind a progress window; a Convert click that lands in it is lost, so wait for its closing status line.
@@ -516,9 +524,15 @@ try {
   # --- 4. the row's fixes: Qualify #convert... is enabled on it ---
   if ($row -ge 0) { [W]::SelectRow($lv, $row); Start-Sleep -Milliseconds 500 }
   Check 'qualify.button.enabled' ([W]::IsWindowVisible($qbtn) -and [Q]::IsWindowEnabled($qbtn)) "visible=$([W]::IsWindowVisible($qbtn)) enabled=$([Q]::IsWindowEnabled($qbtn))"
-  Click $qbtn
+  Check 'qualifyall.button.enabled' (($null -ne $qall) -and [W]::IsWindowVisible($qall) -and [Q]::IsWindowEnabled($qall)) "found=$($null -ne $qall)"
+  if ($QualifyAll) {
+    if ($ProofNoQualifyAll) { "NOTE  -ProofNoQualifyAll: the Qualify all button is not clicked; qualifyall.dialog is expected to FAIL" }
+    elseif ($qall) { Click $qall }
+  } else {
+    Click $qbtn
+  }
   $dlgQ = WaitCls $p.Id 'TQualifyForm' 10
-  Check 'qualify.dialog' ($dlgQ -ne [IntPtr]::Zero) (TopsNow $p.Id)
+  if ($QualifyAll) { Check 'qualifyall.dialog' ($dlgQ -ne [IntPtr]::Zero) (TopsNow $p.Id) }  Check 'qualify.dialog' ($dlgQ -ne [IntPtr]::Zero) (TopsNow $p.Id)
   if ($dlgQ -eq [IntPtr]::Zero) { return }
   $lists = @(Find $dlgQ 'TListBox' $null | Sort-Object { [W]::Top($_) })
   $lbFixes = $lists[0]; $lbCand = $lists[1]
@@ -547,10 +561,18 @@ try {
     Click (@(Find $dlgQ 'TButton' 'Apply')[0])
   }
   $st = WaitStatus $main $before 30
+  $pre = ''
+  if ($QualifyAll) {
+    # One book in the fixture: no second dialog may follow the first one's Apply.
+    Start-Sleep -Seconds 2
+    $second = WaitCls $p.Id 'TQualifyForm' 0
+    Check 'qualifyall.one.dialog' ($second -eq [IntPtr]::Zero) (TopsNow $p.Id)
+    $pre = 'Qualify all (1 of 1 book(s)): '
+  }
   if ($UseAlt) {
-    Check 'status.qualified' ($st -eq 'Qualified 1 #convert side(s) in Fix.rules (line 2) -- not saved: File > Save, then Convert again; added #use LibA') $st
+    Check 'status.qualified' ($st -eq ($pre + 'Qualified 1 #convert side(s) in Fix.rules (line 2) -- not saved: File > Save, then Convert again; added #use LibA')) $st
   } else {
-    Check 'status.qualified' ($st -eq 'Qualified 2 #convert side(s) in Fix.rules (line 1) -- not saved: File > Save, then Convert again') $st
+    Check 'status.qualified' ($st -eq ($pre + 'Qualified 2 #convert side(s) in Fix.rules (line 1) -- not saved: File > Save, then Convert again')) $st
   }
 
   # --- 5. the edit is unsaved: File > Exit asks (Cancel keeps the editor) ---
