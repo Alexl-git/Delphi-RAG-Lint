@@ -846,9 +846,14 @@ the protocol between the IDE and it. The IDE's Code Insight manager is
 exclusive -- one server per language -- so registering drag-lint the plain way
 would trade the compiler front end (generics, `with`, inline vars, the unsaved
 buffer) for a symbol index. Proxying removes the either/or. Add
-`--delphi-lsp <path>` to override which server is spawned. Today the relay is
-transparent: byte-for-byte identical to talking to DelphiLSP directly, with
-merging of drag-lint's own answers still to come.
+`--delphi-lsp <path>` to override which server is spawned. By default the relay
+is transparent: byte-for-byte identical to talking to DelphiLSP directly. Add
+`--merge-diagnostics` and drag-lint's lint findings (source `drag-lint`) are
+appended to DelphiLSP's own `textDocument/publishDiagnostics` notification, so
+compiler errors and lint findings arrive in ONE notification per file. It fails
+open: a file with unsaved edits, a clean file, a frame it cannot parse or a lint
+that overruns `--merge-budget-ms <n>` (default 300) forwards DelphiLSP's
+original bytes untouched.
 
 See **[docs/EDITORS.md](docs/EDITORS.md)**.
 
@@ -1106,7 +1111,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | Command | What it does |
 |---|---|
 | [`serve --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Start the **MCP** stdio server -- for AI agents (Claude, Cursor). Nothing in the IDE uses this. |
-| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag. `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and ignored -- editor clients send them, and stdio is the only transport. |
+| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag; `--merge-diagnostics` appends drag-lint's lint findings to DelphiLSP's own publishDiagnostics (fail-open, budget `--merge-budget-ms`, default 300). `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and ignored -- editor clients send them, and stdio is the only transport. |
 
 #### Maintenance
 

@@ -33,8 +33,27 @@ drag-lint add to those answers:
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails
   open and never drops a message.
 
-Status: the flags are accepted now; the diagnostics handler itself lands
-with merge task A1. Until then every message is relayed unchanged.
+How the diagnostics merge behaves:
+
+- drag-lint's findings for the file (lint rules honouring the up-tree
+  `drag-lint-lint.json`, syntax errors, clones -- the same set plain
+  `drag-lint lsp` publishes) are appended to the `diagnostics` array of
+  DelphiLSP's own notification, tagged `source: "drag-lint"`. One
+  notification, because `publishDiagnostics` replaces the IDE's set for that
+  file: a separate one would erase the compiler errors.
+- A file with a `didChange` since its last `didSave` / `didOpen` is relayed
+  unmerged: drag-lint lints the file on disk, and its ranges would not match
+  the edited buffer. Saving brings the findings back.
+- A clean file is relayed byte-for-byte.
+- Fail-open: a frame that cannot be parsed or lacks `uri` / `diagnostics`, or
+  a lint exception, forwards DelphiLSP's bytes and writes one stderr line
+  naming the merge. A lint that overruns the budget forwards the original too;
+  the first overrun is reported once on stderr. `--merge-budget-ms 0` never
+  waits, so nothing is merged.
+- The linter is created on the first merge, not at startup, so the first
+  publish of a session can overrun the budget and arrive unmerged.
+- With `--trace`, the trace records the frame actually forwarded (the merged
+  one).
 
 ## Reaching it in the IDE
 
