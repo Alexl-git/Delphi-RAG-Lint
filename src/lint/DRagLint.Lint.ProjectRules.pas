@@ -698,7 +698,10 @@ begin
           var Stem: string:= LowerCase(Nm);
           var Dp: Integer:= LastDelimiter('.', Stem);
           if Dp > 0 then Stem:= Copy(Stem, Dp + 1, MaxInt);
-          FileOfStem.AddOrSetValue(Stem, Fid);
+          { N-08: a stem two units share maps to nothing (-1), as in the cycles graph }
+          var Seen: Int64;
+          if FileOfStem.TryGetValue(Stem, Seen) and (Seen <> Fid) then FileOfStem[Stem]:= -1
+          else FileOfStem.AddOrSetValue(Stem, Fid);
           Break;
         end;
     end;
