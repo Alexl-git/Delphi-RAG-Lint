@@ -53,6 +53,21 @@ $shippedText = [IO.File]::ReadAllText($ShippedCastlib)
 Check 'S0 the SHIPPED castlib declares cast StripDB with value strip-db' `
   ($shippedText -match '(?ms)^cast StripDB\s*\r?\n.*?^\s*value\s+strip-db\s*\r?\n.*?^end') ''
 
+# S0b (E3D L2, owner ruling 2026-10-19): the editor offers a cast only for a From type the
+# block ACCEPTS (exact name), so StripDB must list the string alias TFileName beside string.
+function CastAccepts([string]$text, [string]$name) {
+  $m = [regex]::Match($text, '(?ms)^cast ' + $name + '\s*\r?\n(.*?)^end')
+  if (-not $m.Success) { return @() }
+  $a = [regex]::Match($m.Groups[1].Value, '(?m)^\s*accepts\s+(.+?)\s*\r?$')
+  if (-not $a.Success) { return @() }
+  return @($a.Groups[1].Value -split '\s*,\s*')
+}
+$stripAcc = CastAccepts $shippedText 'StripDB'
+Check 'S0b StripDB accepts TFileName (string alias)' ($stripAcc -contains 'TFileName') ('accepts: ' + ($stripAcc -join ','))
+Check 'S0b control: StripDB still accepts string' ($stripAcc -contains 'string') ('accepts: ' + ($stripAcc -join ','))
+Check 'S0b control: StripDB does not accept an unrelated type (TStrings)' (-not ($stripAcc -contains 'TStrings')) ''
+Check 'S0b control: the parser finds a different cast (non-vacuous)' ((CastAccepts $shippedText 'StripDB').Count -gt 0 -and $shippedText -match '(?m)^cast (?!StripDB)\w+') ''
+
 function Fixture([string]$Dir, [string]$Link, [string]$ExtraLine = '') {
   New-Item -ItemType Directory $Dir -Force | Out-Null
   W $Dir 'LibTbl.pas' @'
