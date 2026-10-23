@@ -743,6 +743,94 @@ begin
     end;
 end;
 
+type
+  // One unit's restore point for a run: the .pas and its .dfm copied to a shared .BCK<N>
+  // (SharedBackupPaths). BakPas / BakDfm are set only once their copy has been made, so a
+  // failed Take leaves them naming exactly the backups Drop must remove.
+  TRestorePoint = record
+    UnitPas: string;
+    Dfm    : string;
+    BakPas : string;
+    BakDfm : string;
+    // Copies the unit (and its .dfm, when it exists) to the next free .BCK<N>.
+    function Take(const AUnitPas: string; out AError: string): Boolean;
+    // Copies the backups back over the unit and its .dfm.
+    function Restore(out AError: string): Boolean;
+    // '' when every backup this run made for the unit is gone; else what was kept.
+    function Drop: string;
+    // The unit's backups for a Note: both when it has a .dfm; file names only unless AFullPaths.
+    function Names(AFullPaths: Boolean): string;
+  end;
+// '' when ABak ('' = none made) is gone; else a note that it was kept.
+function DropBackupFile(const ABak: string): string;
+begin
+  Result:= '';
+  if ABak = '' then
+    Exit;
+  try
+    TFile.Delete(ABak);
+  except
+    on E: Exception do
+      Result:= Format('; unneeded backup kept (delete failed: %s): %s', [E.Message, ABak]);
+  end; // try
+end;
+
+function TRestorePoint.Take(const AUnitPas: string; out AError: string): Boolean;
+begin
+  AError:= '';
+  UnitPas:= AUnitPas;
+  BakPas:= '';
+  BakDfm:= '';
+  Dfm   := ChangeFileExt(UnitPas, '.dfm');
+  try
+    // ONE number for the unit: a stale X.dfm.BCK<N> counts even when the .dfm is gone.
+    var LPaths: TArray<string>:= SharedBackupPaths([UnitPas, Dfm], FileProbe());
+    TFile.Copy(UnitPas, LPaths[0]);
+    BakPas:= LPaths[0];
+    if TFile.Exists(Dfm) then
+    begin
+      TFile.Copy(Dfm, LPaths[1]);
+      BakDfm:= LPaths[1];
+    end;
+    Result:= True;
+  except
+    on E: Exception do
+    begin
+      AError:= E.Message;
+      Result:= False;
+    end;
+  end; // try
+end;
+
+function TRestorePoint.Restore(out AError: string): Boolean;
+begin
+  AError:= '';
+  try
+    TFile.Copy(BakPas, UnitPas, True);
+    if BakDfm <> '' then
+      TFile.Copy(BakDfm, Dfm, True);
+    Result:= True;
+  except
+    on E: Exception do
+    begin
+      AError:= E.Message;
+      Result:= False;
+    end;
+  end; // try
+end;
+
+function TRestorePoint.Drop: string;
+begin
+  Result:= DropBackupFile(BakPas) + DropBackupFile(BakDfm);
+end;
+
+function TRestorePoint.Names(AFullPaths: Boolean): string;
+begin
+  Result:= if AFullPaths then BakPas else ExtractFileName(BakPas);
+  if BakDfm <> '' then
+    Result:= Result + ' and ' + (if AFullPaths then BakDfm else ExtractFileName(BakDfm));
+end;
+
 // The ONE unit loop (the public TApplyOnlyFn overload is it without a step callback).
 function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn; AFeatures: TApplyFeatures): TArray<TConvertRow>; forward;
 
@@ -825,9 +913,7 @@ var
   Row     : TConvertRow;
   Total   : Integer;
   CurUnit : string;
-  BakPas  : string;
-  BakDfm  : string;
-  Dfm     : string;
+  RP      : TRestorePoint; // the current unit's restore point (.pas + .dfm backups)
   Invalid : TArray<string>; // books whose rules failed the engine's validation this run
   Changed : Boolean;        // the unit's backup is still needed (a change, or a failed book)
   Watch   : TStopwatch;     // since the run started (C16 step elapsed)
@@ -890,79 +976,6 @@ var
         Exit(False);
   end;
 
-  // '' when ABak ('' = none made) is gone; else a note that it was kept.
-  function DropBackup(const ABak: string): string;
-  begin
-    Result:= '';
-    if ABak = '' then
-      Exit;
-    try
-      TFile.Delete(ABak);
-    except
-      on E: Exception do
-        Result:= Format('; unneeded backup kept (delete failed: %s): %s', [E.Message, ABak]);
-    end; // try
-  end;
-
-  // '' when every backup this run made for the unit is gone; else what was kept.
-  function DropBackups: string;
-  begin
-    Result:= DropBackup(BakPas) + DropBackup(BakDfm);
-  end;
-
-  // The unit's backups for a Note: both when it has a .dfm; file names only
-  // unless AFullPaths.
-  function BackupNames(AFullPaths: Boolean): string;
-  begin
-    Result:= if AFullPaths then BakPas else ExtractFileName(BakPas);
-    if BakDfm <> '' then
-      Result:= Result + ' and ' + (if AFullPaths then BakDfm else ExtractFileName(BakDfm));
-  end;
-
-  // BakPas / BakDfm are set only once their copy has been made, so a failure
-  // leaves them naming exactly the backups DropBackups must remove.
-  function TakeBackups(out AError: string): Boolean;
-  begin
-    AError:= '';
-    BakPas:= '';
-    BakDfm:= '';
-    Dfm   := ChangeFileExt(CurUnit, '.dfm');
-    try
-      // ONE number for the unit: a stale X.dfm.BCK<N> counts even when the .dfm is gone.
-      var LPaths: TArray<string>:= SharedBackupPaths([CurUnit, Dfm], FileProbe());
-      TFile.Copy(CurUnit, LPaths[0]);
-      BakPas:= LPaths[0];
-      if TFile.Exists(Dfm) then
-      begin
-        TFile.Copy(Dfm, LPaths[1]);
-        BakDfm:= LPaths[1];
-      end;
-      Result:= True;
-    except
-      on E: Exception do
-      begin
-        AError:= E.Message;
-        Result:= False;
-      end;
-    end; // try
-  end;
-
-  function TryRestore(out AError: string): Boolean;
-  begin
-    AError:= '';
-    try
-      TFile.Copy(BakPas, CurUnit, True);
-      if BakDfm <> '' then
-        TFile.Copy(BakDfm, Dfm, True);
-      Result:= True;
-    except
-      on E: Exception do
-      begin
-        AError:= E.Message;
-        Result:= False;
-      end;
-    end; // try
-  end;
 
   // Row is the failing book's row; restore the unit and account for its earlier rows.
   // AStatus is the failing row's status: csFailedRestored, csRefused or csConfigError.
@@ -989,11 +1002,11 @@ var
     end;
     Changed:= True; // the backup is the restore point the rows name -- keep it
     Step(rpRestore);
-    if not TryRestore(LError) then
+    if not RP.Restore(LError) then
     begin
       // Earlier csConverted rows stay: their change may still be on disk.
       Row.Status:= csRestoreFailed;
-      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, BackupNames(True)]);
+      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, RP.Names(True)]);
       Add;
       Exit;
     end;
@@ -1006,7 +1019,7 @@ var
       if UnitRows[I].Status = csConverted then
       begin
         UnitRows[I].Status:= csRolledBack;
-        UnitRows[I].Note  := Format('undone: %s %s on this unit; restored from %s', [ExtractFileName(Row.Book), LVerb, BackupNames(False)]);
+        UnitRows[I].Note  := Format('undone: %s %s on this unit; restored from %s', [ExtractFileName(Row.Book), LVerb, RP.Names(False)]);
       end;
     Row.Status:= AStatus;
     Row.Note  := AReason;
@@ -1063,8 +1076,8 @@ var
     Row:= Default(TConvertRow);
     Row.UnitPas  := CurUnit;
     Row.Book     := ABook;
-    Row.Backup   := BakPas;
-    Row.BackupDfm:= BakDfm;
+    Row.Backup   := RP.BakPas;
+    Row.BackupDfm:= RP.BakDfm;
     LScoped:= AskScope(ABook, LOnly);
     if LScoped and (Length(LOnly) = 0) then
     begin
@@ -1188,10 +1201,10 @@ var
     end;
     // One restore point per unit per run, taken before the first book touches it.
     Step(rpBackup);
-    if not TakeBackups(LError) then
+    if not RP.Take(CurUnit, LError) then
     begin
       Row.Status:= csUnitSkipped;
-      Row.Note  := 'backup failed: ' + LError + DropBackups;
+      Row.Note  := 'backup failed: ' + LError + RP.Drop;
       Add;
       Exit;
     end;
@@ -1207,7 +1220,7 @@ var
       Exit;
     // Nothing touched the unit (every book invalid or out of scope, or refused before any change): the fresh copies are
     // identical to it and would only litter the folder.
-    LError:= DropBackups;
+    LError:= RP.Drop;
     if (LError <> '') and (Length(UnitRows) > 0) then
       UnitRows[High(UnitRows)].Note:= UnitRows[High(UnitRows)].Note + LError;
   end;
