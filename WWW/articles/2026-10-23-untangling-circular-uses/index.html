@@ -65,10 +65,7 @@ uses
     <li>The drag-lint Structure window&rsquo;s Diagnostics tree carries a <code>circular-uses</code> warning on every unit that is part of a cycle. The rule is on by default.</li>
   </ul>
 
-  <figure class="note" data-screenshot="todo">
-    <span class="nlabel">Screenshot coming</span>
-    <figcaption>RAD Studio with the drag-lint menu open: <code>Uses &amp; Dependencies</code> expanded, the <code>Circular Uses Report (cycles + fix plan)...</code> item highlighted, and the <code>Fix Circular Uses Mechanically (dry run)...</code> item visible just below it.</figcaption>
-  </figure>
+  <!-- screenshot-todo (WWW\SCREENSHOT-DEBT.md): RAD Studio with the drag-lint menu open: Uses &amp; Dependencies expanded, the Circular Uses Report (cycles + fix plan)... item highlighted, and the Fix Circular Uses Mechanically (dry run)... item visible just below it. -->
 
   <h3>What the report says</h3>
   <p>For the demo, the edge listing and the cause listing are, verbatim:</p>
@@ -128,10 +125,7 @@ uses
     </table>
   </div>
 
-  <figure class="note" data-screenshot="todo">
-    <span class="nlabel">Screenshot coming</span>
-    <figcaption>The Structure window, Diagnostics tree: a <code>circular-uses</code> finding under a unit with its right-click menu open, showing <code>Fix this cycle (dry run)...</code> and <code>Apply cycle fix...</code>.</figcaption>
-  </figure>
+  <!-- screenshot-todo (WWW\SCREENSHOT-DEBT.md): The Structure window, Diagnostics tree: a circular-uses finding under a unit with its right-click menu open, showing Fix this cycle (dry run)... and Apply cycle fix.... -->
 
   <h3>Step 1: the dry run</h3>
   <p>A dry run plans the group, checks the plan against the files on disk, stages the result in a shadow tree and prints a verdict. <strong>No source file of your project is written.</strong> It does build your project once (the baseline build, see below), and that build writes what any build writes: DCUs and the exe.</p>
