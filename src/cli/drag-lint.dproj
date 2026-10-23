@@ -163,6 +163,7 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Proxy.Merge.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Context.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Features.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.Ping.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="DRagLint.Hover.Renderer.pas"/>
