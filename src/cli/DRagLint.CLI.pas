@@ -13060,10 +13060,28 @@ end;
   print the same findings, so without this a regression back to "run everything
   for any --rule" is invisible except as time. stderr, so it cannot corrupt
   --format json|sarif. }
+var
+  { T-04: the previous TraceLintChecker stamp, so DRAGLINT_PROFILE can print
+    how long the phase that just ENDED took. 0 = no phase open yet. }
+  GLintTraceMark: Int64 = 0;
+  GLintTracePrev: string = '';
+
 procedure TraceLintChecker(const AName: string);
 begin
   if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
     Writeln(ErrOutput, '[lint-checker] ' + AName);
+  { T-04: under DRAGLINT_PROFILE each call closes the previous phase, so a
+    `lint <file>` run prints where its wall time went (lint-all has its own
+    TLintPhaseProfiler). Phase 'end' closes the last one. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var Now64: Int64:= TStopwatch.GetTimeStamp;
+    if GLintTraceMark <> 0 then
+      Writeln(ErrOutput, Format('  [lint-phase] %-24s %8.3f s',
+        [GLintTracePrev, (Now64 - GLintTraceMark) / TStopwatch.Frequency]));
+    GLintTraceMark:= Now64;
+    GLintTracePrev:= AName;
+  end;
 end;
 
 const
@@ -13364,6 +13382,7 @@ var
   ScannedFiles: TArray<string>              ;
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
+  TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -13628,6 +13647,7 @@ begin
       var QueryFindings: TArray<TLintFinding>;
       if TFile.Exists(EffPath) then
       begin
+        TraceLintChecker('scm-rules');
         QueryFindings:= Linter.LintFile(EffPath);
         ScannedFiles:= [EffPath];
       end
@@ -13865,6 +13885,7 @@ begin
         Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(EffPath, FlowStore, FlowFid, Findings);
       end;
       { unused local variables (H2164) }
+      TraceLintChecker('ast-checks');
       if (NarrowRule = '') or (NarrowRule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(EffPath);
       { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
         syntax error show up in the editor like the IDE's Error Insight. }
@@ -13990,6 +14011,7 @@ begin
         the exception-ancestry sub-check of type-name-prefix + the library store
         continues the chain -- without them EFoo = class(Exception) is reported
         as needing a 'T' prefix. }
+      TraceLintChecker('naming');
       if LintRuleWants(NarrowRule, LINT_GATE_NAMING) then
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -13999,6 +14021,7 @@ begin
         v0.72: + destructor-without-override (#5) + case-with-too-few-branches +
         boolean-expression-complexity (#6, thresholds) + exception-constructed-but-not-raised
         + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
+      TraceLintChecker('dead-code');
       if LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE) then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
@@ -14007,6 +14030,7 @@ begin
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
+      TraceLintChecker('clone');
       if (NarrowRule = '') or (NarrowRule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath, Cfg.ThresholdFor('duplicate-code', 90)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -14112,6 +14136,7 @@ begin
             if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { Free cached tree after single-file lint }
+      TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // if
   end; // if
@@ -14245,6 +14270,7 @@ begin
       scan are ordered properly. }
     Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
   );
+  TraceLintChecker('end');
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
