@@ -156,6 +156,7 @@ uses
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
+  , DRagLint.MenuTree
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
   , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
@@ -28777,6 +28778,78 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
+/// (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md, section 5).</summary>
+/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --format text|json|paths, --output.</param>
+/// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
+/// unknown --root); 3 stale index (a file it must read changed since it was
+/// indexed -- refused, never answered from); 1 any other error.</returns>
+function DoMenuTree(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@9176 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 other)
+const
+  EXIT_STALE_INDEX = 3;  { spec 5: a stale index is refused, never answered from }
+var
+  Walker: TMenuWalker;
+  Tree  : TMenuTree;
+  Fmt   : string;
+  Txt   : string;
+begin
+  if not ExplicitDbsExist(AArgs, 'menu-tree') then Exit(2);
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'menu-tree: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if AArgs.ProjectPath = '' then
+  begin
+    Writeln(ErrOutput, 'menu-tree: need --project <X.dproj>');
+    Exit(2);
+  end;
+  Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if (Fmt <> 'text') and (Fmt <> 'json') and (Fmt <> 'paths') then
+  begin
+    Writeln(ErrOutput, 'menu-tree: --format must be text, json or paths');
+    Exit(2);
+  end;
+  Tree:= nil;
+  try
+    Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
+    try
+      Tree:= Walker.Walk(AArgs.RootForm);
+    finally
+      Walker.Free;
+    end;
+  except
+    on E: EMenuTreeStale do
+    begin
+      Writeln(ErrOutput, 'menu-tree: stale index: ', E.Message);
+      Exit(EXIT_STALE_INDEX);
+    end;
+    on E: EMenuTreeSetup do
+    begin
+      Writeln(ErrOutput, 'menu-tree: ', E.Message);
+      Exit(2);
+    end;
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'menu-tree: ', E.ClassName, ': ', E.Message);
+      Exit(1);
+    end;
+  end;
+  try
+    if Fmt = 'json' then Txt:= Tree.ToJson(VERSION, AArgs.ProjectPath, AArgs.DbPaths[0])
+    else if Fmt = 'paths' then Txt:= Tree.ToPaths
+    else Txt:= Tree.ToText;
+  finally
+    Tree.Free;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    Writeln('menu-tree: wrote ', AArgs.Output);
+  end
+  else Write(Txt);
+  Result:= 0;
+end; // function
 // v0.45 Task 9: 32-bit size guard.
 // Emits a WARNING to ErrOutput when the process is 32-bit (or AForce32=True for
 // testing) and the DB file exceeds ASizeGuardMB.
@@ -32150,6 +32223,7 @@ begin
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)
+    else if Args.Command = 'menu-tree'         then Result:= DoMenuTree        (Args)
     else if Args.Command = 'generate-test'     then Result:= DoGenerateTest    (Args)
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)

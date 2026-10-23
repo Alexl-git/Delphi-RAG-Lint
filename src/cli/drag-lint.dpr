@@ -110,6 +110,7 @@ uses
   DRagLint.Project.OwnRoots in '..\project\DRagLint.Project.OwnRoots.pas',
   DRagLint.FormsMap in '..\forms\DRagLint.FormsMap.pas',
   DRagLint.FormsMap.Dfm in '..\forms\DRagLint.FormsMap.Dfm.pas',
+  DRagLint.MenuTree in '..\forms\DRagLint.MenuTree.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.MCP.ClientConfig in '..\mcp\DRagLint.MCP.ClientConfig.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
