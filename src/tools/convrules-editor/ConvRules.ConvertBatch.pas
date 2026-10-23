@@ -33,7 +33,7 @@ const
 /// Length(AUnits), and every units[i].UnitPath is either absent ('') or the same file as
 /// AUnits[i] (ExpandFileName, case-insensitive). False for a short, long, reordered or
 /// invalid answer -- the runner then trusts none of the chunk.</returns>
-function BatchUnitsMatch(const ABatch: TApplyBatch; const AUnits: TArray<string>): Boolean;  // dl:ok unused-public-symbol@391a -- REVIEWED 2026-10-23 pure batch decision pinned by the model tests (a separate project); the batch runner wires it in B4 Task 4 (plan 2026-10-23-converter-b4-batch-mode)
+function BatchUnitsMatch(const ABatch: TApplyBatch; const AUnits: TArray<string>): Boolean;
 
 /// <summary>PURE: True when the run converts through apply-batch/1 calls.</summary>
 /// <param name="ACapBatch">The engine reports the batch_units capability.</param>
@@ -44,27 +44,64 @@ function BatchUnitsMatch(const ABatch: TApplyBatch; const AUnits: TArray<string>
 /// <param name="AOverride">CONVRULES_BATCH; 'off' (any case) forces the per-unit path
 /// (decision D6), any other value is ignored.</param>
 /// <returns>ACapBatch and AWholeUnitScope and (AUnitCount >= 2) and not 'off'.</returns>
-function BatchModeFor(ACapBatch, AWholeUnitScope: Boolean; AUnitCount: Integer; const AOverride: string): Boolean;  // dl:ok unused-public-symbol@ae59 -- REVIEWED 2026-10-23 pure batch decision pinned by the model tests (a separate project); the batch runner wires it in B4 Task 4 (plan 2026-10-23-converter-b4-batch-mode)
+function BatchModeFor(ACapBatch, AWholeUnitScope: Boolean; AUnitCount: Integer; const AOverride: string): Boolean;
 
 /// <summary>PURE: splits the active units into batch calls.</summary>
 /// <param name="AUnits">Unit paths in run order.</param>
 /// <param name="AMax">Units per call; 0 or less = one chunk.</param>
 /// <returns>Chunks of at most AMax units, order kept, the last one shorter; [] for no
 /// units.</returns>
-function BatchChunks(const AUnits: TArray<string>; AMax: Integer): TArray<TArray<string>>;  // dl:ok unused-public-symbol@ad56 -- REVIEWED 2026-10-23 pure batch decision pinned by the model tests (a separate project); the batch runner wires it in B4 Task 4 (plan 2026-10-23-converter-b4-batch-mode)
+function BatchChunks(const AUnits: TArray<string>; AMax: Integer): TArray<TArray<string>>;
 
 /// <summary>PURE: the watchdog of one batch call.</summary>
 /// <param name="ABaseMs">The per-unit watchdog (the adapter passes CONVERT_TIMEOUT_MS).</param>
 /// <param name="AUnits">Units in the call.</param>
 /// <returns>ABaseMs for one unit or fewer, else ABaseMs + (AUnits - 1) * BATCH_UNIT_EXTRA_MS.</returns>
-function BatchTimeoutMs(ABaseMs, AUnits: Integer): Integer;  // dl:ok unused-public-symbol@10e3 -- REVIEWED 2026-10-23 pure batch decision pinned by the model tests (a separate project); the batch runner wires it in B4 Task 4 (plan 2026-10-23-converter-b4-batch-mode)
+function BatchTimeoutMs(ABaseMs, AUnits: Integer): Integer;
 
 /// <summary>PURE: the row note of a chunk the runner restored because it could not trust it.</summary>
 /// <param name="AWhy">What broke (unparseable output, missing units, contract breach).</param>
 /// <returns>BATCH_UNTRUSTED_PREFIX + AWhy.</returns>
-function BatchUntrustedNote(const AWhy: string): string;  // dl:ok unused-public-symbol@99ec -- REVIEWED 2026-10-23 pure batch decision pinned by the model tests (a separate project); the batch runner wires it in B4 Task 4 (plan 2026-10-23-converter-b4-batch-mode)
+function BatchUntrustedNote(const AWhy: string): string;
+
+/// <summary>PURE: the answer of a ONE-unit chunk, read as a one-unit apply-batch/1. The
+/// engine answers a single --unit with a bare apply/1 (CONVERSION-RULES.md "Batch
+/// (1.23.0)"), and a batch run meets one-unit chunks: the rest of BatchChunks, or the one
+/// unit still active in a later book.</summary>
+/// <param name="AJson">The engine's output for the one --unit.</param>
+/// <param name="ACode">The call's exit code; it becomes ExitCode.</param>
+/// <param name="AFeatures">As for ParseApplyJson.</param>
+/// <returns>ParseApplyBatchJson(AJson) when that is Valid. Else, when AJson holds an apply/1
+/// object that names its unit: Valid, Units = [that reading], UnitsCount 1, ExitCode =
+/// ACode, Ok = its ok, and one of OkCount (ok), RefusedCount (a refusal or an edit-set
+/// refusal) or FailedCount set to 1 -- so BatchContractBroken says what ApplyExitBroken
+/// says for a single apply. Else not Valid.</returns>
+function BatchOfSingle(const AJson: string; ACode: Integer; AFeatures: TApplyFeatures): TApplyBatch;
 
 implementation
+
+function BatchOfSingle(const AJson: string; ACode: Integer; AFeatures: TApplyFeatures): TApplyBatch;
+var
+  LRow: TApplyRow;
+begin
+  Result:= ParseApplyBatchJson(AJson, AFeatures);
+  if Result.Valid then
+    Exit;
+  LRow:= ParseApplyJson(AJson, AFeatures);
+  if LRow.Unparsed or (LRow.UnitPath = '') then
+    Exit;
+  Result.Valid     := True;
+  Result.Ok        := LRow.Ok;
+  Result.ExitCode  := ACode;
+  Result.UnitsCount:= 1;
+  Result.Units     := [LRow];
+  if LRow.Ok then
+    Result.OkCount:= 1
+  else if LRow.Refused or ApplyEditSetRefused(LRow) then
+    Result.RefusedCount:= 1
+  else
+    Result.FailedCount:= 1;
+end;
 
 function BatchUnitsMatch(const ABatch: TApplyBatch; const AUnits: TArray<string>): Boolean;
 begin
