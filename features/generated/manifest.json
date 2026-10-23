@@ -9522,13 +9522,14 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "contrast-selftest"
+          "verb": "contrast-selftest",
+          "usage": "drag-lint contrast-selftest"
         }
       ],
       "audience": "agent",
       "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "c95fc84e6dffddd5ff019a313955dd75a2ef9e53c50fe130be028d85f1a8af4c"
@@ -9596,13 +9597,20 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "doc-facts-selftest"
+          "verb": "doc-facts-selftest",
+          "usage": "drag-lint doc-facts-selftest --db PATH",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "PATH"
+            }
+          ]
         }
       ],
       "audience": "agent",
       "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "f972cd161d5f8941eb68cd16d089453d4ca6a1b04cde9196635d0bab9b70cd3c"
@@ -9666,13 +9674,28 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "dump-pp-eval"
+          "verb": "dump-pp-eval",
+          "usage": "drag-lint dump-pp-eval --expr \"E\" [--define SYM]... [--numeric K=V]...",
+          "flags": [
+            {
+              "name": "--expr",
+              "arg": "\"E\""
+            },
+            {
+              "name": "--define",
+              "arg": "SYM"
+            },
+            {
+              "name": "--numeric",
+              "arg": "K=V"
+            }
+          ]
         }
       ],
       "audience": "agent",
       "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
@@ -9691,13 +9714,20 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "dump-pp-lex"
+          "verb": "dump-pp-lex",
+          "usage": "drag-lint dump-pp-lex --file PATH",
+          "flags": [
+            {
+              "name": "--file",
+              "arg": "PATH"
+            }
+          ]
         }
       ],
       "audience": "agent",
       "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "b02944f9cf3a99666155c5d3b86d955740509e94a734f5a3d330c5dff215c34d"
@@ -10041,7 +10071,29 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "resolve-uses"
+          "verb": "resolve-uses",
+          "usage": "drag-lint resolve-uses --name <Symbol> [--in <file.pas>] [--kind K] [--json] [--db <file.sqlite>]",
+          "flags": [
+            {
+              "name": "--name",
+              "arg": "<Symbol>"
+            },
+            {
+              "name": "--in",
+              "arg": "<file.pas>"
+            },
+            {
+              "name": "--kind",
+              "arg": "K"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            }
+          ]
         }
       ],
       "audience": "agent",
@@ -10053,7 +10105,7 @@
       ],
       "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "b7e71d41448879b30e1e12defd0282071cc232bacd941f17f0ea05a91972d486"
@@ -10072,13 +10124,14 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "selftest"
+          "verb": "selftest",
+          "usage": "drag-lint selftest <manifest-merge|glob|ignore|files|closure|dbselect|drift|coverage|recreate|unused-locals|harvest|section-db|manifest-save-atomic|own-roots|studio-root|fact-wrap>"
         }
       ],
       "audience": "agent",
       "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "227b9395644e4c8d105f6999b03d75b3b610b1512086232c88c13d62f4a2c1eb"
@@ -10234,7 +10287,14 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "test-store-freshness"
+          "verb": "test-store-freshness",
+          "usage": "drag-lint test-store-freshness --db PATH",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "PATH"
+            }
+          ]
         }
       ],
       "audience": "agent",
@@ -10246,7 +10306,7 @@
       ],
       "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "233a758c69f464298b1cf5f57e96d6f6be4fbd8f197a6e4d8e041a8c7c7967c1"
