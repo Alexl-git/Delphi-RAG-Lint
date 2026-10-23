@@ -1613,8 +1613,8 @@ type
     /// Delphi's order. From the ref's scope (ScopeSymbolAt) outwards: a generic
     /// parameter of the level declines, a routine whose text declares the name
     /// as a local type declines ('unlisted' -- the index lists no local types),
-    /// a type child of the level binds (a nested type, then the own unit's
-    /// types). Then the used units: exactly one TOP-LEVEL INTERFACE type of a
+    /// a type child of the level binds (a nested type -- of the level's
+    /// resolved ancestors too, nearest first -- then the own unit's types). Then the used units: exactly one TOP-LEVEL INTERFACE type of a
     /// unit in scope binds; two are 'ambiguous' (uses-clause order is not
     /// modelled). A qualified name is declined rather than guessed. Identity
     /// only. Counted into TypeUseStats.
@@ -5582,6 +5582,7 @@ var
   S    : TSymbol         ;
   Full : TSymbol         ;
   Count: Integer         ;
+  Anc  : TTypeAncestor   ;
 begin
   Result := 0;
   AReason:= BareReadSite(ARef, Lines, Rcv);
@@ -5599,6 +5600,15 @@ begin
     else
     begin
       Result:= FindChildOfKind(Cur.Id, ARef.NameText, TYPE_LIKE, False).Id;
+      { Review 2026-10-23: an ancestor's nested type is in scope too, nearest
+        ancestor first, before any enclosing or used-unit type. }
+      if (Result = 0) and (Cur.Kind in [skClass, skRecord, skInterface]) then
+        for Anc in AncestorsOf(Cur.Id) do
+          if Anc.Resolved and (Anc.SymbolId > 0) then
+          begin
+            Result:= FindChildOfKind(Anc.SymbolId, ARef.NameText, TYPE_LIKE, False).Id;
+            if Result > 0 then Break;
+          end;
       if Cur.ParentId <= 0 then Cur:= Default(TSymbol)
       else Cur:= SymbolById(Cur.ParentId);
     end;
