@@ -30500,6 +30500,46 @@ begin
   Result:= 0;
 end; // function
 
+{ selftest own-roots, T-01 half: "excludeRoots" carves a vendored subfolder out
+  of an owned root. Fixture is the sibling folder own-roots-exclude, kept apart
+  so run_lint_own_roots' whole-folder index of own-roots does not change.
+  Returns '' when every assertion holds, else the FIRST failure's detail. }
+function SelfTestOwnRootsExclude(const AFx: string): string;
+var
+  Ex : string   ;
+  Own: TOwnRoots;
+
+  procedure Expect(ACond: Boolean; const ADetail: string);
+  begin
+    if (Result = '') and not ACond then Result:= ADetail;
+  end;
+
+begin
+  Result:= '';
+  Ex    := TPath.GetFullPath(TPath.Combine(AFx, '..\own-roots-exclude'));
+
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'proj'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Length(Own.ExcludeRoots) = 1, 'excludeRoots not read');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\Own.pas')), 'excludeRoots dropped an own file');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'proj\vendor\Lib\Vend.pas')), 'excluded vendor file counted as ours');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\vendorX\Keep.pas')),
+    'exclude "vendor" wrongly matched sibling prefix "vendorX"');
+
+  { excludeRoots without ownRoots narrows the DEFAULT root. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'only-exclude'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'only-exclude\A.pas')), 'exclude-only declaration dropped the default root');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'only-exclude\vendor\V.pas')), 'exclude-only declaration did not exclude');
+
+  { Present but not an array, and excluding every own root, are Errors: both
+    would otherwise lint something the author did not intend. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'bad-exclude'));
+  Expect(Own.Error <> '', 'non-array "excludeRoots" must set Error');
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'all-excluded'));
+  Expect(Own.Error <> '', 'excludeRoots covering every own root must set Error');
+end;
+
 { Prints OWNROOTS-FAIL: <ADetail> and returns 1, so a failed assertion is one
   statement: Exit(OwnRootsFail(...)). }
 function OwnRootsFail(const ADetail: string): Integer;
@@ -30596,37 +30636,10 @@ begin
   if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
     begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
 
-  { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): a vendored
-    subfolder of an owned root is NOT ours. Fixture is the sibling folder
-    own-roots-exclude, kept apart so run_lint_own_roots' whole-folder index of
-    own-roots does not change. }
-  var Ex: string:= TPath.GetFullPath(TPath.Combine(Fx, '..\own-roots-exclude'));
-  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'proj'));
-  if Own.Error <> '' then Exit(OwnRootsFail(Own.Error));
-  if Length(Own.ExcludeRoots) <> 1 then
-    Exit(OwnRootsFail('excludeRoots not read'));
-  if not Own.IsOurs(TPath.Combine(Ex, 'proj\Own.pas')) then
-    Exit(OwnRootsFail('excludeRoots dropped an own file'));
-  if Own.IsOurs(TPath.Combine(Ex, 'proj\vendor\Lib\Vend.pas')) then
-    Exit(OwnRootsFail('excluded vendor file counted as ours'));
-  if not Own.IsOurs(TPath.Combine(Ex, 'proj\vendorX\Keep.pas')) then
-    Exit(OwnRootsFail('exclude "vendor" wrongly matched sibling prefix "vendorX"'));
-  { excludeRoots without ownRoots narrows the DEFAULT root. }
-  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'only-exclude'));
-  if Own.Error <> '' then Exit(OwnRootsFail(Own.Error));
-  if not Own.IsOurs(TPath.Combine(Ex, 'only-exclude\A.pas')) then
-    Exit(OwnRootsFail('exclude-only declaration dropped the default root'));
-  if Own.IsOurs(TPath.Combine(Ex, 'only-exclude\vendor\V.pas')) then
-    Exit(OwnRootsFail('exclude-only declaration did not exclude'));
-  { Present but not an array, and excluding every own root, are Errors: both
-    would otherwise lint something the author did not intend. }
-  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'bad-exclude'));
-  if Own.Error = '' then
-    Exit(OwnRootsFail('non-array "excludeRoots" must set Error'));
-  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'all-excluded'));
-  if Own.Error = '' then
-    Exit(OwnRootsFail('excludeRoots covering every own root must set Error'));
-
+  { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): kept in its own
+    function so these assertions add one exit here, not nine. }
+  var ExFail: string:= SelfTestOwnRootsExclude(Fx);
+  if ExFail <> '' then Exit(OwnRootsFail(ExFail));
   if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
                   ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
     begin Writeln('OWNROOTS-FAIL: AnchorDirForDb did not resolve the _D-RAG parent'); Exit(1); end;

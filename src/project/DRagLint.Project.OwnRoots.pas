@@ -31,7 +31,7 @@ type
   /// Value type; copy freely. Immutable after Load. Thread-safe to
   /// share for reading.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ResolveSelection (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAllSelected (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.GroupKeyFor (DRagLint.CLI.pas) (+7 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ResolveSelection (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAllSelected (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.GroupKeyFor (DRagLint.CLI.pas) (+8 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -63,7 +63,7 @@ type
     /// however an own root nests. A non-array "excludeRoots", or one covering
     /// every own root, is an Error for the same reason.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CycleFix.ResolveSelection (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CycleFix.ResolveSelection (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.SelfTestOwnRootsExclude (DRagLint.CLI.pas) (+1 more)</para>
     /// <para>Calls: Default, DRagLint.Project.OwnRoots.AllUnder, DRagLint.Project.OwnRoots.NormalizeDir, DRagLint.Project.OwnRoots.ResolveEntries, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONArray, TJSONObject</para>
     /// <para>Returns: Default(TOwnRoots)</para>
     /// <para>Complexity: 12 (cyclomatic, outer body), 76 lines (full implementation)</para>
@@ -87,7 +87,7 @@ type
     /// DRagLint.Storage.FileMembership.NormalizeForLookup: forward slashes
     /// folded to backslashes, compared case-insensitively.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.SelfTestOwnRootsExclude (DRagLint.CLI.pas) (+1 more)</para>
     /// <para>Calls: DRagLint.Project.OwnRoots.UnderAny, ExpandFileName, StartsText, StringReplace</para>
     /// <para>Returns: True; False</para>
     /// <para>Reads: FActive, FExcludes, FRoots</para>
