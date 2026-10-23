@@ -45,6 +45,17 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   (docs\superpowers\plans\2026-10-23-code-built-menu-reader.md), lane 6 cycles incl. the
   `cycles --fix` refusal line printing the doc-comment start (Orders.pas:6 vs decl 10; tell www-40).
 
+## Update ~14:20 (context checkpoint at 91%)
+- W2-9 INBOX sweep DONE: 18 retired, counts 59/35/367, guard PASS (4 kept open -> small "CLI leftovers"
+  lane: resolve-dbs item 3, info --db garbage FATAL + followups 3/4/4b/5, compare shared %TEMP%,
+  procrun timeout re-run on an idle machine).
+- CONVERTER: T10 merged 02b11037, regenerate 8fa48492 (index.json menus/context/verb); build slot free.
+- Still running (background agents of this session; their reports arrive here as messages):
+  W2-3 lint FPs (e3d/lint-fp, first commit N-14 in), W2-2 resolver (e3d/resolver), L8 #migrate gaps
+  (e3d/migrate-gaps). On a fresh session these reports are LOST: inspect each branch log + worktree,
+  re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
+- Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
+
 ## Next actions (in order)
 1. Merge finished lanes one at a time: review diff, rerun its guard on main, ledger row -> MERGED;
    tell CONVERTER about conversion-related merges (L8).
