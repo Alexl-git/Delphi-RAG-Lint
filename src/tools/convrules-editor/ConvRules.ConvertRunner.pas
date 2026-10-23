@@ -545,7 +545,7 @@ function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TAr
 /// csUnitSkipped, csRestoreFailed, csConfigError) and fewer rows than books. A book that
 /// failed validation counts for every unit: its one csBookSkipped row stands for all of
 /// them. [] when every unit finished.</returns>
-function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@02ec -- REVIEWED 2026-10-23 pure, pinned by the model tests (a separate project); the Convert tab wires it in B4 Task 5 (plan 2026-10-23-converter-b4-batch-mode)
+function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks: TArray<string>): TArray<string>;
 
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
