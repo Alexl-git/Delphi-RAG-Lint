@@ -159,6 +159,12 @@ try {
   $missing = @($units | Where-Object { -not $dpk.Contains("$_ in '$_.pas'") -or -not $dproj.Contains("<DCCReference Include=`"$_.pas`"/>") })
   Check 'W6 the four new units are in the .dpk contains and the .dproj (HOWTO rule 4)' ($missing.Count -eq 0) "missing: $($missing -join ', ')"
 
+  $of = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.OptionsFrames.pas'))
+  Check 'W7 Options > General: HelpRoot loads and saves through DLNormaliseHelpRoot' `
+    ($of.Contains('FEdHelpRoot         .Text   := DLNormaliseHelpRoot(FSettings.HelpRoot);') -and $of.Contains('ASettings.HelpRoot             := DLNormaliseHelpRoot(FEdHelpRoot.Text);')) ''
+  Check 'W8 the Test button opens the all-features page of the root as typed' `
+    ($of.Contains('DLOpenHelpUrl(DLHelpAllUrl(DLNormaliseHelpRoot(FEdHelpRoot.Text)));')) ''
+
   Write-Host '-- Q: queue task lines (spec 3.6)' -ForegroundColor Cyan
   Eq 'Q1 depth 0 -> no lines (the strip stays as today)'       'queue.d0'      '0'
   Eq 'Q2 depth 1 -> Now (pct + phase) + Next'                  'queue.d1'      'Now: Index project - 45%  uMain.pas|Next: Lint all'
