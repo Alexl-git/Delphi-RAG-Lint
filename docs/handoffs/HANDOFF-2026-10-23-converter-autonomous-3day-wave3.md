@@ -29,6 +29,11 @@ featuregen regen + backlog bb8aaf4d; N9 + GlyphForm marker 6b21a559. Pin
 * FG-M DONE on feat/conv-fgm-menu-tree (47af9860, 0a719fc1) -- HELD until ENGINE's final deploy
   (old engine lacks menu-tree -> registry guard would go red).
 
+## Update (later): N8 MERGED e52df7bb (model 2588/5/0). FG-N (featuregen `"noFlags": true`
+marker, 450b9267) DONE on the held FG-M branch; owed at the FG-M merge: lint-all on the featuregen
+DB + lint FeatureGenTests.dpr. Only N7+N11 (agent a5e920f63124c9d02) still in flight -- told to
+merge main (N9 6b21a559, N8 e52df7bb) first.
+
 ## Next actions
 1. Review + cherry-pick N7/N11; act on N8's verdict (fix via sonnet if the table is clear).
 2. Then: N10 (gui-lock stale-owner check), 44 B4 lint findings in ConvRulesModelTests.dpr, other backlog leftovers.
