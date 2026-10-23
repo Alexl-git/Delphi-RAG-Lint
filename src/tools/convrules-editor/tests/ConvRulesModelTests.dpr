@@ -10421,8 +10421,14 @@ begin
     Code.Line:= CODE_LINE;
     Check('inh.action.code.report.line', Pos('C1: TLabel line 7 -- code use -- ', InheritedReportNote(Code, True)) = 1, InheritedReportNote(Code, True));
     Code.AncestorState:= 'converted';
+    // N8: converted + code stays left unless its pas_uses[] entry is mapped (no entry = not mapped).
     Check('inh.action.code.converted.n1', InheritedLeftNote([Code], False) = '1 inherited code use(s) left: ancestor Base (ancestor converted; retype needs engine N2)', InheritedLeftNote([Code], False));
     Check('inh.action.code.converted.retype', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base converted', InheritedLeftNote([Code], True));
+    Code.PasUseStatus:= 'mapped';
+    Check('inh.action.code.converted.mapped.n1', InheritedLeftNote([Code], False) = '', InheritedLeftNote([Code], False));
+    Check('inh.action.code.converted.mapped.retype', InheritedLeftNote([Code], True) = '', InheritedLeftNote([Code], True));
+    Code.AncestorState:= 'unconverted';
+    Check('inh.action.code.unconverted.mapped.still.left', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base not converted', InheritedLeftNote([Code], True));
     Check('inh.action.unverified.report', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True)
       = 'V1: TLabel line 11 -- ancestor field use not verified against the index (field use could not be checked)', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True));
   end;
@@ -10433,6 +10439,54 @@ begin
     and (Pos('V1:', Joined) > Pos('C1:', Joined)) and (Pos('A1:', Joined) = 0), Joined);
 end;
 
+{ N8: a converted ancestor + code use is NOT left once pas_uses[] says mapped. REAL capture
+  (apply-desc-code-converted-1330.json: inherited Label1 code/converted, pas_uses Label1 mapped); the
+  other statuses and a missing entry are inline variants of the same JSON. }
+procedure TestInheritedCodeMapped;
+const
+  JSON_HEAD = '{"schema":"apply/1","ok":true,"edits_count":1,"component_part":"applied","inherited":[{"name":"Label1","type":"TLabel","line":13,"ancestor_unit":"Anc","ancestor_state":"converted","reason":"declared in Anc","action":"code"}]';
+  NOTE_BASE = '1 edit(s), 0 remaining for manual work';
+  NOTE_LEFT = NOTE_BASE + '; 1 inherited code use(s) left: ancestor Anc converted';
+var
+  Conv, Var1, Var2, Var3: TApplyRow;
+  Row                   : TConvertRow;
+  Lines                 : TArray<string>;
+begin
+  Conv:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), APPLY_FEATURES_ALL);
+  Check('inh.n8.real.linked', (Length(Conv.InheritedLeft) = 1) and (Conv.InheritedLeft[0].PasUseStatus = 'mapped'));
+  Check('inh.n8.real.mapped', (Length(Conv.InheritedLeft) = 1) and IsCodeUseMapped(Conv.InheritedLeft[0]));
+  Check('inh.n8.real.no.left.note', InheritedLeftNote(Conv.InheritedLeft, True) = '', InheritedLeftNote(Conv.InheritedLeft, True));
+  Check('inh.n8.real.row.note', Pos('left', ConvertedRowNote(Conv, True, True)) = 0, ConvertedRowNote(Conv, True, True));
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := Conv;
+  Check('inh.n8.real.no.report.line', Length(InheritedReportLines(Row, True, True)) = 0, string.Join(' | ', InheritedReportLines(Row, True, True)));
+  // Features without afPasUses: no entry is read, so the use is still left.
+  Var1:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), []);
+  Check('inh.n8.gated.still.left', (Length(Var1.InheritedLeft) = 1) and not IsCodeUseMapped(Var1.InheritedLeft[0])
+    and (Pos('inherited code use(s) left', InheritedLeftNote(Var1.InheritedLeft, True)) > 0), InheritedLeftNote(Var1.InheritedLeft, True));
+
+  Var1:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"Label1","from_type":"TLabel","member":"Caption","status":"unmapped","lines":[13],"count":1}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.unmapped.left', InheritedLeftNote(Var1.InheritedLeft, True) = '1 inherited code use(s) left: ancestor Anc converted', InheritedLeftNote(Var1.InheritedLeft, True));
+  Check('inh.n8.unmapped.row.note', ConvertedRowNote(Var1, True, True) = NOTE_LEFT, ConvertedRowNote(Var1, True, True));
+  Row.Apply:= Var1;
+  Lines:= InheritedReportLines(Row, True, True);
+  Check('inh.n8.unmapped.report.line', (Length(Lines) = 1) and (Pos('Label1: TLabel line 13 -- code use -- ancestor Anc converted', Lines[0]) > 0), string.Join(' | ', Lines));
+
+  Var2:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"Other","from_type":"TLabel","member":"Caption","status":"mapped"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.no.matching.entry.left', ConvertedRowNote(Var2, True, True) = NOTE_LEFT, ConvertedRowNote(Var2, True, True));
+  Var2:= ParseApplyJson(JSON_HEAD + '}', APPLY_FEATURES_ALL);
+  Check('inh.n8.no.pas_uses.left', ConvertedRowNote(Var2, True, True) = NOTE_LEFT, ConvertedRowNote(Var2, True, True));
+
+  // Two entries for the instance: all must be mapped.
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"label1","status":"mapped"},{"instance":"Label1","status":"cast-refused"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.one.not.mapped.left', (Length(Var3.InheritedLeft) = 1) and (Var3.InheritedLeft[0].PasUseStatus = 'cast-refused') and (ConvertedRowNote(Var3, True, True) = NOTE_LEFT), ConvertedRowNote(Var3, True, True));
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"label1","status":"mapped"},{"instance":"Label1","status":"mapped"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.all.mapped.quiet', ConvertedRowNote(Var3, True, True) = NOTE_BASE, ConvertedRowNote(Var3, True, True));
+  // Bad shapes never raise and never read as mapped.
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":7,"status":true},"x",null]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.bad.shape.left', ConvertedRowNote(Var3, True, True) = NOTE_LEFT, ConvertedRowNote(Var3, True, True));
+end;
 { B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
   descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
   recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
@@ -15400,6 +15454,7 @@ begin
     TestInheritedApply;
     TestInheritedActions;
     TestInheritedCodeUnconverted;
+    TestInheritedCodeMapped;
     TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
