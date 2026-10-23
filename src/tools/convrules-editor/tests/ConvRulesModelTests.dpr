@@ -11271,24 +11271,29 @@ var
   Where: Boolean;
 begin
   Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
-  Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 1) and (Cast.UsesRows[0].Action = 'kept') and (Cast.UsesRows[0].UnitName = 'Vcl.Buttons'));
-  if Length(Cast.UsesRows) = 1 then
-    Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[0].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[0].Dangling) = 0),
-      string.Join(',', Cast.UsesRows[0].NeededBy));
-  Check('apply1270.cast.uses.note.kept.only', UsesNote(Cast) = '', UsesNote(Cast));
+  // Engine 1.28.1 (940193b2 / 4785f028): '#convert trailing units emit uses add rows' -- the capture now has the cxButtons add row first, then the kept row.
+  Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 2) and (Cast.UsesRows[1].Action = 'kept') and (Cast.UsesRows[1].UnitName = 'Vcl.Buttons'));
+  Check('apply1270.cast.uses.add.convert', (Length(Cast.UsesRows) = 2) and (Cast.UsesRows[0].Action = 'add') and (Cast.UsesRows[0].UnitName = 'cxButtons') and (Cast.UsesRows[0].Section = 'interface'));
+  if Length(Cast.UsesRows) = 2 then
+    Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[1].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[1].Dangling) = 0),
+      string.Join(',', Cast.UsesRows[1].NeededBy));
+  // Engine 1.28.1 (940193b2 / 4785f028): the #convert add row counts: +1 -0.
+  Check('apply1270.cast.uses.note.add.only', UsesNote(Cast) = '; uses: +1 -0 moved 0', UsesNote(Cast));
   Check('apply1270.cast.reindex', Cast.UsesReindex = 'done', Cast.UsesReindex);
 
   Uses1:= ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'), APPLY_FEATURES_ALL);
-  Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 2) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add'),
+  // Engine 1.28.1 (940193b2 / 4785f028): '#convert trailing units emit uses add rows' -- remove, add cxButtons (#convert), add Vcl.ExtCtrls (#use).
+  Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 3) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add')
+    and (Uses1.UsesRows[1].UnitName = 'cxButtons') and (Uses1.UsesRows[2].Action = 'add'),
     IntToStr(Length(Uses1.UsesRows)));
-  if Length(Uses1.UsesRows) = 2 then
+  if Length(Uses1.UsesRows) = 3 then
   begin
-    Where:= (Uses1.UsesRows[1].UnitName = 'Vcl.ExtCtrls') and (Uses1.UsesRows[1].Section = 'implementation') and (Uses1.UsesRows[0].Source = 'rule');
+    Where:= (Uses1.UsesRows[2].UnitName = 'Vcl.ExtCtrls') and (Uses1.UsesRows[2].Section = 'implementation') and (Uses1.UsesRows[0].Source = 'rule');
     Check('apply1270.uses.rows.fields', Where);
     Check('apply1270.uses.dangling', (string.Join(',', Uses1.UsesRows[0].Dangling) = 'TBitBtnKind,bkOK') and (Length(Uses1.UsesRows[0].NeededBy) = 0),
       string.Join(',', Uses1.UsesRows[0].Dangling));
   end;
-  Check('apply1270.uses.note', UsesNote(Uses1) = '; uses: +1 -1 moved 0', UsesNote(Uses1));
+  Check('apply1270.uses.note', UsesNote(Uses1) = '; uses: +2 -1 moved 0', UsesNote(Uses1));
 end;
 
 procedure TestApply1270Notes;
@@ -11297,7 +11302,7 @@ const
   DFM_LINE   = 10;
   SAMPLE_ROWS = 3;
   NOTE_ORDER = '2 edit(s), 0 remaining for manual work; 1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)'
-    + '; StripDB: 3 value(s) changed, 1 to check by hand; 1 cast site(s) to convert by hand; uses: +1 -1 moved 0'
+    + '; StripDB: 3 value(s) changed, 1 to check by hand; 1 cast site(s) to convert by hand; uses: +2 -1 moved 0'
     + '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)';
 var
   Strip : TApplyRow;
@@ -11392,10 +11397,12 @@ begin
   Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Row.Apply:= Cast;
   Lines:= ApplyItemReportLines(Row);
-  Check('apply1270.report.cast.count', (Length(Lines) = 2 + 5) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
-  if (Length(Lines) = 2 + 5) and (Length(Cast.CastSites) = 1) then
+  // Engine 1.28.1 (940193b2 / 4785f028): the cxButtons add row is a report line of its own (cast, add, kept, 5 dropped = 3 + 5).
+  Check('apply1270.report.cast.count', (Length(Lines) = 3 + 5) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
+  if (Length(Lines) = 3 + 5) and (Length(Cast.CastSites) = 1) then
     Check('apply1270.report.cast', (Lines[0] = HEAD + 'cast site'#9#9#9#9#9 + Cast.CastSites[0].Text)
-      and (Lines[1] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
+      and (Lines[1] = HEAD + 'uses add'#9#9#9#9#9'cxButtons (interface, source rule)')
+      and (Lines[2] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
   Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'), APPLY_FEATURES_ALL);
   Lines:= ApplyItemReportLines(Row);
   Check('apply1270.report.unresolved', (Length(Lines) = SAMPLE_REPORT) and (Lines[High(Lines)] = HEAD + 'uses unresolved'#9#9#9#9#9'not-found'),
@@ -11597,7 +11604,7 @@ var
 begin
   A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.remainder.cast.once', Length(A.Remainder) = CAST_REMAINDER, IntToStr(Length(A.Remainder)));
-  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 6 remaining for manual work; 1 cast site(s) to convert by hand; 5 dropped source property(ies), no #link: TBitBtn.Height, TBitBtn.Left, TBitBtn.TabOrder, TBitBtn.Top, TBitBtn.Width',
+  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 6 remaining for manual work; 1 cast site(s) to convert by hand; uses: +1 -0 moved 0; 5 dropped source property(ies), no #link: TBitBtn.Height, TBitBtn.Left, TBitBtn.TabOrder, TBitBtn.Top, TBitBtn.Width',
     ConvertedRowNote(A, True, True));
   Check('apply1270.remainder.cast.gated', Length(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), []).Remainder) = CAST_ALL);
   A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
@@ -13110,7 +13117,8 @@ begin
   for var LRow: TPasUseRow in Rows do
     if LRow.Member = 'bkOK' then
       Glob:= RowDisplay(LRow);
-  Check('worklist.global.row', string.Join('|', Glob) = 'Unit1.pas|' + WORK_GLOBAL_INSTANCE + '|' + WORK_GLOBAL_PAIR + '|bkOK||global-dangling|26|Vcl.Buttons',
+  // Engine 1.28.2 (59d101d1): the capture now classifies bkOK as kind enum-value.
+  Check('worklist.global.row', string.Join('|', Glob) = 'Unit1.pas|' + WORK_GLOBAL_INSTANCE + '|' + WORK_GLOBAL_PAIR + '|bkOK|enum-value|global-dangling|26|Vcl.Buttons',
     string.Join('|', Glob));
   Check('worklist.columns', string.Join('|', WorkColumns) = 'Unit|Instance|From -> To|Member|Kind|Status|Lines|Declared in', string.Join('|', WorkColumns));
 end;
@@ -13384,6 +13392,10 @@ const
     + ' {"member":"D","kind":"property","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"mapped","resolution":"resolved"},'
     + ' {"member":"E","declaring_unit":"Vcl.StdCtrls","status":"unmapped","resolution":"brand-new","candidates":["X",5,"Y",null,true]},'
     + ' {"member":5,"kind":1.5,"status":"unmapped","resolution":7,"candidates":"Vcl.StdCtrls"}]';
+  // The 1.28.2 capture of the ambiguous case (a bare TLabel book on a unit with no StdCtrls in uses), kept verbatim: the 1.33.0 engine infers
+  // Vcl.StdCtrls.TLabel from the .dfm (1.28.3, e6f97f7d) and no longer reproduces it from the Fix project.
+  AMBIG_JSON = '[{"instance":"Label1","from_type":"TLabel","to_type":"TPanel","member":"Caption","kind":"","visibility":"","declaring_unit":"","declared_in":"","status":"same-name","lines":[24],"count":1,"resolution":"ambiguous","candidates":["FMX.StdCtrls","Vcl.StdCtrls"]},'
+    + '{"instance":"Label1","from_type":"TLabel","to_type":"TPanel","member":"WordWrap","kind":"","visibility":"","declaring_unit":"","declared_in":"","status":"unmapped","lines":[25],"count":1,"resolution":"ambiguous","candidates":["FMX.StdCtrls","Vcl.StdCtrls"]}]';
   RES_CLASS    = 0;
   RES_MEMBER   = 1;
   RES_KIND     = 2;
@@ -13397,6 +13409,7 @@ const
   KEY_ROWS     = 2;
 var
   Real  : TArray<TPasUseRow>;
+  Amb   : TArray<TPasUseRow>;
   Gated : TArray<TPasUseRow>;
   Res   : TArray<TPasUseRow>;
   Arr   : TJSONArray;
@@ -13405,17 +13418,29 @@ var
   Conv  : TArray<TConvertRow>;
   Twin  : TPasUseRow;
 begin
-  // worklist.resolution.ambiguous -- the real capture: candidates named, nothing guessed.
+  // worklist.resolution.resolved -- the real capture: the engine resolved the declaring unit.
   Real:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), APPLY_FEATURES_ALL).PasUses;
   Shown:= if Length(Real) = REAL_ROWS then string.Join('|', RowDisplay(Real[High(Real)])) else IntToStr(Length(Real)) + ' rows';
+  // Engine 1.28.2 (59d101d1) resolution / 1.28.3 (e6f97f7d) convert-class-inferred: on the 1.33.0 pin the real capture RESOLVES (kind property, Vcl.StdCtrls.TLabel).
+  Check('worklist.resolution.resolved', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|property|unmapped|25|Vcl.StdCtrls.TLabel', Shown);
+  Check('worklist.resolution.resolved.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = 'resolved') and (Length(Real[0].Candidates) = 0)
+    and (Real[0].DeclaringUnit = 'Vcl.StdCtrls'));
+  // The ambiguous shape, from the verbatim 1.28.2 rows (AMBIG_JSON).
+  Arr:= TJSONObject.ParseJSONValue(AMBIG_JSON) as TJSONArray;
+  try
+    Amb:= ParsePasUses(Arr, 'Unit1.pas', WORK_RUN_OLD);
+  finally
+    Arr.Free;
+  end; // try
+  Shown:= if Length(Amb) = REAL_ROWS then string.Join('|', RowDisplay(Amb[High(Amb)])) else IntToStr(Length(Amb)) + ' rows';
   Check('worklist.resolution.ambiguous', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|(unknown)|unmapped|25|ambiguous: FMX.StdCtrls, Vcl.StdCtrls', Shown);
-  Check('worklist.resolution.ambiguous.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = PAS_RES_AMBIGUOUS)
-    and (string.Join(',', Real[0].Candidates) = 'FMX.StdCtrls,Vcl.StdCtrls'));
+  Check('worklist.resolution.ambiguous.fields', (Length(Amb) = REAL_ROWS) and (Amb[0].Resolution = PAS_RES_AMBIGUOUS)
+    and (string.Join(',', Amb[0].Candidates) = 'FMX.StdCtrls,Vcl.StdCtrls'));
 
-  // worklist.resolution.gated.off -- an engine without pas_uses_resolution: both cleared.
+  // worklist.resolution.gated.off -- an engine without pas_uses_resolution: resolution and candidates cleared (kind / declaring unit are plain fields).
   Gated:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), [afPasUses]).PasUses;
   Shown:= if Length(Gated) = REAL_ROWS then string.Join('|', RowDisplay(Gated[High(Gated)])) else IntToStr(Length(Gated)) + ' rows';
-  Check('worklist.resolution.gated.off', (Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap||unmapped|25|') and (Length(Gated) = REAL_ROWS)
+  Check('worklist.resolution.gated.off', (Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|property|unmapped|25|Vcl.StdCtrls.TLabel') and (Length(Gated) = REAL_ROWS)
     and (Gated[0].Resolution = '') and (Length(Gated[0].Candidates) = 0), Shown);
 
   Raised:= False;
