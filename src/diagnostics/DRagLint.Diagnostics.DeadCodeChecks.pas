@@ -280,6 +280,42 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
+  { True when the source right before ANode is a generic argument list
+    `Ident<T, ...>` (nesting allowed), i.e. ANode is the argument list of a
+    generic call such as `GetValue<string>('x')`. Inside a larger expression the
+    parser reads that as `GetValue < string > ('x')`, so redundant-parentheses
+    must not take the argument list for parentheses around a term (N-16). }
+  function FollowsGenericArgs(const ANode: TTSNode): Boolean;
+  var
+    P, Depth: Integer;
+    C       : Byte;
+    HasArg  : Boolean;
+  begin
+    Result:= False;
+    P:= Integer(ANode.StartByte) - 1;
+    while (P >= 0) and (Src[P] in [9, 10, 13, 32]) do Dec(P);
+    if (P < 0) or (Src[P] <> Ord('>')) then Exit;
+    Depth:= 0;
+    HasArg:= False;
+    while P >= 0 do
+    begin
+      C:= Src[P];
+      if C = Ord('>') then Inc(Depth)
+      else if C = Ord('<') then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Break;
+      end
+      else if Chr(C) in ['A'..'Z', 'a'..'z', '0'..'9', '_'] then HasArg:= True
+      else if not (C in [9, 10, 13, 32, Ord('.'), Ord(',')]) then Exit;
+      Dec(P);
+    end;
+    if (P <= 0) or (Depth <> 0) or (not HasArg) then Exit;
+    Dec(P);
+    while (P >= 0) and (Src[P] in [9, 10, 13, 32]) do Dec(P);
+    Result:= (P >= 0) and (Chr(Src[P]) in ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+  end;
+
   { Emit one finding pointing at ANode. Severity defaults to 'warning'; pass
     ASeverity to override (e.g. 'hint' for cosmetic rules). }
   procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage: string;
@@ -1580,7 +1616,7 @@ var
       if (PT <> 'defaultValue') and (PT <> 'arrInitializer') and
          (PT <> 'recInitializer') and (PT <> 'recInitializerField') and
          (PT <> 'declConst') and (PT <> 'constInline') and
-         (N.NamedChildCount >= 1) then
+         (N.NamedChildCount >= 1) and (not FollowsGenericArgs(N)) then
       begin
         var Inner: TTSNode:= N.NamedChild(0);
         if Inner.NodeType = 'exprParens' then
