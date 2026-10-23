@@ -185,7 +185,7 @@ DocInsight comments generated from the index, and drift detection.
 | [Document project](Document-project) | Structure form: Document project; `document` |  |
 | [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
 | [document-all](document-all) | `document-all`; drag-lint > Generate & Export > Auto-Document Every Indexed Unit... |  |
-| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend (wiki) |  |
+| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend |  |
 | [shared-unit](shared-unit) | `shared-unit` |  |
 
 ## Refactoring and code generation
@@ -308,7 +308,8 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Options](drag-lint-Options) | drag-lint > drag-lint Options... |  |
 | [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
 | [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
-| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference (wiki) |  |
+| [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
+| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference |  |
 | [ide-release](ide-release) | `ide-release` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [lsp](lsp) | `lsp` |  |

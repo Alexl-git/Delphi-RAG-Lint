@@ -4319,7 +4319,7 @@
         },
         {
           "type": "ide-menu",
-          "path": "drag-lint > Help > Effect Summary Legend (wiki)",
+          "path": "drag-lint > Help > Effect Summary Legend",
           "steps": ["Choose drag-lint > Help > Effect Summary Legend (wiki)", "Look up the token (g, h, s, `p<k>`) shown by hover or ask effects"]
         }
       ],
@@ -8524,6 +8524,32 @@
       }
     },
     {
+      "id": "ide-help-line",
+      "title": "Help line (DL page)",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root",
+      "intro": "Read this to find help for a feature from inside the IDE and to point the plugin at an offline copy of the help.",
+      "wikiPage": "ide-help-line",
+      "surfaces": [
+        {
+          "type": "tool-window",
+          "path": "View > Tool Windows > drag-lint"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Help > Help on a feature..."
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Help > All features (web)"
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "ide-menu-reference",
       "title": "IDE Menu Reference",
       "group": "editor-integration",
@@ -8540,7 +8566,7 @@
         },
         {
           "type": "ide-menu",
-          "path": "drag-lint > Help > IDE Menu Reference (wiki)",
+          "path": "drag-lint > Help > IDE Menu Reference",
           "steps": ["drag-lint > Help > IDE Menu Reference (wiki)", "The page opens in the browser"]
         }
       ],

@@ -12,6 +12,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.33.0-alpha
 
 * [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) -- Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.
+* [Help line (DL page)](features/ide-help-line.md) -- Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root.
 
 ## 1.31.5-alpha
 

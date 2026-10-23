@@ -4,10 +4,10 @@ title: Register the MCP server (Claude Code, VS Code)
 summary: "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable"
 product: DL
 group: editor-integration
-order: 110010
+order: 110011
 since: 1.26.1-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Register the MCP server (Claude Code, VS Code)

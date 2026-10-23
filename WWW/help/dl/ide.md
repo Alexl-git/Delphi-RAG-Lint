@@ -41,8 +41,10 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Unit Test Stub (symbol)...](features/unit-test-stub-symbol.md)
   * [Go to Definition](features/go-to-definition.md)
   * Help
-    * [Effect Summary Legend (wiki)](features/effect-summary-legend.md)
-    * [IDE Menu Reference (wiki)](features/ide-menu-reference.md)
+    * [All features (web)](features/ide-help-line.md)
+    * [Effect Summary Legend](features/effect-summary-legend.md)
+    * [Help on a feature...](features/ide-help-line.md)
+    * [IDE Menu Reference](features/ide-menu-reference.md)
   * [Hover at Cursor](features/hover-at-cursor.md)
   * Index & Maintenance
     * [Library Drift Check...](features/library-drift-check.md)
