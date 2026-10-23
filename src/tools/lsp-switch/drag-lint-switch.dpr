@@ -34,6 +34,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.IOUtils,
+  System.JSON,
   System.Win.Registry,
   Winapi.Windows,
   Winapi.TlHelp32;
@@ -63,6 +64,14 @@ var
     of its 300+ runs. A guard that damages the machine it runs on does not get
     run, and a path that does not get run is not guarded. }
   GRegLspRoot: string = REG_LSP_ROOT;
+
+  { --vscode state. Workspace defaults to the CWD; the two host overrides exist
+    ONLY so the guard is deterministic whether or not the owner has VS Code open
+    (same rationale as --reg-root): --assume-host-running forces the BLOCKED
+    path, --assume-host-stopped lets the mutating paths run regardless. }
+  GWorkspace     : string = '';
+  GAssumeRunning : Boolean = False;
+  GAssumeStopped : Boolean = False;
 
 { True only when we are about to touch the key RAD Studio itself owns. The
   bds.exe refusal exists because the IDE flushes THAT key on exit and would undo
@@ -288,13 +297,15 @@ begin
   Writeln('');
   Writeln('  drag-lint-switch [--status]                   report both targets (default; never changes anything)');
   Writeln('  drag-lint-switch --delphi --status|--on|--off  the IDE''s custom Code Insight LSP entry');
-  Writeln('  drag-lint-switch --vscode --status             VS Code''s Delphi LSP/MCP (status only for now)');
+  Writeln('  drag-lint-switch --vscode --status|--on|--off  servers["delphi-lsp"] in <workspace>\.vscode\mcp.json');
   Writeln('  drag-lint-switch --kill-orphans                kill stray DelphiLSP / DelphiLSPMCPServer processes');
   Writeln('');
   Writeln('  --exe <path>      with --delphi --on: the server executable to register');
   Writeln('  --params <args>   with --delphi --on: the command line the IDE launches it with');
   Writeln('                    (e.g. "lsp --proxy"); default empty');
   Writeln('  --backup-dir <d>  where --off writes its .reg backup (default: %TEMP%)');
+  Writeln('  --workspace <d>   with --vscode: the workspace folder (default: current directory)');
+  Writeln('  --template <f>    with --vscode --on: JSON file holding the entry, when no backup exists');
   Writeln('  --reg-root <key>  HKCU subkey holding the entries (testing only; defaults to');
   Writeln('                    Software\Embarcadero\BDS\' + BDS_VER + '\LSP\UserDefined)');
   Writeln('');
@@ -316,19 +327,223 @@ begin
   Writeln('    drag-lint registered: ' + (if EntryExists then 'YES' else 'no'));
 end;
 
+{ ---------------------------------------------------------- vscode mcp.json -- }
+
+const
+  VSC_SERVER = 'delphi-lsp';
+
+function VSCodeMcpPath: string;
+begin
+  Result:= TPath.Combine(TPath.Combine(
+    if GWorkspace = '' then GetCurrentDir else GWorkspace, '.vscode'), 'mcp.json');
+end;
+
+function VSCodeRunning: Boolean;
+var
+  Bytes: UInt64;
+begin
+  if GAssumeRunning then Exit(True);
+  if GAssumeStopped then Exit(False);
+  Result:= ProcessCount(['Code.exe'], Bytes) > 0;
+end;
+
+{ Parses AText as a JSON object the caller owns; nil if it is not one. }
+function ParseObject(const AText: string): TJSONObject;
+var
+  V: TJSONValue;
+begin
+  V:= TJSONObject.ParseJSONValue(AText);
+  if V is TJSONObject then Exit(TJSONObject(V));
+  V.Free;
+  Result:= nil;
+end;
+
+procedure WriteJson(const APath: string; AObj: TJSONObject);
+begin
+  TFile.WriteAllText(APath, AObj.Format(2) + #13#10, TUTF8Encoding.Create(False));
+end;
+
+{ The "servers" object of ARoot (not owned), or nil. }
+function ServersOf(ARoot: TJSONObject): TJSONObject;
+var
+  V: TJSONValue;
+begin
+  V:= ARoot.GetValue('servers');
+  if V is TJSONObject then Result:= TJSONObject(V) else Result:= nil;
+end;
+
+{ Newest mcp.json.draglint-*.bak beside AMcpPath (names sort chronologically). }
+function NewestBackup(const AMcpPath: string): string;
+var
+  Files: TArray<string>;
+  I    : Integer;
+begin
+  Result:= '';
+  Files:= TDirectory.GetFiles(TPath.GetDirectoryName(AMcpPath), 'mcp.json.draglint-*.bak');
+  for I:= 0 to High(Files) do
+    if CompareText(Files[I], Result) > 0 then Result:= Files[I];
+end;
+
+function BackupName(const APath: string): string;
+begin
+  Result:= APath + '.draglint-' + FormatDateTime('yyyymmdd-hhnnss', Now) + '.bak';
+end;
+
+function VSCodeOff: Integer;
+var
+  Path, Bak: string;
+  Root     : TJSONObject;
+  Servers  : TJSONObject;
+begin
+  Path:= VSCodeMcpPath;
+  if VSCodeRunning then
+  begin
+    Writeln('BLOCKED: VS Code (Code.exe) is running. Close it first.');
+    Exit(EXIT_BLOCKED);
+  end;
+  if not TFile.Exists(Path) then
+  begin
+    Writeln('already off: no ' + Path);
+    Exit(EXIT_ALREADY);
+  end;
+  Root:= ParseObject(TFile.ReadAllText(Path));
+  if Root = nil then
+  begin
+    Writeln('ERROR: not a JSON object (comments are not supported): ' + Path);
+    Exit(EXIT_FAILED);
+  end;
+  try
+    Servers:= ServersOf(Root);
+    if (Servers = nil) or (Servers.GetValue(VSC_SERVER) = nil) then
+    begin
+      Writeln('already off: no "' + VSC_SERVER + '" in ' + Path);
+      Exit(EXIT_ALREADY);
+    end;
+    Bak:= BackupName(Path);
+    if TFile.Exists(Bak) then
+    begin
+      Sleep(1100);   { names are second-granular; a clash would overwrite a backup }
+      Bak:= BackupName(Path);
+    end;
+    TFile.Copy(Path, Bak, False);
+    Writeln('backup: ' + Bak);
+    Servers.RemovePair(VSC_SERVER).Free;
+    WriteJson(Path, Root);
+  finally
+    Root.Free;
+  end;
+  Writeln('off: "' + VSC_SERVER + '" removed from ' + Path);
+  Result:= EXIT_OK;
+end;
+
+{ The entry to restore: --template wins, else the newest backup's. nil + a
+  message when there is none. Caller owns the result. }
+function LoadEntry(const APath, ATemplate: string): TJSONObject;
+var
+  Src : string;
+  Bak : TJSONObject;
+begin
+  Result:= nil;
+  if ATemplate <> '' then
+  begin
+    if not TFile.Exists(ATemplate) then
+      Writeln('ERROR: no such file: ' + ATemplate)
+    else
+    begin
+      Result:= ParseObject(TFile.ReadAllText(ATemplate));
+      if Result = nil then Writeln('ERROR: template is not a JSON object: ' + ATemplate);
+    end;
+    Exit;
+  end;
+  Src:= NewestBackup(APath);
+  if Src = '' then
+  begin
+    Writeln('no backup to restore -- pass --template <file>');
+    Exit;
+  end;
+  Bak:= ParseObject(TFile.ReadAllText(Src));
+  try
+    if (Bak <> nil) and (ServersOf(Bak) <> nil)
+       and (ServersOf(Bak).GetValue(VSC_SERVER) is TJSONObject) then
+      Result:= TJSONObject(ServersOf(Bak).GetValue(VSC_SERVER).Clone)
+    else
+      Writeln('ERROR: no usable "' + VSC_SERVER + '" entry in ' + Src);
+  finally
+    Bak.Free;
+  end;
+end;
+
+function VSCodeOn(const ATemplate: string): Integer;
+var
+  Path   : string;
+  Root   : TJSONObject;
+  Entry  : TJSONObject;
+  Servers: TJSONObject;
+begin
+  Path:= VSCodeMcpPath;
+  if VSCodeRunning then
+  begin
+    Writeln('BLOCKED: VS Code (Code.exe) is running. Close it first.');
+    Exit(EXIT_BLOCKED);
+  end;
+  Root:= nil;
+  if TFile.Exists(Path) then
+  begin
+    Root:= ParseObject(TFile.ReadAllText(Path));
+    if Root = nil then
+    begin
+      Writeln('ERROR: not a JSON object (comments are not supported): ' + Path);
+      Exit(EXIT_FAILED);
+    end;
+  end
+  else
+    Root:= TJSONObject.Create;
+  try
+    Servers:= ServersOf(Root);
+    if (Servers <> nil) and (Servers.GetValue(VSC_SERVER) <> nil) then
+    begin
+      Writeln('already on: "' + VSC_SERVER + '" is in ' + Path);
+      Exit(EXIT_ALREADY);
+    end;
+    Entry:= LoadEntry(Path, ATemplate);
+    if Entry = nil then Exit(EXIT_FAILED);
+    if Servers = nil then
+    begin
+      Servers:= TJSONObject.Create;
+      Root.AddPair('servers', Servers);
+    end;
+    Servers.AddPair(VSC_SERVER, Entry);
+    TDirectory.CreateDirectory(TPath.GetDirectoryName(Path));
+    WriteJson(Path, Root);
+  finally
+    Root.Free;
+  end;
+  Writeln('on: "' + VSC_SERVER + '" added to ' + Path);
+  Result:= EXIT_OK;
+end;
+
 procedure ReportVSCode;
 var
   N    : Integer;
   Bytes: UInt64 ;
+  Root : TJSONObject;
 begin
-  Writeln('--vscode');
+  Writeln('--vscode  (' + VSCodeMcpPath + ')');
   N:= ProcessCount(['DelphiLSP.exe', 'DelphiLSPMCPServer.exe'], Bytes);
   Writeln(Format('    DelphiLSP / MCP processes running: %d', [N]));
-  { Deliberately reports processes rather than claiming to know the persistent
-    setting. That registration lives inside VS Code's state.vscdb (a SQLite
-    blob store), and this tool is dependency-free on purpose. Saying "disabled"
-    without having read it would be a guess presented as a fact. }
-  Writeln('    persistent on/off: NOT IMPLEMENTED (registration lives in VS Code''s state.vscdb)');
+  Writeln(Format('    Code.exe running: %d', [ProcessCount(['Code.exe'], Bytes)]));
+  Writeln('    mcp.json: ' + (if TFile.Exists(VSCodeMcpPath) then 'present' else 'absent'));
+  Root:= nil;
+  if TFile.Exists(VSCodeMcpPath) then Root:= ParseObject(TFile.ReadAllText(VSCodeMcpPath));
+  try
+    Writeln('    ' + VSC_SERVER + ': ' + (if (Root <> nil) and (ServersOf(Root) <> nil)
+      and (ServersOf(Root).GetValue(VSC_SERVER) <> nil) then 'present' else 'absent'));
+  finally
+    Root.Free;
+  end;
+  { Workspace-level only: the user-level registration inside state.vscdb is not
+    read (this tool is dependency-free; a guess would be presented as a fact). }
+  Writeln('    scope: workspace mcp.json only (state.vscdb is not read)');
 end;
 
 procedure ReportHosts;
@@ -353,12 +568,14 @@ var
   BackupPath: string ;
   Killed    : Integer;
   Bytes     : UInt64 ;
+  Template  : string ;
 begin
   Action   := acStatus;
   Target   := tgBoth  ;
   ExePath  := ''      ;
   BackupDir:= ''      ;
   Params   := ''      ;
+  Template := ''      ;
   try
     I:= 1;
     while I <= ParamCount do
@@ -373,6 +590,10 @@ begin
       else if (A = '--exe') and (I < ParamCount) then begin Inc(I); ExePath  := ParamStr(I); end
       else if (A = '--params') and (I < ParamCount) then begin Inc(I); Params   := ParamStr(I); end
       else if (A = '--backup-dir') and (I < ParamCount) then begin Inc(I); BackupDir:= ParamStr(I); end
+      else if (A = '--workspace') and (I < ParamCount) then begin Inc(I); GWorkspace:= ParamStr(I); end
+      else if (A = '--template') and (I < ParamCount) then begin Inc(I); Template:= ParamStr(I); end
+      else if A = '--assume-host-running' then GAssumeRunning:= True
+      else if A = '--assume-host-stopped' then GAssumeStopped:= True
       else if (A = '--reg-root') and (I < ParamCount) then begin Inc(I); GRegLspRoot:= ParamStr(I); end
       else if (A = '--help') or (A = '-h') or (A = '/?') then begin Banner; Halt(EXIT_OK); end
       else begin Writeln('ERROR: unknown argument: ' + ParamStr(I)); Banner; Halt(EXIT_FAILED); end;
@@ -410,6 +631,7 @@ begin
 
       acOff:
         begin
+          if Target = tgVSCode then Halt(VSCodeOff);
           if Target <> tgDelphi then
           begin
             Writeln('ERROR: --off is implemented for --delphi only');
@@ -458,6 +680,7 @@ begin
 
       acOn:
         begin
+          if Target = tgVSCode then Halt(VSCodeOn(Template));
           if Target <> tgDelphi then
           begin
             Writeln('ERROR: --on is implemented for --delphi only');
