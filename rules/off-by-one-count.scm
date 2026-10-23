@@ -9,6 +9,6 @@
   (#eq? @p "Count"))
 ((for
   start: (assignment rhs: (literalNumber) @s2)
-  end: (exprCall entity: (identifier) @f) @warn)
+  end: (exprCall entity: (identifier) @f args: (exprArgs (identifier) @arr)) @warn)
   (#eq? @s2 "0")
   (#eq? @f "Length"))

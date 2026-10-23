@@ -86,6 +86,12 @@ type
         AST dump rather than assumed -- the grammar's node names have been wrong
         in this repo's comments five times. }
       FExcludeArgOf: TArray<string>;
+      { Optional PRECEDING-TEXT exemption ("exclude_if_preceded_by", N-14): regexes,
+        case-insensitive, with (*name*)-style placeholders -- the capture name in curly braces -- replaced by the regex-escaped text of capture
+        @name. The match is dropped when one of them matches the source text of the
+        enclosing routine before the picked node. A pattern naming a capture the match
+        did not bind never excludes. }
+      FExcludePrecededBy: TArray<string>;
       { True if the picked node (or any ancestor up to the root) is one of the
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
@@ -157,6 +163,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
+      function IsPrecededByExcludedText(const APicked: TTSNode; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
@@ -481,6 +488,49 @@ begin
   end;
 end;
 
+{ N-14. See FExcludePrecededBy. The window is the enclosing routine (defProc)
+  up to the picked node, or the file start when the match is outside a routine.
+  Each brace-wrapped capture name becomes the regex-escaped text of capture @name, so the pattern can
+  insist on the SAME array the match named. }
+function TQueryRule.IsPrecededByExcludedText(const APicked: TTSNode; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
+var
+  Cur     : TTSNode;
+  StartB  : Integer;
+  Window  : string ;
+  Pat     : string ;
+  Expanded: string ;
+  Cap     : TTSQueryCapture;
+  CapName : string ;
+  Bound   : Boolean;
+begin
+  Result:= False;
+  if Length(FExcludePrecededBy) = 0 then Exit;
+  StartB:= 0;
+  Cur:= APicked.Parent;
+  while not Cur.IsNull do
+  begin
+    if Cur.NodeType = 'defProc' then
+    begin
+      StartB:= Integer(Cur.StartByte);
+      Break;
+    end;
+    Cur:= Cur.Parent;
+  end;
+  if Integer(APicked.StartByte) <= StartB then Exit;
+  Window:= TEncoding.UTF8.GetString(ASource, StartB, Integer(APicked.StartByte) - StartB);
+  for Pat in FExcludePrecededBy do
+  begin
+    Expanded:= Pat;
+    for Cap in ACaptures do
+    begin
+      CapName:= FQuery.CaptureNameForID(Cap.index);
+      Expanded:= StringReplace(Expanded, '{' + CapName + '}', TRegEx.Escape(Trim(NodeText(Cap.node, ASource))), [rfReplaceAll, rfIgnoreCase]);
+    end;
+    Bound:= not TRegEx.IsMatch(Expanded, '\{[A-Za-z0-9_]+\}');
+    if Bound and TRegEx.IsMatch(Window, Expanded, [roIgnoreCase]) then Exit(True);
+  end;
+end;
+
 { The literal a query's text must contain for it to be able to match -- see
   TQueryRule.RequiredText for why this exists and why it is this strict.
 
@@ -577,6 +627,10 @@ begin
       if Assigned(ExArr) then
         for ExVal in ExArr do
           FExcludeArgOf:= FExcludeArgOf + [ExVal.Value];
+      ExArr:= JSON.GetValue('exclude_if_preceded_by') as TJSONArray;
+      if Assigned(ExArr) then
+        for ExVal in ExArr do
+          FExcludePrecededBy:= FExcludePrecededBy + [ExVal.Value];
       { Optional structural REQUIREMENT ("require_ancestor"): the match counts
         only inside one of these node kinds. E.g. concat-in-loop lists the four
         loop kinds (for / foreach / while / repeat), so `S := S + X` executed
@@ -1136,6 +1190,7 @@ begin
         { Callee exemption (JSON "exclude_if_argument_of"): drop the match when
           it is an argument of a call this rule declares uninteresting. }
         if IsArgumentOfExcludedCallee(Picked, ASource) then Continue;
+        if IsPrecededByExcludedText(Picked, Captures, ASource) then Continue;
         if not HasRequiredAncestor(Picked) then Continue;
 
         Finding:= Default(TLintFinding);

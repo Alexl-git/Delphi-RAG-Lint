@@ -2,5 +2,8 @@
   "id": "off-by-one-count",
   "severity": "warning",
   "message": "'for I := 0 to X.Count/Length(X)' runs one past the end -- use 'to X.Count - 1' (or 'to High(X)').",
-  "warn_capture": "warn"
+  "warn_capture": "warn",
+  "exclude_if_preceded_by": [
+    "\\bSetLength\\s*\\([^;]*\\bLength\\s*\\(\\s*{arr}\\s*\\)\\s*\\+\\s*1\\b"
+  ]
 }
