@@ -3004,7 +3004,8 @@ var
                 begin
                   It := Cfg.Blocks[B].Items[J];
                   if It.Opaque then Continue;
-                  Reads.Clear; CallDefs.Clear;
+                  Reads.Clear;
+                  CallDefs.Clear;
                   if It.Node.NodeType = 'assignment' then
                     CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs)
                   else
@@ -3016,14 +3017,22 @@ var
                     Emit('loop-var-after-loop', 'warning',
                       Format('Loop variable "%s" is read after the loop; its value is undefined there.',
                         [Cfg.ForVars[I].VarName]), ROW, COL);
-                    StopPath := True; Break;
+                    StopPath := True;
+                    Break;
                   end;
                   { passed to a call: may be an out/var param that REASSIGNS it
                     (e.g. TryGetValue(.., counter)); FP-safe -> treat as reassigned }
-                  if CallDefs.IndexOf(Idx) >= 0 then begin StopPath := True; Break; end;
+                  if CallDefs.IndexOf(Idx) >= 0 then
+                  begin
+                    StopPath := True;
+                    Break;
+                  end;
                   if (It.Node.NodeType = 'assignment')
                      and (AssignmentTargetIndex(It.Node, PF.Src, Vars) = Idx) then
-                  begin StopPath := True; Break; end; { reassigned -> safe on this path }
+                  begin { reassigned -> safe on this path }
+                    StopPath := True;
+                    Break;
+                  end;
                 end;
               if not StopPath then
                 for RIx := 0 to Cfg.Blocks[B].Succ.Count - 1 do

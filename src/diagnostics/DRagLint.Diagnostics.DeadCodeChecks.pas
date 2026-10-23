@@ -286,6 +286,8 @@ var
     parser reads that as `GetValue < string > ('x')`, so redundant-parentheses
     must not take the argument list for parentheses around a term (N-16). }
   function FollowsGenericArgs(const ANode: TTSNode): Boolean;
+  const
+    BLANKS = [Ord(#9), Ord(#10), Ord(#13), Ord(' ')];
   var
     P, Depth: Integer;
     C       : Byte;
@@ -293,7 +295,7 @@ var
   begin
     Result:= False;
     P:= Integer(ANode.StartByte) - 1;
-    while (P >= 0) and (Src[P] in [9, 10, 13, 32]) do Dec(P);
+    while (P >= 0) and (Src[P] in BLANKS) do Dec(P);
     if (P < 0) or (Src[P] <> Ord('>')) then Exit;
     Depth:= 0;
     HasArg:= False;
@@ -307,12 +309,12 @@ var
         if Depth = 0 then Break;
       end
       else if Chr(C) in ['A'..'Z', 'a'..'z', '0'..'9', '_'] then HasArg:= True
-      else if not (C in [9, 10, 13, 32, Ord('.'), Ord(',')]) then Exit;
+      else if not (C in BLANKS + [Ord('.'), Ord(',')]) then Exit;
       Dec(P);
     end;
     if (P <= 0) or (Depth <> 0) or (not HasArg) then Exit;
     Dec(P);
-    while (P >= 0) and (Src[P] in [9, 10, 13, 32]) do Dec(P);
+    while (P >= 0) and (Src[P] in BLANKS) do Dec(P);
     Result:= (P >= 0) and (Chr(Src[P]) in ['A'..'Z', 'a'..'z', '0'..'9', '_']);
   end;
 
