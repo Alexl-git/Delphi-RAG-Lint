@@ -140,9 +140,63 @@ begin
   Put('loc.none', DLLocateHelpIndex(Eng, DL_DEFAULT_HELP_ROOT, Bpl + '\nowhere'));
 end; // procedure
 
+function HitList(const pHits: TArray<TDLHelpHit>): string;
+begin
+  Result:= '';
+  for var H in pHits do
+  begin
+    if Result <> '' then Result:= Result + '|';
+    Result:= Result + H.Id + ':' + IntToStr(H.Rank);
+  end; // for
+end; // function
+
+procedure RunMatcher(const pFixtureDir: string);
+var
+  Idx : TDLHelpIndex;
+  Rows: TArray<TDLHelpEntry>;
+  Many: TArray<TDLHelpEntry>;
+begin
+  Idx:= TDLHelpIndex.Create;
+  try
+    Idx.LoadFromFile(TPath.Combine(pFixtureDir, 'index-sample.json'));
+    Rows:= Idx.Entries;
+  finally
+    Idx.Free;
+  end; // try
+  Put('match.empty', IntToStr(Length(DLHelpMatch('', Rows))));
+  Put('match.blank', IntToStr(Length(DLHelpMatch('   ', Rows))));
+  Put('match.cyc', HitList(DLHelpMatch('cyc', Rows)));
+  Put('match.CYC', HitList(DLHelpMatch('  CYC ', Rows)));
+  Put('match.summary', HitList(DLHelpMatch('never searched', Rows)));
+  Put('match.title', HitList(DLHelpMatch('about', Rows)));
+  SetLength(Many, 20);
+  for var I:= 0 to High(Many) do
+  begin
+    Many[I]:= Rows[0];
+    Many[I].Id:= Format('clone-%.2d', [I]);
+  end; // for
+  Put('match.cap', IntToStr(Length(DLHelpMatch('cyc', Many))));
+  if Length(Rows) = 6 then
+  begin
+    Put('display.menu', DLHelpDisplayText(Rows[0]));
+    Put('display.shortest', DLHelpDisplayText(Rows[1]));
+    Put('display.context', DLHelpDisplayText(Rows[2]));
+    Put('display.title', DLHelpDisplayText(Rows[3]));
+    Put('display.cli', DLHelpDisplayText(Rows[5]));
+    Put('match.cyc.display0', DLHelpMatch('cyc', Rows)[0].Display);
+  end; // if
+  Put('caption.fix', DLHelpIdForMenuCaption('Fix...', Rows));
+  Put('caption.amp', DLHelpIdForMenuCaption('&Fix...', Rows));
+  Put('caption.graph', DLHelpIdForMenuCaption('Call Graph', Rows));
+  Put('caption.context', DLHelpIdForMenuCaption('Recycle Cache', Rows));
+  Put('caption.none', DLHelpIdForMenuCaption('Nope', Rows));
+  Put('caption.inner', DLHelpIdForMenuCaption('Refactor', Rows));
+end; // procedure
+
 begin
   try
     RunUrlRules;
+    RunMatcher(ParamStr(1));
     RunSettingsRoundTrip;
     RunIndex(ParamStr(1), ParamStr(2));
     RunLocator(ParamStr(2));

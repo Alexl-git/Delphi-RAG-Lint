@@ -71,6 +71,46 @@ type
     property FileName : string read FFileName;
   end; // class
 
+  /// <summary>One match of the help line, ready to show.</summary>
+  TDLHelpHit = record
+    /// <summary>Registry id -- what DLOpenHelp is called with.</summary>
+    Id     : string;
+    Title  : string;
+    /// <summary>What the list shows (DLHelpDisplayText).</summary>
+    Display: string;
+    /// <summary>0 title starts with the query, 1 title contains it, 2 a menu or
+    /// context caption contains it, 3 the id or verb contains it.</summary>
+    Rank   : Integer;
+  end; // record
+
+const
+  /// <summary>Most hits DLHelpMatch returns.</summary>
+  DL_HELP_MAX_HITS = 12;
+
+/// <summary>Matches a half-remembered feature name against the feature list (spec 3.3).</summary>
+/// <param name="pQuery">What the user typed; trimmed, case-insensitive.</param>
+/// <param name="pEntries">The rows of a loaded TDLHelpIndex.</param>
+/// <returns>At most DL_HELP_MAX_HITS hits ordered by Rank, then title
+/// (case-insensitive); empty for an empty query. A row is a hit when the query
+/// is a substring of its title, id, verb, or the LAST segment (caption) of
+/// any menu or context path. The summary is never searched.</returns>
+function DLHelpMatch(const pQuery: string; const pEntries: TArray<TDLHelpEntry>): TArray<TDLHelpHit>;
+
+/// <summary>The text a hit shows in the help line's list.</summary>
+/// <param name="pEntry">One feature row.</param>
+/// <returns>"&lt;title&gt; - &lt;shortest menu path&gt;"; with no menu the shortest
+/// context path; with neither "&lt;title&gt; - CLI: drag-lint &lt;verb&gt;"; else the title.</returns>
+function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;
+
+/// <summary>Resolves a menu (or tab) caption to the registry id whose menu or
+/// context path ends with that caption (spec 3.5 -- no table in code).</summary>
+/// <param name="pCaption">A VCL caption; '&amp;' accelerators are ignored
+/// ('&amp;&amp;' is a literal '&amp;').</param>
+/// <param name="pEntries">The rows of a loaded TDLHelpIndex.</param>
+/// <returns>The first matching id in file order (menus before context); ''
+/// when no path ends with the caption.</returns>
+function DLHelpIdForMenuCaption(const pCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
+
 /// <summary>Finds the offline feature list (spec 3.2), first hit wins.</summary>
 /// <param name="pEngineDir">Folder of the resolved drag-lint.exe; may be ''.</param>
 /// <param name="pHelpRoot">The HelpRoot setting; only a file: root is probed.</param>
@@ -124,6 +164,8 @@ uses
   , System.IOUtils
   , System.JSON
   , System.DateUtils
+  , System.Generics.Collections
+  , System.Generics.Defaults
   ;
 
 const
@@ -323,6 +365,124 @@ begin
     if FileExists(Result) then Exit;
   end; // if
   Result:= '';
+end; // function
+
+const
+  PATH_SEP = ' > ';
+  RANK_TITLE_PREFIX = 0;
+  RANK_TITLE        = 1;
+  RANK_CAPTION      = 2;
+  RANK_ID_VERB      = 3;
+  RANK_NONE         = -1;
+
+{ The last segment of "a > b > Caption". }
+function LastSegment(const pPath: string): string;
+var
+  At: Integer;
+begin
+  At:= pPath.LastIndexOf(PATH_SEP);
+  Result:= Trim(if At < 0 then pPath else pPath.Substring(At + Length(PATH_SEP)));
+end; // function
+
+function ShortestOf(const pPaths: TArray<string>): string;
+begin
+  Result:= '';
+  for var P in pPaths do
+    if (Result = '') or (Length(P) < Length(Result)) then Result:= P;
+end; // function
+
+function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;
+var
+  Path: string;
+begin
+  Path:= ShortestOf(pEntry.Menus);
+  if Path = '' then Path:= ShortestOf(pEntry.Context);
+  if Path <> '' then Exit(pEntry.Title + ' - ' + Path);
+  if pEntry.Verb <> '' then Exit(pEntry.Title + ' - CLI: drag-lint ' + pEntry.Verb);
+  Result:= pEntry.Title;
+end; // function
+
+function AnyCaptionContains(const pPaths: TArray<string>; const pLowerQuery: string): Boolean;
+begin
+  for var P in pPaths do
+    if LastSegment(P).ToLower.Contains(pLowerQuery) then Exit(True);
+  Result:= False;
+end; // function
+
+{ RANK_* for one row, RANK_NONE when it is not a hit. }
+function RankOf(const pEntry: TDLHelpEntry; const pLowerQuery: string): Integer;
+var
+  Title: string;
+begin
+  Title:= pEntry.Title.ToLower;
+  if Title.StartsWith(pLowerQuery) then Exit(RANK_TITLE_PREFIX);
+  if Title.Contains(pLowerQuery) then Exit(RANK_TITLE);
+  if AnyCaptionContains(pEntry.Menus, pLowerQuery) or AnyCaptionContains(pEntry.Context, pLowerQuery) then
+    Exit(RANK_CAPTION);
+  if pEntry.Id.ToLower.Contains(pLowerQuery) or pEntry.Verb.ToLower.Contains(pLowerQuery) then
+    Exit(RANK_ID_VERB);
+  Result:= RANK_NONE;
+end; // function
+
+function DLHelpMatch(const pQuery: string; const pEntries: TArray<TDLHelpEntry>): TArray<TDLHelpHit>;
+var
+  Query: string;
+  Hits : TList<TDLHelpHit>;
+  Hit  : TDLHelpHit;
+begin
+  Result:= nil;
+  Query:= Trim(pQuery).ToLower;
+  if Query = '' then Exit;
+  Hits:= TList<TDLHelpHit>.Create;
+  try
+    for var E in pEntries do
+    begin
+      Hit.Rank:= RankOf(E, Query);
+      if Hit.Rank = RANK_NONE then Continue;
+      Hit.Id     := E.Id;
+      Hit.Title  := E.Title;
+      Hit.Display:= DLHelpDisplayText(E);
+      Hits.Add(Hit);
+    end; // for
+    Hits.Sort(TComparer<TDLHelpHit>.Construct(
+      function(const pLeft, pRight: TDLHelpHit): Integer
+      begin
+        Result:= pLeft.Rank - pRight.Rank;
+        if Result = 0 then Result:= CompareText(pLeft.Title, pRight.Title);
+      end));
+    if Hits.Count > DL_HELP_MAX_HITS then Hits.Count:= DL_HELP_MAX_HITS;
+    Result:= Hits.ToArray;
+  finally
+    Hits.Free;
+  end; // try
+end; // function
+
+{ A VCL caption as plain text: '&' accelerators dropped, '&&' kept as '&'. }
+function StripAccelerators(const pCaption: string): string;
+const
+  AMP_PLACEHOLDER = #1;
+begin
+  Result:= Trim(pCaption.Replace('&&', AMP_PLACEHOLDER).Replace('&', '').Replace(AMP_PLACEHOLDER, '&'));
+end; // function
+
+function CaptionIn(const pPaths: TArray<string>; const pCaption: string): Boolean;
+begin
+  for var P in pPaths do
+    if SameText(LastSegment(P), pCaption) then Exit(True);
+  Result:= False;
+end; // function
+
+function DLHelpIdForMenuCaption(const pCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
+var
+  Caption: string;
+begin
+  Result:= '';
+  Caption:= StripAccelerators(pCaption);
+  if Caption = '' then Exit;
+  for var E in pEntries do
+    if CaptionIn(E.Menus, Caption) then Exit(E.Id);
+  for var E in pEntries do
+    if CaptionIn(E.Context, Caption) then Exit(E.Id);
 end; // function
 
 end.

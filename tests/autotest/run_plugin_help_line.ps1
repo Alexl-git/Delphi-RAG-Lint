@@ -115,6 +115,27 @@ try {
   Eq 'L4 no engine dir -> the dev tree'                        'loc.noengine'  $kv['loc.dev.want']
   Eq 'L5 none exists -> empty'                                 'loc.none'      ''
   Check 'L0 the locator expectations were printed'             ([bool]$kv['loc.engine.want'] -and [bool]$kv['loc.dev.want']) ''
+
+  Write-Host '-- M: matcher, display text, caption -> id (spec 3.3 / 3.5)' -ForegroundColor Cyan
+  Eq 'M1 empty query -> no hits'                               'match.empty'   '0'
+  Eq 'M2 blank query -> no hits'                               'match.blank'   '0'
+  Eq 'M3 rank: title prefix < title contains < caption < id/verb; ties by title' 'match.cyc' 'cycles-report:0|uses-cycle-fix:1|structure-tree:2|call-graph-cyc:3|db-compact:3'
+  Eq 'M4 case-insensitive and trimmed'                         'match.CYC'     'cycles-report:0|uses-cycle-fix:1|structure-tree:2|call-graph-cyc:3|db-compact:3'
+  Eq 'M5 the summary is never searched'                        'match.summary' ''
+  Eq 'M6 a title-only row matches on its title'                'match.title'   'about-box:0'
+  Eq 'M7 at most 12 hits'                                      'match.cap'     '12'
+  Eq 'M8 display: title - menu path'                           'display.menu'  'Cycles Report - drag-lint > Reports > Circular Uses Report...'
+  Eq 'M9 display: several menus -> the shortest'               'display.shortest' 'Uses Cycle Fix - drag-lint > Refactor > Fix...'
+  Eq 'M10 display: no menu -> the context path'                'display.context' 'Structure Tree - Code Editor > drag-lint > Recycle Cache'
+  Eq 'M11 display: neither -> the title'                       'display.title' 'About drag-lint'
+  Eq 'M12 display: verb only -> CLI: drag-lint <verb>'         'display.cli'   'Database Compaction - CLI: drag-lint recycle'
+  Eq 'M13 a hit carries its display text'                      'match.cyc.display0' 'Cycles Report - drag-lint > Reports > Circular Uses Report...'
+  Eq 'M14 caption -> the id whose menu path ends with it'      'caption.fix'   'uses-cycle-fix'
+  Eq 'M15 accelerator & ignored'                               'caption.amp'   'uses-cycle-fix'
+  Eq 'M16 caption of a single-menu row'                        'caption.graph' 'call-graph-cyc'
+  Eq 'M17 a context path counts too'                           'caption.context' 'structure-tree'
+  Eq 'M18 unknown caption -> empty'                            'caption.none'  ''
+  Eq 'M19 an inner segment is not a caption'                   'caption.inner' ''
 }
 catch {
   Check "runner: $($_.Exception.Message)" $false
