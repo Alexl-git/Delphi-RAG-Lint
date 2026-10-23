@@ -552,6 +552,34 @@ begin
   end;
 end;
 
+/// <summary>The entry's surfaces of one kind as a one-line JSON array of strings, in registry order: ide-menu gives the full menu path, ide-context gives 'Host > Caption'.</summary>
+function SurfaceTextArray(const pEntry: TFeatureEntry; const pKind: string): string;
+var
+  lS: TSurface;
+  lItems: TList<string>;
+begin
+  lItems := TList<string>.Create;
+  try
+    for lS in pEntry.Surfaces do
+      if lS.Kind = pKind then
+        lItems.Add(JsonStr(if pKind = 'ide-context' then lS.Host + ' > ' + lS.Caption else lS.Path));
+    Result := '[' + string.Join(', ', lItems.ToArray) + ']';
+  finally
+    lItems.Free;
+  end;
+end;
+
+/// <summary>The verb of the entry's first cli surface; '' when it has none (index.json then carries "verb": "", like an absent since).</summary>
+function FirstCliVerb(const pEntry: TFeatureEntry): string;
+var
+  lS: TSurface;
+begin
+  Result := '';
+  for lS in pEntry.Surfaces do
+    if (lS.Kind = 'cli') and (lS.Verb <> '') then
+      Exit(lS.Verb);
+end;
+
 function IndexJson(const pFmt: TSiteFormat; const pReg: TRegistry; const pInc: TArray<TFeatureEntry>): string;
 var
   lG: TNamedRow;
@@ -568,7 +596,9 @@ begin
         lItems := lItems + '  {'#10'    "id": ' + JsonStr(lE.Id) + ','#10'    "title": ' + JsonStr(lE.Title) + ','#10
           + '    "summary": ' + JsonStr(lE.Summary) + ','#10'    "group": ' + JsonStr(lE.Group) + ','#10
           + '    "order": ' + IntToStr(SiteOrder(lE, pFmt, pReg)) + ','#10'    "since": ' + JsonStr(lE.Since) + ','#10
-          + '    "file": ' + JsonStr('features/' + lE.Id + '.md') + #10'  }';
+          + '    "file": ' + JsonStr('features/' + lE.Id + '.md') + ','#10
+          + '    "menus": ' + SurfaceTextArray(lE, 'ide-menu') + ','#10'    "context": ' + SurfaceTextArray(lE, 'ide-context') + ','#10
+          + '    "verb": ' + JsonStr(FirstCliVerb(lE)) + #10'  }';
       end;
   Result := '['#10 + lItems + #10']'#10;
 end;

@@ -2744,6 +2744,51 @@ begin
   end;
 end;
 
+procedure TestSiteIndexFields;
+var
+  lRepo, lOut, lPath, lTxt, lJson, lMsg: string;
+  lArr: TJSONArray;
+  lVal, lAsk, lFix, lMenus: TJSONValue;
+  lI: Integer;
+begin
+  lRepo := CopySiteRepo('index-fields-repo');
+  lPath := TPath.Combine(lRepo, 'features\entries\ask.json');
+  lTxt := TFile.ReadAllText(lPath, TEncoding.ASCII);
+  lTxt := lTxt.Replace('"surfaces": [ { "type": "cli", "verb": "ask" } ]',
+    '"surfaces": [ { "type": "cli", "verb": "ask" }, { "type": "ide-menu", "path": "drag-lint > Ask > One" },'
+    + ' { "type": "ide-menu", "path": "drag-lint > Ask > Two" }, { "type": "ide-context", "host": "Editor", "caption": "Ask here" } ]');
+  TFile.WriteAllText(lPath, lTxt, TEncoding.ASCII);
+  lOut := TPath.Combine(SCRATCH, 'index-fields-out');
+  lMsg := TryBuild(lRepo, lOut);
+  Check('Site.IndexFieldsBuilds', lMsg = '', lMsg);
+  lJson := ReadSiteFile(lOut, 'index.json');
+  lVal := TJSONObject.ParseJSONValue(lJson);
+  try
+    lAsk := nil;
+    lFix := nil;
+    if lVal is TJSONArray then
+    begin
+      lArr := TJSONArray(lVal);
+      for lI := 0 to lArr.Count - 1 do
+        if lArr.Items[lI].GetValue<string>('id') = 'ask' then
+          lAsk := lArr.Items[lI]
+        else if lArr.Items[lI].GetValue<string>('id') = 'fix-refactor' then
+          lFix := lArr.Items[lI];
+    end;
+    Check('Site.IndexFieldsEntryWithAll', (lAsk <> nil) and (lAsk.GetValue<string>('verb') = 'ask')
+      and (lAsk.GetValue<TJSONArray>('menus').Count = 2) and (lAsk.GetValue<TJSONArray>('menus').Items[1].Value = 'drag-lint > Ask > Two')
+      and (lAsk.GetValue<TJSONArray>('context').Count = 1) and (lAsk.GetValue<TJSONArray>('context').Items[0].Value = 'Editor > Ask here'), lJson);
+    lMenus := nil;
+    if lFix <> nil then
+      lMenus := lFix.GetValue<TJSONArray>('menus');
+    Check('Site.IndexFieldsEntryWithNone', (lFix <> nil) and (lFix.GetValue<string>('verb') = '') and (lMenus <> nil)
+      and (TJSONArray(lMenus).Count = 1) and (lFix.GetValue<TJSONArray>('context').Count = 0), lJson);
+    Check('Site.IndexFieldsAppendedAfterFile', Pos('"file": "features/ask.md",'#10'    "menus": [', lJson) > 0, lJson);
+  finally
+    lVal.Free;
+  end;
+end;
+
 procedure TestSiteUpdated;
 var
   lCopy, lOutA, lOutB, lOutC, lPagesFile, lJsonA, lJsonB: string;
@@ -2973,6 +3018,7 @@ begin
     TestMarkedBlock;
     TestCompareOutputTreesPositiveControl;
     TestAuditThin;
+    TestSiteIndexFields;
     TestSiteUpdated;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);
