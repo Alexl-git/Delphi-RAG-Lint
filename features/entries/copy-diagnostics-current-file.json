@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-about",
-      "caption": "Copy Diagnostics (Current File)"
+      "caption": "Copy Diagnostics (Current File)",
+      "steps": ["Open the file in the editor", "Choose drag-lint > Copy Diagnostics (Current File), or click the button of the same name in drag-lint > About", "The file's lint findings are on the clipboard"]
     },
     {
       "type": "cli",
@@ -54,6 +55,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I copy this file's findings to paste elsewhere?",
+      "command": "drag-lint lint <file.pas>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Compile Dependents"
+      "path": "drag-lint > Compile Dependents",
+      "steps": ["Edit and save the unit", "Choose drag-lint > Compile Dependents", "The units that depend on it are checked now instead of after the automatic quiet period"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "I changed a unit -- do the units that use it still compile?",
+      "command": "drag-lint > Compile Dependents (IDE menu)"
+    }
+  ],
   "notes": "seed: needs own page; seed: since unknown",
   "verified": {
     "date": "2026-10-21",

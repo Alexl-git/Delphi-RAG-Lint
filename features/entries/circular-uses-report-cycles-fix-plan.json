@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."
+      "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...",
+      "steps": ["Choose drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...", "Read the reported cycles", "Ask for the plan to get the refactoring playbook that breaks them"]
     },
     {
       "type": "cli",
@@ -41,6 +42,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "The compiler reports a circular unit reference -- which units form the cycle?",
+      "command": "drag-lint cycles --db <db> --edges"
+    },
+    {
+      "ask": "How do I break a uses cycle step by step?",
+      "command": "drag-lint cycles --db <db> --plan"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

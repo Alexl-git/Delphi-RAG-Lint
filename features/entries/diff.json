@@ -28,6 +28,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "What changed between two index snapshots, e.g. before and after a refactor?",
+      "command": "drag-lint diff --db <old.sqlite> --db <new.sqlite>"
+    }
+  ],
   "notes": "seed: group guessed",
   "access": "cli-only",
   "accessReviewed": {

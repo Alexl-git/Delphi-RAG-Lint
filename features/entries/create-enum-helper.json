@@ -44,10 +44,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Enum Record Helper (symbol)..."
+      "path": "drag-lint > Generate & Export > Enum Record Helper (symbol)...",
+      "steps": ["Put the caret on the enum type in the editor", "Choose drag-lint > Generate & Export > Enum Record Helper (symbol)...", "Follow the dialog; the record helper is generated"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I generate ToByte/FromByte/ToString helpers for an enum?",
+      "command": "drag-lint create-enum-helper --qname <TEnum> --apply"
+    },
+    {
+      "ask": "How do I preview the helper first?",
+      "command": "drag-lint create-enum-helper --qname <TEnum>"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226",
   "verified": {
     "date": "2026-10-21",

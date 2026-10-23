@@ -61,6 +61,16 @@
   "audience": "both",
   "requires": ["index"],
   "related": ["convert-apply"],
+  "questions": [
+    {
+      "ask": "A component conversion renames events or properties -- how do I update the code that uses them?",
+      "command": "drag-lint convert-apply --unit <F.pas> --rules <file> --db <db>"
+    },
+    {
+      "ask": "How do I apply the #migrate renames?",
+      "command": "drag-lint convert-apply --unit <F.pas> --rules <file> --db <db> --apply"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

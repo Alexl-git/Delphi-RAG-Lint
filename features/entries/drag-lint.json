@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "tool-window",
-      "path": "View > Tool Windows > drag-lint"
+      "path": "View > Tool Windows > drag-lint",
+      "steps": ["Choose View > Tool Windows > drag-lint", "The main drag-lint dockable panel opens (the same panel as from the drag-lint menu)"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where is the main drag-lint panel?",
+      "command": "View > Tool Windows > drag-lint"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Create helper class"
+      "caption": "Create helper class",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the enum type node", "Choose Create helper class; the Byte-family record helper is generated"]
     },
     {
       "type": "cli",
@@ -47,6 +48,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I generate conversion helpers for an enum from the Structure form?",
+      "command": "drag-lint create-enum-helper --qname <TEnum> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

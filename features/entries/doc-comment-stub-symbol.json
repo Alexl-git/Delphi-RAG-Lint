@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Doc Comment Stub (symbol)..."
+      "path": "drag-lint > Generate & Export > Doc Comment Stub (symbol)...",
+      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Generate & Export > Doc Comment Stub (symbol)...", "The doc-comment stub for the symbol is produced"]
     },
     {
       "type": "cli",
@@ -35,6 +36,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I start a DocInsight comment on one method or type?",
+      "command": "drag-lint generate-docs --qname <Foo.TBar.Baz> --db <db>"
+    },
+    {
+      "ask": "Can I get the stub in pasdoc style?",
+      "command": "drag-lint generate-docs --qname <Foo.TBar.Baz> --format pasdoc --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

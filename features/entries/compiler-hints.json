@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Compiler Hints..."
+      "path": "drag-lint > Code Quality > Compiler Hints...",
+      "steps": ["Choose drag-lint > Code Quality > Compiler Hints...", "Optionally filter by hint code or severity", "The imported hints and warnings are listed"]
     },
     {
       "type": "cli",
@@ -38,6 +39,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which compiler hints and warnings are already imported into the index?",
+      "command": "drag-lint query hints --db <db>"
+    },
+    {
+      "ask": "Show only one hint code or one severity",
+      "command": "drag-lint query hints --db <db> --name <code>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

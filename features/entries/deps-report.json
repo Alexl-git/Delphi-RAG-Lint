@@ -45,11 +45,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)..."
+      "path": "drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)...",
+      "steps": ["Choose drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)...", "Read the rollup of external units and libraries"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which third-party units and libraries does my codebase depend on?",
+      "command": "drag-lint deps-report --db <db>"
+    },
+    {
+      "ask": "Can I export the dependency rollup as CSV?",
+      "command": "drag-lint deps-report --db <db> --format csv --output <file>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

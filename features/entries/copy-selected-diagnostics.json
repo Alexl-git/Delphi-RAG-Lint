@@ -12,10 +12,17 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Copy"
+      "caption": "Copy",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Click a Diagnostics row; Ctrl+click or Shift+click to add more", "Right-click and choose Copy, or press Ctrl+C; selecting only the Diagnostics root copies every finding"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I copy just one or two findings?",
+      "command": "drag-lint lint <file.pas> --rule <id>"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-13",
     "by": "alexanderl",

@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Auto-Document Whole Project..."
+      "path": "drag-lint > Generate & Export > Auto-Document Whole Project...",
+      "steps": ["Choose drag-lint > Generate & Export > Auto-Document Whole Project...", "Follow the dialog", "The batch reindexes, documents every public declaration the project owns, then reindexes again"]
     },
     {
       "type": "cli",
@@ -91,6 +92,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I document every public declaration of a project in one go?",
+      "command": "drag-lint document --project <p.dproj> --apply"
+    },
+    {
+      "ask": "How do I preview the documentation without writing it?",
+      "command": "drag-lint document --project <p.dproj> --stubs"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",
