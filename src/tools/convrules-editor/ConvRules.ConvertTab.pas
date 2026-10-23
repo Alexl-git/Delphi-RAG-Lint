@@ -376,7 +376,7 @@ uses
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
   , ConvRules.Glyph
-  , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- BATCH_MAX_UNITS is the chunk size the start status quotes; it travels with BatchModeFor, the decision the tab asks so the status names the mode the runner will pick
+  , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- BATCH_MAX_UNITS is the chunk size the start status quotes; the batch decisions live there, the tab asks them through JobRunsBatched
   , ConvRules.QualifyForm
   ;
 
@@ -1577,9 +1577,9 @@ begin
   Job.RetypeSupported   := FRetypeOk;
   Job.BatchSupported    := FBatchOk;
   Job.BatchOverride     := GetEnvironmentVariable('CONVRULES_BATCH');
-  FRunBatch := BatchModeFor(Job.BatchSupported, Job.Scope.Kind = skWholeUnit, Length(Job.Units), Job.BatchOverride);
   Job.ApplyFeatures     := FApplyFeatures;
   Job.Scope             := FScope; // copied: Clear scope mid-run does not reach the worker
+  FRunBatch := JobRunsBatched(Job); // after Scope: a scoped run is per-unit in the runner too
   Inc(FRunId);
   Job.RunId             := FRunId; // keys this run's Work list rows (WorkRunOf)
   LExe:= FHost.ExePath;

@@ -1505,7 +1505,7 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
 
     function Suggestions(AFix: TJSONObject): TArray<TQualifySuggestion>;
     var
-      LSug: TQualifySuggestion;  // dl:ok duplicate-code@3ff0 -- REVIEWED 2026-10-19 the inner reader of QualifyFixes, the same shape as InheritedItems (see QualifyFixes)
+      LSug: TQualifySuggestion;
     begin
       Result:= nil;
       if not (AFix.Values['suggestions'] is TJSONArray) then

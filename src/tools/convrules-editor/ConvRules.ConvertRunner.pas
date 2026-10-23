@@ -547,6 +547,16 @@ function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TAr
 /// them. [] when every unit finished.</returns>
 function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks: TArray<string>): TArray<string>;
 
+/// <summary>PURE: True when RunConversion takes AJob through the batch path -- the one
+/// decision the Convert tab asks too, so its start status and its not-reached rows follow
+/// the path the runner really takes.</summary>
+/// <param name="AJob">The job as RunConversion will receive it: Scope, Units,
+/// BatchSupported and BatchOverride already set.</param>
+/// <returns>BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit,
+/// Length(AJob.Units), AJob.BatchOverride). A scoped job (an IDE request) is never
+/// batched, whatever its unit count.</returns>
+function JobRunsBatched(const AJob: TConvertJob): Boolean;
+
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
@@ -794,6 +804,11 @@ begin
     if not LTerminal and (LCount < Length(ABooks)) then
       Result:= Result + [LUnit];
   end;
+end;
+
+function JobRunsBatched(const AJob: TConvertJob): Boolean;
+begin
+  Result:= BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit, Length(AJob.Units), AJob.BatchOverride);
 end;
 
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;

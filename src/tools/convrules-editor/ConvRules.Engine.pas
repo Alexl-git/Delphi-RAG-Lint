@@ -156,8 +156,8 @@ type
   /// line (as the CLI reports it, e.g. "line 4: link ToPath not found ...").</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.Engine.TEngineAdapter.ValidateText (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas), declaration (ConvRules.Engine.pas)</para>
-  /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm</para>
+  /// <para>Used by: ConvRules.Engine.TEngineAdapter.ValidateText (ConvRules.Engine.pas), declaration (ConvRules.Engine.pas)</para>
+  /// <para>Used in units: ConvRules.Engine</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TValidateResult = record
@@ -170,16 +170,22 @@ type
     Output    : string ;
   end;
 
+  /// <summary>Raised by ParseProptreeJson when the engine's reply holds no JSON
+  /// object, so a caller can tell a malformed reply from any other failure.</summary>
+  EProptreeParse = class(Exception);
+
 /// <summary>PURE: parse `proptree/1` JSON into a TProptree. Raises on malformed
 /// JSON; returns an empty Leaves array when the "properties" array is absent.</summary>
 /// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->TProptree -- Observed: Default(TProptree).</returns>
-/// <exception cref="Exception"><!-- drag-lint:auto exc -->proptree: response is not a JSON object</exception>
+/// <exception cref="EProptreeParse"><!-- drag-lint:auto exc -->proptree: response is not a JSON object</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas)</para>
-/// <para>Calls: ConvRules.Engine.SliceJsonObject, Default</para>
+/// <para>Calls: ConvRules.Engine.JsonBoolOf, ConvRules.Engine.JsonStrOf, ConvRules.Engine.SliceJsonObject, Default</para>
 /// <para>Pure</para>
+/// <seealso cref="ConvRules.Engine.JsonBoolOf"/>
+/// <seealso cref="ConvRules.Engine.JsonStrOf"/>
 /// <seealso cref="ConvRules.Engine.SliceJsonObject"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -193,7 +199,7 @@ type
   /// BARE top-level JSON array of these records (there is no enclosing "results"
   /// object), and the declaration line is spelled "start_line", NOT "line".
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.Engine.ParseQueryLocation (ConvRules.Engine.pas), ConvRules.Engine.ParseQuerySymbols (ConvRules.Engine.pas), ConvRules.Engine.SelectQuerySymbol (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas), declaration (ConvRules.Engine.pas) (+1 more)</para>
+  /// <para>Used by: ConvRules.Engine.IsNestedDecl (ConvRules.Engine.pas), ConvRules.Engine.ParseQuerySymbols (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas), ConvRules.Engine.TieBreakRank (ConvRules.Engine.pas), declaration (ConvRules.Engine.pas) (+3 more)</para>
   /// <para>Used in units: ConvRules.Engine</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -215,10 +221,12 @@ type
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.Engine.ParseQueryLocation (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.EnumMembersOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas)</para>
-/// <para>Calls: ConvRules.Engine.SliceJsonArray, Default</para>
+/// <para>Calls: ConvRules.Engine.JsonIntOf, ConvRules.Engine.JsonStrOf, ConvRules.Engine.SliceJsonArray, Default</para>
 /// <para>Returns: nil; List.ToArray</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Pure</para>
+/// <seealso cref="ConvRules.Engine.JsonIntOf"/>
+/// <seealso cref="ConvRules.Engine.JsonStrOf"/>
 /// <seealso cref="ConvRules.Engine.SliceJsonArray"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -356,7 +364,7 @@ type
   /// <summary>Adapter over a drag-lint executable + a set of index DBs.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.ConvertRunner.RunConversionUnits/6 (ConvRules.ConvertRunner.pas), ConvRules.ConvertTab.TConvertTab.ConvertClick (ConvRules.ConvertTab.pas), ConvRules.ConvertTab.TConvertTab.Create (ConvRules.ConvertTab.pas), declaration (ConvRules.ConvertRunner.pas), declaration (ConvRules.ConvertTab.pas) (+5 more)</para>
+  /// <para>Used by: ConvRules.ConvertRunner.RunJobUnits (ConvRules.ConvertRunner.pas), ConvRules.ConvertTab.TConvertTab.ConvertClick (ConvRules.ConvertTab.pas), ConvRules.ConvertTab.TConvertTab.Create (ConvRules.ConvertTab.pas), declaration (ConvRules.ConvertRunner.pas), declaration (ConvRules.ConvertTab.pas) (+5 more)</para>
   /// <para>Used in units: ConvRules.ConvertRunner, ConvRules.ConvertTab, ConvRules.InheritanceEngine, ConvRules.MainForm, ConvRules.MappingForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -393,7 +401,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunCapture(const AArgs: string; out AOutput: string): Integer;
@@ -414,7 +422,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
@@ -445,18 +453,18 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ApplyConversion (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.DbArgs (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ApplyConversion/5 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ApplyConversionBatch (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.DbArgs (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas)</para>
       /// <para>Calls: Format, Trim</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgsFor(const ADbs: TArray<string>): string; overload;
-      /// <returns><!-- drag-lint:auto type -->string</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: DbArgsFor(FDbList).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
@@ -467,7 +475,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
@@ -490,7 +498,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string): string; overload;
@@ -559,7 +567,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
@@ -603,18 +611,18 @@ type
       /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
       /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
       /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; AUnit; FileP.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; AUnit;
+      /// ParseUnitFileJson(Output).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListControlTypesInUnit (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitFile (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, SameText</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 55 lines (full implementation)</para>
+      /// <para>Calls: ConvRules.Engine.ParseUnitFileJson, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="ConvRules.Engine.ParseUnitFileJson"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveUnitFile(const AUnit: string): string;
@@ -625,12 +633,12 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.ConvertTab.TConvertTab.ConvertClick (ConvRules.ConvertTab.pas), ConvRules.ConvertTab.TConvertTab.Create (ConvRules.ConvertTab.pas), ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
       /// <para>constructor</para>
-      /// <para>Writes: FExePath, FDbList, FInfoTimeoutMs</para>
+      /// <para>Writes: FExePath, FDbList, FInfoTimeoutMs, FResolveCache</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AExePath: string; const ADbList: TArray<string>);
@@ -643,12 +651,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ClearResolveCache</para>
       /// <para>Writes: FDbList</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ClearResolveCache"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetDbs(const ADbs: TArray<string>);
@@ -670,8 +679,8 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbList: TArray<string>;
@@ -697,7 +706,7 @@ type
       /// Never a reason to treat the result as a failure.</param>
       /// <param name="AMinVisibility"><!-- drag-lint:auto type -->const string = ''</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via ConvRules.Engine.ParseProptreeJson: proptree: response is not a JSON object</exception>
+      /// <exception cref="EProptreeParse"><!-- drag-lint:auto exc -->via ConvRules.Engine.ParseProptreeJson: proptree: response is not a JSON object</exception>
       /// <remarks>
       /// --refs-as-leaves is ALWAYS passed, so a TComponent-typed property
       /// appears as a single leaf and is NOT recursed into. Callers therefore do not
@@ -713,6 +722,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.DepthArgs, ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Default, FLongCallRunner, Format, LWork, Trim</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 118 lines (full implementation)</para>
       /// <para>Reads: FTreeDepth, FProgressLines, FLongCallRunner   Writes: FLastCancelled</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AError (out), ANote (out), ATree (out)</para>
@@ -740,7 +750,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DeclaringUnitOf(const ATypeName: string): string;
@@ -765,7 +775,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -811,7 +821,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
@@ -916,7 +926,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListControlTypesInUnit(const AUnit: string; const AControlSet: TArray<string>; out ATypes: TArray<string>; out AError: string): Boolean;
@@ -946,7 +956,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeLocation(const AType: string; out AFile: string; out ALine: Integer; out AError: string): Boolean; overload;
@@ -1004,7 +1014,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversionBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumMembersOf(const AType: string; out AMembers: TArray<string>; out AError: string): Boolean; overload;
@@ -1079,14 +1089,13 @@ type
       /// ENGINE_TIMEOUT_MS, so Output's lines are never cut by interleaving.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RunScopedValidate (ConvRules.MainForm.pas), TestComposedFileValidates (ConvRulesModelTests.dpr), TestValidateTextStreams (ConvRulesModelTests.dpr)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Format, Pos, Trim</para>
-      /// <para>Catches: Exception (empty)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.CastLibArgs, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Format, Pos, Trim</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CastLibArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureStreaming"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken = nil): TValidateResult;
@@ -1325,9 +1334,10 @@ function ParseCodeRefRows(const ASqlJson: string; out ARefs: TArray<TEngineCodeR
 /// lowercase; the leniency costs nothing and matches the name dedupe.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline (ConvRules.Engine.pas)</para>
-/// <para>Calls: Copy, LastDelimiter, Pos, SameText, TJSONArray, TJSONObject, Trim</para>
+/// <para>Calls: ConvRules.Engine.JsonStrOf, Copy, LastDelimiter, Pos, SameText, TJSONArray, TJSONObject, Trim</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Pure</para>
+/// <seealso cref="ConvRules.Engine.JsonStrOf"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseOutlineClassNames(const AJson: string): TArray<string>;
@@ -1453,7 +1463,7 @@ begin
   if Sliced = '' then Sliced:= AJson; // fall back to whole text
   Root:= TJSONObject.ParseJSONValue(Sliced) as TJSONObject;
   if Root = nil then
-    raise Exception.Create('proptree: response is not a JSON object');
+    raise EProptreeParse.Create('proptree: response is not a JSON object');
   try
     JsonStrOf(Root, 'qname', Result.Qname);
     JsonStrOf(Root, 'root_type', Result.RootType);
@@ -3285,8 +3295,10 @@ begin
       end; // try
     end; // if
   finally
+    // Best effort, and it never raises: a temp file left behind is harmless, and a
+    // failed cleanup must not replace the validation result.
     if TFile.Exists(Tmp) then
-    try TFile.Delete(Tmp); except end;
+      System.SysUtils.DeleteFile(Tmp);
   end; // try
 end; // function
 

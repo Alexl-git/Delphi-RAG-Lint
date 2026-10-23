@@ -352,6 +352,42 @@ begin
     Check('proptree.noise.leafpath', Tree.Leaves[0].Path = 'Size', Tree.Leaves[0].Path);
 end;
 
+{ A reply with no JSON object raises EProptreeParse (not the root Exception), so a
+  caller can catch the malformed reply on its own. }
+procedure TestProptreeNotObject;
+var
+  LClass: string;
+begin
+  LClass:= '(nothing raised)';
+  try
+    ParseProptreeJson('engine died');
+  except
+    on E: Exception do
+      LClass:= E.ClassName;
+  end;
+  Check('proptree.not.object.raises.EProptreeParse', LClass = 'EProptreeParse', LClass);
+end;
+
+{ B4 review: the Convert tab asks JobRunsBatched on the job RunConversion receives; a
+  scoped job (IDE request) with several units stays per-unit, as the runner decides. }
+procedure TestJobRunsBatched;
+var
+  LJob: TConvertJob;
+begin
+  LJob:= Default(TConvertJob);
+  LJob.Units         := ['A.pas', 'B.pas']; // only the count is read
+  LJob.BatchSupported:= True;
+  Check('batch.job.whole.unit.on', JobRunsBatched(LJob));
+  LJob.Scope.Kind:= skSelected;
+  Check('batch.job.scoped.off', not JobRunsBatched(LJob));
+  LJob.Scope.Kind   := skWholeUnit;
+  LJob.BatchOverride:= 'Off';
+  Check('batch.job.env.off', not JobRunsBatched(LJob));
+  LJob.BatchOverride:= '';
+  LJob.Units        := ['A.pas'];
+  Check('batch.job.one.unit.off', not JobRunsBatched(LJob));
+end;
+
 { proptree/2 (engine schema v17): per-leaf is_writable / visibility / member_kind,
   with proptree/1 back-compat defaults (absent is_writable => True; absent
   member_kind => 'property'; absent visibility => ''). }
@@ -15279,6 +15315,7 @@ begin
     TestUnknownTypeInference;
     TestProptreeParse;
     TestProptreeNoise;
+    TestProptreeNotObject;
     TestProptree2Fields;
     TestSaveComplete;
     TestBookDepth;
@@ -15349,6 +15386,7 @@ begin
     TestRunStepText;
     TestBatchStepText;
     TestBatchRunner;
+    TestJobRunsBatched;
     TestReindexProject;
     TestConvertRunnerLive;
     TestInheritanceScan;
