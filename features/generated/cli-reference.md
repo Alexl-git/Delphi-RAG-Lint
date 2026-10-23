@@ -1074,6 +1074,42 @@ drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [
 
 Described in [Register the MCP server (Claude Code, VS Code)](../../docs/wiki/Register-MCP-Server.md).
 
+### menu-drift
+
+The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
+
+```text
+drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--registry` | `<features dir>` |  |  |
+| `--format` | `text\|json` |  |  |
+| `--output` | `<f>` |  |  |
+
+Described in [Code-built menu tree and registry drift](../../docs/wiki/Menu-Tree.md).
+
+### menu-tree
+
+The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
+
+```text
+drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; exit 0 ran, 2 usage/setup, 3 stale index)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--root` | `<QName>` |  |  |
+| `--format` | `text\|json\|paths` |  |  |
+| `--output` | `<f>` |  |  |
+
+Described in [Code-built menu tree and registry drift](../../docs/wiki/Menu-Tree.md).
+
 ### migrate-dbs
 
 Moves project index databases into each project's own D-RAG folder, matching the current index layout.

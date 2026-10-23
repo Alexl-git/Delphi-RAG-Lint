@@ -5148,8 +5148,8 @@
       "surfaces": [
         {
           "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...",
-          "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...", "Read the suggested moves and the unused entries", "From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`"]
+          "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...",
+          "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...", "Read the suggested moves and the unused entries", "From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`"]
         },
         {
           "type": "cli",
@@ -5181,10 +5181,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
-        "surfaceHash": "01b4e38ce5db60cafa99593b0e82b8566c53c01db6b05fe28896e988728c5f48"
+        "surfaceHash": "f091b0c4b210d9e5851f2dfeb1358127a0936511c8984ffd1035e480a56611ec"
       }
     },
     {
@@ -5200,8 +5200,8 @@
       "surfaces": [
         {
           "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...",
-          "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...", "Review each candidate (verified by compiling) before applying", "From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`"]
+          "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...",
+          "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...", "Review each candidate (verified by compiling) before applying", "From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`"]
         },
         {
           "type": "cli",
@@ -5248,10 +5248,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
-        "surfaceHash": "78e36ac66c8d8639272b41e0286209f6951b72cf3d116e67f6df761beb1c1c75"
+        "surfaceHash": "e56326c25702efc3f98e2fcc1bf94115774f75b3021ce385d7891bc8ba2d14a6"
       }
     },
     {
@@ -6226,6 +6226,99 @@
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "4289e5ac451e1cf2cae70b75a29ba072610221f1475bf80c9e89343beff842c9"
+      }
+    },
+    {
+      "id": "menu-tree",
+      "title": "Code-built menu tree and registry drift",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it",
+      "intro": "Read this when a menu is built in code (TMenuItem.Create, Caption :=, Add) rather than in a .dfm and you need to see the real tree, or when a documented menu path may have drifted from the code. `drag-lint menu-tree --project <dproj> --db <db>` prints the tree: helpers are recognised by what their body does, not by their name, and a caption it cannot evaluate is shown as dynamic with a note instead of being dropped. Needs a fresh project index; a changed file is refused with exit 3.",
+      "wikiPage": "Menu-Tree",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "menu-tree",
+          "usage": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; exit 0 ran, 2 usage/setup, 3 stale index)",
+          "flags": [
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--root",
+              "arg": "<QName>"
+            },
+            {
+              "name": "--format",
+              "arg": "text|json|paths"
+            },
+            {
+              "name": "--output",
+              "arg": "<f>"
+            }
+          ],
+          "helpOrder": 96,
+          "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)"]
+        },
+        {
+          "type": "cli",
+          "verb": "menu-drift",
+          "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
+          "flags": [
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--registry",
+              "arg": "<features dir>"
+            },
+            {
+              "name": "--format",
+              "arg": "text|json"
+            },
+            {
+              "name": "--output",
+              "arg": "<f>"
+            }
+          ],
+          "helpOrder": 97,
+          "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry's ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "What menu does this code actually build?",
+          "command": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite>"
+        },
+        {
+          "ask": "Every leaf of a code-built menu, one per line",
+          "command": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> --format paths"
+        },
+        {
+          "ask": "Does the plugin's menu still match the documented menu paths?",
+          "command": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry features"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-23",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "8ab73f29cdfdc67c84ed1ac44f1df014ab9a379eab2e773d19e58f5592f76061"
       }
     },
     {
