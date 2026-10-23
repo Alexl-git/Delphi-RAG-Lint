@@ -38,6 +38,7 @@ type
   TOwnRoots = record
   strict private
     FRoots   : TArray<string>;
+    FExcludes: TArray<string>;
     FAnchor  : string        ;
     FDeclared: Boolean       ;
     FError   : string        ;
@@ -57,6 +58,10 @@ type
     /// unreadable or malformed file is NOT an error -- it defaults. An explicit
     /// empty "ownRoots": [] IS an error, because scoping to nothing would report
     /// a clean project, the same reasoning as the empty --project refusal.
+    /// An optional "excludeRoots" array (same path rules) carves folders out
+    /// of the own roots, declared or defaulted; IsOurs answers False under one
+    /// however an own root nests. A non-array "excludeRoots", or one covering
+    /// every own root, is an Error for the same reason.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim</para>
@@ -69,7 +74,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Load(const AAnchorDir: string): TOwnRoots; static;
-    /// <summary>True when AFilePath sits under one of the roots.</summary>
+    /// <summary>True when AFilePath sits under one of the roots and under none
+    /// of the ExcludeRoots.</summary>
     /// <param name="AFilePath">Absolute or relative source path.</param>
     /// <returns>True for our code; always True when the record is inactive
     /// (no anchor).</returns>
@@ -94,6 +100,9 @@ type
     /// <summary>True when a drag-lint-project.json supplied the roots; False
     /// when they were defaulted to the anchor.</summary>
     property Declared: Boolean read FDeclared;
+    /// <summary>Resolved "excludeRoots", each with a trailing path delimiter;
+    /// empty when none were declared.</summary>
+    property ExcludeRoots: TArray<string> read FExcludes;
     /// <summary>Non-empty when the declaration was present but unusable.</summary>
     property Error: string read FError;
     /// <summary>False when there is no anchor and IsOurs always answers True.</summary>
@@ -135,6 +144,38 @@ begin
              ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
 end;
 
+{ True when APath (a dir with trailing delimiter, or a file) lies under one of
+  ADirs. Each entry of ADirs ends in a delimiter, so "vendor\" never matches
+  "vendorX\". }
+function UnderAny(const APath: string; const ADirs: TArray<string>): Boolean;
+begin
+  Result:= False;
+  for var D: string in ADirs do
+    if (D <> '') and StartsText(D, APath) then Exit(True);
+end;
+
+{ True when every one of APaths lies under one of ADirs. }
+function AllUnder(const APaths, ADirs: TArray<string>): Boolean;
+begin
+  Result:= True;
+  for var P: string in APaths do
+    if not UnderAny(P, ADirs) then Exit(False);
+end;
+
+{ The non-blank entries of AArr, each made absolute against AAnchor when
+  relative and normalised to a directory with a trailing delimiter. }
+function ResolveEntries(const AArr: TJSONArray; const AAnchor: string): TArray<string>;
+begin
+  Result:= nil;
+  for var V: TJSONValue in AArr do
+  begin
+    var Entry: string:= Trim(V.Value);
+    if Entry = '' then Continue;
+    if TPath.IsRelativePath(Entry) then Entry:= TPath.Combine(AAnchor, Entry);
+    Result:= Result + [NormalizeDir(Entry)];
+  end;
+end;
+
 function AnchorDirForDb(const ADbPath: string): string;
 var
   Dir: string;
@@ -153,7 +194,6 @@ var
   Root   : TJSONObject;
   Arr    : TJSONArray ;
   V      : TJSONValue ;
-  Entry  : string     ;
 begin
   Result         := Default(TOwnRoots);
   Result.FActive := AAnchorDir <> '';
@@ -186,15 +226,20 @@ begin
               'would report a clean project.', [CfgPath]);
             Exit;
           end;
-          for V in Arr do
-          begin
-            Entry:= Trim(V.Value);
-            if Entry = '' then Continue;
-            if TPath.IsRelativePath(Entry) then Entry:= TPath.Combine(Result.FAnchor, Entry);
-            Result.FRoots:= Result.FRoots + [NormalizeDir(Entry)];
-          end;
+          Result.FRoots   := ResolveEntries(Arr, Result.FAnchor);
           Result.FDeclared:= Length(Result.FRoots) > 0;
         end;
+        { T-01: "excludeRoots" carves a vendored subfolder out of an owned
+          root. Present-but-not-an-array is an Error, not a default: ignoring
+          it would silently lint the code the author asked to skip. }
+        V:= Root.GetValue('excludeRoots');
+        if (V <> nil) and not (V is TJSONArray) then
+        begin
+          Result.FError:= Format('%s: "excludeRoots" must be an array of folders, ' +
+            'e.g. ["vendor"].', [CfgPath]);
+          Exit;
+        end;
+        if V is TJSONArray then Result.FExcludes:= ResolveEntries(TJSONArray(V), Result.FAnchor);
       end;
     finally
       JVal.Free;
@@ -212,6 +257,12 @@ begin
   end;
 
   if not Result.FDeclared then Result.FRoots:= [NormalizeDir(Result.FAnchor)];
+
+  { Excluding every own root would scope to nothing -- the same "clean
+    project" lie the empty-ownRoots Error refuses. }
+  if (Length(Result.FExcludes) > 0) and AllUnder(Result.FRoots, Result.FExcludes) then
+    Result.FError:= Format('%s: "excludeRoots" covers every own root, so nothing ' +
+      'would be linted. Narrow "excludeRoots" or widen "ownRoots".', [CfgPath]);
 end;
 
 function TOwnRoots.IsOurs(const AFilePath: string): Boolean;
@@ -223,6 +274,8 @@ begin
   if not FActive then Exit;
   if AFilePath = '' then Exit;
   P:= ExpandFileName(StringReplace(AFilePath, '/', '\', [rfReplaceAll]));
+  { An exclusion wins over every own root, however nested. }
+  if UnderAny(P, FExcludes) then Exit(False);
   for R in FRoots do
     if (R <> '') and StartsText(R, P) then Exit(True);
   Result:= False;
