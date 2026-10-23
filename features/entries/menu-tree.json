@@ -83,5 +83,16 @@
       "ask": "Does the plugin's menu still match the documented menu paths?",
       "command": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry features"
     }
-  ]
+  ],
+  "lastVerified": {
+    "date": "2026-10-23",
+    "by": "ENGINE lane W3-menu (e3d/menu-impl)",
+    "build": "1.33.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-23",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "8ab73f29cdfdc67c84ed1ac44f1df014ab9a379eab2e773d19e58f5592f76061"
+  }
 }

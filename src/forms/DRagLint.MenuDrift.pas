@@ -36,13 +36,18 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    /// <summary>Reads pDir\entries\*.json (surfaces of type ide-menu) and
-    /// pDir\exemptions.json (the keys of "captions").</summary>
+    /// <summary>Reads pDir\entries\*.json (surfaces of type ide-menu), the family
+    /// children of pDir\generated\manifest.json and pDir\exemptions.json (the keys of "captions").</summary>
     /// <param name="pDir">A features directory (the repo's features\, or a fixture's registry\).</param>
     /// <exception cref="EMenuDriftSetup">pDir\entries is missing or an entry is not valid JSON.</exception>
     procedure LoadFromDir(const pDir: string);
     /// <summary>Adds one surface (tests, or a loader).</summary>
     procedure AddSurface(const pEntryId, pPath: string);
+    /// <summary>Adds the ide-menu surfaces of the family children in a generated
+    /// manifest.json ("families": { name: [ child entries ] }) -- e.g. the
+    /// chart-questions children, one per Reports item. A missing file adds nothing.</summary>
+    /// <param name="pManifest">Path of features\generated\manifest.json.</param>
+    procedure LoadFamilies(const pManifest: string);
     /// <summary>The ide-menu surfaces, in load order.</summary>
     property Surfaces: TList<TRegistrySurface> read FSurfaces;
     /// <summary>Exempted captions as written.</summary>
@@ -175,12 +180,42 @@ begin
       V.Free;
     end;
   end;
+  LoadFamilies(TPath.Combine(TPath.Combine(pDir, 'generated'), 'manifest.json'));
   F:= TPath.Combine(pDir, 'exemptions.json');
   if not TFile.Exists(F) then Exit;
   V:= TJSONObject.ParseJSONValue(TFile.ReadAllText(F, TEncoding.UTF8));
   try
     if (V is TJSONObject) and TJSONObject(V).TryGetValue<TJSONObject>('captions', Caps) then
       for Pair in Caps do FExempt.Add(Pair.JsonString.Value);
+  finally
+    V.Free;
+  end;
+end;
+
+procedure TMenuRegistry.LoadFamilies(const pManifest: string);
+var
+  V       : TJSONValue;
+  Fams    : TJSONObject;
+  Fam     : TJSONPair;
+  Child   : TJSONValue;
+  Arr     : TJSONArray;
+  Item    : TJSONValue;
+  Id, Typ : string;
+begin
+  if not TFile.Exists(pManifest) then Exit;
+  V:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pManifest, TEncoding.UTF8));
+  try
+    if not ((V is TJSONObject) and TJSONObject(V).TryGetValue<TJSONObject>('families', Fams)) then Exit;
+    for Fam in Fams do
+      if Fam.JsonValue is TJSONArray then
+        for Child in TJSONArray(Fam.JsonValue) do
+          if (Child is TJSONObject) and TJSONObject(Child).TryGetValue<TJSONArray>('surfaces', Arr) then
+          begin
+            Id:= TJSONObject(Child).GetValue<string>('id', Fam.JsonString.Value);
+            for Item in Arr do
+              if (Item is TJSONObject) and TJSONObject(Item).TryGetValue<string>('type', Typ) and SameText(Typ, 'ide-menu') then
+                AddSurface(Id, TJSONObject(Item).GetValue<string>('path', ''));
+          end;
   finally
     V.Free;
   end;
@@ -356,6 +391,16 @@ end;
 
 { stale-looking exemption (spec 7 note row): an exempted caption that the
   kind model now sees as a container / header / root -- it no longer needs exempting }
+procedure CollectContainers(pNode: TMenuNode; const pPrefix: string; pAcc: TList<string>);
+var
+  C   : TMenuNode;
+  Path: string;
+begin
+  Path:= if pPrefix = '' then pNode.DisplayCaption else pPrefix + PATH_SEP + pNode.DisplayCaption;
+  if pNode.Kind in [mnkRoot, mnkSubmenu] then pAcc.Add(MenuPathKey(Path));
+  for C in pNode.Children do CollectContainers(C, Path, pAcc);
+end;
+
 procedure CollectStructural(pNode: TMenuNode; pAcc: TDictionary<string, TMenuNodeKind>);
 var
   C: TMenuNode;
@@ -372,6 +417,7 @@ var
   RegKeys   : TDictionary<string, Integer>;
   DynParents: TList<string>;
   MovedTo   : TList<string>;
+  Containers: TList<string>;
   Struct    : TDictionary<string, TMenuNodeKind>;
   R         : TRegistrySurface;
   I, Best, P: Integer;
@@ -391,6 +437,7 @@ begin
   RegKeys   := TDictionary<string, Integer>.Create;
   DynParents:= TList<string>.Create;
   MovedTo   := TList<string>.Create;
+  Containers:= TList<string>.Create;
   Struct    := TDictionary<string, TMenuNodeKind>.Create;
   try
     for L in pTree.Leaves do
@@ -405,11 +452,13 @@ begin
       LiveKeys.AddOrSetValue(MenuPathKey(L.Path), Live.Count - 1);
     end;
     for I:= 0 to pRegistry.Surfaces.Count - 1 do RegKeys.AddOrSetValue(pRegistry.Surfaces[I].Key, I);
+    for N in pTree.Roots do CollectContainers(N, '', Containers);
 
     { missing / moved }
     for R in pRegistry.Surfaces do
     begin
-      if (R.Key = '') or LiveKeys.ContainsKey(R.Key) then Continue;
+      { a path naming a live submenu is that submenu's own surface (drag-lint > Reports) }
+      if (R.Key = '') or LiveKeys.ContainsKey(R.Key) or Containers.Contains(R.Key) then Continue;
       PK:= ParentKey(R.Key);
       LK:= LeafKey(R.Key);
       if DynParents.Contains(PK) then Continue;  { the dynamic item may be it; its note says so }
@@ -485,6 +534,7 @@ begin
           [QuotedStr(E), MenuKindName(Kind)]));
   finally
     Struct.Free;
+    Containers.Free;
     MovedTo.Free;
     DynParents.Free;
     RegKeys.Free;

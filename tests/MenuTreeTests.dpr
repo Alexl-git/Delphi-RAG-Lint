@@ -14,6 +14,7 @@ uses
   , System.Classes
   , System.IOUtils
   , System.StrUtils
+  , Winapi.Windows
   , DRagLint.MenuTree
   , DRagLint.MenuDrift
   ;
@@ -275,6 +276,7 @@ var
   Base  : Integer;
   Hand  : TMenuTree;
   N     : TMenuNode;
+  FamDir: string;
 begin
   RegDir:= TPath.Combine(pFixtureDir, 'registry');
   W:= TMenuWalker.Create([pDb], TPath.Combine(pFixtureDir, 'MenuTreeFixture.dproj'));
@@ -340,7 +342,31 @@ begin
     finally
       Rep.Free;
     end;
-  finally
+    { Task 8 (reader): a registered path that names a live SUBMENU is the
+      submenu's own surface (drag-lint > Reports), not a missing item }
+    Rep:= Drift(Tree, RegDir, procedure(R: TMenuRegistry) begin R.AddSurface('catalog', 'Fixture > Catalog'); end);
+    try
+      CheckCounts('registered submenu path', Rep, 0, 0, 0);
+    finally
+      Rep.Free;
+    end;
+    { Task 8 (reader): family children (generated\manifest.json "families",
+      e.g. chart-questions = the Reports items) are registry surfaces too }
+    FamDir:= TPath.Combine(TPath.GetTempPath, 'menutree-family-' + IntToStr(GetCurrentProcessId));
+    TDirectory.CreateDirectory(TPath.Combine(FamDir, 'entries'));
+    TDirectory.CreateDirectory(TPath.Combine(FamDir, 'generated'));
+    for var F in TDirectory.GetFiles(TPath.Combine(RegDir, 'entries'), '*.json') do
+      if not SameText(TPath.GetFileName(F), 'basic-report.json') then
+        TFile.Copy(F, TPath.Combine(TPath.Combine(FamDir, 'entries'), TPath.GetFileName(F)), True);
+    TFile.WriteAllText(TPath.Combine(TPath.Combine(FamDir, 'generated'), 'manifest.json'),
+      '{ "entries": [], "families": { "fixture-family": [ { "id": "fam.basic", "surfaces": [ ' +
+      '{ "type": "ide-menu", "path": "Fixture > Catalog > Basic Report..." } ] } ] } }');
+    Rep:= Drift(Tree, FamDir, nil);
+    try
+      CheckCounts('family child registers an item', Rep, 0, 0, 0);
+    finally
+      Rep.Free;
+    end;  finally
     Tree.Free;
   end;
 
