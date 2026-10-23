@@ -31,6 +31,7 @@ uses
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
   , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
+  , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   ;
 
 type
@@ -67,6 +68,28 @@ type
     IsIntrinsic  : Boolean;
     IntrinsicName: string ;
     IntrinsicSig : string ;
+  end;
+
+  /// <summary>Which indexed symbol a cursor position means, before anything
+  /// is rendered: the selection half of hover, shared with ResolveSymbolAt so
+  /// the two can never pick different symbols for one position.</summary>
+  /// <remarks>
+  /// <para>Sel and HitStore belong together: further queries about Sel must
+  /// run against HitStore. Symbols is every same-named candidate in HitStore.</para>
+  /// <para>Narrowed is True when Sel was picked by the cursor itself (on its
+  /// declaration, its implementation, a forward stub, or via TTypeAtResolver
+  /// at a call site); False when Sel is merely the first candidate.</para>
+  /// <para>HaveOwnerFloor: the resolver found the owner TYPE but not the
+  /// member; OwnerFloorType is that type and Sel is NOT the hovered symbol.</para>
+  /// </remarks>
+  TSymbolSelection = record
+    Symbols       : TArray<TSymbol>;
+    HitStore      : ISymbolStore   ;
+    Sel           : TSymbol        ;
+    Narrowed      : Boolean        ;
+    OnForwardStub : Boolean        ;
+    HaveOwnerFloor: Boolean        ;
+    OwnerFloorType: TSymbol        ;
   end;
 
   // Language Server Protocol over stdio with Content-Length framing.
@@ -153,6 +176,12 @@ type
       FInitialized : Boolean             ;
       FShuttingDown: Boolean             ;
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
+      { S0 feature registry: one instance per registered TLspFeature class, owned;
+        the method table points into it (not owned). FContext is the adapter
+        every feature is handed -- see DRagLint.LSP.Context. }
+      FFeatures       : TObjectList<TLspFeature>         ;
+      FFeatureByMethod: TDictionary<string, TLspFeature> ;
+      FContext        : ILspServerContext                ;
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FControl &lt;&gt; nil) and
       /// FControl.StandDownRequested.</returns>
       /// <remarks>
@@ -241,6 +270,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  BuildEphemeralStore(const APath: string; AStamp: TDateTime): Boolean;
+    private { S0: reached by TLspServerContextAdapter (same unit), not by other units }
       /// <summary>The store list to answer a request about APath with: FStores
       /// unchanged when some store owns the file, else the ephemeral
       /// single-unit store PREPENDED to FStores.</summary>
@@ -263,6 +293,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StoresForFile(const APath: string): TArray<ISymbolStore>;
+    strict private
       /// <summary><!-- drag-lint:auto sum -->Callers use it to let the file's OWN
       /// declaration win outright. Accumulating across every store is right for a
       /// multi-DB project, where the same name legitimately lives in several project
@@ -302,6 +333,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ReadMessage: TJSONObject  ;
+    private { S0: the send/URI helpers TLspServerContextAdapter forwards to }
       /// <param name="AObj"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -380,6 +412,38 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileToUri  (const APath: string): string;
+      /// <summary>Sends {jsonrpc, id, result} -- the envelope every request
+      /// handler answers with.</summary>
+      /// <param name="AId">The request id, cloned; nil omits the id pair (the
+      /// shape the handlers have always sent).</param>
+      /// <param name="AResult">CONSUMED, also when sending raises; nil sends
+      /// result null.</param>
+      procedure SendResult(const AId: TJSONValue; AResult: TJSONValue);
+    strict private
+      /// <summary>Reads textDocument.uri and position.line/character.</summary>
+      /// <param name="AParams">The request params; may be nil.</param>
+      /// <param name="APath">Receives the local path.</param>
+      /// <param name="ALine0">Receives the 0-based line (0 when unparsable).</param>
+      /// <param name="ACol0">Receives the 0-based column (0 when unparsable).</param>
+      /// <returns>False when AParams, textDocument or position is missing.</returns>
+      function PositionParams(const AParams: TJSONObject; out APath: string; out ALine0, ACol0: Integer): Boolean;
+      /// <summary>The selection half of hover: which symbol APath:ALine0:ACol0
+      /// means, given the identifier already read there.</summary>
+      /// <param name="AStores">StoresForFile(APath).</param>
+      /// <param name="APath">The local path.</param>
+      /// <param name="AIdent">IdentifierAtPosition at the position; not an intrinsic.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <param name="ASel">Receives the selection; valid only on True.</param>
+      /// <returns>False when no store has a symbol named AIdent.</returns>
+      function SelectSymbolAt(const AStores: TArray<ISymbolStore>; const APath, AIdent: string; ALine0, ACol0: Integer; out ASel: TSymbolSelection): Boolean;
+      /// <summary>ComputeHover for an already-parsed position.</summary>
+      /// <param name="APath">The local path.</param>
+      /// <param name="ALine">0-based line.</param>
+      /// <param name="ACol">0-based column.</param>
+      /// <param name="AOut">As for ComputeHover.</param>
+      /// <returns>As for ComputeHover.</returns>
+      function ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -755,6 +819,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromRef   (const ARef: TReference; const AStore: ISymbolStore): TJSONObject; overload;
+    private { S0: TLspServerContextAdapter forwards to these two }
       // v0.7: reparse the file at APath and find the identifier text under
       // (ALine, ACol) - both 0-based (LSP convention). Returns empty string
       // if the file doesn't exist or the cursor isn't on an identifier.
@@ -879,9 +944,174 @@ type
       /// <returns>Paths of the stores that opened and passed the schema check;
       /// a --db that was skipped is not in it.</returns>
       property StorePaths: TArray<string> read FStorePaths;
+      /// <summary>Every open store: the ephemeral single-unit index first when
+      /// one is held, then the --db stores in command-line order.</summary>
+      /// <returns>A new array; empty when nothing opened.</returns>
+      function OpenStores: TArray<ISymbolStore>;
+      /// <summary>The body `textDocument/definition` answers for a position.</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <returns>A NEW Location[] array, possibly empty; the caller owns it.</returns>
+      /// <remarks>Every same-named declaration across StoresForFile(APath); when
+      /// the file's ephemeral index leads and declares the name, only those.</remarks>
+      function ComputeDefinition(const APath: string; ALine0, ACol0: Integer): TJSONArray;
+      /// <summary>The body `textDocument/references` answers for a position.</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <param name="AIncludeDecl">Append the name's declarations after its references, per store.</param>
+      /// <returns>A NEW Location[] array, possibly empty; the caller owns it.</returns>
+      function ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+      /// <summary>The `counts` array `draglint/callerCounts` answers for a file:
+      /// one {line, count} per routine line, 0-based, counting distinct call
+      /// sites across every --db store.</summary>
+      /// <param name="APath">Local path; '' answers an empty array.</param>
+      /// <returns>A NEW array, empty for a file no store knows; the caller owns it.</returns>
+      function ComputeCallerCounts(const APath: string): TJSONArray;
+      /// <summary>The markdown `textDocument/hover` shows for a position.</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <returns>The markdown; '' exactly when hover answers null.</returns>
+      function ComputeHoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
+      /// <summary>The single symbol a position refers to -- the selection hover
+      /// makes (SelectSymbolAt), with DedupAndPreferSource applied when the
+      /// cursor did not narrow it.</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <param name="ASym">Receives the symbol; valid only on True.</param>
+      /// <param name="AStore">Receives the store ASym lives in; valid only on True.</param>
+      /// <returns>False for no identifier, a compiler intrinsic, no indexed
+      /// symbol, or the inherited-member owner-type floor.</returns>
+      function ResolveSymbolAt(const APath: string; ALine0, ACol0: Integer; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
+      /// <summary>The surface handed to every registered TLspFeature.</summary>
+      /// <remarks>Owned by this server (reference counted, held in FContext);
+      /// it reaches back into the server, so it must not outlive it.</remarks>
+      property Context: ILspServerContext read FContext;
   end;
 
 implementation
+
+uses
+  DRagLint.LSP.Features  // dl:unit DRagLint.LSP.Features accepted -- linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
+  ;
+
+type
+  { S0: the ILspServerContext a feature is handed. A thin forwarder: every
+    answer is the server's own method, so a feature cannot drift from what the
+    built-in handlers send. Holds a RAW back-pointer -- the server owns the
+    adapter through FContext, so a counted one would be a cycle. }
+  TLspServerContextAdapter = class(TInterfacedObject, ILspServerContext)
+  strict private
+    FServer: TLSPServer;
+  public
+    constructor Create(AServer: TLSPServer);
+    function FileFromUri(const AUri: string): string;
+    function FileToUri(const APath: string): string;
+    function Stores: TArray<ISymbolStore>;
+    function StoresForFile(const APath: string): TArray<ISymbolStore>;
+    function IdentifierAtPosition(const APath: string; ALine0, ACol0: Integer): string;
+    function ResolveSymbolAt(const APath: string; ALine0, ACol0: Integer; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
+    function Definition(const APath: string; ALine0, ACol0: Integer): TJSONArray;
+    function References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+    function CallerCounts(const APath: string): TJSONArray;
+    function HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
+    function Linter: TLinter;
+    procedure Reply(const AId: TJSONValue; AResult: TJSONValue);
+    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
+    procedure Notify(const AMethod: string; AParams: TJSONObject);
+  end;
+
+constructor TLspServerContextAdapter.Create(AServer: TLSPServer);
+begin
+  inherited Create;
+  FServer:= AServer;
+end;
+
+function TLspServerContextAdapter.FileFromUri(const AUri: string): string;
+begin
+  Result:= FServer.FileFromUri(AUri);
+end;
+
+function TLspServerContextAdapter.FileToUri(const APath: string): string;
+begin
+  Result:= FServer.FileToUri(APath);
+end;
+
+function TLspServerContextAdapter.Stores: TArray<ISymbolStore>;
+begin
+  Result:= FServer.OpenStores;
+end;
+
+function TLspServerContextAdapter.StoresForFile(const APath: string): TArray<ISymbolStore>;
+begin
+  Result:= FServer.StoresForFile(APath);
+end;
+
+function TLspServerContextAdapter.IdentifierAtPosition(const APath: string; ALine0, ACol0: Integer): string;
+begin
+  Result:= FServer.IdentifierAtPosition(APath, ALine0, ACol0);
+end;
+
+function TLspServerContextAdapter.ResolveSymbolAt(const APath: string; ALine0, ACol0: Integer; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
+begin
+  Result:= FServer.ResolveSymbolAt(APath, ALine0, ACol0, ASym, AStore);
+end;
+
+function TLspServerContextAdapter.Definition(const APath: string; ALine0, ACol0: Integer): TJSONArray;
+begin
+  Result:= FServer.ComputeDefinition(APath, ALine0, ACol0);
+end;
+
+function TLspServerContextAdapter.References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+begin
+  Result:= FServer.ComputeReferences(APath, ALine0, ACol0, AIncludeDecl);
+end;
+
+function TLspServerContextAdapter.CallerCounts(const APath: string): TJSONArray;
+begin
+  Result:= FServer.ComputeCallerCounts(APath);
+end;
+
+function TLspServerContextAdapter.HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
+begin
+  Result:= FServer.ComputeHoverMarkdown(APath, ALine0, ACol0);
+end;
+
+function TLspServerContextAdapter.Linter: TLinter;
+begin
+  Result:= FServer.EnsureLinter;
+end;
+
+procedure TLspServerContextAdapter.Reply(const AId: TJSONValue; AResult: TJSONValue);
+begin
+  FServer.SendResult(AId, AResult);
+end;
+
+procedure TLspServerContextAdapter.ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
+begin
+  FServer.SendError(AId, ACode, AMessage);
+end;
+
+procedure TLspServerContextAdapter.Notify(const AMethod: string; AParams: TJSONObject);
+begin
+  var Obj: TJSONObject:= TJSONObject.Create;
+  try
+    Obj.AddPair('jsonrpc', '2.0');
+    Obj.AddPair('method' , AMethod);
+    if AParams <> nil then
+    begin
+      Obj.AddPair('params', AParams);
+      AParams:= nil; { Obj owns it now }
+    end;
+    FServer.SendRawNotification(Obj);
+  finally
+    Obj.Free;
+    AParams.Free; { only when AddPair never ran }
+  end;
+end;
 
 constructor TLSPServer.Create(const ADbPath: string);
 begin
@@ -960,10 +1190,27 @@ begin
     end;
   end; // for
   if Length(FStores) > 0 then FStore:= FStores[0];
+
+  { S0 feature registry: one instance per registered class; the first feature
+    to claim a method keeps it. Built-in methods never reach this table --
+    Run consults it only after its own chain -- so a feature cannot shadow one. }
+  FFeatures       := TObjectList<TLspFeature>.Create({AOwnsObjects=}True);
+  FFeatureByMethod:= TDictionary<string, TLspFeature>.Create;
+  for var FC: TLspFeatureClass in RegisteredLspFeatures do
+  begin
+    var Feature: TLspFeature:= FC.Create;
+    FFeatures.Add(Feature);
+    for var M: string in FC.Methods do
+      if not FFeatureByMethod.ContainsKey(M) then FFeatureByMethod.Add(M, Feature);
+  end;
+  FContext:= TLspServerContextAdapter.Create(Self);
 end; // constructor
 
 destructor TLSPServer.Destroy;
 begin
+  FContext:= nil;
+  FFeatureByMethod.Free;
+  FFeatures.Free;
   FLinter.Free;
   FStdIn.Free;
   DropEphemeralStore; { closes the ephemeral connection and removes its %TEMP% database }
@@ -1088,6 +1335,44 @@ begin
   finally
     Obj.Free;
   end;
+end;
+
+procedure TLSPServer.SendResult(const AId: TJSONValue; AResult: TJSONValue);
+var
+  Reply: TJSONObject;
+begin
+  if AResult = nil then AResult:= TJSONNull.Create;
+  try
+    Reply:= TJSONObject.Create;
+  except  // dl:ok bare-except@5cc8 -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    AResult.Free;
+    raise;
+  end;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
+    Reply.AddPair('result', AResult);
+    AResult:= nil; { Reply owns it now }
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+    AResult.Free; { only when the pair was never added }
+  end;
+end;
+
+function TLSPServer.PositionParams(const AParams: TJSONObject; out APath: string; out ALine0, ACol0: Integer): Boolean;
+begin
+  APath := '';
+  ALine0:= 0;
+  ACol0 := 0;
+  if AParams = nil then Exit(False);
+  var TextDoc : TJSONObject:= AParams.GetValue('textDocument') as TJSONObject;
+  var Position: TJSONObject:= AParams.GetValue('position'    ) as TJSONObject;
+  if (TextDoc = nil) or (Position = nil) then Exit(False);
+  APath := FileFromUri(TextDoc.GetValue('uri').Value);
+  ALine0:= StrToIntDef(Position.GetValue('line'     ).Value, 0);
+  ACol0 := StrToIntDef(Position.GetValue('character').Value, 0);
+  Result:= True;
 end; // procedure
 
 function TLSPServer.FileFromUri(const AUri: string): string;
@@ -1218,6 +1503,9 @@ begin
     TriggerCharsSig.AddElement(TJSONString.Create(','));
     SigProvider.AddPair('triggerCharacters'    , TriggerCharsSig);
     Caps       .AddPair('signatureHelpProvider', SigProvider    );
+    { S0: every registered feature adds its own pairs; HandleInitialize never
+      names a feature. }
+    for var Feature: TLspFeature in FFeatures do Feature.AddCapabilities(Caps);
     ResObj     .AddPair('capabilities'         , Caps           );
     Info:= TJSONObject.Create;
     Info  .AddPair('name'      , 'drag-lint LSP');
@@ -1448,44 +1736,32 @@ begin
 end; // procedure
 
 procedure TLSPServer.HandleDefinition(const AId: TJSONValue; const AParams: TJSONObject);
+{ S0: a thin envelope over ComputeDefinition, which features reach through
+  ILspServerContext.Definition -- one body, so the two cannot disagree. }
 var
-  Reply   : TJSONObject    ;
-  Arr     : TJSONArray     ;
-  TextDoc : TJSONObject    ;
-  Position: TJSONObject    ;
-  Uri     : string         ;
-  Path    : string         ;
-  Ident   : string         ;
-  Line    : Integer        ;
-  Col     : Integer        ;
-  Symbols : TArray<TSymbol>;
-  Sym     : TSymbol        ;
+  Path: string ;
+  Line: Integer;
+  Col : Integer;
 begin
-  Reply:= TJSONObject.Create;
-  Arr  := TJSONArray .Create;
-  try
-    Reply.AddPair('jsonrpc', '2.0');
-    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (Length(FStores) = 0) or (AParams = nil) then
-    begin
-      Reply.AddPair('result', Arr);
-      SendMessage(Reply);
-      Exit;
-    end;
-    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
-    Position:= AParams.GetValue('position'    ) as TJSONObject;
-    if (TextDoc = nil) or (Position = nil) then
-    begin
-      Reply.AddPair('result', Arr);
-      SendMessage(Reply);
-      Exit;
-    end;
-    Uri:= TextDoc.GetValue('uri').Value;
-    Path:= FileFromUri(Uri);
-    Line:= StrToIntDef(Position.GetValue('line'     ).Value, 0);
-    Col := StrToIntDef(Position.GetValue('character').Value, 0);
+  if (Length(FStores) = 0) or not PositionParams(AParams, Path, Line, Col) then
+    SendResult(AId, TJSONArray.Create)
+  else
+    SendResult(AId, ComputeDefinition(Path, Line, Col));
+end; // procedure
 
-    Ident:= IdentifierAtPosition(Path, Line, Col);
+function TLSPServer.ComputeDefinition(const APath: string; ALine0, ACol0: Integer): TJSONArray;
+var
+  Arr    : TJSONArray     ;
+  Path   : string         ;
+  Ident  : string         ;
+  Symbols: TArray<TSymbol>;
+  Sym    : TSymbol        ;
+begin
+  Arr:= TJSONArray.Create;
+  try
+    Path:= APath;
+    if Length(FStores) = 0 then Exit(Arr);
+    Ident:= IdentifierAtPosition(Path, ALine0, ACol0);
     if Ident <> '' then
     begin
       { v0.40.3: iterate every store, accumulate definitions.
@@ -1506,64 +1782,54 @@ begin
         if (StIdx = 0) and (Length(Symbols) > 0) and EphemeralLeads(DefStores) then Break;
       end;
     end;
-    Reply.AddPair('result', Arr);
-    SendMessage(Reply);
-  finally
-    Reply.Free;
+  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Arr.Free;
+    raise;
   end; // try
-end; // procedure
+  Result:= Arr;
+end; // function
 
 procedure TLSPServer.HandleReferences(const AId: TJSONValue; const AParams: TJSONObject);
+{ S0: a thin envelope over ComputeReferences (ILspServerContext.References). }
 var
-  Reply      : TJSONObject       ;
+  Path       : string     ;
+  Line       : Integer    ;
+  Col        : Integer    ;
+  Context    : TJSONObject;
+  IncludeDecl: Boolean    ;
+begin
+  if (Length(FStores) = 0) or not PositionParams(AParams, Path, Line, Col) then
+  begin
+    SendResult(AId, TJSONArray.Create);
+    Exit;
+  end;
+  IncludeDecl:= True;
+  Context:= AParams.GetValue('context') as TJSONObject;
+  if Context <> nil then
+  begin
+    var IncDeclVal:= Context.GetValue('includeDeclaration');
+    if IncDeclVal is TJSONBool then IncludeDecl:= TJSONBool(IncDeclVal).AsBoolean;
+  end;
+  SendResult(AId, ComputeReferences(Path, Line, Col, IncludeDecl));
+end; // procedure
+
+function TLSPServer.ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+var
   Arr        : TJSONArray        ;
-  TextDoc    : TJSONObject       ;
-  Position   : TJSONObject       ;
-  Context    : TJSONObject       ;
-  Uri        : string            ;
   Path       : string            ;
   Ident      : string            ;
-  Line       : Integer           ;
-  Col        : Integer           ;
   Refs       : TArray<TReference>;
   Symbols    : TArray<TSymbol>   ;
   IncludeDecl: Boolean           ;
   R          : TReference        ;
   Sym        : TSymbol           ;
 begin
-  Reply:= TJSONObject.Create;
-  Arr  := TJSONArray .Create;
+  Arr:= TJSONArray.Create;
   try
-    Reply.AddPair('jsonrpc', '2.0');
-    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (Length(FStores) = 0) or (AParams = nil) then
-    begin
-      Reply.AddPair('result', Arr);
-      SendMessage(Reply);
-      Exit;
-    end;
-    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
-    Position:= AParams.GetValue('position'    ) as TJSONObject;
-    if (TextDoc = nil) or (Position = nil) then
-    begin
-      Reply.AddPair('result', Arr);
-      SendMessage(Reply);
-      Exit;
-    end;
-    Uri:= TextDoc.GetValue('uri').Value;
-    Path:= FileFromUri(Uri);
-    Line:= StrToIntDef(Position.GetValue('line'     ).Value, 0);
-    Col := StrToIntDef(Position.GetValue('character').Value, 0);
-
-    IncludeDecl:= True;
-    Context:= AParams.GetValue('context') as TJSONObject;
-    if Context <> nil then
-    begin
-      var IncDeclVal:= Context.GetValue('includeDeclaration');
-      if IncDeclVal is TJSONBool then IncludeDecl:= TJSONBool(IncDeclVal).AsBoolean;
-    end;
-
-    Ident:= IdentifierAtPosition(Path, Line, Col);
+    Path       := APath;
+    IncludeDecl:= AIncludeDecl;  // dl:ok duplicate-code@106a -- the Arr/try/IdentifierAtPosition prologue ComputeDefinition shares; both bodies were already duplicated in the pre-S0 handlers and S0 moved them verbatim
+    if Length(FStores) = 0 then Exit(Arr);
+    Ident:= IdentifierAtPosition(Path, ALine0, ACol0);
     if Ident <> '' then
     begin
       { v0.40.3: iterate every store for both callers and declarations.
@@ -1589,12 +1855,12 @@ begin
           MISSING, not that the other stores' were present. }
       end;
     end;
-    Reply.AddPair('result', Arr);
-    SendMessage(Reply);
-  finally
-    Reply.Free;
+  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Arr.Free;
+    raise;
   end; // try
-end; // procedure
+  Result:= Arr;
+end; // function
 
 // v0.42: render a symbol as a Code-Insight-style declaration line, e.g.
 //   function TShape.Area: Double          (proc-likes: sig has params+return)
@@ -1925,76 +2191,42 @@ end; // function
 
 function TLSPServer.ComputeHover(const AParams: TJSONObject; out AOut: THoverComputation): Boolean;
 var
-  TextDoc : TJSONObject    ;
-  Position: TJSONObject    ;
-  Uri     : string         ;
-  Path    : string         ;
-  Ident   : string         ;
-  MdValue : string         ;
-  Line    : Integer        ;
-  Col     : Integer        ;
-  Symbols : TArray<TSymbol>;
-  Sym     : TSymbol        ;
-  Doc     : TParsedDoc     ;
-  Sb      : TStringBuilder ;
-  Stores  : TArray<ISymbolStore>;  { FStores, or the ephemeral single-unit store prepended -- see StoresForFile }
-  OwnerFloorType: TSymbol  ;   // when set, the resolver found the LHS type but not the member -> render an honest inherited-member note
-  HaveOwnerFloor: Boolean  ;
+  Path: string ;
+  Line: Integer;
+  Col : Integer;
 begin
   Result:= False;
   AOut  := Default(THoverComputation);
-  { Zeroed together: OwnerFloorType is only ever READ under HaveOwnerFloor, but
-    nothing in the type system says so, and an uninitialised TSymbol read on a
-    path someone adds later would carry a garbage Id straight into a store
-    lookup. Cheap to make that impossible. }
-  HaveOwnerFloor:= False;
-  OwnerFloorType:= Default(TSymbol);
-  if (Length(FStores) = 0) or (AParams = nil) then
-  begin
-    Exit;
-  end;
-  TextDoc := AParams.GetValue('textDocument') as TJSONObject;
-  Position:= AParams.GetValue('position'    ) as TJSONObject;
-  if (TextDoc = nil) or (Position = nil) then
-  begin
-    Exit;
-  end;
-  Uri:= TextDoc.GetValue('uri').Value;
-  Path:= FileFromUri(Uri);
-  Line:= StrToIntDef(Position.GetValue('line'     ).Value, 0);
-  Col := StrToIntDef(Position.GetValue('character').Value, 0);
-  Ident:= IdentifierAtPosition(Path, Line, Col);
-  if Ident = '' then
-  begin
-    Exit;
-  end;
-  { v0.46: a compiler intrinsic has no real indexed symbol -- show it as a
-    built-in with its System-unit signature (like the IDE) instead of falling
-    through to a wrong library match. The "- `System.X` - line 1" row keeps the
-    clickable shape the popup parses (opens System.pas if on the source path). }
-  if IsCompilerIntrinsic(Ident) then
-  begin
-    MdValue:= Format(
-      '**%s** `intrinsic`'#10#10 + '- `System.%s` - line 1'#10 + '    %s'#10#10 + '_Delphi compiler built-in (System unit)._', [Ident, Ident, IntrinsicSignature(Ident)]);
-    { Real markdown, but NO indexed symbol behind it -- HasSymbol stays False
-      so a bundle built from this never describes symbol id 0. The name and
-      signature are carried separately so a client can still render a structured
-      view; see THoverComputation.IsIntrinsic. }
-    AOut.MdValue     := MdValue;
-    AOut.IsIntrinsic := True   ;
-    AOut.IntrinsicName:= Ident ;
-    AOut.IntrinsicSig := IntrinsicSignature(Ident);
-    Exit(True);
-  end;
-  { INBOX-lsp-hover-unindexed-file-resolves-library-symbol: EVERY store lookup
-    from here on goes through Stores, not FStores. For a file some index owns
-    the two are the same array; for a loose file Stores carries an ephemeral
-    index of that one unit in front, which is what stops the loop below --
-    first store that has the NAME -- from handing back a library symbol
-    belonging to a different program. Built after the intrinsic check, so
-    hovering `Length` never triggers a parse. }
-  Stores:= StoresForFile(Path);
+  if (Length(FStores) = 0) or not PositionParams(AParams, Path, Line, Col) then Exit;
+  Result:= ComputeHoverAt(Path, Line, Col, AOut);
+end; // function
 
+function TLSPServer.OpenStores: TArray<ISymbolStore>;
+begin
+  if FEphemStore <> nil then Result:= TArray<ISymbolStore>.Create(FEphemStore) + FStores
+  else                       Result:= Copy(FStores);
+end;
+
+function TLSPServer.SelectSymbolAt(const AStores: TArray<ISymbolStore>; const APath, AIdent: string; ALine0, ACol0: Integer; out ASel: TSymbolSelection): Boolean;
+{ S0: moved out of ComputeHover unchanged, so hover and ResolveSymbolAt share
+  ONE rule for which symbol a position means. Only the names changed:
+  Stores/Path/Ident/Line/Col are now parameters, and the state the renderer
+  needs comes back in ASel instead of locals. }
+var
+  Symbols: TArray<TSymbol>;
+  Stores : TArray<ISymbolStore>;
+  Path   : string ;
+  Ident  : string ;
+  Line   : Integer;
+  Col    : Integer;
+begin
+  Result:= False;
+  ASel  := Default(TSymbolSelection);
+  Stores:= AStores;
+  Path  := APath  ;
+  Ident := AIdent ;
+  Line  := ALine0 ;
+  Col   := ACol0  ;
   { v0.40.3: hover returns the FIRST hit across stores in declared order
     (project DB before library DB, per CLI arg ordering). For multi-hit
     cases the user can use Find Usages to see all stores' results. }
@@ -2047,6 +2279,7 @@ begin
       end;
   end;
   var Sel: TSymbol:= Symbols[Chosen];
+  ASel.Narrowed:= FoundDeclImpl;
 
   { v(hover call-site fix): the loop above only matches when the cursor sits ON a
     candidate's own DECLARATION or IMPLEMENTATION. At a CALL SITE like
@@ -2074,6 +2307,7 @@ begin
     if TAR.HasResolved and (TAR.Resolved.Id > 0) and SameText(TAR.Resolved.Name, Ident) then
     begin
       Sel:= TAR.Resolved;
+      ASel.Narrowed:= True;
       if (TAR.ResolvedStoreIndex >= 0) and (TAR.ResolvedStoreIndex <= High(Stores)) then
       begin
         HitStore:= Stores[TAR.ResolvedStoreIndex];
@@ -2082,10 +2316,87 @@ begin
     end
     else if TAR.HasResolved and TAR.OwnerTypeFallback and (TAR.Resolved.Id > 0) then
     begin
-      OwnerFloorType:= TAR.Resolved;
-      HaveOwnerFloor:= True;
+      ASel.OwnerFloorType:= TAR.Resolved;
+      ASel.HaveOwnerFloor:= True;
     end;
   end;
+  ASel.Symbols      := Symbols      ;
+  ASel.HitStore     := HitStore     ;
+  ASel.Sel          := Sel          ;
+  ASel.OnForwardStub:= OnForwardStub;
+  Result:= True;
+end; // function
+
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@7cc9, cognitive-complexity@979c -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope
+var
+  Path    : string         ;
+  Ident   : string         ;
+  MdValue : string         ;
+  Line    : Integer        ;
+  Col     : Integer        ;
+  Symbols : TArray<TSymbol>;
+  Sym     : TSymbol        ;
+  Doc     : TParsedDoc     ;
+  Sb      : TStringBuilder ;
+  Stores  : TArray<ISymbolStore>;  { FStores, or the ephemeral single-unit store prepended -- see StoresForFile }
+  OwnerFloorType: TSymbol  ;   // when set, the resolver found the LHS type but not the member -> render an honest inherited-member note
+  HaveOwnerFloor: Boolean  ;
+  Selection     : TSymbolSelection;
+begin
+  Result:= False;
+  AOut  := Default(THoverComputation);
+  { OwnerFloorType / HaveOwnerFloor are assigned together from Selection below,
+    which SelectSymbolAt zeroes with Default() first -- so an OwnerFloorType read
+    on a path someone adds later can never carry a garbage Id into a store
+    lookup. }
+  if Length(FStores) = 0 then
+  begin
+    Exit;
+  end;
+  Path:= APath;
+  Line:= ALine;
+  Col := ACol ;
+  Ident:= IdentifierAtPosition(Path, Line, Col);
+  if Ident = '' then
+  begin
+    Exit;
+  end;
+  { v0.46: a compiler intrinsic has no real indexed symbol -- show it as a
+    built-in with its System-unit signature (like the IDE) instead of falling
+    through to a wrong library match. The "- `System.X` - line 1" row keeps the
+    clickable shape the popup parses (opens System.pas if on the source path). }
+  if IsCompilerIntrinsic(Ident) then
+  begin
+    MdValue:= Format(
+      '**%s** `intrinsic`'#10#10 + '- `System.%s` - line 1'#10 + '    %s'#10#10 + '_Delphi compiler built-in (System unit)._', [Ident, Ident, IntrinsicSignature(Ident)]);
+    { Real markdown, but NO indexed symbol behind it -- HasSymbol stays False
+      so a bundle built from this never describes symbol id 0. The name and
+      signature are carried separately so a client can still render a structured
+      view; see THoverComputation.IsIntrinsic. }
+    AOut.MdValue     := MdValue;
+    AOut.IsIntrinsic := True   ;
+    AOut.IntrinsicName:= Ident ;
+    AOut.IntrinsicSig := IntrinsicSignature(Ident);
+    Exit(True);
+  end;
+  { INBOX-lsp-hover-unindexed-file-resolves-library-symbol: EVERY store lookup
+    from here on goes through Stores, not FStores. For a file some index owns
+    the two are the same array; for a loose file Stores carries an ephemeral
+    index of that one unit in front, which is what stops the loop below --
+    first store that has the NAME -- from handing back a library symbol
+    belonging to a different program. Built after the intrinsic check, so
+    hovering `Length` never triggers a parse. }
+  Stores:= StoresForFile(Path);
+  if not SelectSymbolAt(Stores, Path, Ident, Line, Col, Selection) then
+  begin
+    Exit;
+  end;
+  Symbols       := Selection.Symbols       ;
+  var HitStore: ISymbolStore:= Selection.HitStore;
+  var Sel     : TSymbol     := Selection.Sel     ;
+  var OnForwardStub: Boolean:= Selection.OnForwardStub;
+  HaveOwnerFloor:= Selection.HaveOwnerFloor;
+  OwnerFloorType:= Selection.OwnerFloorType;
 
   // Live-mine the CHOSEN overload's Result:=/Exit() return cases for the popup,
   // so the hover shows the actual returned values (unifies the popup with the
@@ -2278,31 +2589,56 @@ procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObje
   means now lives in one place, so `draglint/hoverBundle` cannot describe a
   different symbol than this reply does for the same cursor. }
 var
-  Reply   : TJSONObject     ;
   HoverObj: TJSONObject     ;
   Contents: TJSONObject     ;
   Comp    : THoverComputation;
 begin
-  Reply:= TJSONObject.Create;
-  try
-    Reply.AddPair('jsonrpc', '2.0');
-    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-    if not ComputeHover(AParams, Comp) then
-      Reply.AddPair('result', TJSONNull.Create)
-    else
-    begin
-      HoverObj:= TJSONObject.Create;
-      Contents:= TJSONObject.Create;
-      Contents.AddPair('kind'    , 'markdown' );
-      Contents.AddPair('value'   , Comp.MdValue);
-      HoverObj.AddPair('contents', Contents   );
-      Reply   .AddPair('result'  , HoverObj   );
-    end;
-    SendMessage(Reply);
-  finally
-    Reply.Free;
-  end; // try
+  if not ComputeHover(AParams, Comp) then
+  begin
+    SendResult(AId, nil); { result: null }
+    Exit;
+  end;
+  HoverObj:= TJSONObject.Create;
+  Contents:= TJSONObject.Create;
+  Contents.AddPair('kind'    , 'markdown' );
+  Contents.AddPair('value'   , Comp.MdValue);
+  HoverObj.AddPair('contents', Contents   );
+  SendResult(AId, HoverObj);
 end; // procedure
+
+function TLSPServer.ComputeHoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
+var
+  Comp: THoverComputation;
+begin
+  if ComputeHoverAt(APath, ALine0, ACol0, Comp) then Result:= Comp.MdValue
+  else                                                Result:= '';
+end;
+
+function TLSPServer.ResolveSymbolAt(const APath: string; ALine0, ACol0: Integer; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
+var
+  Selection: TSymbolSelection;
+begin
+  Result:= False;
+  ASym  := Default(TSymbol);
+  AStore:= nil;
+  if Length(FStores) = 0 then Exit;
+  var Ident: string:= IdentifierAtPosition(APath, ALine0, ACol0);
+  { An intrinsic has no indexed symbol; hover renders it from a table. }
+  if (Ident = '') or IsCompilerIntrinsic(Ident) then Exit;
+  if not SelectSymbolAt(StoresForFile(APath), APath, Ident, ALine0, ACol0, Selection) then Exit;
+  { The owner-type floor names a TYPE, not the symbol under the cursor. }
+  if Selection.HaveOwnerFloor then Exit;
+  ASym:= Selection.Sel;
+  { Nothing narrowed: Sel is merely Symbols[0]. Prefer the source declaration
+    over a generated DFM row, as the hover listing does. }
+  if not Selection.Narrowed then
+  begin
+    var Deduped: TArray<TSymbol>:= DedupAndPreferSource(Selection.Symbols);
+    if Length(Deduped) > 0 then ASym:= Deduped[0];
+  end;
+  AStore:= Selection.HitStore;
+  Result:= True;
+end;
 
 procedure TLSPServer.HandleCallerCounts(const AId: TJSONValue; const AParams: TJSONObject);
 { The caller count for every routine in one file, in ONE reply.
@@ -2324,12 +2660,33 @@ procedure TLSPServer.HandleCallerCounts(const AId: TJSONValue; const AParams: TJ
 
   ROUTINES ONLY. A field or a property has no caller count worth showing in a
   code lens, and including them would put a '[0 callers]' label on half the
-  lines of a form class. }
+  lines of a form class.
+
+  S0: the body moved to ComputeCallerCounts (ILspServerContext.CallerCounts);
+  this is its envelope. }
 var
-  Reply : TJSONObject;
-  Res   : TJSONObject;
+  Uri: string     ;
+  Res: TJSONObject;
+begin
+  Uri:= '';
+  if AParams <> nil then
+  begin
+    var TdObj: TJSONObject:= AParams.GetValue('textDocument') as TJSONObject;
+    if TdObj <> nil then TdObj.TryGetValue<string>('uri', Uri);
+  end;
+  Res:= TJSONObject.Create;
+  try
+    Res.AddPair('counts', ComputeCallerCounts(FileFromUri(Uri)));
+  except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Res.Free;
+    raise;
+  end;
+  SendResult(AId, Res);
+end;
+
+function TLSPServer.ComputeCallerCounts(const APath: string): TJSONArray;
+var
   Arr   : TJSONArray ;
-  Uri   : string     ;
   Path  : string     ;
   Syms  : TArray<TSymbol>;
   St    : ISymbolStore;
@@ -2338,21 +2695,9 @@ var
   Pair  : TPair<Integer, Integer>;
   Total : Integer    ;
 begin
-  Reply:= TJSONObject.Create;
+  Arr:= TJSONArray.Create;
   try
-    Reply.AddPair('jsonrpc', '2.0');
-    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-
-    Res:= TJSONObject.Create;
-    Arr:= TJSONArray.Create;
-
-    Uri := '';
-    if AParams <> nil then
-    begin
-      var TdObj: TJSONObject:= AParams.GetValue('textDocument') as TJSONObject;
-      if TdObj <> nil then TdObj.TryGetValue<string>('uri', Uri);
-    end;
-    Path:= FileFromUri(Uri);
+    Path:= APath;
 
     { A file this index does not know is not an error -- it is a file with no
       lenses. An empty array says that unambiguously; an error would make the
@@ -2407,13 +2752,11 @@ begin
         Seen.Free;
       end;
     end;
-
-    Res.AddPair('counts', Arr);
-    Reply.AddPair('result', Res);
-    SendMessage(Reply);
-  finally
-    Reply.Free;
+  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Arr.Free;
+    raise;
   end;
+  Result:= Arr;
 end;
 
 procedure TLSPServer.HandleUsages(const AId: TJSONValue; const AParams: TJSONObject);
@@ -3112,6 +3455,7 @@ var
   Id       : TJSONValue ;
   Params   : TJSONObject;
   ParamsVal: TJSONValue ;
+  Feature  : TLspFeature;
 begin
   while not FShuttingDown do
   begin
@@ -3156,6 +3500,9 @@ begin
       else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
       else if Method = 'textDocument/didChange' then HandleDidChange(Params)
       else if Method = 'textDocument/didClose' then HandleDidClose(Params)
+      { S0: registered features, tried after every built-in and before the
+        catch-all, so an unknown method still answers -32601. }
+      else if FFeatureByMethod.TryGetValue(Method, Feature) then Feature.Handle(FContext, Method, Id, Params)
       else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
     finally
       if FControl <> nil then FControl.EndWork;
