@@ -107,7 +107,15 @@ const
     (2) symbol_facts SQL tables were cut at '$' (FIB$ENUMVALUES -> 'FIB', and
     a SELECT FROM such a table lost its read entirely). Guard:
     tests\autotest\run_sql_dollar_identifier.ps1. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.22.0-alpha';
+  { 1.22.0 -> 1.23.0 (2026-10-23, e3d/extractor-batch, one re-parse):
+    (1) a type alias's target emits type_use refs (TTokList = TList<TTok>;
+    plain and strong alias). Guard: tests\autotest\run_alias_rhs_refs.ps1.
+    (2) routine-local type/const sections emit symbols + refs, and a local
+    enum's values are scoped to their routine (TEnumValueDecl.OwnerRoutineId).
+    Guard: tests\autotest\run_routine_local_decls.ps1.
+    (3) the member of Self.X records receiver_text 'Self' at insert (read and
+    write). Guard: tests\autotest\run_self_member_receiver.ps1. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.23.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -277,7 +285,17 @@ const
   /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
   /// counters). The reservation for C2.3 + the IsStub unification MOVES from
   /// 1.12.0 to 1.13.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.12.1-alpha';
+  /// <para>1.12.1-alpha -&gt; 1.13.0-alpha (2026-10-23, e3d/resolver, rides the
+  /// 1.23.0 extractor re-parse): B-28 binds BARE reads of locals / params /
+  /// consts / vars to the nearest in-scope declaration (never one declared
+  /// after the site; same-name inline vars bind the nearest); N-07 types the
+  /// implicit Result receiver from the function's return type (declined
+  /// inside an anonymous method of another return type); B-31 binds type_use
+  /// refs to the type they name, walking the ancestors' nested types; a
+  /// routine-local enum value binds only on its owning routine's chain. A
+  /// MINOR: new classes of derived row. The reservation for C2.3 + the IsStub
+  /// unification MOVES from 1.13.0 to 1.14.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.13.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
