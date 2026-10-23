@@ -217,10 +217,13 @@ function Get-ExeLiteralsFromLines([string[]]$Lines) {
       if ($end -lt 0) { $code = $code.Substring(0, $start); $inBlock = $true }
       else { $code = $code.Substring(0, $start) + $rest.Substring($end + 2) }
     }
+    $full = $code
     $code = Remove-PsLineComment $code
     if ($code.Trim() -eq '') { continue }
+    # B-33 item 6: the marker must sit in the COMMENT part of this line.
+    $absent = $full.Substring($code.Length) -match '#.*\bexe-freshness:\s*absent\b'
     foreach ($mm in [regex]::Matches($code, '["'']([^"'']*[\\/]drag-lint\.exe)["'']', 'IgnoreCase')) {
-      $out.Add([pscustomobject]@{ Line = $n; Literal = $mm.Groups[1].Value })
+      $out.Add([pscustomobject]@{ Line = $n; Literal = $mm.Groups[1].Value; Absent = $absent })
     }
   }
   return $out
@@ -255,6 +258,23 @@ Check 'code before a trailing comment counts, the comment after it does not (K11
   (($k11Half.Count -eq 1) -and ($k11Half[0].Literal -eq ('..\..\a\' + $EXE_))) `
   "(got $($k11Half.Count): $(($k11Half | ForEach-Object { $_.Literal }) -join ', '))"
 
+# B-33 item 6 -- a DELIBERATELY ABSENT path. A runner that asserts an engine must
+# NOT be resolvable (run_config_save_guard: "no engine beside the work-dir GUI")
+# names exe paths that are not targets. The trailing comment marker
+#   # exe-freshness: absent
+# exempts every exe literal on THAT line: it is counted, not resolved, not
+# required to exist. The marker counts only in a COMMENT (a string that merely
+# contains the words is still a target), and only on its own line.
+$abs = @(Get-ExeLiteralsFromLines @(('$c = "..\..\x\{0}"   # exe-freshness: absent' -f $EXE_)))
+$absStr = @(Get-ExeLiteralsFromLines @(('$c = "..\..\x\{0}"; $m = "# exe-freshness: absent"' -f $EXE_)))
+$absNext = @(Get-ExeLiteralsFromLines @('# exe-freshness: absent', ('$c = "..\..\x\{0}"' -f $EXE_)))
+Check 'a line marked "# exe-freshness: absent" yields an EXEMPT literal (B-33 #6)' `
+  (($abs.Count -eq 1) -and ($abs[0].Absent -eq $true)) "(got $($abs.Count), Absent=$(@($abs | ForEach-Object { $_.Absent }) -join ','))"
+Check 'the marker inside a STRING does not exempt (positive control, B-33 #6)' `
+  (($absStr.Count -eq 1) -and ($absStr[0].Absent -ne $true)) "(got $($absStr.Count), Absent=$(@($absStr | ForEach-Object { $_.Absent }) -join ','))"
+Check 'the marker exempts its own line only, not the next one (positive control, B-33 #6)' `
+  (($absNext.Count -eq 1) -and ($absNext[0].Absent -ne $true)) "(got $($absNext.Count), Absent=$(@($absNext | ForEach-Object { $_.Absent }) -join ','))"
+
 # K10 -- a BARE RELATIVE literal ('src\cli\Win64\Debug\drag-lint.exe', no
 # $PSScriptRoot and no leading '..') is CWD-relative at run time, not
 # runner-relative and not repo-relative. Resolving it against $Repo is therefore
@@ -280,6 +300,7 @@ Check 'runners enumerated' ($runners.Count -gt 0) "($($runners.Count) run_*.ps1 
 
 $targets    = @{}   # resolved full path -> list of "runner:line"
 $unresolved = New-Object System.Collections.Generic.List[string]
+$absentSites = New-Object System.Collections.Generic.List[string]   # B-33 #6 exemptions
 $siteCount  = 0
 $runnersWithResolvedSite = 0
 foreach ($f in $runners) {
@@ -288,6 +309,7 @@ foreach ($f in $runners) {
   $anyResolved = $false
   foreach ($hit in (Get-ExeLiterals $f.FullName)) {
     $siteCount++
+    if ($hit.Absent) { $absentSites.Add(("{0}:{1}  {2}" -f $rel, $hit.Line, $hit.Literal)); continue }
     $full = Resolve-ExeLiteral $hit.Literal $dir
     if ($null -eq $full) { $unresolved.Add(("{0}:{1}  {2}" -f $rel, $hit.Line, $hit.Literal)); continue }
     $anyResolved = $true
@@ -353,6 +375,9 @@ if ($runnersWithResolvedSite -lt $floor) {
 Check 'every extracted exe literal resolves to a concrete path' ($unresolved.Count -eq 0) `
   "($($unresolved.Count) unresolved of $siteCount)"
 foreach ($x in $unresolved) { Write-Host "        $x" -ForegroundColor Red }
+# Exempt sites are listed, never silent: a marker on the wrong line would hide a target.
+Write-Host "        $($absentSites.Count) site(s) exempt as deliberately absent (# exe-freshness: absent)" -ForegroundColor DarkGray
+foreach ($x in $absentSites) { Write-Host "          $x" -ForegroundColor DarkGray }
 
 # --- Check 1: every resolved target must exist AND be current --------------
 # An absent target is a FAILURE, not an INFO. An earlier version made it INFO and

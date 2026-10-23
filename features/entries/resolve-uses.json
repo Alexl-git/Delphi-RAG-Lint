@@ -11,7 +11,29 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "resolve-uses"
+      "verb": "resolve-uses",
+      "usage": "drag-lint resolve-uses --name <Symbol> [--in <file.pas>] [--kind K] [--json] [--db <file.sqlite>]",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<Symbol>"
+        },
+        {
+          "name": "--in",
+          "arg": "<file.pas>"
+        },
+        {
+          "name": "--kind",
+          "arg": "K"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        }
+      ]
     }
   ],
   "audience": "agent",
@@ -23,7 +45,7 @@
   ],
   "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "b7e71d41448879b30e1e12defd0282071cc232bacd941f17f0ea05a91972d486"

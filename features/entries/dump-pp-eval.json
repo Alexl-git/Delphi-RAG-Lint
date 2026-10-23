@@ -11,13 +11,28 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "dump-pp-eval"
+      "verb": "dump-pp-eval",
+      "usage": "drag-lint dump-pp-eval --expr \"E\" [--define SYM]... [--numeric K=V]...",
+      "flags": [
+        {
+          "name": "--expr",
+          "arg": "\"E\""
+        },
+        {
+          "name": "--define",
+          "arg": "SYM"
+        },
+        {
+          "name": "--numeric",
+          "arg": "K=V"
+        }
+      ]
     }
   ],
   "audience": "agent",
   "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
