@@ -1,0 +1,349 @@
+<!--article
+title: Untangling Circular Uses in Delphi
+date: 2026-10-23
+slug: untangling-circular-uses
+summary: drag-lint finds circular uses groups, shows them in the RAD Studio IDE, and can cut one edge for you behind a compile gate that rolls back on failure.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; uses cycles</span>
+  <h1>Untangling Circular Uses in Delphi</h1>
+  <p class="standfirst">drag-lint finds circular uses groups, shows them in the RAD Studio IDE, and can cut one edge for you behind a compile gate that rolls back on failure. This article walks through what you click and what you see first, then what the engine does underneath &mdash; and, just as important, what it refuses to do.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>Real output from the shipped engine (1.33.0-alpha)</span>
+  </div>
+</header>
+
+<p>We build <a href="https://github.com/Alexl-git/Delphi-RAG-Lint">drag-lint</a> alongside our main product, <a href="https://www.htrmicronite.com">Micronite</a> &mdash; quality and production-control software for manufacturers &mdash; and the cycle fixer was tried on copies of that product&rsquo;s own client project as well as on the small demos below.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The problem</span>
+    <h2>A cycle that compiles is still a cycle</h2>
+  </div>
+  <p>Delphi only forbids a <em>mutual interface-section</em> cycle: if two units use each other in their interface sections, the compiler stops with <code>F2047 Circular unit reference</code>. A cycle that is closed by one <code>implementation</code> uses compiles fine &mdash; and quietly keeps the units welded together. Our running example is two units from the drag-lint repository, <code>docs\examples\circular-uses-demo</code>.</p>
+
+  <pre class="lex"><code>unit Customers;
+interface
+uses
+  Orders;              { interface uses: half of the cycle }
+type
+  TCustomer = class
+  private
+    FOrders: TArray&lt;TOrder&gt;;   { forces the uses }
+  ...
+
+unit Orders;
+interface
+type
+  TOrder = class ... end;   { holds its customer as a TObject }
+implementation
+uses
+  System.SysUtils,
+  Customers;           { implementation uses: closes the cycle }</code></pre>
+  <p class="cap"><code>Customers</code> needs <code>TOrder</code> in its interface. <code>TOrder.Describe</code> reads the customer&rsquo;s name, so <code>Orders</code> reaches back into <code>Customers</code> from its implementation. Legal, but a change to <code>Orders</code> now recompiles <code>Customers</code> and vice versa.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; In the IDE: the report</span>
+    <h2>Where to click to see the cycles</h2>
+  </div>
+  <p>Cycle detection reads unit-to-unit <code>uses</code> edges from the drag-lint index, not from the files on disk, so the project must be indexed first. Then, in RAD Studio:</p>
+
+  <div class="note">
+    <span class="nlabel">Menu path</span>
+    <p><code>drag-lint &gt; Uses &amp; Dependencies &gt; Circular Uses Report (cycles + fix plan)...</code></p>
+  </div>
+
+  <p>The menu item runs <code>cycles --plan --edges --causes</code> against the active project&rsquo;s index and writes the result as a text report. Two other entry points show the same cycles from a different angle:</p>
+  <ul>
+    <li><code>drag-lint &gt; Reports &gt; Circular unit dependencies...</code> draws a chart of each group with every measured <code>uses</code> edge inside it and how heavy each edge is.</li>
+    <li>The drag-lint Structure window&rsquo;s Diagnostics tree carries a <code>circular-uses</code> warning on every unit that is part of a cycle. The rule is on by default.</li>
+  </ul>
+
+  <figure class="note" data-screenshot="todo">
+    <span class="nlabel">Screenshot coming</span>
+    <figcaption>RAD Studio with the drag-lint menu open: <code>Uses &amp; Dependencies</code> expanded, the <code>Circular Uses Report (cycles + fix plan)...</code> item highlighted, and the <code>Fix Circular Uses Mechanically (dry run)...</code> item visible just below it.</figcaption>
+  </figure>
+
+  <h3>What the report says</h3>
+  <p>For the demo, the edge listing and the cause listing are, verbatim:</p>
+  <pre><code>1 circular unit group(s) found:
+  [2 units] customers &lt;-&gt; orders   (has interface coupling -- widest recompile blast radius)
+      customers uses orders  [interface  &lt;-- move-to-implementation candidate]
+      orders uses customers  [implementation]
+
+1 circular unit group(s) found:
+  [2 units] customers &lt;-&gt; orders   (has interface coupling -- widest recompile blast radius)
+      * customers's INTERFACE needs orders via:
+          line 13: TOrder  [class]  -&gt; move/extract this</code></pre>
+  <p class="cap">The first block is <code>cycles --edges</code>, the second <code>cycles --causes</code>. A group with an interface edge is flagged as the one with the widest recompile blast radius; an implementation-only group is marked &ldquo;legal, lower impact&rdquo;.</p>
+
+  <p>The same cycle also shows up per file as a lint finding, which carries its own fix command:</p>
+  <pre><code>Orders.pas:25:1  [warning] circular-uses: Circular unit dependency among 2 units:
+  Customers -&gt; Orders -- it already routes through an implementation-section uses,
+  so it compiles; this is a coupling smell, not a build error. Extract the shared
+  code into a new unit (moving another use to the implementation section will NOT
+  break this cycle)
+  fix: drag-lint cycles --fix --project &lt;X.dproj&gt; --unit orders</code></pre>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; In the IDE: the fix</span>
+    <h2>Asking drag-lint to untangle it</h2>
+  </div>
+  <p>There are three places to start the fix. All three run the same engine verb, <code>cycles --fix</code>, with the active project, its index and the IDE&rsquo;s active platform. The IDE gives each such job a 120 minute limit, longer than the engine&rsquo;s own limits, so the engine always times out and rolls back before the IDE would ever kill it.</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Where</th>
+          <th scope="col">What you click</th>
+          <th scope="col">What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">The drag-lint menu</th>
+          <td><code>drag-lint &gt; Uses &amp; Dependencies &gt; Fix Circular Uses Mechanically (dry run)...</code></td>
+          <td><span class="verdict v-good">Dry run only</span><p>The engine picks the group. There is no apply from a menu click. All files are saved first, because the engine plans and compiles from disk.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">The Uses &amp; Deps tab</th>
+          <td><code>View &gt; Tool Windows &gt; drag-lint</code>, tab <em>Uses &amp; Deps</em>, section <em>This project -- Circular uses (cycles --fix)</em></td>
+          <td><span class="verdict v-good">Dry run, then Apply</span><p>One row per cycle group, with Dry run and Apply buttons. Apply asks first (Yes / No, default No).</p></td>
+        </tr>
+        <tr>
+          <th scope="row">The Structure window</th>
+          <td>Diagnostics tree, right-click a <code>circular-uses</code> finding: <code>Fix this cycle (dry run)...</code> or <code>Apply cycle fix...</code></td>
+          <td><span class="verdict v-good">Dry run, confirm, apply</span><p>On a cycle finding these two items replace the generic <em>Fix it</em>. <em>Apply cycle fix...</em> runs the dry run, asks you, and only then runs the apply.</p></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="note" data-screenshot="todo">
+    <span class="nlabel">Screenshot coming</span>
+    <figcaption>The Structure window, Diagnostics tree: a <code>circular-uses</code> finding under a unit with its right-click menu open, showing <code>Fix this cycle (dry run)...</code> and <code>Apply cycle fix...</code>.</figcaption>
+  </figure>
+
+  <h3>Step 1: the dry run</h3>
+  <p>A dry run plans the group, checks the plan against the files on disk, stages the result in a shadow tree and prints a verdict. <strong>No source file of your project is written.</strong> It does build your project once (the baseline build, see below), and that build writes what any build writes: DCUs and the exe.</p>
+  <p>The verdict is one of two things. For the demo pair it is a refusal, and the refusal says why:</p>
+  <pre><code>Cycle 1: customers &lt;-&gt; orders
+  - base-class: TOrder  Orders.pas:6 -- refused: base-class -- `Customers.pas:13`:
+    `TOrder` is used here as something other than a parameter type (a field,
+    variable, cast or type argument)
+Verdict: refused
+compile: baseline 2.2 s</code></pre>
+  <p class="cap">Real dry run on the demo pair, exit code 1. <code>Customers</code> holds a <em>field</em> of <code>TOrder</code>, and <code>TOrder</code>&rsquo;s own method bodies use <code>TCustomer</code>, so neither can simply move. drag-lint does not guess; the group stays yours, and <code>--plan</code> still prints the playbook and the standard remedy.</p>
+
+  <p>For a group the engine can cut, the verdict is mechanical. This is the three-unit group from the repository&rsquo;s larger <code>circular-demo</code> project:</p>
+  <pre><code>Fix it (mechanical, compile-gated):
+  cuts    : demoblueprint -&gt; demoblueprint.viewmodel (routine-call inversion) (chosen)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
+Verdict: mechanical (dry run; add --apply to write)
+Shadow tree: ...\shadow\
+compile: baseline 1.6 s</code></pre>
+  <p class="cap">Exit code 0. Above this block the dry run prints the whole plan: why the group cycles, which edge it cuts, every edit as current text and new text.</p>
+
+  <h3>Step 2: what you accept or refuse</h3>
+  <p>The apply confirmation is built from the dry run&rsquo;s result. It names the units of the cycle, the recipe and the edge it cuts, how many files will be edited, the names of any new units (or &ldquo;none&rdquo;), the baseline build status and time, and what happens if the build fails. The default button is <strong>No</strong>; answering No leaves the files untouched and the note reads &ldquo;cancelled -- nothing written&rdquo;.</p>
+  <p>Two further things can stop an apply before it starts. The IDE refuses to apply while any file the plan edits has unsaved changes (the apply rewrites those files on disk and reloads the buffers, which would drop your edits). And a refused verdict has no Apply at all: the fix is simply not offered.</p>
+  <p>What you accept with Yes is bounded. Every file the fix touches is backed up as <code>&lt;file&gt;.BCK&lt;n&gt;</code> with a <code>recovery.txt</code>; the project is built in place; and if that build fails, every file is put back. You can also refuse by choosing a different group: one run fixes one circular group, and the text output ends with one line naming each group it did not plan.</p>
+
+  <h3>Step 3: the apply, on a copy</h3>
+  <p>We ran the apply on a scratch copy of <code>circular-demo</code>:</p>
+  <pre><code>Verdict: mechanical
+Applied: 3 file(s) written, 0 new; compile ok
+  backup: ...\DemoBlueprint.pas -&gt; ...\DemoBlueprint.pas.BCK1
+  backup: ...\DemoBlueprint.ViewModel.pas -&gt; ...\DemoBlueprint.ViewModel.pas.BCK1
+  backup: ...\DemoBlueprint.Interfaces.pas -&gt; ...\DemoBlueprint.Interfaces.pas.BCK1
+Re-index: done
+Verified: the re-indexed `cycles` output matches the prediction
+compile: baseline 1.4 s, after 1.5 s</code></pre>
+  <p class="cap">Exit code 0. The three-unit group is gone from the re-indexed <code>cycles</code> output; the other two groups of that project were left alone, as the plan predicted.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Under the hood: finding and choosing</span>
+    <h2>Which cycle, and which edge</h2>
+  </div>
+
+  <h3>Finding the cycles</h3>
+  <p>The index records every unit&rsquo;s uses entries, tagged interface or implementation. A &ldquo;cycle&rdquo; in the report is a strongly connected <em>component</em> of that graph, not a ring: two loops that share a unit form one group, and the report draws the edges that exist rather than inventing a traversal order. Each group is classified by its edges:</p>
+  <ul>
+    <li><strong>Interface-coupled:</strong> at least one unit uses another in its interface. Widest recompile blast radius, so it comes first.</li>
+    <li><strong>Implementation-only:</strong> legal, lower impact, optional to fix.</li>
+  </ul>
+
+  <h3>Two parts</h3>
+  <p>The fix is split to match. <strong>Part A</strong> removes the <em>interface</em> coupling: it turns an interface-coupled group into a legal implementation-only one. <strong>Part B</strong> then cuts one edge of what remains. <code>--part a</code> or <code>--part b</code> asks for one; <code>--part all</code> applies A, re-indexes and re-plans, then applies B, in one run (it needs <code>--apply</code>).</p>
+
+  <h3>Choosing the edge</h3>
+  <p>For Part B the engine evaluates every edge of the group and weighs the recipes in a fixed order: <strong>move globals</strong>, then <strong>routine-call inversion</strong>, then <strong>member hand-over</strong>. Within one recipe the edge whose surface has the fewest members wins, then the one with the fewest references. One edge is cut per run, and every other edge keeps its reason for not being cut. On the three-unit group the plan prints exactly that:</p>
+  <pre><code>- demoblueprint -&gt; demoblueprint.viewmodel: recipe: routine-call inversion -- cut by this plan
+- democontrolplan -&gt; demoblueprint: not mechanical: TDemoBlueprint (class): its method
+  bodies use DemoBlueprintViewModelCreate, which live in units of this cycle --
+  they would have to move with it
+- demoblueprint.viewmodel -&gt; democontrolplan: not mechanical: TDemoControlPlan (class):
+  its method bodies use TDemoBlueprint, which live in units of this cycle --
+  they would have to move with it</code></pre>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; Under the hood: the recipes</span>
+    <h2>What the engine actually edits</h2>
+  </div>
+
+  <h3>Part A: move declarations into a leaf</h3>
+  <p>Enums, records, constants and variables that tie the cycle together move, unchanged, into a new leaf unit named <code>&lt;Declaring&gt;.Untangle</code> (or an existing unit that is still a leaf). Each consuming unit then gets a <strong>uses decision</strong>: keep the old partner, <strong>move it from the interface uses to the implementation uses</strong> when only the implementation still needs it, or remove it when nothing else from it is used. A class whose method bodies use the cycle is not moved. Where every use of it is a <code>const</code> or value parameter that only reads members, a base class carrying just those members is extracted instead; anywhere else the plan refuses with <code>base-class</code>, as the demo pair did above.</p>
+
+  <h3>Part B, recipe R1: routine-call inversion</h3>
+  <p>When an edge is exactly one routine call and every type in the routine&rsquo;s signature is declared outside the cycle, the consumer calls it through a procedural variable declared in a leaf. The declaring unit assigns the variable in its initialization section. This is the real before and after for <code>DemoBlueprint</code>:</p>
+  <pre class="lex"><code>{ DemoBlueprint.pas -- before }
+implementation
+uses
+  DemoBlueprint.ViewModel; // &lt;-- the edge to cut: used for ONE routine call
+...
+  FViewModel := DemoBlueprintViewModelCreate(FFolderId);</code></pre>
+  <pre class="ts"><code>{ DemoBlueprint.pas -- after }
+implementation
+// &lt;-- the edge to cut: used for ONE routine call
+...
+  FViewModel := DemoBlueprintViewModelCreatePtr(FFolderId);
+
+{ DemoBlueprint.Interfaces.pas -- the leaf gains }
+  TDemoBlueprintViewModelCreatePtr = function(const pFolderId: Integer): IDemoBlueprintViewModel;
+var
+  DemoBlueprintViewModelCreatePtr: TDemoBlueprintViewModelCreatePtr;
+
+{ DemoBlueprint.ViewModel.pas -- the declaring unit gains }
+initialization
+  DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;</code></pre>
+  <p class="cap">The signature is copied verbatim, every <code>const</code> and parameter name included. A comment that sat on the removed uses line stays behind as a lone comment.</p>
+
+  <h3>Part B, recipe R2: member hand-over</h3>
+  <p>When an edge is only <code>is</code> / <code>as</code> checks against one class plus reads of its members, the class implements an <code>I&lt;Class&gt;Surface</code> interface declared in its leaf, and the consumer goes through <code>Supports</code> / <code>as</code> on the interface.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">06 &mdash; Under the hood: the safety net</span>
+    <h2>Shadow tree, compile gate, atomic apply</h2>
+  </div>
+
+  <div class="decide">
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Is the project clean to begin with?</p>
+        <p class="ans">Before anything is staged, the <b class="lex">baseline build</b> runs on your untouched project (<code>msbuild /p:Config=Debug</code>, for the platform you name; the IDE passes its active one). If it does not build, the verdict is <code>dirty-baseline</code>, nothing is written, and the fix is not offered. The Release configuration is never built.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Can the plan be applied to the files exactly as they are?</p>
+        <p class="ans">The plan is checked against the files on disk and staged in a <b class="ast">shadow tree</b> (<code>C:\TEMP\draglint_cyclefix_&lt;pid&gt;\</code> by default, deleted at exit unless a message of the run cites a file in it; <code>--shadow-out &lt;dir&gt;</code> keeps one). A file that changed after it was indexed gives <code>stale-file</code>; a line that is not what the planner saw gives <code>anchor-mismatch</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Does the result compile?</p>
+        <p class="ans">On <code>--apply</code> the backups are made, the edits are written and the project is built <b class="ts">in place</b>. One bounded repair is allowed on a compile error (R4: a cast through the plan&rsquo;s ancestor, a missing leaf unit in <code>uses</code>, a re-emitted pointer type); anything else, or a second failure, rolls every file back.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Did it do what it said it would?</p>
+        <p class="ans">The project is re-indexed (unless <code>--no-reindex</code>) and <code>cycles</code> is run again. Its output must equal the plan&rsquo;s prediction, or the result is reported as written but not verified. An apply that skips the compile is refused outright (<code>--apply --no-compile</code> is exit 2).</p>
+      </div>
+    </div>
+  </div>
+
+  <p>The write is all-or-nothing. A write or build that fails part-way ends with every file restored byte for byte, or, if the restore itself fails, the failure named. One caveat is stated in the engine&rsquo;s own docs: a rollback restores your sources, but not the DCUs the failed build wrote, so <strong>rebuild the project after a rollback</strong> before you trust its output.</p>
+
+  <div class="facts">
+    <div class="fact"><span class="fv">0</span><span class="fk">exit: written and verified</span></div>
+    <div class="fact"><span class="fv">1</span><span class="fk">exit: refused, rolled back, or unverified</span></div>
+    <div class="fact"><span class="fv">2</span><span class="fk">exit: error (bad flags, failed write or build)</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">07 &mdash; Under the hood: the refusals</span>
+    <h2>What it will not do, and why</h2>
+  </div>
+  <p>The engine never guesses. Every refusal prints as <code>Verdict: refused</code> with one line per reason, and the kinds fall into a few families:</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Family</th>
+          <th scope="col">Examples</th>
+          <th scope="col">Why it stops</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">The run and the gate</th>
+          <td><code>dirty-baseline</code>, <code>compile-error</code>, <code>build-timeout</code>, <code>no-compiler</code>, <code>stale-file</code>, <code>anchor-mismatch</code>, <code>outside-roots</code>, <code>non-ascii-text</code></td>
+          <td><span class="verdict v-bad">Unsafe to write</span><p>The project does not build, the files are not what was indexed, or the plan would edit a file outside the project&rsquo;s own roots, or insert a non-ASCII character into an ANSI file.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">The plan</th>
+          <td><code>base-class</code>, <code>blocked-symbol</code>, <code>directive</code>, <code>unresolved-edge</code>, <code>edge-still-used</code>, <code>manual-edit</code></td>
+          <td><span class="verdict v-warn">A human decision</span><p>A class whose bodies use the cycle would have to move, a compiler directive sits inside an edited region, the index could not resolve an edge, or the consumer would still use the old unit for another name.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">R1, routine-call inversion</th>
+          <td><code>overloaded-routine</code>, <code>signature-in-cycle</code>, <code>init-order</code>, <code>duplicate-identifier</code>, <code>unit-leaves-program</code></td>
+          <td><span class="verdict v-warn">Order and linking matter</span><p>For example <code>unit-leaves-program</code>: if the declaring unit is used only by the consumer and the <code>.dpr</code> does not list it, the linker would drop it after the cut, its initialization would never assign the pointer, and the call would be a nil call at run time.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">R2, member hand-over</th>
+          <td><code>member-write</code>, <code>construction</code>, <code>class-method</code>, <code>with-member</code>, <code>ref-counted</code>, <code>exception-semantics</code></td>
+          <td><span class="verdict v-warn">The interface is not enough</span><p>Writes, construction, class methods and reference-counting semantics cannot be expressed through a read-only interface surface.</p></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="nlabel">What stays manual</span>
+    <p>A refused group is yours. <code>--plan</code> still prints the playbook and the standard remedy for it, and the repository ships a script that applies a playbook&rsquo;s edits literally if you decide to follow one by hand. Moving a class whose method bodies use the cycle, and any cut a refusal names, stay human decisions.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">08 &mdash; Limits</span>
+    <h2>Honest edges</h2>
+  </div>
+  <ul>
+    <li><strong>It builds your project.</strong> A dry run costs one full build; an apply costs up to three (baseline, after, one repair). On a 625-file Micronite client project that meant a dry run of about two minutes. <code>--no-compile</code> skips the build in a dry run only.</li>
+    <li><strong>One group per run.</strong> With no <code>--cycle</code> or <code>--unit</code>, the first mechanical group is planned and the rest are named, not touched.</li>
+    <li><strong>Part A does not always remove the cycle.</strong> It makes an interface-coupled group legal. On the demo pair, moving a uses entry to the implementation section would not break the cycle, as the lint message itself says; extracting the shared code does.</li>
+    <li><strong>Some shapes have no recipe</strong> (inheriting classes, unresolved <code>set</code>-type edges, class-reference arguments). They are printed with their reason and the standard remedy, and the engine says it cannot help.</li>
+  </ul>
+</section>
+
+<footer>
+  All command output above is real output of drag-lint 1.33.0-alpha, run on scratch copies of <code>docs\examples\circular-uses-demo</code> and <code>circular-demo</code> from the drag-lint repository, with file paths shortened. Behaviour descriptions follow the drag-lint wiki page &ldquo;Circular Uses Report (cycles + fix plan)&rdquo; and the cycle-fix implementation plan.
+</footer>
+
+</div>
