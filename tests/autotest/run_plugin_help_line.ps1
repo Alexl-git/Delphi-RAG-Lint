@@ -140,6 +140,16 @@ try {
   Eq 'M22 resolve: no list loaded -> the page, unchecked'      'resolve.nolist'  "$site/help/dl/features/no-such-id/"
   Eq 'M23 resolve: nil list -> the page, unchecked'            'resolve.nil'     "$site/help/dl/features/no-such-id/"
 
+  Write-Host '-- F: F1 on the dock -> registry id (spec 3.5)' -ForegroundColor Cyan
+  Eq 'F1 a tab caption that is a menu caption resolves through the list' 'tab.caption' 'call-graph-cyc'
+  Eq 'F2 Structure -> show-structure (fallback table)'          'tab.table'   'show-structure'
+  Eq 'F3 a VCL && caption -> uses-deps-tab'                     'tab.amp'     'uses-deps-tab'
+  Eq 'F4 no list: Call Graph -> call-graph-butterfly'           'tab.nolist'  'call-graph-butterfly'
+  Eq 'F5 Search (no grep) -> symbol-search'                     'tab.search'  'symbol-search'
+  Eq 'F6 Find Usages -> find-usages'                            'tab.usages'  'find-usages'
+  Eq 'F7 Lint Options -> drag-lint-project-rules'               'tab.lint'    'drag-lint-project-rules'
+  Eq 'F8 unknown tab -> the drag-lint tool-window entry'        'tab.unknown' 'drag-lint'
+
   Write-Host '-- W: wiring (source pins; the UI itself needs a live IDE)' -ForegroundColor Cyan
   $ed = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
   $df = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.DockForm.pas'))
@@ -169,6 +179,13 @@ try {
   $atl = [regex]::Match($sbw, 'procedure TDragLintStatusBar\.ApplyTaskLines[\s\S]*?\r?\nend;').Value
   Check 'W9 the strip renders DLQueueLines and grows by lines * line height (0 lines = one row, as before)' `
     ($atl.Contains('DLQueueLines(AState)') -and $atl.Contains('STRIP_ROW_HEIGHT + Length(Lines) *') -and $sbw.Contains('ApplyTaskLines(AState);')) ''
+
+  $df2 = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.DockForm.pas'))
+  $init = [regex]::Match($df2, 'procedure TDragLintDockFrame\.HandleInitTimer[\s\S]*?end; // procedure').Value
+  Check 'W10 F1: the dock form''s OnKeyDown is chained from HandleInitTimer (no application hook)' `
+    ($init.Contains('HookDockFormKeys;') -and $df2.Contains('FPrevFormKeyDown(Sender, Key, Shift)') -and -not $df2.Contains('Application.OnMessage') -and -not $df2.Contains('SetWindowsHookEx')) ''
+  Check 'W11 F1 opens DLHelpIdForDockTab(active tab caption); the frame also answers WM_HELP; the hook is undone in Destroy' `
+    ($df2.Contains('DLOpenHelp(DLHelpIdForDockTab(Caption, DLSharedHelpIndex.Entries));') -and $df2.Contains('message WM_HELP;') -and ([regex]::Match($df2, 'destructor TDragLintDockFrame\.Destroy[\s\S]*?end;').Value.Contains('UnhookDockFormKeys;'))) ''
 
   Write-Host '-- Q: queue task lines (spec 3.6)' -ForegroundColor Cyan
   Eq 'Q1 depth 0 -> no lines (the strip stays as today)'       'queue.d0'      '0'

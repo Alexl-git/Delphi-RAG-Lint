@@ -111,6 +111,16 @@ function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;
 /// when no path ends with the caption.</returns>
 function DLHelpIdForMenuCaption(const pCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
 
+/// <summary>The registry id F1 opens for a drag-lint dock tab (spec 3.5).</summary>
+/// <param name="pTabCaption">The active tab's caption ('Call Graph', 'Uses &amp;&amp; Deps'...).</param>
+/// <param name="pEntries">The rows of the loaded feature list; may be empty.</param>
+/// <returns>DLHelpIdForMenuCaption first (a menu caption IS the link); else the
+/// six dock tabs resolved with featuregen find on 2026-10-23 -- Structure:
+/// show-structure, Search (no grep): symbol-search, Find Usages: find-usages,
+/// Lint Options: drag-lint-project-rules, Uses &amp; Deps: uses-deps-tab, Call
+/// Graph: call-graph-butterfly; else 'drag-lint' (the tool-window entry).</returns>
+function DLHelpIdForDockTab(const pTabCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
+
 /// <summary>The URL DLOpenHelp opens for a registry id (spec 3.5).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
 /// <param name="pFeatureId">Registry id.</param>
@@ -493,6 +503,37 @@ begin
     if CaptionIn(E.Menus, Caption) then Exit(E.Id);
   for var E in pEntries do
     if CaptionIn(E.Context, Caption) then Exit(E.Id);
+end; // function
+
+type
+  TDockTabHelp = record
+    Caption: string;
+    Id     : string;
+  end; // record
+
+const
+  { The six dock tabs, resolved with `featuregen find --text <caption>` on
+    2026-10-23. Used only when no menu path ends with the tab's caption. }
+  DOCK_TAB_HELP: array[0..5] of TDockTabHelp = (
+    (Caption: 'Structure'       ; Id: 'show-structure'),
+    (Caption: 'Search (no grep)'; Id: 'symbol-search'),
+    (Caption: 'Find Usages'     ; Id: 'find-usages'),
+    (Caption: 'Lint Options'    ; Id: 'drag-lint-project-rules'),
+    (Caption: 'Uses & Deps'     ; Id: 'uses-deps-tab'),
+    (Caption: 'Call Graph'      ; Id: 'call-graph-butterfly'));
+  { The tool-window entry: the page for "the drag-lint dock" as a whole. }
+  DOCK_FALLBACK_ID = 'drag-lint';
+
+function DLHelpIdForDockTab(const pTabCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
+var
+  Caption: string;
+begin
+  Result:= DLHelpIdForMenuCaption(pTabCaption, pEntries);
+  if Result <> '' then Exit;
+  Caption:= StripAccelerators(pTabCaption);
+  for var Row in DOCK_TAB_HELP do
+    if SameText(Row.Caption, Caption) then Exit(Row.Id);
+  Result:= DOCK_FALLBACK_ID;
 end; // function
 
 end.

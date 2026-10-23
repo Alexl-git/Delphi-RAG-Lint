@@ -191,6 +191,14 @@ begin
   Put('caption.context', DLHelpIdForMenuCaption('Recycle Cache', Rows));
   Put('caption.none', DLHelpIdForMenuCaption('Nope', Rows));
   Put('caption.inner', DLHelpIdForMenuCaption('Refactor', Rows));
+  Put('tab.caption', DLHelpIdForDockTab('Call Graph', Rows));
+  Put('tab.table', DLHelpIdForDockTab('Structure', Rows));
+  Put('tab.amp', DLHelpIdForDockTab('Uses && Deps', Rows));
+  Put('tab.nolist', DLHelpIdForDockTab('Call Graph', nil));
+  Put('tab.search', DLHelpIdForDockTab('Search (no grep)', nil));
+  Put('tab.usages', DLHelpIdForDockTab('Find Usages', nil));
+  Put('tab.lint', DLHelpIdForDockTab('Lint Options', nil));
+  Put('tab.unknown', DLHelpIdForDockTab('Mystery', Rows));
   Idx:= TDLHelpIndex.Create;
   try
     Put('resolve.nolist', DLResolveHelpUrl(DL_DEFAULT_HELP_ROOT, 'no-such-id', Idx));
