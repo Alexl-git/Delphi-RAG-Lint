@@ -30,6 +30,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I make index --all and the IDE see a new project?",
+      "command": "drag-lint register-project <file.dproj> --apply"
+    },
+    {
+      "ask": "How do I preview what would be added to the manifest?",
+      "command": "drag-lint register-project <file.dproj>"
+    }
+  ],
   "notes": "seed: needs own page",
   "access": "cli-only",
   "accessReviewed": {

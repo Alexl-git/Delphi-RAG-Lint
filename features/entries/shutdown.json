@@ -37,6 +37,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I stop running engines so I can rebuild an index?",
+      "command": "drag-lint shutdown --all --wait 30"
+    },
+    {
+      "ask": "Can I see what it would stop first?",
+      "command": "drag-lint shutdown --all --dry-run"
+    }
+  ],
   "notes": "seed: needs own page",
   "access": "cli-only",
   "accessReviewed": {

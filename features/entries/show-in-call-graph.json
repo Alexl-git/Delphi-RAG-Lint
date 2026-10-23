@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Show in Call Graph"
+      "caption": "Show in Call Graph",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node in the tree and choose Show in Call Graph", "The call graph rooted at that symbol opens"]
     },
     {
       "type": "cli",
@@ -45,6 +46,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Who calls the symbol I see in the Structure outline, and what does it call?",
+      "command": "Structure form > Show in Call Graph"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -25,6 +25,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which projects in my workspace are registered, and in what state?",
+      "command": "drag-lint workspace status --config <.drag-lint-workspace.json>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

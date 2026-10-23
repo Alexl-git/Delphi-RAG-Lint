@@ -15,6 +15,12 @@
     }
   ],
   "audience": "agent",
+  "questions": [
+    {
+      "ask": "Is this index store fresh? (a probe the test runner uses)",
+      "command": "drag-lint test-store-freshness --db <file.sqlite>"
+    }
+  ],
   "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown",
   "verified": {
     "date": "2026-10-21",

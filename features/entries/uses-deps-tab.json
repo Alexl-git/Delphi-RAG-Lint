@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes..."
+      "path": "drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes...",
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes...", "Review the uses-clause fixes listed in the tab", "Apply the ones you accept"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where do I review and apply uses-clause fixes in one place?",
+      "command": "drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes..."
+    }
+  ],
   "notes": "seed: needs own page; seed: since unknown",
   "verified": {
     "date": "2026-10-21",

@@ -11,10 +11,21 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)"
+      "path": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)",
+      "steps": ["Put the caret on the undeclared identifier in the editor", "Press Ctrl+Alt+U, or choose drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)", "The unit that declares the identifier is added to the current unit's uses clause"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "The compiler says an identifier is undeclared; which unit declares it?",
+      "command": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)"
+    },
+    {
+      "ask": "How do I add the missing unit to uses without typing it?",
+      "command": "Ctrl+Alt+U with the caret on the identifier"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

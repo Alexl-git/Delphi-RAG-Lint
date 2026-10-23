@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-about",
-      "caption": "Run AST Checks"
+      "caption": "Run AST Checks",
+      "steps": ["Open the file in the editor", "Choose drag-lint > Run AST Checks", "From a shell: drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
     },
     {
       "type": "cli",
@@ -35,6 +36,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Does this file have AST-level issues?",
+      "command": "drag-lint check-ast <file> --db <db>"
+    },
+    {
+      "ask": "How do I run just one AST rule and get JSON?",
+      "command": "drag-lint check-ast <file> --rule <id> --format json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Index & Maintenance > Show Resolved DBs (debug)..."
+      "path": "drag-lint > Index & Maintenance > Show Resolved DBs (debug)...",
+      "steps": ["Choose drag-lint > Index & Maintenance > Show Resolved DBs (debug)...", "Read the list of databases it would use; no query is run", "From a shell: drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]"]
     },
     {
       "type": "cli",
@@ -35,6 +36,16 @@
   ],
   "audience": "both",
   "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."],
+  "questions": [
+    {
+      "ask": "Which index database will drag-lint use for this project?",
+      "command": "drag-lint resolve-dbs --project <file.dproj>"
+    },
+    {
+      "ask": "Which database does it use for a platform or a single file?",
+      "command": "drag-lint resolve-dbs --platform win64"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

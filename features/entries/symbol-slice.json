@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Inspect Symbol > Symbol Slice..."
+      "path": "drag-lint > Inspect Symbol > Symbol Slice...",
+      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Inspect Symbol > Symbol Slice...", "Read its declaration, body and immediate context", "From a shell: drag-lint slice --qname <Foo.TBar> [--db <file.sqlite>] [--format text|json]"]
     },
     {
       "type": "cli",
@@ -35,6 +36,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Show me just the code that matters for this one symbol",
+      "command": "drag-lint slice --qname <Foo.TBar> --db <file.sqlite>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -37,11 +37,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Safe Delete Symbol..."
+      "path": "drag-lint > Safe Delete Symbol...",
+      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Safe Delete Symbol...", "It deletes only when the index finds zero references; otherwise it refuses", "From a shell: drag-lint safe-delete --name <QName> [--apply] [--no-backup] --db <db>"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Can I delete this symbol without breaking anything?",
+      "command": "drag-lint safe-delete --name <QName> --db <db>"
+    },
+    {
+      "ask": "How do I actually delete it once it has no references?",
+      "command": "drag-lint safe-delete --name <QName> --db <db> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -50,6 +50,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I ask the index a question the other verbs do not answer?",
+      "command": "drag-lint sql --query \"SELECT ...\" --db <file.sqlite>"
+    },
+    {
+      "ask": "Which columns can I query?",
+      "command": "drag-lint schema --db <file.sqlite> --format json"
+    }
+  ],
   "notes": "seed: group guessed",
   "access": "cli-only",
   "accessReviewed": {
