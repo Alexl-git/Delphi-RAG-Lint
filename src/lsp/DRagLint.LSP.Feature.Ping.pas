@@ -38,7 +38,7 @@ type
 implementation
 
 uses
-  DRagLint.Core.Model
+  DRagLint.Core.Model  // dl:unit DRagLint.Core.Model accepted -- only DRAGLINT_VERSION: ping echoes the product version
   ;
 
 const

@@ -998,7 +998,7 @@ type
 implementation
 
 uses
-  DRagLint.LSP.Features  // dl:unit DRagLint.LSP.Features accepted -- linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
+  DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
 
 type
