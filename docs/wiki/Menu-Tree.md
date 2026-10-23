@@ -17,7 +17,10 @@ drag-lint menu-tree --project <X.dproj> --db <db> [--root <QName>] [--format tex
 * `paths`: one leaf per line, `path<TAB>handler<TAB>file:line<TAB>confidence`;
   external roots follow, each after a `## external <ident>` line.
 * `json`: schema `menu-tree/1` -- `roots`, `external`, `notes`; every node has
-  `kind`, `caption`, `captionKey`, `handler`, `source`, `confidence`, `children`.
+  `kind`, `caption`, `captionKey`, `handler`, `source`, `confidence`, `children`;
+  an external root has `ident` and `identPath` (the file whose code names the
+  identifier -- for a DFM item, the form's own `.pas`) instead of a caption.
+  Two forms that each own an item called `mnuTools` give two external roots.
 * `--root <QName>` walks one builder routine (and what it reaches) only.
 
 Exit codes: 0 it ran; 2 usage or setup (no `--db`, project not in the db,
@@ -35,7 +38,7 @@ from old code.
 | `X.Enabled := False`, or no OnClick and no children | a header |
 | caption `'-'` | a separator |
 | `P.Add(X)` / `P.Insert(i, X)` | X under P; `MainMenu.Items.Add(X)` or `AddActionMenu(.., X, ..)` makes X a root; a menu-typed field / component / variable that is not a node of this run (a DFM item, a looked-up IDE menu) becomes an external root |
-| a call that passes a node or an anonymous method | the callee's body is walked with its parameters bound -- this is how helpers such as `AddItem(Parent, 'Caption', Handler)` are recognised: by what their body does, never by their name |
+| a call that passes a node, an anonymous method, or a menu-typed component the index knows (`AddMenuItem(mnuTools, ..)`) | the callee's body is walked with its parameters bound -- this is how helpers such as `AddItem(Parent, 'Caption', Handler)` are recognised: by what their body does, never by their name. A parent passed in from outside keeps the CALLER's name: the external root is `mnuTools` in the form's file, not the helper's parameter |
 | `if .. then .. else` | both branches; the same node added on both is one root |
 
 A node created with `Create(nil)` and never added is a root; any other node
@@ -93,8 +96,22 @@ unit. `tests\autotest\run_menu_tree_tests.ps1` runs the unit tests, including
 the renamed-helper control (rename `AddItem` to `PutItem` in a copy: the tree
 does not change).
 
+## forms-csv (algorithm v8)
+
+`forms-csv` runs the same walker and grafts every external root whose
+identifier is a `TMenuItem` of the form's own `.dfm` (and is named in that
+form's `.pas`) under that item: code-added items and submenus then appear in
+`How to open` (`Main menu: Tools > Code Reports`) and their handlers feed the
+launch trace. Separators, headers and dynamic captions are not grafted. A walk
+that cannot run (stale index, setup problem) prints one
+`forms-csv: code-built menu items skipped (..)` line on stderr and the CSV is
+written from the `.dfm` menus alone. Guard: `tests\autotest\run_forms_csv_v8.ps1`
+(fixture `tests\fixtures\formsmap-v8`).
+
 ## Limits (v1)
 
 DevExpress `TdxBar*` items, shortcuts and menu order are not compared;
-context menus, About-form buttons and tool windows are out of scope. The tree
-is computed on demand -- there is no persisted `menu_items` table yet.
+context menus, About-form buttons and tool windows are out of scope. A
+`TMainMenu` / `TPopupMenu` named as a parent (`MainMenu1.Items.Add(X)`,
+`AMenu.Items.Add(X)`) is an external root but is not grafted by forms-csv.
+The tree is computed on demand -- there is no persisted `menu_items` table yet.
