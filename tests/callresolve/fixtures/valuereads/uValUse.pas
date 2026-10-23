@@ -15,6 +15,7 @@ type
     procedure Loops;
     procedure Blocks;
     function Calc2: Integer;
+    procedure Anon;
   end;
 
 const
@@ -115,4 +116,21 @@ begin const CHECK_OK = 9;
   Result := CHECK_OK; // NEG-MIDLINE-CONST
 end;
 
+procedure TVal.Anon;
+var
+  P: TProc;
+begin
+  if FTotal > 0 then
+  begin
+    var H: Integer := 1; // ANON-INLINE-DECL
+    FTotal := H; // R-BEFORE-ANON-VAR
+  end;
+  P := procedure
+    var
+      H: Integer; // ANON-SECTION-DECL
+    begin
+      H := 2;
+      FTotal := H; // R-ANON-SECTION-VAR
+    end;
+end;
 end.

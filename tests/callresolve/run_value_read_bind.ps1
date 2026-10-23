@@ -141,6 +141,9 @@ $dup = @(
   @('DUPW-FIRST-READ',  'read',  'K', 'DUPW-FIRST-DECL'),
   @('DUPW-SECOND-WRITE','write', 'K', 'DUPW-SECOND-DECL'),
   @('DUPW-SECOND-READ', 'read',  'K', 'DUPW-SECOND-DECL'),
+  @('R-BEFORE-ANON-VAR','read',  'H', 'ANON-INLINE-DECL'),
+  # an anonymous method's var section declared AFTER a read never answers it
+  @('R-ANON-SECTION-VAR','read', 'H', 'ANON-SECTION-DECL'),
   @('R-INSCOPE-Q',      'read',  'Q', $null)
 )
 foreach ($p in $dup) {

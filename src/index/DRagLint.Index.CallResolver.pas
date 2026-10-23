@@ -422,8 +422,8 @@ type
     /// <param name="AFileId">The file holding the site and the declaration.</param>
     /// <param name="ALine">The site's line.</param>
     /// <param name="ACol">The site's column.</param>
-    /// <returns>True for a parameter and a var-section variable (the whole
-    /// routine). For an INLINE `var` it is True only when the declaration lies
+    /// <returns>True for a parameter; for a var-section variable declared at or
+    /// before the site (an anonymous method's var section can follow it). For an INLINE `var` it is True only when the declaration lies
     /// at or before the site and the block it sits in -- a `for var` loop's body,
     /// else the enclosing begin/try/case/repeat block -- has not closed before
     /// the site. False when the text cannot be read.</returns>
@@ -3393,12 +3393,66 @@ type
 function CodeTokens(ALines: TStringList; AFromLine, AFromCol, AToLine, AToCol: Integer): TArray<TCodeTok>;
 var
   Toks   : TList<TCodeTok>;
-  Tok    : TCodeTok       ;
-  Ln     : Integer        ;
-  K, W   : Integer        ;
   S      : string         ;
+  K      : Integer        ;
+  Ln     : Integer        ;
   InBrace: Boolean        ;
   InStar : Boolean        ;
+
+  { True when S[K] opens the two-character token ATwo. }
+  function OpensPair(const ATwo: string): Boolean;
+  begin
+    Result:= (K < Length(S)) and (S[K] = ATwo[1]) and (S[K + 1] = ATwo[2]);
+  end;
+
+  { Consumes S[K] when it is comment, string or blank text, or opens a comment
+    or string, advancing K past what it consumed. False leaves K untouched. }
+  function SkipNonCode: Boolean;
+  begin
+    Result:= True;
+    if InBrace then
+      InBrace:= S[K] <> '}'
+    else if InStar then
+    begin
+      InStar:= not OpensPair('*)');
+      if not InStar then Inc(K);
+    end
+    else if S[K] = '{' then
+      InBrace:= True
+    else if OpensPair('(*') then
+    begin
+      InStar:= True;
+      Inc(K);
+    end
+    else if S[K] = '''' then
+    begin
+      Inc(K);
+      while (K <= Length(S)) and (S[K] <> '''') do Inc(K);
+    end
+    else
+      Result:= CharInSet(S[K], [' ', #9]);
+    if Result then Inc(K);
+  end;
+
+  { Adds the token at S[K] -- an identifier or number, `:=`, or one character. }
+  procedure TakeToken;
+  var
+    Tok: TCodeTok;
+    W  : Integer ;
+  begin
+    W:= K;
+    if IsIdentPart(S[K]) then
+      while (K <= Length(S)) and IsIdentPart(S[K]) do Inc(K)
+    else if OpensPair(':=') then
+      Inc(K, 2)
+    else
+      Inc(K);
+    Tok.Text:= LowerCase(Copy(S, W, K - W));
+    Tok.Line:= Ln;
+    Tok.Col := W;
+    Toks.Add(Tok);
+  end;
+
 begin
   Toks   := TList<TCodeTok>.Create;
   InBrace:= False;
@@ -3408,58 +3462,10 @@ begin
     begin
       S:= ALines[Ln - 1];
       K:= (if Ln = AFromLine then Max(AFromCol, 1) else 1);
-      while K <= Length(S) do
-      begin
-        if (Ln = AToLine) and (K >= AToCol) then Break;
-        if InBrace then
-        begin
-          InBrace:= S[K] <> '}';
-          Inc(K);
-        end
-        else if InStar then
-        begin
-          if (S[K] = '*') and (K < Length(S)) and (S[K + 1] = ')') then
-          begin
-            InStar:= False;
-            Inc(K);
-          end;
-          Inc(K);
-        end
-        else if S[K] = '{' then
-        begin
-          InBrace:= True;
-          Inc(K);
-        end
-        else if (S[K] = '(') and (K < Length(S)) and (S[K + 1] = '*') then
-        begin
-          InStar:= True;
-          Inc(K, 2);
-        end
-        else if (S[K] = '/') and (K < Length(S)) and (S[K + 1] = '/') then
-          Break
-        else if S[K] = '''' then
-        begin
-          Inc(K);
-          while (K <= Length(S)) and (S[K] <> '''') do Inc(K);
-          Inc(K);
-        end
-        else if CharInSet(S[K], [' ', #9]) then
-          Inc(K)
-        else
-        begin
-          W:= K;
-          if IsIdentPart(S[K]) then
-            while (K <= Length(S)) and IsIdentPart(S[K]) do Inc(K)
-          else if (S[K] = ':') and (K < Length(S)) and (S[K + 1] = '=') then
-            Inc(K, 2)
-          else
-            Inc(K);
-          Tok.Text:= LowerCase(Copy(S, W, K - W));
-          Tok.Line:= Ln;
-          Tok.Col := W;
-          Toks.Add(Tok);
-        end;
-      end;
+      while (K <= Length(S)) and ((Ln < AToLine) or (K < AToCol)) do
+        if SkipNonCode then Continue
+        else if OpensPair('//') then Break
+        else TakeToken;
     end;
     Result:= Toks.ToArray;
   finally
@@ -3471,10 +3477,60 @@ end;
   +1 for a token that opens a block closed by `end` / `until`, -1 for those. }
 function BlockDelta(const ATok: string): Integer;
 begin
-  if (ATok = 'begin') or (ATok = 'try') or (ATok = 'case') or (ATok = 'repeat') or (ATok = 'asm')
-     or (ATok = 'record') then Result:= 1
-  else if (ATok = 'end') or (ATok = 'until') then Result:= -1
+  if Pos('|' + ATok + '|', '|begin|try|case|repeat|asm|record|') > 0 then Result:= 1
+  else if Pos('|' + ATok + '|', '|end|until|') > 0 then Result:= -1
   else Result:= 0;
+end;
+
+{ Review 2026-10-23: whether the local declared at (ALine, ACol) is an INLINE
+  `var` -- `var` right before its name, past earlier names of the same list
+  (`var A, B: T`). AIsFor: it is a `for var` loop variable. }
+function InlineVarAt(ALines: TStringList; ALine, ACol: Integer; out AIsFor: Boolean): Boolean;
+var
+  Head: TArray<TCodeTok>;
+  K   : Integer         ;
+begin
+  Head:= CodeTokens(ALines, ALine, 1, ALine, ACol);
+  K   := High(Head);
+  while (K >= 1) and (Head[K].Text = ',') do Dec(K, 2);
+  Result:= (K >= 0) and (Head[K].Text = 'var');
+  AIsFor:= Result and (K >= 1) and (Head[K - 1].Text = 'for');
+end;
+
+{ Review 2026-10-23: whether the block an inline declaration sits in is still
+  open after AToks -- the tokens from the declaration to a site. A `for var`
+  loop's scope is its body: the begin..end after `do`, or the one statement up
+  to its `;`. Any other inline var lives to the end of its enclosing block. }
+function InlineScopeOpen(const AToks: TArray<TCodeTok>; AIsFor: Boolean): Boolean;
+var
+  K     : Integer;
+  T     : string ;
+  InBody: Boolean;
+  Single: Boolean;
+  Depth : Integer;
+  Paren : Integer;
+begin
+  Result:= True;
+  InBody:= not AIsFor;
+  Single:= False;
+  Depth := 0;
+  Paren := 0;
+  for K:= 0 to High(AToks) do
+  begin
+    T:= AToks[K].Text;
+    if (T = '(') or (T = '[') then Inc(Paren)
+    else if (T = ')') or (T = ']') then Dec(Paren);
+    if not InBody then
+    begin
+      { The loop header: the body starts after its `do`. }
+      InBody:= (T = 'do') and (Paren = 0);
+      Single:= InBody and (K < High(AToks)) and (AToks[K + 1].Text <> 'begin');
+      Continue;
+    end;
+    Inc(Depth, BlockDelta(T));
+    if (Depth < 0) or (AIsFor and (Depth = 0) and (if Single then (T = ';') and (Paren = 0) else T = 'end')) then
+      Exit(False);
+  end;
 end;
 
 { Scans ABefore -- a line up to a read ref standing as a whole argument --
@@ -5417,55 +5473,17 @@ end;
 
 function TCallResolver.LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
 var
-  Lines : TStringList     ;
-  Head  : TArray<TCodeTok>;
-  Toks  : TArray<TCodeTok>;
-  K     : Integer         ;
-  T     : string          ;
-  IsFor : Boolean         ;
-  InBody: Boolean         ;
-  Single: Boolean         ;
-  Depth : Integer         ;
-  Paren : Integer         ;
+  Lines: TStringList;
+  IsFor: Boolean    ;
 begin
   if ADecl.Kind <> skLocalVar then Exit(True);
   Lines:= LinesOf(AFileId);
   if (Lines = nil) or (ADecl.StartLine < 1) or (ADecl.StartLine > Lines.Count) then Exit(False);
-  { The declaration's line up to its name: an inline declaration has `var` right
-    before the name, past any earlier names of the same list (`var A, B: T`). }
-  Head:= CodeTokens(Lines, ADecl.StartLine, 1, ADecl.StartLine, ADecl.StartCol);
-  K   := High(Head);
-  while (K >= 1) and (Head[K].Text = ',') do Dec(K, 2);
-  if (K < 0) or (Head[K].Text <> 'var') then Exit(True);   { a var section: the whole routine }
-  IsFor:= (K >= 1) and (Head[K - 1].Text = 'for');
-  if (ADecl.StartLine > ALine) or ((ADecl.StartLine = ALine) and (ADecl.StartCol > ACol)) then Exit(False);
-  { From the declaration to the site: has its block closed? }
-  Toks  := CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol);
-  InBody:= False;
-  Single:= False;
-  Depth := 0;
-  Paren := 0;
-  for K:= 0 to High(Toks) do
-  begin
-    T:= Toks[K].Text;
-    if (T = '(') or (T = '[') then Inc(Paren)
-    else if (T = ')') or (T = ']') then Dec(Paren);
-    if IsFor and not InBody then
-    begin
-      { The loop header: the body starts after its `do`. }
-      if (T = 'do') and (Paren = 0) then
-      begin
-        InBody:= True;
-        Single:= (K < High(Toks)) and (Toks[K + 1].Text <> 'begin');
-      end;
-      Continue;
-    end;
-    Inc(Depth, BlockDelta(T));
-    if Depth < 0 then Exit(False);                                     { the enclosing block closed }
-    if IsFor and not Single and (Depth = 0) and (T = 'end') then Exit(False);    { the loop's begin..end }
-    if IsFor and Single and (Depth = 0) and (Paren = 0) and (T = ';') then Exit(False); { its one statement }
-  end;
-  Result:= True;
+  { Never a declaration after the site -- an anonymous method's var section
+    can follow it. A var-section variable then covers the rest of its routine. }
+  Result:= (ADecl.StartLine < ALine) or ((ADecl.StartLine = ALine) and (ADecl.StartCol <= ACol));
+  if Result and InlineVarAt(Lines, ADecl.StartLine, ADecl.StartCol, IsFor) then
+    Result:= InlineScopeOpen(CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol), IsFor);
 end;
 
 function TCallResolver.InsideAnonymousMethod(const ARef: TReference): Boolean;
@@ -5491,7 +5509,7 @@ begin
   begin
     T:= Toks[K].Text;
     P:= (if K > 0 then Toks[K - 1].Text else '');
-    if ((T = 'function') or (T = 'procedure')) and ((P = ':=') or (P = '(') or (P = ',') or (P = '[')) then
+    if ((T = 'function') or (T = 'procedure')) and (Pos('|' + P + '|', '|:=|(|,|[|') > 0) then
       Inc(Pending)                                  { an anonymous method's header }
     else if (T = 'begin') and (Pending > 0) then
     begin
@@ -5566,7 +5584,7 @@ begin
           if (J <= High(Toks)) and (Toks[J].Text = ',') then Inc(J) else Break;
         end;
         if (Names <> '') and (IsDeclMark(J) or ((J <= High(Toks)) and (Toks[J].Text = ':='))) then
-          Result:= Result + Names;
+          Result:= Result + Names;  // dl:ok concat-in-loop@e316 -- REVIEWED 2026-10-23: a routine declares a handful of local names; the cached string stays tiny.
       end
       else if InSect and (T = ';') and IsName(K + 1) then
       begin
