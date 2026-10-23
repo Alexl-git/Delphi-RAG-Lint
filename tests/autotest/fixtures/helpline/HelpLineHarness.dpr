@@ -14,6 +14,8 @@ uses
   , System.IOUtils
   , DragLint.Plugin.Settings
   , DragLint.Plugin.HelpIndex
+  , DragLint.Plugin.JobQueue
+  , DragLint.Plugin.QueueText
   ;
 
 procedure Put(const pKey, pValue: string);
@@ -193,9 +195,42 @@ begin
   Put('caption.inner', DLHelpIdForMenuCaption('Refactor', Rows));
 end; // procedure
 
+function QueueState(const pDepth, pPercent: Integer; const pPhase: string;
+  const pTitles: TArray<string>): TQueueState;
+begin
+  Result:= Default(TQueueState);
+  Result.Running      := True;
+  Result.CurrentTitle := 'Index project';
+  Result.Percent      := pPercent;
+  Result.Phase        := pPhase;
+  Result.QueueDepth   := pDepth;
+  Result.PendingTitles:= pTitles;
+end; // function
+
+procedure RunQueueText;
+var
+  S: TQueueState;
+begin
+  S:= QueueState(0, 45, 'uMain.pas', nil);
+  Put('queue.d0', IntToStr(Length(DLQueueLines(S))));
+  S:= QueueState(1, 45, 'uMain.pas', ['Lint all']);
+  Put('queue.d1', string.Join('|', DLQueueLines(S)));
+  S:= QueueState(3, 45, '', ['Lint all', 'Forms CSV', 'Reindex lib']);
+  Put('queue.d3', string.Join('|', DLQueueLines(S)));
+  S:= QueueState(5, 45, '', ['Lint all', 'Forms CSV', 'Reindex lib']);
+  Put('queue.d5', string.Join('|', DLQueueLines(S)));
+  S:= QueueState(1, -1, '', ['Lint all']);
+  Put('queue.indet', string.Join('|', DLQueueLines(S)));
+  S:= QueueState(1, -1, '', ['Lint all']);
+  S.Running:= False;
+  S.CurrentTitle:= '';
+  Put('queue.idle', string.Join('|', DLQueueLines(S)));
+end; // procedure
+
 begin
   try
     RunUrlRules;
+    RunQueueText;
     RunMatcher(ParamStr(1));
     RunSettingsRoundTrip;
     RunIndex(ParamStr(1), ParamStr(2));

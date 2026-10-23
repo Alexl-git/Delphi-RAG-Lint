@@ -88,6 +88,7 @@ contains
   DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',
   DragLint.Plugin.JobQueue in 'DragLint.Plugin.JobQueue.pas',
   DragLint.Plugin.StatusBar in 'DragLint.Plugin.StatusBar.pas',
+  DragLint.Plugin.QueueText in 'DragLint.Plugin.QueueText.pas',
   DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',
   DragLint.Plugin.SearchParse in 'DragLint.Plugin.SearchParse.pas',
   DragLint.Plugin.SearchForm in 'DragLint.Plugin.SearchForm.pas',

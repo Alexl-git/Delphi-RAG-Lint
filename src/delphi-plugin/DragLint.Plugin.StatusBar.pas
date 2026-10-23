@@ -194,7 +194,10 @@ begin
        and (A.Phase = B.Phase)
        and (A.QueueDepth = B.QueueDepth)
        and (A.CurrentTitle = B.CurrentTitle)
-       and (A.LastResult = B.LastResult);
+       and (A.LastResult = B.LastResult)
+       { The Next:/Then: lines: a coalesced re-enqueue can reorder the waiting
+         jobs without changing QueueDepth. }
+       and (string.Join(#10, A.PendingTitles) = string.Join(#10, B.PendingTitles));
 end;
 
 procedure TDragLintStatusBar.PollEngineHold;

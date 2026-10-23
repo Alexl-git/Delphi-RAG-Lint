@@ -136,6 +136,20 @@ try {
   Eq 'M17 a context path counts too'                           'caption.context' 'structure-tree'
   Eq 'M18 unknown caption -> empty'                            'caption.none'  ''
   Eq 'M19 an inner segment is not a caption'                   'caption.inner' ''
+
+  Write-Host '-- Q: queue task lines (spec 3.6)' -ForegroundColor Cyan
+  Eq 'Q1 depth 0 -> no lines (the strip stays as today)'       'queue.d0'      '0'
+  Eq 'Q2 depth 1 -> Now (pct + phase) + Next'                  'queue.d1'      'Now: Index project - 45%  uMain.pas|Next: Lint all'
+  Eq 'Q3 depth 3 -> Now + Next + Then + Then'                  'queue.d3'      'Now: Index project - 45%|Next: Lint all|Then: Forms CSV|Then: Reindex lib'
+  Eq 'Q4 depth 5 -> ... + "+ 2 more waiting"'                  'queue.d5'      'Now: Index project - 45%|Next: Lint all|Then: Forms CSV|Then: Reindex lib|+ 2 more waiting'
+  Eq 'Q5 percent -1 -> "Now: <title> ..."'                     'queue.indet'   'Now: Index project ...|Next: Lint all'
+  Eq 'Q6 nothing running yet -> no Now line'                   'queue.idle'    'Next: Lint all'
+  $jq = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.JobQueue.pas'))
+  $depthWrites = [regex]::Matches($jq, 'FState\.QueueDepth\s*:=').Count
+  Check 'Q7 every QueueDepth write is the one in SyncPendingLocked (paired with PendingTitles)' `
+    (($depthWrites -eq 1) -and ($jq -match 'SetLength\(FState\.PendingTitles') -and ($jq -match 'FState\.PendingTitles\[I\]\s*:=')) "QueueDepth writes: $depthWrites"
+  $sb = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.StatusBar.pas'))
+  Check 'Q8 StatesEqual compares PendingTitles' ([regex]::Match($sb, 'function TDragLintStatusBar\.StatesEqual[\s\S]*?end;').Value -match 'PendingTitles') ''
 }
 catch {
   Check "runner: $($_.Exception.Message)" $false
