@@ -34,6 +34,17 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
 - If background agents were lost in a restart: check each e3d/* branch's log + worktree state and
   re-dispatch the unfinished part from the ledger row.
 
+## Update ~13:40
+- Merged + regenerated: registry gap fills e33c3c41, regenerate 74ee8494 (registry + docs-sync PASS).
+  CONVERTER + www-40 told. L6 menu-drift spec/plan DONE (untracked docs; owner ruling: docs/superpowers
+  never committed -- do NOT merge e3d/help-line a1d6cd60, it force-added them; copies are in the main tree).
+- Still running: L8 (e3d/migrate-gaps), W2-3 (e3d/lint-fp), W2-2 (e3d/resolver), W2-9 (INBOX sweep), and
+  possibly an L7a background tail (already merged; ignore).
+- Next builder slots: help-line implementation (plan docs\superpowers\plans\2026-10-23-ide-help-line.md,
+  T10 is CONVERTER's, branch feat/featuregen-site-index-fields), menu-reader implementation
+  (docs\superpowers\plans\2026-10-23-code-built-menu-reader.md), lane 6 cycles incl. the
+  `cycles --fix` refusal line printing the doc-comment start (Orders.pas:6 vs decl 10; tell www-40).
+
 ## Next actions (in order)
 1. Merge finished lanes one at a time: review diff, rerun its guard on main, ledger row -> MERGED;
    tell CONVERTER about conversion-related merges (L8).
