@@ -329,6 +329,7 @@ type
     Interval        : Integer       ;
     Open            : Boolean       ;
     ShowHelp        : Boolean       ;
+    HelpVerb        : string        ; // verb whose OWN help <verb> --help prints (menu-tree, menu-drift); empty = the global banner
     ShowVersion     : Boolean       ;
     // v0.66: ergonomics #12 output/CI flags
     FailOn       : string ; // --fail-on error|warning|info|none (ergonomics #12)
@@ -1097,6 +1098,16 @@ begin
   Result:= (A = '--help') or (A = '-h') or (A = '-?');
 end;
 
+/// <summary>Prints the own help of a menu verb (menu-tree --help / menu-drift --help): the `help` line of its surface in features\entries\menu-tree.json, not the global banner.</summary>
+/// <param name="AVerb">menu-tree or menu-drift.</param>
+/// <remarks>The text mirrors the registry entry; tests\autotest\run_menu_verb_help.ps1 fails on drift.</remarks>
+procedure PrintMenuVerbHelp(const AVerb: string);
+begin
+  if AVerb = 'menu-drift' then
+    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry''s ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
+  else
+    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)');
+end; // procedure
 function ParseArgs: TArgs;
 var
   i: Integer;
@@ -1212,7 +1223,12 @@ begin
       Routing is deliberately to the WHOLE banner for every verb. Per-verb help
       TEXT is a separate product decision with its own docs-sync cost (a third
       surface for run_docs_sync_guard.ps1 to police); not crashing is not. }
-    if IsHelpToken(A) then begin Result.ShowHelp:= True; Exit; end;
+    if IsHelpToken(A) then
+    begin
+      Result.ShowHelp:= True;
+      if (Result.Command = 'menu-tree') or (Result.Command = 'menu-drift') then Result.HelpVerb:= Result.Command;
+      Exit;
+    end;
     if (A = '--db') and (i < ParamCount) then
     begin
       Inc(i);
@@ -32282,7 +32298,12 @@ begin
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
   try
     Args:= ParseArgs;
-    if Args.ShowHelp then begin PrintHelp; Exit(0); end;
+    if Args.ShowHelp then
+    begin
+      if Args.HelpVerb <> '' then PrintMenuVerbHelp(Args.HelpVerb)
+      else PrintHelp;
+      Exit(0);
+    end;
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
 
     { A .drag-lint.json DEFAULTS FILE THAT COULD NOT BE READ (1.20.4 Task 4):
