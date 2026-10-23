@@ -25,7 +25,7 @@ uses
   , System.JSON
   , System.Generics.Collections
   , FeatureGen.Model
-  , FeatureGen.Live
+  , FeatureGen.Live  // dl:ok uses-global-census@3d43 -- REVIEWED 2026-10-23: the checker reads the menu-tree kind names (MENU_KIND_*) the live surface defines; one vocabulary, no second copy
   ;
 
 const
@@ -170,6 +170,7 @@ uses
 
 const
   MIN_CAPTION_PREFIX = 12;
+  MENU_PATH_SEP = ' > ';
   STALE_DAYS = 90;
   NEAREST_POOL = 12;
   NEAREST_SHOWN = 3;
@@ -1000,6 +1001,9 @@ type
     function Skeleton(const pId: string; const pSurface: TJSONObject; const pCtx: TCheckContext): string;
     function FamilyPrecheck(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext; out pParents: TDictionary<string, string>): string;
     procedure ImportChildren(const pHand: TArray<TJSONObject>);
+    function CheckMenuTree(const pCtx: TCheckContext; const pRegPaths: TArray<string>): TArray<string>;
+    procedure CheckMenuPath(const pId, pPath: string);
+    procedure CheckCaptions(const pAll: TArray<TJSONObject>; const pCtx: TCheckContext; const pRegKeys: TArray<string>);
     procedure CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);
     procedure CheckBacklog(const pCtx: TCheckContext);
     procedure CheckGenerated;
@@ -1431,6 +1435,81 @@ begin
   Result := False;
 end;
 
+{ ---- menu paths (FG-M): checks B and C compare FULL paths when the live surface carries the
+  engine's menu tree; a path matches when its key is equal, or its parent is equal and the leaf
+  passes the caption rule above (exact, or a prefix of >= 12 characters). ---- }
+
+procedure SplitPathKey(const pKey: string; out pParent, pLeaf: string);
+var
+  lAt: Integer;
+begin
+  lAt := pKey.LastIndexOf(MENU_PATH_SEP);
+  if lAt < 0 then
+  begin
+    pParent := '';
+    pLeaf := pKey;
+  end
+  else
+  begin
+    pParent := pKey.Substring(0, lAt);
+    pLeaf := pKey.Substring(lAt + Length(MENU_PATH_SEP));
+  end;
+end;
+
+function RegistryPathMatch(const pKey: string; const pKeys: TArray<string>): Boolean;
+var
+  lK, lParent, lLeaf, lP2, lL2: string;
+begin
+  Result := False;
+  if pKey = '' then
+    Exit;
+  SplitPathKey(pKey, lParent, lLeaf);
+  for lK in pKeys do
+  begin
+    if lK = pKey then
+      Exit(True);
+    SplitPathKey(lK, lP2, lL2);
+    if (lP2 = lParent) and RegistryCaptionMatch(lLeaf, [lL2]) then
+      Exit(True);
+  end;
+end;
+
+{ The live leaf whose caption matches pLeafKey (caption rule), wherever it sits: the "moved" target; '' when none. }
+function LiveLeafAt(const pLeafKey: string; const pLeaves: TArray<TMenuNodeRow>): string;
+var
+  lRow: TMenuNodeRow;
+begin
+  Result := '';
+  for lRow in pLeaves do
+    if RegistryCaptionMatch(pLeafKey, [CaptionKey(lRow.Caption)]) then
+      Exit(lRow.Path);
+end;
+
+{ True when the submenu pParentKey holds a node the engine could not evaluate: "missing" there would be a guess. }
+function HasDynamicUnder(const pParentKey: string; const pNodes: TArray<TMenuNodeRow>): Boolean;
+var
+  lRow: TMenuNodeRow;
+  lP, lL: string;
+begin
+  Result := False;
+  for lRow in pNodes do
+    if lRow.Kind = MENU_KIND_DYNAMIC then
+    begin
+      SplitPathKey(MenuPathKey(lRow.Path), lP, lL);
+      if lP = pParentKey then
+        Exit(True);
+    end;
+end;
+
+function LeafCaptions(const pLeaves: TArray<TMenuNodeRow>): TArray<string>;
+var
+  lRow: TMenuNodeRow;
+begin
+  Result := nil;
+  for lRow in pLeaves do
+    Result := Result + [lRow.Caption];
+end;
+
 { Get-NearestCaption: candidates scored whole and cut to the key's length; the 3 nearest captions. }
 function NearestCaption(const pKey: string; const pCaptions: TArray<string>): TArray<string>;
 var
@@ -1506,13 +1585,133 @@ begin
   end;
 end;
 
-procedure TChecker.CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);  // dl:ok too-many-locals@7fef, cyclomatic-complexity@cc84, cognitive-complexity@723a -- REVIEWED 2026-10-19: one routine per ported check, kept 1:1 with the retired PowerShell original so the golden parity tests compare like with like
+{ FG-M: check B over the engine's menu tree. Every clickable leaf must be registered at its full
+  path (or its caption exempted); submenus, headers and separators are never "unregistered";
+  a dynamic node is a note, never a finding. An exempted caption that the tree shows as a
+  container or header is reported: the kind model makes that exemption redundant.
+  Returns the caption keys of every tree node, so the flat caption loop can skip what the tree
+  already judged (About buttons, dialog texts and report rows stay with the flat loop). }
+function TChecker.CheckMenuTree(const pCtx: TCheckContext; const pRegPaths: TArray<string>): TArray<string>;
+var
+  lRow: TMenuNodeRow;
+  lK, lSid, lN: string;
+begin
+  Result := nil;
+  for lRow in FLive.MenuNodes do
+  begin
+    lK := CaptionKey(lRow.Caption);
+    if lK <> '' then
+      Result := Result + [lK];
+    if lRow.Kind = MENU_KIND_DYNAMIC then
+    begin
+      FNotes.Add('menu-tree: dynamic caption at ' + lRow.Source + ' (' + lRow.Path + ') -- not checked');
+      Continue;
+    end;
+    if lRow.Kind <> MENU_KIND_ITEM then
+      Continue;
+    if RegistryPathMatch(MenuPathKey(lRow.Path), pRegPaths) or InCI(lRow.Caption, pCtx.ExemptCaptions) then
+      Continue;
+    lSid := TRegEx.Replace(LowerCase(lRow.Caption), '[^a-z0-9]+', '-').Trim(['-']);
+    Fail('B', 'every live IDE menu item is registered -- unregistered: ''' + lRow.Path + ''''#10
+      + '   ^ no ide-menu surface matches this path (exact, or the same submenu and a leaf prefix of >= 12 characters; nearest registered: '
+      + JoinS(NearestCandidates(MenuPathKey(lRow.Path), pRegPaths), ' | ')
+      + '). Register it (handler ' + lRow.Handler + ', ' + lRow.Source + '), or add its caption to features\exemptions.json captions WITH a reason:'#10
+      + Indent3(Skeleton(lSid, SurfaceObj(['type', 'ide-menu', 'path', lRow.Path]), pCtx)));
+  end;
+  for lN in FLive.MenuNotes do
+    FNotes.Add('menu-tree: ' + lN);
+  for lN in pCtx.ExemptCaptions do
+    for lRow in FLive.MenuNodes do
+      if (lRow.Caption <> '') and (CaptionKey(lRow.Caption) = CaptionKey(lN))
+        and not InCI(lRow.Kind, [MENU_KIND_ITEM, MENU_KIND_DYNAMIC, MENU_KIND_SEPARATOR]) then
+      begin
+        Fail('B', 'exemptions.json captions: ''' + lN + ''' is a ' + lRow.Kind + ' in the live menu tree, never reported unregistered -- delete the exemption');
+        Break;
+      end;
+end;
+
+{ FG-M: check C for one ide-menu surface against the tree: registered path present (exact, or
+  same submenu + leaf rule) on ANY captioned node -- an entry may point at a submenu, as the
+  engine's menu-drift allows -> fine; leaf found elsewhere -> moved; the submenu holds a
+  dynamic node -> note (never a guessed "missing"); else missing. }
+procedure TChecker.CheckMenuPath(const pId, pPath: string);
+var
+  lLeaves: TArray<TMenuNodeRow>;
+  lLivePaths: TArray<string>;
+  lRow: TMenuNodeRow;
+  lPk, lParent, lLeaf, lNow: string;
+begin
+  lLeaves := FLive.MenuLeaves;
+  lLivePaths := nil;
+  for lRow in FLive.MenuNodes do
+    if (lRow.Caption <> '') and (lRow.Kind <> MENU_KIND_DYNAMIC) then
+      lLivePaths := lLivePaths + [MenuPathKey(lRow.Path)];
+  lPk := MenuPathKey(pPath);
+  if RegistryPathMatch(lPk, lLivePaths) then
+    Exit;
+  SplitPathKey(lPk, lParent, lLeaf);
+  lNow := LiveLeafAt(lLeaf, lLeaves);
+  if lNow <> '' then
+    Fail('C', pId + ': ide-menu ''' + pPath + ''' moved -- now at ''' + lNow + ''' (featuregen move-menu --from "<old prefix>" --to "<new prefix>", or update the entry)')
+  else if HasDynamicUnder(lParent, FLive.MenuNodes) then
+    FNotes.Add('menu-tree: ' + pId + ': ide-menu ''' + pPath + ''' sits beside a dynamic caption the engine could not evaluate -- not checked')
+  else
+    Fail('C', pId + ': ide-menu ''' + pPath + ''' matches no live menu item (nearest: ' + JoinS(NearestCaption(lLeaf, LeafCaptions(lLeaves)), ' | ')
+      + ') -- the usual cause is a renamed menu item: update the entry');
+end;
+
+{ Check B over the main-menu captions. With the engine's menu tree (FG-M) the clickable leaves
+  are judged by full PATH (CheckMenuTree); the flat caption loop then keeps only what the tree
+  does not know (About buttons, dialog texts, report rows) under the leaf rule, as before. }
+procedure TChecker.CheckCaptions(const pAll: TArray<TJSONObject>; const pCtx: TCheckContext; const pRegKeys: TArray<string>);
+var
+  lE: TJSONObject;
+  lS: TJSONValue;
+  lRegPaths: TList<string>;
+  lTreeKeys: TArray<string>;
+  lCap, lK, lSid: string;
+begin
+  lTreeKeys := nil;
+  if FLive.HasMenuTree then
+  begin
+    lRegPaths := TList<string>.Create;
+    try
+      for lE in pAll do
+      begin
+        if SameText(JS(lE, 'status'), 'planned') then
+          Continue;
+        for lS in JItems(lE, 'surfaces') do
+          if SameText(JS(lS, 'type'), 'ide-menu') then
+            lRegPaths.Add(MenuPathKey(JS(lS, 'path')));
+      end;
+      lTreeKeys := CheckMenuTree(pCtx, lRegPaths.ToArray);
+    finally
+      lRegPaths.Free;
+    end;
+  end;
+  for lCap in FLive.Captions do
+  begin
+    lK := CaptionKey(lCap);
+    if (lK = '') or InOrd(lK, lTreeKeys) then
+      Continue;
+    if RegistryCaptionMatch(lK, pRegKeys) or InCI(lCap, pCtx.ExemptCaptions) then
+      Continue;
+    lSid := TRegEx.Replace(LowerCase(lCap), '[^a-z0-9]+', '-').Trim(['-']);
+    Fail('B', 'every live IDE caption is registered -- unregistered: ''' + lCap + ''''#10
+      + '   ^ no ide-menu/ide-context/ide-about/tool-window surface matches it (exact, or a prefix of >= 12 characters; nearest registered: '
+      + JoinS(NearestCandidates(lK, pRegKeys), ' | ')
+      + '). Register it, or add it to features\exemptions.json captions WITH a reason if it is a container or header:'#10
+      + Indent3(Skeleton(lSid, SurfaceObj(['type', 'ide-menu', 'path', 'drag-lint > <submenu> > ' + lCap]), pCtx)));
+  end;
+end;
+
+procedure TChecker.CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);  // dl:ok too-many-locals@b464, cyclomatic-complexity@3615, cognitive-complexity@c86e -- REVIEWED 2026-10-23 (FG-M: caption loop moved out to CheckCaptions, C dispatches ide-menu paths to CheckMenuPath; re-stamped): one routine per ported check, kept 1:1 with the retired PowerShell original so the golden parity tests compare like with like
 var
   lAll: TArray<TJSONObject>;
   lE: TJSONObject;
   lS: TJSONValue;
   lRegVerbs, lRegSubs, lRegExes, lRegMcp: TList<string>;
-  lRegKeys, lLiveKeys, lAboutKeys, lHostKeys, lSubs: TArray<string>;
+  lRegKeys, lLiveKeys, lAboutKeys, lHostKeys, lSubs, lSubVerbs: TArray<string>;
   lRegCtx: TDictionary<string, TArray<string>>;
   lV, lSub, lCap, lK, lSid, lH, lX, lId, lSt, lT, lWhere: string;
   lM: TMatch;
@@ -1530,6 +1729,9 @@ begin
   try
     // ---- B. live -> registry
     lRegKeys := nil;
+    // hoisted once: a method result handed straight to an open-array parameter (InCI) read as EMPTY
+    // in this routine once its layout changed (Delphi 13 dcc64, bisected with probes 2026-10-23)
+    lSubVerbs := FLive.SubVerbs;
     for lE in lAll do
     begin
       if SameText(JS(lE, 'status'), 'planned') then
@@ -1570,7 +1772,7 @@ begin
         + '.json (featuregen add --id ' + lV + ' ...), then run featuregen build --all and commit the regenerated pages:'#10
         + Indent3(Skeleton(lV, SurfaceObj(['type', 'cli', 'verb', lV]), pCtx)));
     end;
-    for lV in FLive.SubVerbs do
+    for lV in lSubVerbs do
     begin
       lInternal := False;
       for lE in pHand do
@@ -1592,20 +1794,7 @@ begin
           + Indent3(Skeleton(lV + '-' + lSub, SurfaceObj(['type', 'cli', 'verb', lV, 'sub', lSub]), pCtx)));
       end;
     end;
-    for lCap in FLive.Captions do
-    begin
-      lK := CaptionKey(lCap);
-      if lK = '' then
-        Continue;
-      if RegistryCaptionMatch(lK, lRegKeys) or InCI(lCap, pCtx.ExemptCaptions) then
-        Continue;
-      lSid := TRegEx.Replace(LowerCase(lCap), '[^a-z0-9]+', '-').Trim(['-']);
-      Fail('B', 'every live IDE caption is registered -- unregistered: ''' + lCap + ''''#10
-        + '   ^ no ide-menu/ide-context/ide-about/tool-window surface matches it (exact, or a prefix of >= 12 characters; nearest registered: '
-        + JoinS(NearestCandidates(lK, lRegKeys), ' | ')
-        + '). Register it, or add it to features\exemptions.json captions WITH a reason if it is a container or header:'#10
-        + Indent3(Skeleton(lSid, SurfaceObj(['type', 'ide-menu', 'path', 'drag-lint > <submenu> > ' + lCap]), pCtx)));
-    end;
+    CheckCaptions(lAll, pCtx, lRegKeys);
     for lH in FLive.ContextHosts do
     begin
       if not lRegCtx.TryGetValue(lH, lHostKeys) then
@@ -1637,7 +1826,12 @@ begin
     begin
       lM := TRegEx.Match(lK, '^(\S+) (\S+)$');
       if lM.Success then
-        lLiveOk := InCI(lM.Groups[1].Value, FLive.SubVerbs) and InCI(lM.Groups[2].Value, FLive.SubMap[lM.Groups[1].Value])
+      begin
+        lSubs := nil;
+        if InCI(lM.Groups[1].Value, lSubVerbs) then
+          lSubs := FLive.SubMap[lM.Groups[1].Value];
+        lLiveOk := InCI(lM.Groups[2].Value, lSubs);
+      end
       else
         lLiveOk := InCI(lK, FLive.DispatchVerbs);
       if not lLiveOk then
@@ -1694,7 +1888,7 @@ begin
           if JHas(lS, 'sub') then
           begin
             lSubs := nil;
-            if InCI(lV, FLive.SubVerbs) then
+            if InCI(lV, lSubVerbs) then
               lSubs := FLive.SubMap[lV];
             if not InCI(JS(lS, 'sub'), lSubs) then
               Fail('C', lId + ': subcommand ''' + lV + ' ' + JS(lS, 'sub') + ''' is not dispatched (nearest: ' + JoinS(NearestCandidates(JS(lS, 'sub'), lSubs), ', ') + ')');
@@ -1722,6 +1916,8 @@ begin
                 + JoinS(NearestCaption(lK, FLive.ContextCaptions[lH]), ' | ') + ') -- the usual cause is a renamed item: update the entry');
           end;
         end
+        else if SameText(lT, 'ide-menu') and FLive.HasMenuTree then
+          CheckMenuPath(lId, JS(lS, 'path'))
         else if InCI(lT, ['ide-menu', 'ide-about', 'tool-window']) then
         begin
           lK := LeafKey(lS);

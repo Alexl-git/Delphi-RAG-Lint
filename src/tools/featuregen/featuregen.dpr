@@ -43,6 +43,8 @@ begin
   Writeln('  check [--level wellformed|full] [--repo <dir>] [--engine <exe>]');
   Writeln('      the registry guard''s checks A-E; wellformed = check A only (no engine);');
   Writeln('      full (default) adds the live surface (B, C), generated outputs (D) and staleness notes (E).');
+  Writeln('      B/C compare FULL ide-menu paths read by the engine''s menu-tree verb (a moved item fails);');
+  Writeln('      an engine without menu-tree falls back to the flat caption harvest (leaf-only, noted).');
   Writeln('      exits 1 when any check fails.');
   PrintRegistryUsage(
     procedure(const pLine: string)

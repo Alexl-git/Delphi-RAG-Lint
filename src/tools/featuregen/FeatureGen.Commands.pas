@@ -1305,22 +1305,9 @@ begin
 end;
 
 function MenuKey(const pPath: string): string;
-var
-  lSeg, lK: string;
-  lList: TList<string>;
 begin
-  lList := TList<string>.Create;
-  try
-    for lSeg in TRegEx.Split(pPath, '\s+>\s+') do
-    begin
-      lK := CaptionKey(lSeg);
-      if lK <> '' then
-        lList.Add(lK);
-    end;
-    Result := string.Join(' > ', lList.ToArray);
-  finally
-    lList.Free;
-  end;
+  // one rule for every path comparison (checks B/C, move-menu, blast-radius): FeatureGen.Live.MenuPathKey
+  Result := MenuPathKey(pPath);
 end;
 
 function NodeCovers(const pNodeKey, pPathKey: string): Boolean;

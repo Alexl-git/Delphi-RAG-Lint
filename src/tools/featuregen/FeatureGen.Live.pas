@@ -59,6 +59,22 @@ type
     Kind: string;
   end;
 
+  /// <summary>One node of the engine's code-built menu tree (menu-tree/1), flattened with its full path.</summary>
+  TMenuNodeRow = record
+    /// <summary>Full display path, segments joined by ' > ' ('drag-lint > Reports > Compare...'); '&amp;&amp;' reduced to '&amp;'.</summary>
+    Path: string;
+    /// <summary>The node's own caption ('&amp;&amp;' reduced to '&amp;'); '' for a separator.</summary>
+    Caption: string;
+    /// <summary>root | submenu | item | separator | header | dynamic (the engine's kind names).</summary>
+    Kind: string;
+    /// <summary>Qualified click handler; '' for a separator, header or submenu.</summary>
+    Handler: string;
+    /// <summary>file:line of the statement that made the node.</summary>
+    Source: string;
+    /// <summary>certain | derived | unknown.</summary>
+    Confidence: string;
+  end;
+
   /// <summary>The live surface the registry checks compare against (Get-LiveSurface).</summary>
   /// <remarks>Fields are public so tests can build or extend a surface in memory (positive
   /// controls) without touching a file. The object owns RuleCatalog and the dictionaries.
@@ -114,6 +130,13 @@ type
     ResolverVersion: string;  // dl:ok public-field@ced4 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>SCHEMA_VERSION of the storage schema.</summary>
     SchemaVersion: string;  // dl:ok public-field@fb00 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    /// <summary>Where the main-menu tree came from: MENU_SOURCE_TREE when the engine's menu-tree verb read it
+    /// (MenuNodes carries full paths), MENU_SOURCE_REGEX when the engine lacks the verb (Captions only, leaf checks).</summary>
+    MenuSource: string;  // dl:ok public-field@d8cd -- REVIEWED 2026-10-23: plain data-holder class read directly by the checker, as every other field of this surface
+    /// <summary>Every node under the menu-tree roots in tree order (external roots left out), with full paths; empty in regex mode.</summary>
+    MenuNodes: TArray<TMenuNodeRow>;  // dl:ok public-field@45fc -- REVIEWED 2026-10-23: plain data-holder class read directly by the checker, as every other field of this surface
+    /// <summary>The engine's menu-tree notes (dynamic captions, unparented items); empty in regex mode.</summary>
+    MenuNotes: TArray<string>;  // dl:ok public-field@575f -- REVIEWED 2026-10-23: plain data-holder class read directly by the checker, as every other field of this surface
     /// <summary>Constructor: creates an empty surface (all lists empty, dictionaries allocated).</summary>
     constructor Create;
     destructor Destroy; override;
@@ -126,7 +149,29 @@ type
     /// <summary>The verbs that have subcommands (SubMap keys), sorted.</summary>
     /// <returns>A new array.</returns>
     function SubVerbs: TArray<string>;
+    /// <summary>True when MenuSource is MENU_SOURCE_TREE: checks B and C compare full menu paths.</summary>
+    /// <returns>False in regex mode or on an in-memory surface that never set MenuSource.</returns>
+    function HasMenuTree: Boolean;
+    /// <summary>The clickable leaves of the menu tree: MenuNodes whose Kind is MENU_KIND_ITEM, in tree order.</summary>
+    /// <returns>A new array; empty in regex mode.</returns>
+    function MenuLeaves: TArray<TMenuNodeRow>;
   end;
+
+const
+  /// <summary>MenuSource value: the tree came from the engine's menu-tree verb.</summary>
+  MENU_SOURCE_TREE = 'menu-tree';
+  /// <summary>MenuSource value: the engine lacks menu-tree; the flat regex harvest is all there is.</summary>
+  MENU_SOURCE_REGEX = 'regex';
+  /// <summary>Menu-tree node kind of a clickable leaf.</summary>
+  MENU_KIND_ITEM = 'item';
+  /// <summary>Menu-tree node kind of a caption the engine could not evaluate.</summary>
+  MENU_KIND_DYNAMIC = 'dynamic';
+  /// <summary>Menu-tree node kind of a separator ('-'); never a caption.</summary>
+  MENU_KIND_SEPARATOR = 'separator';
+  /// <summary>The IDE plugin project the menu tree is read from, repo-relative.</summary>
+  PLUGIN_DPROJ = 'src\delphi-plugin\dclDragLintWizard.dproj';
+  /// <summary>The plugin's project index, repo-relative (prepare_battery.ps1 keeps it current).</summary>
+  PLUGIN_DB = 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite';
 
 /// <summary>Runs a console program and returns its stdout, decoded as UTF-8.</summary>
 /// <param name="pExe">Full path of the program (no PATH lookup).</param>
@@ -135,6 +180,27 @@ type
 /// <exception cref="EFeatureGenLive">The pipe cannot be created or the program cannot be started.</exception>
 /// <remarks>stderr is discarded; waits for the program to exit; no timeout.</remarks>
 function RunCapture(const pExe, pArgs: string): string;
+
+/// <summary>RunCapture that also reports the program's exit code.</summary>
+/// <param name="pExe">Full path of the program (no PATH lookup).</param>
+/// <param name="pArgs">Command-line arguments, already quoted.</param>
+/// <param name="pExitCode">Receives the process exit code.</param>
+/// <returns>Everything the program wrote to stdout; '' when nothing.</returns>
+/// <exception cref="EFeatureGenLive">The program cannot be started.</exception>
+function RunCaptureCode(const pExe, pArgs: string; out pExitCode: Cardinal): string;
+
+/// <summary>The comparison key of a menu path: every ' > ' segment CaptionKey'd, empty ones dropped, joined by ' > '.</summary>
+/// <param name="pPath">'drag-lint > Uses &amp;&amp; Dependencies > Find Usages...'.</param>
+/// <returns>'drag-lint > uses &amp; dependencies > find usages'. The engine's MenuPathKey is the same rule (shared test vector).</returns>
+function MenuPathKey(const pPath: string): string;
+
+/// <summary>Flattens a menu-tree/1 document (drag-lint menu-tree --format json) into path rows.</summary>
+/// <param name="pJson">The document text.</param>
+/// <param name="pNodes">Receives every node under "roots" in tree order with its full path; "external" roots are left out
+/// (the drift rules ignore them). '&amp;&amp;' in captions is reduced to '&amp;' as in Captions.</param>
+/// <param name="pNotes">Receives the document's "notes" strings.</param>
+/// <exception cref="EFeatureGenLive">Not a JSON object, or its "schema" is not menu-tree/1.</exception>
+procedure ParseMenuTreeJson(const pJson: string; out pNodes: TArray<TMenuNodeRow>; out pNotes: TArray<string>);
 
 /// <summary>The normalised comparison key of a caption (Get-CaptionKey).</summary>
 /// <param name="pCaption">Caption or menu-path segment.</param>
@@ -170,8 +236,19 @@ const
   MIN_DISPATCH_VERBS = 20;
   MIN_CAPTIONS = 40;
   RE_KIND_GROUP = 3;
+  MENU_TREE_VERB = 'menu-tree';
+  MENU_TREE_SCHEMA = 'menu-tree/1';
+  MENU_TREE_EXIT_STALE = 3;
+  PATH_SEP = ' > ';
 
 function RunCapture(const pExe, pArgs: string): string;
+var
+  lCode: Cardinal;
+begin
+  Result := RunCaptureCode(pExe, pArgs, lCode);
+end;
+
+function RunCaptureCode(const pExe, pArgs: string; out pExitCode: Cardinal): string;
 var
   lSa: TSecurityAttributes;
   lRead, lWrite, lNul: THandle;
@@ -182,8 +259,10 @@ var
   lGot: DWORD;
   lMem: TMemoryStream;
   lBytes: TBytes;
+  lCode: DWORD;
 begin
   Result := '';
+  pExitCode := 0;
   lSa.nLength := SizeOf(lSa);
   lSa.bInheritHandle := True;
   lSa.lpSecurityDescriptor := nil;
@@ -210,6 +289,9 @@ begin
       while ReadFile(lRead, lBuf, SizeOf(lBuf), lGot, nil) and (lGot > 0) do
         lMem.WriteBuffer(lBuf, lGot);
       WaitForSingleObject(lPi.hProcess, INFINITE);
+      if not GetExitCodeProcess(lPi.hProcess, lCode) then
+        lCode := High(Cardinal);
+      pExitCode := lCode;
       CloseHandle(lPi.hProcess);
       CloseHandle(lPi.hThread);
       if lMem.Size > 0 then
@@ -309,6 +391,108 @@ begin
   lS := TRegEx.Replace(lS, '[`*"]', ' ');
   lS := TRegEx.Replace(lS, '\s+', ' ');
   Result := LowerCase(lS.Trim.Trim(['.', ',', ';', ':', ')', '(']));
+end;
+
+function MenuPathKey(const pPath: string): string;
+var
+  lSeg, lK: string;
+  lList: TList<string>;
+begin
+  lList := TList<string>.Create;
+  try
+    for lSeg in TRegEx.Split(pPath, '\s+>\s+') do
+    begin
+      lK := CaptionKey(lSeg);
+      if lK <> '' then
+        lList.Add(lK);
+    end;
+    Result := string.Join(PATH_SEP, lList.ToArray);
+  finally
+    lList.Free;
+  end;
+end;
+
+{ ---- menu-tree/1 ---- }
+
+function JStr(const pObj: TJSONObject; const pName: string): string;
+var
+  lV: TJSONValue;
+begin
+  lV := pObj.GetValue(pName);
+  if lV is TJSONString then
+    Result := TJSONString(lV).Value
+  else
+    Result := '';
+end;
+
+procedure FlattenMenuNodes(const pArr: TJSONArray; const pParentPath: string; const pOut: TList<TMenuNodeRow>);
+var
+  lV: TJSONValue;
+  lO: TJSONObject;
+  lRow: TMenuNodeRow;
+  lKids: TJSONValue;
+begin
+  if pArr = nil then
+    Exit;
+  for lV in pArr do
+  begin
+    if not (lV is TJSONObject) then
+      Continue;
+    lO := TJSONObject(lV);
+    lRow.Kind := JStr(lO, 'kind');
+    lRow.Caption := JStr(lO, 'caption').Replace('&&', '&').Trim;
+    lRow.Handler := JStr(lO, 'handler');
+    lRow.Source := JStr(lO, 'source');
+    lRow.Confidence := JStr(lO, 'confidence');
+    if pParentPath = '' then
+      lRow.Path := lRow.Caption
+    else if lRow.Caption = '' then
+      lRow.Path := pParentPath
+    else
+      lRow.Path := pParentPath + PATH_SEP + lRow.Caption;
+    pOut.Add(lRow);
+    lKids := lO.GetValue('children');
+    if lKids is TJSONArray then
+      FlattenMenuNodes(TJSONArray(lKids), lRow.Path, pOut);
+  end;
+end;
+
+procedure ParseMenuTreeJson(const pJson: string; out pNodes: TArray<TMenuNodeRow>; out pNotes: TArray<string>);
+var
+  lV, lN, lItem: TJSONValue;
+  lO: TJSONObject;
+  lList: TList<TMenuNodeRow>;
+  lNotes: TList<string>;
+begin
+  pNodes := nil;
+  pNotes := nil;
+  lV := TJSONObject.ParseJSONValue(pJson, False, False);
+  if not (lV is TJSONObject) then
+  begin
+    lV.Free;
+    raise EFeatureGenLive.Create('live surface: menu-tree --format json did not return a JSON object');
+  end;
+  lList := TList<TMenuNodeRow>.Create;
+  lNotes := TList<string>.Create;
+  try
+    lO := TJSONObject(lV);
+    if JStr(lO, 'schema') <> MENU_TREE_SCHEMA then
+      raise EFeatureGenLive.CreateFmt('live surface: menu-tree returned schema ''%s''; expected %s', [JStr(lO, 'schema'), MENU_TREE_SCHEMA]);
+    lN := lO.GetValue('roots');
+    if lN is TJSONArray then
+      FlattenMenuNodes(TJSONArray(lN), '', lList);
+    lN := lO.GetValue('notes');
+    if lN is TJSONArray then
+      for lItem in TJSONArray(lN) do
+        if lItem is TJSONString then
+          lNotes.Add(TJSONString(lItem).Value);
+    pNodes := lList.ToArray;
+    pNotes := lNotes.ToArray;
+  finally
+    lNotes.Free;
+    lList.Free;
+    lV.Free;
+  end;
 end;
 
 { ---- TLiveHelp ---- }
@@ -783,6 +967,58 @@ begin
   Result := SortUniqueText(SubMap.Keys.ToArray);
 end;
 
+function TLiveSurface.HasMenuTree: Boolean;
+begin
+  Result := MenuSource = MENU_SOURCE_TREE;
+end;
+
+function TLiveSurface.MenuLeaves: TArray<TMenuNodeRow>;
+var
+  lRow: TMenuNodeRow;
+begin
+  Result := nil;
+  for lRow in MenuNodes do
+    if lRow.Kind = MENU_KIND_ITEM then
+      Result := Result + [lRow];
+end;
+
+{ The menu tree from the engine's menu-tree verb; MENU_SOURCE_REGEX when pHelpVerbs lacks the verb
+  (a pre-1.33 engine, the golden stub): the flat regex captions are then all the checks have. }
+procedure HarvestMenuTree(const pRepo, pEngine: string; const pHelpVerbs: TArray<string>; const pLive: TLiveSurface);
+var
+  lV, lProj, lDb, lOut, lHint: string;
+  lHas: Boolean;
+  lCode: Cardinal;
+begin
+  pLive.MenuSource := MENU_SOURCE_REGEX;
+  pLive.MenuNodes := nil;
+  pLive.MenuNotes := nil;
+  lHas := False;
+  for lV in pHelpVerbs do
+    if SameText(lV, MENU_TREE_VERB) then
+      lHas := True;
+  if not lHas then
+    Exit;
+  lProj := TPath.Combine(pRepo, PLUGIN_DPROJ);
+  lDb := TPath.Combine(pRepo, PLUGIN_DB);
+  if not TFile.Exists(lDb) then
+    raise EFeatureGenLive.CreateFmt('live surface: menu-tree needs the plugin index %s -- build it: "%s" index --project "%s" --db "%s"',
+      [lDb, pEngine, lProj, lDb]);
+  lOut := RunCaptureCode(pEngine, Format('%s --project "%s" --db "%s" --format json', [MENU_TREE_VERB, lProj, lDb]), lCode);
+  if lCode <> 0 then
+  begin
+    lHint := (if lCode = MENU_TREE_EXIT_STALE then
+      Format(' -- the plugin index is stale; refresh it: "%s" index --project "%s" --db "%s"', [pEngine, lProj, lDb])
+      else '');
+    raise EFeatureGenLive.CreateFmt('live surface: menu-tree exited %d%s%s', [lCode, lHint,
+      (if lOut.Trim = '' then '' else ' (' + lOut.Trim.Split([#10])[0].Trim + ')')]);
+  end;
+  ParseMenuTreeJson(lOut, pLive.MenuNodes, pLive.MenuNotes);
+  if Length(pLive.MenuLeaves) = 0 then
+    raise EFeatureGenLive.Create('live surface: menu-tree returned no menu items under its roots');
+  pLive.MenuSource := MENU_SOURCE_TREE;
+end;
+
 { Get-MenuSourceText: Editor.pas + AboutForm.pas + ReportText.pas, concatenated. }
 function MenuSourceText(const pRepo: string): string;
 var
@@ -908,6 +1144,9 @@ begin
   end;
   if Length(Captions) < MIN_CAPTIONS then
     raise EFeatureGenLive.CreateFmt('live surface: %d caption(s) harvested; expected >= 40', [Length(Captions)]);
+  // the menu TREE (paths) from the engine, when it has the verb; the flat captions above stay the
+  // source for ide-about, tool-window, dialog texts and the exemption liveness check in both modes
+  HarvestMenuTree(pRepo, pEngine, HelpVerbs, Self);
   lArr := Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas')), 'Add(?:Proc)?Button\(\s*''([^'']+)''');
   SetLength(AboutButtons, Length(lArr));
   for lTotal := 0 to High(lArr) do
