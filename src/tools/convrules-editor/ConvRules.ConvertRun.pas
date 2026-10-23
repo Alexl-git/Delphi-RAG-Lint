@@ -205,6 +205,10 @@ type
     /// the first rule error ("line N: message") or the head of the unparseable
     /// output.</summary>
     Error     : string;
+    /// <summary>The "unit" key (full path of the unit the answer is about); '' when the
+    /// key is absent or not a string. Every units[] entry of an apply-batch/1 carries it;
+    /// ConvRules.ConvertBatch.BatchUnitsMatch compares it with the --unit order.</summary>
+    UnitPath  : string;
     /// <summary>edits_count.</summary>
     EditsCount: Integer;
     /// <summary>rule_errors[] length. Greater than 0 = the BOOK failed the
@@ -1629,6 +1633,7 @@ begin
     // Type-checked, never GetValue<T>: it coerces ("3" -> 3, 1 -> True) on a wrong type.
     Result.Ok        := JsonTrue(Obj, 'ok');
     Result.EditsCount:= JsonInt(Obj, 'edits_count');
+    Result.UnitPath  := Str(Obj, 'unit');
     Result.Converted := Strings(Obj, 'converted');
     Result.InheritedLeft:= InheritedItems(Obj);
     Result.ComponentPart:= Str(Obj, 'component_part');

@@ -40,6 +40,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.WorkList in '..\ConvRules.WorkList.pas'  // dl:unit ConvRules.WorkList accepted -- the tests read the PAS_USE_* statuses and WORK_* texts to pin the unit's own contract, so the consts travel with the unit under test
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertBatch in '..\ConvRules.ConvertBatch.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.QualifyFix in '..\ConvRules.QualifyFix.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
@@ -11027,6 +11028,91 @@ begin
   Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\' + AName)));
 end;
 
+{ B4 batch mode, pure decisions (ConvRules.ConvertBatch) and the per-unit "unit" key of
+  apply-batch/1. REAL captures from the 1.33.0 pin, fixtures\apply1270\batch-*-1330.json:
+  apply (FixUnit + Second written), readonly (Second.dfm read-only, DescUnit inherits
+  FixForm), only (--only Label1 over 2 units), gap (index-gap refusal), unindexed (Loose.pas
+  is in no --db). }
+procedure TestConvertBatch;
+var
+  LBatch   : TApplyBatch;
+  LUnits   : TArray<string>;
+  LChunks  : TArray<TArray<string>>;
+  LSkip    : TApplyRow;
+  LUnitsOne: TArray<string>;
+begin
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-apply-1330.json'), APPLY_FEATURES_ALL);
+  LSkip:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1330.unit.path', (Length(LBatch.Units) = 2) and (LBatch.Units[0].UnitPath = 'C:\fix\FixUnit.pas')
+    and (LBatch.Units[1].UnitPath = 'C:\fix\Second.pas'));
+  // apply-skip-1315.json is a bare apply/1 that DOES carry the key; absence / a wrong type read ''.
+  Check('f1330.unit.path.single.apply', LSkip.UnitPath <> '', LSkip.UnitPath);
+  Check('f1330.unit.path.absent', (ParseApplyJson('{"schema":"apply/1","ok":true}', APPLY_FEATURES_ALL).UnitPath = '')
+    and (ParseApplyJson('{"schema":"apply/1","ok":true,"unit":5}', APPLY_FEATURES_ALL).UnitPath = ''));
+
+  // --- BatchUnitsMatch ---
+  LUnits:= ['C:\fix\FixUnit.pas', 'C:\fix\Second.pas'];
+  Check('batch.match.ok', BatchUnitsMatch(LBatch, LUnits));
+  Check('batch.match.ok.case.insensitive', BatchUnitsMatch(LBatch, ['c:\FIX\fixunit.pas', 'C:\fix\Second.pas']));
+  Check('batch.match.short', not BatchUnitsMatch(LBatch, ['C:\fix\FixUnit.pas', 'C:\fix\Second.pas', 'C:\fix\Third.pas']));
+  Check('batch.match.reordered', not BatchUnitsMatch(LBatch, ['C:\fix\Second.pas', 'C:\fix\FixUnit.pas']));
+  LBatch.Units[0].UnitPath:= '';
+  LBatch.Units[1].UnitPath:= '';
+  Check('batch.match.no.unit.key.counts.only', BatchUnitsMatch(LBatch, ['x', 'y']) and not BatchUnitsMatch(LBatch, ['x']));
+  Check('batch.match.invalid.doc', not BatchUnitsMatch(ParseApplyBatchJson('engine died', APPLY_FEATURES_ALL), []));
+
+  // --- BatchModeFor ---
+  Check('batch.mode.on', BatchModeFor(True, True, 2, ''));
+  Check('batch.mode.cap.off', not BatchModeFor(False, True, 2, ''));
+  Check('batch.mode.scoped.off', not BatchModeFor(True, False, 2, ''));
+  Check('batch.mode.one.unit.off', not BatchModeFor(True, True, 1, '') and not BatchModeFor(True, True, 0, ''));
+  Check('batch.mode.env.off', not BatchModeFor(True, True, 2, 'off') and not BatchModeFor(True, True, 2, 'OFF'));
+  Check('batch.mode.env.other.on', BatchModeFor(True, True, 2, 'on') and BatchModeFor(True, True, 2, 'batch'));
+
+  // --- BatchChunks ---
+  LUnits:= ['a', 'b', 'c', 'd'];
+  LChunks:= BatchChunks(LUnits, 2);
+  Check('batch.chunks.exact', (Length(LChunks) = 2) and (Length(LChunks[0]) = 2) and (LChunks[0][0] = 'a')
+    and (LChunks[1][1] = 'd'), IntToStr(Length(LChunks)));
+  LChunks:= BatchChunks(['a', 'b', 'c'], 2);
+  Check('batch.chunks.rest', (Length(LChunks) = 2) and (Length(LChunks[0]) = 2) and (Length(LChunks[1]) = 1)
+    and (LChunks[1][0] = 'c'), IntToStr(Length(LChunks)));
+  LUnitsOne:= nil;
+  Check('batch.chunks.empty', Length(BatchChunks(LUnitsOne, 8)) = 0);
+  LChunks:= BatchChunks(LUnits, 0);
+  Check('batch.chunks.max.zero', (Length(LChunks) = 1) and (Length(LChunks[0]) = 4), IntToStr(Length(LChunks)));
+  Check('batch.chunks.default.is.eight', BATCH_MAX_UNITS = 8);
+
+  // --- BatchTimeoutMs ---
+  Check('batch.timeout.one', (BatchTimeoutMs(600000, 1) = 600000) and (BatchTimeoutMs(600000, 0) = 600000));
+  Check('batch.timeout.eight', BatchTimeoutMs(600000, 8) = 600000 + 7 * 120000, IntToStr(BatchTimeoutMs(600000, 8)));
+
+  // --- BatchUntrustedNote ---
+  Check('batch.untrusted.note', BatchUntrustedNote('units[] short') = 'batch apply not trusted: units[] short',
+    BatchUntrustedNote('units[] short'));
+
+  // --- per-entry classification the batch loop relies on (real captures) ---
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-readonly-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.readonly.failed.entry', (Length(LBatch.Units) = 3) and not LBatch.Units[1].Ok and not LBatch.Units[1].Refused
+    and (Pos('cannot write', LBatch.Units[1].Error) > 0));
+  Check('f1330.readonly.batch.exit2.counts', (LBatch.ExitCode = 2) and (LBatch.FailedCount = 1) and (LBatch.OkCount = 2)
+    and not BatchContractBroken(LBatch));
+  Check('f1330.inherited.retyped.in.batch', (Length(LBatch.Units) = 3) and (Length(LBatch.Units[2].InheritedLeft) > 0)
+    and IsRetypedInstance(LBatch.Units[2].InheritedLeft[0]));
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-gap-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.gap.both.refused', (Length(LBatch.Units) = 2) and LBatch.Units[0].Refused and LBatch.Units[1].Refused
+    and (LBatch.RefusedCount = 2) and not BatchContractBroken(LBatch));
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-only-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.only.second.failed', (Length(LBatch.Units) = 2) and not LBatch.Units[1].Ok and not LBatch.Units[1].Refused
+    and (Length(LBatch.Units[1].OnlyUnmatched) = 1) and (LBatch.Units[1].OnlyUnmatched[0] = 'Label1'));
+  // Engine gap G2 (plan 2026-10-23 section 5), pinned as MEASURED: a unit that is in no --db
+  // is NOT refused in a batch -- ok, zero edits, counted in ok_count. The editor's Preflight
+  // refuses an unindexed unit before the run, so no loop code depends on this.
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-unindexed-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.unindexed.ok.no.edits', (Length(LBatch.Units) = 3) and LBatch.Units[1].Ok and (LBatch.Units[1].EditsCount = 0)
+    and (LBatch.OkCount = 3));
+end;
+
 { Engine 1.31.5 apply/1 keys the editor used to drop (B1, B3, B6, B7, B8). REAL captures,
   fixtures\apply1270\*-1315.json: apply-batch (2 units, --only Label1,Label9,Nope), apply-skip
   (descendants + three unlinked), apply-desc (inherited skipped), apply-gap (index-gap refusal). }
@@ -14776,6 +14862,7 @@ begin
     TestRunnerLiveOnly;
     TestApply1270Items;
   TestApply1315Fields;
+  TestConvertBatch;
   TestApplyBadShapes;
   TestEngineJsonShapes;
   TestWarnCheckRefDirectives;
