@@ -9867,6 +9867,42 @@ begin
     and (Pos('V1:', Joined) > Pos('C1:', Joined)) and (Pos('A1:', Joined) = 0), Joined);
 end;
 
+{ B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
+  descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
+  recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
+  unconverted; ancestor converted first -> action code / converted. With both inherited_retype and
+  inherited_code_unconverted the editor adds NO code-use note of its own (CodeUseNoteDue). }
+procedure TestInheritedCodeUnconverted;
+const
+  ENTRY_LINE = 13;
+  NOTE_UNC   = '0 edit(s), 0 remaining for manual work; no component of its own to convert; 1 inherited instance(s) left: ancestor Anc not converted';
+var
+  Unc, Conv: TApplyRow;
+  Row      : TConvertRow;
+begin
+  Unc := ParseApplyJson(InheritedFixture('apply-desc-code-unconverted-1330.json'), APPLY_FEATURES_ALL);
+  Conv:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), APPLY_FEATURES_ALL);
+  Check('inh.codeunc.unconverted.parsed', Unc.Ok and (Length(Unc.InheritedLeft) = 1));
+  if Length(Unc.InheritedLeft) = 1 then
+    Check('inh.codeunc.unconverted.entry', (Unc.InheritedLeft[0].Name = 'Label1') and (Unc.InheritedLeft[0].AncestorUnit = 'Anc')
+      and (Unc.InheritedLeft[0].AncestorState = 'unconverted') and (Unc.InheritedLeft[0].Line = ENTRY_LINE));
+  Check('inh.codeunc.unconverted.is.left', (Length(Unc.InheritedLeft) = 1) and not IsRetypedInstance(Unc.InheritedLeft[0]),
+    if Length(Unc.InheritedLeft) = 1 then Unc.InheritedLeft[0].Action else '');
+  Check('inh.codeunc.unconverted.note', ConvertedRowNote(Unc, True, True) = NOTE_UNC, ConvertedRowNote(Unc, True, True));
+  Check('inh.codeunc.converted.parsed', Conv.Ok and (Length(Conv.InheritedLeft) = 1) and (Conv.InheritedLeft[0].Action = 'code')
+    and (Conv.InheritedLeft[0].AncestorState = 'converted') and (Conv.InheritedLeft[0].Line = ENTRY_LINE));
+
+  // Gate per engine state, on the real rows: the editor's own note only when the engine lacks either capability.
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := Unc;
+  Check('inh.codeunc.gate.both', not CodeUseNoteDue(Row, [], True, True));
+  Check('inh.codeunc.gate.no.codeunc', CodeUseNoteDue(Row, [], True, False));
+  Check('inh.codeunc.gate.no.retype', CodeUseNoteDue(Row, [], False, True));
+  Check('inh.codeunc.gate.neither', CodeUseNoteDue(Row, [], False, False));
+  Row.Apply:= Conv;
+  Check('inh.codeunc.converted.gate.both', not CodeUseNoteDue(Row, [], True, True));
+end;
 { C8 E11 live, ONLY against an engine that reports inherited_instances: Anc then Desc
   in one run; Anc's Label1 is converted, and (N2, inherited_retype, 1.26.0 on) Desc's
   inherited Label1 is retyped too and reported as retyped, not left. }
@@ -14682,6 +14718,7 @@ begin
     TestClassLookupLive;
     TestInheritedApply;
     TestInheritedActions;
+    TestInheritedCodeUnconverted;
     TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
