@@ -16,7 +16,7 @@
 # status line once idle, and nothing runs (n1.*). Needs the editor visible on the desktop (run under the GUI lock).
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-param([string]$Exe, [switch]$ProofNoIndex)
+param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -482,15 +482,28 @@ try {
   Start-Sleep -Milliseconds 700
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
   Click (@(Find $dlg 'Button' '&Open')[0])
+  # N9: the progress window is timing-dependent. If it never appears, a REAL click would start an actual
+  # Convert and every later check would cascade. So the click is only made while the window holds the
+  # editor; otherwise 3b FAILS with a clear precondition detail, the add is waited out, and the click is skipped.
+  # -ProofNoWindow skips the wait for the window: 3b must FAIL and every later check must still pass.
   $wait = [IntPtr]::Zero; $t0 = Get-Date
-  while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } }
+  if ($ProofNoWindow) { "NOTE  -ProofNoWindow: the wait for the progress window is SKIPPED; only n1.click.under.progress is expected to FAIL" }
+  else { while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } } }
   $disabled = -not [W]::IsWindowEnabled($main)
-  [W]::MouseClick($conv)
-  [void](WaitIdle $p.Id $main 90)
-  $st = Status $main
-  Check 'n1.click.under.progress' (($wait -ne [IntPtr]::Zero) -and $disabled) "(precondition: the click landed while the progress window disabled the editor) window=$($wait -ne [IntPtr]::Zero) disabled=$disabled"
-  Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') $st
-  Check 'n1.lost.click.no.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
+  if (($wait -ne [IntPtr]::Zero) -and $disabled) {
+    [W]::MouseClick($conv)
+    [void](WaitIdle $p.Id $main 90)
+    $st = Status $main
+    Check 'n1.click.under.progress' $true "(precondition: the click landed while the progress window disabled the editor) window=True disabled=$disabled"
+    Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') $st
+    Check 'n1.lost.click.no.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
+  } else {
+    # let the add finish; NO click, so no real Convert is started. The progress window shows only after a 400 ms delay,
+    # so first wait for the row to land (WaitIdle alone can see a brief false idle before the window opens).
+    $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and -not ([CT]::Items($src) -contains $pas)) { Start-Sleep -Milliseconds 250 }
+    [void](WaitIdle $p.Id $main 90)
+    Check 'n1.click.under.progress' $false "precondition: progress window never appeared (window=$($wait -ne [IntPtr]::Zero) disabled=$disabled); click skipped, n1.lost.click.* not evaluated"
+  }
   [void][W]::Send($src, 0x0185, [IntPtr]1, [IntPtr]0)   # LB_SETSEL row 0, then Delete: step 4 starts from an empty list
   Click $del
   Start-Sleep -Seconds 1
