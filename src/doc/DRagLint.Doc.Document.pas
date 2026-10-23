@@ -976,6 +976,18 @@ begin
 
   Result:= BuildForSymbol(AStore, Syms[0], AHandles, AIncludeSeeAlso, AIncludeSince, ABaseDir,
     AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
+  // N-12: overloads share one qualified name and have no qname form of their
+  // own, so taking Syms[0] alone left every later overload unreachable from
+  // --qname. Their edits sit on different declaration lines of the same unit and
+  // are applied as one set, exactly as --unit applies a whole file's.
+  for var I:= 1 to High(Syms) do
+  begin
+    var More: TDocumentResult:= BuildForSymbol(AStore, Syms[I], AHandles, AIncludeSeeAlso, AIncludeSince,
+      ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
+    if Length(More.Edits) = 0 then Continue;
+    if Length(Result.Edits) = 0 then Result.Action:= More.Action;
+    Result.Edits:= Result.Edits + More.Edits;
+  end;
 end;
 
 { v(2026-09-23): the repair branch's no-change test with the legacy `Pure` line
