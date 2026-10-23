@@ -19,6 +19,7 @@ uses
   , System.Generics.Collections   { GBars -- the live strips a note reaches }
   , DragLint.Plugin.JobQueue
   , DRagLint.Core.EngineHold      { EngineIsHeld -- announced from the tick below }
+  , DragLint.Plugin.QueueText     { DLQueueLines -- the pure task-line formatter }
   ;
 
 type
@@ -28,6 +29,10 @@ type
     FBar     : TProgressBar;
     FDepthLbl: TLabel      ;
     FCancel  : TButton     ;
+    { 2026-10-23 (spec ide-help-line 3.6): the Now:/Next:/Then: task lines,
+      under the one-line strip. Hidden, and the strip one row high, while no
+      job waits -- the strip then looks exactly as before. }
+    FLinesLbl: TLabel      ;
     FTimer   : TTimer      ;
     FLast    : TQueueState ;
     FHasLast : Boolean     ;
@@ -40,6 +45,7 @@ type
     procedure HandleCancel(Sender: TObject);
     procedure Relayout;
     procedure ApplyState(const AState: TQueueState);
+    procedure ApplyTaskLines(const AState: TQueueState);
     function  StatesEqual(const A, B: TQueueState): Boolean;
   protected
     procedure Resize; override; { lays out once parented/sized (handle-safe) }
@@ -67,6 +73,16 @@ type
 procedure SetDragLintNote(const AText: string);
 
 implementation
+
+const
+  { The strip's one-line row: the state label, bar, depth and Cancel live here. }
+  STRIP_ROW_HEIGHT = 26;
+  { Left inset of every label in the strip. }
+  LABEL_INSET = 6;
+  { Space the state label leaves before the depth label. }
+  STATE_LABEL_GAP = 10;
+  { Extra pixels per task line above the font's own height. }
+  TASK_LINE_LEADING = 4;
 
 var
   { Every live strip, so a note reaches all of them; and the note itself, so a
@@ -102,7 +118,7 @@ begin
   if GBars = nil then GBars:= TList<TDragLintStatusBar>.Create;
   GBars.Add(Self);
   Align     := alBottom;
-  Height    := 26;
+  Height    := STRIP_ROW_HEIGHT;
   BevelOuter:= bvNone;
   Caption   := '';
   FHasLast  := False;
@@ -134,6 +150,15 @@ begin
   FCancel.Enabled := False;
   FCancel.OnClick := HandleCancel;
 
+  FLinesLbl:= TLabel.Create(Self);
+  FLinesLbl.Parent     := Self;
+  FLinesLbl.AutoSize   := False;
+  FLinesLbl.WordWrap   := False; { one task per line, via sLineBreak }
+  FLinesLbl.Transparent:= True;
+  FLinesLbl.Layout     := tlTop;
+  FLinesLbl.Caption    := '';
+  FLinesLbl.Visible    := False;
+
   { NB: do NOT lay out here -- reading ClientHeight/Width (or any handle-bound
     property) in the ctor forces handle creation while the panel still has no
     parent -> "control has no parent window". Layout happens in Resize, which the
@@ -160,13 +185,16 @@ begin
   { Guard: Resize can fire during construction (Align/Height set) before the
     child controls exist; and use Height/Width (field reads) not ClientHeight/
     ClientWidth (which force a window handle). }
-  if FCancel = nil then Exit;
-  H:= Height;
+  if (FCancel = nil) or (FLinesLbl = nil) then Exit;
+  { The controls keep to the first row; task lines (ApplyTaskLines) fill the
+    rest of the height below it. }
+  H:= STRIP_ROW_HEIGHT;
   W:= Width;
   FCancel  .SetBounds(W - 4 - 60, (H - 22) div 2, 60, 22);
   FBar     .SetBounds(FCancel.Left - 8 - 150, (H - 14) div 2, 150, 14);
   FDepthLbl.SetBounds(FBar.Left - 8 - 80, 0, 80, H);
-  FStateLbl.SetBounds(6, 0, FDepthLbl.Left - 10, H);
+  FStateLbl.SetBounds(LABEL_INSET, 0, FDepthLbl.Left - STATE_LABEL_GAP, H);
+  FLinesLbl.SetBounds(LABEL_INSET, H, W - 2 * LABEL_INSET, Height - H);
 end;
 
 procedure TDragLintStatusBar.Resize;
@@ -265,6 +293,20 @@ begin
   ApplyState(S);
 end;
 
+procedure TDragLintStatusBar.ApplyTaskLines(const AState: TQueueState);
+var
+  Lines : TArray<string>;
+  NewH  : Integer;
+begin
+  Lines:= DLQueueLines(AState);
+  FLinesLbl.Caption:= string.Join(sLineBreak, Lines);
+  FLinesLbl.Visible:= Length(Lines) > 0;
+  { Font.Height, not Canvas.TextHeight: no handle is forced (see Create). With
+    no lines this is exactly STRIP_ROW_HEIGHT -- the strip as it always was. }
+  NewH:= STRIP_ROW_HEIGHT + Length(Lines) * (Abs(Font.Height) + TASK_LINE_LEADING);
+  if Height <> NewH then Height:= NewH; { Resize -> Relayout places the label }
+end;
+
 procedure TDragLintStatusBar.ApplyState(const AState: TQueueState);
 begin
   if AState.Running then
@@ -300,6 +342,7 @@ begin
   else
     FDepthLbl.Caption:= '';
   FCancel.Enabled:= AState.QueueDepth > 0;
+  ApplyTaskLines(AState);
 
   { PAINT NOW, DO NOT MERELY INVALIDATE.
 

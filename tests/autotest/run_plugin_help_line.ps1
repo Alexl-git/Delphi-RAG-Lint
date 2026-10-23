@@ -165,6 +165,11 @@ try {
   Check 'W8 the Test button opens the all-features page of the root as typed' `
     ($of.Contains('DLOpenHelpUrl(DLHelpAllUrl(DLNormaliseHelpRoot(FEdHelpRoot.Text)));')) ''
 
+  $sbw = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.StatusBar.pas'))
+  $atl = [regex]::Match($sbw, 'procedure TDragLintStatusBar\.ApplyTaskLines[\s\S]*?\r?\nend;').Value
+  Check 'W9 the strip renders DLQueueLines and grows by lines * line height (0 lines = one row, as before)' `
+    ($atl.Contains('DLQueueLines(AState)') -and $atl.Contains('STRIP_ROW_HEIGHT + Length(Lines) *') -and $sbw.Contains('ApplyTaskLines(AState);')) ''
+
   Write-Host '-- Q: queue task lines (spec 3.6)' -ForegroundColor Cyan
   Eq 'Q1 depth 0 -> no lines (the strip stays as today)'       'queue.d0'      '0'
   Eq 'Q2 depth 1 -> Now (pct + phase) + Next'                  'queue.d1'      'Now: Index project - 45%  uMain.pas|Next: Lint all'
