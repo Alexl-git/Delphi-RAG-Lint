@@ -38,6 +38,7 @@ type
     FSource    : string;
     FConfidence: TMenuConfidence;
     FIdent     : string;
+    FIdentPath : string;
     FDisabled  : Boolean;
     FHasClick  : Boolean;
     FParented  : Boolean;
@@ -55,6 +56,9 @@ type
     property Confidence: TMenuConfidence read FConfidence write FConfidence;
     /// <summary>Foreign identifier of an external root; '' otherwise.</summary>
     property Ident: string read FIdent write FIdent;
+    /// <summary>File (index path) whose code names Ident -- for a DFM component,
+    /// the form's own .pas; '' when not an external root.</summary>
+    property IdentPath: string read FIdentPath write FIdentPath;
     /// <summary>Walker state: Enabled := False was seen.</summary>
     property Disabled: Boolean read FDisabled write FDisabled;
     /// <summary>Walker state: an OnClick was assigned.</summary>
@@ -113,8 +117,14 @@ type
     function AddRoot(const pCaption, pSource: string): TMenuNode;
     /// <summary>Adopts pNode (already created) as a root.</summary>
     procedure AdoptRoot(pNode: TMenuNode);
-    /// <summary>The external root for pIdent, created on first use.</summary>
-    function ExternalRoot(const pIdent, pSource: string): TMenuNode;
+    /// <summary>The external root for pIdent as named in pIdentPath, created on
+    /// first use.</summary>
+    /// <param name="pIdent">The foreign identifier, e.g. mnuTools.</param>
+    /// <param name="pSource">file:line of the first Add under it.</param>
+    /// <param name="pIdentPath">File whose code names pIdent. Two forms that
+    /// each own an item called mnuTools get two external roots.</param>
+    /// <returns>The root; owned by the tree.</returns>
+    function ExternalRoot(const pIdent, pSource: string; const pIdentPath: string = ''): TMenuNode;
     /// <summary>Adds a note line (dynamic caption, unparented item, ...).</summary>
     procedure AddNote(const pNote: string);
     function Roots: TObjectList<TMenuNode>;
@@ -346,14 +356,15 @@ begin
   FRoots.Add(pNode);
 end;
 
-function TMenuTree.ExternalRoot(const pIdent, pSource: string): TMenuNode;
+function TMenuTree.ExternalRoot(const pIdent, pSource: string; const pIdentPath: string = ''): TMenuNode;
 var
   N: TMenuNode;
 begin
   for N in FExternal do
-    if SameText(N.Ident, pIdent) then Exit(N);
+    if SameText(N.Ident, pIdent) and SameText(N.IdentPath, pIdentPath) then Exit(N);
   Result:= TMenuNode.Create(mnkExternalRoot, pIdent, pSource);
-  Result.Ident   := pIdent;
+  Result.Ident    := pIdent;
+  Result.IdentPath:= pIdentPath;
   Result.Parented:= True;
   FExternal.Add(Result);
 end;
@@ -483,7 +494,11 @@ var
 begin
   Result:= TJSONObject.Create;
   Result.AddPair('kind', MenuKindName(pNode.Kind));
-  if pNode.Kind = mnkExternalRoot then Result.AddPair('ident', pNode.Ident)
+  if pNode.Kind = mnkExternalRoot then
+  begin
+    Result.AddPair('ident', pNode.Ident);
+    Result.AddPair('identPath', pNode.IdentPath);
+  end
   else if pNode.Kind <> mnkSeparator then
   begin
     Result.AddPair('caption', pNode.Caption);
@@ -634,7 +649,7 @@ type
     function ResolveRoutine(const pName, pFromPath: string): TRoutineInfo;
     function QualifyHandler(const pText, pFromPath: string): string;
     function ConstDecl(const pName, pFromPath: string; out pFile: TWalkFile): TTSNode;
-    function IsMenuTypedForeign(const pIdent, pFromPath: string): Boolean;
+    function IsMenuTypedForeign(const pIdent, pFromPath: string; pUnknown: Boolean = True): Boolean;
     function CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;
     function LiteralFunctionCaptions(const pName, pFromPath: string; out pCaptions: TArray<string>): Boolean;
     function ConstArrayCaptions(const pArr, pField, pFromPath: string; out pCaptions: TArray<string>): Boolean;
@@ -1054,8 +1069,10 @@ end;
 
 { spec 4.6: a foreign parent must be a menu-typed component, field or
   variable -- a TObjectList<TMenuItem> that holds items for teardown is not.
-  An identifier the index does not know is accepted (an inline var). }
-function TWalkCore.IsMenuTypedForeign(const pIdent, pFromPath: string): Boolean;
+  An identifier the index does not know is accepted (an inline var) unless
+  pUnknown is False (the call-relevance test, which must not descend into
+  every routine that receives some unknown name). }
+function TWalkCore.IsMenuTypedForeign(const pIdent, pFromPath: string; pUnknown: Boolean = True): Boolean;
 var
   QI : TFDQuery;
   Sig: string;
@@ -1064,7 +1081,7 @@ begin
     + 'WHERE s.name = :n COLLATE NOCASE AND s.kind IN (''field'',''var'',''local_var'',''component'',''param'') '
     + 'ORDER BY (lower(f.path) = :f) DESC, s.id LIMIT 1', [LastSegment(pIdent), LowerCase(pFromPath)]);
   try
-    if QI.Eof then Exit(True);
+    if QI.Eof then Exit(pUnknown);
     Sig:= QI.FieldByName('g').AsString.Trim;
   finally
     QI.Free;
@@ -1422,6 +1439,12 @@ begin
   Relevant:= False;
   for V in Vals do
     if V.Kind in [mvNode, mvProc] then Relevant:= True;
+  { spec 4.6 with the parent passed in: AddMenuItem(mnuTools, ..) where
+    mnuTools is a menu-typed component the index knows (Micronite helpers) }
+  if not Relevant then
+    for V in Vals do
+      if (V.Kind = mvForeign) and TRegEx.IsMatch(V.Text, '^[A-Za-z_][\w.]*$')
+        and IsMenuTypedForeign(V.Text, V.Path, False) then Relevant:= True;
   if not Relevant then
   begin
     Result.Kind:= mvForeign;
@@ -1528,6 +1551,7 @@ var
   X, P       : TMValue;
   Index      : Integer;
   Ident      : string;
+  IdentPath  : string;
   Xs         : TArray<TMenuNode>;
   N          : TMenuNode;
   I          : Integer;
@@ -1565,7 +1589,7 @@ begin
       Base:= pReceiver.ChildByField('lhs');
       if N.Parented then Continue;
       if SameText(LastSegment(Text(pFrame, Base)), 'MainMenu') then FTree.AdoptRoot(N)
-      else FTree.ExternalRoot(Text(pFrame, Base), Loc(pFrame, pReceiver)).AddChild(N);
+      else FTree.ExternalRoot(Text(pFrame, Base), Loc(pFrame, pReceiver), pFrame.F.Path).AddChild(N);
       Continue;
     end;
     P:= Eval(pReceiver, pFrame);
@@ -1578,10 +1602,13 @@ begin
     { a foreign parent: a DFM item, a looked-up IDE menu. A node already placed
       is only being REMEMBERED (GMenuItems.Add(RootMenu)), not re-parented. }
     if N.Parented or (P.Kind <> mvForeign) then Continue;
-    Ident:= Text(pFrame, pReceiver);
-    if not IsMenuTypedForeign(Ident, pFrame.F.Path) then Continue;
-    if pInsert and (Index >= 0) then FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver)).InsertChild(Index, N)
-    else FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver)).AddChild(N);
+    { P carries the identifier as the CALLER wrote it: a helper's pParent bound
+      to mnuTools names mnuTools in the form's file, not pParent in the helper }
+    Ident:= if P.Text <> '' then P.Text else Text(pFrame, pReceiver);
+    IdentPath:= if P.Path <> '' then P.Path else pFrame.F.Path;
+    if not IsMenuTypedForeign(Ident, IdentPath) then Continue;
+    if pInsert and (Index >= 0) then FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).InsertChild(Index, N)
+    else FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).AddChild(N);
   end;
 end;
 

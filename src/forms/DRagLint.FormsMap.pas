@@ -12,7 +12,9 @@ unit DRagLint.FormsMap;
 /// columns but changes what cells MEAN: Modal is read from the created variable,
 /// a form method or the .dfm and a '?' always carries its reason in Notes;
 /// Before you start covers every hop, text-scan edges and guard messages; popup
-/// forms come from drag-lint-project.json. The plugin's EXPECTED_FORMS_CSV_ALGO
+/// forms come from drag-lint-project.json. v8 (2026-10-23) grafts code-added
+/// menu items (menu-tree external roots named in the form's own .pas) under
+/// their .dfm TMenuItem, so How to open names them. The plugin's EXPECTED_FORMS_CSV_ALGO
 /// must move with FORMS_CSV_ALGORITHM, and the exe and plugin deploy together.</remarks>
 
 interface
@@ -122,6 +124,7 @@ uses
   System.RegularExpressions
   , System.JSON
   , DRagLint.FormsMap.Dfm
+  , DRagLint.MenuTree
   ;
 
 /// <summary>Reads a .pas file as lines with comment content blanked out, for
@@ -192,7 +195,7 @@ const
   // v6: index-first edges (refs + call_edges) with the text scan as fallback, a
   // .dfm-tree location per control (menu / bar / ribbon / tab path), and the
   // tester columns (Click, Handler, Opened by, Modal, Confidence ...).
-  FORMS_CSV_ALGORITHM = '7'; // bump when the edge or path algorithm, or a cell's meaning, changes
+  FORMS_CSV_ALGORITHM = '8'; // bump when the edge or path algorithm, or a cell's meaning, changes
 
   POPUP_FORMS_KEY  = 'popupForms'; // R1: key in <project>\_D-RAG\drag-lint-project.json
   POPUP_NOTE_DEFAULT = 'opened as a popup (declared in drag-lint-project.json)';
@@ -1520,6 +1523,7 @@ type
     FRoutines   : TDictionary<string, TRoutineInfo>;
     FEdgeKeys   : TDictionary<string, Boolean>;
     FEdges      : TList<TNavEdge>;
+    FCodeMenus  : TMenuTree; // not owned; nil = no code-built menus
     function TreeFor(const AFormClass: string): TFormDfmTree;
     function LinesOf(const APath: string): TArray<string>;
     function Routine(AStore: TSQLiteSymbolStore; AId: Int64): TRoutineInfo;
@@ -1547,6 +1551,9 @@ type
     procedure AddTextEdges(ATextEdges: TList<TFormEdge>);
     procedure AddTextEdge(const T: TFormEdge);
     property Edges: TList<TNavEdge> read FEdges;
+    /// <summary>v8: menu-tree output whose external roots are grafted into
+    /// each form's .dfm tree. Not owned; set before RunIndexPass.</summary>
+    property CodeMenus: TMenuTree read FCodeMenus write FCodeMenus;
   end;
 
 /// <summary>True when the first (best-ranked) way is something a tester can
@@ -1601,14 +1608,43 @@ begin
   inherited Destroy;
 end;
 
+/// <summary>v8: copies the item / submenu children of a code-built menu node
+/// under ADfmParent. Separators, headers and dynamic captions add no way a
+/// tester can name, so they are skipped.</summary>
+procedure GraftCodeMenu(ATree: TFormDfmTree; ADfmParent: TFormDfmNode; AFrom: TMenuNode);
+var
+  C      : TMenuNode;
+  Handler: string;
+begin
+  for C in AFrom.Children do
+  begin
+    if not (C.Kind in [mnkItem, mnkSubmenu]) then Continue;
+    { qualified Unit.TForm.Method -> the bare method name a .dfm OnClick holds }
+    Handler:= Copy(C.Handler, LastDelimiter('.', C.Handler) + 1, MaxInt);
+    if StartsStr('<', C.Handler) then Handler:= '';
+    GraftCodeMenu(ATree, ATree.AddCodeMenuItem(ADfmParent, C.Caption, Handler), C);
+  end;
+end;
+
 function TNavBuilder.TreeFor(const AFormClass: string): TFormDfmTree;
 var
   N: TFormNode;
+  X: TMenuNode;
+  P: TFormDfmNode;
 begin
   if FTrees.TryGetValue(LowerCase(AFormClass), Result) then Exit;
   Result:= TFormDfmTree.Create;
   FTrees.Add(LowerCase(AFormClass), Result);
-  if FClassToNode.TryGetValue(AFormClass, N) then Result.LoadFromFile(N.DfmPath);
+  if not FClassToNode.TryGetValue(AFormClass, N) then Exit;
+  Result.LoadFromFile(N.DfmPath);
+  if FCodeMenus = nil then Exit;
+  { an external root named in THIS form's .pas whose ident is one of its .dfm items }
+  for X in FCodeMenus.External do
+  begin
+    if not SameText(X.IdentPath, N.PasPath) then Continue;
+    P:= Result.FindMenuItem(Copy(X.Ident, LastDelimiter('.', X.Ident) + 1, MaxInt));
+    if P <> nil then GraftCodeMenu(Result, P, X);
+  end;
 end;
 
 function TNavBuilder.LinesOf(const APath: string): TArray<string>;
@@ -2515,6 +2551,27 @@ begin
   end;
 end;
 
+/// <summary>v8: the project's code-built menus (menu-tree walker), or nil when
+/// the walk cannot run -- a stale index or a setup problem is reported on
+/// stderr and the CSV is written from the .dfm menus alone, as in v7.</summary>
+function LoadCodeMenus(const ADbPath, AProjectFile: string): TMenuTree;
+var
+  W: TMenuWalker;
+begin
+  Result:= nil;
+  try
+    W:= TMenuWalker.Create([ADbPath], AProjectFile);
+    try
+      Result:= W.Walk;
+    finally
+      W.Free;
+    end;
+  except
+    on E: Exception do
+      Writeln(ErrOutput, 'forms-csv: code-built menu items skipped (' + E.ClassName + ': ' + E.Message + ')');
+  end;
+end;
+
 /// <summary>Shared body of GenerateFormsCsv, operating on already-constructed
 /// stores. APrimary is project-scoped (form enumeration + PAS lines); AExtras
 /// are searched only when resolving callers. Caller owns lifetime of both
@@ -2554,6 +2611,7 @@ var
   Hint       : string                        ;
   Hints      : TStringList                   ;
   Popups     : TDictionary<string, string>   ;
+  CodeMenus  : TMenuTree                     ;
 begin
   Sb:= TStringBuilder.Create;
   try
@@ -2572,9 +2630,12 @@ begin
       Also   := TStringList.Create;
       Hints  := nil;
       Popups := nil;
+      CodeMenus:= nil;
       try
         Hints := TStringList.Create;  // dl:ok create-inside-try@3da8 -- Hints and Popups are set to nil before the try, so a raising constructor leaves nil and the finally's Free is a no-op
         Popups:= LoadPopupForms(AProjectFile);
+        CodeMenus:= LoadCodeMenus(APrimaryDbPath, AProjectFile);
+        Builder.CodeMenus:= CodeMenus;
         // v6: index-first edges, then the v5 text scan merged in as a fallback
         // (AddEdge keeps the first edge per From/To/Handler, so index wins).
         Builder.RunIndexPass;
@@ -2757,6 +2818,7 @@ begin
           .Append(#13#10);
         Result:= Sb.ToString;
       finally
+        CodeMenus.Free;
         Popups.Free;
         Hints.Free;
         Also.Free;

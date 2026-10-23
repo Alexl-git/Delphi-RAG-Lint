@@ -113,6 +113,21 @@ type
     /// <param name="ACaption">Caption text with accelerators already removed.</param>
     /// <returns>The ways for that one control.</returns>
     function WaysForCaption(const ACaption: string): TArray<TNavWay>;
+    /// <summary>The non-root TMenuItem component named AName; nil when this
+    /// .dfm has none (a TMainMenu / TPopupMenu of that name does not count).</summary>
+    /// <param name="AName">Component name, case-insensitive.</param>
+    /// <returns>The node, owned by the tree, or nil.</returns>
+    function FindMenuItem(const AName: string): TFormDfmNode;
+    /// <summary>forms-csv v8: adds a menu item built in CODE (a menu-tree
+    /// external-root child) under a .dfm menu item, so WaysForHandler finds
+    /// it with the full main-menu / right-click path.</summary>
+    /// <param name="AParent">A TMenuItem node of this tree (FindMenuItem, or an
+    /// earlier AddCodeMenuItem result for a code submenu); must not be nil.</param>
+    /// <param name="ACaption">Caption as written in code; accelerators are
+    /// stripped where paths are built, as for a .dfm caption.</param>
+    /// <param name="AHandler">Bare OnClick method name; '' for a submenu.</param>
+    /// <returns>The new node (class TMenuItem, no component name), owned by the tree.</returns>
+    function AddCodeMenuItem(AParent: TFormDfmNode; const ACaption, AHandler: string): TFormDfmNode;
   end;
 
 implementation
@@ -134,6 +149,7 @@ const
   BINARY_DFM_SIGNATURE = 'TPF0';
   EVENT_PREFIX   = 'On';
   MAIN_MENU      = 'Main menu';
+  MENU_ITEM_CLASS = 'TMenuItem';
   // Events nobody fires by pressing something: timers and dataset notifications.
   AUTOMATIC_EVENTS : array[0..5] of string = ('OnTimer', 'OnNewRecord', 'OnFilterRecord', 'OnDataChange', 'OnStateChange', 'OnIdle');
   AUTOMATIC_PREFIXES: array[0..2] of string = ('OnAfter', 'OnBefore', 'OnCalc');
@@ -688,6 +704,24 @@ begin
   finally
     L.Free;
   end;
+end;
+
+function TFormDfmTree.FindMenuItem(const AName: string): TFormDfmNode;
+var
+  N: TFormDfmNode;
+begin
+  Result:= nil;
+  if AName = '' then Exit;
+  for N in FNodes do
+    if (N <> FRoot) and not N.IsItem and SameText(N.Name, AName) and SameText(N.CompClass, MENU_ITEM_CLASS) then Exit(N);
+end;
+
+function TFormDfmTree.AddCodeMenuItem(AParent: TFormDfmNode; const ACaption, AHandler: string): TFormDfmNode;
+begin
+  Result:= NewNode(AParent);
+  Result.CompClass:= MENU_ITEM_CLASS;
+  Result.Props.Add('Caption=' + ACaption);
+  if AHandler <> '' then Result.Props.Add('OnClick=' + AHandler);
 end;
 
 end.
