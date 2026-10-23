@@ -114,6 +114,14 @@ Check 'build\pack-lint-release.ps1 does not name featuregen.exe' (-not ($text -m
 Check 'build\pack-lint-release.ps1 does not copy src\tools\featuregen' (-not ($text -match 'src\\tools\\featuregen')) 'the pack script reaches into src\tools\featuregen'
 Check 'the pack script runs the gate, which is where featuregen is called' ($text.Contains('featuregen-gate.ps1')) 'the pack script no longer gates on the generated pages'
 Write-Host ''
+Write-Host 'check 4 -- the offline feature list ships beside the engine'
+
+# The IDE help line reads <engine dir>\help\dl\index.json first (spec
+# docs\superpowers\specs\2026-10-23-ide-help-line-design.md 3.2); the website does
+# not serve the JSON, so an installed plugin has no other copy of the list.
+Check 'WWW\help\dl\index.json is copied' ($text.Contains('Join-Path $repo "WWW\help\dl\index.json"')) 'the help line would show "(feature list not installed)" in every release'
+Check '... into <stage>\help\dl\index.json' ($text.Contains('Join-Path $stg "help\dl\index.json"')) 'the plugin looks for <engine dir>\help\dl\index.json'
+Write-Host ''
 if ($script:Failed) { Write-Host 'RELEASE PACK PAYLOAD GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RELEASE PACK PAYLOAD GUARD: PASS' -ForegroundColor Green
 exit 0
