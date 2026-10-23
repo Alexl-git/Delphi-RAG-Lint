@@ -96,6 +96,7 @@ uses
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
+  , System.Hash
   , System.IOUtils
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
   , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
@@ -623,6 +624,7 @@ type
     PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
     PpNoNearSearch: Boolean   ; // --no-near-search  (v1.2.1 #2) strict BaseDir-only include resolution
     PpTolerances : Boolean    ; // --tolerances  (v1.2.1 #5) opt-in dcc-tolerance ';' replacement pass
+    PpIncludeSites: Boolean  ; // --include-sites (N-06) preprocess-file prints the active include sites instead of the source
     // PP-Task-7: pp-profile define-profile resolver diagnostic verb
     PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
     // PP-Task-9: index-time preprocessing. Preprocessing is ON by default in the
@@ -1707,6 +1709,7 @@ begin
     else if A = '--no-near-search' then Result.PpNoNearSearch:= True
     // v1.2.1 port change #5: opt into the dcc-tolerance pass.
     else if A = '--tolerances' then Result.PpTolerances:= True
+    else if A = '--include-sites' then Result.PpIncludeSites:= True
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -23881,6 +23884,16 @@ begin
   Result:= 0;
 end; // function
 
+// N-06: lowercase hex MD5 of ABytes (preprocess-file --include-sites digest).
+function Md5Hex(const ABytes: TBytes): string;
+var
+  H: THashMD5;
+begin
+  H:= THashMD5.Create;
+  H.Update(ABytes);
+  Result:= LowerCase(H.HashAsString);
+end;
+
 /// <summary>PP-Task-4/6: drag-lint preprocess-file --file PATH [--define SYM]...
 /// [--numeric K=V]... [--include-mode off|defines-only] -- diagnostic dump of the
 /// chunk processor. Reads --file as raw BYTES, builds a TDefineProfile from the
@@ -23897,6 +23910,7 @@ end; // function
 /// (--tolerances, v1.2.1 #5) opts into the dcc-tolerance ';' replacement pass
 /// (offset-identity preserved -- replacement, never insertion).</param>
 /// <returns>0 on success, 2 on usage error / missing file.</returns>
+
 function DoPreprocessFile(const AArgs: TArgs): Integer;
 var
   InBytes : TBytes           ;
@@ -23909,8 +23923,10 @@ var
   Pairs   : TList<TPair<string, Integer>>;
   StdOut  : THandle          ;
   Written : DWORD            ;
+  Sites   : TArray<TPPIncludeSite>;
+  Site    : TPPIncludeSite   ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]'); Exit(2); end;
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]'); Exit(2); end;
   if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
 
   InBytes:= TFile.ReadAllBytes(AArgs.InFile);
@@ -23950,6 +23966,18 @@ begin
   // matching the JS default. Explicit assignment -- Options is a local record,
   // so an unset Boolean would be stack garbage, not False.
   Options.Tolerances:= AArgs.PpTolerances;
+
+  if AArgs.PpIncludeSites then
+  begin
+    // N-06: one TSV line per active, resolved include site -- site, depth, line,
+    // col, resolved byte count, MD5 of the resolved bytes, absolute path.
+    OutBytes:= Preprocess(InBytes, Options, Sites);
+    for Site in Sites do
+      Writeln(Format('site'#9'%d'#9'%d'#9'%d'#9'%d'#9'%s'#9'%s',
+        [Site.Depth, Site.HostLine, Site.HostCol, Length(Site.Resolved),
+         Md5Hex(Site.Resolved), Site.Path]));
+    Exit(0);
+  end;
 
   OutBytes:= Preprocess(InBytes, Options);
 

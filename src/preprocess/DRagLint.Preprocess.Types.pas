@@ -90,6 +90,23 @@ type
     Tolerances : Boolean       ;
   end;
 
+  /// <summary>N-06: one ACTIVE, RESOLVED {$I}/{$INCLUDE} site met by a
+  /// 'defines-only' preprocess run. HostLine/HostCol are the 1-based line and
+  /// column of the directive's opening brace in the file that contains it (the
+  /// top-level file at Depth 0, the including .inc at Depth 1+). Path is the
+  /// absolute resolved include path. Resolved holds the include's preprocessed
+  /// bytes exactly as the recursion produced them -- under the host's live
+  /// defines at that point -- so a consumer parses those, never re-preprocesses.</summary>
+  /// <remarks>Unresolved, inactive and over-depth includes produce no site.
+  /// Sites are recorded in source order (a nested site follows its parent).</remarks>
+  TPPIncludeSite = record
+    HostLine: Integer;
+    HostCol : Integer;
+    Depth   : Integer;
+    Path    : string ;
+    Resolved: TBytes ;
+  end;
+
 /// <summary>Returns a TPPOptions initialized to the JS-oracle defaults:
 /// IncludeMode 'off', empty BaseDir, and NearSearch True (matching
 /// preprocess.js's options.nearSearch !== false default). Use this instead of
