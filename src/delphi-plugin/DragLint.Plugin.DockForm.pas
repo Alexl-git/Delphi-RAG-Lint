@@ -24,6 +24,10 @@ procedure UnregisterDragLintDock; { idempotent teardown }
 /// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
 procedure ShowDragLintDockLintOptions;
 
+/// <summary>Shows the drag-lint dock and puts the caret in its help line
+/// (drag-lint &gt; Help &gt; Help on a feature...).</summary>
+procedure ShowDragLintDockHelpLine;
+
 /// <summary>Shows the drag-lint dock and selects the Uses &amp; Deps tab -- the
 /// reviewed-fix surface for uses-fix and reconcile-project.</summary>
 /// <remarks>Deliberately does NOT refresh either section. The tab runs nothing
@@ -102,6 +106,7 @@ uses
   , DragLint.Plugin.LintOptionsFrame
   , DragLint.Plugin.UsesDepsFrame
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.HelpLine
   ;
 
 {$R *.dfm}
@@ -126,6 +131,7 @@ type
     private
       FPages         : TPageControl;
       FStatusBar     : TDragLintStatusBar; { v0.65.1: R2 job-queue status strip (alBottom) }
+      FHelpLine      : TDLHelpLine       ; { 2026-10-23: help line (alTop), spec ide-help-line 3.4 }
       FStructure     : TForm       ; { embedded TDragLintStructureForm }
       FTabStruct          : TTabSheet   ;
       FTabUnifiedSearch   : TTabSheet   ;
@@ -181,6 +187,9 @@ type
       procedure PopulateButterfly(const AQName, ACallersJson, ACalleesJson: string);
       /// <summary>Brings the Call Graph tab to the front.</summary>
       procedure SelectButterflyTab;
+      /// <summary>Puts the caret in the help line's edit (drag-lint &gt; Help &gt;
+      /// Help on a feature...). Does nothing while the frame cannot take focus.</summary>
+      procedure FocusHelpLine;
   end;
 
   TDragLintDockable = class(TInterfacedObject, INTACustomDockableForm)
@@ -249,6 +258,11 @@ begin
   FStatusBar:= TDragLintStatusBar.Create(Self);
   FStatusBar.Parent:= Self;
 
+  { 2026-10-23: the help line along the top (alTop), created before the page
+    control for the same reason as the strip: alClient fills what is left. }
+  FHelpLine:= TDLHelpLine.Create(Self);
+  FHelpLine.Parent:= Self;
+
   FPages:= TPageControl.Create(Self);
   FPages.Parent  := Self;
   FPages.Align   := alClient;
@@ -305,6 +319,11 @@ end;
 procedure TDragLintDockFrame.SelectLintOptionsTab;
 begin
   if (FPages <> nil) and (FTabLintOptions <> nil) then FPages.ActivePage:= FTabLintOptions;
+end;
+
+procedure TDragLintDockFrame.FocusHelpLine;
+begin
+  if FHelpLine <> nil then FHelpLine.FocusEdit;
 end;
 
 procedure TDragLintDockFrame.SelectUsesDepsTab;
@@ -679,6 +698,12 @@ procedure ShowDragLintDockLintOptions;
 begin
   ShowDragLintDock;
   if GDockFrame <> nil then GDockFrame.SelectLintOptionsTab;
+end;
+
+procedure ShowDragLintDockHelpLine;
+begin
+  ShowDragLintDock;
+  if GDockFrame <> nil then GDockFrame.FocusHelpLine;
 end;
 
 procedure ShowDragLintDockUsesDeps;

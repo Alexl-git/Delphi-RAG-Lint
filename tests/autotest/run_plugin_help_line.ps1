@@ -79,8 +79,6 @@ try {
   Eq 'U13 all features, file'                                  'all.file'      'file:///C:/dl-help/help/dl/index.html'
   Eq 'U14 menu tree, web'                                      'ide.web'       "$site/help/dl/ide/"
   Eq 'U15 menu tree, file'                                     'ide.file'      'file:///C:/dl-help/help/dl/ide/index.html'
-  Eq 'U16 a web root is not a file root'                       'isfile.web'    'False'
-  Eq 'U17 a folder is a file root'                             'isfile.folder' 'True'
   Eq 'U18 file: root -> its local folder'                      'folder.file'   'C:\dl-help'
   Eq 'U19 web root -> no local folder'                         'folder.web'    ''
   Eq 'U20 DL_DEFAULT_HELP_ROOT is the website'                 'default.const' $site
@@ -136,6 +134,30 @@ try {
   Eq 'M17 a context path counts too'                           'caption.context' 'structure-tree'
   Eq 'M18 unknown caption -> empty'                            'caption.none'  ''
   Eq 'M19 an inner segment is not a caption'                   'caption.inner' ''
+
+  Eq 'M20 resolve: an id in the loaded list -> its page'       'resolve.known'   "$site/help/dl/features/call-graph-cyc/"
+  Eq 'M21 resolve: an id NOT in the loaded list -> all features' 'resolve.unknown' "$site/help/dl/"
+  Eq 'M22 resolve: no list loaded -> the page, unchecked'      'resolve.nolist'  "$site/help/dl/features/no-such-id/"
+  Eq 'M23 resolve: nil list -> the page, unchecked'            'resolve.nil'     "$site/help/dl/features/no-such-id/"
+
+  Write-Host '-- W: wiring (source pins; the UI itself needs a live IDE)' -ForegroundColor Cyan
+  $ed = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
+  $df = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.DockForm.pas'))
+  $dpk = [IO.File]::ReadAllText((Join-Path $pluginDir 'dclDragLintWizard.dpk'))
+  $dproj = [IO.File]::ReadAllText((Join-Path $pluginDir 'dclDragLintWizard.dproj'))
+  Check 'W1 the GitHub-wiki constant is gone (spec 3.1)' (-not $ed.Contains('DL_WIKI_BASE_URL')) ''
+  Check 'W2 both existing Help items open their registry ids' `
+    ($ed.Contains("DLOpenHelp('ide-menu-reference')") -and $ed.Contains("DLOpenHelp('effect-summary-legend')")) ''
+  Check 'W3 Help > "Help on a feature..." and "All features (web)" exist' `
+    ($ed.Contains("AddWrappedItem(SubHelp, 'Help on a feature...', InvokeHelpOnFeature)") -and $ed.Contains("AddWrappedItem(SubHelp, 'All features (web)', InvokeHelpAllFeatures)")) ''
+  Check 'W4 the registry-surfaced captions are unchanged (no menu-path drift)' `
+    ($ed.Contains("'IDE Menu Reference (wiki)'") -and $ed.Contains("'Effect Summary Legend (wiki)'")) ''
+  $ctor = [regex]::Match($df, 'constructor TDragLintDockFrame\.Create[\s\S]*?end; // constructor').Value
+  $iSb = $ctor.IndexOf('TDragLintStatusBar.Create'); $iHl = $ctor.IndexOf('TDLHelpLine.Create'); $iPg = $ctor.IndexOf('TPageControl.Create')
+  Check 'W5 the help line is created after the status strip, before the pages' (($iSb -ge 0) -and ($iHl -gt $iSb) -and ($iPg -gt $iHl)) "sb=$iSb hl=$iHl pages=$iPg"
+  $units = 'DragLint.Plugin.HelpIndex','DragLint.Plugin.Help','DragLint.Plugin.HelpLine','DragLint.Plugin.QueueText'
+  $missing = @($units | Where-Object { -not $dpk.Contains("$_ in '$_.pas'") -or -not $dproj.Contains("<DCCReference Include=`"$_.pas`"/>") })
+  Check 'W6 the four new units are in the .dpk contains and the .dproj (HOWTO rule 4)' ($missing.Count -eq 0) "missing: $($missing -join ', ')"
 
   Write-Host '-- Q: queue task lines (spec 3.6)' -ForegroundColor Cyan
   Eq 'Q1 depth 0 -> no lines (the strip stays as today)'       'queue.d0'      '0'

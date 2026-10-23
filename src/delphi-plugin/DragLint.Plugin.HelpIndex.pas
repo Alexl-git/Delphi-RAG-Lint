@@ -111,6 +111,15 @@ function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;
 /// when no path ends with the caption.</returns>
 function DLHelpIdForMenuCaption(const pCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
 
+/// <summary>The URL DLOpenHelp opens for a registry id (spec 3.5).</summary>
+/// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
+/// <param name="pFeatureId">Registry id.</param>
+/// <param name="pIndex">The loaded feature list, or nil.</param>
+/// <returns>The feature page; the all-features page instead when a LOADED list
+/// does not carry the id (a feature without a page is never a soft 404). With no
+/// list (nil, or not loaded) the feature page, unchecked.</returns>
+function DLResolveHelpUrl(const pRoot, pFeatureId: string; const pIndex: TDLHelpIndex): string;
+
 /// <summary>Finds the offline feature list (spec 3.2), first hit wins.</summary>
 /// <param name="pEngineDir">Folder of the resolved drag-lint.exe; may be ''.</param>
 /// <param name="pHelpRoot">The HelpRoot setting; only a file: root is probed.</param>
@@ -146,11 +155,6 @@ function DLHelpAllUrl(const pRoot: string): string;
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
 /// <returns>The menu-tree URL.</returns>
 function DLHelpIdeUrl(const pRoot: string): string;
-
-/// <summary>True when the (normalised) root is a file: root -- an offline copy.</summary>
-/// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
-/// <returns>True for file:/// roots and plain folders.</returns>
-function DLIsFileHelpRoot(const pRoot: string): Boolean;
 
 /// <summary>The local folder behind a file: root (file:///C:/dl-help -> C:\dl-help).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
@@ -195,11 +199,6 @@ begin
   end; // if
   Result:= StripTrailingSlashes(Result.Replace('\', '/'));
   Result:= FILE_SCHEME + Result;
-end; // function
-
-function DLIsFileHelpRoot(const pRoot: string): Boolean;
-begin
-  Result:= DLNormaliseHelpRoot(pRoot).StartsWith(FILE_SCHEME, True);
 end; // function
 
 function DLHelpRootFolder(const pRoot: string): string;
@@ -389,6 +388,17 @@ begin
   Result:= '';
   for var P in pPaths do
     if (Result = '') or (Length(P) < Length(Result)) then Result:= P;
+end; // function
+
+function DLResolveHelpUrl(const pRoot, pFeatureId: string; const pIndex: TDLHelpIndex): string;
+begin
+  if (pIndex <> nil) and pIndex.Loaded then
+  begin
+    for var E in pIndex.Entries do
+      if SameText(E.Id, Trim(pFeatureId)) then Exit(DLHelpUrl(pRoot, E.Id));
+    Exit(DLHelpAllUrl(pRoot));
+  end; // if
+  Result:= DLHelpUrl(pRoot, pFeatureId);
 end; // function
 
 function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;

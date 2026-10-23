@@ -43,8 +43,6 @@ begin
   Put('all.file', DLHelpAllUrl(FILEROOT));
   Put('ide.web', DLHelpIdeUrl(WEB));
   Put('ide.file', DLHelpIdeUrl(FILEROOT));
-  Put('isfile.web', BoolToStr(DLIsFileHelpRoot(WEB), True));
-  Put('isfile.folder', BoolToStr(DLIsFileHelpRoot('C:\dl-help'), True));
   Put('folder.file', DLHelpRootFolder(FILEROOT));
   Put('folder.web', DLHelpRootFolder(WEB));
   Put('default.const', DL_DEFAULT_HELP_ROOT);
@@ -193,6 +191,16 @@ begin
   Put('caption.context', DLHelpIdForMenuCaption('Recycle Cache', Rows));
   Put('caption.none', DLHelpIdForMenuCaption('Nope', Rows));
   Put('caption.inner', DLHelpIdForMenuCaption('Refactor', Rows));
+  Idx:= TDLHelpIndex.Create;
+  try
+    Put('resolve.nolist', DLResolveHelpUrl(DL_DEFAULT_HELP_ROOT, 'no-such-id', Idx));
+    Put('resolve.nil', DLResolveHelpUrl(DL_DEFAULT_HELP_ROOT, 'no-such-id', nil));
+    Idx.LoadFromFile(TPath.Combine(pFixtureDir, 'index-sample.json'));
+    Put('resolve.known', DLResolveHelpUrl(DL_DEFAULT_HELP_ROOT, 'call-graph-cyc', Idx));
+    Put('resolve.unknown', DLResolveHelpUrl(DL_DEFAULT_HELP_ROOT, 'no-such-id', Idx));
+  finally
+    Idx.Free;
+  end; // try
 end; // procedure
 
 function QueueState(const pDepth, pPercent: Integer; const pPhase: string;
