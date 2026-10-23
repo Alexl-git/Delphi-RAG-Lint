@@ -1046,6 +1046,8 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--proxy` |  |  |  |
 | `--delphi-lsp` | `<path>` |  |  |
 | `--trace` | `<file>` |  |  |
+| `--merge-diagnostics` |  |  |  |
+| `--merge-budget-ms` | `<n>` |  |  |
 
 Described in [lsp](../../docs/wiki/lsp.md).
 

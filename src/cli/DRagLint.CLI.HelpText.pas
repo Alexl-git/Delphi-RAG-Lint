@@ -183,9 +183,11 @@ begin
   Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
   Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
   Writeln('                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.');
-  Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
+  Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
+  Writeln('                               --merge-diagnostics: append drag-lint''s lint findings to DelphiLSP''s publishDiagnostics (one notification, source-tagged); OFF by default.');
+  Writeln('                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP''s bytes untouched (default 300).');
   Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
   Writeln('                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured');
