@@ -7981,6 +7981,8 @@ var
   Findings       : TList<TLintFinding>        ;
   Opened         : TDictionary<string, TTSPoint>;
   ClosedInFinally: TDictionary<string, Boolean> ;
+  PlainActiveTypes: TDictionary<string, Boolean>;  // N-13: types with an Active FIELD
+  LocalTypes     : TDictionary<string, string> ;  // this routine's local -> type name
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -8079,6 +8081,86 @@ var
     Result:= (not P.IsNull) and (P.NodeType = 'statement');
   end;
 
+  { N-13. True when ADeclNode (a declField / declVar) names AName before its
+    type -- the identifiers of `A, B: T` all precede the type field. }
+  function DeclNames(const ADeclNode: TTSNode; const AName: string): Boolean;
+  var
+    I, TypeStart: Integer;
+    Ty, Ch      : TTSNode;
+  begin
+    Result:= False;
+    Ty:= ADeclNode.ChildByField('type');
+    TypeStart:= if Ty.IsNull then MaxInt else Integer(Ty.StartByte);
+    for I:= 0 to ADeclNode.NamedChildCount - 1 do
+    begin
+      Ch:= ADeclNode.NamedChild(I);
+      if (Ch.NodeType = 'identifier') and (Integer(Ch.StartByte) < TypeStart) and SameText(NodeStr(Ch), AName) then Exit(True);
+    end;
+  end;
+
+  function HasActiveField(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'declField') and DeclNames(N, 'Active') then Exit(True);
+    for I:= 0 to N.NamedChildCount - 1 do
+      if HasActiveField(N.NamedChild(I)) then Exit(True);
+  end;
+
+  { N-13. A class or record declared in this file with its own FIELD named
+    Active is not a TDataSet (whose Active is a property), so X.Active := True
+    on a local of that type opens no cursor. Single-file lint has no type
+    information, so only types declared in the same file are recognised. }
+  procedure CollectPlainActiveTypes(const N: TTSNode);
+  var
+    I    : Integer;
+    NameN: TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NameN:= N.ChildByField('name');
+      if not NameN.IsNull and HasActiveField(N.ChildByField('type')) then
+        PlainActiveTypes.AddOrSetValue(LowerCase(NodeStr(NameN)), True);
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectPlainActiveTypes(N.NamedChild(I));
+  end;
+
+  { Records ADefProc's own local var names -> declared type name (lower case). }
+  procedure CollectLocalTypes(const ADefProc: TTSNode);
+  var
+    I, J, K: Integer;
+    Sec, DV, Ty, Ch: TTSNode;
+  begin
+    for I:= 0 to ADefProc.NamedChildCount - 1 do
+    begin
+      Sec:= ADefProc.NamedChild(I);
+      if Sec.NodeType <> 'declVars' then Continue;
+      for J:= 0 to Sec.NamedChildCount - 1 do
+      begin
+        DV:= Sec.NamedChild(J);
+        if DV.NodeType <> 'declVar' then Continue;
+        Ty:= DV.ChildByField('type');
+        if Ty.IsNull then Continue;
+        for K:= 0 to DV.NamedChildCount - 1 do
+        begin
+          Ch:= DV.NamedChild(K);
+          if (Ch.NodeType = 'identifier') and (Ch.StartByte < Ty.StartByte) then
+            LocalTypes.AddOrSetValue(LowerCase(NodeStr(Ch)), LowerCase(Trim(NodeStr(Ty))));
+        end;
+      end;
+    end;
+  end;
+
+  function IsPlainActiveLocal(const AVar: string): Boolean;
+  var
+    Ty: string;
+  begin
+    Result:= LocalTypes.TryGetValue(AVar, Ty) and PlainActiveTypes.ContainsKey(Ty);
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -8095,7 +8177,7 @@ var
       else if SameText(M, 'Close') and AInFinally then ClosedInFinally.AddOrSetValue(V, True);
     end
     else if IsActiveAssign(N, True, V) then
-    begin if not Opened.ContainsKey(V) then Opened.Add(V, N.StartPoint); end
+    begin if not Opened.ContainsKey(V) and not IsPlainActiveLocal(V) then Opened.Add(V, N.StartPoint); end
     else if IsActiveAssign(N, False, V) and AInFinally then ClosedInFinally.AddOrSetValue(V, True);
     { Checked SEPARATELY, not as an else-arm: the branch above already consumed
       the DotMethod result for the Open/Close names, and a Free would otherwise
@@ -8131,6 +8213,8 @@ var
         Opened         := TDictionary<string, TTSPoint>.Create;
         ClosedInFinally:= TDictionary<string, Boolean> .Create;
         try
+          LocalTypes.Clear;
+          CollectLocalTypes(N);
           WalkBody(Body, False);
           for Pair in Opened do
             if not ClosedInFinally.ContainsKey(Pair.Key) then
@@ -8161,11 +8245,15 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
+  PlainActiveTypes:= TDictionary<string, Boolean>.Create;
+  LocalTypes:= TDictionary<string, string>.Create;
   try
-
+    CollectPlainActiveTypes(PF.Tree.RootNode);
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    LocalTypes.Free;
+    PlainActiveTypes.Free;
     Findings.Free;
   end;
 end; // function
