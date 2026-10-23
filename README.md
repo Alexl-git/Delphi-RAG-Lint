@@ -973,7 +973,7 @@ before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Del
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol | `--apply`, `--json` |
+| `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol (every overload of the name) | `--apply`, `--json` |
 | `document --unit <f.pas>` | Document every public decl in a unit (facts-only by default; trivial accessors skipped) | `--apply`, `--stubs`, `--include-accessors` |
 | `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise) | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
 | [`document-all`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/document-all) | Document every public decl in every indexed unit (no project scope) | `--stubs`, `--apply` |
