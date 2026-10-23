@@ -1655,6 +1655,7 @@ var
           (declEnumValue), AND a default parameter value (declArg) -- all three
           share the same 'defaultValue: (kEq) <value>' wrapper in this grammar;
         - a case label: parent 'caseLabel';
+        - the whole rhs of an assignment to a dotted field (a defaults table);
         - an array/set range bound (e.g. 'array[0..9]'): parent 'range';
         - a typed-const/const-array initializer element: parent 'arrInitializer',
           'recInitializer', or 'recInitializerField' (mirrors the exempt set
@@ -1680,6 +1681,14 @@ var
         var IsExempt: Boolean :=
           (LitPT = 'defaultValue') or (LitPT = 'caseLabel') or (LitPT = 'range')
           or (LitPT = 'arrInitializer') or (LitPT = 'recInitializer') or (LitPT = 'recInitializerField');
+        { a defaults table (N-12): the literal is the WHOLE rhs of an assignment
+          to a named field (`Result.MaxLen := 180`) -- the field name states its
+          meaning as a const name would. Part of an rhs, or a plain local
+          target, is still reported. }
+        if (not IsExempt) and (LitPT = 'assignment')
+           and (LitPrnt.ChildByField('rhs') = N)
+           and (LitPrnt.ChildByField('lhs').NodeType = 'exprDot') then
+          IsExempt:= True;
         if not IsExempt then
         begin
           var Anc: TTSNode := LitPrnt;
