@@ -160,8 +160,8 @@ try {
     ($ed.Contains("DLOpenHelp('ide-menu-reference')") -and $ed.Contains("DLOpenHelp('effect-summary-legend')")) ''
   Check 'W3 Help > "Help on a feature..." and "All features (web)" exist' `
     ($ed.Contains("AddWrappedItem(SubHelp, 'Help on a feature...', InvokeHelpOnFeature)") -and $ed.Contains("AddWrappedItem(SubHelp, 'All features (web)', InvokeHelpAllFeatures)")) ''
-  Check 'W4 the registry-surfaced captions are unchanged (no menu-path drift)' `
-    ($ed.Contains("'IDE Menu Reference (wiki)'") -and $ed.Contains("'Effect Summary Legend (wiki)'")) ''
+  Check 'W4 the registry-surfaced captions carry no "(wiki)" suffix and match the registry surfaces' `
+    (($ed.Contains("'IDE Menu Reference'") -and $ed.Contains("'Effect Summary Legend'") -and -not $ed.Contains('Reference (wiki)') -and -not $ed.Contains('Legend (wiki)'))) ''
   $ctor = [regex]::Match($df, 'constructor TDragLintDockFrame\.Create[\s\S]*?end; // constructor').Value
   $iSb = $ctor.IndexOf('TDragLintStatusBar.Create'); $iHl = $ctor.IndexOf('TDLHelpLine.Create'); $iPg = $ctor.IndexOf('TPageControl.Create')
   Check 'W5 the help line is created after the status strip, before the pages' (($iSb -ge 0) -and ($iHl -gt $iSb) -and ($iPg -gt $iHl)) "sb=$iSb hl=$iHl pages=$iPg"

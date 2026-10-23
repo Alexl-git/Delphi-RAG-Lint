@@ -15,7 +15,7 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Help > Effect Summary Legend (wiki)",
+      "path": "drag-lint > Help > Effect Summary Legend",
       "steps": ["Choose drag-lint > Help > Effect Summary Legend (wiki)", "Look up the token (g, h, s, `p<k>`) shown by hover or ask effects"]
     }
   ],

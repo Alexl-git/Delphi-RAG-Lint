@@ -6759,8 +6759,8 @@ begin
   RootMenu.Add(SubHelp);
   AddWrappedItem(SubHelp, 'Help on a feature...', InvokeHelpOnFeature);
   AddWrappedItem(SubHelp, 'All features (web)', InvokeHelpAllFeatures);
-  AddWrappedItem(SubHelp, 'IDE Menu Reference (wiki)', InvokeHelpMenuReference);
-  AddWrappedItem(SubHelp, 'Effect Summary Legend (wiki)', InvokeHelpEffectLegend);
+  AddWrappedItem(SubHelp, 'IDE Menu Reference', InvokeHelpMenuReference);
+  AddWrappedItem(SubHelp, 'Effect Summary Legend', InvokeHelpEffectLegend);
   AddWrappedItem(RootMenu, 'About'                          , InvokeAbout          );
 
   { v0.42: also surface the dockable panel under View > Tool Windows. This item
