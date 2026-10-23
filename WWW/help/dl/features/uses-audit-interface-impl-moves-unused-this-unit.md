@@ -29,9 +29,9 @@ Full flag list: [uses-audit in the CLI reference](../cli.md#uses-audit).
 
 ## Where to click
 
-* RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...**
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...**
    1. Open the unit in the editor
-   2. Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...
+   2. Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...
    3. Read the suggested moves and the unused entries
    4. From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`
 

@@ -1,0 +1,12 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>MenuTreeFixture.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="MT.Wrapper.pas"/>
+    <DCCReference Include="MT.Catalog.pas"/>
+    <DCCReference Include="MT.Builder.pas"/>
+    <DCCReference Include="MT.Dynamic.pas"/>
+    <DCCReference Include="MT.Dfm.pas"><Form>FixtureForm</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>

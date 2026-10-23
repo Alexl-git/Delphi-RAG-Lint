@@ -156,6 +156,8 @@ uses
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
+  , DRagLint.MenuTree
+  , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
   , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
@@ -304,6 +306,10 @@ type
     WikiList        : Boolean       ; // --list : every topic in the resolved DBs
     WikiCheck       : Boolean       ; // --check: SeeCode drift + duplicate-name gate
     Rule            : string        ;
+    { N-02: '<first>, <second>' when --rule was given twice with DIFFERENT ids.
+      Rule holds one id, so the earlier one used to be dropped in silence; Run
+      refuses the command line instead (exit 2). '' otherwise. }
+    RuleConflict    : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -466,6 +472,7 @@ type
     WorkspaceConfig: string; // --config <path>
     // forms-csv
     RootForm: string; // forms-csv: --root <TfrmMAIN> (auto-detect if '')
+    RegistryDir: string; // menu-drift: --registry <features dir>
     // library-drift / selftest drift
     Roots: TArray<string>; // --root <dir> repeatable (drift check)
     // v0.45: index manifest (Task 1)
@@ -1282,7 +1289,13 @@ begin
       Inc(i);
       Result.OfName:= ParamStr(i);
     end
-    else if (A = '--rule') and (i < ParamCount) then begin Inc(i); Result.Rule:= ParamStr(i); end
+    else if (A = '--rule') and (i < ParamCount) then
+    begin
+      Inc(i);
+      if (Result.Rule <> '') and (not SameText(Result.Rule, ParamStr(i))) and (Result.RuleConflict = '') then
+        Result.RuleConflict:= Result.Rule + ', ' + ParamStr(i);
+      Result.Rule:= ParamStr(i);
+    end
     else if (A = '--exclude-under') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1528,6 +1541,11 @@ begin
     else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
     else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
     else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
+    else if (A = '--registry') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RegistryDir:= ParamStr(i);
+    end
     else if (A = '--root') and (i < ParamCount) then
     begin
       Inc(i);
@@ -10037,13 +10055,16 @@ var
     Result:= LowerCase(P) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
   end;
 
-  { One hint per marker, never one per finding that happened to share the line. }
-  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string);
+  { One hint per marker, never one per finding that happened to share the line.
+    AMarkerRule is the marked rule id: one `dl:ok` line can review SEVERAL rules,
+    and keying on the line alone dropped every stale rule after the first, so the
+    re-review loop surfaced them one lint run at a time (N-12). }
+  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string; const AMarkerRule: string = '');
   var
     H: TLintFinding;
     K: string      ;
   begin
-    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule);
+    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule) + '#' + LowerCase(AMarkerRule);
     if Emitted.ContainsKey(K) then Exit;
     Emitted.Add(K, True);
     H:= Default(TLintFinding);
@@ -10159,7 +10180,7 @@ begin
                 Suppressed:= True;
                 EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                   Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
-                         [M.RuleId, M.RuleId, Want]));
+                         [M.RuleId, M.RuleId, Want]), M.RuleId);
               end
               else if SameText(M.Hash, Want) then
                 Suppressed:= True
@@ -10225,7 +10246,7 @@ begin
                            'hashed there. @%s is the hash of line %d itself, so the marker was recorded against ' +
                            'the wrong anchor and can never verify -- this is NOT evidence that the code changed. ' +
                            'Remove it and re-record with: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]))
+                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]), M.RuleId)
                 else if IsMetric then
                   { For a routine metric there IS one more thing worth saying, and
                     it is the thing the reader needs: the LIVE number. (a) and (c)
@@ -10236,13 +10257,13 @@ begin
                     Format('dl:ok marker for "%s" records @%s but this routine now measures %d and hashes to @%s. ' +
                            'Either the routine changed, or the marker predates the metric-bound hash -- this check ' +
                            'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]))
+                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]), M.RuleId)
                 else
                   EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                     Format('dl:ok marker for "%s" records @%s but line %d now hashes to @%s. Either the reviewed ' +
                            'code changed, or the marker predates a change in how markers are hashed -- this check ' +
                            'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]));
+                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]), M.RuleId);
               end;
               Break;
             end;
@@ -10278,7 +10299,7 @@ begin
                 EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
                   Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
                          'Re-review, then: allow --fix-line %d --fix-rule %s',
-                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]));
+                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
             end;
             Break;
           end;
@@ -13052,10 +13073,28 @@ end;
   print the same findings, so without this a regression back to "run everything
   for any --rule" is invisible except as time. stderr, so it cannot corrupt
   --format json|sarif. }
+var
+  { T-04: the previous TraceLintChecker stamp, so DRAGLINT_PROFILE can print
+    how long the phase that just ENDED took. 0 = no phase open yet. }
+  GLintTraceMark: Int64 = 0;
+  GLintTracePrev: string = '';
+
 procedure TraceLintChecker(const AName: string);
 begin
   if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
     Writeln(ErrOutput, '[lint-checker] ' + AName);
+  { T-04: under DRAGLINT_PROFILE each call closes the previous phase, so a
+    `lint <file>` run prints where its wall time went (lint-all has its own
+    TLintPhaseProfiler). Phase 'end' closes the last one. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var Now64: Int64:= TStopwatch.GetTimeStamp;
+    if GLintTraceMark <> 0 then
+      Writeln(ErrOutput, Format('  [lint-phase] %-24s %8.3f s',
+        [GLintTracePrev, (Now64 - GLintTraceMark) / TStopwatch.Frequency]));
+    GLintTraceMark:= Now64;
+    GLintTracePrev:= AName;
+  end;
 end;
 
 const
@@ -13356,6 +13395,7 @@ var
   ScannedFiles: TArray<string>              ;
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
+  TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -13620,6 +13660,7 @@ begin
       var QueryFindings: TArray<TLintFinding>;
       if TFile.Exists(EffPath) then
       begin
+        TraceLintChecker('scm-rules');
         QueryFindings:= Linter.LintFile(EffPath);
         ScannedFiles:= [EffPath];
       end
@@ -13857,6 +13898,7 @@ begin
         Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(EffPath, FlowStore, FlowFid, Findings);
       end;
       { unused local variables (H2164) }
+      TraceLintChecker('ast-checks');
       if (NarrowRule = '') or (NarrowRule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(EffPath);
       { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
         syntax error show up in the editor like the IDE's Error Insight. }
@@ -13982,6 +14024,7 @@ begin
         the exception-ancestry sub-check of type-name-prefix + the library store
         continues the chain -- without them EFoo = class(Exception) is reported
         as needing a 'T' prefix. }
+      TraceLintChecker('naming');
       if LintRuleWants(NarrowRule, LINT_GATE_NAMING) then
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -13991,6 +14034,7 @@ begin
         v0.72: + destructor-without-override (#5) + case-with-too-few-branches +
         boolean-expression-complexity (#6, thresholds) + exception-constructed-but-not-raised
         + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
+      TraceLintChecker('dead-code');
       if LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE) then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
@@ -13999,6 +14043,7 @@ begin
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
+      TraceLintChecker('clone');
       if (NarrowRule = '') or (NarrowRule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath, Cfg.ThresholdFor('duplicate-code', 90)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -14104,6 +14149,7 @@ begin
             if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { Free cached tree after single-file lint }
+      TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // if
   end; // if
@@ -14237,6 +14283,7 @@ begin
       scan are ordered properly. }
     Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
   );
+  TraceLintChecker('end');
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
@@ -16795,17 +16842,29 @@ begin
     Result.Verdict:= 'missing';
     Exit;
   end;
-  var Ok: Boolean;
-  var St: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
-  Result.Readable:= Ok and (St <> nil);
+  { A file that is not a SQLite database RAISES on open or on the first read
+    ("file is not a database"). Uncaught, that ended `info` FATAL (exit 3) and
+    lost every other --db of the call; it is exactly what 'unreadable' means. }
+  var Ok: Boolean:= False;
+  var St: ISymbolStore:= nil;
+  try
+    St:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
+    Ok:= Ok and (St <> nil);
+    if Ok then
+    begin
+      Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
+      Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
+      Result.ResolverExpected:= ResolverFingerprint(St);
+    end;
+  except
+    on E: Exception do Ok:= False;
+  end;
+  Result.Readable:= Ok;
   if not Result.Readable then
   begin
     Result.Verdict:= 'unreadable';
     Exit;
   end;
-  Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
-  Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
-  Result.ResolverExpected:= ResolverFingerprint(St);
   { The stored indexer fingerprint is a compound
     `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is compared,
     because platform and preprocess differences are legitimate per-index facts,
@@ -28832,6 +28891,163 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
+/// (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md, section 5).</summary>
+/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --format text|json|paths, --output.</param>
+/// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
+/// unknown --root); 3 stale index (a file it must read changed since it was
+/// indexed -- refused, never answered from); 1 any other error.</returns>
+function DoMenuTree(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@9176 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 other)
+const
+  EXIT_STALE_INDEX = 3;  { spec 5: a stale index is refused, never answered from }
+var
+  Walker: TMenuWalker;
+  Tree  : TMenuTree;
+  Fmt   : string;
+  Txt   : string;
+begin
+  if not ExplicitDbsExist(AArgs, 'menu-tree') then Exit(2);
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'menu-tree: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if AArgs.ProjectPath = '' then
+  begin
+    Writeln(ErrOutput, 'menu-tree: need --project <X.dproj>');
+    Exit(2);
+  end;
+  Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if (Fmt <> 'text') and (Fmt <> 'json') and (Fmt <> 'paths') then
+  begin
+    Writeln(ErrOutput, 'menu-tree: --format must be text, json or paths');
+    Exit(2);
+  end;
+  Tree:= nil;
+  try
+    Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
+    try
+      Tree:= Walker.Walk(AArgs.RootForm);
+    finally
+      Walker.Free;
+    end;
+  except
+    on E: EMenuTreeStale do
+    begin
+      Writeln(ErrOutput, 'menu-tree: stale index: ', E.Message);
+      Exit(EXIT_STALE_INDEX);
+    end;
+    on E: EMenuTreeSetup do
+    begin
+      Writeln(ErrOutput, 'menu-tree: ', E.Message);
+      Exit(2);
+    end;
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'menu-tree: ', E.ClassName, ': ', E.Message);
+      Exit(1);
+    end;
+  end;
+  try
+    if Fmt = 'json' then Txt:= Tree.ToJson(VERSION, AArgs.ProjectPath, AArgs.DbPaths[0])
+    else if Fmt = 'paths' then Txt:= Tree.ToPaths
+    else Txt:= Tree.ToText;
+  finally
+    Tree.Free;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    Writeln('menu-tree: wrote ', AArgs.Output);
+  end
+  else Write(Txt);
+  Result:= 0;
+end; // function
+/// <summary>menu-drift: the code-built menu tree (menu-tree) against the
+/// registry's ide-menu surfaces (spec section 7): MISSING / MOVED /
+/// UNREGISTERED / NOTE lines and 'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
+/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --format text|json, --output.</param>
+/// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
+/// project not in the db, unreadable registry); 3 stale index (refused).</returns>
+function DoMenuDrift(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@50e0 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 drift or other)
+const
+  EXIT_STALE_INDEX = 3;  { spec 5: a stale index is refused, never answered from }
+var
+  Walker: TMenuWalker;
+  Tree  : TMenuTree;
+  Reg   : TMenuRegistry;
+  Rep   : TMenuDriftReport;
+  Fmt   : string;
+  Txt   : string;
+begin
+  if not ExplicitDbsExist(AArgs, 'menu-drift') then Exit(2);
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if (AArgs.ProjectPath = '') or (AArgs.RegistryDir = '') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir>');
+    Exit(2);
+  end;
+  Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if (Fmt <> 'text') and (Fmt <> 'json') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: --format must be text or json');
+    Exit(2);
+  end;
+  Tree:= nil;
+  Reg := TMenuRegistry.Create;
+  try
+    try
+      Reg.LoadFromDir(AArgs.RegistryDir);
+      Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
+      try
+        Tree:= Walker.Walk;
+      finally
+        Walker.Free;
+      end;
+    except
+      on E: EMenuTreeStale do
+      begin
+        Writeln(ErrOutput, 'menu-drift: stale index: ', E.Message);
+        Exit(EXIT_STALE_INDEX);
+      end;
+      on E: EMenuTreeSetup do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.Message);
+        Exit(2);
+      end;
+      on E: EMenuDriftSetup do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.Message);
+        Exit(2);
+      end;
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.ClassName, ': ', E.Message);
+        Exit(1);
+      end;
+    end;
+    Rep:= ComputeMenuDrift(Tree, Reg);
+    try
+      Txt:= if Fmt = 'json' then Rep.ToJson else Rep.ToText;
+      Result:= if Rep.HasDrift then 1 else 0;
+    finally
+      Rep.Free;
+    end;
+  finally
+    Tree.Free;
+    Reg.Free;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    Writeln('menu-drift: wrote ', AArgs.Output);
+  end
+  else Write(Txt);
+end; // function
 // v0.45 Task 9: 32-bit size guard.
 // Emits a WARNING to ErrOutput when the process is 32-bit (or AForce32=True for
 // testing) and the DB file exceeds ASizeGuardMB.
@@ -32081,6 +32297,15 @@ begin
       Exit(2);
     end;
 
+    { N-02: one --rule per run. A second, different id used to REPLACE the first
+      without a word, so its findings vanished and the run read as clean. }
+    if Args.RuleConflict <> '' then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
+        'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
+      Exit(2);
+    end;
+
     { THE DEFAULT SCHEME: a project's own index + the platform library index.
       Owner ruling, 2026-08-13 -- "by default and maybe always", overridable only
       where a user says otherwise, which is exactly three places: an explicit
@@ -32205,6 +32430,8 @@ begin
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)
+    else if Args.Command = 'menu-tree'         then Result:= DoMenuTree        (Args)
+    else if Args.Command = 'menu-drift'        then Result:= DoMenuDrift       (Args)
     else if Args.Command = 'generate-test'     then Result:= DoGenerateTest    (Args)
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)

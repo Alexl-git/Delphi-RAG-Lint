@@ -34,9 +34,9 @@ Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 
 ## Where to click
 
-* RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...**
+* RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...**
    1. Open the unit in the editor
-   2. Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...
+   2. Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...
    3. Review each candidate (verified by compiling) before applying
    4. From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`
 

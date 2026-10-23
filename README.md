@@ -793,7 +793,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
-| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 20 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
+| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
@@ -849,6 +849,8 @@ buffer) for a symbol index. Proxying removes the either/or. Add
 `--delphi-lsp <path>` to override which server is spawned. Today the relay is
 transparent: byte-for-byte identical to talking to DelphiLSP directly, with
 merging of drag-lint's own answers still to come.
+
+`drag-lint-switch --vscode --status|--on|--off` toggles the `delphi-lsp` entry in a workspace's `.vscode\mcp.json` (backup on `--off`, restore on `--on`; refuses while VS Code runs).
 
 See **[docs/EDITORS.md](docs/EDITORS.md)**.
 
@@ -973,7 +975,7 @@ before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Del
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol | `--apply`, `--json` |
+| `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol (every overload of the name) | `--apply`, `--json` |
 | `document --unit <f.pas>` | Document every public decl in a unit (facts-only by default; trivial accessors skipped) | `--apply`, `--stubs`, `--include-accessors` |
 | `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise) | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
 | [`document-all`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/document-all) | Document every public decl in every indexed unit (no project scope) | `--stubs`, `--apply` |
@@ -1072,6 +1074,8 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
 | `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
 | `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, before-you-start preconditions for every hop, confidence (algorithm v7; a `?` modal always carries its reason in Notes; popup forms the index cannot trace are declared under `popupForms` in the project's `_D-RAG\drag-lint-project.json` -- see docs\wiki\Generate-Test-Helper-CSV.md) | `--output <f.csv>`, `--root <TfrmMAIN>` |
+| `menu-tree --project <dproj> --db <db>` | The menu tree a program BUILDS IN CODE (`TMenuItem.Create` + `Caption :=` + `Add`/`Insert`, item/separator/header helpers recognised by their body, click wrappers, procedural-parameter callbacks, const-array and case-literal captions), read statically from the index + a tree-sitter re-parse; DFM items given code-added children appear as external roots. Exit 0 ran, 2 usage/setup, 3 stale index (refused, never answered) -- see docs\wiki\Menu-Tree.md | `--root <QName>`, `--format text\|json\|paths`, `--output <f>` |
+| `menu-drift --project <dproj> --db <db> --registry <features dir>` | The code-built menu tree (`menu-tree`) against the registry's `ide-menu` surfaces, by PATH: MISSING (registered, not built; `renamed?` hint), MOVED (the caption lives under another parent), UNREGISTERED (built, not registered; a skeleton surface line), NOTE (dynamic captions, unparented items, exemptions the kind model no longer needs). Exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index; guarded on the IDE plugin by `run_menu_drift_guard.ps1` | `--format text\|json`, `--output <f>` |
 | `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const`, `--output <file>` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |

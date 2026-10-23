@@ -4,7 +4,7 @@ title: Uses Report (CSV)
 summary: Exports the project's unit-dependency data as a CSV file
 product: DL
 group: graphs-reports
-order: 70020
+order: 70021
 since: 0.40.5-alpha
 status: shipped
 updated: 1.33.0-alpha

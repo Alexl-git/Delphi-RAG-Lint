@@ -1,0 +1,7 @@
+{
+  "id": "static-leaf",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture Dynamic > Static Leaf" }
+  ]
+}

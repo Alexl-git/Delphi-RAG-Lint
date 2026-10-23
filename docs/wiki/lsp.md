@@ -37,3 +37,17 @@ drag-lint lsp --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite
 
 This is the same command the plugin runs in the background to serve the
 editor's language features for `MyApp`.
+
+## Switching VS Code's Delphi MCP entry off and on
+
+`drag-lint-switch --vscode --status|--on|--off [--workspace <dir>]` toggles
+`servers["delphi-lsp"]` in `<dir>\.vscode\mcp.json` (default `<dir>` = current
+directory). `--off` writes a whole-file backup `mcp.json.draglint-<yyyymmdd-hhmmss>.bak`
+next to it and removes only that entry; `--on` restores the entry from the newest
+backup, or from `--template <file>` (a JSON file holding the entry) when there is
+none. Exit 0 = done, 1 = already in that state, 2 = VS Code (`Code.exe`) is running
+(file untouched), 3 = failure (e.g. no backup and no template). Workspace file only:
+the user-level registration in `state.vscdb` is not read or written. Guard:
+`tests\autotest\run_lsp_switch_vscode_guard.ps1`.
+
+Limits: a mcp.json containing comments (JSONC) cannot be parsed, so the tool exits 3 and leaves the file untouched. The rewritten file is JSON-equal to the original, not byte-equal (indentation is normalised to 2 spaces); the untouched original is kept in the .bak.

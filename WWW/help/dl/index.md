@@ -166,6 +166,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](features/find-dead-code.md) | Scans the index for code with no references -- candidates to delete | 0.25.0-alpha |
 | [Forms for testers (CSV)](features/generate-test-helper-csv.md) | A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form | 0.44.0-alpha |
 | [Impact / Blast Radius (symbol)](features/impact-blast-radius-symbol.md) | Reports what would be affected if a chosen symbol changes -- the set of code to retest | 0.17.0-alpha |
+| [Code-built menu tree and registry drift](features/menu-tree.md) | The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it | 1.33.0-alpha |
 | [Reverse Call Tree (clickable, Messages window)](features/reverse-call-tree-clickable-messages-window.md) | The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller | 0.96.0-alpha |
 | [Reverse Call Tree (who calls this, N-deep)](features/reverse-call-tree-who-calls-this-n-deep.md) | Builds the tree of callers of a chosen symbol, transitively, to a chosen depth | 0.96.0-alpha |
 | [Scan TODOs / FIXMEs](features/scan-todos-fixmes.md) | Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers | 0.12.0-alpha |

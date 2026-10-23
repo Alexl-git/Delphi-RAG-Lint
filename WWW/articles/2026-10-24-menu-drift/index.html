@@ -1,0 +1,251 @@
+<!--article
+title: Menus Built in Code, Checked Against Your Docs
+date: 2026-10-24
+slug: menu-drift
+summary: drag-lint reads the menus a Delphi program builds in code, prints the tree, and compares it with the documented feature registry to report what is missing, moved or unregistered.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; code-built menus</span>
+  <h1>Menus Built in Code, Checked Against Your Docs</h1>
+  <p class="standfirst">A menu declared in a DFM is easy for a tool to see. A menu built with <code>TMenuItem.Create</code>, a helper routine and a const array is not &mdash; and it is exactly the kind that drifts away from its documentation. drag-lint now reads those menus statically, prints the tree, and compares it with the menu paths your docs promise.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>Real output from the next release (the verbs are not in 1.33.0-alpha)</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="nlabel">Availability</span>
+  <p><code>menu-tree</code> and <code>menu-drift</code> are merged to the drag-lint main branch and <strong>ship in the next release</strong>. They are not in the engine deployed today. Every output below comes from a build of the merged code, run on a scratch copy of a small fixture project from the repository.</p>
+</div>
+
+<p><a href="https://github.com/Alexl-git/Delphi-RAG-Lint">drag-lint</a> grew out of the code base of <a href="https://www.htrmicronite.com">Micronite</a>, our quality and production-control software for manufacturers, but the first menu we pointed this feature at was closer to home: drag-lint&rsquo;s own RAD Studio plugin.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The problem</span>
+    <h2>A menu that no DFM describes</h2>
+  </div>
+  <p>The drag-lint IDE plugin builds its whole <code>drag-lint</code> menu at run time. There is no <code>TMainMenu</code> in a form to read. The code looks like this (trimmed from the test fixture that mirrors the plugin&rsquo;s shape):</p>
+
+  <pre class="lex"><code>Root:= TMenuItem.Create(nil);
+Root.Caption:= 'Fixture';
+if MainMenu &lt;&gt; nil then MainMenu.Items.Add(Root)
+else AddActionMenu('ToolsMenu', nil, Root, True, True);
+
+AddItem(Root, 'Open...', DoOpen);          { helper: caption + handler }
+AddSep(Root);                              { helper: separator }
+AddItem(Root, Format('Find %s...', ['Text']), DoFind);
+AddItem(Root, CAP_EXPORT, DoExport);       { caption from a const }
+
+var SubTools: TMenuItem:= TMenuItem.Create(Root);
+SubTools.Caption:= 'Tools &amp;&amp; Options';
+Root.Add(SubTools);
+AddHeader(SubTools, 'Formatting');
+AddItem(SubTools, 'Format Unit', DoFormat);</code></pre>
+  <p class="cap">Captions come from literals, <code>Format</code>, a const; items are created by helper routines that take the parent menu item; submenus are made inline. No caption appears next to the parent it belongs to.</p>
+
+  <p>Worse, some captions are not in the source as text next to a call at all. In the fixture&rsquo;s <code>Catalog</code> submenu the items are produced by a loop over a const array of records, and the group headers by a function that is a <code>case</code> over an enum:</p>
+  <pre><code>CATALOG: array[...] of TCatalogEntry = (
+  (Id: 'basic'   ; Caption: 'Basic Report...'   ; Kind: ckBasic   ),
+  (Id: 'advanced'; Caption: 'Advanced Report...'; Kind: ckAdvanced),
+  (Id: 'summary' ; Caption: 'Summary Report'    ; Kind: ckBasic   ));
+...
+    ckBasic: Result:= 'Basic Group';
+  else
+    Result:= 'Advanced Group';</code></pre>
+
+  <p>A tool that scans the DFMs sees nothing here. A tool that searches for <code>Caption :=</code> or for the helper&rsquo;s name finds a flat list of captions, with no idea which submenu each one lives under &mdash; so a caption that moved to another parent looks unchanged, and a renamed helper silently empties the scan. We had exactly that scraper, and it is why this feature exists.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; menu-tree</span>
+    <h2>Printing the tree the code builds</h2>
+  </div>
+  <p><code>menu-tree</code> works from the project&rsquo;s drag-lint index and a parse of only the routines that build menus. Nothing runs and no IDE is needed.</p>
+  <pre><code>drag-lint menu-tree --project MenuTreeFixture.dproj --db fx.sqlite --format text</code></pre>
+  <pre><code>[root] Fixture  (MT.Builder.pas:72, certain)
+  [item] Direct Item  -&gt; MT.Builder.DoDirect  (MT.Builder.pas:101, certain)
+  [item] Open...  -&gt; MT.Builder.DoOpen  (MT.Builder.pas:77, certain)
+  [separator]   (MT.Builder.pas:78, certain)
+  [item] Find %s...  -&gt; MT.Builder.DoFind  (MT.Builder.pas:79, certain)
+  [item] Export Everything  -&gt; MT.Builder.DoExport  (MT.Builder.pas:80, certain)
+  [submenu] Tools &amp; Options  (MT.Builder.pas:82, certain)
+    [header] Formatting  (MT.Builder.pas:85, certain)
+    [item] Format Unit  -&gt; MT.Builder.DoFormat  (MT.Builder.pas:86, certain)
+  [submenu] Catalog  (MT.Builder.pas:88, certain)
+    [header] Basic Group  (MT.Catalog.pas:51, derived)
+    [header] Advanced Group  (MT.Catalog.pas:51, derived)
+    [item] Basic Report...  -&gt; MT.Builder.DoCatalog  (MT.Catalog.pas:53, derived)
+    [item] Advanced Report...  -&gt; MT.Builder.DoCatalog  (MT.Catalog.pas:53, derived)
+    [item] Summary Report  -&gt; MT.Builder.DoCatalog  (MT.Catalog.pas:53, derived)
+  [separator]   (MT.Builder.pas:107, certain)
+  [item] About  -&gt; MT.Builder.DoAbout  (MT.Builder.pas:108, certain)
+...
+[external-root] mnuTools  (MT.Dfm.pas:47, certain)
+  [item] Code Added Two  -&gt; MT.Dfm.TFixtureForm.DoTwo  (MT.Dfm.pas:48, certain)
+  [item] Code Added One  -&gt; MT.Dfm.TFixtureForm.DoOne  (MT.Dfm.pas:44, certain)
+NOTE dynamic caption at MT.Dynamic.pas:52: Dyn.Caption:= SomeVar
+NOTE unparented item at MT.Dynamic.pas:56: 'Orphan Item' is created but never added to a menu</code></pre>
+  <p class="cap">Real output, trimmed (the fixture&rsquo;s second root, <code>Fixture Dynamic</code>, is cut where the <code>...</code> is). Each node carries its kind, its handler, where it was made and how sure the reader is.</p>
+
+  <p>Notice what came out. <code>Direct Item</code> was added with <code>Insert(0, ...)</code>, and its handler is the real routine even though it is reached through a wrapper object. The <code>Catalog</code> items and headers came out of the const array and the <code>case</code> function, marked <code>derived</code>. <code>mnuTools</code> is a menu that lives in a DFM; the fixture adds two items to it in code, and they are listed under an <em>external root</em> of that name instead of being guessed into a path.</p>
+
+  <h3>How it recognises a helper</h3>
+  <p>It does not know the names <code>AddItem</code>, <code>AddSep</code> or <code>AddHeader</code>. A routine counts as a helper because of what its body does: it creates a menu item and adds it under a menu-item parameter. When a call passes a node or an anonymous method, the callee&rsquo;s body is walked with its parameters bound to the arguments. Renaming <code>AddItem</code> to <code>PutItem</code> in a copy of the fixture leaves the tree unchanged &mdash; a test the repository carries.</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Caption written as</th>
+          <th scope="col">Result</th>
+          <th scope="col">Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Literal, <code>'a' + 'b'</code>, <code>Format('...', ...)</code>, a const identifier</th>
+          <td>The text (a <code>Format</code> keeps its pattern)</td>
+          <td><span class="verdict v-good">certain</span></td>
+        </tr>
+        <tr>
+          <th scope="row">An element of a const array of records, a <code>case</code>-of-literals function</th>
+          <td>One node per value</td>
+          <td><span class="verdict v-warn">derived</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Anything else (a variable, a call result)</th>
+          <td>One <code>dynamic</code> node and a NOTE</td>
+          <td><span class="verdict v-bad">unknown</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>A caption the reader cannot evaluate is never dropped. It appears as a <code>dynamic</code> node, and as a NOTE line, so the output says what it could not see.</p>
+
+  <h3>Other formats and exit codes</h3>
+  <p><code>--format paths</code> prints one leaf per line as path, handler, <code>file:line</code> and confidence, separated by tabs, convenient for diffing or grepping in a build step. <code>--format json</code> writes schema <code>menu-tree/1</code>. <code>--root &lt;QName&gt;</code> walks one builder routine only. Exit 0 means it ran; 2 means a usage or setup problem; 3 means the index is stale (a file it must read changed after it was indexed) and it refuses, printing the reindex command, rather than answering from old code.</p>
+  <pre><code>Fixture &gt; Direct Item                      MT.Builder.DoDirect    certain
+Fixture &gt; Open...                          MT.Builder.DoOpen      certain
+Fixture &gt; Find %s...                       MT.Builder.DoFind      certain
+Fixture &gt; Tools &amp; Options &gt; Format Unit    MT.Builder.DoFormat    certain
+Fixture &gt; Catalog &gt; Basic Report...        MT.Builder.DoCatalog   derived</code></pre>
+  <p class="cap">First leaves of <code>--format paths</code>, with the tab-separated columns re-aligned and the <code>file:line</code> column left out.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; menu-drift</span>
+    <h2>Comparing the code with the docs</h2>
+  </div>
+  <p>Documentation of a menu usually has the form of a path: <code>drag-lint &gt; Reports &gt; Circular unit dependencies...</code>. drag-lint&rsquo;s feature registry records such paths as <code>ide-menu</code> surfaces, one per feature, and generates the help pages from them. <code>menu-drift</code> builds the live tree as <code>menu-tree</code> does and compares it with those registered paths, by full path, not by leaf caption:</p>
+  <pre><code>drag-lint menu-drift --project MenuTreeFixture.dproj --db fx.sqlite --registry registry</code></pre>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Class</th>
+          <th scope="col">Meaning</th>
+          <th scope="col">Printed with</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">MISSING</th>
+          <td>The docs name a path the code does not build, and the caption is nowhere else.</td>
+          <td><span class="verdict v-bad">Docs ahead of code</span><p><code>renamed? -&gt; '&lt;caption&gt;'</code> when an unregistered item under the same parent shares at least 12 leading characters.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">MOVED</th>
+          <td>The caption exists, under a different parent.</td>
+          <td><span class="verdict v-warn">Right item, wrong path</span><p><code>now at &lt;live path&gt;</code></p></td>
+        </tr>
+        <tr>
+          <th scope="row">UNREGISTERED</th>
+          <td>The code builds an item that no documented surface covers.</td>
+          <td><span class="verdict v-warn">Code ahead of docs</span><p>A skeleton surface line to paste into a registry entry.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">NOTE</th>
+          <td>A dynamic caption, an unparented item, or an exemption that is no longer needed.</td>
+          <td><span class="verdict v-good">Information</span><p>Never fails the check by itself.</p></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>With a registry that matches the fixture, the check is quiet except for the notes, and exits 0:</p>
+  <pre><code>NOTE dynamic caption at MT.Dynamic.pas:52: Dyn.Caption:= SomeVar
+NOTE unparented item at MT.Dynamic.pas:56: 'Orphan Item' is created but never added to a menu
+menu-drift: missing=0 unregistered=0 moved=0 notes=2</code></pre>
+
+  <p>To see the classes we changed a scratch copy of the registry: deleted the entry for <em>Export Everything</em>, renamed the documented <em>Open...</em> to <em>Open File...</em> and <em>Find %s...</em> to <em>Search...</em>, and moved <em>Format Unit</em> out of its <em>Tools &amp; Options</em> submenu. The result, exit code 1:</p>
+  <pre><code>MISSING Fixture &gt; Search...  (entry find)
+MISSING Fixture &gt; Open File...  (entry open)
+MOVED Fixture &gt; Format Unit  (entry format-unit)  now at Fixture &gt; Tools &amp; Options &gt; Format Unit
+UNREGISTERED Fixture &gt; Open...  -&gt; MT.Builder.DoOpen  (MT.Builder.pas:77)
+  skeleton: { "type": "ide-menu", "path": "Fixture &gt; Open..." }
+UNREGISTERED Fixture &gt; Find %s...  -&gt; MT.Builder.DoFind  (MT.Builder.pas:79)
+  skeleton: { "type": "ide-menu", "path": "Fixture &gt; Find %s..." }
+UNREGISTERED Fixture &gt; Export Everything  -&gt; MT.Builder.DoExport  (MT.Builder.pas:80)
+  skeleton: { "type": "ide-menu", "path": "Fixture &gt; Export Everything" }
+...
+menu-drift: missing=2 unregistered=3 moved=1 notes=2</code></pre>
+  <p class="cap">Real output, the two NOTE lines elided. A rename shows up as a MISSING plus an UNREGISTERED pair; the <code>renamed?</code> hint appears only when the old and new captions share 12 leading characters, which these short captions do not.</p>
+
+  <h3>What it deliberately ignores</h3>
+  <p>Separators, headers, submenus and external roots are never UNREGISTERED. A documented path that names a live submenu is not MISSING. A documented path under a parent that holds a dynamic item is never MISSING, because the dynamic item may be it; the note says so. Order inside a submenu is not compared. Captions are compared in a normalised form (<code>&amp;&amp;</code> becomes <code>&amp;</code>, a trailing <code>...</code> and surrounding punctuation are dropped, case is folded), the same keys the feature registry uses. The summary line is <code>menu-drift: missing=N unregistered=N moved=N notes=N</code>; exit 0 means no drift, 1 drift, 2 usage or setup, 3 a stale index.</p>
+
+  <div class="facts">
+    <div class="fact"><span class="fv">0</span><span class="fk">exit: no drift</span></div>
+    <div class="fact"><span class="fv">1</span><span class="fk">exit: drift found</span></div>
+    <div class="fact"><span class="fv">3</span><span class="fk">exit: index is stale, reindex first</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Use it</span>
+    <h2>Two jobs for the same pair of verbs</h2>
+  </div>
+
+  <h3>Keeping docs and help in sync with the real menus</h3>
+  <p>Run on the drag-lint plugin itself, the check began with 5 missing and 26 unregistered menu paths. We fixed the registry entries until it reported none, and the check now runs in our test battery on the plugin index, passing only on exit 0. A new menu item that nobody documented, or a caption someone renamed, now fails our test battery instead of waiting for a user to notice.</p>
+
+  <h3>Auditing an application&rsquo;s code-built menus</h3>
+  <p>Point <code>menu-tree</code> at any indexed Delphi project to get a list of every item its code puts on a menu, with the routine that handles the click and the line that created it. Items added to a DFM-declared menu appear under an external root named after the menu component, so you can see what code adds to a menu that the form designer shows as nearly empty. Run <code>menu-tree --format paths</code> before and after a refactor and diff the two files to see whether the menu changed.</p>
+
+  <div class="note">
+    <span class="nlabel">The documentation side</span>
+    <p>The registry half of <code>menu-drift</code> is drag-lint&rsquo;s own feature registry: a folder of <code>entries\*.json</code>, each with <code>ide-menu</code> surfaces, and an <code>exemptions.json</code>. For another project you supply a folder in that shape; the tool does not read arbitrary documentation.</p>
+  </div>
+
+  <!-- screenshot-todo (WWW\SCREENSHOT-DEBT.md): RAD Studio with the drag-lint menu open and one submenu expanded, to set beside the menu-tree text output for the same plugin. -->
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; Limits</span>
+    <h2>Honest edges</h2>
+  </div>
+  <ul>
+    <li><strong>Static means static.</strong> A caption that depends on a run-time value shows as a <code>dynamic</code> node and a note, never as a guess.</li>
+    <li><strong>Only the menu-item shapes it knows.</strong> DevExpress <code>TdxBar*</code> items, shortcuts and menu order are not compared. Context menus, About-form buttons and tool windows are out of scope in this version.</li>
+    <li><strong>External roots are not compared.</strong> Items added to a DFM menu or to a menu looked up from the IDE are listed by <code>menu-tree</code> but ignored by <code>menu-drift</code>.</li>
+    <li><strong>Computed on demand.</strong> There is no stored menu table in the index yet, so each run re-reads the routines that build menus, and the index must be current (exit 3 otherwise).</li>
+    <li><strong>Ships in the next release.</strong> Until then the verbs exist only in a build of the main branch.</li>
+  </ul>
+</section>
+
+<footer>
+  All command output above is real output of a build of the drag-lint main branch (merge 4e3f8077, the version after 1.33.0-alpha), run on a scratch copy of <code>tests\fixtures\menutree</code> from the drag-lint repository, with the index built by <code>drag-lint index --project</code>. Behaviour descriptions follow the drag-lint wiki page &ldquo;Menu Tree (code-built menus)&rdquo; and the code-built menu reader design note.
+</footer>
+
+</div>

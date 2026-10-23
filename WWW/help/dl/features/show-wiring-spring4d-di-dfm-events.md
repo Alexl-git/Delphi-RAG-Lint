@@ -4,7 +4,7 @@ title: Show Wiring (Spring4D DI + DFM events)
 summary: "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type"
 product: DL
 group: graphs-reports
-order: 70018
+order: 70019
 since: 0.21.0-alpha
 status: shipped
 updated: 1.33.0-alpha

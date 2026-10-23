@@ -13,6 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) -- Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.
 * [Help line (DL page)](features/ide-help-line.md) -- Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root.
+* [Code-built menu tree and registry drift](features/menu-tree.md) -- The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
 
 ## 1.31.5-alpha
 

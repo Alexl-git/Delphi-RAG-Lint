@@ -145,7 +145,7 @@ begin
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-  Writeln('                               --rule <id>: report ONLY that rule; naming an OFF-by-default rule opts it in');
+  Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
@@ -342,6 +342,7 @@ begin
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
   Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
+  Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
   Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
@@ -353,6 +354,7 @@ begin
   Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
   Writeln('                               uses, so this is how it is verified without an IDE.');
   Writeln('                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr.');
+  Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry''s ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)');
