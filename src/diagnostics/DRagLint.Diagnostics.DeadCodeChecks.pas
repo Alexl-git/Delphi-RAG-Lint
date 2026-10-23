@@ -207,6 +207,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Analysis.Flow.Lattices;
+
 { True when ABareName (already lower-cased, unqualified) is the name of a
   published TForm/TFrame event handler.
 
@@ -268,6 +271,10 @@ var
     DIFFERENT types maps to '' (unknown). Pure AST, no symbol store; used only by
     default-encoding-io to tell a string-list receiver from a binary one. }
   DeclTypes      : TDictionary<string, string >;
+  { referenced-never-set only: lower-cased names of the parameters and locals of
+    the method being classified whose declared type IS that method's own class,
+    or nil outside ProcessDefProcs. Set and freed there, read by ClassifyRefs. }
+  SameClassVars  : TDictionary<string, Boolean>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -2431,6 +2438,18 @@ var
         begin
           var MemberName: string:= LhsMemberIdent(LhsNode);
           if (MemberName <> '') and AFields.ContainsKey(MemberName) then BaseName:= MemberName;
+        end
+        { `pChild.FParent := x` -- a parameter or local DECLARED AS THIS CLASS is
+          another instance of it, so this is a write to this class's field.
+          Same exactness as `self`: the receiver's declared type is checked, so
+          `pNode.FParent := x` with pNode of another class still credits
+          nothing. Only the direct `<var>.<field>` shape. }
+        else if Assigned(SameClassVars) and SameClassVars.ContainsKey(BaseName)
+                and (LhsNode.NodeType = 'exprDot')
+                and (LhsNode.ChildByField('lhs').NodeType = 'identifier') then
+        begin
+          var OtherMember: string:= LhsMemberIdent(LhsNode);
+          if (OtherMember <> '') and AFields.ContainsKey(OtherMember) then BaseName:= OtherMember;
         end;
         if (BaseName <> '') and AFields.ContainsKey(BaseName) then
         begin
@@ -2630,8 +2649,18 @@ var
             begin
               { Walk the entire defProc body to classify field refs. }
               var BodyN: TTSNode:= ARoot.ChildByField('body');
-              ClassifyRefs(BodyN, AFieldMaps[ClsIdx],
-                AReadMaps[ClsIdx], AWriteMaps[ClsIdx], False);
+              var Vars: TRoutineVarTable:= TRoutineVarTable.Build(ARoot, Src);
+              SameClassVars:= TDictionary<string, Boolean>.Create;
+              try
+                for var V:= 0 to Vars.Count - 1 do
+                  if SameText(Vars.Get(V).TypeText, ClsName) then
+                    SameClassVars.AddOrSetValue(Vars.Get(V).Name, True);
+                ClassifyRefs(BodyN, AFieldMaps[ClsIdx],
+                  AReadMaps[ClsIdx], AWriteMaps[ClsIdx], False);
+              finally
+                FreeAndNil(SameClassVars);
+                Vars.Free;
+              end;
             end;
           end;
         end;
@@ -2734,6 +2763,7 @@ begin
   LocalFunctions := TDictionary<string, Boolean>.Create;
   AddrTaken      := TDictionary<string, Boolean>.Create;
   DeclTypes      := TDictionary<string, string >.Create;
+  SameClassVars  := nil;
   try
     { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
       AMaxUnitLines source lines (root node's last row). }

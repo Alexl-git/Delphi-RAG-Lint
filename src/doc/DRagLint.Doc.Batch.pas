@@ -279,7 +279,7 @@ uses
   { System.SysUtils is in the INTERFACE uses now -- TDocBatchOptions.IsExcluded
     needs TFunc there -- so repeating it here is E2004. }
   System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip,
+  DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Index.Closure, DRagLint.Project.Resolver,
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
     two commands cannot disagree about which files belong to the project. }

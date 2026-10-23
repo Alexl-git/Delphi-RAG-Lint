@@ -10382,6 +10382,43 @@ var
     end;
   end;
 
+  // True when 0-based line AIdx still names the symbol as a whole identifier.
+  // The slice cuts the CURRENT file at line numbers RECORDED at index time; when
+  // the unit was edited since, those numbers point into other code. A recorded
+  // anchor that no longer names the symbol is a stale index, never a slice.
+  function AnchorNamesSymbol(AIdx: Integer): Boolean;
+  var
+    Hay  : string ;
+    Ndl  : string ;
+    P    : Integer;
+    After: Integer;
+  begin
+    Result:= False;
+    if (AIdx < 0) or (AIdx > High(AllLines)) or (ClassSym.Name = '') then Exit;
+    Hay:= UpperCase(AllLines[AIdx]);
+    Ndl:= UpperCase(ClassSym.Name);
+    P:= Pos(Ndl, Hay);
+    while P > 0 do
+    begin
+      After:= P + Length(Ndl);
+      if ((P = 1) or not CharInSet(Hay[P - 1], ['A'..'Z', '0'..'9', '_']))
+         and ((After > Length(Hay)) or not CharInSet(Hay[After], ['A'..'Z', '0'..'9', '_'])) then
+        Exit(True);
+      P:= Pos(Ndl, Hay, P + 1);
+    end;
+  end;
+
+  function StaleAnchorChunk(ALine: Integer): TSliceChunk;
+  begin
+    Result:= Default(TSliceChunk);
+    Result.Kind     := 'stale-anchor';
+    Result.StartLine:= ALine;
+    Result.EndLine  := ALine;
+    Result.Text     := Format('// STALE INDEX: line %d of %s no longer holds %s -- the unit changed since it was ' +
+      'indexed, so no code is shown (it would be another routine''s). reindex: drag-lint index --project ' +
+      '<file.dproj> --db <db>', [ALine, ExtractFileName(FilePath), ClassSym.Name]);
+  end;
+
 begin
   Result:= nil;
   Syms:= FindSymbolsByQualifiedName(AQName);
@@ -10411,6 +10448,20 @@ begin
     Chunk.EndLine:= InterfaceLine + 1;
     Chunk.Text:= JoinLines(0, InterfaceLine);
     Chunks.Add(Chunk);
+
+    // Stale-anchor refusal (INBOX-context-slice-wrong-on-stale-anchor): the
+    // declaration line, and a routine's recorded body line, must still name the
+    // symbol. Otherwise emit one loud stale-anchor chunk and no code at all.
+    if not AnchorNamesSymbol(ClassSym.StartLine - 1) then
+      Chunks.Add(StaleAnchorChunk(ClassSym.StartLine))
+    else if (ClassSym.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor])
+            and (ClassSym.ImplStartLine > 0) and not AnchorNamesSymbol(ClassSym.ImplStartLine - 1) then
+      Chunks.Add(StaleAnchorChunk(ClassSym.ImplStartLine));
+    if (Chunks.Count > 1) and (Chunks.Last.Kind = 'stale-anchor') then
+    begin
+      Result:= Chunks.ToArray;
+      Exit;
+    end;
 
     // 2. Class declaration: ClassSym.StartLine..EndLine (1-based in DB).
     Chunk:= Default(TSliceChunk);

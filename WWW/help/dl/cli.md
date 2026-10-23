@@ -349,7 +349,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json|text] (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--unit <stem>]] [--format json|text] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -358,6 +358,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
 | `--plan` |  |  |  |
+| `--f2047` |  |  |  |
 | `--format` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--fix` |  |  |  |
@@ -1053,6 +1054,8 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--proxy` |  |  |  |
 | `--delphi-lsp` | `<path>` |  |  |
 | `--trace` | `<file>` |  |  |
+| `--merge-diagnostics` |  |  |  |
+| `--merge-budget-ms` | `<n>` |  |  |
 
 Described in [lsp](features/lsp.md).
 
@@ -1080,6 +1083,42 @@ drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [
 | `--appdata-dir` |  |  |  |
 
 Described in [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md).
+
+### menu-drift
+
+The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
+
+```text
+drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--registry` | `<features dir>` |  |  |
+| `--format` | `text\|json` |  |  |
+| `--output` | `<f>` |  |  |
+
+Described in [Code-built menu tree and registry drift](features/menu-tree.md).
+
+### menu-tree
+
+The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
+
+```text
+drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; exit 0 ran, 2 usage/setup, 3 stale index)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--root` | `<QName>` |  |  |
+| `--format` | `text\|json\|paths` |  |  |
+| `--output` | `<f>` |  |  |
+
+Described in [Code-built menu tree and registry drift](features/menu-tree.md).
 
 ### migrate-dbs
 

@@ -205,6 +205,10 @@ type
     /// the first rule error ("line N: message") or the head of the unparseable
     /// output.</summary>
     Error     : string;
+    /// <summary>The "unit" key (full path of the unit the answer is about); '' when the
+    /// key is absent or not a string. Every units[] entry of an apply-batch/1 carries it;
+    /// ConvRules.ConvertBatch.BatchUnitsMatch compares it with the --unit order.</summary>
+    UnitPath  : string;
     /// <summary>edits_count.</summary>
     EditsCount: Integer;
     /// <summary>rule_errors[] length. Greater than 0 = the BOOK failed the
@@ -442,19 +446,19 @@ function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
 /// <returns>See TApplyBatch. Valid is False for text that is no apply-batch/1 object
 /// (a single apply/1 document included). Every read is type-checked: a wrong shape
 /// reads as 0 / '' / empty and a non-object units[] entry is skipped; never raises.</returns>
-function ParseApplyBatchJson(const AJson: string; AFeatures: TApplyFeatures): TApplyBatch;  // dl:ok unused-public-symbol@f010 -- REVIEWED 2026-10-19 apply-batch/1 reader and its contract checks are pinned by the model tests; the batch runner (CONVERTER-BACKLOG B4, needs a backup/restore/reindex design) wires them
+function ParseApplyBatchJson(const AJson: string; AFeatures: TApplyFeatures): TApplyBatch;
 
 /// <summary>PURE: the one-line result of a batch.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's reading.</param>
 /// <returns>'batch: N unit(s) -- A ok, R refused, F failed; K class(es) built; exit E';
 /// '' when ABatch is not Valid.</returns>
-function BatchSummaryText(const ABatch: TApplyBatch): string;  // dl:ok unused-public-symbol@278d -- REVIEWED 2026-10-19 apply-batch/1 reader and its contract checks are pinned by the model tests; the batch runner (CONVERTER-BACKLOG B4, needs a backup/restore/reindex design) wires them
+function BatchSummaryText(const ABatch: TApplyBatch): string;
 
 /// <summary>PURE: True when a batch breaks the engine's all-or-nothing exit contract:
 /// exit 0 with a refused or failed unit counted, or a non-zero exit with every unit ok.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's reading.</param>
 /// <returns>False for an invalid batch and for a consistent one.</returns>
-function BatchContractBroken(const ABatch: TApplyBatch): Boolean;  // dl:ok unused-public-symbol@efbe -- REVIEWED 2026-10-19 apply-batch/1 reader and its contract checks are pinned by the model tests; the batch runner (CONVERTER-BACKLOG B4, needs a backup/restore/reindex design) wires them
+function BatchContractBroken(const ABatch: TApplyBatch): Boolean;
 
 /// <summary>PURE: the converted row's scoped part, from the engine's own answer.</summary>
 /// <param name="ARow">The book's apply/1 answer.</param>
@@ -1501,7 +1505,7 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
 
     function Suggestions(AFix: TJSONObject): TArray<TQualifySuggestion>;
     var
-      LSug: TQualifySuggestion;  // dl:ok duplicate-code@3ff0 -- REVIEWED 2026-10-19 the inner reader of QualifyFixes, the same shape as InheritedItems (see QualifyFixes)
+      LSug: TQualifySuggestion;
     begin
       Result:= nil;
       if not (AFix.Values['suggestions'] is TJSONArray) then
@@ -1629,6 +1633,7 @@ begin
     // Type-checked, never GetValue<T>: it coerces ("3" -> 3, 1 -> True) on a wrong type.
     Result.Ok        := JsonTrue(Obj, 'ok');
     Result.EditsCount:= JsonInt(Obj, 'edits_count');
+    Result.UnitPath  := Str(Obj, 'unit');
     Result.Converted := Strings(Obj, 'converted');
     Result.InheritedLeft:= InheritedItems(Obj);
     Result.ComponentPart:= Str(Obj, 'component_part');

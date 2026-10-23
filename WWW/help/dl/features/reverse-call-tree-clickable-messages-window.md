@@ -4,7 +4,7 @@ title: Reverse Call Tree (clickable, Messages window)
 summary: The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller
 product: DL
 group: graphs-reports
-order: 70014
+order: 70015
 since: 0.96.0-alpha
 status: shipped
 updated: 1.33.0-alpha

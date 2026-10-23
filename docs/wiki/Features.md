@@ -207,8 +207,8 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [safe-delete](safe-delete) | `safe-delete`; drag-lint > Safe Delete Symbol... |  |
 | [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
 | [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
-| [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...; `uses-audit` |  |
-| [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...; `uses-fix` |  |
+| [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...; `uses-audit` |  |
+| [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...; `uses-fix` |  |
 
 ## Component conversion
 
@@ -240,6 +240,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [callgraph](callgraph) | `callgraph`; drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... |  |
 | [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md`; drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)... |  |
 | [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
+| [Code-built menu tree and registry drift](Menu-Tree) | `menu-tree`; `menu-drift` |  |
 | [Cycles fix (mechanical, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles`; drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...; View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix); Structure form: Fix this cycle (dry run)...; Structure form: Apply cycle fix...; `charts\src\Emit-Cycles.ps1` |  |
 | [deps-report](deps-report) | `deps-report`; drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)... |  |
 | [Export Enums (Delphi const)](Export-Enums-Delphi-const) | drag-lint > Generate & Export > Export Enums (Delphi const)...; `export enums` |  |

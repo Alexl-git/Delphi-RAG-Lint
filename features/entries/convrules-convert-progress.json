@@ -21,6 +21,10 @@
     {
       "ask": "Why is my conversion taking so long, and which unit is it on?",
       "command": "Watch the Convert tab progress line in ConvRulesEditor.exe"
+    },
+    {
+      "ask": "Why does the progress line say 'applying units 1-8 of 20 in one batch' and not move for a while?",
+      "command": "Batch mode: one convert-apply per book over up to 8 units, and the engine reports no progress inside the call; set CONVRULES_BATCH=off before starting ConvRulesEditor.exe for per-unit progress"
     }
   ],
   "access": "standalone-app",

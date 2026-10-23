@@ -33,7 +33,7 @@ their pages through the same help root.
 
 ## The Help root setting
 
-`Tools > Options > Third Party > drag-lint > General`, group **Help**:
+In the IDE options dialog (Tools, Options, Third Party), open the drag-lint **General** page, group **Help**:
 
 * **Help root (URL or folder)** -- where help pages are opened from. Two forms:
   * the website, default `https://www.delphi-rag-lint.com`; a feature page is
