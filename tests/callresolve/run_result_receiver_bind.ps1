@@ -140,6 +140,18 @@ $r = EdgesAt 'PV-OUTER-ADDR' 'GetNum'
 Check 'PV-OUTER-ADDR Result := GetNum in a function returning TNumFn is no call edge (address)' `
   ($r.Count -eq 0) "edges=$($r.Count)"
 
+# review 2026-10-23 (W5-res2 fix 3): an anonymous method whose return type is
+# textually the routine's types Result like the routine; NEG-ANON (TOtherJob in
+# a TJob function) and PV-ANON-CALL (Integer in a TNumFn function) stay declined.
+# Positive control: the any-anonymous-method decline left POS-ANON-SAME unbound
+# and made PV-ANON-SAME-ADDR a call edge.
+$r = At 'POS-ANON-SAME' 'member-access' 'Streaming'
+Check 'POS-ANON-SAME Result inside an anonymous function: TJob in a TJob function binds TJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
+$r = EdgesAt 'PV-ANON-SAME-ADDR' 'GetNum'
+Check 'PV-ANON-SAME-ADDR Result := GetNum inside an anonymous function: TNumFn is no call edge (address)' `
+  ($r.Count -eq 0) "edges=$($r.Count)"
+
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
 } finally {
   if ($scratch -and (Test-Path $scratch)) { [System.IO.Directory]::Delete($scratch, $true) }

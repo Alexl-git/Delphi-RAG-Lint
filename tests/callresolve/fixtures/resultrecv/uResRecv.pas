@@ -26,6 +26,12 @@ type
 
 function GetNum: Integer;
 function MakeNumFn: TNumFn;
+function MakeSameAnon: TJob;
+function MakeSameNumFn: TNumFn;
+
+type
+  TJobFn = reference to function: TJob;
+  TNumFnFn = reference to function: TNumFn;
 
 var
   GPeer: TJob;
@@ -103,6 +109,29 @@ begin
       Result := GetNum; // PV-ANON-CALL
     end;
   Result := GetNum; // PV-OUTER-ADDR
+end;
+
+function MakeSameAnon: TJob;
+var
+  G: TJobFn;
+begin
+  G := function: TJob
+    begin
+      Result := TJob.Create;
+      Result.Streaming := True; // POS-ANON-SAME
+    end;
+  Result := G();
+end;
+
+function MakeSameNumFn: TNumFn;
+var
+  H: TNumFnFn;
+begin
+  H := function: TNumFn
+    begin
+      Result := GetNum; // PV-ANON-SAME-ADDR
+    end;
+  Result := H();
 end;
 
 end.

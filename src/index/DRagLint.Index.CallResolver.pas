@@ -445,16 +445,33 @@ type
     /// <remarks>ADeclared with a zero-Id result is 'ambiguous': the caller
     /// declines, and the name still shadows fields, unit values and types.</remarks>
     function LocalInScopeAt(const ARef: TReference; const AName: string; out ADeclared: Boolean): TSymbol;
-    /// <summary>Review 2026-10-23 (N-07): whether ARef sits inside an anonymous
-    /// method's body within its enclosing routine.</summary>
+    /// <summary>Review 2026-10-23 (N-07, W5-res2): whether ARef sits inside an
+    /// anonymous method's body within its enclosing routine, and the declared
+    /// return type of the innermost one.</summary>
     /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
     /// consulted.</param>
-    /// <returns>True inside an anonymous `function` / `procedure` body, and when
-    /// the routine's text cannot be read; False otherwise.</returns>
+    /// <param name="AReturnType">The innermost open anonymous method's return
+    /// type text, lowercased with blanks removed (`tlist<tjob>`); '' for an
+    /// anonymous procedure, outside one, or when it cannot be read.</param>
+    /// <returns>True inside an anonymous `function` / `procedure` body (or its
+    /// header), and when the routine's text cannot be read; False otherwise.</returns>
     /// <remarks>An anonymous method is a `function` / `procedure` keyword right
     /// after `:=`, `(`, `,` or `[`; its body runs from its `begin` to the
     /// matching `end`.</remarks>
-    function InsideAnonymousMethod(const ARef: TReference): Boolean;
+    function InsideAnonymousMethod(const ARef: TReference; out AReturnType: string): Boolean;
+    /// <summary>Review 2026-10-23 (W5-res2): the type of the implicit `Result`
+    /// at ARef -- the enclosing routine's declared return type, unless ARef sits
+    /// in an anonymous method whose own return type is not textually the same
+    /// (then that `Result` is the anonymous method's, of another type).</summary>
+    /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
+    /// consulted.</param>
+    /// <param name="ADeclined">True when ARef is inside an anonymous method
+    /// whose return type cannot be shown equal to the routine's.</param>
+    /// <returns>The return type text; '' when declined, for a procedure, or
+    /// for a signature shape SignatureReturnType does not read.</returns>
+    /// <remarks>Equality is text only (case and blanks ignored): a unit-qualified
+    /// spelling of the same type reads as different and declines.</remarks>
+    function ResultTypeAt(const ARef: TReference; out ADeclined: Boolean): string;
 
     /// <summary>The type symbols of AFileId and its root symbol (the one with no
     /// parent), read once per file and cached.</summary>
@@ -4323,9 +4340,9 @@ begin
   else if SameText(Leaf, 'Result') then
   begin
     { Review 2026-10-23 (W5-res2): inside an anonymous method Result is ITS
-      result, not the enclosing routine's -- unknown here, so ''. }
-    if not InsideAnonymousMethod(ARef) then
-      Result:= SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature);
+      result -- '' unless its return type is the routine's. }
+    var AnonDeclined: Boolean;
+    Result:= ResultTypeAt(ARef, AnonDeclined);
   end
   else
   begin
@@ -4744,9 +4761,11 @@ begin
   //     falls through to the field rung.
   if SameText(AReceiverExpr, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
   begin
-    { Review 2026-10-23: inside an anonymous method Result is ITS result. }
-    if InsideAnonymousMethod(ACallRef) then Exit;
-    RetType:= SignatureReturnType(Encl.Signature);
+    { Review 2026-10-23: inside an anonymous method Result is ITS result --
+      typed only when its return type is the routine's (W5-res2). }
+    var AnonDeclined: Boolean;
+    RetType:= ResultTypeAt(ACallRef, AnonDeclined);
+    if AnonDeclined then Exit;
     if RetType <> '' then Exit(ResolveTypeNameToSymbol(RetType, ACallRef.FileId));
   end;
 
@@ -5532,7 +5551,39 @@ begin
     if LocalScopeCovers(S, ARef.FileId, ARef.StartLine, ARef.StartCol) then Exit(S);
 end;
 
-function TCallResolver.InsideAnonymousMethod(const ARef: TReference): Boolean;
+{ The return type text of the anonymous method whose `function` keyword is
+  AToks[AHeader]: the tokens after the optional parameter list's `:` up to the
+  body or a declaration section, joined (already lowercased, so `tlist<tjob>`).
+  '' for a procedure or a header this does not read. }
+function AnonReturnType(const AToks: TArray<TCodeTok>; AHeader: Integer): string;
+const
+  BODY_START = '|begin|var|const|type|label|';
+var
+  K    : Integer;
+  Depth: Integer;
+  Parts: TArray<string>;
+begin
+  Result:= '';
+  K     := AHeader + 1;
+  Depth := 0;
+  while (K <= High(AToks)) and ((Depth > 0) or (AToks[K].Text = '(')) do
+  begin
+    if AToks[K].Text = '(' then Inc(Depth)
+    else if AToks[K].Text = ')' then Dec(Depth);
+    Inc(K);
+  end;
+  if (K > High(AToks)) or (AToks[K].Text <> ':') then Exit;
+  Parts:= [];
+  Inc(K);
+  while (K <= High(AToks)) and (Pos('|' + AToks[K].Text + '|', BODY_START) = 0) do
+  begin
+    Parts:= Parts + [AToks[K].Text];
+    Inc(K);
+  end;
+  Result:= string.Join('', Parts);
+end;
+
+function TCallResolver.InsideAnonymousMethod(const ARef: TReference; out AReturnType: string): Boolean;
 var
   Encl   : TSymbol         ;
   Lines  : TStringList     ;
@@ -5541,35 +5592,55 @@ var
   T      : string          ;
   P      : string          ;
   Depth  : Integer         ;
-  Pending: Integer         ;
+  Headers: TArray<Integer> ;
   Opened : TArray<Integer> ;
+  OpenHdr: TArray<Integer> ;
 begin
+  AReturnType:= '';
   Encl := SymbolById(ARef.EnclosingSymbolId);
   Lines:= LinesOf(ARef.FileId);
   if (Lines = nil) or (Encl.ImplStartLine <= 0) then Exit(True);
   Toks   := CodeTokens(Lines, Encl.ImplStartLine, 1, ARef.StartLine, ARef.StartCol);
   Depth  := 0;
-  Pending:= 0;
+  Headers:= [];
   Opened := [];
+  OpenHdr:= [];
   for K:= 0 to High(Toks) do
   begin
     T:= Toks[K].Text;
     P:= (if K > 0 then Toks[K - 1].Text else '');
     if ((T = 'function') or (T = 'procedure')) and (Pos('|' + P + '|', '|:=|(|,|[|') > 0) then
-      Inc(Pending)                                  { an anonymous method's header }
-    else if (T = 'begin') and (Pending > 0) then
+      Headers:= Headers + [K]                       { an anonymous method's header }
+    else if (T = 'begin') and (Length(Headers) > 0) then
     begin
-      Dec(Pending);
-      Opened:= Opened + [Depth];                    { its body: closes back at Depth }
+      Opened := Opened + [Depth];                   { its body: closes back at Depth }
+      OpenHdr:= OpenHdr + [Headers[High(Headers)]];
+      SetLength(Headers, Length(Headers) - 1);
       Inc(Depth);
     end
     else
     begin
       Inc(Depth, BlockDelta(T));
-      if (Length(Opened) > 0) and (Depth = Opened[High(Opened)]) then SetLength(Opened, Length(Opened) - 1);
+      if (Length(Opened) > 0) and (Depth = Opened[High(Opened)]) then
+      begin
+        SetLength(Opened, Length(Opened) - 1);
+        SetLength(OpenHdr, Length(OpenHdr) - 1);
+      end;
     end;
   end;
-  Result:= (Length(Opened) > 0) or (Pending > 0);
+  Result:= (Length(Opened) > 0) or (Length(Headers) > 0);
+  if (Length(Headers) = 0) and (Length(OpenHdr) > 0) then
+    AReturnType:= AnonReturnType(Toks, OpenHdr[High(OpenHdr)]);
+end;
+
+function TCallResolver.ResultTypeAt(const ARef: TReference; out ADeclined: Boolean): string;
+var
+  AnonType: string;
+begin
+  Result    := SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature);
+  ADeclined := InsideAnonymousMethod(ARef, AnonType)
+               and ((AnonType = '') or not SameText(AnonType, Result.Replace(' ', '', [rfReplaceAll])));
+  if ADeclined then Result:= '';
 end;
 
 function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
