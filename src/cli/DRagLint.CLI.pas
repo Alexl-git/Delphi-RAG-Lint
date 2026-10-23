@@ -157,6 +157,7 @@ uses
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
   , DRagLint.MenuTree
+  , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
   , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
@@ -467,6 +468,7 @@ type
     WorkspaceConfig: string; // --config <path>
     // forms-csv
     RootForm: string; // forms-csv: --root <TfrmMAIN> (auto-detect if '')
+    RegistryDir: string; // menu-drift: --registry <features dir>
     // library-drift / selftest drift
     Roots: TArray<string>; // --root <dir> repeatable (drift check)
     // v0.45: index manifest (Task 1)
@@ -1527,6 +1529,11 @@ begin
     else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
     else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
     else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
+    else if (A = '--registry') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RegistryDir:= ParamStr(i);
+    end
     else if (A = '--root') and (i < ParamCount) then
     begin
       Inc(i);
@@ -28850,6 +28857,91 @@ begin
   else Write(Txt);
   Result:= 0;
 end; // function
+/// <summary>menu-drift: the code-built menu tree (menu-tree) against the
+/// registry's ide-menu surfaces (spec section 7): MISSING / MOVED /
+/// UNREGISTERED / NOTE lines and 'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
+/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --format text|json, --output.</param>
+/// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
+/// project not in the db, unreadable registry); 3 stale index (refused).</returns>
+function DoMenuDrift(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@50e0 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 drift or other)
+const
+  EXIT_STALE_INDEX = 3;  { spec 5: a stale index is refused, never answered from }
+var
+  Walker: TMenuWalker;
+  Tree  : TMenuTree;
+  Reg   : TMenuRegistry;
+  Rep   : TMenuDriftReport;
+  Fmt   : string;
+  Txt   : string;
+begin
+  if not ExplicitDbsExist(AArgs, 'menu-drift') then Exit(2);
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if (AArgs.ProjectPath = '') or (AArgs.RegistryDir = '') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir>');
+    Exit(2);
+  end;
+  Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if (Fmt <> 'text') and (Fmt <> 'json') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: --format must be text or json');
+    Exit(2);
+  end;
+  Tree:= nil;
+  Reg := TMenuRegistry.Create;
+  try
+    try
+      Reg.LoadFromDir(AArgs.RegistryDir);
+      Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
+      try
+        Tree:= Walker.Walk;
+      finally
+        Walker.Free;
+      end;
+    except
+      on E: EMenuTreeStale do
+      begin
+        Writeln(ErrOutput, 'menu-drift: stale index: ', E.Message);
+        Exit(EXIT_STALE_INDEX);
+      end;
+      on E: EMenuTreeSetup do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.Message);
+        Exit(2);
+      end;
+      on E: EMenuDriftSetup do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.Message);
+        Exit(2);
+      end;
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.ClassName, ': ', E.Message);
+        Exit(1);
+      end;
+    end;
+    Rep:= ComputeMenuDrift(Tree, Reg);
+    try
+      Txt:= if Fmt = 'json' then Rep.ToJson else Rep.ToText;
+      Result:= if Rep.HasDrift then 1 else 0;
+    finally
+      Rep.Free;
+    end;
+  finally
+    Tree.Free;
+    Reg.Free;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    Writeln('menu-drift: wrote ', AArgs.Output);
+  end
+  else Write(Txt);
+end; // function
 // v0.45 Task 9: 32-bit size guard.
 // Emits a WARNING to ErrOutput when the process is 32-bit (or AForce32=True for
 // testing) and the DB file exceeds ASizeGuardMB.
@@ -32224,6 +32316,7 @@ begin
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)
     else if Args.Command = 'menu-tree'         then Result:= DoMenuTree        (Args)
+    else if Args.Command = 'menu-drift'        then Result:= DoMenuDrift       (Args)
     else if Args.Command = 'generate-test'     then Result:= DoGenerateTest    (Args)
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)

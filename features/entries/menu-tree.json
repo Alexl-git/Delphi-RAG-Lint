@@ -37,6 +37,35 @@
       ],
       "helpOrder": 96,
       "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)"]
+    },
+    {
+      "type": "cli",
+      "verb": "menu-drift",
+      "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--registry",
+          "arg": "<features dir>"
+        },
+        {
+          "name": "--format",
+          "arg": "text|json"
+        },
+        {
+          "name": "--output",
+          "arg": "<f>"
+        }
+      ],
+      "helpOrder": 97,
+      "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry's ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
     }
   ],
   "audience": "both",
@@ -49,6 +78,10 @@
     {
       "ask": "Every leaf of a code-built menu, one per line",
       "command": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> --format paths"
+    },
+    {
+      "ask": "Does the plugin's menu still match the documented menu paths?",
+      "command": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry features"
     }
   ]
 }

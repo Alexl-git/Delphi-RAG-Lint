@@ -45,6 +45,39 @@ Builders are found through the index: routines whose body references
 `TMenuItem` (or a descendant) and that take no menu-item parameter themselves
 (those are helpers, walked from their call sites).
 
+## Drift against the registry: `menu-drift`
+
+```
+drag-lint menu-drift --project <X.dproj> --db <db> --registry <features dir> [--format text|json] [--output <f>]
+```
+
+Compares the live tree with the `ide-menu` surfaces of `<features dir>\entries\*.json`
+(and the `captions` of `exemptions.json`) by PATH key -- the same caption /
+path keys featuregen uses (`&&` -> `&`, `...` dropped, punctuation trimmed,
+lowercase, segments joined with ` > `).
+
+| Class | When | Printed with |
+|---|---|---|
+| `MISSING` | a registered path the code does not build, and its caption is nowhere else | `renamed? -> '<caption>'` when a live, unregistered item under the same parent shares at least 12 leading key characters |
+| `MOVED` | a registered path whose caption now lives under another parent | `now at <live path>` |
+| `UNREGISTERED` | a built item no surface covers (exact path, or a caption prefix of at least 12 characters under the same parent) and not exempted | a skeleton surface line to paste |
+| `NOTE` | dynamic captions, unparented items, an exempted caption that is now a submenu / header / root (the exemption is no longer needed) | -- |
+
+Separators, headers, submenus and external roots are never `UNREGISTERED`; a
+registered path that names a live submenu is not `MISSING`; a registered path
+under a parent that holds a dynamic item is never `MISSING` (the dynamic item
+may be it -- its note says so). Order inside a submenu is not compared.
+
+Summary line: `menu-drift: missing=N unregistered=N moved=N notes=N`. Exit 0 no
+drift, 1 drift, 2 usage / setup, 3 stale index. `--format json` writes
+`menu-drift/1` (`missing`, `moved`, `unregistered`, `notes`, `summary`).
+
+The battery runs it on the IDE plugin itself (`tests\autotest\run_menu_drift_guard.ps1`):
+positive controls on the fixture (a deleted entry -> `UNREGISTERED`, a changed
+caption -> `MISSING` with `renamed?`, a changed parent -> `MOVED`, a renamed
+helper -> no drift, a caption made dynamic -> a note, a touched unit -> exit 3),
+then the real run, which passes only on exit 0. The plugin index is a
+`tests\autotest\prepare_battery.ps1` artifact (`src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite`).
 ## Confidence
 
 `certain` (literal caption, direct parenting or a recognised helper),
