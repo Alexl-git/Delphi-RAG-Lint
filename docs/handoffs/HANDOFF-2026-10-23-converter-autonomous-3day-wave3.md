@@ -22,7 +22,10 @@ featuregen regen + backlog bb8aaf4d; N9 + GlyphForm marker 6b21a559. Pin
 * N7+N11 re-entrancy (clicks run handlers inside / just after the progress window; Delete and
   2nd Add dropped) -- session-model implementer, harness worktree; acceptance incl. 5x drive-convert-tab 26/0
   and removing drive-convert-batch's Add retry. Merge after review.
-* N8 decision (analyst, read-only): does "inherited code use(s) left" overstate when the ancestor is converted?
+* N8: verdict OVERSTATES (converted + code + pas_uses mapped -> no note; ruling: no "followed" note
+  either). Fix in flight: sonnet implementer, worktree C:\Projects\Delphi-RAG-lint-wt\conv-n8,
+  branch fix/conv-n8-inherited-note. Review, then cherry-pick. (Harness isolation worktrees are
+  refused while the session cwd is lowercase c: -- create -wt worktrees by hand.)
 * FG-M DONE on feat/conv-fgm-menu-tree (47af9860, 0a719fc1) -- HELD until ENGINE's final deploy
   (old engine lacks menu-tree -> registry guard would go red).
 
