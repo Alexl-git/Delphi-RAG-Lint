@@ -18,6 +18,11 @@ uses
   , System.Generics.Collections
   ;
 
+const
+  /// <summary>How many pending job titles TQueueState.PendingTitles carries
+  /// (and DragLint.Plugin.QueueText.DLQueueLines names before "+ N more waiting").</summary>
+  DL_QUEUE_NAMED_PENDING = 3;
+
 type
   TJobKind = (jkGeneric, jkReindex, jkLintAll, jkFormsCsv);
 
@@ -33,6 +38,10 @@ type
     Phase       : string ;
     QueueDepth  : Integer; { pending jobs, NOT counting the running one }
     LastResult  : string ;
+    { Titles of the first DL_QUEUE_NAMED_PENDING (3) pending jobs, in run
+      order. Written together with QueueDepth, under FLock (SyncPendingLocked),
+      so the status strip's "Next:/Then:" lines never disagree with "N queued". }
+    PendingTitles: TArray<string>;
   end;
 
   TJobPreRun = TProc;                  { UI thread, before the process starts }
@@ -79,6 +88,8 @@ type
     procedure SetPercent(APct: Integer); overload;
     procedure SetPercent(APct: Integer; const APhase: string); overload;
     procedure SetLastResult(const AText: string);
+    { Caller holds FLock. The ONE place QueueDepth and PendingTitles are set. }
+    procedure SyncPendingLocked;
   public
     constructor Create;
     /// <summary>Stops the worker: signals the cancel event, so a running job's
@@ -230,7 +241,7 @@ begin
   FDeferredLogged:= False;
   FState.Running   := False;
   FState.Percent   := -1;
-  FState.QueueDepth:= 0;
+  SyncPendingLocked; { QueueDepth 0, no titles; no other thread exists yet }
   FWorker  := TQueueWorker.Create(Self);
 end;
 
@@ -273,7 +284,7 @@ begin
           FPending.Delete(I); { OwnsObjects -> frees the superseded job }
         end;
     FPending.Add(AJob);
-    FState.QueueDepth:= FPending.Count;
+    SyncPendingLocked;
   finally
     FLock.Leave;
   end;
@@ -291,11 +302,21 @@ begin
     for var J: TDragLintJob in FPending do
       if J.Busy then Inc(Dropped);
     FPending.Clear; { frees pending jobs; the running one is owned by the worker frame }
-    FState.QueueDepth:= 0;
+    SyncPendingLocked;
   finally
     FLock.Leave;
   end;
   if Dropped > 0 then AdjustBusy(-Dropped);
+end;
+
+procedure TDragLintJobQueue.SyncPendingLocked;
+var
+  Named: Integer;
+begin
+  FState.QueueDepth:= FPending.Count;
+  Named:= Min(FPending.Count, DL_QUEUE_NAMED_PENDING);
+  SetLength(FState.PendingTitles, Named);
+  for var I:= 0 to Named - 1 do FState.PendingTitles[I]:= FPending[I].Title;
 end;
 
 function TDragLintJobQueue.GetState: TQueueState;
@@ -591,7 +612,7 @@ begin
           FState.Running     := True;
           FState.CurrentTitle:= Job.Title;
           FState.Percent     := -1;
-          FState.QueueDepth  := FPending.Count;
+          SyncPendingLocked;
         end;
       finally
         FLock.Leave;
@@ -613,7 +634,7 @@ begin
         FState.Running     := False;
         FState.CurrentTitle:= '';
         FState.Percent     := -1;
-        FState.QueueDepth  := FPending.Count;
+        SyncPendingLocked;
       finally
         FLock.Leave;
       end;

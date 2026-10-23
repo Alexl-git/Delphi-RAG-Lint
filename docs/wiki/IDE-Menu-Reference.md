@@ -223,8 +223,8 @@ on the menu rather than behind the About window.
 
 | Item | What it does |
 |---|---|
-| **IDE Menu Reference (wiki)** | Opens this page in the browser. |
-| **Effect Summary Legend (wiki)** | Opens the page that explains the purity tokens in a routine's effect summary. |
+| **IDE Menu Reference** | Opens this page in the browser. |
+| **Effect Summary Legend** | Opens the page that explains the purity tokens in a routine's effect summary. |
 
 ## About
 

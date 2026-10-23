@@ -55,9 +55,9 @@ type
   end;
 
   /// <summary>Tools->Options "General" page: exe/db paths, workspace mode, and the
-  /// auto-compile family of toggles (8 fields: ExePath, DbPathTemplate,
-  /// EnableWorkspaceMode, AutoCompileOnSave, AutoCompileBuffer, AutoCompileOnStartup,
-  /// AutoCompileOnSwitch, AutoJumpToDiagnostics).</summary>
+  /// auto-compile family of toggles, and the help root (9 fields: ExePath,
+  /// DbPathTemplate, EnableWorkspaceMode, AutoCompileOnSave, AutoCompileBuffer,
+  /// AutoCompileOnStartup, AutoCompileOnSwitch, AutoJumpToDiagnostics, HelpRoot).</summary>
   TDLGeneralOptionsFrame = class(TDLPageFrame)
   private
     FGrpPaths    : TGroupBox;
@@ -73,7 +73,11 @@ type
     FCbCompileOnStartup : TCheckBox;
     FCbCompileOnSwitch  : TCheckBox;
     FCbJumpToDiagnostics: TCheckBox;
+    FGrpHelp     : TGroupBox;
+    FEdHelpRoot  : TEdit    ;
+    FBtnHelpTest : TButton  ;
     procedure BtnBrowseClick(Sender: TObject);
+    procedure BtnHelpTestClick(Sender: TObject);
   protected
     procedure BuildControls; override;
     procedure LoadControls; override;
@@ -192,7 +196,8 @@ uses
   DragLint.Plugin.ExeResolver
   , DRagLint.Project.Resolver
   , DragLint.Plugin.DockForm
-  
+  , DragLint.Plugin.HelpIndex  // dl:unit DragLint.Plugin.HelpIndex accepted -- the Help group shows the default root and normalises through the same rules
+  , DragLint.Plugin.Help       { DLOpenHelpUrl }
   , DRagLint.Core.JsonFile    { WriteJsonFileAtomic -- pretty, no BOM, atomic }
   ;
 
@@ -288,13 +293,19 @@ const
   GH = 28;
   CH = 22;
   EH = 24;
+  FRAME_HEIGHT = 530; { room for the Help group }
+  LABEL_H      = 16;
+  ROW_GAP      = 6;
+  BTN_W        = 68;
+  BTN_GAP      = 4;
+  CAPTION_INSET= 4; { first row sits this far above the group's caption height }
 var
   Y : Integer;
   GY: Integer;
   GW: Integer;
 begin
   Width := 460;
-  Height:= 420;
+  Height:= FRAME_HEIGHT;
   Y     := GM;
 
   { --- Paths --- }
@@ -337,6 +348,26 @@ begin
   FCbCompileOnStartup := DLNewCheck(FGrpCompile, LM, GY, 'Compile once when the project opens'          , False); Inc(GY, CH);
   FCbCompileOnSwitch  := DLNewCheck(FGrpCompile, LM, GY, 'Compile when switching to a .pas file'        , False); Inc(GY, CH);
   FCbJumpToDiagnostics:= DLNewCheck(FGrpCompile, LM, GY, 'Jump to Diagnostics in Structure tree after compile', False);
+
+  { --- Help (spec 2026-10-23 ide-help-line 3.1): a group on this page, not a
+    fifth page -- no new frame class, so no HOWTO trap is re-entered. --- }
+  FGrpHelp:= DLNewGroup(Self, 'Help', Y, GH + LABEL_H + EH + ROW_GAP + LABEL_H + GM);
+  GW:= FGrpHelp.Width - LM * 2;
+  GY:= GH - CAPTION_INSET;
+  DLNewLabel(FGrpHelp, 'Help root (URL or folder):', LM, GY);
+  Inc(GY, LABEL_H);
+  FEdHelpRoot:= DLNewEdit(FGrpHelp, LM, GY, GW - BTN_W - BTN_GAP, '');
+  FBtnHelpTest:= TButton.Create(FGrpHelp);
+  FBtnHelpTest.Parent := FGrpHelp;
+  FBtnHelpTest.Caption:= 'Test';
+  FBtnHelpTest.Left   := FEdHelpRoot.Left + FEdHelpRoot.Width + BTN_GAP;
+  FBtnHelpTest.Top    := GY;
+  FBtnHelpTest.Width  := BTN_W;
+  FBtnHelpTest.Height := EH;
+  FBtnHelpTest.Anchors:= [akTop, akRight];
+  FBtnHelpTest.OnClick:= BtnHelpTestClick;
+  Inc(GY, EH + ROW_GAP);
+  DLNewLabel(FGrpHelp, 'Default ' + DL_DEFAULT_HELP_ROOT + ' -- or a folder holding an offline copy of help\dl', LM, GY);
 end; // procedure
 
 procedure TDLGeneralOptionsFrame.LoadControls;
@@ -349,6 +380,7 @@ begin
   FCbCompileOnStartup .Checked:= FSettings.AutoCompileOnStartup;
   FCbCompileOnSwitch  .Checked:= FSettings.AutoCompileOnSwitch;
   FCbJumpToDiagnostics.Checked:= FSettings.AutoJumpToDiagnostics;
+  FEdHelpRoot         .Text   := DLNormaliseHelpRoot(FSettings.HelpRoot);
 end; // procedure
 
 procedure TDLGeneralOptionsFrame.SaveControls(var ASettings: TDragLintSettings);
@@ -361,11 +393,19 @@ begin
   ASettings.AutoCompileOnStartup := FCbCompileOnStartup  .Checked;
   ASettings.AutoCompileOnSwitch  := FCbCompileOnSwitch   .Checked;
   ASettings.AutoJumpToDiagnostics:= FCbJumpToDiagnostics .Checked;
+  ASettings.HelpRoot             := DLNormaliseHelpRoot(FEdHelpRoot.Text);
 end; // procedure
 
 procedure TDLGeneralOptionsFrame.BtnBrowseClick(Sender: TObject);
 begin
   if FOpenDlg.Execute then FEdExe.Text:= FOpenDlg.FileName;
+end;
+
+{ Opens the all-features page of the root AS TYPED (not yet saved), so the
+  user can check a folder before pressing OK. }
+procedure TDLGeneralOptionsFrame.BtnHelpTestClick(Sender: TObject);
+begin
+  DLOpenHelpUrl(DLHelpAllUrl(DLNormaliseHelpRoot(FEdHelpRoot.Text)));
 end;
 
 { ==================== TDLIndexerOptionsFrame ==================== }

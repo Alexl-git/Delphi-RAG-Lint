@@ -77,6 +77,9 @@
         <DCCReference Include="DragLint.Plugin.Editor.pas"/>
         <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.Settings.pas"/>
+        <DCCReference Include="DragLint.Plugin.HelpIndex.pas"/>
+        <DCCReference Include="DragLint.Plugin.Help.pas"/>
+        <DCCReference Include="DragLint.Plugin.HelpLine.pas"/>
         <DCCReference Include="DragLint.Plugin.Keyboard.pas"/>
         <DCCReference Include="DragLint.Plugin.CallerFilter.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverSignature.pas"/>
@@ -127,6 +130,7 @@
         <DCCReference Include="..\core\DRagLint.Core.GhostText.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
         <DCCReference Include="DragLint.Plugin.JobQueue.pas"/>
+        <DCCReference Include="DragLint.Plugin.QueueText.pas"/>
         <DCCReference Include="DragLint.Plugin.StatusBar.pas"/>
         <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
         <DCCReference Include="DragLint.Plugin.SearchParse.pas"/>

@@ -24,6 +24,10 @@ procedure UnregisterDragLintDock; { idempotent teardown }
 /// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
 procedure ShowDragLintDockLintOptions;
 
+/// <summary>Shows the drag-lint dock and puts the caret in its help line
+/// (drag-lint &gt; Help &gt; Help on a feature...).</summary>
+procedure ShowDragLintDockHelpLine;
+
 /// <summary>Shows the drag-lint dock and selects the Uses &amp; Deps tab -- the
 /// reviewed-fix surface for uses-fix and reconcile-project.</summary>
 /// <remarks>Deliberately does NOT refresh either section. The tab runs nothing
@@ -72,6 +76,7 @@ uses
   , System.JSON
   , System.Generics.Collections
   , Winapi.Windows
+  , Winapi.Messages
   , Winapi.ShellAPI
   , Vcl.Controls
   , Vcl.Forms
@@ -102,6 +107,9 @@ uses
   , DragLint.Plugin.LintOptionsFrame
   , DragLint.Plugin.UsesDepsFrame
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.HelpLine
+  , DragLint.Plugin.HelpIndex   { DLHelpIdForDockTab }
+  , DragLint.Plugin.Help        { DLOpenHelp / DLSharedHelpIndex }
   ;
 
 {$R *.dfm}
@@ -126,6 +134,7 @@ type
     private
       FPages         : TPageControl;
       FStatusBar     : TDragLintStatusBar; { v0.65.1: R2 job-queue status strip (alBottom) }
+      FHelpLine      : TDLHelpLine       ; { 2026-10-23: help line (alTop), spec ide-help-line 3.4 }
       FStructure     : TForm       ; { embedded TDragLintStructureForm }
       FTabStruct          : TTabSheet   ;
       FTabUnifiedSearch   : TTabSheet   ;
@@ -151,6 +160,10 @@ type
       FLastStructFile: string      ;
       FLastDiagCount : Integer     ; { v0.46: refresh Diagnostics node when cache changes }
       FLastDiagSig   : Cardinal    ; { 2026-10-13: content signature -- a same-count change refreshes too }
+      { 2026-10-23 F1 (spec ide-help-line 3.5): the form whose OnKeyDown we
+        chained, and the handler that was there before us. }
+      FHookedForm     : TCustomForm ;
+      FPrevFormKeyDown: TKeyEvent   ;
       procedure HandlePageChange(Sender: TObject);
       procedure HandleInitTimer (Sender: TObject);
       procedure HandleWatchTimer(Sender: TObject);
@@ -163,6 +176,13 @@ type
         saying so (H2219, three times) ever since. Removed while this file
         was open for the Uses & Deps tab rather than left to accumulate. }
       procedure ButterflyTreeDblClick(Sender: TObject);
+      procedure HookDockFormKeys;
+      procedure UnhookDockFormKeys;
+      procedure HandleDockFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      procedure OpenHelpForActiveTab;
+      { F1 when the dock is DOCKED: the host's KeyPreview never sees it, but
+        DefWindowProc walks WM_HELP up the parent chain to this frame. }
+      procedure WMHelp(var Message: TWMHelp); message WM_HELP;
     public
       constructor Create(AOwner: TComponent); override;
       destructor Destroy; override;
@@ -181,6 +201,9 @@ type
       procedure PopulateButterfly(const AQName, ACallersJson, ACalleesJson: string);
       /// <summary>Brings the Call Graph tab to the front.</summary>
       procedure SelectButterflyTab;
+      /// <summary>Puts the caret in the help line's edit (drag-lint &gt; Help &gt;
+      /// Help on a feature...). Does nothing while the frame cannot take focus.</summary>
+      procedure FocusHelpLine;
   end;
 
   TDragLintDockable = class(TInterfacedObject, INTACustomDockableForm)
@@ -249,6 +272,11 @@ begin
   FStatusBar:= TDragLintStatusBar.Create(Self);
   FStatusBar.Parent:= Self;
 
+  { 2026-10-23: the help line along the top (alTop), created before the page
+    control for the same reason as the strip: alClient fills what is left. }
+  FHelpLine:= TDLHelpLine.Create(Self);
+  FHelpLine.Parent:= Self;
+
   FPages:= TPageControl.Create(Self);
   FPages.Parent  := Self;
   FPages.Align   := alClient;
@@ -298,6 +326,7 @@ begin
   { v0.94: secondary net alongside TFormWatch.Notification -- guard with
     identity check in case a second frame instance was created meanwhile. }
   if GDockFrame = Self then GDockFrame:= nil;
+  UnhookDockFormKeys;
   FNavList.Free; { Batch E Task 3: frees every TNav attached to FButterflyTree nodes }
   inherited;
 end;
@@ -305,6 +334,11 @@ end;
 procedure TDragLintDockFrame.SelectLintOptionsTab;
 begin
   if (FPages <> nil) and (FTabLintOptions <> nil) then FPages.ActivePage:= FTabLintOptions;
+end;
+
+procedure TDragLintDockFrame.FocusHelpLine;
+begin
+  if FHelpLine <> nil then FHelpLine.FocusEdit;
 end;
 
 procedure TDragLintDockFrame.SelectUsesDepsTab;
@@ -547,10 +581,72 @@ begin
   except
     on E: Exception do AddPlaceholder(FTabUsesDeps, 'Uses & Deps failed to load: ' + E.Message);
   end;
+
+  { Here, not in the constructor: the frame is parented to its dock form by now. }
+  HookDockFormKeys;
 end; // procedure
 
-procedure TDragLintDockFrame.HandlePageChange(Sender: TObject);
+type
+  { KeyPreview / OnKeyDown are protected on TCustomForm. }
+  TDockFormAccess = class(TCustomForm);
+
+procedure TDragLintDockFrame.HookDockFormKeys;
+var
+  Form: TCustomForm;
 begin
+  { The dock form itself (TopForm = False): when it floats, its KeyPreview sees
+    F1 first. Chained, never replaced -- the IDE may have its own handler. }
+  Form:= GetParentForm(Self, False);
+  if (Form = nil) or (Form = FHookedForm) then Exit;
+  UnhookDockFormKeys;
+  FHookedForm:= Form;
+  FPrevFormKeyDown:= TDockFormAccess(Form).OnKeyDown;
+  TDockFormAccess(Form).KeyPreview:= True;
+  TDockFormAccess(Form).OnKeyDown := HandleDockFormKeyDown;
+end; // procedure
+
+procedure TDragLintDockFrame.UnhookDockFormKeys;
+var
+  Ours   : TKeyEvent;
+  Current: TKeyEvent;
+begin
+  if FHookedForm = nil then Exit;
+  Ours   := HandleDockFormKeyDown;
+  Current:= TDockFormAccess(FHookedForm).OnKeyDown;
+  { Restore only if nobody chained after us. }
+  if (TMethod(Current).Code = TMethod(Ours).Code) and (TMethod(Current).Data = TMethod(Ours).Data) then
+    TDockFormAccess(FHookedForm).OnKeyDown:= FPrevFormKeyDown;
+  FHookedForm     := nil;
+  FPrevFormKeyDown:= nil;
+end; // procedure
+
+procedure TDragLintDockFrame.OpenHelpForActiveTab;
+var
+  Caption: string;
+begin
+  Caption:= if (FPages <> nil) and (FPages.ActivePage <> nil) then FPages.ActivePage.Caption else '';
+  DLOpenHelp(DLHelpIdForDockTab(Caption, DLSharedHelpIndex.Entries));
+end; // procedure
+
+procedure TDragLintDockFrame.HandleDockFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  { Only for F1 pressed INSIDE this frame: the same form may host other panes. }
+  if (Key = VK_F1) and (Shift = []) and (Screen.ActiveControl <> nil) and ContainsControl(Screen.ActiveControl) then
+  begin
+    Key:= 0;
+    OpenHelpForActiveTab;
+    Exit;
+  end; // if
+  if Assigned(FPrevFormKeyDown) then FPrevFormKeyDown(Sender, Key, Shift);
+end; // procedure
+
+procedure TDragLintDockFrame.WMHelp(var Message: TWMHelp);
+begin
+  OpenHelpForActiveTab;
+  Message.Result:= 1;
+end; // procedure
+
+procedure TDragLintDockFrame.HandlePageChange(Sender: TObject);begin
   { Re-read the active editor file whenever the Structure tab comes forward. }
   if (FPages.ActivePage = FTabStruct) and (FStructure <> nil) then RefreshEmbeddedStructure(FStructure);
 end;
@@ -679,6 +775,12 @@ procedure ShowDragLintDockLintOptions;
 begin
   ShowDragLintDock;
   if GDockFrame <> nil then GDockFrame.SelectLintOptionsTab;
+end;
+
+procedure ShowDragLintDockHelpLine;
+begin
+  ShowDragLintDock;
+  if GDockFrame <> nil then GDockFrame.FocusHelpLine;
 end;
 
 procedure ShowDragLintDockUsesDeps;
