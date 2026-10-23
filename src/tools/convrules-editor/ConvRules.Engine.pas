@@ -114,6 +114,9 @@ const
   /// <summary>info --json capability: apply/1 sends descendants[] (a descendant form
   /// that still streams a converted instance as the old type; engine 1.25.0).</summary>
   CAPABILITY_DESCENDANT_WARNINGS = 'descendant_warnings';
+  /// <summary>info --json capability: convert-apply takes several --unit and answers one
+  /// apply-batch/1 document (engine 1.23.0); ConvRules.ConvertRunner's batch mode needs it.</summary>
+  CAPABILITY_BATCH_UNITS = 'batch_units';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -1158,6 +1161,20 @@ type
       /// refused=true, 'would leave N unconverted instance(s) of T'). A name that matches
       /// no instance: see the C12 Task 3 report (measured on 1.22.0).</remarks>
       function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer; overload;
+      /// <summary>ONE `convert-apply` over several units (apply-batch/1), bounded by
+      /// ATimeoutMs (the runner passes BatchTimeoutMs(CONVERT_TIMEOUT_MS, Length(AUnits))).</summary>
+      /// <param name="AUnits">The .pas files to convert in place (each .dfm goes with its
+      /// unit), in the order the answer's units[] must follow.</param>
+      /// <param name="ARulesFile">The .rules book.</param>
+      /// <param name="ADbs">--db list; each unit should be indexed in one of them.</param>
+      /// <param name="ATimeoutMs">Watchdog of the call. Passed in, not computed here: ConvRules.ConvertBatch
+      /// sits above ConvRules.ConvertRun, which uses this unit, so the adapter cannot use it.</param>
+      /// <param name="AJson">The engine's output -- feed it to ParseApplyBatchJson.</param>
+      /// <returns>The engine's exit code (see RunCaptureTimed); 3 on timeout.</returns>
+      /// <remarks>--no-backup because the runner owns the .BCK&lt;N&gt; restore points. A
+      /// single unit is NOT routed here: the engine answers it with a bare apply/1 (decision
+      /// D9). No --only: it would bind every unit of the batch.</remarks>
+      function ApplyConversionBatch(const AUnits: TArray<string>; const ARulesFile: string; const ADbs: TArray<string>; ATimeoutMs: Cardinal; out AJson: string): Integer;
       /// <summary>`index --project AProjectFile --db AProjectDb` (incremental),
       /// bounded by CONVERT_TIMEOUT_MS.</summary>
       /// <param name="AProjectFile">The .dpr / .dproj that owns AProjectDb.</param>
@@ -1242,6 +1259,16 @@ type
 /// <remarks>Pass ADepth &gt; 0 only when the engine reports book_depth and AProgress only
 /// when it reports progress_lines: an older engine rejects either flag.</remarks>
 function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
+
+/// <summary>PURE: the command line of ONE batch convert-apply call (the part after the exe).</summary>
+/// <param name="AUnits">The .pas files, in call order (the answer's units[] follows it).</param>
+/// <param name="ARulesFile">The .rules book.</param>
+/// <param name="ADbArgs">Ready-made ' --db "x"' arguments (TEngineAdapter.DbArgsFor).</param>
+/// <param name="ACastLibArgs">Ready-made ' --castlib "x"' argument or '' (CastLibArgs).</param>
+/// <returns>'convert-apply --unit "u1" --unit "u2" ... --rules "r"' + ADbArgs + ACastLibArgs
+/// + ' --apply --no-backup --format json' -- the tail of ApplyConversion, never --only (a
+/// batch --only would bind every unit).</returns>
+function BatchApplyArgs(const AUnits: TArray<string>; const ARulesFile, ADbArgs, ACastLibArgs: string): string;
 
 /// <summary>PURE: the capability keys whose value is the JSON literal true.</summary>
 /// <param name="AInfoOutput">Raw `info --json` output; text before the first '{' and after
@@ -1550,6 +1577,23 @@ begin
     LOnly:= Format(' --only "%s"', [string.Join(',', AOnly)]);
   Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s%s%s --apply --no-backup --format json',
     [AUnitPas, ARulesFile, DbArgsFor(ADbs), LOnly, CastLibArgs]), CONVERT_TIMEOUT_MS, AJson);
+end;
+
+function BatchApplyArgs(const AUnits: TArray<string>; const ARulesFile, ADbArgs, ACastLibArgs: string): string;
+var
+  LUnitArgs: TArray<string>;
+begin
+  SetLength(LUnitArgs, Length(AUnits));
+  for var LIdx:= 0 to High(AUnits) do
+    LUnitArgs[LIdx]:= Format('--unit "%s"', [AUnits[LIdx]]);
+  Result:= Format('convert-apply %s --rules "%s"%s%s --apply --no-backup --format json',
+    [string.Join(' ', LUnitArgs), ARulesFile, ADbArgs, ACastLibArgs]);
+end;
+
+function TEngineAdapter.ApplyConversionBatch(const AUnits: TArray<string>; const ARulesFile: string; const ADbs: TArray<string>; ATimeoutMs: Cardinal; out AJson: string): Integer;
+begin
+  Result:= RunCaptureTimed(BatchApplyArgs(AUnits, ARulesFile, DbArgsFor(ADbs), CastLibArgs),
+    ATimeoutMs, AJson);
 end;
 
 function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;

@@ -11087,6 +11087,17 @@ begin
   Check('batch.timeout.one', (BatchTimeoutMs(600000, 1) = 600000) and (BatchTimeoutMs(600000, 0) = 600000));
   Check('batch.timeout.eight', BatchTimeoutMs(600000, 8) = 600000 + 7 * 120000, IntToStr(BatchTimeoutMs(600000, 8)));
 
+  // --- BatchApplyArgs (ConvRules.Engine) ---
+  Check('engine.batch.args.two.units', BatchApplyArgs(['C:\a\U1.pas', 'C:\a\U2.pas'], 'C:\r\Fix.rules', ' --db "D1" --db "D2"', '')
+    = 'convert-apply --unit "C:\a\U1.pas" --unit "C:\a\U2.pas" --rules "C:\r\Fix.rules" --db "D1" --db "D2" --apply --no-backup --format json',
+    BatchApplyArgs(['C:\a\U1.pas', 'C:\a\U2.pas'], 'C:\r\Fix.rules', ' --db "D1" --db "D2"', ''));
+  Check('engine.batch.args.castlib', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', ' --db "D"', ' --castlib "C.castlib"')
+    = 'convert-apply --unit "U1.pas" --unit "U2.pas" --rules "R.rules" --db "D" --castlib "C.castlib" --apply --no-backup --format json',
+    BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', ' --db "D"', ' --castlib "C.castlib"'));
+  Check('engine.batch.args.no.only', (Pos('--only', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', '', '')) = 0)
+    and (Pos('--apply --no-backup', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', '', '')) > 0));
+  Check('engine.batch.capability.name', CAPABILITY_BATCH_UNITS = 'batch_units');
+
   // --- BatchUntrustedNote ---
   Check('batch.untrusted.note', BatchUntrustedNote('units[] short') = 'batch apply not trusted: units[] short',
     BatchUntrustedNote('units[] short'));
