@@ -1220,6 +1220,9 @@ begin
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  { W5-ext: walk the target so `= type TBase` records a type_use for TBase, as
+    the plain alias now does (run_alias_rhs_refs.ps1). }
+  Walk(WrapNode, AState, AParentSymbolIdx, AParentQualifiedName);
   Result:= True;
 end; // function
 
@@ -1339,6 +1342,12 @@ begin
       end;
   end;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', Her);
+  { W5-ext: the TARGET is a type USE. This handler Exits the dispatch, so nothing
+    else visits the typeref -- `TTokList = TList<TTok>` emitted no ref for TList
+    or TTok, and lint-all called System.Generics.Collections unused. One call,
+    no other walker reaches this node, so it cannot double-emit
+    (run_alias_rhs_refs.ps1 asserts exactly one row per target name). }
+  EmitTypeUseReference(RefNode, AState);
   Result:= True;
 end; // function
 
