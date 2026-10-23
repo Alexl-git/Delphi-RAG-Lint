@@ -39,11 +39,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
+      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)...",
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...", "The callers and callees of the symbol open together in the Call Graph view"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "What calls this routine and what does it call, in one picture?",
+      "command": "drag-lint butterfly --qname <X> --db <db>"
+    },
+    {
+      "ask": "Can I get the combined call chart as Mermaid?",
+      "command": "drag-lint butterfly --qname <X> --format mermaid --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Document it"
+      "caption": "Document it",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the symbol node", "Choose Document it; its managed DocInsight comment is generated or repaired"]
     },
     {
       "type": "cli",
@@ -43,6 +44,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I add or repair a doc comment on just one declaration?",
+      "command": "drag-lint document --qname <Foo.TBar.Baz> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

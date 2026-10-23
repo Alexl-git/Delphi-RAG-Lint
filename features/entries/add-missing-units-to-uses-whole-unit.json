@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)..."
+      "path": "drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...",
+      "steps": ["Open the unit with the unresolved names in the editor", "Choose drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...", "Follow the dialog; the units that declare the unresolved names are added to the uses clause"]
     },
     {
       "type": "cli",
@@ -45,6 +46,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "I pasted a lot of code and many names are unresolved -- how do I add all the missing units to uses at once?",
+      "command": "drag-lint check-unit <unit.pas> --resolve-uses --db <db>"
+    },
+    {
+      "ask": "Which unit declares an identifier my unit cannot resolve?",
+      "command": "drag-lint find-unit --name <X> --in <file.pas> --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

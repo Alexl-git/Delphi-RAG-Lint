@@ -25,6 +25,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which symbol was each reference in this file attributed to?",
+      "command": "drag-lint dump-refs <file> --db <db>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

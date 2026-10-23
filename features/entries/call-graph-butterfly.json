@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
+      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)...",
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...", "The callers (upward wing) and callees (downward wing) open together in the Call Graph view"]
     },
     {
       "type": "cli",
@@ -46,6 +47,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "What calls this routine and what does it call, together?",
+      "command": "drag-lint butterfly --qname <X> --db <db>"
+    },
+    {
+      "ask": "Who calls this routine, several levels deep?",
+      "command": "drag-lint reverse-calltree --qname <X> --depth 3 --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

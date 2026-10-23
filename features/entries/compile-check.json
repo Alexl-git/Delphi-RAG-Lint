@@ -31,6 +31,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Does this project or unit compile, without a full build?",
+      "command": "drag-lint compile-check <target.dproj|.pas> --db <db>"
+    },
+    {
+      "ask": "Can I get the compile result as JSON?",
+      "command": "drag-lint compile-check <target.dproj|.pas> --format json"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037",
   "access": "cli-only",
   "accessReviewed": {

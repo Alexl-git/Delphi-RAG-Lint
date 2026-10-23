@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Document project"
+      "caption": "Document project",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node in the tree", "Choose Document project; managed DocInsight comments are generated or repaired for every public declaration the project owns"]
     },
     {
       "type": "cli",
@@ -43,6 +44,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I document every public declaration of the project?",
+      "command": "drag-lint document --project <p.dproj> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

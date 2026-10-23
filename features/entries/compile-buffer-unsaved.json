@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Compile Buffer (unsaved)"
+      "path": "drag-lint > Compile Buffer (unsaved)",
+      "steps": ["Edit a unit in the editor without saving", "Choose drag-lint > Compile Buffer (unsaved)", "The project compiles with the buffer substituted for the file on disk; the original file is restored unchanged afterwards"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I get compiler diagnostics for edits I have not saved?",
+      "command": "drag-lint ghost-check <dproj> --unit <real.pas> --buffer <buf>"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

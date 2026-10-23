@@ -45,6 +45,16 @@
   ],
   "audience": "both",
   "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work."],
+  "questions": [
+    {
+      "ask": "What do I need to read before editing this symbol?",
+      "command": "drag-lint context --task \"modify <QName>\" --db <db> --format md"
+    },
+    {
+      "ask": "Can I get the bundle without doc comments?",
+      "command": "drag-lint context --task \"modify <QName>\" --db <db> --no-docs"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633",
   "access": "cli-only",
   "accessReviewed": {

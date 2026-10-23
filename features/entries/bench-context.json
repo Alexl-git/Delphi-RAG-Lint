@@ -28,6 +28,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How much does building a context bundle cost on this index?",
+      "command": "drag-lint bench-context --db <file.sqlite> --n 50"
+    }
+  ],
   "notes": "seed: group guessed",
   "access": "cli-only",
   "accessReviewed": {

@@ -36,6 +36,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Why is a call edge missing from callgraph or find-callees?",
+      "command": "drag-lint ambiguous-calls --qname <Foo.Bar> --db <db>"
+    },
+    {
+      "ask": "Which calls in a file could the resolver not pin to one target?",
+      "command": "drag-lint ambiguous-calls --file <file> --db <db>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

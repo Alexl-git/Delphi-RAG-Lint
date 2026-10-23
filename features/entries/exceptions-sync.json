@@ -34,6 +34,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I get one named exception class per distinct raise Exception.Create message?",
+      "command": "drag-lint exceptions-sync --db <db>"
+    },
+    {
+      "ask": "How do I write the derived classes?",
+      "command": "drag-lint exceptions-sync --db <db> --apply"
+    }
+  ],
   "notes": "seed: needs own page",
   "access": "cli-only",
   "accessReviewed": {
