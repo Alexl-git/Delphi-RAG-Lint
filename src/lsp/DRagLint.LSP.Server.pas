@@ -389,21 +389,6 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
-      /// <param name="AUri"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto type -->string</returns>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas) (+4 more)</para>
-      /// <para>Calls: Copy, StringReplace</para>
-      /// <para>Pure</para>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeDefinition"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      function FileFromUri(const AUri : string): string;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
