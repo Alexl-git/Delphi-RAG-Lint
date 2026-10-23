@@ -21435,7 +21435,10 @@ begin
 
   Entries:= TList<TGhostOverlay>.Create;
   try
-    DragDir:= GhostDir(Dproj);
+    { The path only: the shadow default writes nothing beside the project, so
+      the folder is created by the --in-place branch, which journals there
+      (docs\INBOX-ghost-check-leaves-empty-drag-dir.md). }
+    DragDir:= TPath.Combine(ExtractFilePath(Dproj), DRAG_HOME_DIR);
 
     { Build the overlay list from a manifest, or a single --unit/--buffer pair. }
     if AArgs.GhostOverlays <> '' then
@@ -21565,6 +21568,7 @@ begin
         its own write back into the record, and a for-in loop variable is a COPY
         -- the token would be discarded and every restore would fall back to
         "cannot prove ownership". }
+      GhostDir(Dproj);
       for i:= 0 to Entries.Count - 1 do
       begin
         E:= Entries[i];
@@ -30832,6 +30836,54 @@ begin
   Result:= 0;
 end; // function
 
+{ selftest own-roots, T-01 half: "excludeRoots" carves a vendored subfolder out
+  of an owned root. Fixture is the sibling folder own-roots-exclude, kept apart
+  so run_lint_own_roots' whole-folder index of own-roots does not change.
+  Returns '' when every assertion holds, else the FIRST failure's detail. }
+function SelfTestOwnRootsExclude(const AFx: string): string;
+var
+  Ex : string   ;
+  Own: TOwnRoots;
+
+  procedure Expect(ACond: Boolean; const ADetail: string);
+  begin
+    if (Result = '') and not ACond then Result:= ADetail;
+  end;
+
+begin
+  Result:= '';
+  Ex    := TPath.GetFullPath(TPath.Combine(AFx, '..\own-roots-exclude'));
+
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'proj'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Length(Own.ExcludeRoots) = 1, 'excludeRoots not read');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\Own.pas')), 'excludeRoots dropped an own file');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'proj\vendor\Lib\Vend.pas')), 'excluded vendor file counted as ours');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\vendorX\Keep.pas')),
+    'exclude "vendor" wrongly matched sibling prefix "vendorX"');
+
+  { excludeRoots without ownRoots narrows the DEFAULT root. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'only-exclude'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'only-exclude\A.pas')), 'exclude-only declaration dropped the default root');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'only-exclude\vendor\V.pas')), 'exclude-only declaration did not exclude');
+
+  { Present but not an array, and excluding every own root, are Errors: both
+    would otherwise lint something the author did not intend. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'bad-exclude'));
+  Expect(Own.Error <> '', 'non-array "excludeRoots" must set Error');
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'all-excluded'));
+  Expect(Own.Error <> '', 'excludeRoots covering every own root must set Error');
+end;
+
+{ Prints OWNROOTS-FAIL: <ADetail> and returns 1, so a failed assertion is one
+  statement: Exit(OwnRootsFail(...)). }
+function OwnRootsFail(const ADetail: string): Integer;
+begin
+  Writeln('OWNROOTS-FAIL: ', ADetail);
+  Result:= 1;
+end;
+
 // selftest own-roots --dir <fixtures\own-roots>: asserts a declared root list is
 // read (including a RELATIVE entry), that a file under a declared root is ours,
 // that a sibling folder outside them is not, that an UNDECLARED project defaults
@@ -30839,7 +30891,7 @@ end; // function
 // Also covers (review round 1): a sibling folder whose NAME EXTENDS a declared
 // root's name is not a prefix match; an explicit "ownRoots": [] is an Error, not
 // a default; and malformed (unparseable) JSON defaults exactly like a missing
-// file, never an Error.
+// file, never an Error. Also T-01: "excludeRoots" (fixture ..\own-roots-exclude).
 // Prints OWNROOTS-OK or OWNROOTS-FAIL: <detail>.
 function DoSelfTestOwnRoots(const AArgs: TArgs): Integer;
 var
@@ -30920,6 +30972,10 @@ begin
   if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
     begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
 
+  { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): kept in its own
+    function so these assertions add one exit here, not nine. }
+  var ExFail: string:= SelfTestOwnRootsExclude(Fx);
+  if ExFail <> '' then Exit(OwnRootsFail(ExFail));
   if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
                   ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
     begin Writeln('OWNROOTS-FAIL: AnchorDirForDb did not resolve the _D-RAG parent'); Exit(1); end;

@@ -64,11 +64,15 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.", "A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\\_D-RAG\\drag-lint-project.json`."],
   "questions": [
     {
       "ask": "How healthy is my whole project against every lint rule?",
       "command": "drag-lint lint-all --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I stop lint-all reporting a vendored subfolder of my project?",
+      "command": "add \"excludeRoots\": [\"vendor\"] to <project>\\_D-RAG\\drag-lint-project.json"
     },
     {
       "ask": "How do I write the full lint report to a file?",
