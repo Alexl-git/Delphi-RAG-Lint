@@ -644,6 +644,12 @@ begin
     if Length(ABundle.ImplSlice) > 0 then
     begin
       SB.AppendLine('## Impl slice');
+      // A stale-anchor chunk means the slice refused (index older than the unit):
+      // say so OUTSIDE the code fence, where a reader cannot skim past it.
+      for I:= 0 to High(ABundle.ImplSlice) do
+        if ABundle.ImplSlice[I].Kind = 'stale-anchor' then
+          SB.AppendLine('> **WARNING: STALE INDEX** -- the recorded line no longer holds this symbol; no body shown. ' +
+            'Reindex, then ask again.');
       SB.AppendLine('```pascal'    );
       for I:= 0 to High(ABundle.ImplSlice) do
       begin
