@@ -34,6 +34,10 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...**
+   1. Put the caret on the routine in the editor
+   2. Choose drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...
+   3. Pick the depth and read the tree of callers
+   4. From a shell: `drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]`
 
 **Needs:** index
 

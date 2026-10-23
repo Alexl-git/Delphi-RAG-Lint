@@ -32,6 +32,9 @@ Full flag list: [graph in the CLI reference](../cli.md#graph).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Export Graph (DOT)...**
+   1. Choose drag-lint > Generate & Export > Export Graph (DOT)...
+   2. Optionally give a root name substring
+   3. The call/reference graph is exported in DOT format
 
 **Needs:** index
 

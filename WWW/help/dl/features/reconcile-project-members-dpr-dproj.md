@@ -34,6 +34,10 @@ Full flag list: [reconcile-project in the CLI reference](../cli.md#reconcile-pro
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...**
+   1. Open the project in RAD Studio
+   2. Choose drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...
+   3. Review the missing and stale entries it reports; nothing is written until you apply
+   4. From a shell: `drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>]`
 
 ## Details
 

@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...",
-      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...", "Review each candidate (verified by compiling) before applying", "From a shell: drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]"]
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...", "Review each candidate (verified by compiling) before applying", "From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`"]
     },
     {
       "type": "cli",

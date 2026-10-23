@@ -41,6 +41,9 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 ## Where to click
 
 * Right-click in the Structure form: **Fix all in unit**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click a node
+   3. Choose Fix all in unit; a wait cursor shows while it runs and a second fix is refused until it finishes
 
 ## Details
 

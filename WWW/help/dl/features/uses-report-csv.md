@@ -34,6 +34,9 @@ Full flag list: [uses-report in the CLI reference](../cli.md#uses-report).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Report (CSV)...**
+   1. Choose drag-lint > Uses & Dependencies > Uses Report (CSV)...
+   2. Pick the CSV file to write
+   3. From a shell: `drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external]`
 
 ## Details
 

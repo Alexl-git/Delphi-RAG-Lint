@@ -19,6 +19,9 @@ Read this when a Structure form node is a declaration (such as an interface meth
 ## Where to click
 
 * Right-click in the Structure form: **Go to Implementation**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the declaration node
+   3. Choose Go to Implementation; the caret lands on the implementation body
 
 ## Details
 

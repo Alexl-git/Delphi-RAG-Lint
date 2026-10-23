@@ -34,6 +34,9 @@ Full flag list: [ghost-check in the CLI reference](../cli.md#ghost-check).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Compile Buffer (unsaved)**
+   1. Edit a unit without saving it
+   2. drag-lint > Compile Buffer (unsaved)
+   3. Compiler errors from the unsaved buffer are shown; the original files are restored unchanged
 
 ## Pitfalls
 

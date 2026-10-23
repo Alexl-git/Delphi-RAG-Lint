@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Uses Report (CSV)...",
-      "steps": ["Choose drag-lint > Uses & Dependencies > Uses Report (CSV)...", "Pick the CSV file to write", "From a shell: drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external]"]
+      "steps": ["Choose drag-lint > Uses & Dependencies > Uses Report (CSV)...", "Pick the CSV file to write", "From a shell: `drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external]`"]
     },
     {
       "type": "cli",

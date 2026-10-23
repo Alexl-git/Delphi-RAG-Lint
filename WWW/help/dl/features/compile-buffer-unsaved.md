@@ -19,6 +19,9 @@ Read this when you want compiler diagnostics for edits you have not saved yet. I
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Compile Buffer (unsaved)**
+   1. Edit a unit in the editor without saving
+   2. Choose drag-lint > Compile Buffer (unsaved)
+   3. The project compiles with the buffer substituted for the file on disk; the original file is restored unchanged afterwards
 
 ## Details
 

@@ -32,6 +32,9 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Ancestors of Type (full chain)...**
+   1. Needs an index of the project
+   2. drag-lint > Inspect Symbol > Ancestors of Type (full chain)...
+   3. Enter the type; its ancestor chain is listed
 
 ## Details
 

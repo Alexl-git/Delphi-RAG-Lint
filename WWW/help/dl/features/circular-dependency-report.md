@@ -19,6 +19,8 @@ Read this to see what a circular uses report looks like before you run one. It w
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...**
+   1. Read the worked example on the wiki page
+   2. To produce the real report for your project choose drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...
 
 ## Details
 

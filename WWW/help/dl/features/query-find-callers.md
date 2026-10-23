@@ -33,6 +33,9 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Find Usages...**
+   1. Needs an index of the project
+   2. Put the editor caret on the routine
+   3. drag-lint > Find Usages...
 
 ## Pitfalls
 

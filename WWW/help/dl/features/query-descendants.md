@@ -31,6 +31,9 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Descendants of Class...**
+   1. Needs an index of the project
+   2. drag-lint > Inspect Symbol > Descendants of Class...
+   3. Enter the class; every descending class is listed
 
 ## Details
 

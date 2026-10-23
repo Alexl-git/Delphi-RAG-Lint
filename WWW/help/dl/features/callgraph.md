@@ -33,6 +33,9 @@ Full flag list: [callgraph in the CLI reference](../cli.md#callgraph).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...**
+   1. Put the caret on the routine in the editor
+   2. Choose drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...
+   3. Pick the direction and depth; the call tree is shown
 
 **Needs:** index
 

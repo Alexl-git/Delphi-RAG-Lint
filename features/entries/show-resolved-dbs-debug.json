@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Index & Maintenance > Show Resolved DBs (debug)...",
-      "steps": ["Choose drag-lint > Index & Maintenance > Show Resolved DBs (debug)...", "Read the list of databases it would use; no query is run", "From a shell: drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]"]
+      "steps": ["Choose drag-lint > Index & Maintenance > Show Resolved DBs (debug)...", "Read the list of databases it would use; no query is run", "From a shell: `drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]`"]
     },
     {
       "type": "cli",

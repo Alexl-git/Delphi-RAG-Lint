@@ -37,6 +37,9 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Find Undocumented (public)...**
+   1. Needs an index of the project
+   2. drag-lint > Code Quality > Find Undocumented (public)...
+   3. Review the list of public declarations without a documentation comment
 
 ## Pitfalls
 

@@ -31,6 +31,10 @@ Full flag list: [generate-test in the CLI reference](../cli.md#generate-test).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Unit Test Stub (symbol)...**
+   1. Put the caret on the routine in the editor
+   2. Choose drag-lint > Generate & Export > Unit Test Stub (symbol)...
+   3. A unit-test skeleton for the symbol is generated
+   4. From a shell: `drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]`
 
 ## Details
 

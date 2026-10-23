@@ -1549,6 +1549,10 @@ Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers.
 drag-lint todos [<path>] (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])
 ```
 
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+
 Described in [Scan TODOs / FIXMEs](features/scan-todos-fixmes.md).
 
 ### top

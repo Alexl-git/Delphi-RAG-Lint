@@ -7,7 +7,7 @@ group: linting
 order: 30016
 since: 1.29.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Rename across every project that compiles a shared unit
@@ -47,7 +47,13 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 ## Where to click
 
 * Right-click in the Structure form: **Fix it**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the naming finding node
+   3. Choose Fix it; confirm the dialog listing the owning projects
 * Right-click in the Structure form: **Fix all in unit**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click a node
+   3. Choose Fix all in unit; confirm the dialog listing the owning projects
 
 ## Details
 

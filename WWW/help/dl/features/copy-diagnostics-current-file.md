@@ -37,6 +37,9 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 ## Where to click
 
 * drag-lint About window, button **Copy Diagnostics (Current File)**
+   1. Open the file in the editor
+   2. Choose drag-lint > Copy Diagnostics (Current File), or click the button of the same name in drag-lint > About
+   3. The file's lint findings are on the clipboard
 
 ## Details
 

@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...",
-      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...", "Pick the depth and read the tree of callers", "From a shell: drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]"]
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...", "Pick the depth and read the tree of callers", "From a shell: `drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]`"]
     },
     {
       "type": "cli",

@@ -19,6 +19,8 @@ Read this when you want the graph viewer to stay docked in the IDE, for example 
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > drag-lint Graph (dockable)**
+   1. Choose drag-lint > drag-lint Graph (dockable)
+   2. The graph viewer opens as a dockable window; drag it where you want it to stay docked
 
 ## Details
 

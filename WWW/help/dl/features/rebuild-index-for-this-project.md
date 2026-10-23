@@ -35,6 +35,10 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Rebuild Index for This Project**
+   1. Open the project in RAD Studio
+   2. Choose drag-lint > Index & Maintenance > Rebuild Index for This Project
+   3. Wait for the indexing run to finish; progress shows in the IDE
+   4. From a shell instead: `drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild]`
 
 ## Details
 

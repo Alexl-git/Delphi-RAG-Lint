@@ -19,6 +19,9 @@ Read this if a Compile Buffer (unsaved) run was interrupted, for example by a cr
 ## Where to click
 
 * drag-lint About window, button **Recover Buffer-Compile Files**
+   1. Nothing to click in the normal case; the IDE runs it for you
+   2. To run it by hand: `drag-lint ghost-recover "<project>"`
+   3. It prints "ghost-recover: nothing pending." when there is nothing to restore
 
 ## Details
 

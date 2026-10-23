@@ -33,6 +33,9 @@ Full flag list: [cycles in the CLI reference](../cli.md#cycles).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...**
+   1. Choose drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...
+   2. Read the reported cycles
+   3. Ask for the plan to get the refactoring playbook that breaks them
 
 **Needs:** index
 

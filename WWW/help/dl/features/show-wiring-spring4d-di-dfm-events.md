@@ -31,6 +31,10 @@ Full flag list: [wiring in the CLI reference](../cli.md#wiring).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...**
+   1. Open the unit that declares the type
+   2. Choose drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...
+   3. Read the container registrations and DFM event hookups for the type
+   4. From a shell: `drag-lint wiring --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]`
 
 ## Details
 

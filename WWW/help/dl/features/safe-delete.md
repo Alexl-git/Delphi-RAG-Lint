@@ -33,6 +33,10 @@ Full flag list: [safe-delete in the CLI reference](../cli.md#safe-delete).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Safe Delete Symbol...**
+   1. Put the caret on the symbol in the editor
+   2. Choose drag-lint > Safe Delete Symbol...
+   3. It deletes only when the index finds zero references; otherwise it refuses
+   4. From a shell: `drag-lint safe-delete --name <QName> [--apply] [--no-backup] --db <db>`
 
 **Needs:** index
 

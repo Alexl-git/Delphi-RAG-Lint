@@ -35,6 +35,10 @@ Full flag list: [rename in the CLI reference](../cli.md#rename).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Rename Symbol...**
+   1. Put the caret on the symbol in the editor (Ctrl+Alt+R)
+   2. Choose drag-lint > Rename Symbol...
+   3. Enter the new name and review the affected places
+   4. Confirm; backups are written unless disabled
 
 **Needs:** index
 

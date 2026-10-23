@@ -35,6 +35,9 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 ## Where to click
 
 * Right-click in the Structure form: **Rescan this unit**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click in the Structure form and choose Rescan this unit
+   3. It reindexes the project in the background and re-lints the unit; the status strip shows progress
 
 ## Details
 

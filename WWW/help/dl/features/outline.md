@@ -31,6 +31,9 @@ Full flag list: [outline in the CLI reference](../cli.md#outline).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Show Structure**
+   1. Open the unit in the editor
+   2. drag-lint > Show Structure
+   3. The Structure form lists the unit's symbols
 
 ## Details
 

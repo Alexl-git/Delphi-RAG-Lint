@@ -12,7 +12,7 @@
     {
       "type": "ide-about",
       "caption": "Recover Buffer-Compile Files",
-      "steps": ["Nothing to click in the normal case; the IDE runs it for you", "To run it by hand: drag-lint ghost-recover \"<project>\"", "It prints \"ghost-recover: nothing pending.\" when there is nothing to restore"]
+      "steps": ["Nothing to click in the normal case; the IDE runs it for you", "To run it by hand: `drag-lint ghost-recover \"<project>\"`", "It prints \"ghost-recover: nothing pending.\" when there is nothing to restore"]
     }
   ],
   "audience": "both",

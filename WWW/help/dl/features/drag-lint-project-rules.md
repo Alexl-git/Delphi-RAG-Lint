@@ -31,6 +31,9 @@ Full flag list: [rules in the CLI reference](../cli.md#rules).
 ## Where to click
 
 * Right-click in the Project Manager: **drag-lint: Project Rules**
+   1. Open the Project Manager
+   2. Right-click the project and choose drag-lint: Project Rules...
+   3. The lint rule catalog is shown
 
 ## Details
 

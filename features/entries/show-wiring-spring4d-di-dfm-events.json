@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...",
-      "steps": ["Open the unit that declares the type", "Choose drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...", "Read the container registrations and DFM event hookups for the type", "From a shell: drag-lint wiring --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]"]
+      "steps": ["Open the unit that declares the type", "Choose drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...", "Read the container registrations and DFM event hookups for the type", "From a shell: `drag-lint wiring --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]`"]
     },
     {
       "type": "cli",

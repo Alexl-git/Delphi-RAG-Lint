@@ -33,6 +33,9 @@ Full flag list: [butterfly in the CLI reference](../cli.md#butterfly).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Graph (Butterfly)...**
+   1. Put the caret on the routine in the editor
+   2. Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...
+   3. The callers and callees of the symbol open together in the Call Graph view
 
 **Needs:** index
 

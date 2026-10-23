@@ -38,7 +38,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Safe Delete Symbol...",
-      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Safe Delete Symbol...", "It deletes only when the index finds zero references; otherwise it refuses", "From a shell: drag-lint safe-delete --name <QName> [--apply] [--no-backup] --db <db>"]
+      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Safe Delete Symbol...", "It deletes only when the index finds zero references; otherwise it refuses", "From a shell: `drag-lint safe-delete --name <QName> [--apply] [--no-backup] --db <db>`"]
     }
   ],
   "audience": "both",

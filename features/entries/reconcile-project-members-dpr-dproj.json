@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...",
-      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...", "Review the missing and stale entries it reports; nothing is written until you apply", "From a shell: drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>]"]
+      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...", "Review the missing and stale entries it reports; nothing is written until you apply", "From a shell: `drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>]`"]
     },
     {
       "type": "cli",

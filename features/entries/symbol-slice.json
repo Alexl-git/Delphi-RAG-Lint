@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Inspect Symbol > Symbol Slice...",
-      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Inspect Symbol > Symbol Slice...", "Read its declaration, body and immediate context", "From a shell: drag-lint slice --qname <Foo.TBar> [--db <file.sqlite>] [--format text|json]"]
+      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Inspect Symbol > Symbol Slice...", "Read its declaration, body and immediate context", "From a shell: `drag-lint slice --qname <Foo.TBar> [--db <file.sqlite>] [--format text|json]`"]
     },
     {
       "type": "cli",

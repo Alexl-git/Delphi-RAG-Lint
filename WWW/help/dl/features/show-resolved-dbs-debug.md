@@ -31,6 +31,9 @@ Full flag list: [resolve-dbs in the CLI reference](../cli.md#resolve-dbs).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Show Resolved DBs (debug)...**
+   1. Choose drag-lint > Index & Maintenance > Show Resolved DBs (debug)...
+   2. Read the list of databases it would use; no query is run
+   3. From a shell: `drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]`
 
 ## Pitfalls
 

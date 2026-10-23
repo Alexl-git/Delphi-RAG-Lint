@@ -34,6 +34,9 @@ Full flag list: [find-unit in the CLI reference](../cli.md#find-unit).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)...**
+   1. Needs an index; for an RTL/VCL symbol use the platform library DB
+   2. drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)...
+   3. The declaring unit is named; Yes adds it to the active unit's uses clause, No previews a dry run
 
 **Needs:** index
 

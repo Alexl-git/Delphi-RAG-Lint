@@ -31,6 +31,9 @@ Full flag list: [check-ast in the CLI reference](../cli.md#check-ast).
 ## Where to click
 
 * drag-lint About window, button **Run AST Checks**
+   1. Open the file in the editor
+   2. Choose drag-lint > Run AST Checks
+   3. From a shell: `drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]`
 
 ## Details
 

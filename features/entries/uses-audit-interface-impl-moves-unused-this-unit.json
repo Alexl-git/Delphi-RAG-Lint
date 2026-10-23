@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...",
-      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...", "Read the suggested moves and the unused entries", "From a shell: drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]"]
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...", "Read the suggested moves and the unused entries", "From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`"]
     },
     {
       "type": "cli",

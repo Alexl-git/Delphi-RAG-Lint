@@ -34,6 +34,9 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Find Usages...**
+   1. Put the caret on the symbol in the editor
+   2. Choose drag-lint > Find Usages...
+   3. Read the grouped usage sites
 
 ## Details
 

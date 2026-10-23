@@ -32,6 +32,9 @@ Full flag list: [refresh-findings in the CLI reference](../cli.md#refresh-findin
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Full Compile Sweep**
+   1. Open the project in the IDE
+   2. drag-lint > Full Compile Sweep
+   3. Stale units are recompiled and the findings refreshed, then the open file is refreshed
 
 **Needs:** index
 

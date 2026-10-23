@@ -19,6 +19,9 @@ Read this when the compiler would report an undeclared identifier. Put the caret
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)**
+   1. Put the caret on the undeclared identifier in the editor
+   2. Press Ctrl+Alt+U, or choose drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
+   3. The unit that declares the identifier is added to the current unit's uses clause
 
 ## Details
 

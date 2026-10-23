@@ -19,6 +19,9 @@ Read this when you want compiler errors and warnings for the current file or pro
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Compile & Diagnose**
+   1. Open the file or project in the IDE
+   2. Choose drag-lint > Compile & Diagnose
+   3. The compiler messages appear as drag-lint findings
 
 ## Details
 

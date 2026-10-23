@@ -19,6 +19,9 @@ Read this when you are tightening a class public surface. With the caret on a pu
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Convert Public Field to Property at Cursor**
+   1. Put the caret on the public field declaration in the class
+   2. Choose drag-lint > Convert Public Field to Property at Cursor
+   3. The field is rewritten as a property
 
 ## Details
 

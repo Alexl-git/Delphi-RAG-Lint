@@ -19,6 +19,9 @@ Read this when you want a unit as a navigable outline of its types and members i
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Show Structure**
+   1. Open the unit in the editor
+   2. Choose drag-lint > Show Structure
+   3. The structural outline of the unit opens in the Structure form
 
 ## Details
 

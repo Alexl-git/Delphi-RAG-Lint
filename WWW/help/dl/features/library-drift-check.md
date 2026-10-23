@@ -31,6 +31,8 @@ Full flag list: [library-drift in the CLI reference](../cli.md#library-drift).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Library Drift Check...**
+   1. drag-lint > Index & Maintenance > Library Drift Check...
+   2. The registered library roots that have source on disk but nothing in the index are reported
 
 ## Details
 

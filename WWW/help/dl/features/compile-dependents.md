@@ -19,6 +19,9 @@ Read this when you have changed a unit and want to check the units that depend o
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Compile Dependents**
+   1. Edit and save the unit
+   2. Choose drag-lint > Compile Dependents
+   3. The units that depend on it are checked now instead of after the automatic quiet period
 
 ---
 

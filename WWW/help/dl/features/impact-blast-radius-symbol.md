@@ -32,6 +32,9 @@ Full flag list: [impact in the CLI reference](../cli.md#impact).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...**
+   1. Needs an index of the project
+   2. drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...
+   3. Enter the symbol; the affected code to retest is listed
 
 ## Details
 

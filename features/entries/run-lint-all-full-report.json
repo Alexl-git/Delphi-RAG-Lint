@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Code Quality > Run Lint All (Full Report)...",
-      "steps": ["Open the project in RAD Studio (its index must be current)", "Choose drag-lint > Code Quality > Run Lint All (Full Report)...", "Read the findings in the report", "From a shell: drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--output <report.txt>]"]
+      "steps": ["Open the project in RAD Studio (its index must be current)", "Choose drag-lint > Code Quality > Run Lint All (Full Report)...", "Read the findings in the report", "From a shell: `drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--output <report.txt>]`"]
     },
     {
       "type": "cli",

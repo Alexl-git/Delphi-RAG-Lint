@@ -19,6 +19,8 @@ Read this when hover or ask effects shows a short effect string and you need to 
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Help > Effect Summary Legend (wiki)**
+   1. Choose drag-lint > Help > Effect Summary Legend (wiki)
+   2. Look up the token (g, h, s, `p<k>`) shown by hover or ask effects
 
 ## Details
 

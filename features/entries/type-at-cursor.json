@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Inspect Symbol > Type at Cursor",
-      "steps": ["Put the caret on the expression in the editor", "Choose drag-lint > Inspect Symbol > Type at Cursor", "The resolved type is shown", "From a shell: drag-lint typeat <file>:<line>:<col>"]
+      "steps": ["Put the caret on the expression in the editor", "Choose drag-lint > Inspect Symbol > Type at Cursor", "The resolved type is shown", "From a shell: `drag-lint typeat <file>:<line>:<col>`"]
     },
     {
       "type": "cli",

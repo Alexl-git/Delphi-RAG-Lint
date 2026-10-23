@@ -31,6 +31,9 @@ Full flag list: [generate-docs in the CLI reference](../cli.md#generate-docs).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Doc Comment Stub (symbol)...**
+   1. Put the caret on the symbol in the editor
+   2. Choose drag-lint > Generate & Export > Doc Comment Stub (symbol)...
+   3. The doc-comment stub for the symbol is produced
 
 ## Details
 

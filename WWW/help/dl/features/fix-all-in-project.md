@@ -40,6 +40,9 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 ## Where to click
 
 * Right-click in the Structure form: **Fix all in project**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click a node
+   3. Choose Fix all in project (it is not on the main menu)
 
 ## Pitfalls
 

@@ -19,6 +19,8 @@ Read this when you are diagnosing the drag-lint plugin itself: choosing it opens
 ## Where to click
 
 * drag-lint About window, button **Open Plugin Log**
+   1. Open the About and Status window (drag-lint > About)
+   2. Click Open Plugin Log
 
 ## Details
 

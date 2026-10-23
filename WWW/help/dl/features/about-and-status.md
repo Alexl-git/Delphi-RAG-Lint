@@ -34,18 +34,45 @@ Full flag list: [info in the CLI reference](../cli.md#info).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > About**
+   1. Choose drag-lint > About
+   2. Read the version, connection-health, index-file, settings and memory groups
+   3. Use Refresh to re-read every group, or Diagnose Current State to get a report to paste into an issue
 * drag-lint About window, button **Check for Updates**
+   1. Choose drag-lint > About
+   2. Click Check for Updates to look for a newer release
 * drag-lint About window, button **Close**
+   1. Choose drag-lint > About
+   2. Click Close to dismiss the window
 * drag-lint About window, button **Copy Diagnostics (Current File)**
+   1. Choose drag-lint > About
+   2. Click Copy Diagnostics (Current File) to put the current file's findings on the clipboard
 * drag-lint About window, button **Copy Report**
+   1. Choose drag-lint > About
+   2. Click Copy Report to put the full status report on the clipboard
 * drag-lint About window, button **Diagnose Current State**
+   1. Choose drag-lint > About
+   2. Click Diagnose Current State to build the full text report and show it in a copyable window
 * drag-lint About window, button **Import Build Log...**
+   1. Choose drag-lint > About
+   2. Click Import Build Log... and pick an external build log so its errors become browsable findings
 * drag-lint About window, button **Lint Buffer (Unsaved)**
+   1. Choose drag-lint > About
+   2. Click Lint Buffer (Unsaved) to lint the editor buffer including unsaved edits
 * drag-lint About window, button **Open Plugin Log**
+   1. Choose drag-lint > About
+   2. Click Open Plugin Log to see the plugin's own log
 * drag-lint About window, button **Recover Buffer-Compile Files**
+   1. Choose drag-lint > About
+   2. Click Recover Buffer-Compile Files to recover temporary files an interrupted buffer compile left behind
 * drag-lint About window, button **Refresh**
+   1. Choose drag-lint > About
+   2. Click Refresh to re-read every group
 * drag-lint About window, button **Run AST Checks**
+   1. Choose drag-lint > About
+   2. Click Run AST Checks to run the built-in AST checks on the current file
 * drag-lint About window, button **Run Diagnostics (didSave)**
+   1. Choose drag-lint > About
+   2. Click Run Diagnostics (didSave) to run the diagnostics pass the editor fires on save
 
 ## Details
 

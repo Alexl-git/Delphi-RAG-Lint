@@ -32,6 +32,9 @@ Full flag list: [lint-project in the CLI reference](../cli.md#lint-project).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Project Structure Rules (god-class, layering...)...**
+   1. Needs an index of the project
+   2. drag-lint > Code Quality > Project Structure Rules (god-class, layering...)...
+   3. Pick the rule; its project-wide findings are listed
 
 **Needs:** index
 

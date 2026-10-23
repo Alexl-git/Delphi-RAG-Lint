@@ -37,6 +37,9 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 ## Where to click
 
 * Right-click in the Structure form: **Copy All Diagnostics**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click in the Structure form
+   3. Choose Copy All Diagnostics; every finding of the current unit is on the clipboard
 
 ## Details
 

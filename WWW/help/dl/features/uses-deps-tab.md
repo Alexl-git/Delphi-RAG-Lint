@@ -19,6 +19,10 @@ Read this when you want to review uses-clause fixes in one place: the Uses & Dep
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes...**
+   1. Open the unit in the editor
+   2. Choose drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes...
+   3. Review the uses-clause fixes listed in the tab
+   4. Apply the ones you accept
 
 ---
 

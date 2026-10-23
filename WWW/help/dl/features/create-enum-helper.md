@@ -35,6 +35,9 @@ Full flag list: [create-enum-helper in the CLI reference](../cli.md#create-enum-
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Enum Record Helper (symbol)...**
+   1. Put the caret on the enum type in the editor
+   2. Choose drag-lint > Generate & Export > Enum Record Helper (symbol)...
+   3. Follow the dialog; the record helper is generated
 
 ## Details
 

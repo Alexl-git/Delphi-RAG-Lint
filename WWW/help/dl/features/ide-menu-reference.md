@@ -19,6 +19,8 @@ Read this when you wonder what an item in the drag-lint menu of RAD Studio does.
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Help > IDE Menu Reference (wiki)**
+   1. drag-lint > Help > IDE Menu Reference (wiki)
+   2. The page opens in the browser
 
 ## Details
 

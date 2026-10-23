@@ -31,6 +31,9 @@ Full flag list: [find-deadcode in the CLI reference](../cli.md#find-deadcode).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Find Dead Code...**
+   1. Needs an index of the project
+   2. drag-lint > Code Quality > Find Dead Code...
+   3. Review the listed symbols; they are candidates to delete, not proof
 
 ## Details
 

@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Generate & Export > Unit Test Stub (symbol)...",
-      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Generate & Export > Unit Test Stub (symbol)...", "A unit-test skeleton for the symbol is generated", "From a shell: drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]"]
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Generate & Export > Unit Test Stub (symbol)...", "A unit-test skeleton for the symbol is generated", "From a shell: `drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]`"]
     },
     {
       "type": "cli",

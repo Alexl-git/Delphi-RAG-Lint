@@ -31,6 +31,9 @@ Full flag list: [format in the CLI reference](../cli.md#format).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Format with YADF**
+   1. Open the unit in the editor
+   2. drag-lint > Format with YADF
+   3. The unit is rewritten in place by YADF
 
 ## Details
 

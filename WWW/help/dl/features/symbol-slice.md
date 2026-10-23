@@ -31,6 +31,10 @@ Full flag list: [slice in the CLI reference](../cli.md#slice).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Symbol Slice...**
+   1. Put the caret on the symbol in the editor
+   2. Choose drag-lint > Inspect Symbol > Symbol Slice...
+   3. Read its declaration, body and immediate context
+   4. From a shell: `drag-lint slice --qname <Foo.TBar> [--db <file.sqlite>] [--format text|json]`
 
 ## Details
 

@@ -31,6 +31,9 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Compiler Hints...**
+   1. Choose drag-lint > Code Quality > Compiler Hints...
+   2. Optionally filter by hint code or severity
+   3. The imported hints and warnings are listed
 
 **Needs:** index
 

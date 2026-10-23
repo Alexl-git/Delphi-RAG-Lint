@@ -35,6 +35,9 @@ Full flag list: [create-enum-helper in the CLI reference](../cli.md#create-enum-
 ## Where to click
 
 * Right-click in the Structure form: **Create helper class**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the enum type node
+   3. Choose Create helper class; the Byte-family record helper is generated
 
 ## Details
 

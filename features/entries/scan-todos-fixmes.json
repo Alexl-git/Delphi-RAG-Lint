@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Code Quality > Scan TODOs / FIXMEs...",
-      "steps": ["Choose drag-lint > Code Quality > Scan TODOs / FIXMEs...", "Read the list of markers (TODO, FIXME, HACK, XXX, REVIEW, NOTE)", "From a shell: drag-lint todos [<path>] [--json]"]
+      "steps": ["Choose drag-lint > Code Quality > Scan TODOs / FIXMEs...", "Read the list of markers (TODO, FIXME, HACK, XXX, REVIEW, NOTE)", "From a shell: `drag-lint todos [<path>] [--json]`"]
     },
     {
       "type": "cli",

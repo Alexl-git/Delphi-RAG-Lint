@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Index & Maintenance > Rebuild Index for This Project",
-      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Index & Maintenance > Rebuild Index for This Project", "Wait for the indexing run to finish; progress shows in the IDE", "From a shell instead: drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild]"]
+      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Index & Maintenance > Rebuild Index for This Project", "Wait for the indexing run to finish; progress shows in the IDE", "From a shell instead: `drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild]`"]
     },
     {
       "type": "cli",

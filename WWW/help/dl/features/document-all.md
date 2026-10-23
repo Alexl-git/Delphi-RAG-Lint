@@ -35,6 +35,9 @@ Full flag list: [document-all in the CLI reference](../cli.md#document-all).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Auto-Document Every Indexed Unit...**
+   1. Choose drag-lint > Generate & Export > Auto-Document Every Indexed Unit...
+   2. Follow the dialog
+   3. Every public declaration in every indexed unit is documented (facts-only by default)
 
 ## Details
 

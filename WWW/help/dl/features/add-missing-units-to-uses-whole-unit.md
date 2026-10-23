@@ -34,6 +34,9 @@ Full flag list: [check-unit in the CLI reference](../cli.md#check-unit).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...**
+   1. Open the unit with the unresolved names in the editor
+   2. Choose drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...
+   3. Follow the dialog; the units that declare the unresolved names are added to the uses clause
 
 ## Details
 
