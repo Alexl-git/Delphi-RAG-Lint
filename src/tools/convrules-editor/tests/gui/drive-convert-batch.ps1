@@ -493,7 +493,10 @@ function RunScenario([string]$BatchEnv, [string]$Tag) {
   Click $checkAll
   Start-Sleep -Milliseconds 500
   # One Add... per unit (the common dialog takes one path). The editor is brought to the foreground first, and a
-  # missing dialog is retried once after the editor has been idle.
+  # missing dialog is retried once after the editor has been idle. The second Add's click is lost on every run
+  # (B4 Task 7, todo N11): most likely it lands just before the first Add's follow-up work (harvest / C8 analysis
+  # behind TEngineWaitForm) shows its window, so WaitIdle cannot see it; a WM_COMMAND click instead opened the Open
+  # dialog ON TOP of TEngineWaitForm (re-entrant AddClick, N7's class) and wedged the run.
   function AddUnit($path) {
     [void][W]::SetForegroundWindow($main)
     $e = AddViaDialog $script:p.Id $add $path

@@ -891,6 +891,25 @@ itself fails is the unit left partly converted: `... -- rollback FAILED for
 recorded in recovery.txt`. A single `--unit` reports either as `ERROR: ...`,
 exit 2.
 
+**How the ConvRules editor uses it (B4, 2026-10-23).** When the engine reports
+the `batch_units` capability, the run is unscoped and has two or more units, the
+Convert tab converts book by book: ONE reindex before the first book, one
+`.BCK<N>` restore point per unit (the editor's own, so it calls with
+`--no-backup`), then per book one `convert-apply --unit ... --apply --no-backup
+--format json` over chunks of at most 8 units (watchdog 600 s + 120 s per extra
+unit) and ONE `index --project` after each chunk. Each `units[]` entry is read
+like a single-unit `apply/1` (refused, failed, converted); an answer that is no
+`apply-batch/1`, whose `units[]` do not follow the `--unit` order, or whose
+`exit_code` contradicts its counts restores every unit of the chunk. A one-unit
+chunk reads the bare `apply/1` the engine answers it with. `CONVRULES_BATCH=off`
+in the editor's environment, an IDE-scoped run (`--only` would bind every unit)
+or a single unit keeps the per-unit path. Known on the 1.33.0-alpha-20261021 pin
+(captures `src\tools\convrules-editor\tests\fixtures\apply1270\batch-*-1330.json`):
+G1 no progress inside a call, so the editor can only say "applying units 1-8";
+G2 an unindexed unit answers `ok: true, edits_count: 0` (the editor's preflight
+refuses unindexed units first); G3 `units[]` entries carry no `exit_code`; G4 the
+engine reindexes after EVERY unit inside the call (`uses_reindex`).
+
 **What is atomic, exactly (1.25.1).** Per unit, across its `.pas` and `.dfm`:
 an edit set the applier would refuse (overlapping delete ranges) -- nothing is
 written, dry run and `--apply` alike, exit 1; a file not writable before the
