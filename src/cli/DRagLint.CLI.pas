@@ -434,6 +434,7 @@ type
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
+    F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
@@ -1538,6 +1539,7 @@ begin
     else if A = '--edges'         then Result.Edges          := True
     else if A = '--causes'        then Result.Causes         := True
     else if A = '--plan'          then Result.Plan           := True
+    else if A = '--f2047'         then Result.F2047          := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
@@ -21982,6 +21984,12 @@ end; // function
 function DoCycles(const AArgs: TArgs): Integer;
 type
   TEdgeSet = TDictionary<string, Boolean>;
+  { one interface-section reference of unit A to a symbol declared in unit B }
+  TIntfEdgeSym = record
+    Name: string ;
+    Line: Integer;
+    Kind: string ;
+  end;
 var
   Store    : ISymbolStore                      ;
   CycGraph : TCycleGraph                       ; { BuildCycleGraph; the four below alias it }
@@ -22072,6 +22080,159 @@ var
         (if Result <> nil then LibPath else '(none: ' + LibPath + ' did not open)'));
     end;
   end;
+
+  { The symbols in A's INTERFACE section that are declared in unit B -- what forces the
+    interface edge A->B (--causes, --f2047). First reference per name, in reference
+    order. Best-effort: the index can miss refs like set types. }
+  function IntfEdgeSymbols(const A, B: string): TArray<TIntfEdgeSym>;
+  var
+    Afid : Int64                        ;
+    APath: string                       ;
+    ImplL: Integer                      ;
+    Seen : TDictionary<string, Boolean> ;
+    One  : TIntfEdgeSym                 ;
+  begin
+    Result:= nil;
+    if not UnitFid.TryGetValue(A, Afid) then Exit;
+    APath:= '';
+    UnitFile.TryGetValue(A, APath);
+    ImplL:= MaxInt;
+    if TFile.Exists(APath) then
+    begin
+      var LS:= TStringList.Create;
+      try
+        LS.LoadFromFile(APath);
+        for var kk:= 0 to LS.Count - 1 do
+          if SameText(Trim(LS[kk]), 'implementation') then
+          begin
+            ImplL:= kk + 1;
+            Break;
+          end;
+      finally
+        LS.Free;
+      end;
+    end;
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for var R in Store.GetReferencesFromFile(Afid) do
+      begin
+        if R.StartLine >= ImplL then Continue; { interface only }
+        if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
+        for var Sym in Store.FindSymbolsByExactName(R.NameText) do
+          if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
+          begin
+            One.Name:= R.NameText;
+            One.Line:= R.StartLine;
+            One.Kind:= Sym.Kind.ToText;
+            Result:= Result + [One];
+            Seen.AddOrSetValue(LowerCase(R.NameText), True);
+            Break;
+          end;
+      end; // for
+    finally Seen.Free; end; // try
+  end;
+
+  { N-09 `cycles --f2047 [--unit <stem>]`: only the cycles made ENTIRELY of interface uses
+    edges -- the ones dcc rejects with F2047 -- each with the symbols forcing its edges and
+    the next commands. --unit takes the name from dcc's message; a unit in no such cycle is
+    exit 0 with a note (the index may be stale). }
+  function ReportF2047: Integer;
+  var
+    Groups : TList<TArray<string>>;
+    Want   : string               ;
+    Shown  : Integer              ;
+    PlanCmd: string               ;
+    JArrF  : TJSONArray           ;
+  begin
+    Result:= 0;
+    Want:= LowerCase(Trim(AArgs.GhostUnit));
+    if EndsText('.pas', Want) then Want:= ChangeFileExt(Want, '');
+    PlanCmd:= Format('drag-lint cycles --db "%s" --plan', [AArgs.DbPath]);
+    Shown:= 0;
+    JArrF:= nil;
+    Groups:= ComputeInterfaceSccs(CycGraph);
+    try
+      if SameText(AArgs.Format, 'json') then JArrF:= TJSONArray.Create;
+      for var Comp in Groups do
+      begin
+        if (Want <> '') and (IndexStr(Want, Comp) < 0) then Continue;
+        Inc(Shown);
+        var FixUnit: string:= if Want <> '' then Want else Comp[0];
+        var FixCmd: string:= Format('drag-lint cycles --db "%s" --fix --project "%s" --unit %s',
+          [AArgs.DbPath, (if AArgs.ProjectPath <> '' then AArgs.ProjectPath else '<X.dproj>'), FixUnit]);
+        var JO    : TJSONObject:= nil;
+        var JEdges: TJSONArray := nil;
+        if JArrF <> nil then
+        begin
+          JO:= TJSONObject.Create;
+          JArrF.AddElement(JO);
+          var JUnits:= TJSONArray.Create;
+          JO.AddPair('units', JUnits);
+          for var U in Comp do JUnits.Add(U);
+          JEdges:= TJSONArray.Create;
+          JO.AddPair('edges', JEdges);
+        end
+        else
+        begin
+          if Shown = 1 then
+            Writeln('F2047: interface-only cycle(s) -- dcc rejects each with "Circular unit reference":');
+          Writeln(Format('  [%d units] %s', [Length(Comp), string.Join(' <-> ', Comp)]));
+        end;
+        for var A in Comp do
+          for var B in Comp do
+          begin
+            if (A = B) or not IntfEdges.ContainsKey(A + '->' + B) then Continue;
+            var Syms:= IntfEdgeSymbols(A, B);
+            if JEdges <> nil then
+            begin
+              var JE:= TJSONObject.Create;
+              JEdges.AddElement(JE);
+              JE.AddPair('from', A);
+              JE.AddPair('to', B);
+              var JSyms:= TJSONArray.Create;
+              JE.AddPair('symbols', JSyms);
+              for var S in Syms do
+              begin
+                var JS:= TJSONObject.Create;
+                JSyms.AddElement(JS);
+                JS.AddPair('name', S.Name);
+                JS.AddPair('line', TJSONNumber.Create(S.Line));
+                JS.AddPair('kind', S.Kind);
+              end;
+            end
+            else if Length(Syms) = 0 then
+              Writeln(Format('      %s''s INTERFACE uses %s: no specific symbol resolved (index gap -- inspect it by hand)', [A, B]))
+            else
+            begin
+              Writeln(Format('      %s''s INTERFACE uses %s via:', [A, B]));
+              for var S in Syms do
+                Writeln(Format('          line %d: %s  [%s]', [S.Line, S.Name, S.Kind]));
+            end;
+          end;
+        if JO <> nil then
+        begin
+          JO.AddPair('plan', PlanCmd);
+          JO.AddPair('fix', FixCmd);
+        end
+        else
+        begin
+          Writeln('      next: ' + PlanCmd);
+          Writeln('            ' + FixCmd);
+        end;
+      end; // for
+      if JArrF <> nil then Writeln(JArrF.ToJson)
+      else if Shown = 0 then
+      begin
+        if Want <> '' then
+          Writeln(Format('%s is in no interface-only cycle (the index may be stale: reindex)', [AArgs.GhostUnit]))
+        else
+          Writeln('F2047: no interface-only cycle -- dcc reports no circular unit reference for this index.');
+      end;
+    finally
+      JArrF.Free;
+      Groups.Free;
+    end; // try
+  end;
 var
   FixCode: Integer       ; { cycles --fix: RunCycleFix's exit code; -1 = not a --fix run }
 begin
@@ -22092,6 +22253,16 @@ begin
   Sccs     := nil;
   try
     Sccs:= ComputeSccs(CycGraph);
+
+    if AArgs.F2047 then
+    begin
+      if AArgs.Plan or AArgs.Fix then
+      begin
+        Writeln(ErrOutput, 'ERROR: cycles --f2047 does not combine with --plan or --fix -- it prints those commands per cycle');
+        Exit(2);
+      end;
+      Exit(ReportF2047);
+    end;
 
     if AArgs.Plan or AArgs.Fix then
     begin
@@ -22252,42 +22423,13 @@ begin
             for var B in Comp do
               begin
                 if (A = B) or not IntfEdges.ContainsKey(A + '->' + B) then Continue;
-                var Afid: Int64;
-                if not UnitFid.TryGetValue(A, Afid) then Continue;
-                var APath: string:= '';
-                UnitFile.TryGetValue(A, APath);
-
-                var ImplL: Integer:= MaxInt;
-                if TFile.Exists(APath) then
-                begin
-                  var LS:= TStringList.Create;
-                  try
-                    LS.LoadFromFile(APath);
-                    for var kk:= 0 to LS.Count - 1 do
-                      if SameText(Trim(LS[kk]), 'implementation') then
-                      begin ImplL:= kk + 1; Break; end;
-                  finally LS.Free; end;
-                end;
-
-                var Seen:= TDictionary<string, Boolean>.Create;
-                var HdrShown:= False;
-                try
-                  for var R in Store.GetReferencesFromFile(Afid) do
-                  begin
-                    if R.StartLine >= ImplL then Continue; { interface only }
-                    if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
-                    for var Sym in Store.FindSymbolsByExactName(R.NameText) do
-                      if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
-                      begin
-                        if not HdrShown then begin Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B])); HdrShown:= True; end;
-                        Writeln(Format('          line %d: %s  [%s]  -> move/extract this', [R.StartLine, R.NameText, Sym.Kind.ToText]));
-                        Seen.AddOrSetValue(LowerCase(R.NameText), True);
-                        Break;
-                      end;
-                  end; // for
-                  if not HdrShown then
-                    Writeln(Format('      * %s -> %s interface dep: no specific symbol ' + 'resolved (index gap -- inspect %s''s interface uses of %s by hand)', [A, B, A, B]));
-                finally Seen.Free; end; // try
+                if not UnitFid.ContainsKey(A) then Continue;
+                var Syms:= IntfEdgeSymbols(A, B);
+                if Length(Syms) > 0 then Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B]));
+                for var S in Syms do
+                  Writeln(Format('          line %d: %s  [%s]  -> move/extract this', [S.Line, S.Name, S.Kind]));
+                if Length(Syms) = 0 then
+                  Writeln(Format('      * %s -> %s interface dep: no specific symbol ' + 'resolved (index gap -- inspect %s''s interface uses of %s by hand)', [A, B, A, B]));
               end; // for
           end; // if
         end; // for
@@ -31934,6 +32076,7 @@ const
   COMPARE_TEMP_SVG_PREFIX = 'drag-lint-compare-old-';
   COMPARE_SVG_EXT = '.svg';
   COMPARE_STAMP = 'yyyymmdd-hhnn';
+  COMPARE_RUN_STAMP = 'yyyymmdd-hhnnss';
 
 function CompareReadText(const APath: string): string;
 begin
@@ -32076,11 +32219,16 @@ begin
   else Write(Doc);
 end;
 
-{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index. }
+{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index.
+  The new run's bundle goes to a PER-RUN folder under %TEMP%\drag-lint-reports: the bundle name is
+  question + target only, so two runs in the shared folder overwrote each other's chart (INBOX
+  compare item 3). }
 function CompareProduceOptions(const AArgs: TArgs): TProduceOptions;
 begin
   Result:= DefaultProduceOptions;
   Result.EnginePath:= ParamStr(0);
+  Result.OutRoot:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+    Format('compare-run-%s-%d', [FormatDateTime(COMPARE_RUN_STAMP, Now), GetCurrentProcessId]));
   if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
 end;
 

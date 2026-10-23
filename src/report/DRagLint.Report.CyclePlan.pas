@@ -365,6 +365,15 @@ function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>; overload
 /// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
 function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>; overload;
 
+/// <summary>The cycles dcc rejects with F2047: Tarjan's strongly-connected components
+/// (of more than one unit) of the INTERFACE-uses edges alone.</summary>
+/// <param name="pGraph">A graph from BuildCycleGraph; read only.</param>
+/// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
+/// <remarks>`cycles --f2047` (N-09). Every group here is also inside one group of
+/// ComputeSccs(pGraph); a group there with an implementation edge on every loop is not
+/// here, because the compiler accepts it.</remarks>
+function ComputeInterfaceSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
+
 implementation
 
 uses
@@ -5090,6 +5099,28 @@ begin
     Result:= ComputeSccs(Graph);
   finally
     FreeCycleGraph(Graph);
+  end;
+end;
+
+function ComputeInterfaceSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
+var
+  IntfOnly: TCycleGraph;
+begin
+  IntfOnly          := pGraph; { IntfEdges / UnitFile / UnitFid aliased, read only }
+  IntfOnly.Adj      := TDictionary<string, TList<string>>.Create;
+  try
+    for var Pair in pGraph.Adj do
+    begin
+      { every unit stays a node (ComputeSccs treats a stem with no Adj key as a library leaf) }
+      var Kept:= TList<string>.Create;
+      IntfOnly.Adj.Add(Pair.Key, Kept);
+      for var Used in Pair.Value do
+        if pGraph.IntfEdges.ContainsKey(Pair.Key + '->' + Used) then Kept.Add(Used);
+    end;
+    Result:= ComputeSccs(IntfOnly);
+  finally
+    for var L in IntfOnly.Adj.Values do L.Free;
+    IntfOnly.Adj.Free;
   end;
 end;
 
