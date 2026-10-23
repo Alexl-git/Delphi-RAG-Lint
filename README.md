@@ -838,7 +838,9 @@ predates it answers the standard `-32601`.
 * **Zed** -- tree-sitter highlighting ships today; the language-server
   registration needs a small Rust/WASM extension that is **not yet built** and is
   fully specified for contributors.
-* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`.
+* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`. Add `--full-rules` (OFF by default) to
+  publish the complete built-in rule set on every save instead of the subset; it runs `lint` out-of-process
+  and reports its cost in ms on stderr.
 
 `drag-lint lsp --proxy` is a different shape of the same server: instead of
 answering alone, it spawns RAD Studio's own `bin64\DelphiLSP.exe` and relays

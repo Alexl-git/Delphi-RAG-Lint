@@ -180,6 +180,7 @@ type
       FInitialized : Boolean             ;
       FShuttingDown: Boolean             ;
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
+      FFullRules   : Boolean             ; { C1: --full-rules; OFF by default } // dl:ok referenced-never-set@c208 -- written through the FullRules property (write FFullRules) by the CLI
       { S0 feature registry: one instance per registered TLspFeature class, owned;
         the method table points into it (not owned). FContext is the adapter
         every feature is handed -- see DRagLint.LSP.Context. }
@@ -764,7 +765,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidOpenOrSave(const AParams: TJSONObject);
-      /// <summary>Stores the client's live buffer text (full sync) so position
+      /// <summary>C1: runs `ParamStr(0) lint "AFile" --json` out-of-process and returns its stdout.</summary>
+      /// <param name="AFile">Absolute path of the saved file.</param>
+      /// <param name="AJson">Receives lint's stdout when the run succeeded.</param>
+      /// <returns>True when the child exited 0 within LSP_FULL_RULES_TIMEOUT_MS; False on a spawn
+      /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
+      /// <remarks>Blocks the calling thread for at most the timeout. The child never inherits the
+      /// server's stdin/stdout: its handles are a temp file and NUL.</remarks>
+      function RunFullRulesLint(const AFile: string; out AJson: string): Boolean;      /// <summary>Stores the client's live buffer text (full sync) so position
       /// lookups see unsaved edits. See TLiveDocuments for why.</summary>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -999,6 +1007,13 @@ type
       /// stdin read and each handler for it, and leaves the loop the moment a
       /// stand-down is taken. docs\PLAN-maintenance-shutdown-channel.md.</remarks>
       property ControlChannel: TControlChannel read FControl write FControl;
+      /// <summary>C1 (lsp --full-rules): when True each didOpen/didSave publishes the FULL
+      /// built-in rule set, obtained by running lint --json out-of-process, instead of the
+      /// BuildDiagnostics subset; compiler findings are kept. Default False.</summary>
+      /// <remarks>Costs one lint run per save; the measured ms is written to stderr as
+      /// drag-lint lsp: full-rules <file> <ms> ms <n> findings. Falls back to the subset (and
+      /// says so on stderr) on timeout, non-zero exit or invalid JSON.</remarks>
+      property FullRules: Boolean read FFullRules write FFullRules;
       /// <summary>The databases this server actually opened, in FStores order.</summary>
       /// <returns>Paths of the stores that opened and passed the schema check;
       /// a --db that was skipped is not in it.</returns>
@@ -1141,6 +1156,13 @@ implementation
 uses
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
+
+const
+  { C1: budget for the out-of-process `lint --json` that --full-rules runs on each
+    didOpen/didSave -- the same 8 s the plugin's live runner allows. }
+  LSP_FULL_RULES_TIMEOUT_MS = 8000;
+  { Bounded wait for the killed child to be reaped after TerminateProcess. }
+  LSP_FULL_RULES_REAP_MS = 2000;
 
 type
   { S0: the ILspServerContext a feature is handed. A thin forwarder: every
@@ -3504,6 +3526,27 @@ begin
     TLiveDocuments.Remove(Path);
   // v0.26: pass FStore so compiler_findings are merged into publishDiagnostics.
   Diags:= TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore);
+  if FFullRules then
+  begin
+    { C1: replace the lint subset (every source='drag-lint' entry) by the full
+      `lint --json` set; the store's compiler findings (source='dcc') stay. }
+    var Started: UInt64:= GetTickCount64;
+    var LintJson: string;
+    var Full: TJSONArray:= nil;
+    if RunFullRulesLint(Path, LintJson) then Full:= TLspCompletion.DiagnosticsFromLintJson(LintJson);
+    if Full <> nil then
+    begin
+      for var K:= Diags.Count - 1 downto 0 do
+        if SameText((Diags.Items[K] as TJSONObject).GetValue<string>('source', ''), 'drag-lint') then
+          Diags.Remove(K).Free;
+      for var J:= 0 to Full.Count - 1 do
+        Diags.AddElement(Full.Items[J].Clone as TJSONValue);
+      Full.Free;
+    end
+    else
+      Writeln(ErrOutput, 'drag-lint lsp: full-rules fallback to the subset (timeout, failed run or invalid JSON): ', Path);
+    Writeln(ErrOutput, Format('drag-lint lsp: full-rules %s %d ms %d findings', [Path, GetTickCount64 - Started, Diags.Count]));
+  end;
   Notif:= TJSONObject.Create;
   try
     Notif.AddPair('jsonrpc', '2.0'                            );
@@ -3517,6 +3560,65 @@ begin
     Notif.Free;
   end;
 end; // procedure
+
+function TLSPServer.RunFullRulesLint(const AFile: string; out AJson: string): Boolean;
+var
+  Sa      : TSecurityAttributes;
+  TmpPath : string;
+  HOut    : THandle;
+  HNul    : THandle;
+  Si      : TStartupInfo;
+  Pi      : TProcessInformation;
+  Cmd     : string;
+  ExitCode: DWORD;
+begin
+  Result:= False;
+  AJson:= '';
+  if AFile = '' then Exit;
+  TmpPath:= TPath.GetTempFileName;
+  FillChar(Sa, SizeOf(Sa), 0);
+  Sa.nLength       := SizeOf(Sa);
+  Sa.bInheritHandle:= True;
+  HOut:= CreateFile(PChar(TmpPath), GENERIC_WRITE, FILE_SHARE_READ, @Sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  HNul:= CreateFile('NUL', GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, @Sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  try
+    if (HOut = INVALID_HANDLE_VALUE) or (HNul = INVALID_HANDLE_VALUE) then Exit;
+    FillChar(Si, SizeOf(Si), 0);
+    Si.cb         := SizeOf(Si);
+    Si.dwFlags    := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+    Si.wShowWindow:= SW_HIDE;
+    Si.hStdInput  := HNul;
+    Si.hStdOutput := HOut;
+    Si.hStdError  := HNul;
+    Cmd:= '"' + ParamStr(0) + '" lint "' + AFile + '" --json';
+    UniqueString(Cmd);
+    if not CreateProcess(PChar(ParamStr(0)), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
+    try
+      if WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_TIMEOUT_MS) <> WAIT_OBJECT_0 then
+      begin
+        TerminateProcess(Pi.hProcess, 1);
+        WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_REAP_MS);
+        Exit;
+      end;
+      ExitCode:= 1;
+      GetExitCodeProcess(Pi.hProcess, ExitCode);
+      { lint exits 1 when it REPORTS findings (stdout is the complete array) and
+        2+ on an error such as a missing path, so exit 0 or 1 with a JSON array is
+        a good run; anything else falls back to the subset. }
+      CloseHandle(HOut);
+      HOut:= INVALID_HANDLE_VALUE;
+      AJson:= TFile.ReadAllText(TmpPath, TEncoding.UTF8);
+      Result:= (ExitCode <= 1) and AJson.TrimLeft.StartsWith('[');
+    finally
+      CloseHandle(Pi.hThread);
+      CloseHandle(Pi.hProcess);
+    end;
+  finally
+    if HOut <> INVALID_HANDLE_VALUE then CloseHandle(HOut);
+    if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
+    TFile.Delete(TmpPath);
+  end;
+end; // function
 
 procedure TLSPServer.HandleDidChange(const AParams: TJSONObject);
 { Full-sync document update. The server advertises TextDocumentSyncKind.Full,

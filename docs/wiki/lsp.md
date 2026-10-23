@@ -33,6 +33,24 @@ drag-lint add to those answers:
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails
   open and never drops a message.
 
+### Full rule set on save: `--full-rules` (opt-in)
+
+```
+drag-lint lsp --db <db> --full-rules
+```
+
+By default the publish on `didOpen`/`didSave` runs a subset of the built-in
+checks. With `--full-rules` the server runs `drag-lint lint "<file>" --json`
+**out-of-process** (the same path the IDE live runner uses; 8000 ms budget),
+publishes that complete finding set in place of the lint subset, and keeps the
+store's compiler findings. **OFF by default**: it costs one `lint` run per save.
+The measured cost is written to stderr on every save:
+`drag-lint lsp: full-rules <file> <ms> ms <n> findings`. On a timeout, a failed
+run or invalid JSON the server falls back to the subset and says so on stderr.
+Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
+second process start) is deliberately NOT built; it can follow if the measured
+cost justifies it.
+
 Status: the flags are accepted now; the diagnostics handler itself lands
 with merge task A1. Until then every message is relayed unchanged.
 

@@ -182,6 +182,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
+      /// <summary>Maps the bare ARRAY that lint <file> --json prints to LSP diagnostics
+      /// (C1, lsp --full-rules). Same severity map as BuildDiagnostics, source is
+      /// 'drag-lint', code is the rule id.</summary>
+      /// <param name="AJson">The raw stdout of lint <file> --json: a JSON array of objects with
+      /// rule (or rule_id), severity, start_line, start_col, end_line, end_col, message (1-based).</param>
+      /// <returns>A new array (caller owns), empty for []; nil when AJson is not a JSON array,
+      /// so the caller can fall back to BuildDiagnostics.</returns>
+      /// <remarks>Pure. Findings without a rule id are skipped.</remarks>
+      class function DiagnosticsFromLintJson(const AJson: string): TJSONArray;
       /// <summary>Code actions for diagnostics on AFile in the given range. Returns
       /// a JSON array of CodeAction objects with edits to insert reviewed-markers.</summary>
       /// <param name="AFile">Path to the source file.</param>
@@ -1095,6 +1104,61 @@ begin
       end; // for
     end; // if
   end; // if
+end; // function
+
+class function TLspCompletion.DiagnosticsFromLintJson(const AJson: string): TJSONArray;
+var
+  Root    : TJSONValue;
+  Item    : TJSONValue;
+  Obj     : TJSONObject;
+  Rule    : string;
+  Sev     : string;
+  DiagObj : TJSONObject;
+  RangeObj: TJSONObject;
+  StartObj: TJSONObject;
+  EndObj  : TJSONObject;
+
+  function IntField(const AName: string; ADefault: Integer): Integer;
+  begin
+    if not Obj.TryGetValue<Integer>(AName, Result) then Result:= ADefault;
+  end;
+
+begin
+  Result:= nil;
+  Root:= TJSONObject.ParseJSONValue(AJson);
+  if Root = nil then Exit;
+  try
+    if Root is not TJSONArray then Exit;
+    Result:= TJSONArray.Create;
+    for Item in TJSONArray(Root) do
+    begin
+      if Item is not TJSONObject then Continue;
+      Obj:= TJSONObject(Item);
+      if not Obj.TryGetValue<string>('rule', Rule) then
+        if not Obj.TryGetValue<string>('rule_id', Rule) then Continue;
+      if not Obj.TryGetValue<string>('severity', Sev) then Sev:= 'info';
+
+      StartObj:= TJSONObject.Create;
+      StartObj.AddPair('line'     , TJSONNumber.Create(IntField('start_line', 1) - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(IntField('start_col' , 1) - 1));
+      EndObj:= TJSONObject.Create;
+      EndObj.AddPair('line'     , TJSONNumber.Create(IntField('end_line', IntField('start_line', 1)) - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(IntField('end_col' , IntField('start_col' , 1)) - 1));
+      RangeObj:= TJSONObject.Create;
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end'  , EndObj  );
+
+      DiagObj:= TJSONObject.Create;
+      DiagObj.AddPair('range'   , RangeObj);
+      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(Sev)));
+      DiagObj.AddPair('source'  , 'drag-lint');
+      DiagObj.AddPair('code'    , Rule);
+      DiagObj.AddPair('message' , Obj.GetValue<string>('message', ''));
+      Result.AddElement(DiagObj);
+    end; // for
+  finally
+    Root.Free;
+  end;
 end; // function
 
 class function TLspCompletion.BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;

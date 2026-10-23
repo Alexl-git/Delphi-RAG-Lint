@@ -526,6 +526,7 @@ type
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
     LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
+    LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
@@ -1597,6 +1598,7 @@ begin
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
     else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
+    else if A = '--full-rules' then Result.LspFullRules:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
       Inc(i);
@@ -32744,6 +32746,7 @@ begin
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
+      LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance
