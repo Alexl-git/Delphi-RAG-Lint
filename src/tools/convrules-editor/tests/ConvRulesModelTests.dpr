@@ -12872,14 +12872,12 @@ begin
     Check('runner.scope.all.out.drops.backup', (Length(LRows) = 1) and (LRows[0].Status = csOutOfScope) and (Length(Calls) = 0)
       and (TFile.ReadAllText(TPath.Combine(AllDir, 'F.pas')) = ORIG) and (Length(TDirectory.GetFiles(AllDir, 'F.*.BCK*')) = 0), Describe(LRows));
 
-    // the engine's --only refusal gets the hint (E10)
+    // the engine's --only refusal gets no hint
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],
       Refuse, Index, Scope, nil, nil);
     Check('runner.scope.refused.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
-      and LRows[0].Note.EndsWith(' -- convert all TTable instances on this form, or remove the #unuse / #useswap from the book'), Describe(LRows));
-    Check('runner.scope.refusal.hint.pure', (RefusalHint('x would leave 3 unconverted instance(s) of TQuery -- unit not changed') = ' -- convert all TQuery instances on this form, or remove the #unuse / #useswap from the book')
-      and (RefusalHint('inherited instances of TTable are not converted yet') = ''));
+      and (Pos(' -- convert all ', LRows[0].Note) = 0) and (Pos('--only asked for', LRows[0].Note) = 0), Describe(LRows));
     // an unscoped refusal never gets the hint: the reason is not about a scope
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],

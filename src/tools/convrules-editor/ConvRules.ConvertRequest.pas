@@ -263,13 +263,6 @@ function UnmatchedOnlyHint(const AOnly: TArray<string>): string;
 /// instance to its ancestor, so "re-send it" would be wrong; else UnmatchedOnlyHint(AOnly).</returns>
 function UnmatchedOnlyHintFor(const AScope: TConvertScope; const AOnly: TArray<string>): string;
 
-/// <summary>The E10 hint appended to the engine's --only refusal.</summary>
-/// <param name="AReason">The apply/1 reason.</param>
-/// <returns>' -- convert all &lt;Type&gt; instances on this form, or remove the #unuse /
-/// #useswap from the book' when AReason holds 'unconverted instance(s) of &lt;Type&gt;';
-/// else ''.</returns>
-function RefusalHint(const AReason: string): string;
-
 /// <summary>The converted row's note for a scoped run (spec E11).</summary>
 /// <param name="AOnly">The names passed as --only, in order.</param>
 /// <param name="AConvertedNote">The unscoped note: ConvertedRowNote ('&lt;edits&gt;
@@ -439,8 +432,6 @@ const
   DFM_BINARY_FMT     = 'the .dfm %s is binary -- convert it to text in the IDE first';
   DFM_MISSING_FMT    = 'the .dfm %s is missing, unreadable or has no object header -- the component scope cannot be resolved';
   UNIT_COUNT_FMT     = 'a %s request lists exactly one unit (got %d)';
-  REFUSAL_MARK       = 'unconverted instance(s) of ';
-  REFUSAL_HINT_FMT   = ' -- convert all %s instances on this form, or remove the #unuse / #useswap from the book';
   SCOPED_NOTE_FMT    = '--only %d instance(s): %s; ';
   UNMATCHED_ONLY_FMT = ' -- --only asked for %s; the form may have changed since the IDE request -- re-send it';
   REPORT_SCOPE_HEAD  = 'Scope'#9;
@@ -867,21 +858,6 @@ begin
       Exit(UnmatchedOnlyHint(AOnly));
   end;
   Result:= if Length(AOnly) = 0 then UnmatchedOnlyHint(AOnly) else '';
-end;
-
-function RefusalHint(const AReason: string): string;
-var
-  P, Q: Integer;
-begin
-  Result:= '';
-  P:= Pos(REFUSAL_MARK, AReason);
-  if P = 0 then
-    Exit;
-  P:= P + Length(REFUSAL_MARK);
-  Q:= P;
-  while (Q <= Length(AReason)) and (AReason[Q] <> ' ') do
-    Inc(Q);
-  Result:= Format(REFUSAL_HINT_FMT, [Copy(AReason, P, Q - P)]);
 end;
 
 function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
