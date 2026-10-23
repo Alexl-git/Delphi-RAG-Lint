@@ -48,4 +48,4 @@ backup, or from `--template <file>` (a JSON file holding the entry) when there i
 none. Exit 0 = done, 1 = already in that state, 2 = VS Code (`Code.exe`) is running
 (file untouched), 3 = failure (e.g. no backup and no template). Workspace file only:
 the user-level registration in `state.vscdb` is not read or written. Guard:
-`testsutotestun_lsp_switch_vscode_guard.ps1`.
+`tests\autotest\run_lsp_switch_vscode_guard.ps1`.
