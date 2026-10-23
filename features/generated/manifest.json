@@ -8547,7 +8547,13 @@
           "path": "drag-lint > Help > All features (web)"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-23",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3c9544e404c3bb3f843bbfc31f756c8739133c68512fc9ab3708a7d680ea0696"
+      }
     },
     {
       "id": "ide-menu-reference",
