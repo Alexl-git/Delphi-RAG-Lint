@@ -58,7 +58,7 @@ if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
 function Invoke-Raw {
-  param([string]$exe, [string[]]$argv, [byte[]]$c1, [hashtable]$envs = @{})
+  param([string]$exe, [string[]]$argv, [byte[]]$c1, [hashtable]$envs = @{}, [byte[]]$c2 = $null, [int]$delayMs = 0)
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName               = $exe
   foreach ($a in $argv) { [void]$psi.ArgumentList.Add($a) }
@@ -76,6 +76,7 @@ function Invoke-Raw {
   try {
     $sin = $p.StandardInput.BaseStream
     if ($c1 -and $c1.Length) { $sin.Write($c1, 0, $c1.Length); $sin.Flush() }
+    if ($c2 -and $c2.Length) { Start-Sleep -Milliseconds $delayMs; $sin.Write($c2, 0, $c2.Length); $sin.Flush() }
     $sin.Close()
   } catch { }
   $done = $p.WaitForExit(60000)
@@ -161,6 +162,7 @@ $plainArgs = @('lsp', '--proxy', '--delphi-lsp', $stub)
 $offArgs   = @('lsp', '--proxy', '--merge-budget-ms', '20000', '--delphi-lsp', $stub)
 $onArgs    = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '20000', '--delphi-lsp', $stub)
 $zeroArgs  = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '0', '--delphi-lsp', $stub)
+$defArgs   = @('lsp', '--proxy', '--merge-diagnostics', '--delphi-lsp', $stub)   # NO --merge-budget-ms: the shipping default
 $script:PushN = 0
 function Push([string[]]$argv, [string]$body) {
   $script:PushN++
@@ -246,6 +248,29 @@ Check 'after didChange: the publish is the original bytes' ($g1.Count -eq 1 -and
 Check 'after didSave: the publish is merged (drag-lint present)' ($g2.Count -eq 1 -and ($g2[0].Sources -contains 'drag-lint')) ("count=$($g2.Count) sources=$($g2[0].Sources -join ',')")
 
 # --- (h) UTF-8 byte count ---------------------------------------------------
+# --- (i) DEFAULT budget: the first publish after didOpen is merged (I1) ------
+Write-Host ''
+Write-Host '(i) default budget: didOpen, then a later publish -> merged (cold linter warmed off the relay path)' -ForegroundColor Cyan
+$pubI = PublishBody $dirtyUri 'stub-default-budget-3333'
+foreach ($run in 1, 2) {
+  $iOn  = Invoke-Raw $Exe $defArgs ([byte[]](DocNote 'textDocument/didOpen' $dirtyUri)) @{} ([byte[]](Frame $pubI)) 6000
+  $iPub = @(Publishes $iOn.Out | Where-Object { $_.Frame.Body.Contains('stub-default-budget-3333') })
+  Check "run ${run}: the first publish is merged (drag-lint present)" ($iPub.Count -eq 1 -and ($iPub[0].Sources -contains 'drag-lint')) ("count=$($iPub.Count) sources=$($iPub[0].Sources -join ',')")
+}
+
+# --- (j) didClose / didOpen clear the dirty flag (M1, M5) -----------------------
+Write-Host ''
+Write-Host '(j) didChange + didClose (or didOpen) -> the next publish is merged' -ForegroundColor Cyan
+$pubJ1 = PublishBody $dirtyUri 'stub-after-close-4444'
+$pubJ2 = PublishBody $dirtyUri 'stub-after-open-5555'
+$j1 = Invoke-Raw $Exe $onArgs ([byte[]]((DocNote 'textDocument/didChange' $dirtyUri) + (DocNote 'textDocument/didClose' $dirtyUri) + (Frame $pubJ1)))
+# didOpen warms the linter on the worker; the publish follows later so it is not refused as busy
+$j2 = Invoke-Raw $Exe $onArgs ([byte[]]((DocNote 'textDocument/didChange' $dirtyUri) + (DocNote 'textDocument/didOpen' $dirtyUri))) @{} ([byte[]](Frame $pubJ2)) 6000
+$jp1 = @(Publishes $j1.Out | Where-Object { $_.Frame.Body.Contains('stub-after-close-4444') })
+$jp2 = @(Publishes $j2.Out | Where-Object { $_.Frame.Body.Contains('stub-after-open-5555') })
+Check 'after didChange + didClose: the publish is merged' ($jp1.Count -eq 1 -and ($jp1[0].Sources -contains 'drag-lint')) ("count=$($jp1.Count)")
+Check 'after didChange + didOpen: the publish is merged' ($jp2.Count -eq 1 -and ($jp2[0].Sources -contains 'drag-lint')) ("count=$($jp2.Count)")
+
 Write-Host ''
 Write-Host '(h) non-ASCII message: Content-Length is the UTF-8 byte count' -ForegroundColor Cyan
 $uMsg  = 'stub-umlaut-' + [char]0x00FC + '-end'

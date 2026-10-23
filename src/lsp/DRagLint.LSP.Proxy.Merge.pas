@@ -90,7 +90,10 @@ type
     FDirty       : TDictionary<string, Boolean>;
     FDirtyLock   : TCriticalSection;
     FBudgetWarned: Boolean;
+    FWarmQueued  : Boolean;
+    FWarming     : Integer;
     procedure WorkerLoop;
+    procedure WarmLinter;
     function  IsDirty(const APath: string): Boolean;
     procedure TrackDocument(const AFrame: TBytes; ALen: Integer);
     function  MergeDiagnostics(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
@@ -119,7 +122,7 @@ type
     /// True with an empty replacement.</returns>
     /// <remarks>
     /// <para>C&gt;S frames are never replaced. With MergeDiagnostics on, a
-    /// didChange marks its URI dirty and a didSave or didOpen clears it; a
+    /// didChange marks its URI dirty and a didSave, didOpen or didClose clears it; a
     /// publish for a dirty URI is forwarded unmerged, because drag-lint lints
     /// the file on DISK and its ranges would not match the edited buffer.</para>
     /// <para>Fail-open: unparseable JSON, a missing uri or diagnostics array,
@@ -221,6 +224,7 @@ const
   METHOD_DID_CHANGE          = 'textDocument/didChange';
   METHOD_DID_SAVE            = 'textDocument/didSave';
   METHOD_DID_OPEN            = 'textDocument/didOpen';
+  METHOD_DID_CLOSE           = 'textDocument/didClose';
   { The common prefix of the three document notifications tracked above. }
   METHOD_DID_PREFIX          = 'textDocument/did';
 
@@ -417,8 +421,32 @@ begin
   end;
 end;
 
-{ C>S: didChange marks the document dirty, didSave / didOpen clear it. Runs on
-  the C>S pump thread, inline (no worker, no FCallLock). }
+{ C>S, first didOpen only: builds the lint engine on the merge worker, off the
+  relay path (budget 0 = enqueue and return at once). TLinter.Create loads every
+  rule file, which takes seconds cold and would otherwise make the FIRST
+  publishDiagnostics of a session miss any budget. Does not touch
+  FBudgetWarned. FWarming tells the S>C side an overrun is the warm-up, not a
+  dead merge. Runs on the C>S pump thread. }
+procedure TProxyMergeEngine.WarmLinter;
+begin
+  if FWarmQueued then Exit;
+  FWarmQueued:= True;
+  TInterlocked.Exchange(FWarming, 1);
+  if not RunWithinBudget(
+    procedure
+    begin
+      try
+        if FLinter = nil then FLinter:= TLinter.Create('');
+      finally
+        TInterlocked.Exchange(FWarming, 0);
+      end;
+    end, 0) then
+    TInterlocked.Exchange(FWarming, 0);
+end;
+
+{ C>S: didChange marks the document dirty, didSave / didOpen / didClose clear it.
+  A first didOpen also warms the linter. Runs on the C>S pump thread, inline
+  (no worker, no FCallLock). }
 procedure TProxyMergeEngine.TrackDocument(const AFrame: TBytes; ALen: Integer);
 var
   Json  : TJSONValue;
@@ -433,7 +461,8 @@ begin
     try
       if not (Json is TJSONObject) then Exit;
       if not Json.TryGetValue<string>('method', Method) then Exit;
-      if (Method <> METHOD_DID_CHANGE) and (Method <> METHOD_DID_SAVE) and (Method <> METHOD_DID_OPEN) then Exit;
+      if (Method <> METHOD_DID_CHANGE) and (Method <> METHOD_DID_SAVE) and (Method <> METHOD_DID_OPEN)
+         and (Method <> METHOD_DID_CLOSE) then Exit;
       if not Json.TryGetValue<string>('params.textDocument.uri', Uri) then Exit;
       Key:= DocKey(TLSPServer.FileFromUri(Uri));
       FDirtyLock.Enter;
@@ -443,6 +472,7 @@ begin
       finally
         FDirtyLock.Leave;
       end;
+      if Method = METHOD_DID_OPEN then WarmLinter;
     finally
       Json.Free;
     end;
@@ -522,7 +552,7 @@ begin
           end;
         end, FOptions.MergeBudgetMs) then
       begin
-        if not FBudgetWarned then
+        if (not FBudgetWarned) and (TInterlocked.CompareExchange(FWarming, 0, 0) = 0) then
         begin
           FBudgetWarned:= True;   { S>C pump thread only: no lock needed }
           MergeErrLine(MERGE_ERR_PREFIX + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +

@@ -41,9 +41,13 @@ How the diagnostics merge behaves:
   DelphiLSP's own notification, tagged `source: "drag-lint"`. One
   notification, because `publishDiagnostics` replaces the IDE's set for that
   file: a separate one would erase the compiler errors.
-- A file with a `didChange` since its last `didSave` / `didOpen` is relayed
+- A file with a `didChange` since its last `didSave` / `didOpen` / `didClose` is relayed
   unmerged: drag-lint lints the file on disk, and its ranges would not match
   the edited buffer. Saving brings the findings back.
+- The first didOpen of a session warms drag-lint's lint engine on the merge
+  worker, off the relay path (loading the rules takes seconds cold); a publish
+  that arrives while it still warms is relayed unmerged and does not use up the
+  once-only over-budget stderr line.
 - A clean file is relayed byte-for-byte.
 - Fail-open: a frame that cannot be parsed or lacks `uri` / `diagnostics`, or
   a lint exception, forwards DelphiLSP's bytes and writes one stderr line
