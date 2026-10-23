@@ -16,6 +16,10 @@ type
 
 function MakeJob: TJob;
 procedure UseLocal;
+function MakeWithAnon: TJob;
+
+type
+  TOtherFn = reference to function: TOtherJob;
 
 implementation
 
@@ -37,6 +41,19 @@ var
 begin
   Result := nil;
   Result.Streaming := True; // NEG-LOCAL
+end;
+
+function MakeWithAnon: TJob;
+var
+  F: TOtherFn;
+begin
+  F := function: TOtherJob
+    begin
+      Result := TOtherJob.Create;
+      Result.Streaming := True; // NEG-ANON
+    end;
+  Result := TJob.Create;
+  Result.Streaming := False; // POS-AFTER-ANON
 end;
 
 end.

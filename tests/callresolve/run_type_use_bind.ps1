@@ -82,7 +82,10 @@ $pos = @(
   @('TU-UNIT-VAR',    'TBase',   'uTuUse.TBase'),
   @('TU-PARAM',       'TBase',   'uTuUse.TBase'),
   @('TU-GENERIC-ARG', 'TGen',    'uTuUse.TGen'),
-  @('TU-GENERIC-ARG', 'TBase',   'uTuUse.TBase')
+  @('TU-GENERIC-ARG', 'TBase',   'uTuUse.TBase'),
+  # review 2026-10-23: an ancestor's nested type is in scope before the used
+  # units. Positive control: without the ancestor walk uTuLib.TNest answers.
+  @('TU-INHERITED-NESTED', 'TNest', 'uTuUse.TBase2.TNest')
 )
 foreach ($p in $pos) {
   $r = @(TypeUseAt $p[0] $p[1])

@@ -12,6 +12,9 @@ type
   public
     procedure Run(AErr: Integer);
     function Calc: Integer;
+    procedure Loops;
+    procedure Blocks;
+    function Calc2: Integer;
   end;
 
 const
@@ -45,6 +48,13 @@ var
     N := L; // R-OUTER-LOCAL
   end;
 
+  procedure InnerConst;
+  const
+    AErr = 7;
+  begin
+    N := AErr; // NEG-INNER-CONST
+  end;
+
 begin
   L := 1;
   GOwn := 2;
@@ -67,6 +77,42 @@ function TVal.Calc: Integer;
 begin
   Result := 1;
   Calc := Result; // NEG-RESULT
+end;
+
+procedure TVal.Loops;
+begin
+  for var i := 0 to 1 do FTotal := i; // DUP-FIRST-DECL
+  for var i := 0 to 2 do // DUP-SECOND-DECL
+  begin
+    FTotal := i; // DUP-SECOND-READ
+  end;
+end;
+
+procedure TVal.Blocks;
+begin
+  if FTotal > 0 then
+  begin
+    var K: Integer := 1; // DUPW-FIRST-DECL
+    K := 2; // DUPW-FIRST-WRITE
+    FTotal := K; // DUPW-FIRST-READ
+  end;
+  if FTotal > 1 then
+  begin
+    var K: Integer := 5; // DUPW-SECOND-DECL
+    K := 6; // DUPW-SECOND-WRITE
+    FTotal := K; // DUPW-SECOND-READ
+  end;
+  if FTotal > 2 then
+  begin
+    var Q: Integer := 1;
+    FTotal := Q; // R-INSCOPE-Q
+  end;
+  FTotal := Q; // NEG-OUTSCOPE-Q
+end;
+
+function TVal.Calc2: Integer;
+begin const CHECK_OK = 9;
+  Result := CHECK_OK; // NEG-MIDLINE-CONST
 end;
 
 end.

@@ -88,6 +88,16 @@ Check 'NEG-LOCAL a local Result: TOtherJob binds TOtherJob.Streaming, never TJob
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1 -and
    @($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
 
+# review 2026-10-23: inside an anonymous method `Result` is the anonymous
+# method's, not the enclosing function's -- never typed from MakeWithAnon's
+# return type. Positive control: before the fix NEG-ANON bound TJob.Streaming.
+$r = At 'NEG-ANON' 'member-access' 'Streaming'
+Check 'NEG-ANON Result inside an anonymous function never binds TJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
+$r = At 'POS-AFTER-ANON' 'member-access' 'Streaming'
+Check 'POS-AFTER-ANON Result after the anonymous method closes still binds TJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
+
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
 } finally {
   if ($scratch -and (Test-Path $scratch)) { [System.IO.Directory]::Delete($scratch, $true) }

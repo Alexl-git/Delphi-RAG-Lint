@@ -108,6 +108,51 @@ foreach ($n in @(@('NEG-AMBIGUOUS', 'GClash'), @('NEG-NOT-FOUND', 'GMissing'), @
   $ok = ($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)
   Check "$($n[0]) $($n[1]) stays unbound" $ok ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
 }
+# check 2b (review 2026-10-23) -- the unlisted-declaration check runs for the
+# levels INSIDE the one that declares the name: a nested routine's local const
+# hides the outer routine's parameter; a mid-line `begin const X = ..` counts.
+foreach ($n in @(@('NEG-INNER-CONST', 'AErr'), @('NEG-MIDLINE-CONST', 'CHECK_OK'))) {
+  $r = @(ReadAt $n[0] $n[1])
+  Check "$($n[0]) $($n[1]) stays unbound (unlisted)" (($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)) `
+    ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
+}
+
+# check 5 (review 2026-10-23) -- two same-name inline vars in one routine: a
+# read or a write binds the NEAREST declaration at or before it whose block
+# covers it, never the first. Positive control: a first-match lookup binds every
+# DUP-SECOND / DUPW-SECOND ref to the FIRST declaration, and NEG-OUTSCOPE-Q to
+# the Q of a block that already closed.
+function DeclId([string]$Marker, [string]$Name) {
+  $line = LineOf $Marker
+  $d = @(Sql ("SELECT s.id FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path LIKE '%uValUse.pas' " +
+              "AND s.kind = 'local_var' AND s.name = '$Name' AND s.start_line = $line") | Where-Object { $_ })
+  if ($d.Count -ne 1) { throw "declaration $Name at '$Marker' found $($d.Count) times" }
+  return [int64]$d[0].id
+}
+function RefAt([string]$Marker, [string]$Kind, [string]$Name) {
+  $line = LineOf $Marker
+  return @(Sql ("SELECT r.id, r.symbol_id FROM refs r JOIN files f ON f.id = r.file_id WHERE f.path LIKE '%uValUse.pas' " +
+                "AND r.kind = '$Kind' AND r.start_line = $line AND r.name_text = '$Name'") | Where-Object { $_ })
+}
+$dup = @(
+  @('DUP-FIRST-DECL',   'read',  'i', 'DUP-FIRST-DECL'),
+  @('DUP-SECOND-READ',  'read',  'i', 'DUP-SECOND-DECL'),
+  @('DUPW-FIRST-WRITE', 'write', 'K', 'DUPW-FIRST-DECL'),
+  @('DUPW-FIRST-READ',  'read',  'K', 'DUPW-FIRST-DECL'),
+  @('DUPW-SECOND-WRITE','write', 'K', 'DUPW-SECOND-DECL'),
+  @('DUPW-SECOND-READ', 'read',  'K', 'DUPW-SECOND-DECL'),
+  @('R-INSCOPE-Q',      'read',  'Q', $null)
+)
+foreach ($p in $dup) {
+  $want = if ($p[3]) { DeclId $p[3] $p[2] } else { [int64](@(Sql ("SELECT s.id FROM symbols s WHERE s.kind = 'local_var' AND s.name = 'Q'"))[0].id) }
+  $r = @(RefAt $p[0] $p[1] $p[2])
+  Check "$($p[0]) $($p[1]) $($p[2]) binds the nearest in-scope declaration" (($r.Count -eq 1) -and ([int64]$r[0].symbol_id -eq $want)) `
+    ("rows=$($r.Count) got=$(if ($r.Count) { $r[0].symbol_id }) want=$want")
+}
+$r = @(RefAt 'NEG-OUTSCOPE-Q' 'read' 'Q')
+Check 'NEG-OUTSCOPE-Q read of a closed block''s Q stays unbound (ambiguous)' (($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)) `
+  ("rows=$($r.Count) got=$(if ($r.Count) { $r[0].symbol_id })")
+
 $r = @(ReadAt 'NEG-FIELD' 'FTotal')
 Check 'NEG-FIELD FTotal is the member stream''s (bound to the field)' (($r.Count -eq 1) -and ($r[0].tk -eq 'field')) "tk=$(if ($r.Count) { $r[0].tk })"
 $r = @(ReadAt 'NEG-ROUTINE' 'GetIt')

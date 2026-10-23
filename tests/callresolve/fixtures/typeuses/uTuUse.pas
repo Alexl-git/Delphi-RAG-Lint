@@ -27,6 +27,19 @@ type
   TLoc = class
   end;
 
+  TBase2 = class
+  public
+    type
+      TNest = record
+        B: Integer;
+      end;
+  end;
+
+  TDerived2 = class(TBase2)
+  public
+    FN: TNest; // TU-INHERITED-NESTED
+  end;
+
 var
   GBase: TBase; // TU-UNIT-VAR
 
