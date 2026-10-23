@@ -10037,13 +10037,16 @@ var
     Result:= LowerCase(P) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
   end;
 
-  { One hint per marker, never one per finding that happened to share the line. }
-  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string);
+  { One hint per marker, never one per finding that happened to share the line.
+    AMarkerRule is the marked rule id: one `dl:ok` line can review SEVERAL rules,
+    and keying on the line alone dropped every stale rule after the first, so the
+    re-review loop surfaced them one lint run at a time (N-12). }
+  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string; const AMarkerRule: string = '');
   var
     H: TLintFinding;
     K: string      ;
   begin
-    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule);
+    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule) + '#' + LowerCase(AMarkerRule);
     if Emitted.ContainsKey(K) then Exit;
     Emitted.Add(K, True);
     H:= Default(TLintFinding);
@@ -10159,7 +10162,7 @@ begin
                 Suppressed:= True;
                 EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                   Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
-                         [M.RuleId, M.RuleId, Want]));
+                         [M.RuleId, M.RuleId, Want]), M.RuleId);
               end
               else if SameText(M.Hash, Want) then
                 Suppressed:= True
@@ -10225,7 +10228,7 @@ begin
                            'hashed there. @%s is the hash of line %d itself, so the marker was recorded against ' +
                            'the wrong anchor and can never verify -- this is NOT evidence that the code changed. ' +
                            'Remove it and re-record with: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]))
+                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]), M.RuleId)
                 else if IsMetric then
                   { For a routine metric there IS one more thing worth saying, and
                     it is the thing the reader needs: the LIVE number. (a) and (c)
@@ -10236,13 +10239,13 @@ begin
                     Format('dl:ok marker for "%s" records @%s but this routine now measures %d and hashes to @%s. ' +
                            'Either the routine changed, or the marker predates the metric-bound hash -- this check ' +
                            'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]))
+                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]), M.RuleId)
                 else
                   EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                     Format('dl:ok marker for "%s" records @%s but line %d now hashes to @%s. Either the reviewed ' +
                            'code changed, or the marker predates a change in how markers are hashed -- this check ' +
                            'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]));
+                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]), M.RuleId);
               end;
               Break;
             end;
@@ -10278,7 +10281,7 @@ begin
                 EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
                   Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
                          'Re-review, then: allow --fix-line %d --fix-rule %s',
-                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]));
+                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
             end;
             Break;
           end;
