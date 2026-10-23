@@ -416,6 +416,20 @@ type
     /// <param name="AFileId">The file holding that implementation.</param>
     /// <returns>'|' when nothing is declared or the text cannot be read.</returns>
     function LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+    /// <summary>Review 2026-10-23: whether the scope of ADecl, a local
+    /// variable or parameter, covers position (ALine, ACol).</summary>
+    /// <param name="ADecl">A local_var or param symbol of the routine at the site.</param>
+    /// <param name="AFileId">The file holding the site and the declaration.</param>
+    /// <param name="ALine">The site's line.</param>
+    /// <param name="ACol">The site's column.</param>
+    /// <returns>True for a parameter and a var-section variable (the whole
+    /// routine). For an INLINE `var` it is True only when the declaration lies
+    /// at or before the site and the block it sits in -- a `for var` loop's body,
+    /// else the enclosing begin/try/case/repeat block -- has not closed before
+    /// the site. False when the text cannot be read.</returns>
+    /// <remarks>Text-based, conservative: a block shape it does not model reads
+    /// as closed, which only declines.</remarks>
+    function LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
 
     /// <summary>The type symbols of AFileId and its root symbol (the one with no
     /// parent), read once per file and cached.</summary>
@@ -1259,12 +1273,19 @@ type
     /// nearest first.</summary>
     /// <param name="AScope">The write's enclosing scope.</param>
     /// <param name="AName">The identifier as written.</param>
+    /// <param name="AFileId">The file of the site.</param>
+    /// <param name="ALine">The site's line.</param>
+    /// <param name="ACol">The site's column.</param>
     /// <param name="AReason">OUT: '' when bound or when nothing here declares
-    /// the name (the unit rung decides then); 'routine' or 'own-name' for a
-    /// decline.</param>
+    /// the name (the unit rung decides then); 'routine', 'own-name' or
+    /// 'ambiguous' for a decline.</param>
     /// <returns>The local / parameter / const / var / field / property id, or 0.</returns>
+    /// <remarks>Review 2026-10-23: a level may hold several value declarations
+    /// of the name (`for var i` twice). The NEAREST one at or before the site
+    /// whose scope covers it answers (LocalScopeCovers); when none covers it
+    /// the level declines 'ambiguous' rather than fall back to the first.</remarks>
     function ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
-      out AReason: string): Int64;
+      AFileId: Int64; ALine, ACol: Integer; out AReason: string): Int64;
     /// <summary>The unit rung of a bare write: the unit-level var/const named
     /// ALc declared in ARefFileId itself or, when it declares nothing of that
     /// name, in the interface of a unit it uses.</summary>
@@ -3344,6 +3365,106 @@ begin
     end;
 end;
 
+type
+  { One code token of a routine's text: a lowercased identifier, keyword or
+    number, `:=`, or one punctuation character. }
+  TCodeTok = record
+    Text: string ;
+    Line: Integer;
+    Col : Integer;
+  end;
+
+{ Review 2026-10-23: the code tokens of ALines (1-based lines and columns) from
+  (AFromLine, AFromCol) up to, not including, (AToLine, AToCol). Comments --
+  braces, paren-star, `//` -- and string literals are skipped; the start is
+  assumed to lie outside a comment. }
+function CodeTokens(ALines: TStringList; AFromLine, AFromCol, AToLine, AToCol: Integer): TArray<TCodeTok>;
+var
+  Toks   : TList<TCodeTok>;
+  Tok    : TCodeTok       ;
+  Ln     : Integer        ;
+  K, W   : Integer        ;
+  S      : string         ;
+  InBrace: Boolean        ;
+  InStar : Boolean        ;
+begin
+  Toks   := TList<TCodeTok>.Create;
+  InBrace:= False;
+  InStar := False;
+  try
+    for Ln:= Max(AFromLine, 1) to Min(AToLine, ALines.Count) do
+    begin
+      S:= ALines[Ln - 1];
+      K:= (if Ln = AFromLine then Max(AFromCol, 1) else 1);
+      while K <= Length(S) do
+      begin
+        if (Ln = AToLine) and (K >= AToCol) then Break;
+        if InBrace then
+        begin
+          InBrace:= S[K] <> '}';
+          Inc(K);
+        end
+        else if InStar then
+        begin
+          if (S[K] = '*') and (K < Length(S)) and (S[K + 1] = ')') then
+          begin
+            InStar:= False;
+            Inc(K);
+          end;
+          Inc(K);
+        end
+        else if S[K] = '{' then
+        begin
+          InBrace:= True;
+          Inc(K);
+        end
+        else if (S[K] = '(') and (K < Length(S)) and (S[K + 1] = '*') then
+        begin
+          InStar:= True;
+          Inc(K, 2);
+        end
+        else if (S[K] = '/') and (K < Length(S)) and (S[K + 1] = '/') then
+          Break
+        else if S[K] = '''' then
+        begin
+          Inc(K);
+          while (K <= Length(S)) and (S[K] <> '''') do Inc(K);
+          Inc(K);
+        end
+        else if CharInSet(S[K], [' ', #9]) then
+          Inc(K)
+        else
+        begin
+          W:= K;
+          if IsIdentPart(S[K]) then
+            while (K <= Length(S)) and IsIdentPart(S[K]) do Inc(K)
+          else if (S[K] = ':') and (K < Length(S)) and (S[K + 1] = '=') then
+            Inc(K, 2)
+          else
+            Inc(K);
+          Tok.Text:= LowerCase(Copy(S, W, K - W));
+          Tok.Line:= Ln;
+          Tok.Col := W;
+          Toks.Add(Tok);
+        end;
+      end;
+    end;
+    Result:= Toks.ToArray;
+  finally
+    Toks.Free;
+  end;
+end;
+
+{ Review 2026-10-23: the block-depth change a statement-level token makes --
+  +1 for a token that opens a block closed by `end` / `until`, -1 for those. }
+function BlockDelta(const ATok: string): Integer;
+begin
+  if (ATok = 'begin') or (ATok = 'try') or (ATok = 'case') or (ATok = 'repeat') or (ATok = 'asm')
+     or (ATok = 'record') then Result:= 1
+  else if (ATok = 'end') or (ATok = 'until') then Result:= -1
+  else Result:= 0;
+end;
+
 { Scans ABefore -- a line up to a read ref standing as a whole argument --
   right to left for the bracket that opens its argument list. AOpenCol receives
   that bracket's 1-based column and AArgIndex the ref's 0-based argument
@@ -5069,12 +5190,14 @@ begin
 end;
 
 function TCallResolver.ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
-  out AReason: string): Int64;
+  AFileId: Int64; ALine, ACol: Integer; out AReason: string): Int64;
 var
   Kids   : TList<TSymbol>;
   S      : TSymbol       ;
   Id     : Int64         ;
   Routine: Boolean       ;
+  Values : TArray<TSymbol>;
+  K      : Integer       ;
 begin
   Result := 0;
   AReason:= '';
@@ -5085,12 +5208,29 @@ begin
     Kids:= ChildrenOf(Id);
     if Kids = nil then Continue;
     Routine:= False;
+    Values := [];
     for S in Kids do
       if SameText(S.Name, AName) then
       begin
-        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then Exit(S.Id);
+        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then
+        begin
+          { Kept NEAREST-LAST-DECLARED first: insert before the first earlier one. }
+          K:= 0;
+          while (K < Length(Values)) and ((Values[K].StartLine > S.StartLine)
+                 or ((Values[K].StartLine = S.StartLine) and (Values[K].StartCol > S.StartCol))) do Inc(K);
+          Insert(S, Values, K);
+        end;
         Routine:= Routine or (S.Kind in METHOD_KINDS);
       end;
+    { Review 2026-10-23: the NEAREST declaration at or before the site whose
+      scope covers it -- two `for var i` loops declare two i's. }
+    if Length(Values) > 0 then
+    begin
+      for S in Values do
+        if LocalScopeCovers(S, AFileId, ALine, ACol) then Exit(S.Id);
+      AReason:= 'ambiguous';
+      Exit;
+    end;
     if Routine then
     begin
       AReason:= 'routine';
@@ -5253,12 +5393,65 @@ begin
   end
   else if (AReason = '') and not ViaSelf then
   begin
-    Result:= ScopeWriteTarget(Scope, ARef.NameText, AReason);
+    Result:= ScopeWriteTarget(Scope, ARef.NameText, ARef.FileId, ARef.StartLine, ARef.StartCol, AReason);
     { Nothing nearer declares the name: the unit, then the units it uses. }
     if (Result = 0) and (AReason = '') then
       Result:= UnitScopeWriteTarget(ARef.FileId, LowerCase(ARef.NameText), AReason);
   end;
   TallyWrite(AReason);
+end;
+
+function TCallResolver.LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
+var
+  Lines : TStringList     ;
+  Head  : TArray<TCodeTok>;
+  Toks  : TArray<TCodeTok>;
+  K     : Integer         ;
+  T     : string          ;
+  IsFor : Boolean         ;
+  InBody: Boolean         ;
+  Single: Boolean         ;
+  Depth : Integer         ;
+  Paren : Integer         ;
+begin
+  if ADecl.Kind <> skLocalVar then Exit(True);
+  Lines:= LinesOf(AFileId);
+  if (Lines = nil) or (ADecl.StartLine < 1) or (ADecl.StartLine > Lines.Count) then Exit(False);
+  { The declaration's line up to its name: an inline declaration has `var` right
+    before the name, past any earlier names of the same list (`var A, B: T`). }
+  Head:= CodeTokens(Lines, ADecl.StartLine, 1, ADecl.StartLine, ADecl.StartCol);
+  K   := High(Head);
+  while (K >= 1) and (Head[K].Text = ',') do Dec(K, 2);
+  if (K < 0) or (Head[K].Text <> 'var') then Exit(True);   { a var section: the whole routine }
+  IsFor:= (K >= 1) and (Head[K - 1].Text = 'for');
+  if (ADecl.StartLine > ALine) or ((ADecl.StartLine = ALine) and (ADecl.StartCol > ACol)) then Exit(False);
+  { From the declaration to the site: has its block closed? }
+  Toks  := CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol);
+  InBody:= False;
+  Single:= False;
+  Depth := 0;
+  Paren := 0;
+  for K:= 0 to High(Toks) do
+  begin
+    T:= Toks[K].Text;
+    if (T = '(') or (T = '[') then Inc(Paren)
+    else if (T = ')') or (T = ']') then Dec(Paren);
+    if IsFor and not InBody then
+    begin
+      { The loop header: the body starts after its `do`. }
+      if (T = 'do') and (Paren = 0) then
+      begin
+        InBody:= True;
+        Single:= (K < High(Toks)) and (Toks[K + 1].Text <> 'begin');
+      end;
+      Continue;
+    end;
+    Inc(Depth, BlockDelta(T));
+    if Depth < 0 then Exit(False);                                     { the enclosing block closed }
+    if IsFor and not Single and (Depth = 0) and (T = 'end') then Exit(False);    { the loop's begin..end }
+    if IsFor and Single and (Depth = 0) and (Paren = 0) and (T = ';') then Exit(False); { its one statement }
+  end;
+  Result:= True;
 end;
 
 function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
@@ -5455,7 +5648,7 @@ begin
   begin
     Scope := WriteScopeOf(ARef.EnclosingSymbolId);
     Lc    := LowerCase(ARef.NameText);
-    Result:= ScopeWriteTarget(Scope, ARef.NameText, AReason);
+    Result:= ScopeWriteTarget(Scope, ARef.NameText, ARef.FileId, ARef.StartLine, ARef.StartCol, AReason);
     if (Result = 0) and (AReason = '') then
       Result:= UnitScopeWriteTarget(ARef.FileId, Lc, AReason);
     if (Result > 0) and not (SymbolById(Result).Kind in VALUE_KINDS) then
