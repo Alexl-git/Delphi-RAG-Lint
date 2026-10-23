@@ -16829,17 +16829,29 @@ begin
     Result.Verdict:= 'missing';
     Exit;
   end;
-  var Ok: Boolean;
-  var St: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
-  Result.Readable:= Ok and (St <> nil);
+  { A file that is not a SQLite database RAISES on open or on the first read
+    ("file is not a database"). Uncaught, that ended `info` FATAL (exit 3) and
+    lost every other --db of the call; it is exactly what 'unreadable' means. }
+  var Ok: Boolean:= False;
+  var St: ISymbolStore:= nil;
+  try
+    St:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
+    Ok:= Ok and (St <> nil);
+    if Ok then
+    begin
+      Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
+      Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
+      Result.ResolverExpected:= ResolverFingerprint(St);
+    end;
+  except
+    on E: Exception do Ok:= False;
+  end;
+  Result.Readable:= Ok;
   if not Result.Readable then
   begin
     Result.Verdict:= 'unreadable';
     Exit;
   end;
-  Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
-  Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
-  Result.ResolverExpected:= ResolverFingerprint(St);
   { The stored indexer fingerprint is a compound
     `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is compared,
     because platform and preprocess differences are legitimate per-index facts,
