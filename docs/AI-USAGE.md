@@ -1804,7 +1804,7 @@ stale-annotation sweep and a branch-wide lint over the FULL diff
 
 ```
 drag-lint lint-all --db <db> --enable multiple-statements-per-line,magic-literal,commented-out-code
-drag-lint lint <every changed unit> --db <db> --enable ...   (review-marker-stale included)
+one drag-lint lint <unit> --db <db> --enable ... per changed unit   (review-marker-stale included; lint takes ONE path)
 ```
 
 Run `review-marker-stale` WITH the same `--enable` rules the branch's `dl:ok`
