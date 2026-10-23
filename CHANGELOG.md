@@ -3,6 +3,69 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## [Unreleased] -- next after 1.33.0-alpha
+
+No extractor or resolver change on main: no re-parse.
+
+### Added
+- **`menu-tree` and `menu-drift` verbs.** `menu-tree --project <X.dproj> --db <db> [--root <caption>]
+  [--format text|json|paths] [--output <file>]` reads the menus a plugin builds in code (static
+  reader over the project DB and the CST) and prints the tree (`menu-tree/1`); exit 0 / 2 / 3.
+  `menu-drift --project --db --registry [--format text|json] [--output]` compares that tree with the
+  feature registry's `ide-menu` surfaces and reports `missing` (with a `renamed?` hint),
+  `unregistered` and `moved` entries; exit 0 clean / 1 drift / 2 / 3. The plugin's own drift is
+  zero (5 missing + 26 unregistered fixed).
+- **IDE help line.** Options > General gains a *Help root* setting (edit + Test button); the DL page
+  has a help line that searches an offline feature list (`help\dl\index.json`, shipped in the
+  release pack) and opens the page; Help menu items open the feature list; **F1** on the
+  drag-lint dock opens the active tab's feature page; the status strip shows the queued job
+  titles (Now / Next / Then). The two Help captions lost their "(wiki)" suffix.
+- **`cycles --f2047 [--unit <stem>]`** lists only the interface-only cycles dcc rejects (F2047).
+- **`drag-lint-switch --vscode --status|--on|--off`** toggles `servers[delphi-lsp]` in the
+  workspace `.vscode/mcp.json` (backup and restore, `--template`; `--on` without `.vscode` exits 3).
+- **LSP proxy P0:** `--merge-diagnostics` and `--merge-budget-ms` merge the engine's diagnostics
+  into the Delphi LSP's stream; stub push / scripted / log modes and a frame-interceptor seam.
+- **`convert-apply` / `convert-scaffold`:** `--progress` (`batch_progress` lines), `exit_code`
+  on `apply/1`.
+- **`#migrate` output gaps (additive `apply/1`):** `migrate-applied`, `deliberate-break` and
+  `migrate-check` carry the block's `from_type` / `to_type`; `migrate-check` carries `old_value`;
+  `pas_uses[]` rows gain `migrate_to` and `rules_file` (status stays `mapped`); a member reached
+  through `with inst do` is listed on its `pas_uses` row (never rewritten); `convert-validate`
+  warns on a `#migrate` form `convert-apply` refuses.
+
+### Changed
+- `convert-apply` refuses a unit that is not in the index, single and batch (was: proceeded).
+- A `DL_NONE` marker is skipped by the uses reconciliation (no `uses-unit-unresolved` item, no
+  `uses_unresolved[]` row).
+- A second, different `--rule` is refused (exit 2) instead of silently replacing the first.
+- `lint-all` tracks in-repo `ownRoots` declarations, so a worktree lints the whole project
+  (was: only the files under the worktree).
+- The `compare` verb writes the new run's chart bundle to a per-run folder, not the shared
+  `%TEMP%\drag-lint-reports`.
+- `info --db <not a database>` reports verdict `unreadable` instead of ending FATAL.
+- `lint <file>` is faster: class metrics load one by-kind class list, members only for measured
+  classes.
+- The castlib `StripDB` cast accepts the string alias `TFileName`.
+- Exit codes for an unknown verb (2) and an unknown flag (3, the stale-index code) are
+  documented, not renumbered. The `--help` verb reference is generated from the feature registry.
+
+### Fixed
+- `context`: the Impl slice refuses a stale anchor instead of showing another routine's body.
+- `document`: `--qname` documents every overload of the name; two declarations on one line are
+  skipped (one line) instead of stacked or refused. Stale `dl:ok` markers: every stale rule of a
+  multi-rule line is reported in one pass, with a hint per rule.
+- `cycles --fix` names a refused symbol at its declaration line, not at its doc-comment start.
+- `cycles` and `circular-uses` agree on a bare uses name (a unique last segment maps to its unit).
+- Lint false positives: `dataset-open-without-close` skips a local of a same-file type with a
+  plain `Active` field; `off-by-one-count` no longer fires after `SetLength(X, Length(X) + 1)`;
+  `loop-var-after-loop` stops at a later `for-in` that re-binds the counter;
+  `redundant-parentheses` skips the argument list of a generic call misread as comparisons;
+  `confusable-identifier` compares the locals of one routine with each other;
+  `magic-literal` exempts a literal that is the whole right side of a named-field assignment;
+  `referenced-never-set` credits a write through another instance of the same class; the
+  Doc.Regions fence constants are accepted.
+- Rule sidecar key `exclude_if_preceded_by` is documented.
+
 ## v1.33.0-alpha -- 2026-10-20
 
 No extractor change (1.22.0-alpha): no re-parse.
