@@ -77,14 +77,25 @@ Check 'A: query --name Combine exits 0' ($LASTEXITCODE -eq 0)
 Check 'A FIXTURE: strip_collision.Combine resolves to exactly TWO rows' `
   ((([regex]::Matches($combineRowsOut, '"qualified_name"\s*:\s*"strip_collision\.Combine"')).Count) -eq 2) $combineRowsOut
 
-# document --qname always targets Syms[0] only (TDocumenter.BuildFor takes a
-# bare qualified name, not a resolved row -- see TDocBatch.DocumentUnit's own
-# "Bug A" comment for why the BATCH path had to change this). For an
-# overloaded routine that means only the FIRST overload's declaration ever
-# gets an engine-written comment through --qname -- which, for two
-# declarations on consecutive lines, is exactly the shape that collides.
+# The collision shape: an engine-written comment above the FIRST overload
+# only, two declarations on consecutive lines. Until 2026-10-23 `document
+# --qname` produced it directly (BuildFor took Syms[0]); it now documents EVERY
+# overload (N-12), so the second overload's block is removed again here and
+# the unit reindexed -- the shape stays reachable from older engines and hand
+# edits, which is what this guard protects strip against.
 & $exePath document --qname strip_collision.Combine --db $dbA --apply --json 2>$null | Out-Null
 Check 'A: document --qname --apply exits 0' ($LASTEXITCODE -eq 0)
+$tmpLines = [IO.File]::ReadAllLines($targetA)
+$ia = -1; $ib = -1
+for ($i = 0; $i -lt $tmpLines.Count; $i++) {
+  if ($tmpLines[$i] -match '^function Combine\(A: Integer\): Integer; overload;') { $ia = $i }
+  if ($tmpLines[$i] -match '^function Combine\(A, B: Integer\): Integer; overload;') { $ib = $i }
+}
+if ($ia -ge 0 -and $ib -gt $ia + 1) {
+  $keep = @($tmpLines[0..$ia]) + @($tmpLines[$ib..($tmpLines.Count - 1)])
+  [IO.File]::WriteAllText($targetA, (($keep -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+  & $exePath index $scratchA --db $dbA 2>$null | Out-Null
+}
 
 $afterApplyLines = [IO.File]::ReadAllLines($targetA)
 $declAIx = -1; $declBIx = -1

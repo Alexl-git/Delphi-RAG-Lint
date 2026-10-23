@@ -44,7 +44,7 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work."],
+  "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.", "A WARNING: STALE INDEX line (stale-anchor chunk) means the unit changed since it was indexed: no body is shown. Reindex, then ask again."],
   "questions": [
     {
       "ask": "What do I need to read before editing this symbol?",

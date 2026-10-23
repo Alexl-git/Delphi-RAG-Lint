@@ -472,7 +472,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , System.Generics.Defaults
-  , DRagLint.Doc.Regions
+  , DRagLint.Doc.Regions // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   , DRagLint.Doc.ProjectTags { SplitEntries, the [A,B]entry tag grammar, INBOUND_LABELS }
   , DRagLint.Lint.SharedUnit
   ;
