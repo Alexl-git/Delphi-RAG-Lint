@@ -88,6 +88,33 @@ try {
   Eq 'S1 DefaultSettings.HelpRoot = the default root'          'settings.default' $site
   Eq 'S2 a folder is saved normalised and loads back'          'settings.folder'  'file:///C:/dl-help'
   Eq 'S3 empty on disk reads as the default'                   'settings.empty'   $site
+
+  Write-Host '-- I: offline feature list (index-sample.json)' -ForegroundColor Cyan
+  Eq 'I1 LoadFromFile succeeds on the fixture'                 'index.load'    'True'
+  Eq 'I2 six rows'                                             'index.count'   '6'
+  Eq 'I3 Loaded is True'                                       'index.loaded'  'True'
+  Eq 'I4 a row with two menus keeps both, in order'            'index.r1.menus' 'drag-lint > Uses & Deps > Circular > Fix...|drag-lint > Refactor > Fix...'
+  Eq 'I5 an absent verb reads as empty'                        'index.r1.verb' ''
+  Eq 'I6 verb + file read'                                     'index.r0.verb' 'cycles'
+  Eq 'I7 file field read'                                      'index.r0.file' 'features/cycles-report.md'
+  Eq 'I8 a row without menus has an empty array'               'index.r3.menus' '0'
+  Eq 'I9 ... and without context too'                          'index.r3.context' '0'
+  Eq 'I10 context paths read'                                  'index.r2.context' 'Code Editor > drag-lint > Recycle Cache'
+  Eq 'I11 malformed JSON: LoadFromFile returns False'          'bad.load'      'False'
+  Eq 'I12 ... Loaded False'                                    'bad.loaded'    'False'
+  Eq 'I13 ... zero rows'                                       'bad.count'     '0'
+  Eq 'I14 ... LastError non-empty'                             'bad.error'     'True'
+  Eq 'I15 a missing file: False, no exception'                 'missing.load'  'False'
+  Eq 'I16 unchanged file: no reload'                           'reload.same'   'False'
+  Eq 'I17 changed size/mtime: reloaded'                        'reload.changed' 'True'
+  Eq 'I18 ... with the new rows'                               'reload.count'  '1'
+  Write-Host '-- L: locator order (spec 3.2)' -ForegroundColor Cyan
+  Eq 'L1 engine dir first'                                     'loc.engine'    $kv['loc.engine.want']
+  Eq 'L2 then the file: help root'                             'loc.file'      $kv['loc.file.want']
+  Eq 'L3 a web root is skipped -> the dev tree'                'loc.webroot'   $kv['loc.dev.want']
+  Eq 'L4 no engine dir -> the dev tree'                        'loc.noengine'  $kv['loc.dev.want']
+  Eq 'L5 none exists -> empty'                                 'loc.none'      ''
+  Check 'L0 the locator expectations were printed'             ([bool]$kv['loc.engine.want'] -and [bool]$kv['loc.dev.want']) ''
 }
 catch {
   Check "runner: $($_.Exception.Message)" $false

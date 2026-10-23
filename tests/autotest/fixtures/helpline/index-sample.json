@@ -1,0 +1,68 @@
+[
+  {
+    "id": "cycles-report",
+    "title": "Cycles Report",
+    "summary": "Lists the circular uses groups of a project",
+    "group": "reports",
+    "order": 1,
+    "since": "1.0.0",
+    "file": "features/cycles-report.md",
+    "menus": ["drag-lint > Reports > Circular Uses Report..."],
+    "context": [],
+    "verb": "cycles"
+  },
+  {
+    "id": "uses-cycle-fix",
+    "title": "Uses Cycle Fix",
+    "summary": "Breaks a circular uses group mechanically",
+    "group": "refactor",
+    "order": 2,
+    "since": "1.0.0",
+    "file": "features/uses-cycle-fix.md",
+    "menus": ["drag-lint > Uses & Deps > Circular > Fix...", "drag-lint > Refactor > Fix..."],
+    "context": []
+  },
+  {
+    "id": "structure-tree",
+    "title": "Structure Tree",
+    "summary": "The unit outline on the DL page",
+    "group": "editor-integration",
+    "order": 3,
+    "since": "1.0.0",
+    "file": "features/structure-tree.md",
+    "menus": [],
+    "context": ["Code Editor > drag-lint > Recycle Cache"]
+  },
+  {
+    "id": "about-box",
+    "title": "About drag-lint",
+    "summary": "cycle cyc cycles -- the summary is never searched",
+    "group": "ide",
+    "order": 4,
+    "since": "1.0.0",
+    "file": "features/about-box.md"
+  },
+  {
+    "id": "call-graph-cyc",
+    "title": "Call Graph",
+    "summary": "Callers and callees of a routine",
+    "group": "navigation",
+    "order": 5,
+    "since": "1.0.0",
+    "file": "features/call-graph-cyc.md",
+    "menus": ["drag-lint > Views > Call Graph"],
+    "context": [],
+    "verb": "graph",
+    "unknownField": {"ignored": true}
+  },
+  {
+    "id": "db-compact",
+    "title": "Database Compaction",
+    "summary": "Shrinks an index database",
+    "group": "indexing",
+    "order": 6,
+    "since": "1.0.0",
+    "file": "features/db-compact.md",
+    "verb": "recycle"
+  }
+]
