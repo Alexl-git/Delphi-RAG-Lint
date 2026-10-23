@@ -27,17 +27,15 @@ before working on an item.**
   drivers; pin editor = main 1dc238da build).
 * Owed after ENGINE's final deploy (end of day 3, owner rule: no approval-needing step mid-run):
   `featuregen verify --id convert-apply` / `convert-scaffold --by CONVERTER`; re-pin + baseline.
+* DONE in wave 3: **N9** 6b21a559 (drive-convert-tab 3b fails cleanly without the progress
+  window); **N8** e52df7bb (converted-ancestor code use with mapped pas_uses is not "left");
+  **N7 + N11** a246e716 (`ConvRules.InputGate` on Application.OnMessage refuses main-form
+  clicks/commands while busy, reports the first, never queues; `ConvRulesEditor.Busy` message for
+  drivers' WaitIdle; drive-convert-tab 32/0 x6, batch-driver Add retry removed; model 2615/5/0).
 * Open todos from this run:
-  * **N7** (medium) a posted BM_CLICK reaches Convert INSIDE the progress window's modal loop ->
-    ConvertClick re-entrant during analysis; N1's Save path not driven separately.
-  * **N8** (decide) ancestor converted + code-only use -> engine "code" / pas_uses "mapped", yet
-    the editor says "inherited code use(s) left" -- may overstate.
-  * **N9** (medium) drive-convert-tab step 3b must abort when the progress window never appears
-    (window=False -> a real Convert runs, cascade 16/10).
+  * **N7 leftover** N1's Save path is still not driven separately.
   * **N10** (low) GUI lock stays held by a dead owner (cost D2 ~20 min): add a stale-owner check.
-  * **N11** (medium, N7 class) the 2nd Convert-tab "Add..." BM_CLICK is dropped; posted as
-    WM_COMMAND it opens the Open dialog over TEngineWaitForm (AddClick inside the modal loop),
-    run wedges. drive-convert-batch retries once and documents it.
+  * **FG-N** featuregen `"noFlags": true` marker -- done on the held FG-M branch (450b9267).
   * **FG-M** featuregen: Harvest via `menu-tree --format json`, path-based checks B/C, caption-key
     parity vector, drop 14 stale exemptions (in flight, branch feat/conv-fgm-menu-tree).
   * B4 left 44 findings (magic numbers, `C:\fix` fixture paths) on its lines in
