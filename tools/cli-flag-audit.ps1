@@ -9,7 +9,8 @@
   but unparsed. Positive controls (-AcceptedUndocumentedControl, -DocumentedControl)
   are reported PASS / FAIL / UNAVAILABLE (flag absent from this CLI.pas).
 .PARAMETER Exe     engine to run (default: deployed dll-win64; use a lane engine for lane-P flags)
-.PARAMETER CliPas  CLI source to scan (default: this worktree's src\cli\DRagLint.CLI.pas)
+.PARAMETER CliPas  CLI source to scan (default: this worktree's src\cli\DRagLint.CLI.pas); its PrintHelp
+                   Writeln lines are part of H together with HelpText.pas
 #>
 param(
   [string]$Exe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
@@ -17,7 +18,7 @@ param(
   [string]$HelpText = (Join-Path $PSScriptRoot '..\src\cli\DRagLint.CLI.HelpText.pas'),
   [string]$SrcRoot = (Join-Path $PSScriptRoot '..\src'),
   [switch]$HelpFromExe,
-  [string]$AcceptedUndocumentedControl = '--merge-diagnostics',
+  [string]$AcceptedUndocumentedControl = '--from-block',
   [string]$DocumentedControl = '--trace',
   [string]$OutFile = ''
 )
@@ -32,7 +33,17 @@ for ($n = 0; $n -lt $lines.Count; $n++) {
   }
 }
 # H from the SAME revision as P: the generated HelpText.pas next to CLI.pas (default), or the exe's --help (-HelpFromExe).
-if ($HelpFromExe) { $help = (& $Exe --help 2>&1 | Out-String) } else { $help = [IO.File]::ReadAllText((Resolve-Path $HelpText).Path) }
+# --help = PrintHelp's own Writeln lines in CLI.pas + the generated verb reference (HelpText.pas). Reading HelpText.pas
+# alone missed PrintHelp's lines and misreported --force32 / --size-guard-mb as undocumented (W6-Q, 2026-10-23).
+if ($HelpFromExe) { $help = (& $Exe --help 2>&1 | Out-String) } else {
+  $help = [IO.File]::ReadAllText((Resolve-Path $HelpText).Path)
+  $ph = -1
+  for ($n = 0; $n -lt $lines.Count; $n++) {
+    if ($ph -lt 0) { if ($lines[$n] -match '^procedure PrintHelp\s*;') { $ph = $n } }
+    elseif ($lines[$n] -match '^end;') { $help += "`n" + (($lines[$ph..$n] | Where-Object { $_ -match '^\s*Writeln\(' }) -join "`n"); break }
+  }
+  if ($ph -lt 0) { throw "PrintHelp not found in $CliPas -- the help surface moved; update this audit" }
+}
 # V = '--x' literals in ANY src unit (verb-local parsers), for classifying H\P rows.
 $V = @{}
 foreach ($u in Get-ChildItem (Resolve-Path $SrcRoot).Path -Recurse -Filter *.pas) {
