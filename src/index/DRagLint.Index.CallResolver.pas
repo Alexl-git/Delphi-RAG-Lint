@@ -1589,9 +1589,11 @@ type
     /// 'member' (ResolveBareMemberRead binds it and writes its member_accesses
     /// row), a routine / type / enum value 'routine'. A receiver-qualified read,
     /// `Self.X` included, is 'qualified'. The extractor emits no symbol for a
-    /// routine's local const or an inline const/var, so a binding the class or
-    /// unit rung supplies is declined 'unlisted' when an enclosing routine's text
-    /// declares the name that way (LocalDeclNamesOf). Identity only -- the caller writes
+    /// routine's local const or an inline const, so a binding is declined
+    /// 'unlisted' when a routine NEARER than the answering scope -- every
+    /// enclosing routine when the class or unit answered, the inner levels when
+    /// an outer routine did -- declares the name that way in its text
+    /// (LocalDeclNamesOf). Identity only -- the caller writes
     /// refs.symbol_id and nothing else. Counted into ValueReadStats.
     /// </remarks>
     function ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
@@ -5633,7 +5635,7 @@ var
   Scope: TWriteScope    ;
   Id     : Int64          ;
   Lc     : string         ;
-  Lexical: Boolean        ;
+  Parent : Int64          ;
 begin
   Result := 0;
   AReason:= BareReadSite(ARef, Lines, Rcv);
@@ -5656,19 +5658,25 @@ begin
       Result := 0;
       AReason:= 'member';
     end;
-    { The class or unit answered: a local const or inline declaration the index
-      does not list would be nearer, so the routine text must not declare it. }
-    Lexical:= False;
+    { A local const or inline declaration the index does not list is nearer
+      than the scope that answered when a routine INSIDE that scope declares
+      it: every lexical level below the answering one (all of them when the
+      class or unit answered) must not declare the name in its text. Review
+      2026-10-23: a nested routine's const hides the outer routine's param. }
     if Result > 0 then
-      for Id in Scope.Chain do Lexical:= Lexical or (Id = SymbolById(Result).ParentId);
-    if (Result > 0) and not Lexical then
+    begin
+      Parent:= SymbolById(Result).ParentId;
       for Id in Scope.Chain do
+      begin
+        if Id = Parent then Break;
         if Pos('|' + Lc + '|', LocalDeclNamesOf(Id, ARef.FileId)) > 0 then
         begin
           Result := 0;
           AReason:= 'unlisted';
           Break;
         end;
+      end;
+    end;
   end;
   if AReason = '' then Inc(FValueReadStats.Bound)
   else if AReason = 'result' then Inc(FValueReadStats.ResultVar)
