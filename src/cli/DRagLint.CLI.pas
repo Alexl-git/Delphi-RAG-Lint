@@ -156,9 +156,11 @@ uses
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
+  , DRagLint.MenuTree
+  , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
-  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
+  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP  // dl:ok uses-global-census@a9ed -- one const (the merge budget default) is the intended coupling to the proxy options
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
   , DRagLint.Hover      .Returns
@@ -304,6 +306,10 @@ type
     WikiList        : Boolean       ; // --list : every topic in the resolved DBs
     WikiCheck       : Boolean       ; // --check: SeeCode drift + duplicate-name gate
     Rule            : string        ;
+    { N-02: '<first>, <second>' when --rule was given twice with DIFFERENT ids.
+      Rule holds one id, so the earlier one used to be dropped in silence; Run
+      refuses the command line instead (exit 2). '' otherwise. }
+    RuleConflict    : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -323,6 +329,7 @@ type
     Interval        : Integer       ;
     Open            : Boolean       ;
     ShowHelp        : Boolean       ;
+    HelpVerb        : string        ; // verb whose OWN help <verb> --help prints (menu-tree, menu-drift); empty = the global banner
     ShowVersion     : Boolean       ;
     // v0.66: ergonomics #12 output/CI flags
     FailOn       : string ; // --fail-on error|warning|info|none (ergonomics #12)
@@ -428,6 +435,7 @@ type
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
+    F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
@@ -466,6 +474,7 @@ type
     WorkspaceConfig: string; // --config <path>
     // forms-csv
     RootForm: string; // forms-csv: --root <TfrmMAIN> (auto-detect if '')
+    RegistryDir: string; // menu-drift: --registry <features dir>
     // library-drift / selftest drift
     Roots: TArray<string>; // --root <dir> repeatable (drift check)
     // v0.45: index manifest (Task 1)
@@ -516,6 +525,9 @@ type
     LspProxy    : Boolean; // --proxy
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
+    LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
+    LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
+    LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
@@ -1090,6 +1102,16 @@ begin
   Result:= (A = '--help') or (A = '-h') or (A = '-?');
 end;
 
+/// <summary>Prints the own help of a menu verb (menu-tree --help / menu-drift --help): the `help` line of its surface in features\entries\menu-tree.json, not the global banner.</summary>
+/// <param name="AVerb">menu-tree or menu-drift.</param>
+/// <remarks>The text mirrors the registry entry; tests\autotest\run_menu_verb_help.ps1 fails on drift.</remarks>
+procedure PrintMenuVerbHelp(const AVerb: string);
+begin
+  if AVerb = 'menu-drift' then
+    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry''s ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
+  else
+    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)');
+end; // procedure
 function ParseArgs: TArgs;
 var
   i: Integer;
@@ -1205,7 +1227,12 @@ begin
       Routing is deliberately to the WHOLE banner for every verb. Per-verb help
       TEXT is a separate product decision with its own docs-sync cost (a third
       surface for run_docs_sync_guard.ps1 to police); not crashing is not. }
-    if IsHelpToken(A) then begin Result.ShowHelp:= True; Exit; end;
+    if IsHelpToken(A) then
+    begin
+      Result.ShowHelp:= True;
+      if (Result.Command = 'menu-tree') or (Result.Command = 'menu-drift') then Result.HelpVerb:= Result.Command;
+      Exit;
+    end;
     if (A = '--db') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1282,7 +1309,13 @@ begin
       Inc(i);
       Result.OfName:= ParamStr(i);
     end
-    else if (A = '--rule') and (i < ParamCount) then begin Inc(i); Result.Rule:= ParamStr(i); end
+    else if (A = '--rule') and (i < ParamCount) then
+    begin
+      Inc(i);
+      if (Result.Rule <> '') and (not SameText(Result.Rule, ParamStr(i))) and (Result.RuleConflict = '') then
+        Result.RuleConflict:= Result.Rule + ', ' + ParamStr(i);
+      Result.Rule:= ParamStr(i);
+    end
     else if (A = '--exclude-under') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1522,12 +1555,18 @@ begin
     else if A = '--edges'         then Result.Edges          := True
     else if A = '--causes'        then Result.Causes         := True
     else if A = '--plan'          then Result.Plan           := True
+    else if A = '--f2047'         then Result.F2047          := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
     else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
     else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
     else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
+    else if (A = '--registry') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RegistryDir:= ParamStr(i);
+    end
     else if (A = '--root') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1557,6 +1596,13 @@ begin
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
+    else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
+    else if (A = '--merge-budget-ms') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.LspMergeBudgetMs := StrToIntDef(ParamStr(i), -1);
+      Result.LspMergeBudgetSet:= Result.LspMergeBudgetMs >= 0;   { unreadable or negative: the default }
+    end
     else if A = '--resolve-only' then Result.ResolveOnly:= True
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
@@ -10037,13 +10083,16 @@ var
     Result:= LowerCase(P) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
   end;
 
-  { One hint per marker, never one per finding that happened to share the line. }
-  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string);
+  { One hint per marker, never one per finding that happened to share the line.
+    AMarkerRule is the marked rule id: one `dl:ok` line can review SEVERAL rules,
+    and keying on the line alone dropped every stale rule after the first, so the
+    re-review loop surfaced them one lint run at a time (N-12). }
+  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string; const AMarkerRule: string = '');
   var
     H: TLintFinding;
     K: string      ;
   begin
-    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule);
+    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule) + '#' + LowerCase(AMarkerRule);
     if Emitted.ContainsKey(K) then Exit;
     Emitted.Add(K, True);
     H:= Default(TLintFinding);
@@ -10159,7 +10208,7 @@ begin
                 Suppressed:= True;
                 EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                   Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
-                         [M.RuleId, M.RuleId, Want]));
+                         [M.RuleId, M.RuleId, Want]), M.RuleId);
               end
               else if SameText(M.Hash, Want) then
                 Suppressed:= True
@@ -10225,7 +10274,7 @@ begin
                            'hashed there. @%s is the hash of line %d itself, so the marker was recorded against ' +
                            'the wrong anchor and can never verify -- this is NOT evidence that the code changed. ' +
                            'Remove it and re-record with: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]))
+                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]), M.RuleId)
                 else if IsMetric then
                   { For a routine metric there IS one more thing worth saying, and
                     it is the thing the reader needs: the LIVE number. (a) and (c)
@@ -10236,13 +10285,13 @@ begin
                     Format('dl:ok marker for "%s" records @%s but this routine now measures %d and hashes to @%s. ' +
                            'Either the routine changed, or the marker predates the metric-bound hash -- this check ' +
                            'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]))
+                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]), M.RuleId)
                 else
                   EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                     Format('dl:ok marker for "%s" records @%s but line %d now hashes to @%s. Either the reviewed ' +
                            'code changed, or the marker predates a change in how markers are hashed -- this check ' +
                            'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
-                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]));
+                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]), M.RuleId);
               end;
               Break;
             end;
@@ -10278,7 +10327,7 @@ begin
                 EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
                   Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
                          'Re-review, then: allow --fix-line %d --fix-rule %s',
-                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]));
+                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
             end;
             Break;
           end;
@@ -13052,10 +13101,28 @@ end;
   print the same findings, so without this a regression back to "run everything
   for any --rule" is invisible except as time. stderr, so it cannot corrupt
   --format json|sarif. }
+var
+  { T-04: the previous TraceLintChecker stamp, so DRAGLINT_PROFILE can print
+    how long the phase that just ENDED took. 0 = no phase open yet. }
+  GLintTraceMark: Int64 = 0;
+  GLintTracePrev: string = '';
+
 procedure TraceLintChecker(const AName: string);
 begin
   if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
     Writeln(ErrOutput, '[lint-checker] ' + AName);
+  { T-04: under DRAGLINT_PROFILE each call closes the previous phase, so a
+    `lint <file>` run prints where its wall time went (lint-all has its own
+    TLintPhaseProfiler). Phase 'end' closes the last one. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var Now64: Int64:= TStopwatch.GetTimeStamp;
+    if GLintTraceMark <> 0 then
+      Writeln(ErrOutput, Format('  [lint-phase] %-24s %8.3f s',
+        [GLintTracePrev, (Now64 - GLintTraceMark) / TStopwatch.Frequency]));
+    GLintTraceMark:= Now64;
+    GLintTracePrev:= AName;
+  end;
 end;
 
 const
@@ -13356,6 +13423,7 @@ var
   ScannedFiles: TArray<string>              ;
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
+  TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -13620,6 +13688,7 @@ begin
       var QueryFindings: TArray<TLintFinding>;
       if TFile.Exists(EffPath) then
       begin
+        TraceLintChecker('scm-rules');
         QueryFindings:= Linter.LintFile(EffPath);
         ScannedFiles:= [EffPath];
       end
@@ -13857,6 +13926,7 @@ begin
         Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(EffPath, FlowStore, FlowFid, Findings);
       end;
       { unused local variables (H2164) }
+      TraceLintChecker('ast-checks');
       if (NarrowRule = '') or (NarrowRule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(EffPath);
       { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
         syntax error show up in the editor like the IDE's Error Insight. }
@@ -13982,6 +14052,7 @@ begin
         the exception-ancestry sub-check of type-name-prefix + the library store
         continues the chain -- without them EFoo = class(Exception) is reported
         as needing a 'T' prefix. }
+      TraceLintChecker('naming');
       if LintRuleWants(NarrowRule, LINT_GATE_NAMING) then
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -13991,6 +14062,7 @@ begin
         v0.72: + destructor-without-override (#5) + case-with-too-few-branches +
         boolean-expression-complexity (#6, thresholds) + exception-constructed-but-not-raised
         + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
+      TraceLintChecker('dead-code');
       if LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE) then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
@@ -13999,6 +14071,7 @@ begin
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
+      TraceLintChecker('clone');
       if (NarrowRule = '') or (NarrowRule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath, Cfg.ThresholdFor('duplicate-code', 90)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -14104,6 +14177,7 @@ begin
             if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { Free cached tree after single-file lint }
+      TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // if
   end; // if
@@ -14237,6 +14311,7 @@ begin
       scan are ordered properly. }
     Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
   );
+  TraceLintChecker('end');
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
@@ -16795,17 +16870,29 @@ begin
     Result.Verdict:= 'missing';
     Exit;
   end;
-  var Ok: Boolean;
-  var St: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
-  Result.Readable:= Ok and (St <> nil);
+  { A file that is not a SQLite database RAISES on open or on the first read
+    ("file is not a database"). Uncaught, that ended `info` FATAL (exit 3) and
+    lost every other --db of the call; it is exactly what 'unreadable' means. }
+  var Ok: Boolean:= False;
+  var St: ISymbolStore:= nil;
+  try
+    St:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
+    Ok:= Ok and (St <> nil);
+    if Ok then
+    begin
+      Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
+      Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
+      Result.ResolverExpected:= ResolverFingerprint(St);
+    end;
+  except
+    on E: Exception do Ok:= False;
+  end;
+  Result.Readable:= Ok;
   if not Result.Readable then
   begin
     Result.Verdict:= 'unreadable';
     Exit;
   end;
-  Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
-  Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
-  Result.ResolverExpected:= ResolverFingerprint(St);
   { The stored indexer fingerprint is a compound
     `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is compared,
     because platform and preprocess differences are legitimate per-index facts,
@@ -21348,7 +21435,10 @@ begin
 
   Entries:= TList<TGhostOverlay>.Create;
   try
-    DragDir:= GhostDir(Dproj);
+    { The path only: the shadow default writes nothing beside the project, so
+      the folder is created by the --in-place branch, which journals there
+      (docs\INBOX-ghost-check-leaves-empty-drag-dir.md). }
+    DragDir:= TPath.Combine(ExtractFilePath(Dproj), DRAG_HOME_DIR);
 
     { Build the overlay list from a manifest, or a single --unit/--buffer pair. }
     if AArgs.GhostOverlays <> '' then
@@ -21478,6 +21568,7 @@ begin
         its own write back into the record, and a for-in loop variable is a COPY
         -- the token would be discarded and every restore would fall back to
         "cannot prove ownership". }
+      GhostDir(Dproj);
       for i:= 0 to Entries.Count - 1 do
       begin
         E:= Entries[i];
@@ -21913,6 +22004,12 @@ end; // function
 function DoCycles(const AArgs: TArgs): Integer;
 type
   TEdgeSet = TDictionary<string, Boolean>;
+  { one interface-section reference of unit A to a symbol declared in unit B }
+  TIntfEdgeSym = record
+    Name: string ;
+    Line: Integer;
+    Kind: string ;
+  end;
 var
   Store    : ISymbolStore                      ;
   CycGraph : TCycleGraph                       ; { BuildCycleGraph; the four below alias it }
@@ -22003,6 +22100,159 @@ var
         (if Result <> nil then LibPath else '(none: ' + LibPath + ' did not open)'));
     end;
   end;
+
+  { The symbols in A's INTERFACE section that are declared in unit B -- what forces the
+    interface edge A->B (--causes, --f2047). First reference per name, in reference
+    order. Best-effort: the index can miss refs like set types. }
+  function IntfEdgeSymbols(const A, B: string): TArray<TIntfEdgeSym>;
+  var
+    Afid : Int64                        ;
+    APath: string                       ;
+    ImplL: Integer                      ;
+    Seen : TDictionary<string, Boolean> ;
+    One  : TIntfEdgeSym                 ;
+  begin
+    Result:= nil;
+    if not UnitFid.TryGetValue(A, Afid) then Exit;
+    APath:= '';
+    UnitFile.TryGetValue(A, APath);
+    ImplL:= MaxInt;
+    if TFile.Exists(APath) then
+    begin
+      var LS:= TStringList.Create;
+      try
+        LS.LoadFromFile(APath);
+        for var kk:= 0 to LS.Count - 1 do
+          if SameText(Trim(LS[kk]), 'implementation') then
+          begin
+            ImplL:= kk + 1;
+            Break;
+          end;
+      finally
+        LS.Free;
+      end;
+    end;
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for var R in Store.GetReferencesFromFile(Afid) do
+      begin
+        if R.StartLine >= ImplL then Continue; { interface only }
+        if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
+        for var Sym in Store.FindSymbolsByExactName(R.NameText) do
+          if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
+          begin
+            One.Name:= R.NameText;
+            One.Line:= R.StartLine;
+            One.Kind:= Sym.Kind.ToText;
+            Result:= Result + [One];
+            Seen.AddOrSetValue(LowerCase(R.NameText), True);
+            Break;
+          end;
+      end; // for
+    finally Seen.Free; end; // try
+  end;
+
+  { N-09 `cycles --f2047 [--unit <stem>]`: only the cycles made ENTIRELY of interface uses
+    edges -- the ones dcc rejects with F2047 -- each with the symbols forcing its edges and
+    the next commands. --unit takes the name from dcc's message; a unit in no such cycle is
+    exit 0 with a note (the index may be stale). }
+  function ReportF2047: Integer;
+  var
+    Groups : TList<TArray<string>>;
+    Want   : string               ;
+    Shown  : Integer              ;
+    PlanCmd: string               ;
+    JArrF  : TJSONArray           ;
+  begin
+    Result:= 0;
+    Want:= LowerCase(Trim(AArgs.GhostUnit));
+    if EndsText('.pas', Want) then Want:= ChangeFileExt(Want, '');
+    PlanCmd:= Format('drag-lint cycles --db "%s" --plan', [AArgs.DbPath]);
+    Shown:= 0;
+    JArrF:= nil;
+    Groups:= ComputeInterfaceSccs(CycGraph);
+    try
+      if SameText(AArgs.Format, 'json') then JArrF:= TJSONArray.Create;
+      for var Comp in Groups do
+      begin
+        if (Want <> '') and (IndexStr(Want, Comp) < 0) then Continue;
+        Inc(Shown);
+        var FixUnit: string:= if Want <> '' then Want else Comp[0];
+        var FixCmd: string:= Format('drag-lint cycles --db "%s" --fix --project "%s" --unit %s',
+          [AArgs.DbPath, (if AArgs.ProjectPath <> '' then AArgs.ProjectPath else '<X.dproj>'), FixUnit]);
+        var JO    : TJSONObject:= nil;
+        var JEdges: TJSONArray := nil;
+        if JArrF <> nil then
+        begin
+          JO:= TJSONObject.Create;
+          JArrF.AddElement(JO);
+          var JUnits:= TJSONArray.Create;
+          JO.AddPair('units', JUnits);
+          for var U in Comp do JUnits.Add(U);
+          JEdges:= TJSONArray.Create;
+          JO.AddPair('edges', JEdges);
+        end
+        else
+        begin
+          if Shown = 1 then
+            Writeln('F2047: interface-only cycle(s) -- dcc rejects each with "Circular unit reference":');
+          Writeln(Format('  [%d units] %s', [Length(Comp), string.Join(' <-> ', Comp)]));
+        end;
+        for var A in Comp do
+          for var B in Comp do
+          begin
+            if (A = B) or not IntfEdges.ContainsKey(A + '->' + B) then Continue;
+            var Syms:= IntfEdgeSymbols(A, B);
+            if JEdges <> nil then
+            begin
+              var JE:= TJSONObject.Create;
+              JEdges.AddElement(JE);
+              JE.AddPair('from', A);
+              JE.AddPair('to', B);
+              var JSyms:= TJSONArray.Create;
+              JE.AddPair('symbols', JSyms);
+              for var S in Syms do
+              begin
+                var JS:= TJSONObject.Create;
+                JSyms.AddElement(JS);
+                JS.AddPair('name', S.Name);
+                JS.AddPair('line', TJSONNumber.Create(S.Line));
+                JS.AddPair('kind', S.Kind);
+              end;
+            end
+            else if Length(Syms) = 0 then
+              Writeln(Format('      %s''s INTERFACE uses %s: no specific symbol resolved (index gap -- inspect it by hand)', [A, B]))
+            else
+            begin
+              Writeln(Format('      %s''s INTERFACE uses %s via:', [A, B]));
+              for var S in Syms do
+                Writeln(Format('          line %d: %s  [%s]', [S.Line, S.Name, S.Kind]));
+            end;
+          end;
+        if JO <> nil then
+        begin
+          JO.AddPair('plan', PlanCmd);
+          JO.AddPair('fix', FixCmd);
+        end
+        else
+        begin
+          Writeln('      next: ' + PlanCmd);
+          Writeln('            ' + FixCmd);
+        end;
+      end; // for
+      if JArrF <> nil then Writeln(JArrF.ToJson)
+      else if Shown = 0 then
+      begin
+        if Want <> '' then
+          Writeln(Format('%s is in no interface-only cycle (the index may be stale: reindex)', [AArgs.GhostUnit]))
+        else
+          Writeln('F2047: no interface-only cycle -- dcc reports no circular unit reference for this index.');
+      end;
+    finally
+      JArrF.Free;
+      Groups.Free;
+    end; // try
+  end;
 var
   FixCode: Integer       ; { cycles --fix: RunCycleFix's exit code; -1 = not a --fix run }
 begin
@@ -22023,6 +22273,16 @@ begin
   Sccs     := nil;
   try
     Sccs:= ComputeSccs(CycGraph);
+
+    if AArgs.F2047 then
+    begin
+      if AArgs.Plan or AArgs.Fix then
+      begin
+        Writeln(ErrOutput, 'ERROR: cycles --f2047 does not combine with --plan or --fix -- it prints those commands per cycle');
+        Exit(2);
+      end;
+      Exit(ReportF2047);
+    end;
 
     if AArgs.Plan or AArgs.Fix then
     begin
@@ -22183,42 +22443,13 @@ begin
             for var B in Comp do
               begin
                 if (A = B) or not IntfEdges.ContainsKey(A + '->' + B) then Continue;
-                var Afid: Int64;
-                if not UnitFid.TryGetValue(A, Afid) then Continue;
-                var APath: string:= '';
-                UnitFile.TryGetValue(A, APath);
-
-                var ImplL: Integer:= MaxInt;
-                if TFile.Exists(APath) then
-                begin
-                  var LS:= TStringList.Create;
-                  try
-                    LS.LoadFromFile(APath);
-                    for var kk:= 0 to LS.Count - 1 do
-                      if SameText(Trim(LS[kk]), 'implementation') then
-                      begin ImplL:= kk + 1; Break; end;
-                  finally LS.Free; end;
-                end;
-
-                var Seen:= TDictionary<string, Boolean>.Create;
-                var HdrShown:= False;
-                try
-                  for var R in Store.GetReferencesFromFile(Afid) do
-                  begin
-                    if R.StartLine >= ImplL then Continue; { interface only }
-                    if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
-                    for var Sym in Store.FindSymbolsByExactName(R.NameText) do
-                      if SameText(UnitNameOfFile(Store.GetFilePath(Sym.FileId)), B) then
-                      begin
-                        if not HdrShown then begin Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B])); HdrShown:= True; end;
-                        Writeln(Format('          line %d: %s  [%s]  -> move/extract this', [R.StartLine, R.NameText, Sym.Kind.ToText]));
-                        Seen.AddOrSetValue(LowerCase(R.NameText), True);
-                        Break;
-                      end;
-                  end; // for
-                  if not HdrShown then
-                    Writeln(Format('      * %s -> %s interface dep: no specific symbol ' + 'resolved (index gap -- inspect %s''s interface uses of %s by hand)', [A, B, A, B]));
-                finally Seen.Free; end; // try
+                if not UnitFid.ContainsKey(A) then Continue;
+                var Syms:= IntfEdgeSymbols(A, B);
+                if Length(Syms) > 0 then Writeln(Format('      * %s''s INTERFACE needs %s via:', [A, B]));
+                for var S in Syms do
+                  Writeln(Format('          line %d: %s  [%s]  -> move/extract this', [S.Line, S.Name, S.Kind]));
+                if Length(Syms) = 0 then
+                  Writeln(Format('      * %s -> %s interface dep: no specific symbol ' + 'resolved (index gap -- inspect %s''s interface uses of %s by hand)', [A, B, A, B]));
               end; // for
           end; // if
         end; // for
@@ -28832,6 +29063,163 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
+/// (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md, section 5).</summary>
+/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --format text|json|paths, --output.</param>
+/// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
+/// unknown --root); 3 stale index (a file it must read changed since it was
+/// indexed -- refused, never answered from); 1 any other error.</returns>
+function DoMenuTree(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@9176 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 other)
+const
+  EXIT_STALE_INDEX = 3;  { spec 5: a stale index is refused, never answered from }
+var
+  Walker: TMenuWalker;
+  Tree  : TMenuTree;
+  Fmt   : string;
+  Txt   : string;
+begin
+  if not ExplicitDbsExist(AArgs, 'menu-tree') then Exit(2);
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'menu-tree: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if AArgs.ProjectPath = '' then
+  begin
+    Writeln(ErrOutput, 'menu-tree: need --project <X.dproj>');
+    Exit(2);
+  end;
+  Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if (Fmt <> 'text') and (Fmt <> 'json') and (Fmt <> 'paths') then
+  begin
+    Writeln(ErrOutput, 'menu-tree: --format must be text, json or paths');
+    Exit(2);
+  end;
+  Tree:= nil;
+  try
+    Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
+    try
+      Tree:= Walker.Walk(AArgs.RootForm);
+    finally
+      Walker.Free;
+    end;
+  except
+    on E: EMenuTreeStale do
+    begin
+      Writeln(ErrOutput, 'menu-tree: stale index: ', E.Message);
+      Exit(EXIT_STALE_INDEX);
+    end;
+    on E: EMenuTreeSetup do
+    begin
+      Writeln(ErrOutput, 'menu-tree: ', E.Message);
+      Exit(2);
+    end;
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'menu-tree: ', E.ClassName, ': ', E.Message);
+      Exit(1);
+    end;
+  end;
+  try
+    if Fmt = 'json' then Txt:= Tree.ToJson(VERSION, AArgs.ProjectPath, AArgs.DbPaths[0])
+    else if Fmt = 'paths' then Txt:= Tree.ToPaths
+    else Txt:= Tree.ToText;
+  finally
+    Tree.Free;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    Writeln('menu-tree: wrote ', AArgs.Output);
+  end
+  else Write(Txt);
+  Result:= 0;
+end; // function
+/// <summary>menu-drift: the code-built menu tree (menu-tree) against the
+/// registry's ide-menu surfaces (spec section 7): MISSING / MOVED /
+/// UNREGISTERED / NOTE lines and 'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
+/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --format text|json, --output.</param>
+/// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
+/// project not in the db, unreadable registry); 3 stale index (refused).</returns>
+function DoMenuDrift(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@50e0 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 drift or other)
+const
+  EXIT_STALE_INDEX = 3;  { spec 5: a stale index is refused, never answered from }
+var
+  Walker: TMenuWalker;
+  Tree  : TMenuTree;
+  Reg   : TMenuRegistry;
+  Rep   : TMenuDriftReport;
+  Fmt   : string;
+  Txt   : string;
+begin
+  if not ExplicitDbsExist(AArgs, 'menu-drift') then Exit(2);
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --db <index.sqlite>');
+    Exit(2);
+  end;
+  if (AArgs.ProjectPath = '') or (AArgs.RegistryDir = '') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir>');
+    Exit(2);
+  end;
+  Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if (Fmt <> 'text') and (Fmt <> 'json') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: --format must be text or json');
+    Exit(2);
+  end;
+  Tree:= nil;
+  Reg := TMenuRegistry.Create;
+  try
+    try
+      Reg.LoadFromDir(AArgs.RegistryDir);
+      Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
+      try
+        Tree:= Walker.Walk;
+      finally
+        Walker.Free;
+      end;
+    except
+      on E: EMenuTreeStale do
+      begin
+        Writeln(ErrOutput, 'menu-drift: stale index: ', E.Message);
+        Exit(EXIT_STALE_INDEX);
+      end;
+      on E: EMenuTreeSetup do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.Message);
+        Exit(2);
+      end;
+      on E: EMenuDriftSetup do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.Message);
+        Exit(2);
+      end;
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, 'menu-drift: ', E.ClassName, ': ', E.Message);
+        Exit(1);
+      end;
+    end;
+    Rep:= ComputeMenuDrift(Tree, Reg);
+    try
+      Txt:= if Fmt = 'json' then Rep.ToJson else Rep.ToText;
+      Result:= if Rep.HasDrift then 1 else 0;
+    finally
+      Rep.Free;
+    end;
+  finally
+    Tree.Free;
+    Reg.Free;
+  end;
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    Writeln('menu-drift: wrote ', AArgs.Output);
+  end
+  else Write(Txt);
+end; // function
 // v0.45 Task 9: 32-bit size guard.
 // Emits a WARNING to ErrOutput when the process is 32-bit (or AForce32=True for
 // testing) and the DB file exceeds ASizeGuardMB.
@@ -30448,6 +30836,54 @@ begin
   Result:= 0;
 end; // function
 
+{ selftest own-roots, T-01 half: "excludeRoots" carves a vendored subfolder out
+  of an owned root. Fixture is the sibling folder own-roots-exclude, kept apart
+  so run_lint_own_roots' whole-folder index of own-roots does not change.
+  Returns '' when every assertion holds, else the FIRST failure's detail. }
+function SelfTestOwnRootsExclude(const AFx: string): string;
+var
+  Ex : string   ;
+  Own: TOwnRoots;
+
+  procedure Expect(ACond: Boolean; const ADetail: string);
+  begin
+    if (Result = '') and not ACond then Result:= ADetail;
+  end;
+
+begin
+  Result:= '';
+  Ex    := TPath.GetFullPath(TPath.Combine(AFx, '..\own-roots-exclude'));
+
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'proj'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Length(Own.ExcludeRoots) = 1, 'excludeRoots not read');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\Own.pas')), 'excludeRoots dropped an own file');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'proj\vendor\Lib\Vend.pas')), 'excluded vendor file counted as ours');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\vendorX\Keep.pas')),
+    'exclude "vendor" wrongly matched sibling prefix "vendorX"');
+
+  { excludeRoots without ownRoots narrows the DEFAULT root. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'only-exclude'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'only-exclude\A.pas')), 'exclude-only declaration dropped the default root');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'only-exclude\vendor\V.pas')), 'exclude-only declaration did not exclude');
+
+  { Present but not an array, and excluding every own root, are Errors: both
+    would otherwise lint something the author did not intend. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'bad-exclude'));
+  Expect(Own.Error <> '', 'non-array "excludeRoots" must set Error');
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'all-excluded'));
+  Expect(Own.Error <> '', 'excludeRoots covering every own root must set Error');
+end;
+
+{ Prints OWNROOTS-FAIL: <ADetail> and returns 1, so a failed assertion is one
+  statement: Exit(OwnRootsFail(...)). }
+function OwnRootsFail(const ADetail: string): Integer;
+begin
+  Writeln('OWNROOTS-FAIL: ', ADetail);
+  Result:= 1;
+end;
+
 // selftest own-roots --dir <fixtures\own-roots>: asserts a declared root list is
 // read (including a RELATIVE entry), that a file under a declared root is ours,
 // that a sibling folder outside them is not, that an UNDECLARED project defaults
@@ -30455,7 +30891,7 @@ end; // function
 // Also covers (review round 1): a sibling folder whose NAME EXTENDS a declared
 // root's name is not a prefix match; an explicit "ownRoots": [] is an Error, not
 // a default; and malformed (unparseable) JSON defaults exactly like a missing
-// file, never an Error.
+// file, never an Error. Also T-01: "excludeRoots" (fixture ..\own-roots-exclude).
 // Prints OWNROOTS-OK or OWNROOTS-FAIL: <detail>.
 function DoSelfTestOwnRoots(const AArgs: TArgs): Integer;
 var
@@ -30536,6 +30972,10 @@ begin
   if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
     begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
 
+  { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): kept in its own
+    function so these assertions add one exit here, not nine. }
+  var ExFail: string:= SelfTestOwnRootsExclude(Fx);
+  if ExFail <> '' then Exit(OwnRootsFail(ExFail));
   if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
                   ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
     begin Writeln('OWNROOTS-FAIL: AnchorDirForDb did not resolve the _D-RAG parent'); Exit(1); end;
@@ -31708,6 +32148,7 @@ const
   COMPARE_TEMP_SVG_PREFIX = 'drag-lint-compare-old-';
   COMPARE_SVG_EXT = '.svg';
   COMPARE_STAMP = 'yyyymmdd-hhnn';
+  COMPARE_RUN_STAMP = 'yyyymmdd-hhnnss';
 
 function CompareReadText(const APath: string): string;
 begin
@@ -31850,11 +32291,16 @@ begin
   else Write(Doc);
 end;
 
-{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index. }
+{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index.
+  The new run's bundle goes to a PER-RUN folder under %TEMP%\drag-lint-reports: the bundle name is
+  question + target only, so two runs in the shared folder overwrote each other's chart (INBOX
+  compare item 3). }
 function CompareProduceOptions(const AArgs: TArgs): TProduceOptions;
 begin
   Result:= DefaultProduceOptions;
   Result.EnginePath:= ParamStr(0);
+  Result.OutRoot:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+    Format('compare-run-%s-%d', [FormatDateTime(COMPARE_RUN_STAMP, Now), GetCurrentProcessId]));
   if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
 end;
 
@@ -32066,7 +32512,12 @@ begin
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
   try
     Args:= ParseArgs;
-    if Args.ShowHelp then begin PrintHelp; Exit(0); end;
+    if Args.ShowHelp then
+    begin
+      if Args.HelpVerb <> '' then PrintMenuVerbHelp(Args.HelpVerb)
+      else PrintHelp;
+      Exit(0);
+    end;
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
 
     { A .drag-lint.json DEFAULTS FILE THAT COULD NOT BE READ (1.20.4 Task 4):
@@ -32078,6 +32529,15 @@ begin
        MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
     begin
       ReportManifestRefusal(Args.Command, Args.ConfigError);
+      Exit(2);
+    end;
+
+    { N-02: one --rule per run. A second, different id used to REPLACE the first
+      without a word, so its findings vanished and the run read as clean. }
+    if Args.RuleConflict <> '' then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
+        'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
       Exit(2);
     end;
 
@@ -32205,6 +32665,8 @@ begin
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)
+    else if Args.Command = 'menu-tree'         then Result:= DoMenuTree        (Args)
+    else if Args.Command = 'menu-drift'        then Result:= DoMenuDrift       (Args)
     else if Args.Command = 'generate-test'     then Result:= DoGenerateTest    (Args)
     else if Args.Command = 'format'            then Result:= DoFormat          (Args)
     else if Args.Command = 'check-ast'         then Result:= DoCheckAst        (Args)
@@ -32257,10 +32719,13 @@ begin
         the startup path of the IDE's only Code Insight provider. }
       if Args.LspProxy then
       begin
-        var ProxyOpt: DRagLint.LSP.Proxy.TLspProxyOptions;
+        var ProxyOpt:= Default(DRagLint.LSP.Proxy.TLspProxyOptions);
         ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
         ProxyOpt.ChildArgs   := '';
         ProxyOpt.TraceFile   := Args.LspTraceFile;
+        ProxyOpt.MergeDiagnostics:= Args.LspMergeDiagnostics;
+        ProxyOpt.MergeBudgetMs   := if Args.LspMergeBudgetSet then Args.LspMergeBudgetMs else DRagLint.LSP.Proxy.LSP_MERGE_BUDGET_DEFAULT_MS;
+        ProxyOpt.DbPaths         := Args.DbPaths;
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;

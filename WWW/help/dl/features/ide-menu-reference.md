@@ -4,7 +4,7 @@ title: IDE Menu Reference
 summary: What every item in the drag-lint menu does
 product: DL
 group: editor-integration
-order: 110006
+order: 110007
 since: 0.0.0
 status: shipped
 updated: 1.33.0-alpha
@@ -18,7 +18,7 @@ Read this when you wonder what an item in the drag-lint menu of RAD Studio does.
 
 ## Where to click
 
-* RAD Studio main menu: **drag-lint > Help > IDE Menu Reference (wiki)**
+* RAD Studio main menu: **drag-lint > Help > IDE Menu Reference**
    1. drag-lint > Help > IDE Menu Reference (wiki)
    2. The page opens in the browser
 
@@ -247,8 +247,8 @@ on the menu rather than behind the About window.
 
 | Item | What it does |
 |---|---|
-| **IDE Menu Reference (wiki)** | Opens this page in the browser. |
-| **Effect Summary Legend (wiki)** | Opens the page that explains the purity tokens in a routine's effect summary. |
+| **IDE Menu Reference** | Opens this page in the browser. |
+| **Effect Summary Legend** | Opens the page that explains the purity tokens in a routine's effect summary. |
 
 ### About
 

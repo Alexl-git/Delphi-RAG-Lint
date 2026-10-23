@@ -1,0 +1,7 @@
+{
+  "id": "summary-report",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture > Catalog > Summary Report" }
+  ]
+}

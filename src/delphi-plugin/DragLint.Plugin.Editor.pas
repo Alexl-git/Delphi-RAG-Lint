@@ -245,6 +245,7 @@ uses
   , DragLint.Plugin.CodeLensCache  { SetCallerCountsHook -- the LSP fast path }
   , DragLint.Plugin.HoverTracker
   , DragLint.Plugin.DockForm
+  , DragLint.Plugin.Help           { DLOpenHelp -- every Help item opens a registry id }
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.SaveNotifier
   , DragLint.Plugin.LiveDiagnostics
@@ -5895,9 +5896,6 @@ const
   DL_LONG_JOB_MS = 600000;
   { Hop limit passed to call-path. }
   DL_CALLPATH_MAX_DEPTH = 8;
-  { Wiki page root for the two Help entries; the page names are the registry
-    entries' wikiPage values. }
-  DL_WIKI_BASE_URL = 'https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/';
 
 /// <summary>Prompts for one free-text argument and rejects a double quote,
 /// which would break the quoted engine argument.</summary>
@@ -6278,17 +6276,30 @@ begin
     DLRunReport('migrate-dbs', 'drag-lint-migrate-dbs.txt');
 end;
 
-/// <summary>Opens the IDE Menu Reference wiki page in the browser.</summary>
+/// <summary>Opens the IDE Menu Reference help page (registry id
+/// ide-menu-reference) at the configured help root.</summary>
 procedure InvokeHelpMenuReference(Sender: TObject);
 begin
-  ShellExecute(0, 'open', PChar(DL_WIKI_BASE_URL + 'IDE-Menu-Reference'), nil, nil, SW_SHOWNORMAL);
+  DLOpenHelp('ide-menu-reference');
 end;
 
-/// <summary>Opens the Effect Summary Legend wiki page (what the purity tokens
-/// in a routine's effect summary mean) in the browser.</summary>
+/// <summary>Opens the Effect Summary Legend help page (what the purity tokens
+/// in a routine's effect summary mean; registry id effect-summary-legend).</summary>
 procedure InvokeHelpEffectLegend(Sender: TObject);
 begin
-  ShellExecute(0, 'open', PChar(DL_WIKI_BASE_URL + 'Effect-Summary-Legend'), nil, nil, SW_SHOWNORMAL);
+  DLOpenHelp('effect-summary-legend');
+end;
+
+/// <summary>Shows the drag-lint dock with the caret in its help line.</summary>
+procedure InvokeHelpOnFeature(Sender: TObject);
+begin
+  ShowDragLintDockHelpLine;
+end;
+
+/// <summary>Opens the complete feature list at the configured help root.</summary>
+procedure InvokeHelpAllFeatures(Sender: TObject);
+begin
+  DLOpenAllFeatures;
 end;
 
 const
@@ -6746,8 +6757,10 @@ begin
   var SubHelp: TMenuItem:= TMenuItem.Create(RootMenu);
   SubHelp.Caption:= 'Help';
   RootMenu.Add(SubHelp);
-  AddWrappedItem(SubHelp, 'IDE Menu Reference (wiki)', InvokeHelpMenuReference);
-  AddWrappedItem(SubHelp, 'Effect Summary Legend (wiki)', InvokeHelpEffectLegend);
+  AddWrappedItem(SubHelp, 'Help on a feature...', InvokeHelpOnFeature);
+  AddWrappedItem(SubHelp, 'All features (web)', InvokeHelpAllFeatures);
+  AddWrappedItem(SubHelp, 'IDE Menu Reference', InvokeHelpMenuReference);
+  AddWrappedItem(SubHelp, 'Effect Summary Legend', InvokeHelpEffectLegend);
   AddWrappedItem(RootMenu, 'About'                          , InvokeAbout          );
 
   { v0.42: also surface the dockable panel under View > Tool Windows. This item

@@ -1,0 +1,14 @@
+Fixture > Direct Item	MT.Builder.DoDirect	certain
+Fixture > Open...	MT.Builder.DoOpen	certain
+Fixture > Find %s...	MT.Builder.DoFind	certain
+Fixture > Export Everything	MT.Builder.DoExport	certain
+Fixture > Tools & Options > Format Unit	MT.Builder.DoFormat	certain
+Fixture > Catalog > Basic Report...	MT.Builder.DoCatalog	derived
+Fixture > Catalog > Advanced Report...	MT.Builder.DoCatalog	derived
+Fixture > Catalog > Summary Report	MT.Builder.DoCatalog	derived
+Fixture > About	MT.Builder.DoAbout	certain
+Fixture Dynamic > Static Leaf	MT.Dynamic.TDynHandlers.DoStatic	certain
+Fixture Dynamic > <dynamic: SomeVar>	MT.Dynamic.TDynHandlers.DoDynamic	unknown
+## external mnuTools
+mnuTools > Code Added Two	MT.Dfm.TFixtureForm.DoTwo	certain
+mnuTools > Code Added One	MT.Dfm.TFixtureForm.DoOne	certain

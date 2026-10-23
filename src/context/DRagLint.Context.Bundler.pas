@@ -279,6 +279,63 @@ begin
   SetLength(Result, N);
 end; // function
 
+// ARefs (a BARE-NAME caller lookup) narrowed to refs that can be calls of the
+// target. The lookup matches the last name segment only, so for `Create` it
+// returned every constructor call in the index (stats\draglint-gaps.log
+// 2026-10-23: `modify TDragLintDockFrame.Create` listed TCriticalSection.Create,
+// TFileStream.Create, ...). Two rules, both from facts already in the DB:
+//  1. a ref the resolver bound to a symbol OUTSIDE ATargetIds is a call of that
+//     other symbol, never of the target (refs.symbol_id is the bound target);
+//  2. an UNBOUND ref of a CONSTRUCTOR is kept only when its receiver is empty,
+//     Self, inherited or the owning type -- the receiver rule of
+//     ISymbolStore.FindUnresolvedNameCallers. Ordinary methods skip rule 2: their
+//     receiver is usually a variable, and dropping `FFoo.Run` would be worse.
+// Guarded by tests\autotest\run_context_callers_scoped_to_target.ps1.
+function CallersOfTarget( const ARefs: TArray<TReference>; const ATargetIds: TArray<Int64>; AIsConstructor: Boolean;
+  const AOwnerLeaf: string): TArray<TReference>;
+
+  function ReceiverLeaf( const AText: string): string;
+  var
+    P: Integer;
+  begin
+    Result:= Trim(AText);
+    P:= Pos('<', Result);
+    if P > 0 then Result:= Trim(Copy(Result, 1, P - 1));
+    P:= LastDelimiter('.', Result);
+    if P > 0 then Result:= Copy(Result, P + 1, MaxInt);
+  end; // function
+
+  function IsTarget( AId: Int64): Boolean;
+  var
+    T: Int64;
+  begin
+    for T in ATargetIds do
+      if T = AId then Exit(True);
+    Result:= False;
+  end; // function
+
+var
+  R   : TReference;
+  Recv: string    ;
+begin
+  Result:= [];
+  for R in ARefs do
+  begin
+    if R.SymbolId <> 0 then
+    begin
+      if IsTarget(R.SymbolId) then Result:= Result + [R];
+      Continue;
+    end;
+    if AIsConstructor and (AOwnerLeaf <> '') then
+    begin
+      Recv:= ReceiverLeaf(R.ReceiverText);
+      if not ((Recv = '') or SameText(Recv, 'Self') or SameText(Recv, 'inherited') or SameText(Recv, AOwnerLeaf)) then
+        Continue;
+    end;
+    Result:= Result + [R];
+  end;
+end; // function
+
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
   AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
@@ -290,7 +347,9 @@ var
   OwnerIsClass: Boolean          ;  { the lean DFM-field filter runs only for a CLASS owner }
   CallerName : string            ;
   RawCallers : TArray<TReference>;
-  Total      : Integer           ;
+  TargetIds  : TArray<Int64>     ;  { every symbol id under EffQName (overloads) }
+  OwnerLeaf  : string            ;  { 'TType' of Unit.TType.Member; '' for a free routine }
+  Total     : Integer           ;
   SB         : TStringBuilder    ;
   I          : Integer           ;
   L          : TSurfaceLine      ;
@@ -511,7 +570,13 @@ begin
   // Callers (truncated to AMaxCallers; resolve FilePath from store)
   CallerName:= EffQName;
   if LastDelimiter('.', CallerName) > 0 then CallerName:= Copy(CallerName, LastDelimiter('.', CallerName) + 1, MaxInt);
-  RawCallers:= DistinctCallSites(AStore.FindCallersByNameWithContext(CallerName, ACallerContext));
+  TargetIds:= [];
+  for var TS: TSymbol in AStore.FindSymbolsByQualifiedName(EffQName) do TargetIds:= TargetIds + [TS.Id];
+  if Length(TargetIds) = 0 then TargetIds:= [Sym.Id];
+  OwnerLeaf:= Copy(EffQName, 1, Length(EffQName) - Length(CallerName) - 1);
+  if LastDelimiter('.', OwnerLeaf) > 0 then OwnerLeaf:= Copy(OwnerLeaf, LastDelimiter('.', OwnerLeaf) + 1, MaxInt);
+  RawCallers:= DistinctCallSites(CallersOfTarget(AStore.FindCallersByNameWithContext(CallerName, ACallerContext),
+                                                 TargetIds, Sym.Kind = skConstructor, OwnerLeaf));
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);
   SetLength(Result.Callers, Length(RawCallers));
   for I:= 0 to High(RawCallers) do
@@ -644,6 +709,12 @@ begin
     if Length(ABundle.ImplSlice) > 0 then
     begin
       SB.AppendLine('## Impl slice');
+      // A stale-anchor chunk means the slice refused (index older than the unit):
+      // say so OUTSIDE the code fence, where a reader cannot skim past it.
+      for I:= 0 to High(ABundle.ImplSlice) do
+        if ABundle.ImplSlice[I].Kind = 'stale-anchor' then
+          SB.AppendLine('> **WARNING: STALE INDEX** -- the recorded line no longer holds this symbol; no body shown. ' +
+            'Reindex, then ask again.');
       SB.AppendLine('```pascal'    );
       for I:= 0 to High(ABundle.ImplSlice) do
       begin

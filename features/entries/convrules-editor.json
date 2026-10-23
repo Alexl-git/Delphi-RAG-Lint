@@ -28,6 +28,10 @@
     {
       "ask": "How do I see what a conversion would change before running it?",
       "command": "Open the Convert tab in ConvRulesEditor.exe (see the manual, section Composing the rules for one job)"
+    },
+    {
+      "ask": "Can the Convert tab convert many units faster, and how do I turn that off?",
+      "command": "Batch mode is automatic for 2+ units on an engine with batch_units (one convert-apply per book per 8 units); set CONVRULES_BATCH=off before starting ConvRulesEditor.exe to convert one unit at a time"
     }
   ],
   "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown",

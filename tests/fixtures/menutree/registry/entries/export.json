@@ -1,0 +1,7 @@
+{
+  "id": "export",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture > Export Everything" }
+  ]
+}

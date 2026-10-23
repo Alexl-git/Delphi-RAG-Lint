@@ -28,6 +28,7 @@ Full flag list: [cycles in the CLI reference](../cli.md#cycles).
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
 | `--plan` |  |  |  |
+| `--f2047` |  |  |  |
 | `--format` |  |  |  |
 
 ## Where to click

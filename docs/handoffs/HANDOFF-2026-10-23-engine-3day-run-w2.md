@@ -56,6 +56,29 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
+## STATE 2026-10-24 (day 2) -- ledger is authoritative
+Owner away ~26 h from 10-24 morning; R8: avoid EVERY approval prompt (no edits outside the repo/scratch;
+new code lanes use Agent isolation "worktree"); do not stop for /clear -- keep working through compaction.
+Merged to main since 10-23 evening: menu reader 4e3f8077, doctools b5d41bef, cli7 f5a77072, w5 014337c1,
+w6cli 93803bea, owncfg 453193ba, w6l 4a4401e0, w6q 7fc9bd75 (+ regens/verifies). Articles: circular-uses
+(live), menu-drift 7181e3be (held by www-40 for the release).
+Running: W7-H hygiene, RC rehearsal (e3d/rc = main + resolver + extractor-batch + version bumps + FULL
+battery, no deploy), T11 menu external roots (Micronite copy), N-06 impl (e3d/n06 from extractor-batch).
+END sequence (DEFERRED-APPROVALS.md): RC re-merge with e3d/n06 -> battery -> CHANGELOG (e3d/changelog
+7e8a2f93) + DRAGLINT_VERSION -> deploy engine then BPLs -> re-parse -> tell CONVERTER (FG-M + verify +
+re-pin), www-40 (cycles refusal line + publish menu article), lsp-6f -> B-41 doc regen -> owner list.
+Owner questions: docs\superpowers\plans\2026-10-24-engine-next-wave.md (14) + F5, RaiseLastOSError, T-10,
+entryunitkey class names, cron wakeup.
+
+## OWNER RULING R7 (2026-10-23 evening) -- READ FIRST
+No approval-needing command mid-run (deletes, destructive git, Stop-Process, deploys, gh/curl, publish).
+Queue in `.superpowers\sdd\2026-10-23-engine-3day\DEFERRED-APPROVALS.md`; deploy + version bump +
+re-parse move to the END of day 3. Peers (CONVERTER, www-40, lsp-6f) told. Docs-sync is RED on main
+until that deploy (deployed --help lacks --progress) -- expected, do not "fix" it otherwise.
+Merged since 14:20: lint-fp 465f1972, lint-fp2 03b508f6, migrate-gaps 041e5fbb, cycles 6baf2acd,
+apply-batch 25cd99de, help line 136f95c5 (+verify 57088ad3, www page 343d4879). Running: e3d/cli7,
+e3d/menu-impl, e3d/resolver (review fixes; hold for the end bump), e3d/doctools.
+
 ## Next actions (in order)
 1. Merge finished lanes one at a time: review diff, rerun its guard on main, ledger row -> MERGED;
    tell CONVERTER about conversion-related merges (L8).

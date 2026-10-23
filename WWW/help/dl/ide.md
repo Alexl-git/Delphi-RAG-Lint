@@ -41,8 +41,10 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Unit Test Stub (symbol)...](features/unit-test-stub-symbol.md)
   * [Go to Definition](features/go-to-definition.md)
   * Help
-    * [Effect Summary Legend (wiki)](features/effect-summary-legend.md)
-    * [IDE Menu Reference (wiki)](features/ide-menu-reference.md)
+    * [All features (web)](features/ide-help-line.md)
+    * [Effect Summary Legend](features/effect-summary-legend.md)
+    * [Help on a feature...](features/ide-help-line.md)
+    * [IDE Menu Reference](features/ide-menu-reference.md)
   * [Hover at Cursor](features/hover-at-cursor.md)
   * Index & Maintenance
     * [Library Drift Check...](features/library-drift-check.md)
@@ -83,8 +85,8 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Show Wiring (Spring4D DI + DFM events)...](features/show-wiring-spring4d-di-dfm-events.md)
     * [Uses & Deps Tab -- review & apply fixes...](features/uses-deps-tab.md)
     * Uses Audit -- interface-
-      * [impl moves + unused (this unit)...](features/uses-audit-interface-impl-moves-unused-this-unit.md)
-    * [Uses Cleanup Preview (compiler-verified, this unit)...](features/uses-cleanup-preview-compiler-verified-this-unit.md)
+      * [impl moves + unused...](features/uses-audit-interface-impl-moves-unused-this-unit.md)
+    * [Uses Cleanup Preview (compiler-verified)...](features/uses-cleanup-preview-compiler-verified-this-unit.md)
     * [Uses Report (CSV)...](features/uses-report-csv.md)
     * [What This Routine Calls (callees)...](features/find-callees.md)
   * [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md)

@@ -166,6 +166,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](features/find-dead-code.md) | Scans the index for code with no references -- candidates to delete | 0.25.0-alpha |
 | [Forms for testers (CSV)](features/generate-test-helper-csv.md) | A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form | 0.44.0-alpha |
 | [Impact / Blast Radius (symbol)](features/impact-blast-radius-symbol.md) | Reports what would be affected if a chosen symbol changes -- the set of code to retest | 0.17.0-alpha |
+| [Code-built menu tree and registry drift](features/menu-tree.md) | The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it | 1.33.0-alpha |
 | [Reverse Call Tree (clickable, Messages window)](features/reverse-call-tree-clickable-messages-window.md) | The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller | 0.96.0-alpha |
 | [Reverse Call Tree (who calls this, N-deep)](features/reverse-call-tree-who-calls-this-n-deep.md) | Builds the tree of callers of a chosen symbol, transitively, to a chosen depth | 0.96.0-alpha |
 | [Scan TODOs / FIXMEs](features/scan-todos-fixmes.md) | Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers | 0.12.0-alpha |
@@ -226,6 +227,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) | Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure | 0.0.0 |
 | [drag-lint Options](features/drag-lint-options.md) | The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog | 0.95.0-alpha |
 | [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) | Opens the main drag-lint dockable tool window inside the IDE | 0.0.0 |
+| [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
 | [IDE Menu Reference](features/ide-menu-reference.md) | What every item in the drag-lint menu does | 0.0.0 |
 | [ide-release](features/ide-release.md) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request | 1.13.0-alpha |
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |

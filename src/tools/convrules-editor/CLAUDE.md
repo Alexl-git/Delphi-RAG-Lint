@@ -42,10 +42,10 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 2224 pass / 0 fail / 19 skip** after the 1.31.5 apply-field work (B1/B3/B6/B7/B8, C-2). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 2460 pass / 0 fail / 19 skip** after B4 batch mode (2026-10-23). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
-  tests SKIP; first line says which). Baseline on the 1.31.5 pin:
-  **2281 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
+  tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
+  **2571 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
   (`picker.unit.has.VARINSP`, `fill.from-unit.*`). A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -59,6 +59,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-engine-wait.ps1` 9 -- progress window, Cancel, retry, cached reload
   * `drive-book-depth.ps1` 21 -- `#depth` combo
   * `drive-convert-tab.ps1` 26 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported
+  * `drive-convert-batch.ps1` 22 -- B4 batch mode: 2 units in ONE convert-apply, batch note, `.BCK1` x4, then a `CONVRULES_BATCH=off` relaunch runs per-unit (`-ProofNoBatch` = RED). The second Add... click is lost on every run and retried once (todo N11, re-entrancy of N7's class: never "fix" it by clicking with WM_COMMAND -- that opened the Open dialog on top of TEngineWaitForm and wedged the run)
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
   * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
   * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
@@ -78,12 +79,13 @@ two different builds have reported the same version; compare SHA256 and build st
 * `Glyph` (decisions) / `GlyphForm` (dialog) -- G[I/N] expressions, count links, glyph notes.
 * `Inheritance` -- C8 analysis, offers, order warning, gate; `InheritanceEngine` -- its engine binders.
 * `ConvertRun` -- pure Convert decisions: backups, preflight, `ParseApplyJson`, row notes, progress text.
-* `ConvertRunner` -- executes a run: per-unit backup/apply/restore, steps, report lines.
+* `ConvertRunner` -- executes a run: the per-unit loop and the book-major batch loop (B4, `RunConversionBatched`), backup/apply/restore, steps, report lines; `NotReachedUnits`, `JobRunsBatched`.
+* `ConvertBatch` -- pure batch decisions: `BatchModeFor`, `BatchChunks` (8 per call), `BatchTimeoutMs`, `BatchUnitsMatch`, `BatchOfSingle`.
 * `ConvertTab` -- Convert tab UI (editor-only); `ConvertRequest` -- `convert-request/1` parse, validate, scope.
 * `WorkList` (pure) / `WorkListTab` (UI) -- pas_uses work list.
 * `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).
 * `ConvCatalog` / `Casts` -- cast options incl. `ckValue` (StripDB).
-* `Engine` -- `TEngineAdapter`: every engine call, pipes, timeouts, capabilities, resolve cache.
+* `Engine` -- `TEngineAdapter`: every engine call (incl. `ApplyConversionBatch`, apply-batch/1), pipes, timeouts, capabilities, resolve cache.
 * `EngineWait` -- progress window / cancellable long call (editor-only). `DropTarget` -- OLE glue only.
 * `MainForm` -- wiring only.
 

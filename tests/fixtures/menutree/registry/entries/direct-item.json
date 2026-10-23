@@ -1,0 +1,7 @@
+{
+  "id": "direct-item",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture > Direct Item" }
+  ]
+}

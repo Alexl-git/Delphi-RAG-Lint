@@ -11,8 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...",
-      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...", "Review each candidate (verified by compiling) before applying", "From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`"]
+      "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...",
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...", "Review each candidate (verified by compiling) before applying", "From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`"]
     },
     {
       "type": "cli",
@@ -59,9 +59,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
-    "surfaceHash": "78e36ac66c8d8639272b41e0286209f6951b72cf3d116e67f6df761beb1c1c75"
+    "surfaceHash": "e56326c25702efc3f98e2fcc1bf94115774f75b3021ce385d7891bc8ba2d14a6"
   }
 }

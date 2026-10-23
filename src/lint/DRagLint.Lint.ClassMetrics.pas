@@ -82,7 +82,7 @@ type
 implementation
 
 uses
-  DRagLint.Core.ForwardStub { PairForwardStubs / HasChildInSet -- BuildInventory }
+  DRagLint.Core.ForwardStub { PairForwardStubs -- BuildInventory }
   ;
 
 type
@@ -201,6 +201,7 @@ var
   TInstPct    : Integer                          ; { v0.82 instability: I=Ce/(Ca+Ce) threshold, as a percent }
   TInstFloor  : Integer                          ; { v0.82 instability: noise floor on Ca+Ce (also guards div-by-zero) }
   CI          : TClassInfo                       ;
+  NeedAllMembers: Boolean                        ; { T-04: load Methods/Fields for every class, not only AOnlyFileId's }
 
   { --rule narrows; ARuleKept drops what the caller's final filter would drop. }
   function WantRule(const AId: string): Boolean;
@@ -298,16 +299,48 @@ var
     Low : string         ;
     Lst : TList<Int64>   ;
   begin
+    { T-04: ONE by-kind query for every class row, grouped by file, instead of
+      materialising every symbol of every file (FindSymbolsByFile per file id,
+      locals and params included) -- 3.2 s of a 7.5 s warm `lint BASICS.PAS` on
+      ORM3. Iteration order is kept exactly: files in GetAllFileIds order, rows
+      by (start_line, start_col) as FindSymbolsByFile ordered them, because the
+      first class registered under a name is the one ResolveParents picks. }
+    var ByFile: TObjectDictionary<Int64, TList<TSymbol>>:=
+      TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
+    try
+    for S in AStore.FindSymbolsByKind(skClass.ToText, False, MaxInt) do
+    begin
+      var FileRows: TList<TSymbol>;
+      if not ByFile.TryGetValue(S.FileId, FileRows) then
+      begin
+        FileRows:= TList<TSymbol>.Create;
+        ByFile.Add(S.FileId, FileRows);
+      end;
+      FileRows.Add(S);
+    end;
     for Fid in AStore.GetAllFileIds do
     begin
+      var FileRows: TList<TSymbol>;
+      if not ByFile.TryGetValue(Fid, FileRows) then Continue;
       Path:= AStore.GetFilePath(Fid);
-      Syms:= AStore.FindSymbolsByFile(Path);
+      Syms:= FileRows.ToArray;
+      TArray.Sort<TSymbol>(Syms, TComparer<TSymbol>.Construct(
+        function(const L, R: TSymbol): Integer
+        begin
+          Result:= L.StartLine - R.StartLine;
+          if Result = 0 then Result:= L.StartCol - R.StartCol;
+        end));
       { C2.5: a forward stub (`TFoo = class;` completed later in this unit) is
         NOT a class. Left in, it entered ByName FIRST (lower line) and
         ResolveParents parented every `class(TFoo)` to the stub, so the real
-        TFoo measured NOC 0 and the finding pointed at the stub. Whole-file rows
-        are in hand, so children are answered from Syms, not the store. }
-      var StubOf: TArray<Integer>:= PairForwardStubs(Syms, HasChildInSet(Syms));
+        TFoo measured NOC 0 and the finding pointed at the stub. Only class rows
+        are in hand, so the children test asks the store -- PairForwardStubs
+        asks it LAST, for a same-name later twin only, so it runs rarely. }
+      var StubOf: TArray<Integer>:= PairForwardStubs(Syms,
+        function(const ASym: TSymbol): Boolean
+        begin
+          Result:= Length(AStore.FindAllChildSymbols(ASym.Id)) > 0;
+        end);
       for var Idx:= 0 to High(Syms) do
       begin
         S:= Syms[Idx];
@@ -323,10 +356,17 @@ var
           Info.DeclCol    := S.StartCol;
           Info.DeclEndLine:= S.EndLine;
           Info.Heritage   := S.Heritage;
-          Kids:= AStore.FindAllChildSymbols(S.Id);
-          for K in Kids do
-            if IsMethodKind(K.Kind) then Info.Methods:= Info.Methods + [K]
-            else if K.Kind = skField then Info.Fields:= Info.Fields + [K];
+          { T-04: members are read only for the classes being MEASURED (this
+            file's, under `lint <file>`) and by the two whole-inventory passes,
+            fan-in/instability and feature-envy. Everywhere else a class is just
+            a name + heritage for NOC/DIT, so skip one store query per class. }
+          if NeedAllMembers or (Fid = AOnlyFileId) then
+          begin
+            Kids:= AStore.FindAllChildSymbols(S.Id);
+            for K in Kids do
+              if IsMethodKind(K.Kind) then Info.Methods:= Info.Methods + [K]
+              else if K.Kind = skField then Info.Fields:= Info.Fields + [K];
+          end;
           if not Inv.ContainsKey(Info.Id) then
           begin
             Inv.Add(Info.Id, Info);
@@ -341,6 +381,9 @@ var
         end; // if skClass
       end; // for Idx
     end; // for Fid
+    finally
+      ByFile.Free;
+    end;
   end;
 
   { Resolve each class's direct class-parent (first heritage entry that resolves
@@ -1098,8 +1141,14 @@ begin
     TInstPct  := ACfg.ThresholdFor('instability', 80);       { percent form of I threshold (default 0.8) }
     TInstFloor:= ACfg.ThresholdFor('instability-floor', 5);  { noise floor on Ca+Ce; keeps Total > 0 }
 
+    NeedAllMembers:= (AOnlyFileId <= 0) or WantRule('fan-in') or WantRule('instability')
+                     or WantRule('feature-envy');
+    var TInv: Int64:= TStopwatch.GetTimeStamp;
     BuildInventory;
+    TInv:= TStopwatch.GetTimeStamp - TInv;
+    var TPar: Int64:= TStopwatch.GetTimeStamp;
     ResolveParents;
+    TPar:= TStopwatch.GetTimeStamp - TPar;
     ComputeNOC;
     { FanIn feeds exactly two rules, both OFF by default; it is the costliest pass
       here (6.3 s of a single-file lint on ORM3), and with ARuleKept supplied the
@@ -1226,6 +1275,9 @@ begin
     if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
     begin
       Writeln(ErrOutput, Format('  CLASS-METRICS BREAKDOWN (%d class(es))', [Inv.Count]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (members loaded: %s)', ['BuildInventory', TInv / TStopwatch.Frequency,
+        if NeedAllMembers then 'every class' else 'this file''s classes']));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s', ['ResolveParents', TPar / TStopwatch.Frequency]));
       Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s), %d distinct (name,file) key(s))',
         ['ResolveTypeCategory', GBRtc / TStopwatch.Frequency, GCRtc, GRtcSeen.Count]));
       Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['GetTransitiveAncestors', GBAnc  / TStopwatch.Frequency, GCAnc ]));

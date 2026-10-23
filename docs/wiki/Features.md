@@ -185,7 +185,7 @@ DocInsight comments generated from the index, and drift detection.
 | [Document project](Document-project) | Structure form: Document project; `document` |  |
 | [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
 | [document-all](document-all) | `document-all`; drag-lint > Generate & Export > Auto-Document Every Indexed Unit... |  |
-| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend (wiki) |  |
+| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend |  |
 | [shared-unit](shared-unit) | `shared-unit` |  |
 
 ## Refactoring and code generation
@@ -207,8 +207,8 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [safe-delete](safe-delete) | `safe-delete`; drag-lint > Safe Delete Symbol... |  |
 | [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
 | [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
-| [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...; `uses-audit` |  |
-| [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...; `uses-fix` |  |
+| [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...; `uses-audit` |  |
+| [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...; `uses-fix` |  |
 
 ## Component conversion
 
@@ -240,6 +240,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [callgraph](callgraph) | `callgraph`; drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... |  |
 | [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md`; drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)... |  |
 | [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
+| [Code-built menu tree and registry drift](Menu-Tree) | `menu-tree`; `menu-drift` |  |
 | [Cycles fix (mechanical, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles`; drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...; View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix); Structure form: Fix this cycle (dry run)...; Structure form: Apply cycle fix...; `charts\src\Emit-Cycles.ps1` |  |
 | [deps-report](deps-report) | `deps-report`; drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)... |  |
 | [Export Enums (Delphi const)](Export-Enums-Delphi-const) | drag-lint > Generate & Export > Export Enums (Delphi const)...; `export enums` |  |
@@ -308,7 +309,8 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Options](drag-lint-Options) | drag-lint > drag-lint Options... |  |
 | [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
 | [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
-| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference (wiki) |  |
+| [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
+| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference |  |
 | [ide-release](ide-release) | `ide-release` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [lsp](lsp) | `lsp` |  |

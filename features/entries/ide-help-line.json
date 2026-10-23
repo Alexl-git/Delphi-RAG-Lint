@@ -1,0 +1,37 @@
+{
+  "id": "ide-help-line",
+  "title": "Help line (DL page)",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.33.0-alpha",
+  "summary": "Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root",
+  "intro": "Read this to find help for a feature from inside the IDE and to point the plugin at an offline copy of the help.",
+  "wikiPage": "ide-help-line",
+  "surfaces": [
+    {
+      "type": "tool-window",
+      "path": "View > Tool Windows > drag-lint"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Help > Help on a feature..."
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Help > All features (web)"
+    }
+  ],
+  "audience": "both",
+  "lastVerified": {
+    "date": "2026-10-23",
+    "by": "alexanderl",
+    "build": "1.33.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-23",
+    "by": "ENGINE",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "3c9544e404c3bb3f843bbfc31f756c8739133c68512fc9ab3708a7d680ea0696"
+  }
+}

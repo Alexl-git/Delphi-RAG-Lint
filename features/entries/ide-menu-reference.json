@@ -15,7 +15,7 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Help > IDE Menu Reference (wiki)",
+      "path": "drag-lint > Help > IDE Menu Reference",
       "steps": ["drag-lint > Help > IDE Menu Reference (wiki)", "The page opens in the browser"]
     }
   ],

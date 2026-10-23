@@ -209,7 +209,7 @@ uses
   System.IOUtils,
   { DRagLint.Doc.Facts moved to the INTERFACE uses -- TDocFactsRenderOptions is
     part of Analyze's signature now. It still supplies TDocFactsBuilder here. }
-  DRagLint.Refactor.DocStub, DRagLint.Doc.Regions,
+  DRagLint.Refactor.DocStub, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Doc.SharedFacts;
 
 // ---------------------------------------------------------------------------
