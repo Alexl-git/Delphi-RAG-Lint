@@ -69,6 +69,16 @@ const
   /// same name to reach the menu while a VCL style has detached it from the
   /// window.</summary>
   MAIN_MENU_QUERY_MSG = 'ConvRulesEditor.MainMenuHandle';
+  /// <summary>Name of the registered window message the main form answers with
+  /// EDITOR_BUSY_ANSWER while it is busy (ConvRules.InputGate.EditorBusy: an engine wait
+  /// or an hourglass section) and EDITOR_IDLE_ANSWER otherwise. A GUI driver sends it
+  /// with a timeout before a click: no answer means the main thread is blocked, which is
+  /// busy too (N7/N11: a click sent then is refused).</summary>
+  EDITOR_BUSY_QUERY_MSG = 'ConvRulesEditor.Busy';
+  /// <summary>EDITOR_BUSY_QUERY_MSG's answer while idle (0 is never an answer).</summary>
+  EDITOR_IDLE_ANSWER = 1;
+  /// <summary>EDITOR_BUSY_QUERY_MSG's answer while busy.</summary>
+  EDITOR_BUSY_ANSWER = 2;
   /// <summary>Private window message that runs the --convert-request (see
   /// TConvRulesForm.PostPendingRequest).</summary>
   WM_APPLY_REQUEST = WM_APP + 1;
@@ -205,6 +215,7 @@ type
       FLostClickTimer: TTimer         ; // N1: shows the lost-Convert-click notice once the editor is idle (DepthCommitBlocked)
       FLostClickTitle: string         ; // N1: the progress title the Convert click was lost under; '' = no notice pending
       FBusyTitle    : string          ; // N1: the running long call's title (RunLongCallTracked); '' = none
+      FLostCommand  : string          ; // N7/N11: CommandName of the refused click FLostClickTitle reports
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCancelStatus : string          ; // the status text that cancel wrote; SetStatusAfterCancel keeps it while it is on screen
       { Keys (TValidateJob.Key) of blocks whose validation a Cancel cut short. The
@@ -2277,6 +2288,22 @@ type
       /// LostConvertClickStatus notice to the status line, red. Stays armed while blocked.</summary>
       /// <param name="Sender">The timer.</param>
       procedure LostClickTimerFire(Sender: TObject);
+      /// <summary>Application.OnMessage (N7/N11): every VCL message pump -- the top-level
+      /// loop, the progress window's modal loop, an hourglass section's ProcessMessages --
+      /// passes each queued message here first. While EditorBusy, GateVerdict refuses a
+      /// click or command for the main form (Handled, never dispatched, so no handler runs
+      /// inside the pump and nothing is queued) and arms FLostClickTimer to report it.</summary>
+      /// <param name="Msg">The queued message.</param>
+      /// <param name="Handled">Set True to swallow it.</param>
+      /// <remarks>Covers what ShowModal's disabled windows do not: a posted WM_COMMAND (no
+      /// enabled check at all) and input that queued while the main thread was blocked.
+      /// Sent messages never pass a queue and are not filtered.</remarks>
+      procedure AppMessage(var Msg: TMsg; var Handled: Boolean);
+      /// <summary>The caption of what a refused message would have clicked: a menu item
+      /// (WM_COMMAND from a menu) or a TButton; '' when it is neither.</summary>
+      /// <param name="AMsg">The refused message.</param>
+      /// <returns>The raw caption, hotkey marker included (CommandName strips it).</returns>
+      function GateTargetCaption(const AMsg: TMsg): string;
       /// <summary>FCbDepth.WindowProc hook: tracks CBN_DROPDOWN .. CBN_CLOSEUP (FDepthDropped) and a
       /// CBN_SELENDCANCEL inside that window (FDepthCancelled), which VCL does not surface, so a
       /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
@@ -2690,6 +2717,7 @@ uses
   , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
   , ConvRules.QualifyFix     // A2: ApplyQualifyPicks / QualifyStatusText behind the Convert host's QualifyBook
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
+  , ConvRules.InputGate      // N7/N11: GateVerdict & co. behind AppMessage
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2815,6 +2843,7 @@ begin
   OnClose:= FormCloseHandler;
   OnCloseQuery:= FormCloseQueryHandler;
   Application.OnHint:= AppHint;
+  Application.OnMessage:= AppMessage; // N7/N11: the one queue filter while busy
   Visible:= True; // ensure the CreateNew form is shown by Run
 
   // Where the Open-form dialog resumes. --form's own folder wins over the stored
@@ -2870,6 +2899,8 @@ begin
   // Application outlives this form: a hint after the free must not call AppHint.
   if TMethod(Application.OnHint).Data = Self then
     Application.OnHint:= nil;
+  if TMethod(Application.OnMessage).Data = Self then
+    Application.OnMessage:= nil;
   FEngine.Free;
   FBook.Free;
   // Both are lazily created (FVisualSet only if the engine answered, FDeclUnits on
@@ -3002,11 +3033,19 @@ end;
 
 var
   GMainMenuQueryMsg: Cardinal = 0; // RegisterWindowMessage(MAIN_MENU_QUERY_MSG), on first use
+  GBusyQueryMsg    : Cardinal = 0; // RegisterWindowMessage(EDITOR_BUSY_QUERY_MSG), on first use
 
 procedure TConvRulesForm.WndProc(var Message: TMessage);
 begin
   if GMainMenuQueryMsg = 0 then
     GMainMenuQueryMsg:= RegisterWindowMessage(MAIN_MENU_QUERY_MSG);
+  if GBusyQueryMsg = 0 then
+    GBusyQueryMsg:= RegisterWindowMessage(EDITOR_BUSY_QUERY_MSG);
+  if (GBusyQueryMsg <> 0) and (Message.Msg = GBusyQueryMsg) then
+  begin
+    Message.Result:= if EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass) then EDITOR_BUSY_ANSWER else EDITOR_IDLE_ANSWER;
+    Exit;
+  end;
   if (GMainMenuQueryMsg <> 0) and (Message.Msg = GMainMenuQueryMsg) then
   begin
     Message.Result:= 0;
@@ -6492,6 +6531,7 @@ begin
   if ConvertClickLost(SmallInt(Msg.HitTest), Msg.MouseMsg, FBusyTitle, LOnConvert) then
   begin
     FLostClickTitle:= FBusyTitle;
+    FLostCommand   := LOST_COMMAND_CONVERT;
     FLostClickTimer.Enabled:= True;
   end;
   inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-23 a message method has no named ancestor method; DefWindowProc keeps the beep and the progress window's flash
@@ -6499,13 +6539,58 @@ end;
 
 procedure TConvRulesForm.LostClickTimerFire(Sender: TObject);
 begin
-  if DepthCommitBlocked then
-    Exit; // still armed: a modal (a C8 prompt, another load) is up
+  if DepthCommitBlocked or (Screen.Cursor = crHourGlass) then
+    Exit; // still armed: a modal (a C8 prompt, another load) or an hourglass section is up
   FLostClickTimer.Enabled:= False;
   if FLostClickTitle = '' then
     Exit;
-  SetError(LostConvertClickStatus(FLblStatus.Caption, FLostClickTitle));
+  SetError(LostCommandStatus(FLblStatus.Caption, FLostCommand, FLostClickTitle));
   FLostClickTitle:= '';
+  FLostCommand   := '';
+end;
+
+procedure TConvRulesForm.AppMessage(var Msg: TMsg; var Handled: Boolean);
+begin
+  if not HandleAllocated then
+    Exit;
+  var LBusy: Boolean:= EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass);
+  var LInMain: Boolean:= (Msg.hwnd <> 0) and (GetAncestor(Msg.hwnd, GA_ROOT) = Handle);
+  var LVerdict: TGateVerdict:= GateVerdict(Msg.message, LBusy, LInMain);
+  if LVerdict = gvPass then
+    Exit;
+  Handled:= True;
+  // The first refusal is reported; more clicks under the same busy work add nothing.
+  if (LVerdict = gvRefuse) and (FLostClickTitle = '') then
+  begin
+    FLostCommand   := CommandName(GateTargetCaption(Msg));
+    FLostClickTitle:= BusyTitleFor(FBusyTitle, FLblStatus.Caption);
+    FLostClickTimer.Enabled:= True;
+  end;
+end;
+
+function TConvRulesForm.GateTargetCaption(const AMsg: TMsg): string;
+var
+  LItem: TMenuItem  ;
+  LCtl : TWinControl;
+  LWnd : HWND       ;
+begin
+  Result:= '';
+  if (AMsg.message = WM_COMMAND) and (AMsg.lParam = 0) then
+  begin
+    // A menu item (an accelerator would carry 1 in HiWord(wParam): there are none here).
+    LItem:= nil;
+    if Menu <> nil then
+      LItem:= Menu.FindItem(LoWord(AMsg.wParam), fkCommand);
+    if LItem <> nil then
+      Result:= LItem.Caption;
+    Exit;
+  end;
+  LWnd:= AMsg.hwnd;
+  if AMsg.message = WM_COMMAND then
+    LWnd:= HWND(AMsg.lParam); // a control notification names the control in lParam
+  LCtl:= FindControl(LWnd);
+  if LCtl is TButton then
+    Result:= TButton(LCtl).Caption;
 end;
 
 procedure TConvRulesForm.SyncDepthCombo;

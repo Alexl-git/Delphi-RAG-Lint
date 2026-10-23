@@ -48,6 +48,7 @@ uses
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
+  , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
   ;
 
 var
@@ -15231,6 +15232,55 @@ begin
 end;
 
 { Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+{ ConvRules.InputGate (N7/N11) -- the one queue filter of the main window: while the
+  editor is busy (an engine wait, an hourglass section's nested pump) a click or a
+  command for the main form is refused and reported, never run inside the pump and
+  never queued; the progress window, dialogs and non-input messages always pass. }
+procedure TestInputGate;
+begin
+  Check('gate.win32', (GATE_WM_KEYFIRST = WM_KEYFIRST) and (GATE_WM_KEYLAST = WM_KEYLAST)
+    and (GATE_WM_COMMAND = WM_COMMAND) and (GATE_BM_CLICK = BM_CLICK)
+    and (GATE_WM_MOUSEMOVE = WM_MOUSEMOVE) and (GATE_WM_LBUTTONDOWN = WM_LBUTTONDOWN)
+    and (GATE_WM_LBUTTONDBLCLK = WM_LBUTTONDBLCLK) and (GATE_WM_MOUSELAST = WM_MOUSELAST)
+    and (GATE_WM_NCMOUSEMOVE = WM_NCMOUSEMOVE) and (GATE_WM_NCMOUSELAST = WM_NCXBUTTONDBLCLK));
+  Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
+  Check('gate.busy.hourglass', EditorBusy(0, True));
+  Check('gate.idle', not EditorBusy(0, False));
+  // N11: the second Add... (a posted BM_CLICK) and its WM_COMMAND form; N7: Convert.
+  Check('gate.bmclick.refused', GateVerdict(BM_CLICK, True, True) = gvRefuse);
+  Check('gate.command.refused', GateVerdict(WM_COMMAND, True, True) = gvRefuse, '(a button notification or a menu item)');
+  Check('gate.lbutton.refused', GateVerdict(WM_LBUTTONDOWN, True, True) = gvRefuse);
+  Check('gate.dblclk.refused', GateVerdict(WM_LBUTTONDBLCLK, True, True) = gvRefuse);
+  Check('gate.key.dropped', (GateVerdict(WM_KEYDOWN, True, True) = gvDrop) and (GateVerdict(WM_CHAR, True, True) = gvDrop)
+    and (GateVerdict(WM_SYSKEYDOWN, True, True) = gvDrop));
+  Check('gate.mouse.dropped', (GateVerdict(WM_LBUTTONUP, True, True) = gvDrop) and (GateVerdict(WM_RBUTTONDOWN, True, True) = gvDrop)
+    and (GateVerdict(WM_MOUSEWHEEL, True, True) = gvDrop) and (GateVerdict(WM_MOUSEHWHEEL, True, True) = gvDrop));
+  Check('gate.nc.dropped', (GateVerdict(WM_NCLBUTTONDOWN, True, True) = gvDrop) and (GateVerdict(WM_NCXBUTTONDBLCLK, True, True) = gvDrop),
+    '(a title-bar or menu-bar press is not a command to report)');
+  Check('gate.hover.passes', (GateVerdict(WM_MOUSEMOVE, True, True) = gvPass) and (GateVerdict(WM_NCMOUSEMOVE, True, True) = gvPass));
+  Check('gate.paint.passes', (GateVerdict(WM_PAINT, True, True) = gvPass) and (GateVerdict(WM_TIMER, True, True) = gvPass)
+    and (GateVerdict(WM_USER + 1, True, True) = gvPass));
+  Check('gate.other.window.passes', (GateVerdict(BM_CLICK, True, False) = gvPass) and (GateVerdict(WM_KEYDOWN, True, False) = gvPass),
+    '(Cancel and Esc on the progress window, a message box, the Open dialog)');
+  Check('gate.idle.passes', (GateVerdict(BM_CLICK, False, True) = gvPass) and (GateVerdict(WM_COMMAND, False, True) = gvPass)
+    and (GateVerdict(WM_KEYDOWN, False, True) = gvPass));
+  Check('gate.name.add', CommandName('&Add...') = 'Add', CommandName('&Add...'));
+  Check('gate.name.amp', CommandName('Save && close') = 'Save & close', CommandName('Save && close'));
+  Check('gate.name.plain', CommandName('Delete') = 'Delete', CommandName('Delete'));
+  Check('gate.name.empty', (CommandName('') = LOST_COMMAND_UNNAMED) and (LOST_COMMAND_UNNAMED = 'The click'), CommandName(''));
+  Check('gate.status', LostCommandStatus('2 source unit(s) listed.', 'Add', 'Checking 1 source unit(s) for inherited instances')
+    = '2 source unit(s) listed. | Add was NOT run: it was clicked while the editor was busy (Checking 1 source unit(s) for inherited instances). Click it again.',
+    LostCommandStatus('2 source unit(s) listed.', 'Add', 'Checking 1 source unit(s) for inherited instances'));
+  Check('gate.status.empty', LostCommandStatus('', 'Delete', 'Reading the classes of A.pas ...')
+    = 'Delete was NOT run: it was clicked while the editor was busy (Reading the classes of A.pas ...). Click it again.',
+    LostCommandStatus('', 'Delete', 'Reading the classes of A.pas ...'));
+  Check('gate.status.convert.n1', LostCommandStatus('x', 'Convert', 'Validating') = LostConvertClickStatus('x', 'Validating'),
+    '(one text for a lost Convert, however it was lost)');
+  Check('gate.title.wait', BusyTitleFor('Checking 1 source unit(s)', 'Adding ...') = 'Checking 1 source unit(s)', '(the progress window names the work first)');
+  Check('gate.title.status', BusyTitleFor('', ' Reading the classes of A.pas ... ') = 'Reading the classes of A.pas ...');
+  Check('gate.title.unknown', (BusyTitleFor('', '  ') = BUSY_TITLE_UNKNOWN) and (BUSY_TITLE_UNKNOWN = 'another operation'));
+end;
+
 procedure TestConverterMinorsStartup;
 const
   FORM_ERR = '--form "X.pas" does not exist.';
@@ -15487,6 +15537,7 @@ begin
     TestConverterMinorsD;
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
+    TestInputGate;
 
     FreeAndNil(GParseBook);
 
