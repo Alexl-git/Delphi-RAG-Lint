@@ -899,6 +899,27 @@ exit 2; a rollback failing -- reported with the files it could not restore, exit
 2. In batch mode each of these fails that unit only.
 `info --json` advertises it as `capabilities.batch_units: true`.
 
+**Addendum 1.33.0 (CONVERTER gaps G1-G3, all additive).**
+
+* **An unindexed unit is refused (G2).** A `--unit` whose `.pas` no supplied
+  `--db` indexes is REFUSED -- `ok: false`, `refused: true`, `reason`
+  `<unit> is not covered by any supplied --db (<dbs>) -- index its project,
+  then re-run; nothing was planned`, exit 1 -- dry run and `--apply`, single
+  and batch alike. Before, both a single run and a batch planned the unit's
+  unit rules, skipped every instance (the index locates them) and reported
+  `ok: true` -- so `--apply` half-converted the unit. In a batch it is one
+  refusal (`refused_count`); the other units run as before.
+* **`exit_code` on every `apply/1` (G3).** Each `units[]` entry, and a single
+  run's bare `apply/1`, carries `exit_code` -- that unit's own code (0 / 1 / 2
+  / 6), the last key. `units[i]` still equals the single run of that unit.
+* **`--progress` (G1).** Off by default. With it, convert-apply writes one
+  JSON line to STDERR as each unit finishes, flushed at once:
+  `{"progress":{"verb":"convert-apply","unit_done":i,"units":N,"unit":"<path as given>","ok":true|false,"refused":true|false,"exit_code":E}}`.
+  stdout is byte-identical with and without it, but a caller that merges the
+  two streams must leave it off. `info --json` advertises it as
+  `capabilities.batch_progress: true`. Pinned by
+  `tests\autotest\run_apply_batch_gaps.ps1`.
+
 **Which blocks are validated (1.20.6).** Before planning, `convert-apply`
 validates the WHOLE book: every `#convert` block against its OWN From/To types,
 and each `#mapping` against the block(s) that `#apply` it -- each path resolved
