@@ -11,10 +11,21 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Convert Public Field to Property at Cursor"
+      "path": "drag-lint > Convert Public Field to Property at Cursor",
+      "steps": ["Put the caret on the public field declaration in the class", "Choose drag-lint > Convert Public Field to Property at Cursor", "The field is rewritten as a property"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I turn a public field into a property?",
+      "command": "drag-lint > Convert Public Field to Property at Cursor"
+    },
+    {
+      "ask": "Can I wrap a public field without editing every use by hand?",
+      "command": "drag-lint > Convert Public Field to Property at Cursor"
+    }
+  ],
   "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown",
   "verified": {
     "date": "2026-10-21",

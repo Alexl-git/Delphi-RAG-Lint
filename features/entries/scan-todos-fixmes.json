@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Scan TODOs / FIXMEs..."
+      "path": "drag-lint > Code Quality > Scan TODOs / FIXMEs...",
+      "steps": ["Choose drag-lint > Code Quality > Scan TODOs / FIXMEs...", "Read the list of markers (TODO, FIXME, HACK, XXX, REVIEW, NOTE)", "From a shell: drag-lint todos [<path>] [--json]"]
     },
     {
       "type": "cli",
@@ -22,6 +23,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which TODO, FIXME or HACK comments are left in my code?",
+      "command": "drag-lint todos <path>"
+    },
+    {
+      "ask": "How do I list them as JSON?",
+      "command": "drag-lint todos <path> --json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

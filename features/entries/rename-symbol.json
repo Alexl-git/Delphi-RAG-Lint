@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Rename Symbol..."
+      "path": "drag-lint > Rename Symbol...",
+      "steps": ["Put the caret on the symbol in the editor (Ctrl+Alt+R)", "Choose drag-lint > Rename Symbol...", "Enter the new name and review the affected places", "Confirm; backups are written unless disabled"]
     },
     {
       "type": "cli",
@@ -49,6 +50,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I rename a symbol in every unit that uses it?",
+      "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --apply"
+    },
+    {
+      "ask": "Can I preview a rename before it writes anything?",
+      "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -37,6 +37,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which code implements this concept?",
+      "command": "drag-lint wiki --term \"<phrase>\" --db <file.sqlite>"
+    },
+    {
+      "ask": "Which concept topics has the team written?",
+      "command": "drag-lint wiki --list"
+    }
+  ],
   "access": "repo-tooling",
   "accessReviewed": {
     "date": "2026-10-21",

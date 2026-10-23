@@ -11,10 +11,21 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor"
+      "path": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor",
+      "steps": ["Compile the project and find the H2443 hint on the inline routine call", "Put the caret on the identifier named in the hint", "Choose drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor", "The declaring unit is added to the uses clause of the current unit"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "The compiler gave hint H2443 for an inline routine; which unit do I add?",
+      "command": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor"
+    },
+    {
+      "ask": "How do I fix H2443 without hunting for the declaring unit by hand?",
+      "command": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

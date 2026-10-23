@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Top Symbols (fan-in)..."
+      "path": "drag-lint > Code Quality > Top Symbols (fan-in)...",
+      "steps": ["Choose drag-lint > Code Quality > Top Symbols (fan-in)...", "Read the ranking of symbols by number of references", "From a shell: drag-lint top --db <file.sqlite> [--by fanin] [--limit N] [--json]"]
     },
     {
       "type": "cli",
@@ -39,6 +40,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which symbols are referenced from the most places?",
+      "command": "drag-lint top --db <file.sqlite> --by fanin --limit N"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

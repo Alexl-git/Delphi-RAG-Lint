@@ -36,6 +36,16 @@
   "audience": "both",
   "requires": ["index"],
   "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+  "questions": [
+    {
+      "ask": "Which symbols have a name containing this text?",
+      "command": "drag-lint query --name <symbol-name> --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I match the name exactly, or respect case?",
+      "command": "drag-lint query --name <symbol-name> --exact --case-sensitive --db <file.sqlite>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

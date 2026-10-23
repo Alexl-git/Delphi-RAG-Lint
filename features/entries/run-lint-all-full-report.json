@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
+      "path": "drag-lint > Code Quality > Run Lint All (Full Report)...",
+      "steps": ["Open the project in RAD Studio (its index must be current)", "Choose drag-lint > Code Quality > Run Lint All (Full Report)...", "Read the findings in the report", "From a shell: drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--output <report.txt>]"]
     },
     {
       "type": "cli",
@@ -64,6 +65,16 @@
   ],
   "audience": "both",
   "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+  "questions": [
+    {
+      "ask": "How healthy is my whole project against every lint rule?",
+      "command": "drag-lint lint-all --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I write the full lint report to a file?",
+      "command": "drag-lint lint-all --db <file.sqlite> --output <report.txt>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Symbol Search..."
+      "path": "drag-lint > Symbol Search...",
+      "steps": ["Choose drag-lint > Symbol Search...", "Type part of the symbol name in the search box", "Pick a result to open its declaration; the dialog also has a Usages view"]
     },
     {
       "type": "cli",
@@ -39,6 +40,16 @@
   ],
   "audience": "both",
   "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+  "questions": [
+    {
+      "ask": "Where is this symbol declared?",
+      "command": "drag-lint query --name <symbol-name> --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I search for a symbol from inside the IDE?",
+      "command": "drag-lint > Symbol Search..."
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
+      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...",
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...", "Pick the depth and read the tree of callers", "From a shell: drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]"]
     },
     {
       "type": "cli",
@@ -44,6 +45,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Who calls this routine, transitively?",
+      "command": "drag-lint reverse-calltree --qname <X> --depth N --db <db>"
+    },
+    {
+      "ask": "What does this routine call, N levels deep?",
+      "command": "drag-lint reverse-calltree --qname <X> --direction callees --depth N --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

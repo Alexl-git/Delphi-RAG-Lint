@@ -36,6 +36,16 @@
   ],
   "audience": "both",
   "pitfalls": ["omit --in for the project-wide answer; add --in `<F.pas>` to ask about ONE file.", "for an RTL/VCL/third-party unit pass the platform library DB too (--db `<proj>` --db `<library>`) for the reference breakdown. With the project DB alone you still get the importer list; only the --in form exits 2."],
+  "questions": [
+    {
+      "ask": "Does this file use this unit?",
+      "command": "drag-lint query unit-usage --unit <UnitName> --in <file.pas> --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I ask the same about a unit without naming a file?",
+      "command": "drag-lint query unit-usage --unit <UnitName> --json"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

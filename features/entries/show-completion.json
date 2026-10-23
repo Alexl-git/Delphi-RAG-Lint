@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Show Completion"
+      "path": "drag-lint > Show Completion",
+      "steps": ["Put the caret in the editor where you want a completion", "Choose drag-lint > Show Completion", "Pick an entry from the list"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I get an index-backed completion list at the caret?",
+      "command": "drag-lint > Show Completion"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

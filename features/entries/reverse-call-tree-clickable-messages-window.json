@@ -39,11 +39,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
+      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...",
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...", "The callers appear in the Messages window; double-click a line to open that caller"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Who calls this routine, and can I jump to each caller?",
+      "command": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
+    },
+    {
+      "ask": "How do I get the same call tree on the command line?",
+      "command": "drag-lint reverse-calltree --qname <X> --depth N --db <db>"
+    }
+  ],
   "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window",
   "verified": {
     "date": "2026-10-21",

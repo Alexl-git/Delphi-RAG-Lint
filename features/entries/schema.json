@@ -32,6 +32,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "What tables and columns does an index database have?",
+      "command": "drag-lint schema --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I get the schema as JSON before writing a SQL query?",
+      "command": "drag-lint schema --db <file.sqlite> --format json"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

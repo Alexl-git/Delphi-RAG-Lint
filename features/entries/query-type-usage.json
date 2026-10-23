@@ -39,6 +39,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which of these type names does this file use?",
+      "command": "drag-lint query type-usage --in <file.pas> --names A,B,C --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I check a long list of type names against one file?",
+      "command": "drag-lint query type-usage --in <file.pas> --names-file <f> --json"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",
