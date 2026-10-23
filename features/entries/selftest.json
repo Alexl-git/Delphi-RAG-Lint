@@ -11,13 +11,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "selftest"
+      "verb": "selftest",
+      "usage": "drag-lint selftest <manifest-merge|glob|ignore|files|closure|dbselect|drift|coverage|recreate|unused-locals|harvest|section-db|manifest-save-atomic|own-roots|studio-root|fact-wrap>"
     }
   ],
   "audience": "agent",
   "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "227b9395644e4c8d105f6999b03d75b3b610b1512086232c88c13d62f4a2c1eb"

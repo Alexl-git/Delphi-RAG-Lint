@@ -1031,6 +1031,9 @@ followed too: every access in the unit on a field an ancestor declares -- any
 number of levels up, bound to that field by the resolver (`refs.symbol_id`),
 the ancestor's `.dfm` opening the component with the To type -- is rewritten.
 A local or parameter of the same name binds to itself and is left alone.
+The editor then shows no "left" note for it: a use of a converted ancestor's field (action
+`code`) counts as left ("N inherited code use(s) left") only when the matching `pas_uses[]`
+entry is not `mapped` or there is none; once it is `mapped` the code is converted and nothing is left.
 
 `inherited[]` gains `action`: `retyped`, `code` (an N2a field; `line` is its
 first reference in the `.pas`) or `skipped` (every other state, and a retype
