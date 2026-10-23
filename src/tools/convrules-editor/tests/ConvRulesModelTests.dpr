@@ -3192,7 +3192,7 @@ begin
   B:= SplitRulesBlocks(Text);
 
   Check('select.bde.blocks', Length(B) = 12, IntToStr(Length(B)));
-  Check('select.bde.trailer.start', (B[11].StartLine = 654) and (B[10].EndLine = 653), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
+  Check('select.bde.trailer.start', (B[11].StartLine = 658) and (B[10].EndLine = 657), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
 
   { Nothing selected: 155 preamble + 76 trailer. }
   Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 231, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
@@ -14176,6 +14176,60 @@ begin
   end;
 end;
 
+{ B9: the shipped BDE book carries the engine's reference checks and a #warn, every one
+  well-formed and byte-identical through parse + emit (also with every node dirty). }
+procedure TestBdeBookWarnCheckRef;
+const
+  REF_EXPECT = '#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName';
+  REFS_WANT  = 3;  // TTable, TQuery, TStoredProc: each links ConnectionName <- DatabaseName
+  WARNS_WANT = 1;  // TTable IndexName
+var
+  P, Text: string;
+  B      : TRuleBook;
+  N      : TRuleNode;
+  Refs, Warns, Bad: Integer;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('bde.warnref', 'BDE-to-FireDAC.rules not found: ' + P);
+    Exit;
+  end;
+  Text:= TFile.ReadAllText(P, TEncoding.ASCII);
+  B:= TRuleBook.Create;
+  try
+    B.LoadFromString(Text);
+    Refs := 0;
+    Warns:= 0;
+    Bad  := 0;
+    for N in B.Nodes do
+    begin
+      if N.Kind = rnkCheckRef then
+      begin
+        Inc(Refs);
+        if (not N.CheckRefValid) or (N.Emit <> REF_EXPECT) then
+          Inc(Bad);
+      end
+      else if N.Kind = rnkWarn then
+      begin
+        Inc(Warns);
+        if not N.WarnValid then
+          Inc(Bad);
+      end;
+    end;
+    Check('bde.warnref.check-ref.count', Refs = REFS_WANT, IntToStr(Refs));
+    Check('bde.warnref.warn.count', Warns = WARNS_WANT, IntToStr(Warns));
+    Check('bde.warnref.all.valid', Bad = 0, IntToStr(Bad));
+    Check('bde.warnref.roundtrip', B.SaveToString = Text);
+    for N in B.Nodes do
+      if N.Kind in [rnkWarn, rnkCheckRef] then
+        N.Dirty:= True;
+    Check('bde.warnref.dirty.rebuild', B.SaveToString = Text);
+  finally
+    B.Free;
+  end; // try
+end;
+
 procedure TestQualifyRunner;
 const
   ORIG = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
@@ -14646,6 +14700,7 @@ begin
   TestApplyBadShapes;
   TestEngineJsonShapes;
   TestWarnCheckRefDirectives;
+  TestBdeBookWarnCheckRef;
   TestRunner1315;
     TestApply1270Uses;
     TestApply1270Notes;

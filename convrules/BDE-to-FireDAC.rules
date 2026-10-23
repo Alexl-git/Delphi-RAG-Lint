@@ -220,6 +220,7 @@
 #note 2 NEAR-MISS left bare so the engine reports them as unlinked; none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
+#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName
 #link UpdateOptions.UpdateMode <- UpdateMode
 #link UpdateOptions.ReadOnly <- ReadOnly
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
@@ -251,6 +252,7 @@
 #link IndexDefs.Items.Name <- IndexDefs.Items.Name
 #link IndexFieldNames <- IndexFieldNames
 #link IndexName <- IndexName
+#warn IndexName "index <value> must exist on table {TableName} in the target database"
 #link MasterFields <- MasterFields
 #link MasterSource <- MasterSource
 #link Filter <- Filter
@@ -338,6 +340,7 @@
 #note 2 NEAR-MISS left bare so the engine reports them as unlinked; none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
+#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName
 #link FetchOptions.Unidirectional <- Unidirectional
 #link UpdateOptions.RequestLive <- RequestLive
 #link UpdateOptions.UpdateMode <- UpdateMode
@@ -452,6 +455,7 @@
 #note 2 NEAR-MISS left bare so the engine reports them as unlinked; none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
+#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link StoredProcName <- StoredProcName
 #link Overload <- Overload
