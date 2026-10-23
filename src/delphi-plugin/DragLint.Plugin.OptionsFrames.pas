@@ -196,7 +196,7 @@ uses
   DragLint.Plugin.ExeResolver
   , DRagLint.Project.Resolver
   , DragLint.Plugin.DockForm
-  , DragLint.Plugin.HelpIndex  { DLNormaliseHelpRoot / DLHelpAllUrl }
+  , DragLint.Plugin.HelpIndex  // dl:unit DragLint.Plugin.HelpIndex accepted -- the Help group shows the default root and normalises through the same rules
   , DragLint.Plugin.Help       { DLOpenHelpUrl }
   , DRagLint.Core.JsonFile    { WriteJsonFileAtomic -- pretty, no BOM, atomic }
   ;

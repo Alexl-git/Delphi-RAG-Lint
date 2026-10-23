@@ -18,7 +18,7 @@ uses
   , Vcl.Controls
   , Vcl.ExtCtrls
   , Vcl.StdCtrls
-  , DragLint.Plugin.HelpIndex
+  , DragLint.Plugin.HelpIndex // dl:unit DragLint.Plugin.HelpIndex accepted -- the help line is the UI of the matcher; DL_HELP_INDEX_REL names the file it reports missing
   ;
 
 type

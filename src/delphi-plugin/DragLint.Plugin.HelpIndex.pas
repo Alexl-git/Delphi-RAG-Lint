@@ -164,7 +164,7 @@ function DLHelpAllUrl(const pRoot: string): string;
 /// index.html for a file: root).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
 /// <returns>The menu-tree URL.</returns>
-function DLHelpIdeUrl(const pRoot: string): string;
+function DLHelpIdeUrl(const pRoot: string): string; // dl:ok unused-public-symbol@abbd -- spec 3.1 URL rule for the menu-tree page, pinned by the harness (U14/U15); no menu item opens it yet
 
 /// <summary>The local folder behind a file: root (file:///C:/dl-help -> C:\dl-help).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>

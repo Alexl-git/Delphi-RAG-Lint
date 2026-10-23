@@ -85,7 +85,7 @@ uses
   , System.Win.Registry
   , Winapi.Windows
   , DRagLint.Core.Model
-  , DragLint.Plugin.HelpIndex
+  , DragLint.Plugin.HelpIndex // dl:unit DragLint.Plugin.HelpIndex accepted -- HelpRoot's default and its normaliser live with the URL rules they serve
   ;
 
 const

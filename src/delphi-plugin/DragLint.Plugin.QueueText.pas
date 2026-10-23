@@ -7,7 +7,7 @@ unit DragLint.Plugin.QueueText;
 interface
 
 uses
-  DragLint.Plugin.JobQueue
+  DragLint.Plugin.JobQueue // dl:unit DragLint.Plugin.JobQueue accepted -- TQueueState + DL_QUEUE_NAMED_PENDING are the queue's snapshot contract; this unit renders exactly that
   ;
 
 /// <summary>The task lines the status strip shows while jobs are waiting.</summary>
