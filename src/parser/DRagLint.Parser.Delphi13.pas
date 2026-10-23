@@ -167,7 +167,10 @@ type
       const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False; const APropAccess: string = '';
       const ADirectives: string = ''; AVisExplicit: Boolean = True; const AGenericParams: string = ''
     ): Integer;
-    procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
+    { AReceiver is persisted as refs.receiver_text at insert time (N-05: the
+      member of `Self.X`). '' keeps the column NULL, as every other ref has it
+      until the call stream computes one. }
+    procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string = '');
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
   end;
 
@@ -212,7 +215,7 @@ begin
   if DotPos > 0 then Stem:= Copy(Stem, DotPos + 1, MaxInt);
 end; // procedure
 
-procedure TWalkState.EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
+procedure TWalkState.EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string);
 var
   Ref: TReference;
 begin
@@ -220,6 +223,7 @@ begin
   Ref:= Default(TReference);
   Ref.Kind    := AKind;
   Ref.NameText:= ANameText;
+  Ref.ReceiverText:= AReceiver;
   Ref.SymbolId:= 0; // unresolved at parse time
   Ref.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
   Ref.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
@@ -2831,7 +2835,10 @@ begin
       if (not L.IsNull) and (L.NodeType = 'identifier') and SameText(Trim(NodeText(L, AState.Source)), 'Self') then
       begin
         var R:= ANode.ChildByField('rhs');
-        if (not R.IsNull) and (R.NodeType = 'identifier') then AState.EmitRef('read', NodeText(R, AState.Source), R);
+        { N-05: record the receiver. Inside `with P do ... Self.X`, a bare X binds
+          to P while Self.X is the routine's own member; without receiver_text the
+          two rows were indistinguishable and consumers re-read the source text. }
+        if (not R.IsNull) and (R.NodeType = 'identifier') then AState.EmitRef('read', NodeText(R, AState.Source), R, 'Self');
       end;
       // Ref-gap G: capture the MEMBER of a NON-Self dotted access (obj.Member) as a
       // 'member-access' ref, so the component-conversion applier can find instance-
@@ -2911,7 +2918,7 @@ begin
            and (not DotMember.IsNull) and (DotMember.NodeType = 'identifier') then
         begin
           AState.EmitRef('read', NodeText(DotBase, AState.Source), DotBase);
-          AState.EmitRef('write', NodeText(DotMember, AState.Source), DotMember);
+          AState.EmitRef('write', NodeText(DotMember, AState.Source), DotMember, 'Self');   { N-05 }
           SelfMemberLhs:= True;
         end;
       end;

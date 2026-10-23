@@ -4457,8 +4457,8 @@ begin
     '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
-    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
-    'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec, :esid)');
+    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id, receiver_text) ' +
+    'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec, :esid, :rcv)');
   FQInsertCallEdge:= NewQuery(
     'INSERT OR REPLACE INTO call_edges(ref_id, target_symbol_id, confidence, receiver_type_symbol_id) ' +
     'VALUES (:rid, :tid, :conf, :rtid)');
@@ -5177,6 +5177,11 @@ begin
   FQInsertRef.ParamByName('esid').DataType:= ftLargeint;
   if ARef.EnclosingSymbolId > 0 then FQInsertRef.ParamByName('esid').AsLargeInt:= ARef.EnclosingSymbolId
   else FQInsertRef.ParamByName('esid').Clear;
+  { N-05: a receiver the PARSER knows (the member of `Self.X`). Empty stays
+    NULL -- the call stream fills its own refs later, unchanged. }
+  FQInsertRef.ParamByName('rcv').DataType:= ftString;
+  if ARef.ReceiverText <> '' then FQInsertRef.ParamByName('rcv').AsString:= ARef.ReceiverText
+  else FQInsertRef.ParamByName('rcv').Clear;
   FQInsertRef.ExecSQL;
 end;
 
