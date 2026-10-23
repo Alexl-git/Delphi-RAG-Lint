@@ -31,8 +31,8 @@ type
   /// Value type; copy freely. Immutable after Load. Thread-safe to
   /// share for reading.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Project.OwnRoots.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ResolveSelection (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAllSelected (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.GroupKeyFor (DRagLint.CLI.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOwnRoots = record
@@ -63,13 +63,16 @@ type
     /// however an own root nests. A non-array "excludeRoots", or one covering
     /// every own root, is an Error for the same reason.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
-    /// <para>Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim</para>
+    /// <para>Called from: DRagLint.CLI.CycleFix.ResolveSelection (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Calls: Default, DRagLint.Project.OwnRoots.AllUnder, DRagLint.Project.OwnRoots.NormalizeDir, DRagLint.Project.OwnRoots.ResolveEntries, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONArray, TJSONObject</para>
     /// <para>Returns: Default(TOwnRoots)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 76 lines (full implementation)</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Project.OwnRoots.AllUnder"/>
     /// <seealso cref="DRagLint.Project.OwnRoots.NormalizeDir"/>
+    /// <seealso cref="DRagLint.Project.OwnRoots.ResolveEntries"/>
     /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -84,11 +87,12 @@ type
     /// DRagLint.Storage.FileMembership.NormalizeForLookup: forward slashes
     /// folded to backslashes, compared case-insensitively.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
-    /// <para>Calls: ExpandFileName, StartsText, StringReplace</para>
+    /// <para>Called from: DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Calls: DRagLint.Project.OwnRoots.UnderAny, ExpandFileName, StartsText, StringReplace</para>
     /// <para>Returns: True; False</para>
-    /// <para>Reads: FActive, FRoots</para>
+    /// <para>Reads: FActive, FExcludes, FRoots</para>
     /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Project.OwnRoots.UnderAny"/>
     /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.Load"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -118,7 +122,7 @@ type
 /// property of the path, so no manifest lookup and no CWD-sensitive config
 /// discovery is needed to find a project's declaration.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Snapshot.ResolveSnapshotDir (DRagLint.Charts.Snapshot.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.IfdefProjectFile (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas), DRagLint.CLI.NamingReindexHint (DRagLint.CLI.pas)</para>
 /// <para>Calls: ExpandFileName, ExtractFileDir, ExtractFileName, SameText, StringReplace</para>
 /// <para>Returns: ''; ExtractFileDir(Dir)</para>
 /// <para>Pure</para>
