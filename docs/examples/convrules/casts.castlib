@@ -82,8 +82,10 @@ end
 # no patterns: one fixed, named transform per keyword.
 # ---------------------------------------------------------------------------
 
+# Accepts is an EXACT type name (no alias walk), so the string alias TFileName is listed
+# beside string (owner ruling 2026-10-19); add another alias here the same way.
 cast StripDB
-  accepts string
+  accepts string, TFileName
   yields  string
   value   strip-db
   todo    'TableName kept its .db where it was not one string literal -- check by hand'
