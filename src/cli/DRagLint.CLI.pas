@@ -304,6 +304,10 @@ type
     WikiList        : Boolean       ; // --list : every topic in the resolved DBs
     WikiCheck       : Boolean       ; // --check: SeeCode drift + duplicate-name gate
     Rule            : string        ;
+    { N-02: '<first>, <second>' when --rule was given twice with DIFFERENT ids.
+      Rule holds one id, so the earlier one used to be dropped in silence; Run
+      refuses the command line instead (exit 2). '' otherwise. }
+    RuleConflict    : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -1282,7 +1286,13 @@ begin
       Inc(i);
       Result.OfName:= ParamStr(i);
     end
-    else if (A = '--rule') and (i < ParamCount) then begin Inc(i); Result.Rule:= ParamStr(i); end
+    else if (A = '--rule') and (i < ParamCount) then
+    begin
+      Inc(i);
+      if (Result.Rule <> '') and (not SameText(Result.Rule, ParamStr(i))) and (Result.RuleConflict = '') then
+        Result.RuleConflict:= Result.Rule + ', ' + ParamStr(i);
+      Result.Rule:= ParamStr(i);
+    end
     else if (A = '--exclude-under') and (i < ParamCount) then
     begin
       Inc(i);
@@ -13052,10 +13062,28 @@ end;
   print the same findings, so without this a regression back to "run everything
   for any --rule" is invisible except as time. stderr, so it cannot corrupt
   --format json|sarif. }
+var
+  { T-04: the previous TraceLintChecker stamp, so DRAGLINT_PROFILE can print
+    how long the phase that just ENDED took. 0 = no phase open yet. }
+  GLintTraceMark: Int64 = 0;
+  GLintTracePrev: string = '';
+
 procedure TraceLintChecker(const AName: string);
 begin
   if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
     Writeln(ErrOutput, '[lint-checker] ' + AName);
+  { T-04: under DRAGLINT_PROFILE each call closes the previous phase, so a
+    `lint <file>` run prints where its wall time went (lint-all has its own
+    TLintPhaseProfiler). Phase 'end' closes the last one. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var Now64: Int64:= TStopwatch.GetTimeStamp;
+    if GLintTraceMark <> 0 then
+      Writeln(ErrOutput, Format('  [lint-phase] %-24s %8.3f s',
+        [GLintTracePrev, (Now64 - GLintTraceMark) / TStopwatch.Frequency]));
+    GLintTraceMark:= Now64;
+    GLintTracePrev:= AName;
+  end;
 end;
 
 const
@@ -13356,6 +13384,7 @@ var
   ScannedFiles: TArray<string>              ;
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
+  TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -13620,6 +13649,7 @@ begin
       var QueryFindings: TArray<TLintFinding>;
       if TFile.Exists(EffPath) then
       begin
+        TraceLintChecker('scm-rules');
         QueryFindings:= Linter.LintFile(EffPath);
         ScannedFiles:= [EffPath];
       end
@@ -13857,6 +13887,7 @@ begin
         Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(EffPath, FlowStore, FlowFid, Findings);
       end;
       { unused local variables (H2164) }
+      TraceLintChecker('ast-checks');
       if (NarrowRule = '') or (NarrowRule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(EffPath);
       { syntax errors (tree-sitter ERROR/MISSING) -- this is what makes a typed
         syntax error show up in the editor like the IDE's Error Insight. }
@@ -13982,6 +14013,7 @@ begin
         the exception-ancestry sub-check of type-name-prefix + the library store
         continues the chain -- without them EFoo = class(Exception) is reported
         as needing a 'T' prefix. }
+      TraceLintChecker('naming');
       if LintRuleWants(NarrowRule, LINT_GATE_NAMING) then
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -13991,6 +14023,7 @@ begin
         v0.72: + destructor-without-override (#5) + case-with-too-few-branches +
         boolean-expression-complexity (#6, thresholds) + exception-constructed-but-not-raised
         + duplicate-exception-handler (#7) -- all from the same TDeadCodeChecker.Check }
+      TraceLintChecker('dead-code');
       if LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE) then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
@@ -13999,6 +14032,7 @@ begin
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
+      TraceLintChecker('clone');
       if (NarrowRule = '') or (NarrowRule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath, Cfg.ThresholdFor('duplicate-code', 90)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
@@ -14104,6 +14138,7 @@ begin
             if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { Free cached tree after single-file lint }
+      TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // if
   end; // if
@@ -14237,6 +14272,7 @@ begin
       scan are ordered properly. }
     Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
   );
+  TraceLintChecker('end');
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
@@ -16795,17 +16831,29 @@ begin
     Result.Verdict:= 'missing';
     Exit;
   end;
-  var Ok: Boolean;
-  var St: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
-  Result.Readable:= Ok and (St <> nil);
+  { A file that is not a SQLite database RAISES on open or on the first read
+    ("file is not a database"). Uncaught, that ended `info` FATAL (exit 3) and
+    lost every other --db of the call; it is exactly what 'unreadable' means. }
+  var Ok: Boolean:= False;
+  var St: ISymbolStore:= nil;
+  try
+    St:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
+    Ok:= Ok and (St <> nil);
+    if Ok then
+    begin
+      Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
+      Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
+      Result.ResolverExpected:= ResolverFingerprint(St);
+    end;
+  except
+    on E: Exception do Ok:= False;
+  end;
+  Result.Readable:= Ok;
   if not Result.Readable then
   begin
     Result.Verdict:= 'unreadable';
     Exit;
   end;
-  Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
-  Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
-  Result.ResolverExpected:= ResolverFingerprint(St);
   { The stored indexer fingerprint is a compound
     `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is compared,
     because platform and preprocess differences are legitimate per-index facts,
@@ -32078,6 +32126,15 @@ begin
        MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
     begin
       ReportManifestRefusal(Args.Command, Args.ConfigError);
+      Exit(2);
+    end;
+
+    { N-02: one --rule per run. A second, different id used to REPLACE the first
+      without a word, so its findings vanished and the run read as clean. }
+    if Args.RuleConflict <> '' then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
+        'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
       Exit(2);
     end;
 

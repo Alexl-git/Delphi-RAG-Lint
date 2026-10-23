@@ -1,0 +1,10 @@
+{
+  "_comment": [
+    "This project's .dproj sits in a SUBFOLDER of the repository, so the default",
+    "own-root (the project file's own folder) would classify the rest of the repo",
+    "as third-party. Declare the repo root instead.",
+    "Vendored code inside the repo is handled by exclude_paths in",
+    "drag-lint-lint.json, not here."
+  ],
+  "ownRoots": ["..\\.."]
+}
