@@ -887,6 +887,24 @@ begin
   Result:= ExistingDocForSymbol(AStore, ASym, AFound, AHasDoc);
 end;
 
+{ N-17: True when another type or routine declaration of the same file starts on
+  ASym's own line, so a /// block above that line cannot be attributed to one of
+  them. Params, fields and locals are not counted: a parameter always shares its
+  routine's line, and a field list documents as one. }
+function SharesDeclLine(const ASym: TSymbol; const AFileSyms: TArray<TSymbol>): Boolean;
+const
+  DOCUMENTABLE = [skClass, skInterface, skRecord, skProcedure, skFunction, skMethod, skConstructor, skDestructor,
+                  skProperty];
+var
+  Other: TSymbol;
+begin
+  Result:= False;
+  if not (ASym.Kind in DOCUMENTABLE) then Exit;
+  for Other in AFileSyms do
+    if (Other.Id <> ASym.Id) and (Other.StartLine = ASym.StartLine) and (Other.Kind in DOCUMENTABLE) then
+      Exit(True);
+end;
+
 class function TDocumenter.ExistingDocForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
   out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
 var
@@ -915,6 +933,11 @@ begin
   SetLength(SymStartLines, Length(FileSyms));
   for I:= 0 to High(FileSyms) do SymStartLines[I]:= FileSyms[I].StartLine;
   TArray.Sort<Integer>(SymStartLines);
+
+  // N-17: a block above a line holding two declarations belongs to neither --
+  // BuildForSymbol skips them, so the checker must not grade it either (else
+  // doc-drift reports a block no command can clear).
+  if SharesDeclLine(ASym, FileSyms) then Exit;
 
   // Same live-scan the Documenter uses: nearest doc-comment above the decl,
   // allow a 1-line gap, skip loose regions. Kind = TDocCommentKind(-1) = none.
@@ -1011,6 +1034,20 @@ begin
   SetLength(SymStartLines, Length(FileSyms));
   for I:= 0 to High(FileSyms) do SymStartLines[I]:= FileSyms[I].StartLine;
   TArray.Sort<Integer>(SymStartLines);
+
+  // N-17: two documentable declarations on ONE line (`TC = class class
+  // function Go; end;`) share every comment line above it, and DocInsight cannot
+  // say which one a block belongs to. Writing both stacked them into one run, and
+  // the next pass planned two overlapping deletes of that run (refused), while a
+  // drift fix rewrote it for one declaration and deleted the other's remarks.
+  // Skip both, loudly; the remedy is one declaration per line.
+  if SharesDeclLine(ASym, FileSyms) then
+  begin
+    Writeln(ErrOutput, Format('doc: skipped %s at %s:%d -- two declarations on one line share one doc block; ' +
+      'put each on its own line to document it', [ASym.QualifiedName, ExtractFileName(Path), ASym.StartLine]));
+    Result.Action:= daUnchanged;
+    Exit;
+  end;
 
   // Existing doc-comment above the declaration (allow a 1-line gap; skip loose).
   // FindDocRegionAbove signals "not found" with Kind = TDocCommentKind(-1).
