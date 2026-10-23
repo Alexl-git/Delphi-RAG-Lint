@@ -304,6 +304,10 @@ type
     WikiList        : Boolean       ; // --list : every topic in the resolved DBs
     WikiCheck       : Boolean       ; // --check: SeeCode drift + duplicate-name gate
     Rule            : string        ;
+    { N-02: '<first>, <second>' when --rule was given twice with DIFFERENT ids.
+      Rule holds one id, so the earlier one used to be dropped in silence; Run
+      refuses the command line instead (exit 2). '' otherwise. }
+    RuleConflict    : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -1281,7 +1285,13 @@ begin
       Inc(i);
       Result.OfName:= ParamStr(i);
     end
-    else if (A = '--rule') and (i < ParamCount) then begin Inc(i); Result.Rule:= ParamStr(i); end
+    else if (A = '--rule') and (i < ParamCount) then
+    begin
+      Inc(i);
+      if (Result.Rule <> '') and (not SameText(Result.Rule, ParamStr(i))) and (Result.RuleConflict = '') then
+        Result.RuleConflict:= Result.Rule + ', ' + ParamStr(i);
+      Result.Rule:= ParamStr(i);
+    end
     else if (A = '--exclude-under') and (i < ParamCount) then
     begin
       Inc(i);
@@ -32023,6 +32033,15 @@ begin
        MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
     begin
       ReportManifestRefusal(Args.Command, Args.ConfigError);
+      Exit(2);
+    end;
+
+    { N-02: one --rule per run. A second, different id used to REPLACE the first
+      without a word, so its findings vanished and the run read as clean. }
+    if Args.RuleConflict <> '' then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
+        'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
       Exit(2);
     end;
 
