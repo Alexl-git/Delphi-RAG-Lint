@@ -4383,6 +4383,7 @@ var
   ClassId : Int64  ;
   Member  : TSymbol;
   CastType: string ;
+  RetType : string ;
 begin
   Result:= 0;
   if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
@@ -4459,6 +4460,18 @@ begin
     Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
   if FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]).Id > 0 then
     Exit; // a local/param of that name exists but its type is ambiguous -> 0
+
+  // --- Kind 9 (N-07, 2026-10-23): the implicit `Result` of the enclosing
+  //     FUNCTION -- `Result:= TJob.Create; Result.Streaming:= False;`. Typed
+  //     from the routine's declared return type. No symbol row exists for
+  //     Result, so a local or parameter named Result (only legal outside a
+  //     function) was already answered above; a routine with no return type
+  //     falls through to the field rung.
+  if SameText(AReceiverExpr, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
+  begin
+    RetType:= SignatureReturnType(Encl.Signature);
+    if RetType <> '' then Exit(ResolveTypeNameToSymbol(RetType, ACallRef.FileId));
+  end;
 
   // --- Kind 2: FIELD 'FBar.M' / Kind 3: PROPERTY 'Prop.M' -> member's type.
   //     Members are children of the enclosing class.

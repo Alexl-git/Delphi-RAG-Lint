@@ -1,0 +1,94 @@
+<#
+  run_result_receiver_bind.ps1 -- a member access on the implicit `Result` of a
+  function binds (backlog N-07, INBOX-result-receiver-member-write-unbound).
+
+  THE DEFECT. `Result:= TDragLintJob.Create(...); Result.Streaming:= False;` --
+  the `Streaming` ref stayed symbol_id NULL with no member_accesses row, so
+  `usages` under-reported writes: TCallResolver.TypeReceiver had no rung for the
+  receiver text `Result`, which has no symbol row of its own.
+
+  THE FIX: TypeReceiver kind 9 types `Result` from the enclosing FUNCTION's
+  declared return type (SignatureReturnType -> ResolveTypeNameToSymbol). A
+  local or parameter named Result (legal only outside a function) still answers
+  first, from its own declared type.
+
+  WHAT THIS GUARD PINS
+    POS-WRITE  Result.Streaming := ..  binds TJob.Streaming, member_accesses mode write
+    POS-READ   if Result.Streaming     binds TJob.Streaming, mode read
+    POS-CALL   Result.Start()          owns a call edge to TJob.Start
+    NEG-LOCAL  a procedure's LOCAL `Result: TOtherJob` -- binds TOtherJob.Streaming,
+               never TJob's (POSITIVE CONTROL: a by-name join of `Streaming`
+               would pick either class)
+
+  Usage: pwsh -File tests\callresolve\run_result_receiver_bind.ps1 [-Exe <drag-lint.exe>]
+#>
+[CmdletBinding()]
+param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
+
+$ErrorActionPreference = 'Stop'
+$script:fail = $false
+function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
+  $tag = if ($Ok) { 'PASS' } else { 'FAIL' }
+  Write-Host ("[{0}] {1}{2}" -f $tag, $Name, $(if ($Detail) { "  ($Detail)" } else { '' }))
+  if (-not $Ok) { $script:fail = $true }
+}
+
+$exePath = (Resolve-Path $Exe).Path
+$fixDir  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\resultrecv')).Path
+$scratch = Join-Path C:\TEMP "draglint_result_receiver_bind_$PID"
+if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
+New-Item -ItemType Directory -Path $scratch | Out-Null
+Copy-Item (Join-Path $fixDir '*.pas') $scratch
+$src = Join-Path $scratch 'uResRecv.pas'
+$db  = Join-Path $scratch 'resultrecv.sqlite'
+
+function Sql([string]$Query) {
+  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $b = $raw.IndexOf('{')
+  if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
+  $o = $raw.Substring($b) | ConvertFrom-Json
+  $names = @($o.columns | ForEach-Object { $_.name })
+  $out = @()
+  foreach ($r in @($o.rows)) {
+    $h = @{}
+    for ($i = 0; $i -lt $names.Count; $i++) { $h[$names[$i]] = $r[$i] }
+    $out += $h
+  }
+  return ,@($out)
+}
+function LineOf([string]$Marker) {
+  $m = @(Select-String -LiteralPath $src -SimpleMatch -Pattern "// $Marker")
+  if ($m.Count -ne 1) { throw "marker '$Marker' found $($m.Count) times in the fixture" }
+  return [int]$m[0].LineNumber
+}
+function At([string]$Marker, [string]$Kind, [string]$Name) {
+  $line = LineOf $Marker
+  return @(Sql ("SELECT r.id, s.qualified_name AS sq, ma.mode AS mode, t.qualified_name AS tq FROM refs r " +
+                "LEFT JOIN symbols s ON s.id = r.symbol_id LEFT JOIN member_accesses ma ON ma.ref_id = r.id " +
+                "LEFT JOIN call_edges ce ON ce.ref_id = r.id LEFT JOIN symbols t ON t.id = ce.target_symbol_id " +
+                "WHERE r.kind = '$Kind' AND r.name_text = '$Name' AND r.start_line = $line") | Where-Object { $_ })
+}
+function Show($r) { ($r | ForEach-Object { "sq=$($_.sq) mode=$($_.mode) tq=$($_.tq)" }) -join '; ' }
+
+$null = & $exePath index $scratch --db $db 2>&1
+Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
+
+$r = At 'POS-WRITE' 'member-access' 'Streaming'
+Check 'POS-WRITE Result.Streaming := binds TJob.Streaming, mode write' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
+$r = At 'POS-READ' 'member-access' 'Streaming'
+Check 'POS-READ if Result.Streaming binds TJob.Streaming, mode read' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'read' }).Count -eq 1) (Show $r)
+$r = At 'POS-CALL' 'call' 'Start'
+Check 'POS-CALL Result.Start() has a call edge to TJob.Start' `
+  (@($r | Where-Object { $_.tq -eq 'uResRecv.TJob.Start' }).Count -eq 1) (Show $r)
+$r = At 'NEG-LOCAL' 'member-access' 'Streaming'
+Check 'NEG-LOCAL a local Result: TOtherJob binds TOtherJob.Streaming, never TJob''s' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1 -and
+   @($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
+
+if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
+} finally {
+  if ($scratch -and (Test-Path $scratch)) { [System.IO.Directory]::Delete($scratch, $true) }
+}
