@@ -9,6 +9,11 @@ foreach ($f in 'index.html', 'articles\index.html', 'articles\newest\index.html'
                'robots.txt', 'web.config', '.htaccess', 'assets\style.css', 'assets\releases.js') {
     Assert-True (Test-Path (Join-Path $out $f)) "missing $f"
 }
+# a missing page answers 404, not 200: ExecuteURL served 404.html through a child request that
+# answered 200 (soft 404, live 2026-10-23); File mode sends the file and keeps the status
+$wc = [IO.File]::ReadAllText("$out\web.config")
+Assert-True ($wc.Contains('<error statusCode="404" path="404.html" responseMode="File" />')) 'web.config: 404 page sent as a File'
+Assert-True (-not $wc.Contains('ExecuteURL')) 'web.config: no ExecuteURL error page'
 # IONOS IIS has no URL Rewrite module but honours .htaccess: http and the bare host go to baseUrl
 $ht = [IO.File]::ReadAllText("$out\.htaccess")
 Assert-True ($ht.Contains('RewriteCond %{SERVER_PORT} !=443 [OR]')) '.htaccess: http redirected'

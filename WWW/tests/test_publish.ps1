@@ -55,6 +55,12 @@ Assert-True (-not (Test-LiveRedirect ([pscustomobject]@{ Status = 302; Location 
 Assert-True (-not (Test-LiveRedirect ([pscustomobject]@{ Status = 302; Location = "$b.evil.example/" }) $b)) 'look-alike host refused'
 Assert-True (-not (Test-LiveRedirect ([pscustomobject]@{ Status = 200; Location = '' }) $b)) 'no redirect refused'
 
+# test_live_not_found: a missing page must answer 404 with our page; 200 is a soft 404 (live 2026-10-23)
+$nf = '<title>Page not found - Delphi-RAG-Lint</title>'
+Assert-True (Test-LiveNotFound ([pscustomobject]@{ Status = 404; Content = $nf })) '404 with our page'
+Assert-True (-not (Test-LiveNotFound ([pscustomobject]@{ Status = 200; Content = $nf }))) 'soft 404 (200) refused'
+Assert-True (-not (Test-LiveNotFound ([pscustomobject]@{ Status = 404; Content = 'IIS 404' }))) 'host default 404 page refused'
+
 # test_http_status_sees_redirect: pwsh 7.6 Invoke-WebRequest -MaximumRedirection 0 THROWS on a 302,
 # which made the live redirect check read 0 although the redirect worked (2026-10-20)
 $port = Get-Random -Minimum 20000 -Maximum 40000
