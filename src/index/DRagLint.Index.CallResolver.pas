@@ -248,6 +248,42 @@ type
     Unreadable: Int64;
   end;
 
+  /// <summary>B-28: per-run counters of the bare value-read pass, printed on the
+  /// calls stage's `value-reads:` ResolveLog line.</summary>
+  /// <remarks>
+  /// Every DECLINE is counted by reason: a declined read stores nothing, so
+  /// these numbers are its only trace. Bound + the nine declines = the read
+  /// refs the pass was asked about.
+  /// </remarks>
+  TValueReadStats = record
+    /// <summary>Reads whose refs.symbol_id was set to a local, param, const or var.</summary>
+    Bound     : Int64;
+    /// <summary>Declined: `Result` -- an implicit variable with no symbol row.</summary>
+    ResultVar : Int64;
+    /// <summary>Declined: the name of an enclosing function (its result).</summary>
+    OwnName   : Int64;
+    /// <summary>Declined: an enclosing `with` target may supply the name.</summary>
+    WithScope : Int64;
+    /// <summary>Declined: the name is a property or field -- the member-read
+    /// stream's binding, which also writes the member_accesses row.</summary>
+    Member    : Int64;
+    /// <summary>Declined: two or more declarations are equally near.</summary>
+    Ambiguous : Int64;
+    /// <summary>Declined: nothing of the name is visible in this index.</summary>
+    NotFound  : Int64;
+    /// <summary>Declined: the nearest declaration is a routine, type or enum value.</summary>
+    Routine   : Int64;
+    /// <summary>Declined: a receiver qualifies the read (`A.X`, `Self.X`).</summary>
+    Qualified : Int64;
+    /// <summary>Declined: the scope walk answered from the class or unit, but an
+    /// enclosing routine's text declares the name in a way the index does not
+    /// list (a local or inline const, an inline var).</summary>
+    Unlisted  : Int64;
+    /// <summary>Declined: the source line could not be read, or the file no
+    /// longer matches the index.</summary>
+    Unreadable: Int64;
+  end;
+
   /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
   /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
@@ -339,6 +375,20 @@ type
     FUnitFileOf : TDictionary<string, Int64>;
     // D13: enclosing routine id -> its TWriteScope, built on first use.
     FWriteScopes: TDictionary<Int64, TWriteScope>;
+    // B-28: counters of the bare value-read pass.
+    FValueReadStats: TValueReadStats;
+    // B-28: routine id -> '|name|...|' its text declares as a const or an
+    // inline const/var, lowercased; built on first use (LocalDeclNamesOf).
+    FLocalDecls: TDictionary<Int64, string>;
+
+    /// <summary>The names ARoutineId's implementation text declares in a const
+    /// section, or as an inline const / var -- declarations the extractor does
+    /// not emit as symbols -- as '|name|...|', lowercased and cached.</summary>
+    /// <param name="ARoutineId">A routine symbol; its ImplStartLine..ImplEndLine
+    /// is scanned, nested routines included (a wider set only declines more).</param>
+    /// <param name="AFileId">The file holding that implementation.</param>
+    /// <returns>'|' when nothing is declared or the text cannot be read.</returns>
+    function LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1461,6 +1511,35 @@ type
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
     /// pass.</remarks>
     property WriteStats: TWriteResolveStats read FWriteStats;
+
+    /// <summary>B-28 (2026-10-23): the local / parameter / const / var a bare
+    /// `read` ref names, by the scope walk of a bare write -- certain or nothing.</summary>
+    /// <param name="ARef">The read ref. FileId, NameText, StartLine, StartCol and
+    /// EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise 'unreadable' |
+    /// 'qualified' | 'result' | 'with-scope' | 'member' | 'own-name' | 'routine'
+    /// | 'ambiguous' | 'not-found' | 'unlisted'.</param>
+    /// <returns>The local_var / param / const / var id, or 0 for every decline.</returns>
+    /// <remarks>
+    /// The lookup order is ResolveWriteRef's: the `with` scope at the site (a
+    /// member of a typed target is the member-read stream's, 'member'; an
+    /// undecidable target declines 'with-scope'), the lexical levels of the
+    /// routine and the routines around it, the enclosing class chain, the own
+    /// unit, the interfaces of the used units. The first scope that declares the
+    /// name answers. Only a value kind binds: a property or field is declined
+    /// 'member' (ResolveBareMemberRead binds it and writes its member_accesses
+    /// row), a routine / type / enum value 'routine'. A receiver-qualified read,
+    /// `Self.X` included, is 'qualified'. The extractor emits no symbol for a
+    /// routine's local const or an inline const/var, so a binding the class or
+    /// unit rung supplies is declined 'unlisted' when an enclosing routine's text
+    /// declares the name that way (LocalDeclNamesOf). Identity only -- the caller writes
+    /// refs.symbol_id and nothing else. Counted into ValueReadStats.
+    /// </remarks>
+    function ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>Per-run counters of the value-read pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property ValueReadStats: TValueReadStats read FValueReadStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -2055,6 +2134,7 @@ begin
   FMemberReadStats:= Default(TMemberReadStats);
   FUnitFileOf := TDictionary<string, Int64>.Create;
   FWriteScopes:= TDictionary<Int64, TWriteScope>.Create;
+  FLocalDecls := TDictionary<Int64, string>.Create;
   FWriteStats := Default(TWriteResolveStats);
   BuildMaps;
 end;
@@ -2067,6 +2147,7 @@ begin
   FWith.Statements    .Free;
   FLineCache .Free;
   FUnitFileOf.Free;
+  FLocalDecls.Free;
   FWriteScopes.Free;
   FStaleFiles.Free;
   FChildCache.Free;
@@ -5102,6 +5183,129 @@ begin
       Result:= UnitScopeWriteTarget(ARef.FileId, LowerCase(ARef.NameText), AReason);
   end;
   TallyWrite(AReason);
+end;
+
+function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+
+  { The identifier ALine starts with, '' when it starts with anything else. }
+  function LeadingIdent(const ALine: string): string;
+  var
+    P: Integer;
+  begin
+    Result:= '';
+    if (ALine = '') or not IsIdentStart(ALine[1]) then Exit;
+    P:= 1;
+    while (P <= Length(ALine)) and IsIdentPart(ALine[P]) do Inc(P);
+    Result:= Copy(ALine, 1, P - 1);
+  end;
+
+  { True when ARest -- the text after a name -- is a declaration's `=` or `:`,
+    not an assignment's `:=`. }
+  function DeclShape(const ARest: string): Boolean;
+  var
+    R: string;
+  begin
+    R:= TrimLeft(ARest);
+    Result:= (R <> '') and ((R[1] = '=') or ((R[1] = ':') and not R.StartsWith(':=')));
+  end;
+
+const
+  { A line starting with one of these ends a const section. }
+  SECTION_END = '|type|var|begin|procedure|function|constructor|destructor|label|class|asm|threadvar|';
+var
+  S      : TSymbol    ;
+  Lines  : TStringList;
+  I      : Integer    ;
+  T      : string     ;
+  W      : string     ;
+  N      : string     ;
+  InConst: Boolean    ;
+begin
+  if FLocalDecls.TryGetValue(ARoutineId, Result) then Exit;
+  Result := '|';
+  S      := SymbolById(ARoutineId);
+  Lines  := LinesOf(AFileId);
+  InConst:= False;
+  if (Lines <> nil) and (S.ImplStartLine > 0) then
+    for I:= S.ImplStartLine to Min(S.ImplEndLine, Lines.Count) do
+    begin
+      T:= LowerCase(Trim(Lines[I - 1]));
+      W:= LeadingIdent(T);
+      if (W = 'const') or (W = 'var') then
+      begin
+        { `const` opens a section; `const X = 1;` / `var X := F;` on one line
+          is also an inline declaration of X. }
+        InConst:= W = 'const';
+        T:= TrimLeft(Copy(T, Length(W) + 1, MaxInt));
+        N:= LeadingIdent(T);
+        if (N <> '') and DeclShape(Copy(T, Length(N) + 1, MaxInt)) then Result:= Result + N + '|';
+      end
+      else if Pos('|' + W + '|', SECTION_END) > 0 then InConst:= False
+      else if InConst and (W <> '') and DeclShape(Copy(T, Length(W) + 1, MaxInt)) then
+        Result:= Result + W + '|';
+    end;
+  FLocalDecls.Add(ARoutineId, Result);
+end;
+
+function TCallResolver.ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
+const
+  VALUE_KINDS: TSymbolKindSet = [skLocalVar, skParam, skConstDecl, skVarDecl];
+var
+  Lines: TStringList    ;
+  Rcv  : string         ;
+  WType: Int64          ;
+  WKind: TWithMemberKind;
+  Scope: TWriteScope    ;
+  Id     : Int64          ;
+  Lc     : string         ;
+  Lexical: Boolean        ;
+begin
+  Result := 0;
+  AReason:= BareReadSite(ARef, Lines, Rcv);
+  if (AReason = '') and (Rcv <> '') then AReason:= 'qualified'
+  else if (AReason = '') and SameText(ARef.NameText, 'Result') then AReason:= 'result';
+  if AReason = '' then
+    case WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WType, WKind) of
+      wvUndecided: AReason:= 'with-scope';
+      wvMember   : AReason:= 'member';
+    end;
+  if AReason = '' then
+  begin
+    Scope := WriteScopeOf(ARef.EnclosingSymbolId);
+    Lc    := LowerCase(ARef.NameText);
+    Result:= ScopeWriteTarget(Scope, ARef.NameText, AReason);
+    if (Result = 0) and (AReason = '') then
+      Result:= UnitScopeWriteTarget(ARef.FileId, Lc, AReason);
+    if (Result > 0) and not (SymbolById(Result).Kind in VALUE_KINDS) then
+    begin
+      Result := 0;
+      AReason:= 'member';
+    end;
+    { The class or unit answered: a local const or inline declaration the index
+      does not list would be nearer, so the routine text must not declare it. }
+    Lexical:= False;
+    if Result > 0 then
+      for Id in Scope.Chain do Lexical:= Lexical or (Id = SymbolById(Result).ParentId);
+    if (Result > 0) and not Lexical then
+      for Id in Scope.Chain do
+        if Pos('|' + Lc + '|', LocalDeclNamesOf(Id, ARef.FileId)) > 0 then
+        begin
+          Result := 0;
+          AReason:= 'unlisted';
+          Break;
+        end;
+  end;
+  if AReason = '' then Inc(FValueReadStats.Bound)
+  else if AReason = 'result' then Inc(FValueReadStats.ResultVar)
+  else if AReason = 'own-name' then Inc(FValueReadStats.OwnName)
+  else if AReason = 'with-scope' then Inc(FValueReadStats.WithScope)
+  else if AReason = 'member' then Inc(FValueReadStats.Member)
+  else if AReason = 'ambiguous' then Inc(FValueReadStats.Ambiguous)
+  else if AReason = 'not-found' then Inc(FValueReadStats.NotFound)
+  else if AReason = 'routine' then Inc(FValueReadStats.Routine)
+  else if AReason = 'qualified' then Inc(FValueReadStats.Qualified)
+  else if AReason = 'unlisted' then Inc(FValueReadStats.Unlisted)
+  else Inc(FValueReadStats.Unreadable);
 end;
 
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;

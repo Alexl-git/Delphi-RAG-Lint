@@ -208,7 +208,9 @@ try {
   foreach ($mk in 'POS-ASSERT', 'POS-ASSIGN', 'POS-ARG') {
     $after += @(RefsAt (LineOf $mk) 'NextId' | Where-Object { $_.kind -eq 'read' })
   }
-  $still = @($after | Where-Object { ($null -ne $_.tid) -or ($null -ne $_.symbol_id) })
+  # B-28 (resolver value-read stream): the reads now bind to the shadowing LOCAL;
+  # what this check guards is unchanged -- no edge and no binding to the function.
+  $still = @($after | Where-Object { ($null -ne $_.tid) -or (($null -ne $_.symbol_id) -and ($_.sk -ne 'local_var')) })
   $meth  = @(RefsAt (LineOf 'POS-METHOD') 'Tick' | Where-Object { $_.kind -eq 'read' -and $null -ne $_.tid })
   Check 'check 6  SCOPED re-index: a new shadowing local unbinds the three Driver reads; POS-METHOD keeps its edge' `
     ($scoped -and ($after.Count -eq 3) -and ($still.Count -eq 0) -and ($meth.Count -eq 1)) `
