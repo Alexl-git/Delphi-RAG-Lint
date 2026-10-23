@@ -25133,6 +25133,18 @@ begin
     Writeln(U.Message);
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
+  { G3: a member #migrate (inside a #convert block) convert-apply will not
+    realise -- its own refusal sentence; a file-scope #migrate is not a member
+    migration and is left alone, as convert-apply does }
+  var InBlock: Boolean:= False;
+  for R in RuleSet.Rules do
+  begin
+    InBlock:= InBlock or (R.Kind = rkConvert);
+    if not InBlock or (R.Kind <> rkMigrate) then Continue;
+    var Why: string:= MigrateRuleRefusal(R);
+    if Why <> '' then
+      Writeln(Format('line %d: warning: #migrate %s -> %s is not applied by convert-apply -- %s', [R.LineNo, R.Old, R.New, Why]));
+  end;
 
   { 1.26.1: without both types the paths were never checked -- say so (on
     stderr, so the stdout contract 'OK' is unchanged), or a bare run reads as
@@ -25948,8 +25960,13 @@ type
 
 /// <summary>apply/1 pas_uses[] (1.27.0): one object per TApplyPasUse.</summary>
 /// <param name="AUses">The report's PasUses.</param>
+/// <param name="ARulesFile">The book the run applied; every row names it
+/// (rules_file, additive) so a consumer merging several runs keeps the book.</param>
 /// <returns>A new array; the caller owns it (AddPair takes it over).</returns>
-function PasUsesJson(const AUses: TArray<TApplyPasUse>): TJSONArray;
+/// <remarks>Additive keys after 1.33: migrate_to (the New of the #migrate
+/// convert-apply realises for the member, DL_NONE for a deliberate break, ''
+/// when none; status stays mapped) and rules_file.</remarks>
+function PasUsesJson(const AUses: TArray<TApplyPasUse>; const ARulesFile: string): TJSONArray;
 begin
   Result:= TJSONArray.Create;
   for var PU: TApplyPasUse in AUses do
@@ -25972,6 +25989,8 @@ begin
     var JC: TJSONArray:= TJSONArray.Create;
     for var C: string in PU.Candidates do JC.Add(C);
     JP.AddPair('candidates'    , JC);
+    JP.AddPair('migrate_to'    , PU.MigrateTo);    { G4, additive }
+    JP.AddPair('rules_file'    , ARulesFile);      { G7, additive }
     Result.AddElement(JP);
   end;
 end;
@@ -26024,7 +26043,7 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
       Result.AddPair('value', AItem.Value);
     { 1.27.0 (C15): the literal a value cast replaced; C18: the member text a
       #migrate renamed or wrapped }
-    if AItem.Kind in [aikValueCastApplied, aikMigrateApplied, aikDeliberateBreak] then
+    if AItem.Kind in [aikValueCastApplied, aikMigrateApplied, aikDeliberateBreak, aikMigrateCheck] then { G11: + the check's Old }
       Result.AddPair('old_value', AItem.OldValue);
   end;
 
@@ -26227,7 +26246,7 @@ begin
       instance, then one per global from a unit the reconciliation removes.
       ALWAYS present, [] when none. status mapped | cast-refused | same-name |
       unmapped | global-dangling; the editor filters on it. }
-    JRoot.AddPair('pas_uses', PasUsesJson(ACtx.Report.PasUses));
+    JRoot.AddPair('pas_uses', PasUsesJson(ACtx.Report.PasUses, ACtx.RulesFile));
     { 1.20.6 (T2b) -- the classes whose members the run resolved, summed over
       the --db stores. No property tree is built; this is the whole cost. }
     JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));
