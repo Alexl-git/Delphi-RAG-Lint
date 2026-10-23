@@ -19,6 +19,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I check that the engine runs?",
+      "command": "drag-lint info"
+    },
+    {
+      "ask": "Which verbs exist once it is installed?",
+      "command": "drag-lint --help"
+    }
+  ],
   "access": "repo-tooling",
   "accessReviewed": {
     "date": "2026-10-21",

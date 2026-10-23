@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Export Enums (Delphi const)..."
+      "path": "drag-lint > Generate & Export > Export Enums (Delphi const)...",
+      "steps": ["Choose drag-lint > Generate & Export > Export Enums (Delphi const)...", "Follow the dialog; the indexed enum types are written as Delphi const declarations"]
     },
     {
       "type": "cli",
@@ -37,6 +38,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I get the project's enum types as Delphi const declarations?",
+      "command": "drag-lint export enums --db <db> --format delphi-const"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

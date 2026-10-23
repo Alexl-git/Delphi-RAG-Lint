@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-about",
-      "caption": "Lint Buffer (Unsaved)"
+      "caption": "Lint Buffer (Unsaved)",
+      "steps": ["Edit a unit without saving it", "Open the About and Status window (drag-lint > About)", "Click Lint Buffer (Unsaved); findings for the in-memory content are shown"]
     },
     {
       "type": "cli",
@@ -54,6 +55,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Can I lint edits I have not saved?",
+      "command": "drag-lint > About > Lint Buffer (Unsaved)"
+    },
+    {
+      "ask": "How do I lint a saved file from the command line?",
+      "command": "drag-lint lint <path>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

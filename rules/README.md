@@ -26,8 +26,8 @@ below as the canonical inventory.
 
 Each rule is a pair:
 
-- `<name>.scm` — the tree-sitter query
-- `<name>.json` — optional metadata
+- `<name>.scm` ? the tree-sitter query
+- `<name>.json` ? optional metadata
 
 If the `.json` is missing, defaults apply (severity = "warning", message =
 the rule id, warn capture name = `warn`).
@@ -55,6 +55,8 @@ the rule id, warn capture name = `warn`).
 | `warn_capture` | `warn` | Which capture the finding is pinned to. |
 | `enabled` | `true` | `false` ships the rule OFF; `--enable <id>` turns it back on. |
 | `exclude_if_ancestor` | none | Node kinds; a match is DROPPED when the picked node has an ancestor of any listed kind. |
+| `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
+| `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
 | `require_ancestor` | none | Node kinds; a match COUNTS ONLY inside one of them. |
 | `require_file_text` | none | Substrings; the rule does not run at all against a file whose text contains NONE of them. Case-insensitive, matched against the whole file. |
 
@@ -110,27 +112,27 @@ Works for both external `.scm` rules and the built-in checks.
 
 | Rule id | Severity | Description |
 |---------|----------|-------------|
-| `writeln-in-source` | info | Direct `WriteLn` call — use a logger |
+| `writeln-in-source` | info | Direct `WriteLn` call ? use a logger |
 | `goto-statement` | warning | `goto` statement is generally considered harmful |
 | `with-statement` | info | `with` statement makes symbol scope ambiguous |
 | `empty-procedure-body` | info | Empty `procedure`/`function` body (begin..end with no statements) |
 | `large-magic-number` | info | Numeric literal not in the common-constants allow-list |
-| `string-equality-comparison` | info | **Off by default** (opt in via `--rule` or config `"enabled"`). `=` comparison on expressions — fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
+| `string-equality-comparison` | info | **Off by default** (opt in via `--rule` or config `"enabled"`). `=` comparison on expressions ? fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
 
 ## Shipped rules (v0.31)
 
 | Rule id | Severity | Description |
 |---------|----------|-------------|
-| `parser-error` | error | Tree-sitter `ERROR` node — malformed syntax that the parser could not recover |
+| `parser-error` | error | Tree-sitter `ERROR` node ? malformed syntax that the parser could not recover |
 
 ## Shipped rules (v0.32)
 
 | Rule id | Severity | Description |
 |---------|----------|-------------|
-| `compiler-magic-comments` | info | Comment contains TODO/FIXME/HACK/XXX — track in issue tracker |
-| `nested-with` | warning | Nested `with` statement — scope becomes highly ambiguous |
-| `assert-call` | info | `Assert()` call — ensure the second argument provides a descriptive message |
-| `case-magic-numbers` | info | `case` label is an integer literal — consider naming the constant |
+| `compiler-magic-comments` | info | Comment contains TODO/FIXME/HACK/XXX ? track in issue tracker |
+| `nested-with` | warning | Nested `with` statement ? scope becomes highly ambiguous |
+| `assert-call` | info | `Assert()` call ? ensure the second argument provides a descriptive message |
+| `case-magic-numbers` | info | `case` label is an integer literal ? consider naming the constant |
 
 ## Shipped rules (v0.35)
 

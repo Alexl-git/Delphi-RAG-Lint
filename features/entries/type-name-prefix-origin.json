@@ -140,6 +140,16 @@
   ],
   "audience": "both",
   "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+  "questions": [
+    {
+      "ask": "Why does type-name-prefix want E or T on my class?",
+      "command": "drag-lint lint <path> --rule type-name-prefix"
+    },
+    {
+      "ask": "What do I do when the ancestor chain cannot be traced?",
+      "command": "drag-lint lint <path> --library-db <lib.sqlite>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

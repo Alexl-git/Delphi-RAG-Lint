@@ -12,10 +12,17 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Go to Declaration"
+      "caption": "Go to Declaration",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the node", "Choose Go to Declaration; the editor caret lands on the declaration"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I jump to where a Structure-tree symbol is declared?",
+      "command": "Structure form > right-click > Go to Declaration"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

@@ -34,6 +34,9 @@ Full flag list: [document in the CLI reference](../cli.md#document).
 ## Where to click
 
 * Right-click in the Structure form: **Document it**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the symbol node
+   3. Choose Document it; its managed DocInsight comment is generated or repaired
 
 ## Details
 

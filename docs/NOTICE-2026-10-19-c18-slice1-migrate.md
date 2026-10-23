@@ -48,3 +48,22 @@ covering the same member keeps its own status). Same rows, same fields.
 * Idempotent: a renamed site no longer names Old; a wrapped site is not wrapped twice.
 * A DL_NONE unit fails dcc64 on exactly the wrapped lines (E2003 `DL_NONE`).
 * Guard: `tests/autotest/run_convert_apply_migrate.ps1`.
+
+## Addendum 2026-10-23 (ENGINE, branch e3d/migrate-gaps) -- additive, still apply/1
+
+Answers CONVERTER's `INBOX-2026-10-23-converter-to-engine-migrate-gaps.md`:
+
+* G8: a `#migrate X -> DL_NONE` break no longer yields `uses-unit-unresolved` nor a
+  `uses_unresolved[]` row for `DL_NONE` (the marker is skipped by the uses reconciliation).
+* G9: all three migrate item kinds carry `from_type` / `to_type` = the book spelling of
+  their `#convert` header.
+* G11: `migrate-check` items now carry `old_value` = the rule's Old member.
+* G4: `pas_uses[]` rows gain `migrate_to` = the New of the `#migrate` convert-apply
+  realises for the member (`DL_NONE` for a break, `''` otherwise). `status` stays `mapped`.
+* G7: `pas_uses[]` rows gain `rules_file` (= the document's `rules_file`).
+* G10: a member reached through `with <inst> do` is now on its `pas_uses[]` row (`lines[]`,
+  `count`) when the index resolved the receiverless body ref to the From class's member;
+  it is still never rewritten (the `migrate-check` stays).
+* G3: `convert-validate` prints `line N: warning: #migrate Old -> New is not applied by
+  convert-apply -- <reason>` for a refused form inside a `#convert` block; exit 0 and `OK` unchanged.
+* Guard: `tests/autotest/run_migrate_gaps.ps1`.

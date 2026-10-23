@@ -37,6 +37,9 @@ Full flag list: [allow in the CLI reference](../cli.md#allow).
 ## Where to click
 
 * Right-click in the Structure form: **Allow this message**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the tree node of the finding
+   3. Choose Allow this message; a dl:ok review is recorded for that finding
 
 ## Details
 

@@ -34,6 +34,9 @@ Full flag list: [document in the CLI reference](../cli.md#document).
 ## Where to click
 
 * Right-click in the Structure form: **Document project**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click a node in the tree
+   3. Choose Document project; managed DocInsight comments are generated or repaired for every public declaration the project owns
 
 ## Details
 

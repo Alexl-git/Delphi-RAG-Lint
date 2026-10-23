@@ -19,6 +19,8 @@ Read this to find the main drag-lint dockable panel. It opens from View > Tool W
 ## Where to click
 
 * Tool window: **View > Tool Windows > drag-lint**
+   1. Choose View > Tool Windows > drag-lint
+   2. The main drag-lint dockable panel opens (the same panel as from the drag-lint menu)
 
 ## Details
 

@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Copy All Diagnostics"
+      "caption": "Copy All Diagnostics",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click in the Structure form", "Choose Copy All Diagnostics; every finding of the current unit is on the clipboard"]
     },
     {
       "type": "cli",
@@ -57,6 +58,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I paste every lint finding of this unit into a chat or issue?",
+      "command": "drag-lint lint <file.pas> --json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

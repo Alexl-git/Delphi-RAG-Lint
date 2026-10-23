@@ -19,6 +19,9 @@ Read this when you want to paste one or two findings, not the whole list. Select
 ## Where to click
 
 * Right-click in the Structure form: **Copy**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Click a Diagnostics row; Ctrl+click or Shift+click to add more
+   3. Right-click and choose Copy, or press Ctrl+C; selecting only the Diagnostics root copies every finding
 
 ## Details
 

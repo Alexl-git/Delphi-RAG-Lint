@@ -19,6 +19,10 @@ Read this when the compiler raises hint H2443 because an inline routine comes fr
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor**
+   1. Compile the project and find the H2443 hint on the inline routine call
+   2. Put the caret on the identifier named in the hint
+   3. Choose drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor
+   4. The declaring unit is added to the uses clause of the current unit
 
 ## Details
 

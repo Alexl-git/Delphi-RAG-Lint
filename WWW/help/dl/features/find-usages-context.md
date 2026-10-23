@@ -34,6 +34,9 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 ## Where to click
 
 * Right-click in the Structure form: **Find Usages**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the node
+   3. Choose Find Usages
 
 ## Details
 

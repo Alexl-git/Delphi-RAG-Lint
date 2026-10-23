@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > drag-lint Graph (dockable)"
+      "path": "drag-lint > drag-lint Graph (dockable)",
+      "steps": ["Choose drag-lint > drag-lint Graph (dockable)", "The graph viewer opens as a dockable window; drag it where you want it to stay docked"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I keep the graph viewer docked beside the Structure form?",
+      "command": "drag-lint > drag-lint Graph (dockable)"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

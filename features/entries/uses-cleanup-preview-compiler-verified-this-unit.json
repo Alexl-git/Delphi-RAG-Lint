@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)..."
+      "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...",
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...", "Review each candidate (verified by compiling) before applying", "From a shell: `drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--apply] [--remove-unused]`"]
     },
     {
       "type": "cli",
@@ -47,6 +48,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Can I remove these unused units safely?",
+      "command": "drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I write the verified removals?",
+      "command": "drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -11,10 +11,21 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > drag-lint Options..."
+      "path": "drag-lint > drag-lint Options...",
+      "steps": ["Choose drag-lint > drag-lint Options...", "Browse the rule catalog (default state, auto-fix)", "Toggle rules on or off"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which lint rules exist and which are on by default?",
+      "command": "drag-lint rules --json"
+    },
+    {
+      "ask": "How do I turn lint rules on or off?",
+      "command": "drag-lint > drag-lint Options..."
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

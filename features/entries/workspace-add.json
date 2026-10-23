@@ -25,6 +25,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I register another project in my workspace?",
+      "command": "drag-lint workspace add <projfile> --config <.drag-lint-workspace.json>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

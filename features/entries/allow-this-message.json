@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Allow this message"
+      "caption": "Allow this message",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the tree node of the finding", "Choose Allow this message; a dl:ok review is recorded for that finding"]
     },
     {
       "type": "cli",
@@ -56,6 +57,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I stop one reviewed finding from being reported without fixing it?",
+      "command": "drag-lint allow <file> --fix-line <L> --fix-rule <id> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -1,0 +1,7 @@
+#migrate Early -> Later
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption
+#migrate TSrcBtn:Click -> Press
+#migrate Count -> Items.Count
+#migrate Hint -> DL_NONE
+#migrate Click -> Press

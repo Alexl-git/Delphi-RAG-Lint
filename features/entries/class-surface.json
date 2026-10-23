@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Inspect Symbol > Class Surface..."
+      "path": "drag-lint > Inspect Symbol > Class Surface...",
+      "steps": ["Put the caret on the class name in the editor", "Choose drag-lint > Inspect Symbol > Class Surface...", "The members and signatures are shown without method bodies"]
     },
     {
       "type": "cli",
@@ -42,6 +43,16 @@
   ],
   "audience": "both",
   "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."],
+  "questions": [
+    {
+      "ask": "What does this class expose, without reading the whole unit?",
+      "command": "drag-lint surface --qname <Foo.TBar> --db <db>"
+    },
+    {
+      "ask": "Which non-public members does it have?",
+      "command": "drag-lint surface --qname <Foo.TBar> --all-visibility --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Full Compile Sweep"
+      "path": "drag-lint > Full Compile Sweep",
+      "steps": ["Open the project in the IDE", "drag-lint > Full Compile Sweep", "Stale units are recompiled and the findings refreshed, then the open file is refreshed"]
     },
     {
       "type": "cli",
@@ -39,6 +40,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I refresh the stored compiler findings for a project?",
+      "command": "drag-lint refresh-findings --project <X.dproj>"
+    },
+    {
+      "ask": "How do I force a full build instead of the stale-count threshold?",
+      "command": "drag-lint refresh-findings --project <X.dproj> --full"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

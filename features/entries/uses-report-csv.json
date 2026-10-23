@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Uses Report (CSV)..."
+      "path": "drag-lint > Uses & Dependencies > Uses Report (CSV)...",
+      "steps": ["Choose drag-lint > Uses & Dependencies > Uses Report (CSV)...", "Pick the CSV file to write", "From a shell: `drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external]`"]
     },
     {
       "type": "cli",
@@ -45,6 +46,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I export the project's unit dependencies to a spreadsheet?",
+      "command": "drag-lint uses-report --output <out.csv> --db <db>"
+    },
+    {
+      "ask": "How do I limit the report to some units?",
+      "command": "drag-lint uses-report --output <out.csv> --name <pattern>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

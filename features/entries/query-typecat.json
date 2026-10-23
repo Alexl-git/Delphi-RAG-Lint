@@ -31,6 +31,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Is this type a float, string, class or interface?",
+      "command": "drag-lint query typecat --name <type> --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I get the type category as JSON for a script?",
+      "command": "drag-lint query typecat --name <type> --json"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

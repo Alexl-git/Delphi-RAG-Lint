@@ -39,7 +39,12 @@ Full flag list: [doc-forget in the CLI reference](../cli.md#doc-forget).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Forget Documentation Project Tag...**
+   1. Choose drag-lint > Generate & Export > Forget Documentation Project Tag...
+   2. Give the scope and the project tag
+   3. Without applying it is a dry run; confirm to apply
 * RAD Studio main menu: **drag-lint > Generate & Export > List Documentation Project Tags**
+   1. Choose drag-lint > Generate & Export > List Documentation Project Tags
+   2. The project tags on inbound documentation facts are listed
 
 ---
 

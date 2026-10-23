@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Fix all in unit"
+      "caption": "Fix all in unit",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node", "Choose Fix all in unit; a wait cursor shows while it runs and a second fix is refused until it finishes"]
     },
     {
       "type": "cli",
@@ -56,6 +57,16 @@
   ],
   "audience": "both",
   "related": ["fix-all-in-project", "fix-all-in-unit"],
+  "questions": [
+    {
+      "ask": "Why did Fix all drop my renames or run twice?",
+      "command": "drag-lint lint <path> --json"
+    },
+    {
+      "ask": "Which rules does Fix all apply?",
+      "command": "drag-lint rules --json"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-16",
     "by": "alexanderl",

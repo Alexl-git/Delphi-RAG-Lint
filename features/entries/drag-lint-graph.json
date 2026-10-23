@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "tool-window",
-      "path": "View > Tool Windows > drag-lint Graph"
+      "path": "View > Tool Windows > drag-lint Graph",
+      "steps": ["Choose View > Tool Windows > drag-lint Graph", "The graph viewer opens (the same window as drag-lint Graph (dockable)); drag_lint_graph.exe must be deployed beside the plugin"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where is the call/reference graph viewer?",
+      "command": "View > Tool Windows > drag-lint Graph"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

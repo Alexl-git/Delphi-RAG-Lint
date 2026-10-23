@@ -40,6 +40,10 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Run Lint All (Full Report)...**
+   1. Open the project in RAD Studio (its index must be current)
+   2. Choose drag-lint > Code Quality > Run Lint All (Full Report)...
+   3. Read the findings in the report
+   4. From a shell: `drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--output <report.txt>]`
 
 ## Pitfalls
 

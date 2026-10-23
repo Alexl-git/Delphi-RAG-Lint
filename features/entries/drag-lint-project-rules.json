@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Project Manager",
-      "caption": "drag-lint: Project Rules"
+      "caption": "drag-lint: Project Rules",
+      "steps": ["Open the Project Manager", "Right-click the project and choose drag-lint: Project Rules...", "The lint rule catalog is shown"]
     },
     {
       "type": "cli",
@@ -36,6 +37,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which lint rules apply to this project?",
+      "command": "drag-lint rules"
+    },
+    {
+      "ask": "Which rules are in one category?",
+      "command": "drag-lint rules --category <name>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

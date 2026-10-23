@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Compile & Diagnose"
+      "path": "drag-lint > Compile & Diagnose",
+      "steps": ["Open the file or project in the IDE", "Choose drag-lint > Compile & Diagnose", "The compiler messages appear as drag-lint findings"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I see compiler errors and warnings for the current file inside the IDE?",
+      "command": "drag-lint compile-check <target.dproj|.pas> --db <db>"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

@@ -53,6 +53,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I mark one lint finding as a deliberate, reviewed exception?",
+      "command": "drag-lint allow <file> --fix-line <L> --fix-rule <id> --apply"
+    },
+    {
+      "ask": "Can I preview the dl:ok review before it is written?",
+      "command": "drag-lint allow <file> --fix-line <L> --fix-rule <id>"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061",
   "access": "cli-only",
   "accessReviewed": {

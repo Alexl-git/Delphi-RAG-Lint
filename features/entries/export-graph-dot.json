@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Export Graph (DOT)..."
+      "path": "drag-lint > Generate & Export > Export Graph (DOT)...",
+      "steps": ["Choose drag-lint > Generate & Export > Export Graph (DOT)...", "Optionally give a root name substring", "The call/reference graph is exported in DOT format"]
     },
     {
       "type": "cli",
@@ -40,6 +41,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I draw the indexed call/reference graph in Graphviz?",
+      "command": "drag-lint graph --db <db> --format dot --output <file>"
+    },
+    {
+      "ask": "How do I root the graph at one name?",
+      "command": "drag-lint graph --db <db> --name <root-substr>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

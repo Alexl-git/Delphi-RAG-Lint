@@ -25,6 +25,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "callgraph gave a surprising answer -- what are the raw resolved call edges?",
+      "command": "drag-lint dump-call-edges --db <db>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

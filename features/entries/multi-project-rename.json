@@ -52,16 +52,28 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Fix it"
+      "caption": "Fix it",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the naming finding node", "Choose Fix it; confirm the dialog listing the owning projects"]
     },
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Fix all in unit"
+      "caption": "Fix all in unit",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node", "Choose Fix all in unit; confirm the dialog listing the owning projects"]
     }
   ],
   "audience": "both",
   "related": ["fix-all-in-unit", "fix-it", "rename-symbol"],
+  "questions": [
+    {
+      "ask": "A unit is compiled by several projects; can I rename safely in all of them?",
+      "command": "drag-lint lint <path> --fix --fix-line <L> --fix-rule const-casing --db <db>"
+    },
+    {
+      "ask": "Which naming rules can be fixed?",
+      "command": "drag-lint rules --category naming"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-14",
     "by": "alexanderl",

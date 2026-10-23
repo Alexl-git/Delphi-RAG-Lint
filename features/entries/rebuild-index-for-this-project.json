@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Index & Maintenance > Rebuild Index for This Project"
+      "path": "drag-lint > Index & Maintenance > Rebuild Index for This Project",
+      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Index & Maintenance > Rebuild Index for This Project", "Wait for the indexing run to finish; progress shows in the IDE", "From a shell instead: `drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild]`"]
     },
     {
       "type": "cli",
@@ -46,6 +47,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I rebuild the index for the project I have open?",
+      "command": "drag-lint index --project <file.dproj> --rebuild"
+    },
+    {
+      "ask": "How do I refresh the index after edits without a full rebuild?",
+      "command": "drag-lint index --project <file.dproj> --db <file.sqlite>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

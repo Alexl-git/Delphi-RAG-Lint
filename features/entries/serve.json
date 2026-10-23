@@ -25,6 +25,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I let an AI client such as Claude or Cursor query the index?",
+      "command": "drag-lint serve --db <file.sqlite>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

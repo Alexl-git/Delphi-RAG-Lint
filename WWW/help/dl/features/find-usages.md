@@ -19,6 +19,9 @@ Read this before changing or removing a symbol, to see every place it is used. W
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Find Usages...**
+   1. Needs an index of the project
+   2. Put the editor caret on the symbol
+   3. drag-lint > Find Usages...
 
 ## Details
 

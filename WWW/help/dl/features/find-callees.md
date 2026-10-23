@@ -31,6 +31,9 @@ Full flag list: [find-callees in the CLI reference](../cli.md#find-callees).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > What This Routine Calls (callees)...**
+   1. Needs an index of the project
+   2. drag-lint > Uses & Dependencies > What This Routine Calls (callees)...
+   3. Enter or confirm the routine; its resolved outgoing calls are listed
 
 **Needs:** index
 

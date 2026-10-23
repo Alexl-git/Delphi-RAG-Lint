@@ -85,6 +85,10 @@ try {
         $ok = $false
     }
 
+    $missing = Get-HttpStatus "$base/no-such-page-publish-check/"
+    Write-Host "GET $base/no-such-page-publish-check/ = $($missing.Status)"
+    if (-not (Test-LiveNotFound $missing)) { Write-Host 'a missing page does not answer 404 with our page (soft 404 or host page): check httpErrors in web.config'; $ok = $false }
+
     # 10.
     if (-not $ok) { Write-Host 'PUBLISHED, but a live check failed'; exit 1 }
     Write-Host 'published'

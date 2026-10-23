@@ -649,6 +649,7 @@ type
     NoWarnUnlinked: Boolean; // --no-warn-unlinked  (convert-apply: keep the unlinked count, drop the warnings)
     NoReconcileUses: Boolean; // --no-reconcile-uses (convert-apply, C9: the 1.26.6 unit rules exactly)
     NoReindex     : Boolean; // --no-reindex (convert-apply, C9: do not refresh the unit's project DB after --apply)
+    UnitProgress  : Boolean; // --progress (convert-apply, 1.33.0 G1: one stderr JSON line per finished unit)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -1454,6 +1455,7 @@ begin
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
     else if A = '--no-reconcile-uses' then Result.NoReconcileUses:= True // convert-apply (C9): no uses reconciliation
     else if A = '--no-reindex' then Result.NoReindex:= True // convert-apply (C9): skip the post-apply project-DB refresh
+    else if (A = '--progress') and (Result.Command = 'convert-apply') then Result.UnitProgress:= True // 1.33.0 G1: per-unit stderr lines
     else if A = '--no-warn-unlinked' then Result.NoWarnUnlinked:= True // convert-apply: silence the per-(type,property) unlinked warnings; the json count stays
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
@@ -16952,6 +16954,9 @@ begin
         once and converts every unit in ONE process -- one rule-book
         validation, one member cache -- emitting apply-batch/1 under JSON. }
       JCap.AddPair('batch_units', TJSONBool.Create(True));
+      { 1.33.0 (CONVERTER G1), same contract: convert-apply --progress writes
+        one stderr JSON line per finished unit; stdout unchanged; off by default. }
+      JCap.AddPair('batch_progress', TJSONBool.Create(True));
       { 1.23.0 (C13 N4), same contract: with --only, a #unuse / #useswap
         removal that would strand ONLY instances --only left out is skipped
         (apply/1 uses[] action 'skipped') instead of refusing the unit. }
@@ -25133,6 +25138,18 @@ begin
     Writeln(U.Message);
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
+  { G3: a member #migrate (inside a #convert block) convert-apply will not
+    realise -- its own refusal sentence; a file-scope #migrate is not a member
+    migration and is left alone, as convert-apply does }
+  var InBlock: Boolean:= False;
+  for R in RuleSet.Rules do
+  begin
+    InBlock:= InBlock or (R.Kind = rkConvert);
+    if not InBlock or (R.Kind <> rkMigrate) then Continue;
+    var Why: string:= MigrateRuleRefusal(R);
+    if Why <> '' then
+      Writeln(Format('line %d: warning: #migrate %s -> %s is not applied by convert-apply -- %s', [R.LineNo, R.Old, R.New, Why]));
+  end;
 
   { 1.26.1: without both types the paths were never checked -- say so (on
     stderr, so the stdout contract 'OK' is unchanged), or a bare run reads as
@@ -25948,8 +25965,13 @@ type
 
 /// <summary>apply/1 pas_uses[] (1.27.0): one object per TApplyPasUse.</summary>
 /// <param name="AUses">The report's PasUses.</param>
+/// <param name="ARulesFile">The book the run applied; every row names it
+/// (rules_file, additive) so a consumer merging several runs keeps the book.</param>
 /// <returns>A new array; the caller owns it (AddPair takes it over).</returns>
-function PasUsesJson(const AUses: TArray<TApplyPasUse>): TJSONArray;
+/// <remarks>Additive keys after 1.33: migrate_to (the New of the #migrate
+/// convert-apply realises for the member, DL_NONE for a deliberate break, ''
+/// when none; status stays mapped) and rules_file.</remarks>
+function PasUsesJson(const AUses: TArray<TApplyPasUse>; const ARulesFile: string): TJSONArray;
 begin
   Result:= TJSONArray.Create;
   for var PU: TApplyPasUse in AUses do
@@ -25972,6 +25994,8 @@ begin
     var JC: TJSONArray:= TJSONArray.Create;
     for var C: string in PU.Candidates do JC.Add(C);
     JP.AddPair('candidates'    , JC);
+    JP.AddPair('migrate_to'    , PU.MigrateTo);    { G4, additive }
+    JP.AddPair('rules_file'    , ARulesFile);      { G7, additive }
     Result.AddElement(JP);
   end;
 end;
@@ -26024,7 +26048,7 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
       Result.AddPair('value', AItem.Value);
     { 1.27.0 (C15): the literal a value cast replaced; C18: the member text a
       #migrate renamed or wrapped }
-    if AItem.Kind in [aikValueCastApplied, aikMigrateApplied, aikDeliberateBreak] then
+    if AItem.Kind in [aikValueCastApplied, aikMigrateApplied, aikDeliberateBreak, aikMigrateCheck] then { G11: + the check's Old }
       Result.AddPair('old_value', AItem.OldValue);
   end;
 
@@ -26227,7 +26251,7 @@ begin
       instance, then one per global from a unit the reconciliation removes.
       ALWAYS present, [] when none. status mapped | cast-refused | same-name |
       unmapped | global-dangling; the editor filters on it. }
-    JRoot.AddPair('pas_uses', PasUsesJson(ACtx.Report.PasUses));
+    JRoot.AddPair('pas_uses', PasUsesJson(ACtx.Report.PasUses, ACtx.RulesFile));
     { 1.20.6 (T2b) -- the classes whose members the run resolved, summed over
       the --db stores. No property tree is built; this is the whole cost. }
     JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));
@@ -26808,7 +26832,13 @@ type
 /// dry-run a stale/unindexed type only WARNS (the preview still renders), on --apply it
 /// REFUSES (exit 1) before any write is attempted. A book whose #link carries a glyph
 /// expression validates but is REFUSED here (exit 1, through the rule-error path) until
-/// CV-2 realises G-links (UnrealisedGlyphLinks) -- never carried whole.</remarks>
+/// CV-2 realises G-links (UnrealisedGlyphLinks) -- never carried whole.
+/// 1.33.0 (CONVERTER G2): a --unit whose .pas NO supplied --db indexes is REFUSED (exit 1,
+/// reason 'not covered by any supplied --db'), dry run and --apply, single and batch alike --
+/// it used to plan its unit rules and skip every instance, so --apply half-converted it.
+/// G3: every apply/1 object carries exit_code (that unit's). G1: --progress writes one
+/// stderr JSON line per finished unit ({"progress":{"verb":"convert-apply","unit_done",
+/// "units","unit","ok","refused","exit_code"}}, flushed); stdout is unchanged by it.</remarks>
 function DoConvertApply(const AArgs: TArgs): Integer;
 var
   UnitPas   : string            ;
@@ -27039,7 +27069,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@7d75 -- each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0b2d -- each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
@@ -27096,6 +27126,16 @@ var
     { 1.26.0: a DB whose edges predate bound field reads is refused, dry run too }
     var StaleResolver: string:= ResolverRefusal(Stores, Dbs, UnitPas);
     if StaleResolver <> '' then Exit(RefuseUnit(StaleResolver));
+    { 1.33.0 (CONVERTER G2): a unit no --db indexes cannot locate one instance,
+      yet its unit rules would still be written -- a half conversion. REFUSED,
+      dry run and --apply, single and batch alike (as C13 d's index gap).
+      UnitFileIdIn resolves a moved tree's unit the way its symbols are found. }
+    var Indexed: Boolean:= False;
+    for var St: ISymbolStore in Stores do
+      if UnitFileIdIn(St, UnitPas) > 0 then Indexed:= True;
+    if not Indexed then
+      Exit(RefuseUnit(Format('%s is not covered by any supplied --db (%s) -- index its project, then re-run; nothing was planned',
+        [UnitPas, String.Join(', ', Dbs)])));
     // Sibling .dfm: same base name + '.dfm', same folder as --unit.
     DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
     JCtx.DfmPath:= DfmPath;
@@ -27377,6 +27417,28 @@ var
     end;
   end;
 
+  // 1.33.0 (CONVERTER G3): exit_code on the apply/1 object(s) this unit
+  // appended from index AFrom on (normally one) -- additive, last key.
+  procedure StampUnitExit(AFrom, ACode: Integer);
+  begin
+    if not UseJson then Exit;
+    for var K: Integer:= AFrom to BatchJson.Count - 1 do
+      if BatchJson.Items[K] is TJSONObject then
+        TJSONObject(BatchJson.Items[K]).AddPair('exit_code', TJSONNumber.Create(ACode));
+  end;
+
+  // 1.33.0 (CONVERTER G1): --progress -- one JSON line on STDERR per finished
+  // unit, flushed now (stdout untouched; off by default -- see MakeProgressWriter).
+  procedure ReportUnitProgress(AIndex, ACode: Integer);
+  begin
+    if not AArgs.UnitProgress then Exit;
+    Writeln(ErrOutput, Format('{"progress":{"verb":"convert-apply","unit_done":%d,"units":%d,"unit":%s,' +
+      '"ok":%s,"refused":%s,"exit_code":%d}}',
+      [AIndex + 1, Length(Units), ProgressJsonStr(Units[AIndex]),
+       BoolToStr(ACode = 0, True).ToLower, BoolToStr(JCtx.Refused, True).ToLower, ACode]));
+    Flush(ErrOutput);
+  end;
+
 begin
   if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
@@ -27387,7 +27449,7 @@ begin
 
   if (Length(Units) = 0) or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
     Exit(2);
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
@@ -27467,13 +27529,22 @@ begin
   BookChecked := False;
   FreshChecked:= False;
   BatchJson   := nil;
-  { batch JSON collects every unit's apply/1 object; one --unit keeps writing
-    its own apply/1 document, unchanged for existing callers }
-  if UseJson and (Length(Units) > 1) then BatchJson:= TJSONArray.Create;
+  { JSON collects every unit's apply/1 object (1.33.0: a single --unit too, so
+    its exit_code can be stamped); one --unit still writes a bare apply/1 }
+  if UseJson then BatchJson:= TJSONArray.Create;
   Trees:= TConvertTreeCache.Create(Stores);
   try
     Trees.DbPaths:= Dbs; { C9: names the db of a uses_unresolved candidate }
-    if Length(Units) = 1 then Exit(RunUnit(Units[0]));
+    if Length(Units) = 1 then
+    begin
+      { 1.33.0 G3: the apply/1 document carries exit_code, known only once the
+        unit is done -- so under JSON it is collected, stamped, then written }
+      Result:= RunUnit(Units[0]);
+      StampUnitExit(0, Result);
+      if UseJson and (BatchJson.Count > 0) then WriteStdoutDocument(BatchJson.Items[0].ToJSON + sLineBreak);
+      ReportUnitProgress(0, Result);
+      Exit;
+    end;
     { 1.23.0 (C13 b2): batch. A unit's refusal or failure never stops the
       others; the exit code is the worst unit's (6 > 2 > 1 > 0; 6 = an unusable castlib, 1.28.0). }
     Result:= 0;
@@ -27483,6 +27554,7 @@ begin
     begin
       if not UseJson then Writeln(Format('=== unit %d of %d: %s ===', [I + 1, Length(Units), Units[I]]));
       var Code: Integer;
+      var Before: Integer:= if UseJson then BatchJson.Count else 0;
       try
         Code:= RunUnit(Units[I]);
       except
@@ -27490,6 +27562,8 @@ begin
         on Ex: Exception do
           Code:= FailUnit(Format('%s: %s: %s -- unit not finished', [ExtractFileName(Units[I]), Ex.ClassName, Ex.Message]), 2);
       end;
+      StampUnitExit(Before, Code);
+      ReportUnitProgress(I, Code);
       if Code > Result then Result:= Code;
       if Code = 0 then Inc(NOk)
       else if JCtx.Refused then Inc(NRefused);

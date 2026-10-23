@@ -19,6 +19,8 @@ Read this when you want the call/reference graph viewer from RAD Studio standard
 ## Where to click
 
 * Tool window: **View > Tool Windows > drag-lint Graph**
+   1. Choose View > Tool Windows > drag-lint Graph
+   2. The graph viewer opens (the same window as drag-lint Graph (dockable)); drag_lint_graph.exe must be deployed beside the plugin
 
 ## Details
 

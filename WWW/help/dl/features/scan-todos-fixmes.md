@@ -20,9 +20,18 @@ Read this when you want to see the outstanding work left in code: it lists TODO,
 
 Full flag list: [todos in the CLI reference](../cli.md#todos).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Scan TODOs / FIXMEs...**
+   1. Choose drag-lint > Code Quality > Scan TODOs / FIXMEs...
+   2. Read the list of markers (TODO, FIXME, HACK, XXX, REVIEW, NOTE)
+   3. From a shell: `drag-lint todos [<path>] [--json]`
 
 ## Details
 

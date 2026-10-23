@@ -33,6 +33,20 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I rebuild drag-lint.exe while the IDE is open?",
+      "command": "drag-lint ide-release --seconds 900"
+    },
+    {
+      "ask": "How do I cancel the hold early?",
+      "command": "drag-lint ide-release --resume"
+    },
+    {
+      "ask": "Is a hold active right now?",
+      "command": "drag-lint ide-release --status"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

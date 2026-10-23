@@ -32,6 +32,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Why is this doc comment considered out of date?",
+      "command": "drag-lint doc-drift --qname <X> --db <db>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

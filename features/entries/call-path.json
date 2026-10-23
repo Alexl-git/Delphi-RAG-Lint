@@ -39,11 +39,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Call Path Between Two Routines..."
+      "path": "drag-lint > Uses & Dependencies > Call Path Between Two Routines...",
+      "steps": ["Choose drag-lint > Uses & Dependencies > Call Path Between Two Routines...", "Give the starting routine and the target routine", "The shortest resolved call path is shown; none is reported when there is no path"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Does routine A ever reach routine B, and through which calls?",
+      "command": "drag-lint call-path --from <A> --to <B> --db <db>"
+    },
+    {
+      "ask": "How do I cap the search depth?",
+      "command": "drag-lint call-path --from <A> --to <B> --max-depth 6 --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

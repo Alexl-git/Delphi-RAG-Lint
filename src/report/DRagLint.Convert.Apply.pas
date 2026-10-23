@@ -460,8 +460,10 @@ type
   /// <remarks>
   /// <para>A MEMBER row is keyed by (Instance, Member). Its sites are the
   /// access-site rewrite's own (FindMemberAccessSites + BoundAccessSites), so
-  /// a member reached with no receiver at the site (a `with` block) or on a
-  /// site the index cannot vouch for is NOT listed. Kind, Visibility,
+  /// a site the index cannot vouch for is NOT listed. A member reached through
+  /// 'with inst do' IS listed (G10) when the index resolved the receiverless
+  /// ref, in the routine of that with line, to the member the From class
+  /// declares; it is never rewritten. Kind, Visibility,
   /// DeclaredIn and DeclaringUnit describe the member as the From type -- or
   /// the nearest ancestor of it that declares it, across the --db stores --
   /// has it; all four are '' when no store holds it, and Resolution then
@@ -496,6 +498,7 @@ type
     Lines        : TArray<Integer>;
     Resolution   : string;  { a PAS_RES_* constant (1.28.2) }
     Candidates   : TArray<string>;  { the declaring units, PAS_RES_AMBIGUOUS only (1.28.2) }
+    MigrateTo    : string;  { G4: the New of the #migrate convert-apply realises for the member (DL_NONE_MARK for a break); '' when none }
   end;
 
   /// <summary>Human-readable summary of one convert-apply run, grouped by
@@ -1359,6 +1362,17 @@ function ApplyItemKindName(AKind: TApplyItemKind): string;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ApplyFieldName(AField: TApplyField): string;
+
+/// <summary>Why convert-apply does NOT realise the member #migrate rule ARule
+/// (C18 slice 1), or '' when it does.</summary>
+/// <param name="ARule">A rkMigrate rule inside a #convert block.</param>
+/// <returns>'' for a plain member renamed to a plain identifier or to DL_NONE;
+/// else the reason sentence convert-apply prints in its migrate-check item
+/// (scoped form, call / assignment form, no replacement, a replacement
+/// template, uses units after the rule).</returns>
+/// <remarks>Pure. Shared by convert-apply and convert-validate (G3), so the
+/// two never disagree about which forms are applied.</remarks>
+function MigrateRuleRefusal(const ARule: TConversionRule): string;
 
 implementation
 
@@ -4014,6 +4028,11 @@ type
     PlannerNeeded   : Boolean;             { unit rules or a C13 move: the planner owns every edit }
   end;
 
+const
+  { C18: the '#migrate Old -> DL_NONE' replacement -- a deliberate break. A
+    marker, never a unit symbol: the uses reconciliation skips it (G8). }
+  DL_NONE_MARK = 'DL_NONE';
+
 function ReconcileUnitUses(const ATrees: TConvertTreeCache; const AArgs: TReconcileUnitArgs): TReconcileOutcome;
 var
   UnitIn : TUsesReconcileInput;
@@ -4050,7 +4069,7 @@ begin
   UnitIn.ConvPas     := TTextEditApplier.ApplyToText(UnitPas, UnitIn.OrigPas, AArgs.Edits);
   UnitIn.Rules       := Rules;
   UnitIn.ExtraAdds   := Adds;
-  UnitIn.HandledNames:= AArgs.Handled;
+  UnitIn.HandledNames:= AArgs.Handled + [DL_NONE_MARK]; { G8: a #migrate break's marker needs no unit }
   UnitIn.InterfaceAdds:= AArgs.IntfAdds;
   OrigDfm:= '';
   if (DfmPath <> '') and TFile.Exists(DfmPath) then
@@ -4786,10 +4805,6 @@ begin
   Result:= if Dotted and not Identity then PAS_USE_NOT_REWRITTEN else PAS_USE_MAPPED;
 end;
 
-const
-  { C18: the '#migrate Old -> DL_NONE' replacement -- a deliberate break }
-  DL_NONE_MARK = 'DL_NONE';
-
 // C18 slice 1: '' when convert-apply realises the #migrate rule ARule (a plain
 // member renamed to a plain identifier, or to DL_NONE), else why it does not.
 // A refused rule is reported (migrate-check), never applied in part.
@@ -4853,6 +4868,7 @@ var
   Hits    : TDictionary<string, TMemberHit>;  { UPPER class|member -> FindClassMember's answer }
   ClassMemo: TDictionary<string, TScopedClass>; { UPPER instance|type|side -> ClassOf's answer }
   Blocks  : TDictionary<string, Integer>;     { instance -> its #convert block, once for every link }
+  MigTo   : TDictionary<string, string>;      { UPPER instance|member -> a realised #migrate's New (G4) }
   Unv     : TArray<TAccessSite>;
   Status  : string;
 
@@ -4901,6 +4917,114 @@ var
     ClassMemo.Add(Key, Result);
   end;
 
+  { one site of (AInstance, AMember) on ALine: joins the row, or opens it }
+  procedure AddSite(const AInstance, AMember: string; ALine: Integer);
+  begin
+    var Inst: string:= AInstance;
+    for var N: string in AIn.Converted do
+      if SameText(N, AInstance) then Inst:= N;
+    var K: string:= UpperCase(Inst + '|' + AMember);
+    var At: Integer;
+    if Index.TryGetValue(K, At) then
+    begin
+      RowLines[At].Add(ALine);
+      Exit;
+    end;
+    var R: TApplyPasUse:= Default(TApplyPasUse);
+    R.Instance:= Inst;
+    R.Member  := AMember;
+    if not AIn.FromTypes.TryGetValue(Inst, R.FromType) then R.FromType:= '';
+    if not AIn.ToTypes.TryGetValue(Inst, R.ToType) then R.ToType:= '';
+    var FromCls: TScopedClass:= ClassOf(Inst, R.FromType, False);
+    R.Resolution:= FromCls.Resolution;
+    R.Candidates:= FromCls.Candidates;
+    if FromCls.Resolution = PAS_RES_RESOLVED then
+    begin
+      var Hit: TMemberHit:= Lookup(FromCls.QName, AMember);
+      if Hit.Found then
+      begin
+        R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
+        R.Visibility   := Trim(Hit.Member.Modifiers);
+        R.DeclaredIn   := Hit.Owner;
+        R.DeclaringUnit:= Hit.DeclUnit;
+      end
+      else if Hit.Ambig.Resolution = PAS_RES_AMBIGUOUS then
+      begin
+        R.Resolution:= PAS_RES_AMBIGUOUS;
+        R.Candidates:= Hit.Ambig.Candidates;
+      end
+      else
+        R.Resolution:= PAS_RES_MEMBER_NOT_FOUND;
+    end;
+    if not Cover.TryGetValue(K, Status) then
+    begin
+      { an unresolved To class carries nothing implicitly: unmapped, the
+        conservative answer (1.28.2: it was a bare-name lookup) }
+      var ToCls: TScopedClass:= if R.ToType = '' then Default(TScopedClass) else ClassOf(Inst, R.ToType, True);
+      Status:= if (ToCls.Resolution = PAS_RES_RESOLVED) and Lookup(ToCls.QName, AMember).Found then PAS_USE_SAME_NAME
+               else PAS_USE_UNMAPPED;
+    end;
+    R.Status:= Status;
+    if not MigTo.TryGetValue(K, R.MigrateTo) then R.MigrateTo:= '';
+    Index.Add(K, Rows.Count);
+    Rows.Add(R);
+    RowLines.Add(TList<Integer>.Create);
+    RowLines.Last.Add(ALine);
+  end;
+
+  { G10: a member reached through 'with <inst> do' -- a ref with no receiver,
+    after a with line naming a converted instance in the same routine, that
+    the index resolved to the member the instance's From class declares. The
+    nearest such with line above the ref owns it. Listed only; never rewritten. }
+  procedure AddWithSites;
+  type
+    TWithAt = record
+      Line     : Integer;
+      Inst     : string;
+      Enclosing: Int64;
+    end;
+  begin
+    var Refs: TArray<TReference>:= AIn.Store.GetReferencesFromFile(AIn.FileId);
+    var Withs: TList<TWithAt>:= TList<TWithAt>.Create;
+    try
+      for var Rf: TReference in Refs do
+        if (Rf.StartLine >= 1) and (Rf.StartLine <= AIn.PasLines.Count) and (Rf.EnclosingSymbolId > 0) then
+          for var N: string in AIn.Converted do
+            if SameText(Rf.NameText, N) and WithNamesTarget(AIn.PasLines[Rf.StartLine - 1], N) then
+            begin
+              var W: TWithAt;
+              W.Line     := Rf.StartLine;
+              W.Inst     := N;
+              W.Enclosing:= Rf.EnclosingSymbolId;
+              Withs.Add(W);
+            end;
+      if Withs.Count = 0 then Exit;
+      for var Rf: TReference in Refs do
+      begin
+        if (Rf.SymbolId <= 0) or (Rf.ReceiverText <> '') or SameText(Rf.Kind, 'member-access') then Continue;
+        var Sym: TSymbol:= AIn.Store.GetSymbolById(Rf.SymbolId);
+        if (Sym.Id <= 0) or not SameText(Sym.Name, Rf.NameText) or (Sym.ParentId <= 0) then Continue;
+        var Owner: string:= AIn.Store.GetSymbolById(Sym.ParentId).Name;
+        var Best: Integer:= -1;
+        for var I: Integer:= 0 to Withs.Count - 1 do
+        begin
+          var W: TWithAt:= Withs[I];
+          if (W.Enclosing <> Rf.EnclosingSymbolId) or (W.Line >= Rf.StartLine) then Continue;
+          if (Best >= 0) and (Withs[Best].Line >= W.Line) then Continue;
+          var FromT: string;
+          if not AIn.FromTypes.TryGetValue(W.Inst, FromT) then Continue;
+          var Cls: TScopedClass:= ClassOf(W.Inst, FromT, False);
+          if Cls.Resolution <> PAS_RES_RESOLVED then Continue;
+          var Hit: TMemberHit:= Lookup(Cls.QName, Rf.NameText);
+          if Hit.Found and SameText(Hit.Owner, Owner) then Best:= I;
+        end;
+        if Best >= 0 then AddSite(Withs[Best].Inst, Rf.NameText, Rf.StartLine);
+      end;
+    finally
+      Withs.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
   if (AIn.FileId <= 0) or (AIn.Converted = nil) or (AIn.Converted.Count = 0) then Exit;
@@ -4911,6 +5035,7 @@ begin
   Hits    := TDictionary<string, TMemberHit>.Create;
   ClassMemo:= TDictionary<string, TScopedClass>.Create;
   Blocks  := InstanceConvertBlocks(AIn.Book.Rules, AIn.Converted, AIn.FromTypes);
+  MigTo   := TDictionary<string, string>.Create;
   try
     for var L: TConversionRule in WithoutUnreachableRules(AIn.Book.Rules, AIn.Book.Unreachable, 0).Rules do
     begin
@@ -4936,61 +5061,13 @@ begin
       var MBlock: Integer:= LinkRuleBlock(AIn.Book.Rules, M);
       if MBlock = 0 then Continue; { file scope: not a member migration }
       for var N: string in ScopeFromBlocks(AIn.Converted, Blocks, MBlock) do
-        Cover.TryAdd(UpperCase(N + '|' + M.Old), PAS_USE_MAPPED);
+        if Cover.TryAdd(UpperCase(N + '|' + M.Old), PAS_USE_MAPPED) and not SameText(M.Old, M.New) then
+          MigTo.TryAdd(UpperCase(N + '|' + M.Old), M.New); { G4 }
     end;
     for var S: TAccessSite in BoundAccessSites(AIn.Store, AIn.FileId, AIn.DfmPath,
       FindMemberAccessSites(AIn.Store, AIn.FileId, AIn.PasLines, '', AIn.Converted.ToArray), Unv) do
-    begin
-      var Inst: string:= S.InstanceName;
-      for var N: string in AIn.Converted do
-        if SameText(N, S.InstanceName) then Inst:= N;
-      var K: string:= UpperCase(Inst + '|' + S.Member);
-      var At: Integer;
-      if Index.TryGetValue(K, At) then
-      begin
-        RowLines[At].Add(S.Line);
-        Continue;
-      end;
-      var R: TApplyPasUse:= Default(TApplyPasUse);
-      R.Instance:= Inst;
-      R.Member  := S.Member;
-      if not AIn.FromTypes.TryGetValue(Inst, R.FromType) then R.FromType:= '';
-      if not AIn.ToTypes.TryGetValue(Inst, R.ToType) then R.ToType:= '';
-      var FromCls: TScopedClass:= ClassOf(Inst, R.FromType, False);
-      R.Resolution:= FromCls.Resolution;
-      R.Candidates:= FromCls.Candidates;
-      if FromCls.Resolution = PAS_RES_RESOLVED then
-      begin
-        var Hit: TMemberHit:= Lookup(FromCls.QName, S.Member);
-        if Hit.Found then
-        begin
-          R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
-          R.Visibility   := Trim(Hit.Member.Modifiers);
-          R.DeclaredIn   := Hit.Owner;
-          R.DeclaringUnit:= Hit.DeclUnit;
-        end
-        else if Hit.Ambig.Resolution = PAS_RES_AMBIGUOUS then
-        begin
-          R.Resolution:= PAS_RES_AMBIGUOUS;
-          R.Candidates:= Hit.Ambig.Candidates;
-        end
-        else
-          R.Resolution:= PAS_RES_MEMBER_NOT_FOUND;
-      end;
-      if not Cover.TryGetValue(K, Status) then
-      begin
-        { an unresolved To class carries nothing implicitly: unmapped, the
-          conservative answer (1.28.2: it was a bare-name lookup) }
-        var ToCls: TScopedClass:= if R.ToType = '' then Default(TScopedClass) else ClassOf(Inst, R.ToType, True);
-        Status:= if (ToCls.Resolution = PAS_RES_RESOLVED) and Lookup(ToCls.QName, S.Member).Found then PAS_USE_SAME_NAME
-                 else PAS_USE_UNMAPPED;
-      end;
-      R.Status:= Status;
-      Index.Add(K, Rows.Count);
-      Rows.Add(R);
-      RowLines.Add(TList<Integer>.Create);
-      RowLines.Last.Add(S.Line);
-    end;
+      AddSite(S.InstanceName, S.Member, S.Line);
+    AddWithSites;
     Result:= Rows.ToArray;
     for var I: Integer:= 0 to High(Result) do Result[I].Lines:= DistinctSortedLines(RowLines[I].ToArray);
     TArray.Sort<TApplyPasUse>(Result, TComparer<TApplyPasUse>.Construct(
@@ -5000,6 +5077,7 @@ begin
         if Result = 0 then Result:= CompareText(A.Member, B.Member);
       end));
   finally
+    MigTo.Free;
     Blocks.Free;
     ClassMemo.Free;
     Hits.Free;
@@ -5033,7 +5111,10 @@ var
   Unv   : TArray<TAccessSite>;
   Edits : TList<TTextEdit>;
   Items : TList<TApplyItem>;
+  Conv  : TConversionRule;               { the #convert header of the block being planned }
 
+  { every item names its block's From / To (G9) and the rule's Old member
+    (G11; an applied rename or a break overrides it with the text written) }
   function Item(AKind: TApplyItemKind; AField: TApplyField; const ARule: TConversionRule;
     const AInst: string; ALine: Integer; const AText: string): TApplyItem;
   begin
@@ -5041,9 +5122,12 @@ var
     Result.Kind    := AKind;
     Result.Field   := AField;
     Result.Instance:= AInst;
+    Result.FromType:= Conv.FromType;
+    Result.ToType  := Conv.ToType;
     Result.FilePath:= AUnitPas;
     Result.Path    := ARule.Old;
     Result.Value   := ARule.New;
+    Result.OldValue:= ARule.Old;
     Result.RuleLine:= ARule.LineNo;
     Result.Line    := ALine;
     Result.Text    := AText;
@@ -5142,9 +5226,14 @@ begin
         Taken.AddOrSetValue(UpperCase(IntToStr(LinkRuleBlock(AIn.Book.Rules, L)) + '|' + L.FromPath), L.LineNo);
     end;
     var Block: Integer:= 0;
+    Conv:= Default(TConversionRule);
     for var R: TConversionRule in AIn.Book.Rules.Rules do
     begin
-      if R.Kind = rkConvert then Inc(Block);
+      if R.Kind = rkConvert then
+      begin
+        Inc(Block);
+        Conv:= R;
+      end;
       if (R.Kind <> rkMigrate) or (Block = 0) then Continue;
       var Scope: TArray<string>:= ScopeFromBlocks(AIn.Converted, Blocks, Block);
       if Length(Scope) = 0 then Continue; { no instance of this block in the unit }

@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-about",
-      "caption": "Recover Buffer-Compile Files"
+      "caption": "Recover Buffer-Compile Files",
+      "steps": ["Nothing to click in the normal case; the IDE runs it for you", "To run it by hand: `drag-lint ghost-recover \"<project>\"`", "It prints \"ghost-recover: nothing pending.\" when there is nothing to restore"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "The IDE crashed during Compile Buffer (unsaved); is a unit left with the wrong text?",
+      "command": "drag-lint ghost-recover \"<project>\""
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

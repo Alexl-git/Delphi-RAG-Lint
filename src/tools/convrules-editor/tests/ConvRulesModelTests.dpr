@@ -15,6 +15,7 @@ uses
   , System.Generics.Collections
   , System.JSON
   , Winapi.Windows
+  , Winapi.Messages // N1: WM_LBUTTONDOWN & co. pin ConvertClickLost's named constants
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
   , ConvRules.Units in '..\ConvRules.Units.pas'
@@ -1059,6 +1060,45 @@ begin
   Opts := ConversionsFor('Integer', Lib.Casts, Lib.Enums);
   Check('catalog.value.cast.not.for.integer', not FindCast('StripDB', Opt),
     'StripDB accepts string only');
+end;
+
+{ C-1: the picker offers StripDB for the string ALIAS TFileName. `accepts` is an
+  exact-name match (no alias walk), so the REPO castlib lists TFileName beside
+  string; the control proves the old `accepts string` list does not offer it. }
+procedure TestConvCatalogTFileNameStripDB;
+const
+  OLD_LIB = 'cast StripDB'#13#10 + '  accepts string'#13#10 + '  yields  string'#13#10 +
+    '  value   strip-db'#13#10 + 'end'#13#10;
+var
+  P   : string;
+  Lib : TCastLib;
+  Defs: TArray<TCastDef>;
+
+  function Offers(const ADefs: TArray<TCastDef>; const AFrom: string): Boolean;
+  var
+    o: TConvOption;
+  begin
+    for o in ConversionsFor(AFrom, ADefs, Lib.Enums) do
+      if SameText(o.CastName, 'StripDB') and (o.Kind = ckValue) then
+        Exit(True);
+    Result := False;
+  end;
+
+begin
+  Defs := LoadCastLibText(OLD_LIB);
+  Check('catalog.tfilename.control.old.string', Offers(Defs, 'string'), 'old list offers string');
+  Check('catalog.tfilename.control.old.notfilename', not Offers(Defs, 'TFileName'),
+    'old `accepts string` must NOT offer TFileName');
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\docs\examples\convrules\casts.castlib'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('catalog.tfilename.repo', 'casts.castlib not found: ' + P);
+    Exit;
+  end;
+  Lib := ParseCastLib(P);
+  Check('catalog.tfilename.repo.offered', Offers(Lib.Casts, 'TFileName'), P);
+  Check('catalog.tfilename.repo.string.kept', Offers(Lib.Casts, 'string'), P);
 end;
 
 procedure TestControlTypesFromNonProjectUnit;
@@ -3153,7 +3193,7 @@ begin
   B:= SplitRulesBlocks(Text);
 
   Check('select.bde.blocks', Length(B) = 12, IntToStr(Length(B)));
-  Check('select.bde.trailer.start', (B[11].StartLine = 654) and (B[10].EndLine = 653), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
+  Check('select.bde.trailer.start', (B[11].StartLine = 658) and (B[10].EndLine = 657), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
 
   { Nothing selected: 155 preamble + 76 trailer. }
   Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 231, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
@@ -9827,6 +9867,42 @@ begin
     and (Pos('V1:', Joined) > Pos('C1:', Joined)) and (Pos('A1:', Joined) = 0), Joined);
 end;
 
+{ B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
+  descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
+  recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
+  unconverted; ancestor converted first -> action code / converted. With both inherited_retype and
+  inherited_code_unconverted the editor adds NO code-use note of its own (CodeUseNoteDue). }
+procedure TestInheritedCodeUnconverted;
+const
+  ENTRY_LINE = 13;
+  NOTE_UNC   = '0 edit(s), 0 remaining for manual work; no component of its own to convert; 1 inherited instance(s) left: ancestor Anc not converted';
+var
+  Unc, Conv: TApplyRow;
+  Row      : TConvertRow;
+begin
+  Unc := ParseApplyJson(InheritedFixture('apply-desc-code-unconverted-1330.json'), APPLY_FEATURES_ALL);
+  Conv:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), APPLY_FEATURES_ALL);
+  Check('inh.codeunc.unconverted.parsed', Unc.Ok and (Length(Unc.InheritedLeft) = 1));
+  if Length(Unc.InheritedLeft) = 1 then
+    Check('inh.codeunc.unconverted.entry', (Unc.InheritedLeft[0].Name = 'Label1') and (Unc.InheritedLeft[0].AncestorUnit = 'Anc')
+      and (Unc.InheritedLeft[0].AncestorState = 'unconverted') and (Unc.InheritedLeft[0].Line = ENTRY_LINE));
+  Check('inh.codeunc.unconverted.is.left', (Length(Unc.InheritedLeft) = 1) and not IsRetypedInstance(Unc.InheritedLeft[0]),
+    if Length(Unc.InheritedLeft) = 1 then Unc.InheritedLeft[0].Action else '');
+  Check('inh.codeunc.unconverted.note', ConvertedRowNote(Unc, True, True) = NOTE_UNC, ConvertedRowNote(Unc, True, True));
+  Check('inh.codeunc.converted.parsed', Conv.Ok and (Length(Conv.InheritedLeft) = 1) and (Conv.InheritedLeft[0].Action = 'code')
+    and (Conv.InheritedLeft[0].AncestorState = 'converted') and (Conv.InheritedLeft[0].Line = ENTRY_LINE));
+
+  // Gate per engine state, on the real rows: the editor's own note only when the engine lacks either capability.
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := Unc;
+  Check('inh.codeunc.gate.both', not CodeUseNoteDue(Row, [], True, True));
+  Check('inh.codeunc.gate.no.codeunc', CodeUseNoteDue(Row, [], True, False));
+  Check('inh.codeunc.gate.no.retype', CodeUseNoteDue(Row, [], False, True));
+  Check('inh.codeunc.gate.neither', CodeUseNoteDue(Row, [], False, False));
+  Row.Apply:= Conv;
+  Check('inh.codeunc.converted.gate.both', not CodeUseNoteDue(Row, [], True, True));
+end;
 { C8 E11 live, ONLY against an engine that reports inherited_instances: Anc then Desc
   in one run; Anc's Label1 is converted, and (N2, inherited_retype, 1.26.0 on) Desc's
   inherited Label1 is retyped too and reported as retyped, not left. }
@@ -10122,6 +10198,22 @@ begin
   Check('tab.add.refused.running.wins', SourcesAddRefusal(True, True) = SourcesAddRefusal(True, False), SourcesAddRefusal(True, True));
   Check('tab.add.refused.checking', SourcesAddRefusal(False, True) = 'Inherited instances are being checked -- add the sources again when it finishes.', SourcesAddRefusal(False, True));
   Check('tab.add.allowed', SourcesAddRefusal(False, False) = '', SourcesAddRefusal(False, False));
+  // N1: a click on Convert that the progress window's modal loop swallowed is reported,
+  // never run later (a destructive run does not start by itself).
+  Check('tab.lost.click.win32', (LOST_CLICK_HIT_ERROR = HTERROR) and (LOST_CLICK_LBUTTONDOWN = WM_LBUTTONDOWN) and (LOST_CLICK_LBUTTONDBLCLK = WM_LBUTTONDBLCLK));
+  Check('tab.lost.click.convert', ConvertClickLost(HTERROR, WM_LBUTTONDOWN, 'Validating', True));
+  Check('tab.lost.click.dblclk', ConvertClickLost(HTERROR, WM_LBUTTONDBLCLK, 'Validating', True));
+  Check('tab.lost.click.move', not ConvertClickLost(HTERROR, WM_MOUSEMOVE, 'Validating', True), '(hovering is not a click)');
+  Check('tab.lost.click.release', not ConvertClickLost(HTERROR, WM_LBUTTONUP, 'Validating', True));
+  Check('tab.lost.click.enabled', not ConvertClickLost(HTCLIENT, WM_LBUTTONDOWN, 'Validating', True), '(an enabled window gets the click itself)');
+  Check('tab.lost.click.not.busy', not ConvertClickLost(HTERROR, WM_LBUTTONDOWN, '', True), '(no long call: a dialog of someone else disabled the editor)');
+  Check('tab.lost.click.other', not ConvertClickLost(HTERROR, WM_LBUTTONDOWN, 'Validating', False));
+  Check('tab.lost.click.status', LostConvertClickStatus('Saved Fix.rules.', 'Validating the book')
+    = 'Saved Fix.rules. | Convert was NOT started: it was clicked while the editor was busy (Validating the book). Click Convert again.',
+    LostConvertClickStatus('Saved Fix.rules.', 'Validating the book'));
+  Check('tab.lost.click.status.empty', LostConvertClickStatus('', 'Checking 1 source unit(s)')
+    = 'Convert was NOT started: it was clicked while the editor was busy (Checking 1 source unit(s)). Click Convert again.',
+    LostConvertClickStatus('', 'Checking 1 source unit(s)'));
 
   Row:= Default(TConvertRow);
   Row.UnitPas:= 'x\Desc.pas';
@@ -11232,24 +11324,29 @@ var
   Where: Boolean;
 begin
   Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
-  Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 1) and (Cast.UsesRows[0].Action = 'kept') and (Cast.UsesRows[0].UnitName = 'Vcl.Buttons'));
-  if Length(Cast.UsesRows) = 1 then
-    Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[0].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[0].Dangling) = 0),
-      string.Join(',', Cast.UsesRows[0].NeededBy));
-  Check('apply1270.cast.uses.note.kept.only', UsesNote(Cast) = '', UsesNote(Cast));
+  // Engine 1.28.1 (940193b2 / 4785f028): '#convert trailing units emit uses add rows' -- the capture now has the cxButtons add row first, then the kept row.
+  Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 2) and (Cast.UsesRows[1].Action = 'kept') and (Cast.UsesRows[1].UnitName = 'Vcl.Buttons'));
+  Check('apply1270.cast.uses.add.convert', (Length(Cast.UsesRows) = 2) and (Cast.UsesRows[0].Action = 'add') and (Cast.UsesRows[0].UnitName = 'cxButtons') and (Cast.UsesRows[0].Section = 'interface'));
+  if Length(Cast.UsesRows) = 2 then
+    Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[1].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[1].Dangling) = 0),
+      string.Join(',', Cast.UsesRows[1].NeededBy));
+  // Engine 1.28.1 (940193b2 / 4785f028): the #convert add row counts: +1 -0.
+  Check('apply1270.cast.uses.note.add.only', UsesNote(Cast) = '; uses: +1 -0 moved 0', UsesNote(Cast));
   Check('apply1270.cast.reindex', Cast.UsesReindex = 'done', Cast.UsesReindex);
 
   Uses1:= ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'), APPLY_FEATURES_ALL);
-  Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 2) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add'),
+  // Engine 1.28.1 (940193b2 / 4785f028): '#convert trailing units emit uses add rows' -- remove, add cxButtons (#convert), add Vcl.ExtCtrls (#use).
+  Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 3) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add')
+    and (Uses1.UsesRows[1].UnitName = 'cxButtons') and (Uses1.UsesRows[2].Action = 'add'),
     IntToStr(Length(Uses1.UsesRows)));
-  if Length(Uses1.UsesRows) = 2 then
+  if Length(Uses1.UsesRows) = 3 then
   begin
-    Where:= (Uses1.UsesRows[1].UnitName = 'Vcl.ExtCtrls') and (Uses1.UsesRows[1].Section = 'implementation') and (Uses1.UsesRows[0].Source = 'rule');
+    Where:= (Uses1.UsesRows[2].UnitName = 'Vcl.ExtCtrls') and (Uses1.UsesRows[2].Section = 'implementation') and (Uses1.UsesRows[0].Source = 'rule');
     Check('apply1270.uses.rows.fields', Where);
     Check('apply1270.uses.dangling', (string.Join(',', Uses1.UsesRows[0].Dangling) = 'TBitBtnKind,bkOK') and (Length(Uses1.UsesRows[0].NeededBy) = 0),
       string.Join(',', Uses1.UsesRows[0].Dangling));
   end;
-  Check('apply1270.uses.note', UsesNote(Uses1) = '; uses: +1 -1 moved 0', UsesNote(Uses1));
+  Check('apply1270.uses.note', UsesNote(Uses1) = '; uses: +2 -1 moved 0', UsesNote(Uses1));
 end;
 
 procedure TestApply1270Notes;
@@ -11258,7 +11355,7 @@ const
   DFM_LINE   = 10;
   SAMPLE_ROWS = 3;
   NOTE_ORDER = '2 edit(s), 0 remaining for manual work; 1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)'
-    + '; StripDB: 3 value(s) changed, 1 to check by hand; 1 cast site(s) to convert by hand; uses: +1 -1 moved 0'
+    + '; StripDB: 3 value(s) changed, 1 to check by hand; 1 cast site(s) to convert by hand; uses: +2 -1 moved 0'
     + '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)';
 var
   Strip : TApplyRow;
@@ -11353,10 +11450,12 @@ begin
   Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Row.Apply:= Cast;
   Lines:= ApplyItemReportLines(Row);
-  Check('apply1270.report.cast.count', (Length(Lines) = 2 + 5) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
-  if (Length(Lines) = 2 + 5) and (Length(Cast.CastSites) = 1) then
+  // Engine 1.28.1 (940193b2 / 4785f028): the cxButtons add row is a report line of its own (cast, add, kept, 5 dropped = 3 + 5).
+  Check('apply1270.report.cast.count', (Length(Lines) = 3 + 5) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
+  if (Length(Lines) = 3 + 5) and (Length(Cast.CastSites) = 1) then
     Check('apply1270.report.cast', (Lines[0] = HEAD + 'cast site'#9#9#9#9#9 + Cast.CastSites[0].Text)
-      and (Lines[1] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
+      and (Lines[1] = HEAD + 'uses add'#9#9#9#9#9'cxButtons (interface, source rule)')
+      and (Lines[2] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
   Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'), APPLY_FEATURES_ALL);
   Lines:= ApplyItemReportLines(Row);
   Check('apply1270.report.unresolved', (Length(Lines) = SAMPLE_REPORT) and (Lines[High(Lines)] = HEAD + 'uses unresolved'#9#9#9#9#9'not-found'),
@@ -11558,7 +11657,7 @@ var
 begin
   A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.remainder.cast.once', Length(A.Remainder) = CAST_REMAINDER, IntToStr(Length(A.Remainder)));
-  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 6 remaining for manual work; 1 cast site(s) to convert by hand; 5 dropped source property(ies), no #link: TBitBtn.Height, TBitBtn.Left, TBitBtn.TabOrder, TBitBtn.Top, TBitBtn.Width',
+  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 6 remaining for manual work; 1 cast site(s) to convert by hand; uses: +1 -0 moved 0; 5 dropped source property(ies), no #link: TBitBtn.Height, TBitBtn.Left, TBitBtn.TabOrder, TBitBtn.Top, TBitBtn.Width',
     ConvertedRowNote(A, True, True));
   Check('apply1270.remainder.cast.gated', Length(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), []).Remainder) = CAST_ALL);
   A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
@@ -12833,14 +12932,12 @@ begin
     Check('runner.scope.all.out.drops.backup', (Length(LRows) = 1) and (LRows[0].Status = csOutOfScope) and (Length(Calls) = 0)
       and (TFile.ReadAllText(TPath.Combine(AllDir, 'F.pas')) = ORIG) and (Length(TDirectory.GetFiles(AllDir, 'F.*.BCK*')) = 0), Describe(LRows));
 
-    // the engine's --only refusal gets the hint (E10)
+    // the engine's --only refusal gets no hint
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],
       Refuse, Index, Scope, nil, nil);
     Check('runner.scope.refused.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
-      and LRows[0].Note.EndsWith(' -- convert all TTable instances on this form, or remove the #unuse / #useswap from the book'), Describe(LRows));
-    Check('runner.scope.refusal.hint.pure', (RefusalHint('x would leave 3 unconverted instance(s) of TQuery -- unit not changed') = ' -- convert all TQuery instances on this form, or remove the #unuse / #useswap from the book')
-      and (RefusalHint('inherited instances of TTable are not converted yet') = ''));
+      and (Pos(' -- convert all ', LRows[0].Note) = 0) and (Pos('--only asked for', LRows[0].Note) = 0), Describe(LRows));
     // an unscoped refusal never gets the hint: the reason is not about a scope
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],
@@ -13073,7 +13170,8 @@ begin
   for var LRow: TPasUseRow in Rows do
     if LRow.Member = 'bkOK' then
       Glob:= RowDisplay(LRow);
-  Check('worklist.global.row', string.Join('|', Glob) = 'Unit1.pas|' + WORK_GLOBAL_INSTANCE + '|' + WORK_GLOBAL_PAIR + '|bkOK||global-dangling|26|Vcl.Buttons',
+  // Engine 1.28.2 (59d101d1): the capture now classifies bkOK as kind enum-value.
+  Check('worklist.global.row', string.Join('|', Glob) = 'Unit1.pas|' + WORK_GLOBAL_INSTANCE + '|' + WORK_GLOBAL_PAIR + '|bkOK|enum-value|global-dangling|26|Vcl.Buttons',
     string.Join('|', Glob));
   Check('worklist.columns', string.Join('|', WorkColumns) = 'Unit|Instance|From -> To|Member|Kind|Status|Lines|Declared in', string.Join('|', WorkColumns));
 end;
@@ -13347,6 +13445,10 @@ const
     + ' {"member":"D","kind":"property","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"mapped","resolution":"resolved"},'
     + ' {"member":"E","declaring_unit":"Vcl.StdCtrls","status":"unmapped","resolution":"brand-new","candidates":["X",5,"Y",null,true]},'
     + ' {"member":5,"kind":1.5,"status":"unmapped","resolution":7,"candidates":"Vcl.StdCtrls"}]';
+  // The 1.28.2 capture of the ambiguous case (a bare TLabel book on a unit with no StdCtrls in uses), kept verbatim: the 1.33.0 engine infers
+  // Vcl.StdCtrls.TLabel from the .dfm (1.28.3, e6f97f7d) and no longer reproduces it from the Fix project.
+  AMBIG_JSON = '[{"instance":"Label1","from_type":"TLabel","to_type":"TPanel","member":"Caption","kind":"","visibility":"","declaring_unit":"","declared_in":"","status":"same-name","lines":[24],"count":1,"resolution":"ambiguous","candidates":["FMX.StdCtrls","Vcl.StdCtrls"]},'
+    + '{"instance":"Label1","from_type":"TLabel","to_type":"TPanel","member":"WordWrap","kind":"","visibility":"","declaring_unit":"","declared_in":"","status":"unmapped","lines":[25],"count":1,"resolution":"ambiguous","candidates":["FMX.StdCtrls","Vcl.StdCtrls"]}]';
   RES_CLASS    = 0;
   RES_MEMBER   = 1;
   RES_KIND     = 2;
@@ -13360,6 +13462,7 @@ const
   KEY_ROWS     = 2;
 var
   Real  : TArray<TPasUseRow>;
+  Amb   : TArray<TPasUseRow>;
   Gated : TArray<TPasUseRow>;
   Res   : TArray<TPasUseRow>;
   Arr   : TJSONArray;
@@ -13368,17 +13471,29 @@ var
   Conv  : TArray<TConvertRow>;
   Twin  : TPasUseRow;
 begin
-  // worklist.resolution.ambiguous -- the real capture: candidates named, nothing guessed.
+  // worklist.resolution.resolved -- the real capture: the engine resolved the declaring unit.
   Real:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), APPLY_FEATURES_ALL).PasUses;
   Shown:= if Length(Real) = REAL_ROWS then string.Join('|', RowDisplay(Real[High(Real)])) else IntToStr(Length(Real)) + ' rows';
+  // Engine 1.28.2 (59d101d1) resolution / 1.28.3 (e6f97f7d) convert-class-inferred: on the 1.33.0 pin the real capture RESOLVES (kind property, Vcl.StdCtrls.TLabel).
+  Check('worklist.resolution.resolved', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|property|unmapped|25|Vcl.StdCtrls.TLabel', Shown);
+  Check('worklist.resolution.resolved.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = 'resolved') and (Length(Real[0].Candidates) = 0)
+    and (Real[0].DeclaringUnit = 'Vcl.StdCtrls'));
+  // The ambiguous shape, from the verbatim 1.28.2 rows (AMBIG_JSON).
+  Arr:= TJSONObject.ParseJSONValue(AMBIG_JSON) as TJSONArray;
+  try
+    Amb:= ParsePasUses(Arr, 'Unit1.pas', WORK_RUN_OLD);
+  finally
+    Arr.Free;
+  end; // try
+  Shown:= if Length(Amb) = REAL_ROWS then string.Join('|', RowDisplay(Amb[High(Amb)])) else IntToStr(Length(Amb)) + ' rows';
   Check('worklist.resolution.ambiguous', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|(unknown)|unmapped|25|ambiguous: FMX.StdCtrls, Vcl.StdCtrls', Shown);
-  Check('worklist.resolution.ambiguous.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = PAS_RES_AMBIGUOUS)
-    and (string.Join(',', Real[0].Candidates) = 'FMX.StdCtrls,Vcl.StdCtrls'));
+  Check('worklist.resolution.ambiguous.fields', (Length(Amb) = REAL_ROWS) and (Amb[0].Resolution = PAS_RES_AMBIGUOUS)
+    and (string.Join(',', Amb[0].Candidates) = 'FMX.StdCtrls,Vcl.StdCtrls'));
 
-  // worklist.resolution.gated.off -- an engine without pas_uses_resolution: both cleared.
+  // worklist.resolution.gated.off -- an engine without pas_uses_resolution: resolution and candidates cleared (kind / declaring unit are plain fields).
   Gated:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), [afPasUses]).PasUses;
   Shown:= if Length(Gated) = REAL_ROWS then string.Join('|', RowDisplay(Gated[High(Gated)])) else IntToStr(Length(Gated)) + ' rows';
-  Check('worklist.resolution.gated.off', (Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap||unmapped|25|') and (Length(Gated) = REAL_ROWS)
+  Check('worklist.resolution.gated.off', (Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|property|unmapped|25|Vcl.StdCtrls.TLabel') and (Length(Gated) = REAL_ROWS)
     and (Gated[0].Resolution = '') and (Length(Gated[0].Candidates) = 0), Shown);
 
   Raised:= False;
@@ -14139,6 +14254,60 @@ begin
   end;
 end;
 
+{ B9: the shipped BDE book carries the engine's reference checks and a #warn, every one
+  well-formed and byte-identical through parse + emit (also with every node dirty). }
+procedure TestBdeBookWarnCheckRef;
+const
+  REF_EXPECT = '#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName';
+  REFS_WANT  = 3;  // TTable, TQuery, TStoredProc: each links ConnectionName <- DatabaseName
+  WARNS_WANT = 1;  // TTable IndexName
+var
+  P, Text: string;
+  B      : TRuleBook;
+  N      : TRuleNode;
+  Refs, Warns, Bad: Integer;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('bde.warnref', 'BDE-to-FireDAC.rules not found: ' + P);
+    Exit;
+  end;
+  Text:= TFile.ReadAllText(P, TEncoding.ASCII);
+  B:= TRuleBook.Create;
+  try
+    B.LoadFromString(Text);
+    Refs := 0;
+    Warns:= 0;
+    Bad  := 0;
+    for N in B.Nodes do
+    begin
+      if N.Kind = rnkCheckRef then
+      begin
+        Inc(Refs);
+        if (not N.CheckRefValid) or (N.Emit <> REF_EXPECT) then
+          Inc(Bad);
+      end
+      else if N.Kind = rnkWarn then
+      begin
+        Inc(Warns);
+        if not N.WarnValid then
+          Inc(Bad);
+      end;
+    end;
+    Check('bde.warnref.check-ref.count', Refs = REFS_WANT, IntToStr(Refs));
+    Check('bde.warnref.warn.count', Warns = WARNS_WANT, IntToStr(Warns));
+    Check('bde.warnref.all.valid', Bad = 0, IntToStr(Bad));
+    Check('bde.warnref.roundtrip', B.SaveToString = Text);
+    for N in B.Nodes do
+      if N.Kind in [rnkWarn, rnkCheckRef] then
+        N.Dirty:= True;
+    Check('bde.warnref.dirty.rebuild', B.SaveToString = Text);
+  finally
+    B.Free;
+  end; // try
+end;
+
 procedure TestQualifyRunner;
 const
   ORIG = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
@@ -14486,6 +14655,7 @@ begin
     TestControlTypesFromNonProjectUnit;
   TestConvCatalog;
   TestConvCatalogValueCast;
+  TestConvCatalogTFileNameStripDB;
     TestAcceptanceTcxButtonToPool;
     TestQueryLocationParse;
     TestQuerySymbolTieBreak;
@@ -14548,6 +14718,7 @@ begin
     TestClassLookupLive;
     TestInheritedApply;
     TestInheritedActions;
+    TestInheritedCodeUnconverted;
     TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
@@ -14608,6 +14779,7 @@ begin
   TestApplyBadShapes;
   TestEngineJsonShapes;
   TestWarnCheckRefDirectives;
+  TestBdeBookWarnCheckRef;
   TestRunner1315;
     TestApply1270Uses;
     TestApply1270Notes;

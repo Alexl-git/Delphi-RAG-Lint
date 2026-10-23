@@ -33,6 +33,9 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Symbol Search...**
+   1. Choose drag-lint > Symbol Search...
+   2. Type part of the symbol name in the search box
+   3. Pick a result to open its declaration; the dialog also has a Usages view
 
 ## Pitfalls
 

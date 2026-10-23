@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)..."
+      "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...",
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...", "Read the suggested moves and the unused entries", "From a shell: `drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]`"]
     },
     {
       "type": "cli",
@@ -32,6 +33,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which uses entries can move from interface to implementation?",
+      "command": "drag-lint uses-audit <unit.pas> --db <file.sqlite>"
+    },
+    {
+      "ask": "Which units in uses are not needed at all?",
+      "command": "drag-lint uses-audit <unit.pas> --db <file.sqlite> --format json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

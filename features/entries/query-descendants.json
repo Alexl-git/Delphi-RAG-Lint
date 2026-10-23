@@ -31,10 +31,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Inspect Symbol > Descendants of Class..."
+      "path": "drag-lint > Inspect Symbol > Descendants of Class...",
+      "steps": ["Needs an index of the project", "drag-lint > Inspect Symbol > Descendants of Class...", "Enter the class; every descending class is listed"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which classes descend from this ancestor?",
+      "command": "drag-lint query descendants --of <ancestor> --db <db>"
+    },
+    {
+      "ask": "Can I get them as JSON?",
+      "command": "drag-lint query descendants --of <ancestor> --json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Document unit"
+      "caption": "Document unit",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the unit node", "Choose Document unit; managed DocInsight comments are generated or repaired for its public declarations"]
     },
     {
       "type": "cli",
@@ -43,6 +44,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I document all public declarations of one unit?",
+      "command": "drag-lint document --qname <Unit> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

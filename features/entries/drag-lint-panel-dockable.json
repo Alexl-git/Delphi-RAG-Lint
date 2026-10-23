@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > drag-lint Panel (dockable)"
+      "path": "drag-lint > drag-lint Panel (dockable)",
+      "steps": ["Choose drag-lint > drag-lint Panel (dockable)", "The main drag-lint tool window opens as a dockable window; drag it where you want it to stay docked"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I dock the main drag-lint panel beside my editor?",
+      "command": "drag-lint > drag-lint Panel (dockable)"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

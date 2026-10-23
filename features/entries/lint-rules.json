@@ -29,6 +29,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which lint rules does the engine ship?",
+      "command": "drag-lint rules"
+    },
+    {
+      "ask": "Which rules are in one category?",
+      "command": "drag-lint rules --category <name>"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.LintOptionsFrame.pas:88",
   "access": "cli-only",
   "accessReviewed": {

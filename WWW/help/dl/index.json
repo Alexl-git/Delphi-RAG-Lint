@@ -6,7 +6,10 @@
     "group": "indexing",
     "order": 10001,
     "since": "0.1.0-alpha",
-    "file": "features/auto-document-whole-project.md"
+    "file": "features/auto-document-whole-project.md",
+    "menus": ["drag-lint > Generate & Export > Auto-Document Whole Project..."],
+    "context": [],
+    "verb": "index"
   },
   {
     "id": "migrate-dbs",
@@ -15,7 +18,10 @@
     "group": "indexing",
     "order": 10002,
     "since": "1.3.0-alpha",
-    "file": "features/migrate-dbs.md"
+    "file": "features/migrate-dbs.md",
+    "menus": ["drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG..."],
+    "context": [],
+    "verb": "migrate-dbs"
   },
   {
     "id": "pp-profile",
@@ -24,7 +30,10 @@
     "group": "indexing",
     "order": 10003,
     "since": "0.92.0-alpha",
-    "file": "features/pp-profile.md"
+    "file": "features/pp-profile.md",
+    "menus": [],
+    "context": [],
+    "verb": "pp-profile"
   },
   {
     "id": "purge-locals",
@@ -33,7 +42,10 @@
     "group": "indexing",
     "order": 10004,
     "since": "0.91.0-alpha",
-    "file": "features/purge-locals.md"
+    "file": "features/purge-locals.md",
+    "menus": ["drag-lint > Index & Maintenance > Shrink Index (purge locals)..."],
+    "context": [],
+    "verb": "purge-locals"
   },
   {
     "id": "rebuild-index-for-this-project",
@@ -42,7 +54,10 @@
     "group": "indexing",
     "order": 10005,
     "since": "0.1.0-alpha",
-    "file": "features/rebuild-index-for-this-project.md"
+    "file": "features/rebuild-index-for-this-project.md",
+    "menus": ["drag-lint > Index & Maintenance > Rebuild Index for This Project"],
+    "context": [],
+    "verb": "index"
   },
   {
     "id": "register-project",
@@ -51,7 +66,10 @@
     "group": "indexing",
     "order": 10006,
     "since": "1.20.4-alpha",
-    "file": "features/register-project.md"
+    "file": "features/register-project.md",
+    "menus": [],
+    "context": [],
+    "verb": "register-project"
   },
   {
     "id": "schema",
@@ -60,7 +78,10 @@
     "group": "indexing",
     "order": 10007,
     "since": "0.3.0-alpha",
-    "file": "features/schema.md"
+    "file": "features/schema.md",
+    "menus": [],
+    "context": [],
+    "verb": "schema"
   },
   {
     "id": "show-resolved-dbs-debug",
@@ -69,7 +90,10 @@
     "group": "indexing",
     "order": 10008,
     "since": "0.60.0-alpha",
-    "file": "features/show-resolved-dbs-debug.md"
+    "file": "features/show-resolved-dbs-debug.md",
+    "menus": ["drag-lint > Index & Maintenance > Show Resolved DBs (debug)..."],
+    "context": [],
+    "verb": "resolve-dbs"
   },
   {
     "id": "call-path",
@@ -78,7 +102,10 @@
     "group": "search-navigation",
     "order": 20001,
     "since": "0.91.0-alpha",
-    "file": "features/call-path.md"
+    "file": "features/call-path.md",
+    "menus": ["drag-lint > Uses & Dependencies > Call Path Between Two Routines..."],
+    "context": [],
+    "verb": "call-path"
   },
   {
     "id": "class-surface",
@@ -87,7 +114,10 @@
     "group": "search-navigation",
     "order": 20002,
     "since": "0.1.0-alpha",
-    "file": "features/class-surface.md"
+    "file": "features/class-surface.md",
+    "menus": ["drag-lint > Inspect Symbol > Class Surface..."],
+    "context": [],
+    "verb": "surface"
   },
   {
     "id": "compiler-hints",
@@ -96,7 +126,10 @@
     "group": "search-navigation",
     "order": 20003,
     "since": "0.1.0-alpha",
-    "file": "features/compiler-hints.md"
+    "file": "features/compiler-hints.md",
+    "menus": ["drag-lint > Code Quality > Compiler Hints..."],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "context",
@@ -105,7 +138,10 @@
     "group": "search-navigation",
     "order": 20004,
     "since": "0.6.0-alpha",
-    "file": "features/context.md"
+    "file": "features/context.md",
+    "menus": [],
+    "context": [],
+    "verb": "context"
   },
   {
     "id": "find-callees",
@@ -114,7 +150,10 @@
     "group": "search-navigation",
     "order": 20005,
     "since": "0.91.0-alpha",
-    "file": "features/find-callees.md"
+    "file": "features/find-callees.md",
+    "menus": ["drag-lint > Uses & Dependencies > What This Routine Calls (callees)..."],
+    "context": [],
+    "verb": "find-callees"
   },
   {
     "id": "find-undocumented-public",
@@ -123,7 +162,10 @@
     "group": "search-navigation",
     "order": 20006,
     "since": "0.1.0-alpha",
-    "file": "features/find-undocumented-public.md"
+    "file": "features/find-undocumented-public.md",
+    "menus": ["drag-lint > Code Quality > Find Undocumented (public)..."],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "find-unit",
@@ -132,7 +174,10 @@
     "group": "search-navigation",
     "order": 20007,
     "since": "0.69.0-alpha",
-    "file": "features/find-unit.md"
+    "file": "features/find-unit.md",
+    "menus": ["drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)..."],
+    "context": [],
+    "verb": "find-unit"
   },
   {
     "id": "find-usages",
@@ -141,7 +186,10 @@
     "group": "search-navigation",
     "order": 20008,
     "since": "0.33.0-alpha",
-    "file": "features/find-usages.md"
+    "file": "features/find-usages.md",
+    "menus": ["drag-lint > Find Usages..."],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "find-usages-context",
@@ -150,7 +198,10 @@
     "group": "search-navigation",
     "order": 20009,
     "since": "0.33.0-alpha",
-    "file": "features/find-usages-context.md"
+    "file": "features/find-usages-context.md",
+    "menus": [],
+    "context": ["Structure form > Find Usages"],
+    "verb": "usages"
   },
   {
     "id": "go-to-declaration",
@@ -159,7 +210,10 @@
     "group": "search-navigation",
     "order": 20010,
     "since": "0.0.0",
-    "file": "features/go-to-declaration.md"
+    "file": "features/go-to-declaration.md",
+    "menus": [],
+    "context": ["Structure form > Go to Declaration"],
+    "verb": ""
   },
   {
     "id": "go-to-definition",
@@ -168,7 +222,10 @@
     "group": "search-navigation",
     "order": 20011,
     "since": "0.0.0",
-    "file": "features/go-to-definition.md"
+    "file": "features/go-to-definition.md",
+    "menus": ["drag-lint > Go to Definition"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "go-to-implementation",
@@ -177,7 +234,10 @@
     "group": "search-navigation",
     "order": 20012,
     "since": "0.43.0-alpha",
-    "file": "features/go-to-implementation.md"
+    "file": "features/go-to-implementation.md",
+    "menus": [],
+    "context": ["Structure form > Go to Implementation"],
+    "verb": ""
   },
   {
     "id": "helpers-of",
@@ -186,7 +246,10 @@
     "group": "search-navigation",
     "order": 20013,
     "since": "0.94.0-alpha",
-    "file": "features/helpers-of.md"
+    "file": "features/helpers-of.md",
+    "menus": ["drag-lint > Inspect Symbol > Helpers of Type..."],
+    "context": [],
+    "verb": "helpers-of"
   },
   {
     "id": "hover-at-cursor",
@@ -195,7 +258,10 @@
     "group": "search-navigation",
     "order": 20014,
     "since": "0.7.0-alpha",
-    "file": "features/hover-at-cursor.md"
+    "file": "features/hover-at-cursor.md",
+    "menus": ["drag-lint > Hover at Cursor"],
+    "context": [],
+    "verb": "hover"
   },
   {
     "id": "outline",
@@ -204,7 +270,10 @@
     "group": "search-navigation",
     "order": 20015,
     "since": "0.86.0-alpha",
-    "file": "features/outline.md"
+    "file": "features/outline.md",
+    "menus": ["drag-lint > Show Structure"],
+    "context": [],
+    "verb": "outline"
   },
   {
     "id": "query-ancestors",
@@ -213,7 +282,10 @@
     "group": "search-navigation",
     "order": 20016,
     "since": "0.1.0-alpha",
-    "file": "features/query-ancestors.md"
+    "file": "features/query-ancestors.md",
+    "menus": ["drag-lint > Inspect Symbol > Ancestors of Type (full chain)..."],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-descendants",
@@ -222,7 +294,10 @@
     "group": "search-navigation",
     "order": 20017,
     "since": "0.1.0-alpha",
-    "file": "features/query-descendants.md"
+    "file": "features/query-descendants.md",
+    "menus": ["drag-lint > Inspect Symbol > Descendants of Class..."],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-find-callers",
@@ -231,7 +306,10 @@
     "group": "search-navigation",
     "order": 20018,
     "since": "0.1.0-alpha",
-    "file": "features/query-find-callers.md"
+    "file": "features/query-find-callers.md",
+    "menus": ["drag-lint > Find Usages..."],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-kind-all",
@@ -240,7 +318,10 @@
     "group": "search-navigation",
     "order": 20019,
     "since": "0.1.0-alpha",
-    "file": "features/query-kind-all.md"
+    "file": "features/query-kind-all.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-name-like",
@@ -249,7 +330,10 @@
     "group": "search-navigation",
     "order": 20020,
     "since": "0.1.0-alpha",
-    "file": "features/query-name-like.md"
+    "file": "features/query-name-like.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-type-usage",
@@ -258,7 +342,10 @@
     "group": "search-navigation",
     "order": 20021,
     "since": "0.1.0-alpha",
-    "file": "features/query-type-usage.md"
+    "file": "features/query-type-usage.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-typecat",
@@ -267,7 +354,10 @@
     "group": "search-navigation",
     "order": 20022,
     "since": "0.1.0-alpha",
-    "file": "features/query-typecat.md"
+    "file": "features/query-typecat.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "query-unit-usage",
@@ -276,7 +366,10 @@
     "group": "search-navigation",
     "order": 20023,
     "since": "0.1.0-alpha",
-    "file": "features/query-unit-usage.md"
+    "file": "features/query-unit-usage.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "show-completion",
@@ -285,7 +378,10 @@
     "group": "search-navigation",
     "order": 20024,
     "since": "0.21.0-alpha",
-    "file": "features/show-completion.md"
+    "file": "features/show-completion.md",
+    "menus": ["drag-lint > Show Completion"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "show-signature-help",
@@ -294,7 +390,10 @@
     "group": "search-navigation",
     "order": 20025,
     "since": "0.21.0-alpha",
-    "file": "features/show-signature-help.md"
+    "file": "features/show-signature-help.md",
+    "menus": ["drag-lint > Show Signature Help"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "show-structure",
@@ -303,7 +402,10 @@
     "group": "search-navigation",
     "order": 20026,
     "since": "0.30.0-alpha",
-    "file": "features/show-structure.md"
+    "file": "features/show-structure.md",
+    "menus": ["drag-lint > Show Structure"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "symbol-search",
@@ -312,7 +414,10 @@
     "group": "search-navigation",
     "order": 20027,
     "since": "0.1.0-alpha",
-    "file": "features/symbol-search.md"
+    "file": "features/symbol-search.md",
+    "menus": ["drag-lint > Symbol Search..."],
+    "context": [],
+    "verb": "query"
   },
   {
     "id": "symbol-slice",
@@ -321,7 +426,10 @@
     "group": "search-navigation",
     "order": 20028,
     "since": "0.17.0-alpha",
-    "file": "features/symbol-slice.md"
+    "file": "features/symbol-slice.md",
+    "menus": ["drag-lint > Inspect Symbol > Symbol Slice..."],
+    "context": [],
+    "verb": "slice"
   },
   {
     "id": "type-at-cursor",
@@ -330,7 +438,10 @@
     "group": "search-navigation",
     "order": 20029,
     "since": "0.19.0-alpha",
-    "file": "features/type-at-cursor.md"
+    "file": "features/type-at-cursor.md",
+    "menus": ["drag-lint > Inspect Symbol > Type at Cursor"],
+    "context": [],
+    "verb": "typeat"
   },
   {
     "id": "usages",
@@ -339,7 +450,10 @@
     "group": "search-navigation",
     "order": 20030,
     "since": "0.33.0-alpha",
-    "file": "features/usages.md"
+    "file": "features/usages.md",
+    "menus": ["drag-lint > Find Usages..."],
+    "context": [],
+    "verb": "usages"
   },
   {
     "id": "wiki",
@@ -348,7 +462,10 @@
     "group": "search-navigation",
     "order": 20031,
     "since": "1.7.0-alpha",
-    "file": "features/wiki.md"
+    "file": "features/wiki.md",
+    "menus": [],
+    "context": [],
+    "verb": "wiki"
   },
   {
     "id": "copy-all-diagnostics",
@@ -357,7 +474,10 @@
     "group": "linting",
     "order": 30001,
     "since": "0.1.0-alpha",
-    "file": "features/copy-all-diagnostics.md"
+    "file": "features/copy-all-diagnostics.md",
+    "menus": [],
+    "context": ["Structure form > Copy All Diagnostics"],
+    "verb": "lint"
   },
   {
     "id": "copy-diagnostics-current-file",
@@ -366,7 +486,10 @@
     "group": "linting",
     "order": 30002,
     "since": "0.1.0-alpha",
-    "file": "features/copy-diagnostics-current-file.md"
+    "file": "features/copy-diagnostics-current-file.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
   },
   {
     "id": "copy-selected-diagnostics",
@@ -375,7 +498,10 @@
     "group": "linting",
     "order": 30003,
     "since": "1.28.3-alpha",
-    "file": "features/copy-selected-diagnostics.md"
+    "file": "features/copy-selected-diagnostics.md",
+    "menus": [],
+    "context": ["Structure form > Copy"],
+    "verb": ""
   },
   {
     "id": "drag-lint-project-rules",
@@ -384,7 +510,10 @@
     "group": "linting",
     "order": 30004,
     "since": "0.2.0-alpha",
-    "file": "features/drag-lint-project-rules.md"
+    "file": "features/drag-lint-project-rules.md",
+    "menus": [],
+    "context": ["Project Manager > drag-lint: Project Rules"],
+    "verb": "rules"
   },
   {
     "id": "exceptions-sync",
@@ -393,7 +522,10 @@
     "group": "linting",
     "order": 30005,
     "since": "1.8.0-alpha",
-    "file": "features/exceptions-sync.md"
+    "file": "features/exceptions-sync.md",
+    "menus": [],
+    "context": [],
+    "verb": "exceptions-sync"
   },
   {
     "id": "fix-all-in-project",
@@ -402,7 +534,10 @@
     "group": "linting",
     "order": 30006,
     "since": "0.61.0-alpha",
-    "file": "features/fix-all-in-project.md"
+    "file": "features/fix-all-in-project.md",
+    "menus": [],
+    "context": ["Structure form > Fix all in project"],
+    "verb": "lint-all"
   },
   {
     "id": "fix-all-in-unit",
@@ -411,7 +546,10 @@
     "group": "linting",
     "order": 30007,
     "since": "0.1.0-alpha",
-    "file": "features/fix-all-in-unit.md"
+    "file": "features/fix-all-in-unit.md",
+    "menus": [],
+    "context": ["Structure form > Fix all in unit"],
+    "verb": "lint"
   },
   {
     "id": "fix-all-reliability",
@@ -420,7 +558,10 @@
     "group": "linting",
     "order": 30008,
     "since": "1.31.3-alpha",
-    "file": "features/fix-all-reliability.md"
+    "file": "features/fix-all-reliability.md",
+    "menus": [],
+    "context": ["Structure form > Fix all in unit"],
+    "verb": "lint"
   },
   {
     "id": "fix-it",
@@ -429,7 +570,10 @@
     "group": "linting",
     "order": 30009,
     "since": "0.1.0-alpha",
-    "file": "features/fix-it.md"
+    "file": "features/fix-it.md",
+    "menus": [],
+    "context": ["Structure form > Fix it"],
+    "verb": "lint"
   },
   {
     "id": "format-whole-project-with-yadf",
@@ -438,7 +582,10 @@
     "group": "linting",
     "order": 30010,
     "since": "0.1.0-alpha",
-    "file": "features/format-whole-project-with-yadf.md"
+    "file": "features/format-whole-project-with-yadf.md",
+    "menus": ["drag-lint > Format Whole Project with YADF..."],
+    "context": [],
+    "verb": "format"
   },
   {
     "id": "format-with-yadf",
@@ -447,7 +594,10 @@
     "group": "linting",
     "order": 30011,
     "since": "0.16.0-alpha",
-    "file": "features/format-with-yadf.md"
+    "file": "features/format-with-yadf.md",
+    "menus": ["drag-lint > Format with YADF"],
+    "context": [],
+    "verb": "format"
   },
   {
     "id": "lint-buffer-unsaved",
@@ -456,7 +606,10 @@
     "group": "linting",
     "order": 30012,
     "since": "0.1.0-alpha",
-    "file": "features/lint-buffer-unsaved.md"
+    "file": "features/lint-buffer-unsaved.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
   },
   {
     "id": "lint-project",
@@ -465,7 +618,10 @@
     "group": "linting",
     "order": 30013,
     "since": "0.48.0-alpha",
-    "file": "features/lint-project.md"
+    "file": "features/lint-project.md",
+    "menus": ["drag-lint > Code Quality > Project Structure Rules (god-class, layering...)..."],
+    "context": [],
+    "verb": "lint-project"
   },
   {
     "id": "lint-rules",
@@ -474,7 +630,10 @@
     "group": "linting",
     "order": 30014,
     "since": "0.2.0-alpha",
-    "file": "features/lint-rules.md"
+    "file": "features/lint-rules.md",
+    "menus": [],
+    "context": [],
+    "verb": "rules"
   },
   {
     "id": "lint-tree",
@@ -483,7 +642,10 @@
     "group": "linting",
     "order": 30015,
     "since": "1.11.0-alpha",
-    "file": "features/lint-tree.md"
+    "file": "features/lint-tree.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint-tree"
   },
   {
     "id": "multi-project-rename",
@@ -492,7 +654,10 @@
     "group": "linting",
     "order": 30016,
     "since": "1.29.0-alpha",
-    "file": "features/multi-project-rename.md"
+    "file": "features/multi-project-rename.md",
+    "menus": [],
+    "context": ["Structure form > Fix it", "Structure form > Fix all in unit"],
+    "verb": "lint"
   },
   {
     "id": "rescan-this-unit",
@@ -501,7 +666,10 @@
     "group": "linting",
     "order": 30017,
     "since": "1.28.3-alpha",
-    "file": "features/rescan-this-unit.md"
+    "file": "features/rescan-this-unit.md",
+    "menus": [],
+    "context": ["Structure form > Rescan this unit"],
+    "verb": "index"
   },
   {
     "id": "run-ast-checks",
@@ -510,7 +678,10 @@
     "group": "linting",
     "order": 30018,
     "since": "0.31.0-alpha",
-    "file": "features/run-ast-checks.md"
+    "file": "features/run-ast-checks.md",
+    "menus": [],
+    "context": [],
+    "verb": "check-ast"
   },
   {
     "id": "run-diagnostics-didsave",
@@ -519,7 +690,10 @@
     "group": "linting",
     "order": 30019,
     "since": "0.0.0",
-    "file": "features/run-diagnostics-didsave.md"
+    "file": "features/run-diagnostics-didsave.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "run-lint-all-full-report",
@@ -528,7 +702,10 @@
     "group": "linting",
     "order": 30020,
     "since": "0.61.0-alpha",
-    "file": "features/run-lint-all-full-report.md"
+    "file": "features/run-lint-all-full-report.md",
+    "menus": ["drag-lint > Code Quality > Run Lint All (Full Report)..."],
+    "context": [],
+    "verb": "lint-all"
   },
   {
     "id": "type-name-prefix-origin",
@@ -537,7 +714,10 @@
     "group": "linting",
     "order": 30021,
     "since": "1.31.4-alpha",
-    "file": "features/type-name-prefix-origin.md"
+    "file": "features/type-name-prefix-origin.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
   },
   {
     "id": "doc-comment-stub-symbol",
@@ -546,7 +726,10 @@
     "group": "documentation",
     "order": 40001,
     "since": "0.25.0-alpha",
-    "file": "features/doc-comment-stub-symbol.md"
+    "file": "features/doc-comment-stub-symbol.md",
+    "menus": ["drag-lint > Generate & Export > Doc Comment Stub (symbol)..."],
+    "context": [],
+    "verb": "generate-docs"
   },
   {
     "id": "doc-drift",
@@ -555,7 +738,10 @@
     "group": "documentation",
     "order": 40002,
     "since": "0.93.0-alpha",
-    "file": "features/doc-drift.md"
+    "file": "features/doc-drift.md",
+    "menus": [],
+    "context": [],
+    "verb": "doc-drift"
   },
   {
     "id": "doc-forget",
@@ -564,7 +750,10 @@
     "group": "documentation",
     "order": 40003,
     "since": "1.17.0-alpha",
-    "file": "features/doc-forget.md"
+    "file": "features/doc-forget.md",
+    "menus": ["drag-lint > Generate & Export > Forget Documentation Project Tag...", "drag-lint > Generate & Export > List Documentation Project Tags"],
+    "context": [],
+    "verb": "doc-forget"
   },
   {
     "id": "document-all",
@@ -573,7 +762,10 @@
     "group": "documentation",
     "order": 40004,
     "since": "0.93.0-alpha",
-    "file": "features/document-all.md"
+    "file": "features/document-all.md",
+    "menus": ["drag-lint > Generate & Export > Auto-Document Every Indexed Unit..."],
+    "context": [],
+    "verb": "document-all"
   },
   {
     "id": "document-it",
@@ -582,7 +774,10 @@
     "group": "documentation",
     "order": 40005,
     "since": "0.90.0-alpha",
-    "file": "features/document-it.md"
+    "file": "features/document-it.md",
+    "menus": [],
+    "context": ["Structure form > Document it"],
+    "verb": "document"
   },
   {
     "id": "document-project",
@@ -591,7 +786,10 @@
     "group": "documentation",
     "order": 40006,
     "since": "0.90.0-alpha",
-    "file": "features/document-project.md"
+    "file": "features/document-project.md",
+    "menus": [],
+    "context": ["Structure form > Document project"],
+    "verb": "document"
   },
   {
     "id": "document-unit",
@@ -600,7 +798,10 @@
     "group": "documentation",
     "order": 40007,
     "since": "0.90.0-alpha",
-    "file": "features/document-unit.md"
+    "file": "features/document-unit.md",
+    "menus": [],
+    "context": ["Structure form > Document unit"],
+    "verb": "document"
   },
   {
     "id": "effect-summary-legend",
@@ -609,7 +810,10 @@
     "group": "documentation",
     "order": 40008,
     "since": "0.0.0",
-    "file": "features/effect-summary-legend.md"
+    "file": "features/effect-summary-legend.md",
+    "menus": ["drag-lint > Help > Effect Summary Legend (wiki)"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "shared-unit",
@@ -618,7 +822,10 @@
     "group": "documentation",
     "order": 40009,
     "since": "1.10.0-alpha",
-    "file": "features/shared-unit.md"
+    "file": "features/shared-unit.md",
+    "menus": [],
+    "context": [],
+    "verb": "shared-unit"
   },
   {
     "id": "wiki-blocks-authoring",
@@ -627,7 +834,10 @@
     "group": "documentation",
     "order": 40010,
     "since": "1.7.0-alpha",
-    "file": "features/wiki-blocks-authoring.md"
+    "file": "features/wiki-blocks-authoring.md",
+    "menus": [],
+    "context": [],
+    "verb": "wiki"
   },
   {
     "id": "allow",
@@ -636,7 +846,10 @@
     "group": "refactoring",
     "order": 50001,
     "since": "0.54.0-alpha",
-    "file": "features/allow.md"
+    "file": "features/allow.md",
+    "menus": [],
+    "context": [],
+    "verb": "allow"
   },
   {
     "id": "allow-this-message",
@@ -645,7 +858,10 @@
     "group": "refactoring",
     "order": 50002,
     "since": "0.54.0-alpha",
-    "file": "features/allow-this-message.md"
+    "file": "features/allow-this-message.md",
+    "menus": [],
+    "context": ["Structure form > Allow this message"],
+    "verb": "allow"
   },
   {
     "id": "create-enum-helper",
@@ -654,7 +870,10 @@
     "group": "refactoring",
     "order": 50003,
     "since": "0.94.0-alpha",
-    "file": "features/create-enum-helper.md"
+    "file": "features/create-enum-helper.md",
+    "menus": ["drag-lint > Generate & Export > Enum Record Helper (symbol)..."],
+    "context": [],
+    "verb": "create-enum-helper"
   },
   {
     "id": "create-helper-class",
@@ -663,7 +882,10 @@
     "group": "refactoring",
     "order": 50004,
     "since": "0.94.0-alpha",
-    "file": "features/create-helper-class.md"
+    "file": "features/create-helper-class.md",
+    "menus": [],
+    "context": ["Structure form > Create helper class"],
+    "verb": "create-enum-helper"
   },
   {
     "id": "extract-method",
@@ -672,7 +894,10 @@
     "group": "refactoring",
     "order": 50005,
     "since": "0.85.0-alpha",
-    "file": "features/extract-method.md"
+    "file": "features/extract-method.md",
+    "menus": ["drag-lint > Extract Method (selection)... (Ctrl+Alt+M)"],
+    "context": [],
+    "verb": "extract-method"
   },
   {
     "id": "quick-fix-add-unit-for-inline-hint-h2443-at-cursor",
@@ -681,7 +906,10 @@
     "group": "refactoring",
     "order": 50006,
     "since": "0.0.0",
-    "file": "features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md"
+    "file": "features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md",
+    "menus": ["drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u",
@@ -690,7 +918,10 @@
     "group": "refactoring",
     "order": 50007,
     "since": "0.0.0",
-    "file": "features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md"
+    "file": "features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md",
+    "menus": ["drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "quick-fix-convert-public-field-to-property-at-cursor",
@@ -699,7 +930,10 @@
     "group": "refactoring",
     "order": 50008,
     "since": "0.0.0",
-    "file": "features/quick-fix-convert-public-field-to-property-at-cursor.md"
+    "file": "features/quick-fix-convert-public-field-to-property-at-cursor.md",
+    "menus": ["drag-lint > Convert Public Field to Property at Cursor"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "reconcile-project-members-dpr-dproj",
@@ -708,7 +942,10 @@
     "group": "refactoring",
     "order": 50009,
     "since": "1.18.0-alpha",
-    "file": "features/reconcile-project-members-dpr-dproj.md"
+    "file": "features/reconcile-project-members-dpr-dproj.md",
+    "menus": ["drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)..."],
+    "context": [],
+    "verb": "reconcile-project"
   },
   {
     "id": "rename-symbol",
@@ -717,7 +954,10 @@
     "group": "refactoring",
     "order": 50010,
     "since": "0.24.0-alpha",
-    "file": "features/rename-symbol.md"
+    "file": "features/rename-symbol.md",
+    "menus": ["drag-lint > Rename Symbol..."],
+    "context": [],
+    "verb": "rename"
   },
   {
     "id": "safe-delete",
@@ -726,7 +966,10 @@
     "group": "refactoring",
     "order": 50011,
     "since": "0.69.0-alpha",
-    "file": "features/safe-delete.md"
+    "file": "features/safe-delete.md",
+    "menus": ["drag-lint > Safe Delete Symbol..."],
+    "context": [],
+    "verb": "safe-delete"
   },
   {
     "id": "unit-test-stub-symbol",
@@ -735,7 +978,10 @@
     "group": "refactoring",
     "order": 50012,
     "since": "0.27.0-alpha",
-    "file": "features/unit-test-stub-symbol.md"
+    "file": "features/unit-test-stub-symbol.md",
+    "menus": ["drag-lint > Generate & Export > Unit Test Stub (symbol)..."],
+    "context": [],
+    "verb": "generate-test"
   },
   {
     "id": "uses-audit-interface-impl-moves-unused-this-unit",
@@ -744,7 +990,10 @@
     "group": "refactoring",
     "order": 50013,
     "since": "0.43.0-alpha",
-    "file": "features/uses-audit-interface-impl-moves-unused-this-unit.md"
+    "file": "features/uses-audit-interface-impl-moves-unused-this-unit.md",
+    "menus": ["drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)..."],
+    "context": [],
+    "verb": "uses-audit"
   },
   {
     "id": "uses-cleanup-preview-compiler-verified-this-unit",
@@ -753,7 +1002,10 @@
     "group": "refactoring",
     "order": 50014,
     "since": "0.43.0-alpha",
-    "file": "features/uses-cleanup-preview-compiler-verified-this-unit.md"
+    "file": "features/uses-cleanup-preview-compiler-verified-this-unit.md",
+    "menus": ["drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)..."],
+    "context": [],
+    "verb": "uses-fix"
   },
   {
     "id": "uses-deps-tab",
@@ -762,7 +1014,10 @@
     "group": "refactoring",
     "order": 50015,
     "since": "0.0.0",
-    "file": "features/uses-deps-tab.md"
+    "file": "features/uses-deps-tab.md",
+    "menus": ["drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes..."],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "convert-apply",
@@ -771,7 +1026,10 @@
     "group": "component-conversion",
     "order": 60001,
     "since": "1.2.0-alpha",
-    "file": "features/convert-apply.md"
+    "file": "features/convert-apply.md",
+    "menus": [],
+    "context": [],
+    "verb": "convert-apply"
   },
   {
     "id": "convert-apply-migrate",
@@ -780,7 +1038,10 @@
     "group": "component-conversion",
     "order": 60002,
     "since": "1.22.0-alpha",
-    "file": "features/convert-apply-migrate.md"
+    "file": "features/convert-apply-migrate.md",
+    "menus": [],
+    "context": [],
+    "verb": "convert-apply"
   },
   {
     "id": "convert-scaffold",
@@ -789,7 +1050,10 @@
     "group": "component-conversion",
     "order": 60003,
     "since": "1.1.0-alpha",
-    "file": "features/convert-scaffold.md"
+    "file": "features/convert-scaffold.md",
+    "menus": [],
+    "context": [],
+    "verb": "convert-scaffold"
   },
   {
     "id": "convert-validate",
@@ -798,7 +1062,10 @@
     "group": "component-conversion",
     "order": 60004,
     "since": "1.1.0-alpha",
-    "file": "features/convert-validate.md"
+    "file": "features/convert-validate.md",
+    "menus": [],
+    "context": [],
+    "verb": "convert-validate"
   },
   {
     "id": "convrules-convert-progress",
@@ -807,7 +1074,10 @@
     "group": "component-conversion",
     "order": 60005,
     "since": "1.26.7-alpha",
-    "file": "features/convrules-convert-progress.md"
+    "file": "features/convrules-convert-progress.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "convrules-editor",
@@ -816,7 +1086,10 @@
     "group": "component-conversion",
     "order": 60006,
     "since": "0.0.0",
-    "file": "features/convrules-editor.md"
+    "file": "features/convrules-editor.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "convrules-qualify-fix",
@@ -825,7 +1098,10 @@
     "group": "component-conversion",
     "order": 60007,
     "since": "1.31.5-alpha",
-    "file": "features/convrules-qualify-fix.md"
+    "file": "features/convrules-qualify-fix.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "convrules-reindex-project",
@@ -834,7 +1110,10 @@
     "group": "component-conversion",
     "order": 60008,
     "since": "1.26.7-alpha",
-    "file": "features/convrules-reindex-project.md"
+    "file": "features/convrules-reindex-project.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "convrules-work-list",
@@ -843,7 +1122,10 @@
     "group": "component-conversion",
     "order": 60009,
     "since": "1.28.2-alpha",
-    "file": "features/convrules-work-list.md"
+    "file": "features/convrules-work-list.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "glyph-vacuum",
@@ -852,7 +1134,10 @@
     "group": "component-conversion",
     "order": 60010,
     "since": "1.15.0-alpha",
-    "file": "features/glyph-vacuum.md"
+    "file": "features/glyph-vacuum.md",
+    "menus": [],
+    "context": [],
+    "verb": "glyph-vacuum"
   },
   {
     "id": "proptree",
@@ -861,7 +1146,10 @@
     "group": "component-conversion",
     "order": 60011,
     "since": "1.1.0-alpha",
-    "file": "features/proptree.md"
+    "file": "features/proptree.md",
+    "menus": [],
+    "context": [],
+    "verb": "proptree"
   },
   {
     "id": "butterfly",
@@ -870,7 +1158,10 @@
     "group": "graphs-reports",
     "order": 70001,
     "since": "0.99.0-alpha",
-    "file": "features/butterfly.md"
+    "file": "features/butterfly.md",
+    "menus": ["drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."],
+    "context": [],
+    "verb": "butterfly"
   },
   {
     "id": "call-graph-butterfly",
@@ -879,7 +1170,10 @@
     "group": "graphs-reports",
     "order": 70002,
     "since": "0.96.0-alpha",
-    "file": "features/call-graph-butterfly.md"
+    "file": "features/call-graph-butterfly.md",
+    "menus": ["drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."],
+    "context": [],
+    "verb": "reverse-calltree"
   },
   {
     "id": "callgraph",
@@ -888,7 +1182,10 @@
     "group": "graphs-reports",
     "order": 70003,
     "since": "0.91.0-alpha",
-    "file": "features/callgraph.md"
+    "file": "features/callgraph.md",
+    "menus": ["drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)..."],
+    "context": [],
+    "verb": "callgraph"
   },
   {
     "id": "circular-dependency-report",
@@ -897,7 +1194,10 @@
     "group": "graphs-reports",
     "order": 70004,
     "since": "0.0.0",
-    "file": "features/circular-dependency-report.md"
+    "file": "features/circular-dependency-report.md",
+    "menus": ["drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "circular-uses-report-cycles-fix-plan",
@@ -906,7 +1206,10 @@
     "group": "graphs-reports",
     "order": 70005,
     "since": "0.43.0-alpha",
-    "file": "features/circular-uses-report-cycles-fix-plan.md"
+    "file": "features/circular-uses-report-cycles-fix-plan.md",
+    "menus": ["drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."],
+    "context": [],
+    "verb": "cycles"
   },
   {
     "id": "cycles-fix",
@@ -915,7 +1218,10 @@
     "group": "graphs-reports",
     "order": 70006,
     "since": "1.33.0-alpha",
-    "file": "features/cycles-fix.md"
+    "file": "features/cycles-fix.md",
+    "menus": ["drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)..."],
+    "context": ["Structure form > Fix this cycle (dry run)...", "Structure form > Apply cycle fix..."],
+    "verb": "cycles"
   },
   {
     "id": "deps-report",
@@ -924,7 +1230,10 @@
     "group": "graphs-reports",
     "order": 70007,
     "since": "0.95.0-alpha",
-    "file": "features/deps-report.md"
+    "file": "features/deps-report.md",
+    "menus": ["drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)..."],
+    "context": [],
+    "verb": "deps-report"
   },
   {
     "id": "export-enums-delphi-const",
@@ -933,7 +1242,10 @@
     "group": "graphs-reports",
     "order": 70008,
     "since": "0.6.0-alpha",
-    "file": "features/export-enums-delphi-const.md"
+    "file": "features/export-enums-delphi-const.md",
+    "menus": ["drag-lint > Generate & Export > Export Enums (Delphi const)..."],
+    "context": [],
+    "verb": "export"
   },
   {
     "id": "export-graph-dot",
@@ -942,7 +1254,10 @@
     "group": "graphs-reports",
     "order": 70009,
     "since": "0.6.0-alpha",
-    "file": "features/export-graph-dot.md"
+    "file": "features/export-graph-dot.md",
+    "menus": ["drag-lint > Generate & Export > Export Graph (DOT)..."],
+    "context": [],
+    "verb": "graph"
   },
   {
     "id": "export-to-obsidian",
@@ -951,7 +1266,10 @@
     "group": "graphs-reports",
     "order": 70010,
     "since": "0.6.0-alpha",
-    "file": "features/export-to-obsidian.md"
+    "file": "features/export-to-obsidian.md",
+    "menus": ["drag-lint > Generate & Export > Export to Obsidian..."],
+    "context": [],
+    "verb": "export"
   },
   {
     "id": "find-dead-code",
@@ -960,7 +1278,10 @@
     "group": "graphs-reports",
     "order": 70011,
     "since": "0.25.0-alpha",
-    "file": "features/find-dead-code.md"
+    "file": "features/find-dead-code.md",
+    "menus": ["drag-lint > Code Quality > Find Dead Code..."],
+    "context": [],
+    "verb": "find-deadcode"
   },
   {
     "id": "generate-test-helper-csv",
@@ -969,7 +1290,10 @@
     "group": "graphs-reports",
     "order": 70012,
     "since": "0.44.0-alpha",
-    "file": "features/generate-test-helper-csv.md"
+    "file": "features/generate-test-helper-csv.md",
+    "menus": ["drag-lint > Reports > Forms for testers (CSV)..."],
+    "context": [],
+    "verb": "forms-csv"
   },
   {
     "id": "impact-blast-radius-symbol",
@@ -978,7 +1302,10 @@
     "group": "graphs-reports",
     "order": 70013,
     "since": "0.17.0-alpha",
-    "file": "features/impact-blast-radius-symbol.md"
+    "file": "features/impact-blast-radius-symbol.md",
+    "menus": ["drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)..."],
+    "context": [],
+    "verb": "impact"
   },
   {
     "id": "reverse-call-tree-clickable-messages-window",
@@ -987,7 +1314,10 @@
     "group": "graphs-reports",
     "order": 70014,
     "since": "0.96.0-alpha",
-    "file": "features/reverse-call-tree-clickable-messages-window.md"
+    "file": "features/reverse-call-tree-clickable-messages-window.md",
+    "menus": ["drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."],
+    "context": [],
+    "verb": "reverse-calltree"
   },
   {
     "id": "reverse-call-tree-who-calls-this-n-deep",
@@ -996,7 +1326,10 @@
     "group": "graphs-reports",
     "order": 70015,
     "since": "0.96.0-alpha",
-    "file": "features/reverse-call-tree-who-calls-this-n-deep.md"
+    "file": "features/reverse-call-tree-who-calls-this-n-deep.md",
+    "menus": ["drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."],
+    "context": [],
+    "verb": "reverse-calltree"
   },
   {
     "id": "scan-todos-fixmes",
@@ -1005,7 +1338,10 @@
     "group": "graphs-reports",
     "order": 70016,
     "since": "0.12.0-alpha",
-    "file": "features/scan-todos-fixmes.md"
+    "file": "features/scan-todos-fixmes.md",
+    "menus": ["drag-lint > Code Quality > Scan TODOs / FIXMEs..."],
+    "context": [],
+    "verb": "todos"
   },
   {
     "id": "show-in-call-graph",
@@ -1014,7 +1350,10 @@
     "group": "graphs-reports",
     "order": 70017,
     "since": "0.96.0-alpha",
-    "file": "features/show-in-call-graph.md"
+    "file": "features/show-in-call-graph.md",
+    "menus": [],
+    "context": ["Structure form > Show in Call Graph"],
+    "verb": "reverse-calltree"
   },
   {
     "id": "show-wiring-spring4d-di-dfm-events",
@@ -1023,7 +1362,10 @@
     "group": "graphs-reports",
     "order": 70018,
     "since": "0.21.0-alpha",
-    "file": "features/show-wiring-spring4d-di-dfm-events.md"
+    "file": "features/show-wiring-spring4d-di-dfm-events.md",
+    "menus": ["drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)..."],
+    "context": [],
+    "verb": "wiring"
   },
   {
     "id": "top-symbols-fan-in",
@@ -1032,7 +1374,10 @@
     "group": "graphs-reports",
     "order": 70019,
     "since": "0.6.0-alpha",
-    "file": "features/top-symbols-fan-in.md"
+    "file": "features/top-symbols-fan-in.md",
+    "menus": ["drag-lint > Code Quality > Top Symbols (fan-in)..."],
+    "context": [],
+    "verb": "top"
   },
   {
     "id": "uses-report-csv",
@@ -1041,7 +1386,10 @@
     "group": "graphs-reports",
     "order": 70020,
     "since": "0.40.5-alpha",
-    "file": "features/uses-report-csv.md"
+    "file": "features/uses-report-csv.md",
+    "menus": ["drag-lint > Uses & Dependencies > Uses Report (CSV)..."],
+    "context": [],
+    "verb": "uses-report"
   },
   {
     "id": "ask",
@@ -1050,7 +1398,10 @@
     "group": "diagrams-charts",
     "order": 80001,
     "since": "1.30.0-alpha",
-    "file": "features/ask.md"
+    "file": "features/ask.md",
+    "menus": ["drag-lint > Reports"],
+    "context": [],
+    "verb": "ask"
   },
   {
     "id": "chart-engine-dot-lookup",
@@ -1059,7 +1410,10 @@
     "group": "diagrams-charts",
     "order": 80002,
     "since": "1.26.1-alpha",
-    "file": "features/chart-engine-dot-lookup.md"
+    "file": "features/chart-engine-dot-lookup.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "chart-questions",
@@ -1068,7 +1422,10 @@
     "group": "diagrams-charts",
     "order": 80003,
     "since": "1.20.2-alpha",
-    "file": "features/chart-questions.md"
+    "file": "features/chart-questions.md",
+    "menus": ["drag-lint > Reports"],
+    "context": [],
+    "verb": "ask"
   },
   {
     "id": "charts-and-the-ide",
@@ -1077,7 +1434,10 @@
     "group": "diagrams-charts",
     "order": 80004,
     "since": "1.20.1-alpha",
-    "file": "features/charts-and-the-ide.md"
+    "file": "features/charts-and-the-ide.md",
+    "menus": ["drag-lint > Reports"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "compare",
@@ -1086,7 +1446,10 @@
     "group": "diagrams-charts",
     "order": 80005,
     "since": "1.28.0-alpha",
-    "file": "features/compare.md"
+    "file": "features/compare.md",
+    "menus": ["drag-lint > Reports > Compare a Saved Report or Chart with Current Code..."],
+    "context": [],
+    "verb": "compare"
   },
   {
     "id": "protocol-handler",
@@ -1095,7 +1458,10 @@
     "group": "diagrams-charts",
     "order": 80006,
     "since": "1.31.0-alpha",
-    "file": "features/protocol-handler.md"
+    "file": "features/protocol-handler.md",
+    "menus": [],
+    "context": [],
+    "verb": "protocol"
   },
   {
     "id": "add-missing-units-to-uses-whole-unit",
@@ -1104,7 +1470,10 @@
     "group": "compiler",
     "order": 90001,
     "since": "0.43.0-alpha",
-    "file": "features/add-missing-units-to-uses-whole-unit.md"
+    "file": "features/add-missing-units-to-uses-whole-unit.md",
+    "menus": ["drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)..."],
+    "context": [],
+    "verb": "check-unit"
   },
   {
     "id": "compile-buffer-unsaved",
@@ -1113,7 +1482,10 @@
     "group": "compiler",
     "order": 90002,
     "since": "0.0.0",
-    "file": "features/compile-buffer-unsaved.md"
+    "file": "features/compile-buffer-unsaved.md",
+    "menus": ["drag-lint > Compile Buffer (unsaved)"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "compile-check",
@@ -1122,7 +1494,10 @@
     "group": "compiler",
     "order": 90003,
     "since": "0.26.0-alpha",
-    "file": "features/compile-check.md"
+    "file": "features/compile-check.md",
+    "menus": [],
+    "context": [],
+    "verb": "compile-check"
   },
   {
     "id": "compile-dependents",
@@ -1131,7 +1506,10 @@
     "group": "compiler",
     "order": 90004,
     "since": "0.0.0",
-    "file": "features/compile-dependents.md"
+    "file": "features/compile-dependents.md",
+    "menus": ["drag-lint > Compile Dependents"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "compile-diagnose",
@@ -1140,7 +1518,10 @@
     "group": "compiler",
     "order": 90005,
     "since": "0.0.0",
-    "file": "features/compile-diagnose.md"
+    "file": "features/compile-diagnose.md",
+    "menus": ["drag-lint > Compile & Diagnose"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "full-compile-sweep",
@@ -1149,7 +1530,10 @@
     "group": "compiler",
     "order": 90006,
     "since": "1.2.0-alpha",
-    "file": "features/full-compile-sweep.md"
+    "file": "features/full-compile-sweep.md",
+    "menus": ["drag-lint > Full Compile Sweep"],
+    "context": [],
+    "verb": "refresh-findings"
   },
   {
     "id": "ghost-check",
@@ -1158,7 +1542,10 @@
     "group": "compiler",
     "order": 90007,
     "since": "1.8.0-alpha",
-    "file": "features/ghost-check.md"
+    "file": "features/ghost-check.md",
+    "menus": ["drag-lint > Compile Buffer (unsaved)"],
+    "context": [],
+    "verb": "ghost-check"
   },
   {
     "id": "ghost-recover",
@@ -1167,7 +1554,10 @@
     "group": "compiler",
     "order": 90008,
     "since": "0.64.1-alpha",
-    "file": "features/ghost-recover.md"
+    "file": "features/ghost-recover.md",
+    "menus": [],
+    "context": [],
+    "verb": "ghost-recover"
   },
   {
     "id": "import-build-log",
@@ -1176,7 +1566,10 @@
     "group": "compiler",
     "order": 90009,
     "since": "0.8.0-alpha",
-    "file": "features/import-build-log.md"
+    "file": "features/import-build-log.md",
+    "menus": [],
+    "context": [],
+    "verb": "import-log"
   },
   {
     "id": "preprocess-file",
@@ -1185,7 +1578,10 @@
     "group": "compiler",
     "order": 90010,
     "since": "0.92.0-alpha",
-    "file": "features/preprocess-file.md"
+    "file": "features/preprocess-file.md",
+    "menus": [],
+    "context": [],
+    "verb": "preprocess-file"
   },
   {
     "id": "project-facts",
@@ -1194,7 +1590,10 @@
     "group": "compiler",
     "order": 90011,
     "since": "1.20.0-alpha",
-    "file": "features/project-facts.md"
+    "file": "features/project-facts.md",
+    "menus": [],
+    "context": [],
+    "verb": "project-facts"
   },
   {
     "id": "recover-buffer-compile-files",
@@ -1203,7 +1602,10 @@
     "group": "compiler",
     "order": 90012,
     "since": "0.0.0",
-    "file": "features/recover-buffer-compile-files.md"
+    "file": "features/recover-buffer-compile-files.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "fb-snapshot",
@@ -1212,7 +1614,10 @@
     "group": "database",
     "order": 100001,
     "since": "0.40.5-alpha",
-    "file": "features/fb-snapshot.md"
+    "file": "features/fb-snapshot.md",
+    "menus": [],
+    "context": [],
+    "verb": "fb-snapshot"
   },
   {
     "id": "link-orm",
@@ -1221,7 +1626,10 @@
     "group": "database",
     "order": 100002,
     "since": "0.40.5-alpha",
-    "file": "features/link-orm.md"
+    "file": "features/link-orm.md",
+    "menus": [],
+    "context": [],
+    "verb": "link-orm"
   },
   {
     "id": "drag-lint",
@@ -1230,7 +1638,10 @@
     "group": "editor-integration",
     "order": 110001,
     "since": "0.2.0-alpha",
-    "file": "features/drag-lint.md"
+    "file": "features/drag-lint.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "drag-lint-graph",
@@ -1239,7 +1650,10 @@
     "group": "editor-integration",
     "order": 110002,
     "since": "0.10.0-alpha",
-    "file": "features/drag-lint-graph.md"
+    "file": "features/drag-lint-graph.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "drag-lint-graph-dockable",
@@ -1248,7 +1662,10 @@
     "group": "editor-integration",
     "order": 110003,
     "since": "0.0.0",
-    "file": "features/drag-lint-graph-dockable.md"
+    "file": "features/drag-lint-graph-dockable.md",
+    "menus": ["drag-lint > drag-lint Graph (dockable)"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "drag-lint-options",
@@ -1257,7 +1674,10 @@
     "group": "editor-integration",
     "order": 110004,
     "since": "0.95.0-alpha",
-    "file": "features/drag-lint-options.md"
+    "file": "features/drag-lint-options.md",
+    "menus": ["drag-lint > drag-lint Options..."],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "drag-lint-panel-dockable",
@@ -1266,7 +1686,10 @@
     "group": "editor-integration",
     "order": 110005,
     "since": "0.0.0",
-    "file": "features/drag-lint-panel-dockable.md"
+    "file": "features/drag-lint-panel-dockable.md",
+    "menus": ["drag-lint > drag-lint Panel (dockable)"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "ide-menu-reference",
@@ -1275,7 +1698,10 @@
     "group": "editor-integration",
     "order": 110006,
     "since": "0.0.0",
-    "file": "features/ide-menu-reference.md"
+    "file": "features/ide-menu-reference.md",
+    "menus": ["drag-lint > Help > IDE Menu Reference (wiki)"],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "ide-release",
@@ -1284,7 +1710,10 @@
     "group": "editor-integration",
     "order": 110007,
     "since": "1.13.0-alpha",
-    "file": "features/ide-release.md"
+    "file": "features/ide-release.md",
+    "menus": [],
+    "context": [],
+    "verb": "ide-release"
   },
   {
     "id": "installation",
@@ -1293,7 +1722,10 @@
     "group": "editor-integration",
     "order": 110008,
     "since": "0.21.0-alpha",
-    "file": "features/installation.md"
+    "file": "features/installation.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "lsp",
@@ -1302,7 +1734,10 @@
     "group": "editor-integration",
     "order": 110009,
     "since": "0.6.0-alpha",
-    "file": "features/lsp.md"
+    "file": "features/lsp.md",
+    "menus": [],
+    "context": [],
+    "verb": "lsp"
   },
   {
     "id": "mcp-config-writer",
@@ -1311,7 +1746,10 @@
     "group": "editor-integration",
     "order": 110010,
     "since": "1.26.1-alpha",
-    "file": "features/mcp-config-writer.md"
+    "file": "features/mcp-config-writer.md",
+    "menus": [],
+    "context": [],
+    "verb": "mcp-config"
   },
   {
     "id": "mcp-server",
@@ -1320,7 +1758,10 @@
     "group": "editor-integration",
     "order": 110011,
     "since": "0.4.0-alpha",
-    "file": "features/mcp-server.md"
+    "file": "features/mcp-server.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "serve",
@@ -1329,7 +1770,10 @@
     "group": "editor-integration",
     "order": 110012,
     "since": "0.4.0-alpha",
-    "file": "features/serve.md"
+    "file": "features/serve.md",
+    "menus": [],
+    "context": [],
+    "verb": "serve"
   },
   {
     "id": "setup-installer",
@@ -1338,7 +1782,10 @@
     "group": "editor-integration",
     "order": 110013,
     "since": "1.28.3-alpha",
-    "file": "features/setup-installer.md"
+    "file": "features/setup-installer.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "workspace-add",
@@ -1347,7 +1794,10 @@
     "group": "editor-integration",
     "order": 110014,
     "since": "0.6.0-alpha",
-    "file": "features/workspace-add.md"
+    "file": "features/workspace-add.md",
+    "menus": [],
+    "context": [],
+    "verb": "workspace"
   },
   {
     "id": "workspace-index",
@@ -1356,7 +1806,10 @@
     "group": "editor-integration",
     "order": 110015,
     "since": "0.6.0-alpha",
-    "file": "features/workspace-index.md"
+    "file": "features/workspace-index.md",
+    "menus": [],
+    "context": [],
+    "verb": "workspace"
   },
   {
     "id": "workspace-status",
@@ -1365,7 +1818,10 @@
     "group": "editor-integration",
     "order": 110016,
     "since": "0.6.0-alpha",
-    "file": "features/workspace-status.md"
+    "file": "features/workspace-status.md",
+    "menus": [],
+    "context": [],
+    "verb": "workspace"
   },
   {
     "id": "about-and-status",
@@ -1374,7 +1830,10 @@
     "group": "maintenance",
     "order": 120001,
     "since": "0.15.0-alpha",
-    "file": "features/about-and-status.md"
+    "file": "features/about-and-status.md",
+    "menus": ["drag-lint > About"],
+    "context": [],
+    "verb": "info"
   },
   {
     "id": "ambiguous-calls",
@@ -1383,7 +1842,10 @@
     "group": "maintenance",
     "order": 120002,
     "since": "0.91.0-alpha",
-    "file": "features/ambiguous-calls.md"
+    "file": "features/ambiguous-calls.md",
+    "menus": [],
+    "context": [],
+    "verb": "ambiguous-calls"
   },
   {
     "id": "bench-context",
@@ -1392,7 +1854,10 @@
     "group": "maintenance",
     "order": 120003,
     "since": "0.18.0-alpha",
-    "file": "features/bench-context.md"
+    "file": "features/bench-context.md",
+    "menus": [],
+    "context": [],
+    "verb": "bench-context"
   },
   {
     "id": "diff",
@@ -1401,7 +1866,10 @@
     "group": "maintenance",
     "order": 120004,
     "since": "0.13.0-alpha",
-    "file": "features/diff.md"
+    "file": "features/diff.md",
+    "menus": [],
+    "context": [],
+    "verb": "diff"
   },
   {
     "id": "dump-call-edges",
@@ -1410,7 +1878,10 @@
     "group": "maintenance",
     "order": 120005,
     "since": "0.91.0-alpha",
-    "file": "features/dump-call-edges.md"
+    "file": "features/dump-call-edges.md",
+    "menus": [],
+    "context": [],
+    "verb": "dump-call-edges"
   },
   {
     "id": "dump-refs",
@@ -1419,7 +1890,10 @@
     "group": "maintenance",
     "order": 120006,
     "since": "0.82.0-alpha",
-    "file": "features/dump-refs.md"
+    "file": "features/dump-refs.md",
+    "menus": [],
+    "context": [],
+    "verb": "dump-refs"
   },
   {
     "id": "feature-registry",
@@ -1428,7 +1902,10 @@
     "group": "maintenance",
     "order": 120007,
     "since": "1.22.0-alpha",
-    "file": "features/feature-registry.md"
+    "file": "features/feature-registry.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "info",
@@ -1437,7 +1914,10 @@
     "group": "maintenance",
     "order": 120008,
     "since": "0.19.0-alpha",
-    "file": "features/info.md"
+    "file": "features/info.md",
+    "menus": [],
+    "context": [],
+    "verb": "info"
   },
   {
     "id": "library-drift-check",
@@ -1446,7 +1926,10 @@
     "group": "maintenance",
     "order": 120009,
     "since": "0.0.0",
-    "file": "features/library-drift-check.md"
+    "file": "features/library-drift-check.md",
+    "menus": ["drag-lint > Index & Maintenance > Library Drift Check..."],
+    "context": [],
+    "verb": "library-drift"
   },
   {
     "id": "maintenance",
@@ -1455,7 +1938,10 @@
     "group": "maintenance",
     "order": 120010,
     "since": "0.0.0",
-    "file": "features/maintenance.md"
+    "file": "features/maintenance.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "open-plugin-log",
@@ -1464,7 +1950,10 @@
     "group": "maintenance",
     "order": 120011,
     "since": "0.39.0-alpha",
-    "file": "features/open-plugin-log.md"
+    "file": "features/open-plugin-log.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
   },
   {
     "id": "shutdown",
@@ -1473,7 +1962,10 @@
     "group": "maintenance",
     "order": 120012,
     "since": "0.6.0-alpha",
-    "file": "features/shutdown.md"
+    "file": "features/shutdown.md",
+    "menus": [],
+    "context": [],
+    "verb": "shutdown"
   },
   {
     "id": "sql",
@@ -1482,6 +1974,9 @@
     "group": "maintenance",
     "order": 120013,
     "since": "0.40.5-alpha",
-    "file": "features/sql.md"
+    "file": "features/sql.md",
+    "menus": [],
+    "context": [],
+    "verb": "sql"
   }
 ]

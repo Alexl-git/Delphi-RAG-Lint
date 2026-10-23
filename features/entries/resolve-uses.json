@@ -15,6 +15,12 @@
     }
   ],
   "audience": "agent",
+  "questions": [
+    {
+      "ask": "Which unit declares an identifier a unit is missing from its uses clause?",
+      "command": "drag-lint check-unit <unit.pas> --resolve-uses --db <db>"
+    }
+  ],
   "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
   "verified": {
     "date": "2026-10-21",

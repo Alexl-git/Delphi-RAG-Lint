@@ -32,6 +32,9 @@ Full flag list: [top in the CLI reference](../cli.md#top).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Top Symbols (fan-in)...**
+   1. Choose drag-lint > Code Quality > Top Symbols (fan-in)...
+   2. Read the ranking of symbols by number of references
+   3. From a shell: `drag-lint top --db <file.sqlite> [--by fanin] [--limit N] [--json]`
 
 **Needs:** index
 

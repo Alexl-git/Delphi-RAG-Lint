@@ -19,6 +19,9 @@ Read this when you want to know what you can type next at the editor caret: it s
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Show Completion**
+   1. Put the caret in the editor where you want a completion
+   2. Choose drag-lint > Show Completion
+   3. Pick an entry from the list
 
 ## Details
 

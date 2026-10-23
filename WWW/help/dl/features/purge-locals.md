@@ -30,6 +30,8 @@ Full flag list: [purge-locals in the CLI reference](../cli.md#purge-locals).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Shrink Index (purge locals)...**
+   1. drag-lint > Index & Maintenance > Shrink Index (purge locals)...
+   2. It runs as a queued job with the LSP stopped; the next index run restores the dropped rows
 
 **Needs:** index
 

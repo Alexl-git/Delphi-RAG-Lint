@@ -31,6 +31,9 @@ Full flag list: [export in the CLI reference](../cli.md#export).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Export to Obsidian...**
+   1. Make sure the project has an index
+   2. drag-lint > Generate & Export > Export to Obsidian...
+   3. Follow the prompts; the notes are written as linked markdown pages
 
 **Needs:** index
 

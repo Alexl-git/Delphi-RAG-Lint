@@ -37,6 +37,7 @@ uses
   , ConvRules.Casts
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- TEngineAdapter types a field; CAPABILITY_BOOK_DEPTH/PROGRESS_LINES travel with CapabilityNames, the one call that answers them
   , ConvRules.Platform
+  , ConvRules.EngineProgress // TStreamingWork: RunLongCallTracked's signature, so INTERFACE-visible
   , DRagLint.Convert.CastLib
   , ConvRules.ConvCatalog
   , ConvRules.Theme
@@ -201,6 +202,9 @@ type
       FDepthDropped : Boolean         ; // between CBN_DROPDOWN and CBN_CLOSEUP on FCbDepth
       FDepthComboWndProc: TWndMethod  ; // FCbDepth's own WindowProc, chained by DepthComboWndProc
       FTreeLoads    : Integer         ; // > 0 while a tree load or a proptree engine call runs (depth commits wait)
+      FLostClickTimer: TTimer         ; // N1: shows the lost-Convert-click notice once the editor is idle (DepthCommitBlocked)
+      FLostClickTitle: string         ; // N1: the progress title the Convert click was lost under; '' = no notice pending
+      FBusyTitle    : string          ; // N1: the running long call's title (RunLongCallTracked); '' = none
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCancelStatus : string          ; // the status text that cancel wrote; SetStatusAfterCancel keeps it while it is on screen
       { Keys (TValidateJob.Key) of blocks whose validation a Cancel cut short. The
@@ -2255,6 +2259,24 @@ type
       /// DepthCommitBlocked it stays armed and the step stays pending.</summary>
       /// <param name="Sender">The timer.</param>
       procedure DepthTimerFire(Sender: TObject);
+      /// <summary>Runs a long call behind the progress window (RunWithProgressDialog): the
+      /// engine adapter's LongCallRunner and the Convert tab's RunLongCall. Counts FTreeLoads
+      /// (depth commits wait) and holds ATitle in FBusyTitle for WMSetCursor (N1).</summary>
+      /// <param name="ATitle">The window's title; also names the busy work in a lost-click notice.</param>
+      /// <param name="AWork">The engine call.</param>
+      /// <returns>AWork's result, or ENGINE_OUTCOME_CANCELLED.</returns>
+      /// <exception cref="Exception">Re-raised from the worker (RunWithProgressDialog).</exception>
+      function RunLongCallTracked(const ATitle: string; const AWork: TStreamingWork): Integer;
+      /// <summary>N1: a left press on the Convert button while a long call holds the editor
+      /// disabled never reaches the button (Windows drops it; this message, hit test HTERROR,
+      /// is its only trace). ConvertClickLost decides; a lost click arms FLostClickTimer.</summary>
+      /// <param name="Msg">The WM_SETCURSOR; always passed on (the beep / flash stay).</param>
+      procedure WMSetCursor(var Msg: TWMSetCursor); message WM_SETCURSOR;
+      /// <summary>FLostClickTimer.OnTimer: once nothing is DepthCommitBlocked (the operation that
+      /// held the progress window has finished and written its own status), appends the
+      /// LostConvertClickStatus notice to the status line, red. Stays armed while blocked.</summary>
+      /// <param name="Sender">The timer.</param>
+      procedure LostClickTimerFire(Sender: TObject);
       /// <summary>FCbDepth.WindowProc hook: tracks CBN_DROPDOWN .. CBN_CLOSEUP (FDepthDropped) and a
       /// CBN_SELENDCANCEL inside that window (FDepthCancelled), which VCL does not surface, so a
       /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
@@ -2660,7 +2682,6 @@ uses
   , Winapi.ShellAPI    // HDROP for a pasted Explorer file list
   , ConvRules.DropTarget
   , ConvRules.EngineWait // RunWithProgressDialog: proptree behind a cancellable window
-  , ConvRules.EngineProgress // TStreamingWork: the LongCallRunner wrapper's signature
   , ConvRules.Glyph     // dl:unit ConvRules.Glyph accepted -- C10 glyph-link decisions; GLYPH_COUNT_EXPR travels with FindCountLink / CountLinkIssueFor
   , ConvRules.GlyphForm // C10: the glyph-expression dialog
   , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
@@ -2684,6 +2705,8 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
   { Quiet time after the last wheel / arrow-key step on the depth combo before the
     change is committed (one reload); long enough to span a run of wheel notches. }
   DEPTH_COMMIT_DELAY_MS = 600;
+  { N1: how often a lost-Convert-click notice asks whether the editor is idle again. }
+  LOST_CLICK_POLL_MS = 200;
   { Validation marks in the grid's cast column (GridDrawCell). Prefixes are
     painted, never stored in the cell. Colours are the fixed red / orange of a
     status mark, readable on both the light and the dark style. }
@@ -2767,15 +2790,7 @@ begin
   FEngine:= TEngineAdapter.Create(GEditorExe, EngineDbSet);
   // proptree runs behind a cancellable window; FTreeLoads holds depth commits back
   // for every such call, including New Conversion's class checks.
-  FEngine.LongCallRunner:= function(const ATitle: string; const AWork: TStreamingWork): Integer
-    begin
-      Inc(FTreeLoads);
-      try
-        Result:= RunWithProgressDialog(ATitle, AWork);
-      finally
-        Dec(FTreeLoads);
-      end; // try
-    end;
+  FEngine.LongCallRunner:= RunLongCallTracked;
   // One `info --json` call gates both 1.20.6 features for the whole session.
   var LCaps: TArray<string>:= FEngine.CapabilityNames;
   FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
@@ -3222,6 +3237,10 @@ begin
   FDepthTimer.Enabled := False;
   FDepthTimer.Interval:= DEPTH_COMMIT_DELAY_MS;
   FDepthTimer.OnTimer := DepthTimerFire;
+  FLostClickTimer:= TTimer.Create(Self);
+  FLostClickTimer.Enabled := False;
+  FLostClickTimer.Interval:= LOST_CLICK_POLL_MS;
+  FLostClickTimer.OnTimer := LostClickTimerFire;
   FLblDepthNote:= TLabel.Create(Self);
   FLblDepthNote.Parent:= FPanelTop;
   FLblDepthNote.SetBounds(884, 42, 200, 15);  // dl:ok magic-literal@5670, large-magic-number@5670 -- Task 5; same unnamed SetBounds coordinate idiom used by every control in BuildUI
@@ -3556,15 +3575,7 @@ begin
     end;
   // C8: the inherited-instance check behind the same cancellable window as proptree;
   // FTreeLoads holds depth commits back while it runs (see FEngine.LongCallRunner).
-  LHost.RunLongCall:= function(const ATitle: string; const AWork: TStreamingWork): Integer
-    begin
-      Inc(FTreeLoads);
-      try
-        Result:= RunWithProgressDialog(ATitle, AWork);
-      finally
-        Dec(FTreeLoads);
-      end; // try
-    end;
+  LHost.RunLongCall:= RunLongCallTracked;
   // Task 3: each finished run REPLACES the Work list (rows keyed by run id).
   LHost.WorkListReady:= procedure(ARun: TWorkRun)
     begin
@@ -6452,6 +6463,49 @@ begin
   // menu (WM_ENTERMENULOOP reaches this form); a TPopupMenu's loop is owned by
   // VCL's PopupList window, so the thread's GUI state is asked as well.
   Result:= (FTreeLoads > 0) or FMenuOpen or InMenuLoop or (Screen.ActiveForm <> Self) or not IsWindowEnabled(Handle);
+end;
+
+function TConvRulesForm.RunLongCallTracked(const ATitle: string; const AWork: TStreamingWork): Integer;
+begin
+  var LOuter: string:= FBusyTitle; // a long call inside another one's message pump
+  FBusyTitle:= ATitle;
+  Inc(FTreeLoads);
+  try
+    Result:= RunWithProgressDialog(ATitle, AWork);
+  finally
+    Dec(FTreeLoads);
+    FBusyTitle:= LOuter;
+  end; // try
+end;
+
+procedure TConvRulesForm.WMSetCursor(var Msg: TWMSetCursor);
+var
+  LPos : TPoint;
+  LRect: TRect;
+begin
+  var LOnConvert: Boolean:= False;
+  var LWnd: NativeUInt:= if FConvertTab <> nil then FConvertTab.ConvertButtonWnd else 0;
+  if (LWnd <> 0) and GetCursorPos(LPos) and GetWindowRect(HWND(LWnd), LRect) then
+    LOnConvert:= PtInRect(LRect, LPos);
+  // N1: the press is about to be dropped (the editor is disabled under the progress
+  // window); report it once the operation that holds the window has written its status.
+  if ConvertClickLost(SmallInt(Msg.HitTest), Msg.MouseMsg, FBusyTitle, LOnConvert) then
+  begin
+    FLostClickTitle:= FBusyTitle;
+    FLostClickTimer.Enabled:= True;
+  end;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-23 a message method has no named ancestor method; DefWindowProc keeps the beep and the progress window's flash
+end;
+
+procedure TConvRulesForm.LostClickTimerFire(Sender: TObject);
+begin
+  if DepthCommitBlocked then
+    Exit; // still armed: a modal (a C8 prompt, another load) is up
+  FLostClickTimer.Enabled:= False;
+  if FLostClickTitle = '' then
+    Exit;
+  SetError(LostConvertClickStatus(FLblStatus.Caption, FLostClickTitle));
+  FLostClickTitle:= '';
 end;
 
 procedure TConvRulesForm.SyncDepthCombo;

@@ -30,6 +30,10 @@ Full flag list: [typeat in the CLI reference](../cli.md#typeat).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Type at Cursor**
+   1. Put the caret on the expression in the editor
+   2. Choose drag-lint > Inspect Symbol > Type at Cursor
+   3. The resolved type is shown
+   4. From a shell: `drag-lint typeat <file>:<line>:<col>`
 
 ## Details
 

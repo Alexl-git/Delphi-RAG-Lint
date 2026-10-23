@@ -33,6 +33,9 @@ Full flag list: [call-path in the CLI reference](../cli.md#call-path).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Path Between Two Routines...**
+   1. Choose drag-lint > Uses & Dependencies > Call Path Between Two Routines...
+   2. Give the starting routine and the target routine
+   3. The shortest resolved call path is shown; none is reported when there is no path
 
 **Needs:** index
 

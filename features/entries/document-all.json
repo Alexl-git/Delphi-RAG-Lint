@@ -42,10 +42,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Auto-Document Every Indexed Unit..."
+      "path": "drag-lint > Generate & Export > Auto-Document Every Indexed Unit...",
+      "steps": ["Choose drag-lint > Generate & Export > Auto-Document Every Indexed Unit...", "Follow the dialog", "Every public declaration in every indexed unit is documented (facts-only by default)"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I sweep DocInsight comments over every indexed unit?",
+      "command": "drag-lint document-all --db <db> --apply"
+    },
+    {
+      "ask": "How do I preview that sweep?",
+      "command": "drag-lint document-all --stubs --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

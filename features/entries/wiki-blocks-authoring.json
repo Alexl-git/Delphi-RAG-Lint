@@ -39,6 +39,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I write a dl:wiki block in a doc comment?",
+      "command": "docs\\wiki\\Wiki-Blocks-Authoring.md"
+    },
+    {
+      "ask": "How do I check that my blocks still point at real code?",
+      "command": "drag-lint wiki --check --db <file.sqlite>"
+    }
+  ],
   "access": "repo-tooling",
   "accessReviewed": {
     "date": "2026-10-21",

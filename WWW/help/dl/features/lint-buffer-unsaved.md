@@ -37,6 +37,9 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 ## Where to click
 
 * drag-lint About window, button **Lint Buffer (Unsaved)**
+   1. Edit a unit without saving it
+   2. Open the About and Status window (drag-lint > About)
+   3. Click Lint Buffer (Unsaved); findings for the in-memory content are shown
 
 ## Details
 

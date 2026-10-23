@@ -29,6 +29,9 @@ Full flag list: [import-log in the CLI reference](../cli.md#import-log).
 ## Where to click
 
 * drag-lint About window, button **Import Build Log...**
+   1. Open the About and Status window (drag-lint > About)
+   2. Click Import Build Log...
+   3. Pick the dcc or msbuild log; its errors and warnings become stored findings
 
 **Needs:** index
 

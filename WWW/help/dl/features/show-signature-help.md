@@ -19,6 +19,9 @@ Read this while writing a call and you need the parameter list and order of the 
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Show Signature Help**
+   1. Put the caret inside the call's parentheses in the editor
+   2. Choose drag-lint > Show Signature Help
+   3. The parameter help for the routine is shown
 
 ## Details
 

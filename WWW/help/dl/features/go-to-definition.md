@@ -19,6 +19,9 @@ Read this to jump straight to where the symbol under the cursor is defined. Choo
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Go to Definition**
+   1. Needs an index of the project
+   2. Put the editor caret on the symbol
+   3. drag-lint > Go to Definition
 
 ## Details
 

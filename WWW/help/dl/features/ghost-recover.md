@@ -23,6 +23,9 @@ Full flag list: [ghost-recover in the CLI reference](../cli.md#ghost-recover).
 ## Where to click
 
 * drag-lint About window, button **Recover Buffer-Compile Files**
+   1. Open the About and Status window (drag-lint > About)
+   2. Click Recover Buffer-Compile Files
+   3. It restores any file left overlaid, or says nothing is pending
 
 ## Details
 

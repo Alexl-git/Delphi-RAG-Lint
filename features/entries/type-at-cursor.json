@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Inspect Symbol > Type at Cursor"
+      "path": "drag-lint > Inspect Symbol > Type at Cursor",
+      "steps": ["Put the caret on the expression in the editor", "Choose drag-lint > Inspect Symbol > Type at Cursor", "The resolved type is shown", "From a shell: `drag-lint typeat <file>:<line>:<col>`"]
     },
     {
       "type": "cli",
@@ -31,6 +32,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What is the static type of the expression under my caret?",
+      "command": "drag-lint typeat <file>:<line>:<col> --db <file.sqlite>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

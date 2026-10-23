@@ -44,14 +44,26 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Forget Documentation Project Tag..."
+      "path": "drag-lint > Generate & Export > Forget Documentation Project Tag...",
+      "steps": ["Choose drag-lint > Generate & Export > Forget Documentation Project Tag...", "Give the scope and the project tag", "Without applying it is a dry run; confirm to apply"]
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > List Documentation Project Tags"
+      "path": "drag-lint > Generate & Export > List Documentation Project Tags",
+      "steps": ["Choose drag-lint > Generate & Export > List Documentation Project Tags", "The project tags on inbound documentation facts are listed"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Documentation facts carry the wrong project tag -- how do I list the tags?",
+      "command": "drag-lint doc-forget --scope <dir> --list-tags"
+    },
+    {
+      "ask": "How do I rename or remove a project tag?",
+      "command": "drag-lint doc-forget --scope <dir> --project <Tag> --rename <Tag>=<New> --apply"
+    }
+  ],
   "notes": "seed: needs own page",
   "verified": {
     "date": "2026-10-21",

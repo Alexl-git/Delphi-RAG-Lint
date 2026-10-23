@@ -46,6 +46,9 @@ Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 ## Where to click
 
 * Right-click in the Structure form: **Fix it**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the finding node
+   3. Choose Fix it
 
 ## Details
 

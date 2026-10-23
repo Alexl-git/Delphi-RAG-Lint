@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Unit Test Stub (symbol)..."
+      "path": "drag-lint > Generate & Export > Unit Test Stub (symbol)...",
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Generate & Export > Unit Test Stub (symbol)...", "A unit-test skeleton for the symbol is generated", "From a shell: `drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]`"]
     },
     {
       "type": "cli",
@@ -35,6 +36,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I get a test skeleton for one routine?",
+      "command": "drag-lint generate-test --qname <Foo.TBar.Baz> --framework dunitx"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

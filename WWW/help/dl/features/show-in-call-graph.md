@@ -34,6 +34,9 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 ## Where to click
 
 * Right-click in the Structure form: **Show in Call Graph**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click a node in the tree and choose Show in Call Graph
+   3. The call graph rooted at that symbol opens
 
 **Needs:** index
 

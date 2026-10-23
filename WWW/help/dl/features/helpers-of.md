@@ -30,6 +30,9 @@ Full flag list: [helpers-of in the CLI reference](../cli.md#helpers-of).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Helpers of Type...**
+   1. Needs an index of the project
+   2. drag-lint > Inspect Symbol > Helpers of Type...
+   3. Enter the type; its helpers are listed
 
 **Needs:** index
 

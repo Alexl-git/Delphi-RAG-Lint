@@ -19,6 +19,9 @@ Read this to know why drag-lint findings refresh on their own: the diagnostics p
 ## Where to click
 
 * drag-lint About window, button **Run Diagnostics (didSave)**
+   1. Nothing to click; it fires each time you save a file in the IDE
+   2. It needs an open editor with a saved file
+   3. There is no CLI equivalent; it runs in-process in the plugin
 
 ## Details
 

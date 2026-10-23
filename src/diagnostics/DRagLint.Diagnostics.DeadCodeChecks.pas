@@ -280,6 +280,44 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
+  { True when the source right before ANode is a generic argument list
+    `Ident<T, ...>` (nesting allowed), i.e. ANode is the argument list of a
+    generic call such as `GetValue<string>('x')`. Inside a larger expression the
+    parser reads that as `GetValue < string > ('x')`, so redundant-parentheses
+    must not take the argument list for parentheses around a term (N-16). }
+  function FollowsGenericArgs(const ANode: TTSNode): Boolean;
+  const
+    BLANKS = [Ord(#9), Ord(#10), Ord(#13), Ord(' ')];
+  var
+    P, Depth: Integer;
+    C       : Byte;
+    HasArg  : Boolean;
+  begin
+    Result:= False;
+    P:= Integer(ANode.StartByte) - 1;
+    while (P >= 0) and (Src[P] in BLANKS) do Dec(P);
+    if (P < 0) or (Src[P] <> Ord('>')) then Exit;
+    Depth:= 0;
+    HasArg:= False;
+    while P >= 0 do
+    begin
+      C:= Src[P];
+      if C = Ord('>') then Inc(Depth)
+      else if C = Ord('<') then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Break;
+      end
+      else if Chr(C) in ['A'..'Z', 'a'..'z', '0'..'9', '_'] then HasArg:= True
+      else if not (C in BLANKS + [Ord('.'), Ord(',')]) then Exit;
+      Dec(P);
+    end;
+    if (P <= 0) or (Depth <> 0) or (not HasArg) then Exit;
+    Dec(P);
+    while (P >= 0) and (Src[P] in BLANKS) do Dec(P);
+    Result:= (P >= 0) and (Chr(Src[P]) in ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+  end;
+
   { Emit one finding pointing at ANode. Severity defaults to 'warning'; pass
     ASeverity to override (e.g. 'hint' for cosmetic rules). }
   procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage: string;
@@ -1580,7 +1618,7 @@ var
       if (PT <> 'defaultValue') and (PT <> 'arrInitializer') and
          (PT <> 'recInitializer') and (PT <> 'recInitializerField') and
          (PT <> 'declConst') and (PT <> 'constInline') and
-         (N.NamedChildCount >= 1) then
+         (N.NamedChildCount >= 1) and (not FollowsGenericArgs(N)) then
       begin
         var Inner: TTSNode:= N.NamedChild(0);
         if Inner.NodeType = 'exprParens' then
@@ -1619,6 +1657,7 @@ var
           (declEnumValue), AND a default parameter value (declArg) -- all three
           share the same 'defaultValue: (kEq) <value>' wrapper in this grammar;
         - a case label: parent 'caseLabel';
+        - the whole rhs of an assignment to a dotted field (a defaults table);
         - an array/set range bound (e.g. 'array[0..9]'): parent 'range';
         - a typed-const/const-array initializer element: parent 'arrInitializer',
           'recInitializer', or 'recInitializerField' (mirrors the exempt set
@@ -1644,6 +1683,14 @@ var
         var IsExempt: Boolean :=
           (LitPT = 'defaultValue') or (LitPT = 'caseLabel') or (LitPT = 'range')
           or (LitPT = 'arrInitializer') or (LitPT = 'recInitializer') or (LitPT = 'recInitializerField');
+        { a defaults table (N-12): the literal is the WHOLE rhs of an assignment
+          to a named field (`Result.MaxLen := 180`) -- the field name states its
+          meaning as a const name would. Part of an rhs, or a plain local
+          target, is still reported. }
+        if (not IsExempt) and (LitPT = 'assignment')
+           and (LitPrnt.ChildByField('rhs') = N)
+           and (LitPrnt.ChildByField('lhs').NodeType = 'exprDot') then
+          IsExempt:= True;
         if not IsExempt then
         begin
           var Anc: TTSNode := LitPrnt;

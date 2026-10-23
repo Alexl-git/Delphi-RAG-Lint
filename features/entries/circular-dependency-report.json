@@ -15,10 +15,17 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."
+      "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...",
+      "steps": ["Read the worked example on the wiki page", "To produce the real report for your project choose drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What does a circular uses report look like before I run one?",
+      "command": "drag-lint cycles --db <db> --edges --causes"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

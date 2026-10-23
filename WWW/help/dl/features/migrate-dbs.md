@@ -30,6 +30,8 @@ Full flag list: [migrate-dbs in the CLI reference](../cli.md#migrate-dbs).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG...**
+   1. drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG...
+   2. Yes applies the move (queued job, LSP stopped); No previews it
 
 ## Details
 

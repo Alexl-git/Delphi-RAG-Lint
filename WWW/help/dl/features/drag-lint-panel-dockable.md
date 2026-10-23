@@ -19,6 +19,8 @@ Read this when you want the main drag-lint tool window docked beside your editor
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > drag-lint Panel (dockable)**
+   1. Choose drag-lint > drag-lint Panel (dockable)
+   2. The main drag-lint tool window opens as a dockable window; drag it where you want it to stay docked
 
 ## Details
 

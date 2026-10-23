@@ -15,10 +15,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Help > IDE Menu Reference (wiki)"
+      "path": "drag-lint > Help > IDE Menu Reference (wiki)",
+      "steps": ["drag-lint > Help > IDE Menu Reference (wiki)", "The page opens in the browser"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What does each drag-lint menu item do?",
+      "command": "drag-lint > Help > IDE Menu Reference (wiki)"
+    },
+    {
+      "ask": "Where is the full verb reference?",
+      "command": "drag-lint --help"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

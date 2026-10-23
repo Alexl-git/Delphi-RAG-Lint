@@ -19,6 +19,9 @@ Read this when you want to see which lint rules exist, which are on by default a
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > drag-lint Options...**
+   1. Choose drag-lint > drag-lint Options...
+   2. Browse the rule catalog (default state, auto-fix)
+   3. Toggle rules on or off
 
 ## Details
 

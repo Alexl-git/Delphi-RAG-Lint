@@ -44,6 +44,9 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Format Whole Project with YADF...**
+   1. Save your work
+   2. drag-lint > Format Whole Project with YADF...
+   3. Confirm; every unit in the project is formatted and the index is refreshed
 
 ## Details
 

@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Fix all in unit"
+      "caption": "Fix all in unit",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node", "Choose Fix all in unit; its caption shows how many fixes are available"]
     },
     {
       "type": "cli",
@@ -55,6 +56,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I fix all auto-fixable findings in one unit at once?",
+      "command": "drag-lint lint <path> --fix"
+    },
+    {
+      "ask": "Which findings can be fixed in a unit?",
+      "command": "drag-lint lint <path> --json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

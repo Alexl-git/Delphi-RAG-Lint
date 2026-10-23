@@ -439,8 +439,9 @@ end;
   only thing telling them apart, and code that means one silently compiles
   against the other. Also what makes a const-casing rename unsafe, which is why
   that fix asks the index before renaming. One warning per LATER declaration,
-  naming the first. Unit/class-level consts and vars only: a routine's locals
-  are their own scope. }
+  naming the first. Called once per scope: the unit/class level, and each
+  routine body for its own local consts and vars (T-06) -- a local is never
+  compared with the unit level or with another routine's locals. }
 function ConfusableFindings(const AFile: string; const ADecls: TArray<TLintFinding>): TArray<TLintFinding>;
 var
   FirstByKey: TDictionary<string, Integer>;
@@ -514,9 +515,10 @@ var
     external header -- renaming them breaks the mapping. Saved/restored around
     declType recursion. }
   InRecordDecl: Boolean;
-  { confusable-identifier: every unit/class-level const and var declared in
-    the file, as (Message = name, StartLine, StartCol, EndCol). Compared once
-    the walk is done; see ConfusableFindings. }
+  { confusable-identifier: every const and var of the CURRENT scope, as
+    (Message = name, StartLine, StartCol, EndCol). The unit/class level is
+    compared once the walk is done; a defProc swaps in its own list and compares
+    it on exit (T-06); see ConfusableFindings. }
   Decls: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
@@ -1175,11 +1177,21 @@ var
           end;
         end;
       end;
-      { Enter proc body scope for local-var-casing. }
+      { Enter proc body scope for local-var-casing. confusable-identifier
+        compares this routine's own locals with each other only (T-06), so
+        they collect into a fresh list; the enclosing one is restored after. }
       var SavedInProcBody: Boolean:= InProcBody;
+      var SavedDecls: TList<TLintFinding>:= Decls;
       InProcBody:= True;
-      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
-      InProcBody:= SavedInProcBody;
+      Decls:= TList<TLintFinding>.Create;
+      try
+        for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+        Findings.AddRange(ConfusableFindings(AFile, Decls.ToArray));
+      finally
+        Decls.Free;
+        Decls:= SavedDecls;
+        InProcBody:= SavedInProcBody;
+      end;
       Exit;
     end;
 
@@ -1214,9 +1226,8 @@ var
       is a naming-convention smell). Skipped when LocalCase=''. }
     if N.NodeType = 'declVar' then
     begin
-      if not InProcBody then
-        for I:= 0 to N.NamedChildCount - 1 do
-          if N.NamedChild(I).NodeType = 'identifier' then NoteDecl(N.NamedChild(I), Trim(NodeStr(N.NamedChild(I))));
+      for I:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(I).NodeType = 'identifier' then NoteDecl(N.NamedChild(I), Trim(NodeStr(N.NamedChild(I))));
       if InProcBody and ((ANaming.LocalCase <> '') or ANaming.ShortIdentifierCheck) then
       begin
         TypeNode:= N.ChildByField('type');

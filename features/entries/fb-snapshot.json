@@ -28,6 +28,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I index a Firebird database schema so SQL objects become queryable?",
+      "command": "drag-lint fb-snapshot --connection \"Database=...;User=...;Password=...;DriverID=FB\" --db <sql.sqlite>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

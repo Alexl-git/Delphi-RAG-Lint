@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)..."
+      "path": "drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...",
+      "steps": ["Open the unit that declares the type", "Choose drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...", "Read the container registrations and DFM event hookups for the type", "From a shell: `drag-lint wiring --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]`"]
     },
     {
       "type": "cli",
@@ -35,6 +36,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where is this interface registered in the Spring4D container?",
+      "command": "drag-lint wiring --qname <IIntf|TForm> --db <file.sqlite>"
+    },
+    {
+      "ask": "Which DFM event handlers are hooked up for this form?",
+      "command": "drag-lint wiring --qname <TForm> --db <file.sqlite> --format json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

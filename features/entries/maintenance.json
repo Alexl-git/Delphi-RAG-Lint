@@ -15,6 +15,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "The answer looks wrong; is the index stale?",
+      "command": "drag-lint info --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I refresh an index?",
+      "command": "drag-lint index --project <X.dproj> --db <db>"
+    }
+  ],
   "notes": "seed: since unknown",
   "access": "repo-tooling",
   "accessReviewed": {

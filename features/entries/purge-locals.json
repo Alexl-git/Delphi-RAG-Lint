@@ -27,11 +27,18 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Index & Maintenance > Shrink Index (purge locals)..."
+      "path": "drag-lint > Index & Maintenance > Shrink Index (purge locals)...",
+      "steps": ["drag-lint > Index & Maintenance > Shrink Index (purge locals)...", "It runs as a queued job with the LSP stopped; the next index run restores the dropped rows"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "My index is too large; how do I shrink it?",
+      "command": "drag-lint purge-locals --db <PATH>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

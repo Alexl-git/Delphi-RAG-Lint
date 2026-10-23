@@ -216,6 +216,12 @@ function Test-LiveHome($Response, [string]$BaseUrl) {
     $Response.Status -eq 200 -and ([string]$Response.Content).Contains("<link rel=""canonical"" href=""$BaseUrl/"">")
 }
 
+# True only when a missing page answers 404 with OUR not-found page: a 200 is a soft 404
+# (search engines index it), and the host's own 404 page means web.config's httpErrors was ignored.
+function Test-LiveNotFound($Response) {
+    $Response.Status -eq 404 -and ([string]$Response.Content).Contains('<title>Page not found - Delphi-RAG-Lint</title>')
+}
+
 # The HTTP 500 fallback: upload the prepared rewrite-free web.config (no rebuild, no gh),
 # probe again, and keep NoRewrite only if the site now answers 200.
 # $Put = { param($localPath, $relPath) }; $Probe = { -> status code }.

@@ -38,11 +38,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)..."
+      "path": "drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...",
+      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...", "Pick the direction and depth; the call tree is shown"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Who calls this routine, several levels deep?",
+      "command": "drag-lint callgraph --qname <X> --depth 3 --db <db>"
+    },
+    {
+      "ask": "What does this routine call, several levels deep?",
+      "command": "drag-lint callgraph --qname <X> --direction callees --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

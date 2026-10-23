@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-about",
-      "caption": "Run Diagnostics (didSave)"
+      "caption": "Run Diagnostics (didSave)",
+      "steps": ["Nothing to click; it fires each time you save a file in the IDE", "It needs an open editor with a saved file", "There is no CLI equivalent; it runs in-process in the plugin"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Why do drag-lint findings refresh by themselves when I save?",
+      "command": "drag-lint > Run Diagnostics (didSave)"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Rescan this unit"
+      "caption": "Rescan this unit",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click in the Structure form and choose Rescan this unit", "It reindexes the project in the background and re-lints the unit; the status strip shows progress"]
     },
     {
       "type": "cli",
@@ -47,6 +48,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "The Diagnostics panel still shows a finding I already fixed; how do I refresh it?",
+      "command": "Structure form > Rescan this unit"
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-13",
     "by": "alexanderl",

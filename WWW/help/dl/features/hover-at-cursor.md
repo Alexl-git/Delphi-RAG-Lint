@@ -31,6 +31,9 @@ Full flag list: [hover in the CLI reference](../cli.md#hover).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Hover at Cursor**
+   1. Needs an index of the project
+   2. Put the editor caret on the symbol
+   3. drag-lint > Hover at Cursor
 
 ## Details
 

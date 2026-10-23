@@ -58,13 +58,14 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
   * `drive-engine-wait.ps1` 9 -- progress window, Cancel, retry, cached reload
   * `drive-book-depth.ps1` 21 -- `#depth` combo
-  * `drive-convert-tab.ps1` 23 -- Convert tab end to end (`-ProofNoIndex`)
+  * `drive-convert-tab.ps1` 26 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
   * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
   * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
   * `drive-convert-request.ps1` 28 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
-  * `drive-qualify-fix.ps1` 20 -- qualify quick fix (`-ProofNoFix` = 15 pass / 5 fail)
+  * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
+* In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
 ## Unit map (who owns which decision)
 

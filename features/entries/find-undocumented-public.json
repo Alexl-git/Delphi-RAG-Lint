@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Find Undocumented (public)..."
+      "path": "drag-lint > Code Quality > Find Undocumented (public)...",
+      "steps": ["Needs an index of the project", "drag-lint > Code Quality > Find Undocumented (public)...", "Review the list of public declarations without a documentation comment"]
     },
     {
       "type": "cli",
@@ -59,6 +60,16 @@
   ],
   "audience": "both",
   "pitfalls": ["--no-docs is a FILTER (UNDOCUMENTED symbols only), not \"hide the docs\" -- to list them all use query --kind `<k>` --all", "--decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`) -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.", "case-insensitive, over /// blocks and harvested // above a declaration.", "declaration clauses the index does not model. `query --text` sees string literals and comment prose, not declaring lines -- this reads the declaring line instead."],
+  "questions": [
+    {
+      "ask": "Which public declarations have no doc comment?",
+      "command": "drag-lint query find --no-docs --public --db <db>"
+    },
+    {
+      "ask": "Which undocumented classes are in one unit?",
+      "command": "drag-lint query find --no-docs --kind class --unit <U> --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

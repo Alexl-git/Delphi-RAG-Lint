@@ -30,6 +30,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which compiler defines are on for this project?",
+      "command": "drag-lint pp-profile --dproj <PATH>"
+    },
+    {
+      "ask": "And for Win64 Release?",
+      "command": "drag-lint pp-profile --dproj <PATH> --platform win64 --config Release"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

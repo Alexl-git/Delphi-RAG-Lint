@@ -35,10 +35,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Inspect Symbol > Ancestors of Type (full chain)..."
+      "path": "drag-lint > Inspect Symbol > Ancestors of Type (full chain)...",
+      "steps": ["Needs an index of the project", "drag-lint > Inspect Symbol > Ancestors of Type (full chain)...", "Enter the type; its ancestor chain is listed"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What is the full ancestor chain of this class?",
+      "command": "drag-lint query ancestors --name <type> --db <db>"
+    },
+    {
+      "ask": "Does it descend from a given ancestor?",
+      "command": "drag-lint query ancestors --name <type> --of <ancestor> --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

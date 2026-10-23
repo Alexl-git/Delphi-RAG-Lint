@@ -35,6 +35,9 @@ Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Extract Method (selection)... (Ctrl+Alt+M)**
+   1. Select the statements to extract in the editor
+   2. drag-lint > Extract Method (selection)... or Ctrl+Alt+M
+   3. Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk
 
 ## Details
 

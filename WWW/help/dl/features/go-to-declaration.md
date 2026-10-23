@@ -19,6 +19,9 @@ Read this when you are browsing the Structure form and want to land on where a s
 ## Where to click
 
 * Right-click in the Structure form: **Go to Declaration**
+   1. Open the Structure form (drag-lint > Show Structure)
+   2. Right-click the node
+   3. Choose Go to Declaration; the editor caret lands on the declaration
 
 ## Details
 

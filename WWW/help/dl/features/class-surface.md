@@ -33,6 +33,9 @@ Full flag list: [surface in the CLI reference](../cli.md#surface).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Class Surface...**
+   1. Put the caret on the class name in the editor
+   2. Choose drag-lint > Inspect Symbol > Class Surface...
+   3. The members and signatures are shown without method bodies
 
 ## Pitfalls
 

@@ -11,10 +11,21 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Find Usages..."
+      "path": "drag-lint > Find Usages...",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages..."]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where is the symbol under my caret used?",
+      "command": "drag-lint usages --name <X> --db <db>"
+    },
+    {
+      "ask": "Who calls this routine?",
+      "command": "drag-lint query find-callers --name <Bar> --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

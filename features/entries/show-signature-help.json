@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Show Signature Help"
+      "path": "drag-lint > Show Signature Help",
+      "steps": ["Put the caret inside the call's parentheses in the editor", "Choose drag-lint > Show Signature Help", "The parameter help for the routine is shown"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What parameters does the call I am typing take?",
+      "command": "drag-lint > Show Signature Help"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

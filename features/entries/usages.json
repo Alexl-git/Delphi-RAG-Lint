@@ -41,10 +41,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Find Usages..."
+      "path": "drag-lint > Find Usages...",
+      "steps": ["Put the caret on the symbol in the editor", "Choose drag-lint > Find Usages...", "Read the grouped usage sites"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where is this symbol used?",
+      "command": "drag-lint usages --name <X> --db <path>"
+    },
+    {
+      "ask": "How do I get a wider or JSON report?",
+      "command": "drag-lint usages --name <X> --width wide --json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

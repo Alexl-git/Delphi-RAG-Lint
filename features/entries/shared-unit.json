@@ -34,6 +34,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which projects share this unit?",
+      "command": "drag-lint shared-unit --in <file.pas>"
+    },
+    {
+      "ask": "How do I record another project as a sharer of the unit?",
+      "command": "drag-lint shared-unit --in <file.pas> --add-project <name> --apply"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

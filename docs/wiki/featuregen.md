@@ -21,7 +21,7 @@ read the live surface take `--engine <drag-lint.exe>` (default
 
 | Verb | What it does |
 |---|---|
-| `build` | write the wiki pages, the README / AI-USAGE blocks, `manifest.json` and `cli-reference.md`; `--site` the website set `WWW\help\dl\` and `site-pages.json`; `--all` both; `--check` writes nothing and exits 1 when any output would change |
+| `build` | write the wiki pages, the README / AI-USAGE blocks, `manifest.json` and `cli-reference.md`; `--site` the website set `WWW\help\dl\` and `site-pages.json` (each `index.json` row: id, title, summary, group, order, since, file, then `menus` = the ide-menu paths, `context` = the ide-context surfaces as `Host > Caption`, `verb` = the first cli verb, `""` when none); `--all` both; `--check` writes nothing and exits 1 when any output would change |
 | `check` | the registry guard: A well-formed, B live -> registry, C registry -> live, D every generated output current, E staleness notes; `--level wellformed` is check A alone |
 | `add` | register a feature; an unknown group or team is refused unless `--new-group` / `--new-team` creates it |
 | `update` | change fields of one entry (`--set "field=value ;; field2=value2"`) |

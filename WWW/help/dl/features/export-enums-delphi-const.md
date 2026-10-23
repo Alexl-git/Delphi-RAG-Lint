@@ -31,6 +31,8 @@ Full flag list: [export in the CLI reference](../cli.md#export).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Export Enums (Delphi const)...**
+   1. Choose drag-lint > Generate & Export > Export Enums (Delphi const)...
+   2. Follow the dialog; the indexed enum types are written as Delphi const declarations
 
 **Needs:** index
 

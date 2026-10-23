@@ -47,6 +47,9 @@ Full flag list: [document in the CLI reference](../cli.md#document).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Auto-Document Whole Project...**
+   1. Choose drag-lint > Generate & Export > Auto-Document Whole Project...
+   2. Follow the dialog
+   3. The batch reindexes, documents every public declaration the project owns, then reindexes again
 
 ## Details
 

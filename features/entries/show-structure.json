@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Show Structure"
+      "path": "drag-lint > Show Structure",
+      "steps": ["Open the unit in the editor", "Choose drag-lint > Show Structure", "The structural outline of the unit opens in the Structure form"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What is in this unit, at a glance?",
+      "command": "drag-lint > Show Structure"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

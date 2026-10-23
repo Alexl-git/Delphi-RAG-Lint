@@ -35,6 +35,8 @@ Full flag list: [deps-report in the CLI reference](../cli.md#deps-report).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)...**
+   1. Choose drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)...
+   2. Read the rollup of external units and libraries
 
 **Needs:** index
 
