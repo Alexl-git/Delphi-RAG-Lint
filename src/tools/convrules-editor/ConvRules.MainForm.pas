@@ -2717,7 +2717,7 @@ uses
   , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
   , ConvRules.QualifyFix     // A2: ApplyQualifyPicks / QualifyStatusText behind the Convert host's QualifyBook
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
-  , ConvRules.InputGate      // N7/N11: GateVerdict & co. behind AppMessage
+  , ConvRules.InputGate      // dl:unit ConvRules.InputGate accepted -- N7/N11: GateVerdict & co. behind AppMessage; LOST_COMMAND_CONVERT travels with LostCommandStatus (WMSetCursor names the Convert command by it)
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by

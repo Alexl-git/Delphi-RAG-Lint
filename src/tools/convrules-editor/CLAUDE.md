@@ -45,7 +45,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * **Model tests (no engine beside the runner, live tests SKIP): 2460 pass / 0 fail / 19 skip** after B4 batch mode (2026-10-23). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
-  **2571 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
+  **2615 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
   (`picker.unit.has.VARINSP`, `fill.from-unit.*`). A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -58,8 +58,8 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
   * `drive-engine-wait.ps1` 9 -- progress window, Cancel, retry, cached reload
   * `drive-book-depth.ps1` 21 -- `#depth` combo
-  * `drive-convert-tab.ps1` 26 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported
-  * `drive-convert-batch.ps1` 22 -- B4 batch mode: 2 units in ONE convert-apply, batch note, `.BCK1` x4, then a `CONVRULES_BATCH=off` relaunch runs per-unit (`-ProofNoBatch` = RED). The second Add... click is lost on every run and retried once (todo N11, re-entrancy of N7's class: never "fix" it by clicking with WM_COMMAND -- that opened the Open dialog on top of TEngineWaitForm and wedged the run)
+  * `drive-convert-tab.ps1` 32 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported; N7/N11 (`n7.*`): POSTED WM_COMMAND (Add..., Convert) and BM_CLICK (Delete) under the progress window are refused and reported, none runs (RED on a pre-InputGate exe: Open dialog over the window + a real Convert)
+  * `drive-convert-batch.ps1` 22 -- B4 batch mode: 2 units in ONE convert-apply, batch note, `.BCK1` x4, then a `CONVRULES_BATCH=off` relaunch runs per-unit (`-ProofNoBatch` = RED). No retry since N11: every driver's `WaitIdle` also asks the editor (registered message `ConvRulesEditor.Busy`: 2 busy / 1 idle / no answer = blocked = busy), and `ConvRules.InputGate` refuses + reports a click that still lands in busy work
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
   * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
   * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
@@ -86,7 +86,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).
 * `ConvCatalog` / `Casts` -- cast options incl. `ckValue` (StripDB).
 * `Engine` -- `TEngineAdapter`: every engine call (incl. `ApplyConversionBatch`, apply-batch/1), pipes, timeouts, capabilities, resolve cache.
-* `EngineWait` -- progress window / cancellable long call (editor-only). `DropTarget` -- OLE glue only.
+* `EngineWait` -- progress window / cancellable long call (editor-only). `InputGate` -- N7/N11 queue filter decisions (`MainForm.AppMessage` wires it). `DropTarget` -- OLE glue only.
 * `MainForm` -- wiring only.
 
 ## Standing traps

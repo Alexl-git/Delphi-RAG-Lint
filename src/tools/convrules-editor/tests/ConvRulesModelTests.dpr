@@ -15292,11 +15292,11 @@ end;
   never queued; the progress window, dialogs and non-input messages always pass. }
 procedure TestInputGate;
 begin
-  Check('gate.win32', (GATE_WM_KEYFIRST = WM_KEYFIRST) and (GATE_WM_KEYLAST = WM_KEYLAST)
-    and (GATE_WM_COMMAND = WM_COMMAND) and (GATE_BM_CLICK = BM_CLICK)
-    and (GATE_WM_MOUSEMOVE = WM_MOUSEMOVE) and (GATE_WM_LBUTTONDOWN = WM_LBUTTONDOWN)
-    and (GATE_WM_LBUTTONDBLCLK = WM_LBUTTONDBLCLK) and (GATE_WM_MOUSELAST = WM_MOUSELAST)
-    and (GATE_WM_NCMOUSEMOVE = WM_NCMOUSEMOVE) and (GATE_WM_NCMOUSELAST = WM_NCXBUTTONDBLCLK));
+  Check('gate.win32.keys', (GATE_WM_KEYFIRST = WM_KEYFIRST) and (GATE_WM_KEYLAST = WM_KEYLAST)
+    and (GATE_WM_COMMAND = WM_COMMAND) and (GATE_BM_CLICK = BM_CLICK));
+  Check('gate.win32.mouse', (GATE_WM_MOUSEMOVE = WM_MOUSEMOVE) and (GATE_WM_LBUTTONDOWN = WM_LBUTTONDOWN)
+    and (GATE_WM_LBUTTONDBLCLK = WM_LBUTTONDBLCLK) and (GATE_WM_MOUSELAST = WM_MOUSELAST));
+  Check('gate.win32.nc', (GATE_WM_NCMOUSEMOVE = WM_NCMOUSEMOVE) and (GATE_WM_NCMOUSELAST = WM_NCXBUTTONDBLCLK));
   Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
   Check('gate.busy.hourglass', EditorBusy(0, True));
   Check('gate.idle', not EditorBusy(0, False));

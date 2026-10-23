@@ -128,12 +128,14 @@ begin
   Result:= gvPass;
   if not (ABusy and ATargetInMainForm) then
     Exit;
-  if (AMsg = GATE_BM_CLICK) or (AMsg = GATE_WM_COMMAND)
-    or (AMsg = GATE_WM_LBUTTONDOWN) or (AMsg = GATE_WM_LBUTTONDBLCLK) then
+  var LCommand: Boolean:= (AMsg = GATE_BM_CLICK) or (AMsg = GATE_WM_COMMAND);
+  var LPress  : Boolean:= (AMsg = GATE_WM_LBUTTONDOWN) or (AMsg = GATE_WM_LBUTTONDBLCLK);
+  var LKey    : Boolean:= (AMsg >= GATE_WM_KEYFIRST) and (AMsg <= GATE_WM_KEYLAST);
+  var LMouse  : Boolean:= (AMsg > GATE_WM_MOUSEMOVE) and (AMsg <= GATE_WM_MOUSELAST);
+  var LNcMouse: Boolean:= (AMsg > GATE_WM_NCMOUSEMOVE) and (AMsg <= GATE_WM_NCMOUSELAST);
+  if LCommand or LPress then
     Result:= gvRefuse
-  else if ((AMsg >= GATE_WM_KEYFIRST) and (AMsg <= GATE_WM_KEYLAST))
-    or ((AMsg > GATE_WM_MOUSEMOVE) and (AMsg <= GATE_WM_MOUSELAST))
-    or ((AMsg > GATE_WM_NCMOUSEMOVE) and (AMsg <= GATE_WM_NCMOUSELAST)) then
+  else if LKey or LMouse or LNcMouse then
     Result:= gvDrop;
 end;
 
