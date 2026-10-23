@@ -21396,7 +21396,10 @@ begin
 
   Entries:= TList<TGhostOverlay>.Create;
   try
-    DragDir:= GhostDir(Dproj);
+    { The path only: the shadow default writes nothing beside the project, so
+      the folder is created by the --in-place branch, which journals there
+      (docs\INBOX-ghost-check-leaves-empty-drag-dir.md). }
+    DragDir:= TPath.Combine(ExtractFilePath(Dproj), DRAG_HOME_DIR);
 
     { Build the overlay list from a manifest, or a single --unit/--buffer pair. }
     if AArgs.GhostOverlays <> '' then
@@ -21526,6 +21529,7 @@ begin
         its own write back into the record, and a for-in loop variable is a COPY
         -- the token would be discarded and every restore would fall back to
         "cannot prove ownership". }
+      GhostDir(Dproj);
       for i:= 0 to Entries.Count - 1 do
       begin
         E:= Entries[i];
