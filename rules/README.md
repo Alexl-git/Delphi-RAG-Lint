@@ -56,6 +56,7 @@ the rule id, warn capture name = `warn`).
 | `enabled` | `true` | `false` ships the rule OFF; `--enable <id>` turns it back on. |
 | `exclude_if_ancestor` | none | Node kinds; a match is DROPPED when the picked node has an ancestor of any listed kind. |
 | `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
+| `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
 | `require_ancestor` | none | Node kinds; a match COUNTS ONLY inside one of them. |
 | `require_file_text` | none | Substrings; the rule does not run at all against a file whose text contains NONE of them. Case-insensitive, matched against the whole file. |
 
