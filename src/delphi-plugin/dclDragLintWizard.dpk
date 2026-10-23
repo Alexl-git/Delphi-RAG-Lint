@@ -40,6 +40,7 @@ contains
   DragLint.Plugin.Editor in 'DragLint.Plugin.Editor.pas',
   DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas',
   DragLint.Plugin.Settings in 'DragLint.Plugin.Settings.pas',
+  DragLint.Plugin.HelpIndex in 'DragLint.Plugin.HelpIndex.pas',
   DragLint.Plugin.Keyboard in 'DragLint.Plugin.Keyboard.pas',
   DragLint.Plugin.CallerFilter in 'DragLint.Plugin.CallerFilter.pas',
   DragLint.Plugin.HoverSignature in 'DragLint.Plugin.HoverSignature.pas',

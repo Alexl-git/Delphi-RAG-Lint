@@ -46,6 +46,11 @@ type
       because the OTA answers it directly (TopView.Buffer.FileName + CursorPos). }
     EnableGhostText: Boolean; { default True since 2026-08-19 -- see LoadDefaults }
     GhostTextPort  : Integer; { default 8765; loopback only }
+    /// <summary>Where help pages are opened from (spec 2026-10-23-ide-help-line
+    /// 3.1): an http(s) root or a file:/// root holding the rendered help tree.</summary>
+    /// <remarks>Stored normalised (DLNormaliseHelpRoot); an empty or missing
+    /// registry value reads as DL_DEFAULT_HELP_ROOT, so an upgrade changes nothing.</remarks>
+    HelpRoot       : string ;
   end; // record
 
 /// <summary>Applies the 2026-08-19 EnableGhostText default to an installation
@@ -80,6 +85,7 @@ uses
   , System.Win.Registry
   , Winapi.Windows
   , DRagLint.Core.Model
+  , DragLint.Plugin.HelpIndex
   ;
 
 const
@@ -149,6 +155,7 @@ begin
     told from a real suggestion. Loopback only, and Stop() runs on unload. }
   Result.EnableGhostText := True;
   Result.GhostTextPort   := 8765;
+  Result.HelpRoot        := DL_DEFAULT_HELP_ROOT;
 end; // function
 
 function LoadSettings: TDragLintSettings;
@@ -265,6 +272,8 @@ begin
         Result.GhostTextPort:= Reg.ReadInteger('GhostTextPort');
         if (Result.GhostTextPort < 1024) or (Result.GhostTextPort > 65535) then Result.GhostTextPort:= 8765;
       end;
+      { Empty on disk normalises to the default root -- never to a blank URL. }
+      if Reg.ValueExists('HelpRoot') then Result.HelpRoot:= DLNormaliseHelpRoot(Reg.ReadString('HelpRoot'));
     finally
       Reg.CloseKey;
     end; // try
@@ -353,6 +362,7 @@ begin
       Reg.WriteInteger('IncludeLibraryDb', Ord(ASettings.IncludeLibraryDb));
       Reg.WriteInteger('EnableGhostText' , Ord(ASettings.EnableGhostText ));
       Reg.WriteInteger('GhostTextPort'   ,     ASettings.GhostTextPort    );
+      Reg.WriteString('HelpRoot', DLNormaliseHelpRoot(ASettings.HelpRoot));
     finally
       Reg.CloseKey;
     end; // try

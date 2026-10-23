@@ -77,6 +77,7 @@
         <DCCReference Include="DragLint.Plugin.Editor.pas"/>
         <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.Settings.pas"/>
+        <DCCReference Include="DragLint.Plugin.HelpIndex.pas"/>
         <DCCReference Include="DragLint.Plugin.Keyboard.pas"/>
         <DCCReference Include="DragLint.Plugin.CallerFilter.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverSignature.pas"/>
