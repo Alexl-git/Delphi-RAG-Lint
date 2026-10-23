@@ -64,7 +64,7 @@
     "version": "1.33.0-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "70a2834d64f4b2abf3515e69bfa23518b969f306d2034147483ff31417048c6b",
+    "hash": "a19f6c0e91c67777b3d73b60d88aaaf59e5c01ccc70a5f82e44a4343e3680159",
     "version": "1.33.0-alpha"
   },
   "features/class-surface.md": {
@@ -96,7 +96,7 @@
     "version": "1.33.0-alpha"
   },
   "features/context.md": {
-    "hash": "b5b7fe05bbff97b113a43ce70e700c75c255b331a8f8ef15370d4b23121158f4",
+    "hash": "dc69d0d7829d2688026fc46b582b8b577b88bbf9e2d0ed9cacfe461c3bb169e6",
     "version": "1.33.0-alpha"
   },
   "features/convert-apply-migrate.md": {
@@ -116,8 +116,8 @@
     "version": "1.33.0-alpha"
   },
   "features/convrules-convert-progress.md": {
-    "hash": "bded8eb6cb82429c70e9e1b24fecdd62f5344b465b1cb1e0c78ef398db303c2a",
-    "version": "1.32.0-alpha"
+    "hash": "348034e518b6e84f8d72ec60a024388bca603755f5d33e2c443e06193e9259e9",
+    "version": "1.33.0-alpha"
   },
   "features/convrules-editor.md": {
     "hash": "314f6e107a0dde02111645b5c0426cfaa2ea43a8798978e3faf4c53e33c2a069",
@@ -400,7 +400,7 @@
     "version": "1.33.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "4f4d4fe195fded595b18002fd071a3ca9bebc7139a3e54a3648c4cc3c54cd9a4",
+    "hash": "92e04e81ad2fa6e11a52a18bad1ee4549af36388567cf0ecfcbbeb83e864265b",
     "version": "1.33.0-alpha"
   },
   "features/maintenance.md": {
@@ -544,7 +544,7 @@
     "version": "1.33.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "f3c4dbc4c4e60991e8b4636431feb4c0ff3f7f75cda963e8aae8bc0c99e73d37",
+    "hash": "1d732d3d54da620deff63040cc950dd2bee5fb75decf9ec5c0ec491637ab2a38",
     "version": "1.33.0-alpha"
   },
   "features/safe-delete.md": {

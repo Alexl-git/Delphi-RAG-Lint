@@ -130,6 +130,8 @@ type
       FIndexKnown     : Boolean;            // False = the index could not be read: flag nothing
       FInheritedOk    : Boolean;            // engine reports inherited_instances (C8 E10/E11)
       FRunInheritedOk : Boolean;            // FInheritedOk when Convert was pressed: the report follows the run
+      FBatchOk        : Boolean;            // engine reports batch_units (B4 apply-batch/1)
+      FRunBatch       : Boolean;            // this run took the batch path (BatchModeFor at Convert): not-reached units follow it
       FRetypeOk       : Boolean;            // engine reports inherited_retype (C8 N2): the notes stop warning that a descendant breaks
       FRunRetypeOk    : Boolean;            // FRetypeOk when Convert was pressed
   FCodeUncOk      : Boolean;            // engine reports inherited_code_unconverted (1.26.7): it lists unconverted-ancestor code uses itself
@@ -374,6 +376,7 @@ uses
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
   , ConvRules.Glyph
+  , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- BATCH_MAX_UNITS is the chunk size the start status quotes; the batch decisions live there, the tab asks them through JobRunsBatched
   , ConvRules.QualifyForm
   ;
 
@@ -669,6 +672,7 @@ begin
     var LCaps: TArray<string>:= FEngineProbe.CapabilityNames;
     FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
     FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
+    FBatchOk    := MatchText(CAPABILITY_BATCH_UNITS, LCaps);
     FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
     FCodeUncOk  := MatchText(CAPABILITY_INHERITED_CODE_UNCONVERTED, LCaps);
     FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
@@ -1298,6 +1302,8 @@ begin
   TThread.Queue(nil,
     procedure
     begin
+      if LStep.Summary <> '' then
+        FNotes:= FNotes + [LStep.Summary];
       FLastStep := LStep;
       FStepWatch:= TStopwatch.StartNew;
       FHasStep  := True;
@@ -1569,8 +1575,11 @@ begin
   Job.Dbs        := FHost.GetDbs();
   Job.InheritedSupported:= FInheritedOk;
   Job.RetypeSupported   := FRetypeOk;
+  Job.BatchSupported    := FBatchOk;
+  Job.BatchOverride     := GetEnvironmentVariable('CONVRULES_BATCH');
   Job.ApplyFeatures     := FApplyFeatures;
   Job.Scope             := FScope; // copied: Clear scope mid-run does not reach the worker
+  FRunBatch := JobRunsBatched(Job); // after Scope: a scoped run is per-unit in the runner too
   Inc(FRunId);
   Job.RunId             := FRunId; // keys this run's Work list rows (WorkRunOf)
   LExe:= FHost.ExePath;
@@ -1589,7 +1598,10 @@ begin
   SetRunning(True);
   FProgress.Max     := Length(Job.Books) * Length(Job.Units);
   FProgress.Position:= 0;
-  FHost.SetStatus(Format('Converting %d unit(s) with %d book(s)...', [Length(Job.Units), Length(Job.Books)]), False);
+  if FRunBatch then
+    FHost.SetStatus(Format('Converting %d unit(s) with %d book(s) -- batch mode (%d per call)...', [Length(Job.Units), Length(Job.Books), BATCH_MAX_UNITS]), False)
+  else
+    FHost.SetStatus(Format('Converting %d unit(s) with %d book(s)...', [Length(Job.Units), Length(Job.Books)]), False);
   TThread.CreateAnonymousThread(
     procedure
     var
@@ -1736,12 +1748,14 @@ begin
   SetRunning(False);
   FProgress.Position:= FProgress.Max;
   NotReached := nil;
-  if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
+  if FRunBatch then
+    NotReached:= NotReachedUnits(FRunRows, AJob.Units, AJob.Books) // cancel polls count chunks there, not units
+  else if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
     NotReached:= Copy(AJob.Units, AStopAt, Length(AJob.Units) - AStopAt);
   // Engine 1.28.0 exit 6: the run stopped on an unusable cast library -- a RUN-level
   // error that leads the status line; the units after the stop never ran.
   var LStop: string:= CastLibStopText(FRunRows, FRunCastLib);
-  if LStop <> '' then
+  if (LStop <> '') and not FRunBatch then
     NotReached:= NotReachedAfterStop(FRunRows, AJob.Units);
   for var LUnit: string in NotReached do
     AddResultRow(['', ExtractFileName(LUnit), if LStop <> '' then STATUS_NOT_REACHED_STOPPED else STATUS_NOT_REACHED, '', '', '', '', '']);

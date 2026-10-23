@@ -15,8 +15,8 @@ interface
 
 uses
   System.SysUtils
-  , ConvRules.Engine
-  , ConvRules.ConvertRun
+  , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- the batch path bounds each call with the adapter's own CONVERT_TIMEOUT_MS (BatchTimeoutMs); the unit is used for TEngineAdapter anyway
+  , ConvRules.ConvertRun  // dl:unit ConvRules.ConvertRun accepted -- the apply/1 reader and its feature set (APPLY_FEATURES_ALL for the test seams) travel with the runner that reads every answer
   , ConvRules.ConvertRequest
   , ConvRules.WorkList
   ;
@@ -152,6 +152,12 @@ type
     /// <summary>The Convert tab's run counter (1, 2, ...); the run's Work list rows
     /// carry it (WorkRunOf), so a new run replaces the list and never mixes with it.</summary>
     RunId: Integer;
+    /// <summary>The engine reports batch_units (CAPABILITY_BATCH_UNITS): RunConversion may
+    /// convert through one convert-apply per book over many units (BatchModeFor).</summary>
+    BatchSupported: Boolean;
+    /// <summary>CONVRULES_BATCH as the tab read it; 'off' (any case) forces the per-unit
+    /// path (decision D6), anything else is ignored.</summary>
+    BatchOverride: string;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -181,18 +187,27 @@ type
   /// (UnmatchedOnlyHintFor with the job's scope bound).</summary>
   TOnlyHintFn = reference to function(const AOnly: TArray<string>): string;
 
+  /// <summary>Applies one book to several units in ONE convert-apply (apply-batch/1); the
+  /// shape of TEngineAdapter.ApplyConversionBatch with the --db list and the watchdog bound.</summary>
+  /// <remarks>AUnits holds at least two units; the answer's units[] must follow their order.</remarks>
+  TApplyBatchFn = reference to function(const AUnits: TArray<string>; const ARulesFile: string; out AJson: string): Integer;
+
   /// <summary>What a Convert run is doing right now (C16).</summary>
   /// <remarks>Per unit: rpReindexBefore, rpBackup, then per book rpApply and, after a
   /// successful apply, rpReindexAfter; rpRestore follows the step that failed when the
-  /// unit is copied back from its backup. rpFinalReindex is the closing refresh the
-  /// Convert tab runs after the unit loop -- the runner never emits it.</remarks>
-  TRunPhase = (rpReindexBefore, rpBackup, rpApply, rpReindexAfter, rpRestore, rpFinalReindex);
+  /// unit is copied back from its backup. Batch mode (RunConversionBatched): ONE
+  /// rpReindexBefore (UnitNo = 0), rpBackup per unit, then per book and chunk rpApplyBatch
+  /// and the chunk's rpReindexAfter, with rpRestore per unit restored in between.
+  /// rpFinalReindex is the closing refresh the Convert tab runs after the unit loop -- the
+  /// runner never emits it.</remarks>
+  TRunPhase = (rpReindexBefore, rpBackup, rpApply, rpReindexAfter, rpRestore, rpApplyBatch, rpFinalReindex);
 
   /// <summary>One progress step of a run: emitted as the phase STARTS.</summary>
   TRunStep = record
     /// <summary>The phase starting now.</summary>
     Phase         : TRunPhase;
-    /// <summary>1-based position of the unit in the job; 0 on rpFinalReindex.</summary>
+    /// <summary>1-based position of the unit in the job; 0 on rpFinalReindex and on batch
+    /// mode's one rpReindexBefore; the chunk's first unit on a batch chunk's steps.</summary>
     UnitNo        : Integer;
     /// <summary>Units in the job.</summary>
     UnitCount     : Integer;
@@ -205,10 +220,18 @@ type
     BookCount     : Integer;
     /// <summary>The book's .rules path; '' when BookNo = 0.</summary>
     Book          : string;
-    /// <summary>Milliseconds since the unit's first step.</summary>
+    /// <summary>Milliseconds since the unit's first step (batch mode: since the chunk's
+    /// rpApplyBatch on a chunk's steps).</summary>
     UnitElapsedMs : Int64;
     /// <summary>Milliseconds since the run started; never less than UnitElapsedMs.</summary>
     TotalElapsedMs: Int64;
+    /// <summary>Units in the batch chunk on rpApplyBatch and on that chunk's rpReindexAfter
+    /// (UnitNo .. UnitNo + BatchUnits - 1); 0 on every other step and on every per-unit step.</summary>
+    BatchUnits    : Integer;
+    /// <summary>BatchSummaryText of the chunk's answer on a chunk's rpReindexAfter ('' when
+    /// the answer was no apply-batch/1); '' on every other step. The Convert tab writes each
+    /// non-empty one to the report as a note line.</summary>
+    Summary       : string;
   end;
 
   /// <summary>Receives each TRunStep (worker thread!).</summary>
@@ -218,10 +241,14 @@ type
 /// <param name="AJob">The job.</param>
 /// <param name="AEngine">An adapter owned by the caller's thread.</param>
 /// <param name="AProgress">May be nil.</param>
-/// <param name="ACancelled">May be nil; polled exactly once just before each unit (never between two books of one unit); True stops the run there.</param>
+/// <param name="ACancelled">May be nil; per-unit path: polled exactly once just before each unit (never between two books of one unit); batch path: once before each chunk (see RunConversionBatched). True stops the run there.</param>
 /// <param name="AOnStep">May be nil; receives every TRunStep (C16).</param>
 /// <returns>One row per unit x book attempted; an invalid book yields one
 /// csBookSkipped row (on the first unit that tried it) and is not tried again.</returns>
+/// <remarks>Batch mode when BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind =
+/// skWholeUnit, Length(AJob.Units), AJob.BatchOverride): the RunConversionBatched loop over
+/// TEngineAdapter.ApplyConversionBatch in chunks of BATCH_MAX_UNITS, each call watched for
+/// BatchTimeoutMs(CONVERT_TIMEOUT_MS, chunk size). Otherwise the per-unit loop, unchanged.</remarks>
 function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>;
 
 /// <summary>The unit loop of RunConversion, for books already validated,
@@ -306,13 +333,52 @@ function RunConversionUnitsStepped(const AUnits, ABooks: TArray<string>; const A
 /// AOnlyHint's tail. AScope raising counts as out of scope.</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False; const AOnlyHint: TOnlyHintFn = nil): TArray<TConvertRow>; overload;
 
+/// <summary>The book-major batch loop with the engine calls injected (B4): ONE convert-apply
+/// per book over chunks of the units; the test seam of RunConversion's batch path.</summary>
+/// <param name="AUnits">Source units, run order (also the --unit order of every call).</param>
+/// <param name="ABooks">Validated books, application order.</param>
+/// <param name="AApplyBatch">Applies one book to one chunk of units.</param>
+/// <param name="AIndex">Reindexes ONCE before the first book and once after every chunk.</param>
+/// <param name="AProgress">May be nil. A unit's rows arrive together, in their final
+/// status, once the unit has finished: after its chunk of the last book still to run, or
+/// earlier when it failed, was refused or skipped; the rest at the end of the run.</param>
+/// <param name="ACancelled">May be nil; polled once before each chunk (never inside a
+/// call). True stops the run there: every unit keeps the books already applied to it.</param>
+/// <param name="AOnStep">May be nil; receives every TRunStep: rpReindexBefore (UnitNo 0),
+/// rpBackup per unit, then per book and chunk rpApplyBatch, rpRestore per unit restored,
+/// and the chunk's rpReindexAfter (BatchUnits and Summary set).</param>
+/// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
+/// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
+/// <param name="AMaxUnits">Units per call (BatchChunks; RunConversion passes BATCH_MAX_UNITS).</param>
+/// <returns>The same row statuses as RunConversionUnits, per unit x book attempted.</returns>
+/// <remarks>Every unit still gets ONE restore point per run (.BCK&lt;N&gt;, dropped when no
+/// book changed it). Per chunk: exit ENGINE_EXIT_CONFIG gives every unit of the chunk a
+/// csConfigError row (the first one StoppedRun) and stops the run with no reindex; an
+/// answer that is no apply-batch/1, whose units[] do not line up with the --unit list
+/// (BatchUnitsMatch), that breaks the exit contract (BatchContractBroken) or that lists
+/// rule_errors on some units only is not trusted (a one-unit chunk's bare apply/1 is read
+/// with BatchOfSingle) -- every unit of the chunk is restored,
+/// csFailedRestored, note BatchUntrustedNote; rule_errors on every entry give ONE
+/// csBookSkipped row (the chunk's first unit) and the book is not tried again; otherwise
+/// each entry is read as the per-unit path reads one apply/1 (refused, failed, half
+/// written, converted). The reindex after a chunk runs whatever the entries said; when it
+/// fails, every unit the chunk converted is restored (csFailedRestored, note
+/// BATCH_REINDEX_FAILED_FMT) and its earlier rows become csRolledBack (decision D4). The
+/// apply/1 entries are read with every 1.27.0 feature (APPLY_FEATURES_ALL). Never raises.
+/// A separate name, never a defaulted parameter on an existing overload (E2250).</remarks>
+function RunConversionBatched(const AUnits, ABooks: TArray<string>; const AApplyBatch: TApplyBatchFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean; AMaxUnits: Integer): TArray<TConvertRow>;  // dl:ok unused-public-symbol@56bd -- REVIEWED 2026-10-23 the batch loop's test seam, called by the model tests (a separate project); RunConversion reaches the same loop through RunJobUnits
+
 /// <summary>PURE: the progress line for one step (status bar and the Convert tab).</summary>
 /// <param name="AStep">The step.</param>
 /// <returns>'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: applying (0:42,
 /// total 3:10)' for a book-level phase; 'Unit 2 of 5: SystemData2: backing up (0:03, total
 /// 3:10)' for a unit-level one; 'Final reindex (total 3:10)' for rpFinalReindex. Unit and
 /// book are file names without extension. Phase words: reindexing before apply, backing
-/// up, applying, reindexing after apply, restoring from backup.</returns>
+/// up, applying, reindexing after apply, restoring from backup, applying (batch). A batch
+/// chunk (BatchUnits &gt; 0): 'Book 1 of 2 Fix: applying units 1-8 of 20 in one batch (0:42,
+/// total 3:10)' on rpApplyBatch, 'Book 1 of 2 Fix: reindexing after batch apply, units 1-8
+/// of 20 (0:42, total 3:10)' on rpReindexAfter; batch mode's one rpReindexBefore (UnitNo
+/// 0): 'All 20 unit(s): reindexing before apply (0:03, total 0:03)'.</returns>
 function RunStepText(const AStep: TRunStep): string;
 
 /// <summary>PURE: AStep with AMs added to both elapsed fields -- the tab's once-a-second
@@ -470,6 +536,27 @@ function CastLibStopText(const ARows: TArray<TConvertRow>; const ACastLib: strin
 /// StoppedRun (or its unit is not in AUnits).</returns>
 function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TArray<string>): TArray<string>;
 
+/// <summary>PURE: the units a batch run did not take through every book (B4, plan 3.6) --
+/// the batch path's stand-in for counting cancel polls, which count chunks there.</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <param name="AUnits">The job's units, run order.</param>
+/// <param name="ABooks">The job's books.</param>
+/// <returns>The units, in AUnits order, with no terminal row (csFailedRestored, csRefused,
+/// csUnitSkipped, csRestoreFailed, csConfigError) and fewer rows than books. A book that
+/// failed validation counts for every unit: its one csBookSkipped row stands for all of
+/// them. [] when every unit finished.</returns>
+function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks: TArray<string>): TArray<string>;
+
+/// <summary>PURE: True when RunConversion takes AJob through the batch path -- the one
+/// decision the Convert tab asks too, so its start status and its not-reached rows follow
+/// the path the runner really takes.</summary>
+/// <param name="AJob">The job as RunConversion will receive it: Scope, Units,
+/// BatchSupported and BatchOverride already set.</param>
+/// <returns>BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit,
+/// Length(AJob.Units), AJob.BatchOverride). A scoped job (an IDE request) is never
+/// batched, whatever its unit count.</returns>
+function JobRunsBatched(const AJob: TConvertJob): Boolean;
+
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
@@ -511,6 +598,7 @@ uses
   , System.Diagnostics
   , ConvRules.Glyph
   , ConvRules.UnitStatus  // TFileProbe (FileProbe's return type) is declared here
+  , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- the batch loop executes these pure batch decisions; BATCH_MAX_UNITS and BATCH_REINDEX_FAILED_FMT are part of that contract
   ;
 
 const
@@ -693,6 +781,36 @@ begin
       Exit(Copy(AUnits, I + 1, Length(AUnits) - I - 1));
 end;
 
+function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks: TArray<string>): TArray<string>;
+const
+  TERMINAL = [csFailedRestored, csRefused, csUnitSkipped, csRestoreFailed, csConfigError];
+var
+  LCount   : Integer;
+  LTerminal: Boolean;
+begin
+  Result:= nil;
+  for var LUnit: string in AUnits do
+  begin
+    LCount   := 0;
+    LTerminal:= False;
+    for var LRow: TConvertRow in ARows do
+      if SameText(LRow.UnitPas, LUnit) then
+      begin
+        Inc(LCount);
+        LTerminal:= LTerminal or (LRow.Status in TERMINAL);
+      end
+      else if LRow.Status = csBookSkipped then
+        Inc(LCount); // the book failed validation once, for every unit
+    if not LTerminal and (LCount < Length(ABooks)) then
+      Result:= Result + [LUnit];
+  end;
+end;
+
+function JobRunsBatched(const AJob: TConvertJob): Boolean;
+begin
+  Result:= BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit, Length(AJob.Units), AJob.BatchOverride);
+end;
+
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 var
   LUnits: TArray<string>;
@@ -718,10 +836,21 @@ end;
 function RunStepText(const AStep: TRunStep): string;
 const
   PHASE_WORDS: array[TRunPhase] of string = ('reindexing before apply', 'backing up', 'applying',
-    'reindexing after apply', 'restoring from backup', 'final reindex');
+    'reindexing after apply', 'restoring from backup', 'applying (batch)', 'final reindex');
+var
+  LChunk: string;
 begin
   if AStep.Phase = rpFinalReindex then
     Exit(Format('Final reindex (total %s)', [FormatElapsed(AStep.TotalElapsedMs)]));
+  if (AStep.BatchUnits > 0) and (AStep.Phase in [rpApplyBatch, rpReindexAfter]) then
+  begin
+    LChunk:= Format('units %d-%d of %d', [AStep.UnitNo, AStep.UnitNo + AStep.BatchUnits - 1, AStep.UnitCount]);
+    Result:= Format('Book %d of %d %s: ', [AStep.BookNo, AStep.BookCount, ChangeFileExt(ExtractFileName(AStep.Book), '')]);
+    Result:= Result + (if AStep.Phase = rpApplyBatch then 'applying ' + LChunk + ' in one batch' else 'reindexing after batch apply, ' + LChunk);
+    Exit(Result + Format(' (%s, total %s)', [FormatElapsed(AStep.UnitElapsedMs), FormatElapsed(AStep.TotalElapsedMs)]));
+  end;
+  if AStep.UnitNo = 0 then // batch mode's one reindex before the first book
+    Exit(Format('All %d unit(s): %s (%s, total %s)', [AStep.UnitCount, PHASE_WORDS[AStep.Phase], FormatElapsed(AStep.UnitElapsedMs), FormatElapsed(AStep.TotalElapsedMs)]));
   Result:= Format('Unit %d of %d: %s', [AStep.UnitNo, AStep.UnitCount, ChangeFileExt(ExtractFileName(AStep.UnitPas), '')]);
   if AStep.BookNo > 0 then
     Result:= Result + Format(' -- book %d of %d %s', [AStep.BookNo, AStep.BookCount, ChangeFileExt(ExtractFileName(AStep.Book), '')]);
@@ -743,8 +872,99 @@ begin
     end;
 end;
 
+type
+  // One unit's restore point for a run: the .pas and its .dfm copied to a shared .BCK<N>
+  // (SharedBackupPaths). BakPas / BakDfm are set only once their copy has been made, so a
+  // failed Take leaves them naming exactly the backups Drop must remove.
+  TRestorePoint = record
+    UnitPas: string;
+    Dfm    : string;
+    BakPas : string;
+    BakDfm : string;
+    // Copies the unit (and its .dfm, when it exists) to the next free .BCK<N>.
+    function Take(const AUnitPas: string; out AError: string): Boolean;
+    // Copies the backups back over the unit and its .dfm.
+    function Restore(out AError: string): Boolean;
+    // '' when every backup this run made for the unit is gone; else what was kept.
+    function Drop: string;
+    // The unit's backups for a Note: both when it has a .dfm; file names only unless AFullPaths.
+    function Names(AFullPaths: Boolean): string;
+  end;
+// '' when ABak ('' = none made) is gone; else a note that it was kept.
+function DropBackupFile(const ABak: string): string;
+begin
+  Result:= '';
+  if ABak = '' then
+    Exit;
+  try
+    TFile.Delete(ABak);
+  except
+    on E: Exception do
+      Result:= Format('; unneeded backup kept (delete failed: %s): %s', [E.Message, ABak]);
+  end; // try
+end;
+
+function TRestorePoint.Take(const AUnitPas: string; out AError: string): Boolean;
+begin
+  AError:= '';
+  UnitPas:= AUnitPas;
+  BakPas:= '';
+  BakDfm:= '';
+  Dfm   := ChangeFileExt(UnitPas, '.dfm');
+  try
+    // ONE number for the unit: a stale X.dfm.BCK<N> counts even when the .dfm is gone.
+    var LPaths: TArray<string>:= SharedBackupPaths([UnitPas, Dfm], FileProbe());
+    TFile.Copy(UnitPas, LPaths[0]);
+    BakPas:= LPaths[0];
+    if TFile.Exists(Dfm) then
+    begin
+      TFile.Copy(Dfm, LPaths[1]);
+      BakDfm:= LPaths[1];
+    end;
+    Result:= True;
+  except
+    on E: Exception do
+    begin
+      AError:= E.Message;
+      Result:= False;
+    end;
+  end; // try
+end;
+
+function TRestorePoint.Restore(out AError: string): Boolean;
+begin
+  AError:= '';
+  try
+    TFile.Copy(BakPas, UnitPas, True);
+    if BakDfm <> '' then
+      TFile.Copy(BakDfm, Dfm, True);
+    Result:= True;
+  except
+    on E: Exception do
+    begin
+      AError:= E.Message;
+      Result:= False;
+    end;
+  end; // try
+end;
+
+function TRestorePoint.Drop: string;
+begin
+  Result:= DropBackupFile(BakPas) + DropBackupFile(BakDfm);
+end;
+
+function TRestorePoint.Names(AFullPaths: Boolean): string;
+begin
+  Result:= if AFullPaths then BakPas else ExtractFileName(BakPas);
+  if BakDfm <> '' then
+    Result:= Result + ' and ' + (if AFullPaths then BakDfm else ExtractFileName(BakDfm));
+end;
+
 // The ONE unit loop (the public TApplyOnlyFn overload is it without a step callback).
 function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn; AFeatures: TApplyFeatures): TArray<TConvertRow>; forward;
+
+// The book-major batch loop (RunConversionBatched without the feature default).
+function RunBatchLoop(const AUnits, ABooks: TArray<string>; const AApplyBatch: TApplyBatchFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean; AMaxUnits: Integer; AFeatures: TApplyFeatures): TArray<TConvertRow>; forward;
 
 // The TConvertJob overload's body, with the step callback.
 function RunJobUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>; forward;
@@ -767,6 +987,17 @@ var
 begin
   LJob   := AJob;
   LEngine:= AEngine;
+  if BatchModeFor(LJob.BatchSupported, LJob.Scope.Kind = skWholeUnit, Length(AUnits), LJob.BatchOverride) then
+    Exit(RunBatchLoop(AUnits, ABooks,
+      function(const AChunk: TArray<string>; const ARulesFile: string; out AJson: string): Integer
+      begin
+        Result:= LEngine.ApplyConversionBatch(AChunk, ARulesFile, LJob.Dbs, BatchTimeoutMs(CONVERT_TIMEOUT_MS, Length(AChunk)), AJson);
+      end,
+      function(out AOutput: string): Integer
+      begin
+        Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
+      end,
+      AProgress, ACancelled, AOnStep, LJob.InheritedSupported, LJob.RetypeSupported, BATCH_MAX_UNITS, LJob.ApplyFeatures));
   // The book is read on the worker thread; an unreadable one is out of scope.
   LScope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
     begin
@@ -825,9 +1056,7 @@ var
   Row     : TConvertRow;
   Total   : Integer;
   CurUnit : string;
-  BakPas  : string;
-  BakDfm  : string;
-  Dfm     : string;
+  RP      : TRestorePoint; // the current unit's restore point (.pas + .dfm backups)
   Invalid : TArray<string>; // books whose rules failed the engine's validation this run
   Changed : Boolean;        // the unit's backup is still needed (a change, or a failed book)
   Watch   : TStopwatch;     // since the run started (C16 step elapsed)
@@ -890,79 +1119,6 @@ var
         Exit(False);
   end;
 
-  // '' when ABak ('' = none made) is gone; else a note that it was kept.
-  function DropBackup(const ABak: string): string;
-  begin
-    Result:= '';
-    if ABak = '' then
-      Exit;
-    try
-      TFile.Delete(ABak);
-    except
-      on E: Exception do
-        Result:= Format('; unneeded backup kept (delete failed: %s): %s', [E.Message, ABak]);
-    end; // try
-  end;
-
-  // '' when every backup this run made for the unit is gone; else what was kept.
-  function DropBackups: string;
-  begin
-    Result:= DropBackup(BakPas) + DropBackup(BakDfm);
-  end;
-
-  // The unit's backups for a Note: both when it has a .dfm; file names only
-  // unless AFullPaths.
-  function BackupNames(AFullPaths: Boolean): string;
-  begin
-    Result:= if AFullPaths then BakPas else ExtractFileName(BakPas);
-    if BakDfm <> '' then
-      Result:= Result + ' and ' + (if AFullPaths then BakDfm else ExtractFileName(BakDfm));
-  end;
-
-  // BakPas / BakDfm are set only once their copy has been made, so a failure
-  // leaves them naming exactly the backups DropBackups must remove.
-  function TakeBackups(out AError: string): Boolean;
-  begin
-    AError:= '';
-    BakPas:= '';
-    BakDfm:= '';
-    Dfm   := ChangeFileExt(CurUnit, '.dfm');
-    try
-      // ONE number for the unit: a stale X.dfm.BCK<N> counts even when the .dfm is gone.
-      var LPaths: TArray<string>:= SharedBackupPaths([CurUnit, Dfm], FileProbe());
-      TFile.Copy(CurUnit, LPaths[0]);
-      BakPas:= LPaths[0];
-      if TFile.Exists(Dfm) then
-      begin
-        TFile.Copy(Dfm, LPaths[1]);
-        BakDfm:= LPaths[1];
-      end;
-      Result:= True;
-    except
-      on E: Exception do
-      begin
-        AError:= E.Message;
-        Result:= False;
-      end;
-    end; // try
-  end;
-
-  function TryRestore(out AError: string): Boolean;
-  begin
-    AError:= '';
-    try
-      TFile.Copy(BakPas, CurUnit, True);
-      if BakDfm <> '' then
-        TFile.Copy(BakDfm, Dfm, True);
-      Result:= True;
-    except
-      on E: Exception do
-      begin
-        AError:= E.Message;
-        Result:= False;
-      end;
-    end; // try
-  end;
 
   // Row is the failing book's row; restore the unit and account for its earlier rows.
   // AStatus is the failing row's status: csFailedRestored, csRefused or csConfigError.
@@ -989,11 +1145,11 @@ var
     end;
     Changed:= True; // the backup is the restore point the rows name -- keep it
     Step(rpRestore);
-    if not TryRestore(LError) then
+    if not RP.Restore(LError) then
     begin
       // Earlier csConverted rows stay: their change may still be on disk.
       Row.Status:= csRestoreFailed;
-      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, BackupNames(True)]);
+      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, RP.Names(True)]);
       Add;
       Exit;
     end;
@@ -1006,7 +1162,7 @@ var
       if UnitRows[I].Status = csConverted then
       begin
         UnitRows[I].Status:= csRolledBack;
-        UnitRows[I].Note  := Format('undone: %s %s on this unit; restored from %s', [ExtractFileName(Row.Book), LVerb, BackupNames(False)]);
+        UnitRows[I].Note  := Format('undone: %s %s on this unit; restored from %s', [ExtractFileName(Row.Book), LVerb, RP.Names(False)]);
       end;
     Row.Status:= AStatus;
     Row.Note  := AReason;
@@ -1063,8 +1219,8 @@ var
     Row:= Default(TConvertRow);
     Row.UnitPas  := CurUnit;
     Row.Book     := ABook;
-    Row.Backup   := BakPas;
-    Row.BackupDfm:= BakDfm;
+    Row.Backup   := RP.BakPas;
+    Row.BackupDfm:= RP.BakDfm;
     LScoped:= AskScope(ABook, LOnly);
     if LScoped and (Length(LOnly) = 0) then
     begin
@@ -1188,10 +1344,10 @@ var
     end;
     // One restore point per unit per run, taken before the first book touches it.
     Step(rpBackup);
-    if not TakeBackups(LError) then
+    if not RP.Take(CurUnit, LError) then
     begin
       Row.Status:= csUnitSkipped;
-      Row.Note  := 'backup failed: ' + LError + DropBackups;
+      Row.Note  := 'backup failed: ' + LError + RP.Drop;
       Add;
       Exit;
     end;
@@ -1207,7 +1363,7 @@ var
       Exit;
     // Nothing touched the unit (every book invalid or out of scope, or refused before any change): the fresh copies are
     // identical to it and would only litter the folder.
-    LError:= DropBackups;
+    LError:= RP.Drop;
     if (LError <> '') and (Length(UnitRows) > 0) then
       UnitRows[High(UnitRows)].Note:= UnitRows[High(UnitRows)].Note + LError;
   end;
@@ -1237,6 +1393,424 @@ begin
     if Stopped then
       Break; // a castlib configuration error: every later apply would fail the same way
   end; // for units
+  Result:= Rows;
+end;
+
+function RunConversionBatched(const AUnits, ABooks: TArray<string>; const AApplyBatch: TApplyBatchFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean; AMaxUnits: Integer): TArray<TConvertRow>;  // dl:ok too-many-parameters@a927 -- REVIEWED 2026-10-23 the batch test seam: the same engine seams, progress, cancel and step callback as RunConversionUnitsStepped, plus the chunk size
+begin
+  Result:= RunBatchLoop(AUnits, ABooks, AApplyBatch, AIndex, AProgress, ACancelled, AOnStep, AInheritedSupported, ARetypeSupported, AMaxUnits, APPLY_FEATURES_ALL);
+end;
+
+// True = AIndex reported success; else AError is the head of its output. Never raises.
+function TryIndex(const AIndex: TIndexFn; out AError: string): Boolean;
+var
+  LOutput: string;
+  LCode  : Integer;
+begin
+  try
+    LCode:= AIndex(LOutput);
+  except  // not swallowed: becomes a failed reindex, and the row carries the message
+    on E: Exception do
+    begin
+      LOutput:= 'reindex raised: ' + E.Message;
+      LCode  := -1;
+    end;
+  end; // try
+  AError:= Copy(Trim(LOutput), 1, OUTPUT_HEAD_CHARS);
+  Result:= LCode = 0;
+end;
+
+// The batch entry shape of a book that failed the engine's validation (RunUnitLoop's test).
+function BookInvalidEntry(const AEntry: TApplyRow): Boolean;
+begin
+  Result:= (not AEntry.Ok) and (AEntry.RuleErrorCount > 0) and not AEntry.Refused and not ApplyEditSetRefused(AEntry);
+end;
+
+// Why the answer of one batch call is not trusted; '' = trusted. AAllInvalid = every entry
+// says the book failed validation (only set on a trusted answer).
+function BatchDistrust(const ADoc: TApplyBatch; const AUnits: TArray<string>; ACode: Integer; const AJson: string; out AAllInvalid: Boolean): string;
+var
+  LInvalid: Integer;
+begin
+  AAllInvalid:= False;
+  if not ADoc.Valid then
+    Exit(Format('exit %d, no apply-batch/1 answer: %s', [ACode, Copy(Trim(AJson), 1, OUTPUT_HEAD_CHARS)]));
+  if not BatchUnitsMatch(ADoc, AUnits) then
+    Exit(Format('%d units[] entr(ies), units_count %d, for %d --unit(s) in this order', [Length(ADoc.Units), ADoc.UnitsCount, Length(AUnits)]));
+  LInvalid:= 0;
+  for var LEntry: TApplyRow in ADoc.Units do
+    if BookInvalidEntry(LEntry) then
+      Inc(LInvalid);
+  AAllInvalid:= LInvalid = Length(ADoc.Units);
+  if AAllInvalid then
+    Exit('');
+  if BatchContractBroken(ADoc) then
+    Exit(Format('exit_code %d contradicts %d ok / %d refused / %d failed', [ADoc.ExitCode, ADoc.OkCount, ADoc.RefusedCount, ADoc.FailedCount]));
+  if LInvalid > 0 then
+    Exit(Format('rule_errors on %d of %d unit(s) only', [LInvalid, Length(ADoc.Units)]));
+  Result:= '';
+end;
+
+type
+  // One unit of a batch run: its restore point and its rows, delivered together once final.
+  TBatchUnit = record
+    RP       : TRestorePoint;
+    Rows     : TArray<TConvertRow>;
+    Changed  : Boolean; // the backup is still needed (a change, or a restore)
+    Finished : Boolean; // skipped, failed, refused or stopped: no later book runs on it
+    Delivered: Boolean; // its rows reached AProgress
+  end;
+
+function RunBatchLoop(const AUnits, ABooks: TArray<string>; const AApplyBatch: TApplyBatchFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean; AMaxUnits: Integer; AFeatures: TApplyFeatures): TArray<TConvertRow>;  // dl:ok too-many-parameters@bf88 -- REVIEWED 2026-10-23 the batch twin of RunUnitLoop: two engine seams, progress, cancel, step callback, the job's capability flags, chunk size and feature set
+var
+  Rows    : TArray<TConvertRow>;
+  Units   : TArray<TBatchUnit>; // parallel to AUnits
+  Invalid : TArray<string>;     // books whose rules failed the engine's validation this run
+  Total   : Integer;
+  Watch   : TStopwatch;
+  StepsOff: Boolean;            // AOnStep raised once: no further steps this run
+  Stopped : Boolean;            // a configuration stop or a cancel: no further chunk runs
+
+  // Tells AOnStep that APhase starts now; AAt = Watch's ms the elapsed "unit" time counts from.
+  procedure Step(APhase: TRunPhase; AUnitNo, ABookNo, ABatchUnits: Integer; AAt: Int64; const ASummary: string);
+  var
+    LStep: TRunStep;
+  begin
+    if not Assigned(AOnStep) or StepsOff then
+      Exit;
+    LStep:= Default(TRunStep);
+    LStep.Phase    := APhase;
+    LStep.UnitNo   := AUnitNo;
+    LStep.UnitCount:= Length(AUnits);
+    if AUnitNo > 0 then
+      LStep.UnitPas:= AUnits[AUnitNo - 1];
+    LStep.BookNo   := ABookNo;
+    LStep.BookCount:= Length(ABooks);
+    if ABookNo > 0 then
+      LStep.Book:= ABooks[ABookNo - 1];
+    LStep.BatchUnits:= ABatchUnits;
+    LStep.Summary   := ASummary;
+    LStep.TotalElapsedMs:= Watch.ElapsedMilliseconds;
+    LStep.UnitElapsedMs := LStep.TotalElapsedMs - AAt;
+    try
+      AOnStep(LStep);
+    except  // dl:ok try-except-swallowed@76ff -- REVIEWED 2026-10-23 as RunUnitLoop.Step: progress is advisory, a raising display callback must not fail a unit or escape a routine documented as never raising; it is not asked again
+      on Exception do
+        StepsOff:= True;
+    end; // try
+  end;
+
+  function NewRow(K: Integer; const ABook: string): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.UnitPas  := AUnits[K];
+    Result.Book     := ABook;
+    Result.Backup   := Units[K].RP.BakPas;
+    Result.BackupDfm:= Units[K].RP.BakDfm;
+  end;
+
+  // A unit-level skip: one csUnitSkipped row, the unit takes no further part.
+  procedure SkipUnit(K: Integer; const ANote: string);
+  var
+    LRow: TConvertRow;
+  begin
+    LRow:= Default(TConvertRow);
+    LRow.UnitPas:= AUnits[K];
+    LRow.Status := csUnitSkipped;
+    LRow.Note   := ANote;
+    Units[K].Rows    := Units[K].Rows + [LRow];
+    Units[K].Finished:= True;
+  end;
+
+  // Drops the unit's unneeded backups and hands its rows to AProgress, once.
+  procedure Deliver(K: Integer);
+  var
+    LError: string;
+  begin
+    if Units[K].Delivered then
+      Exit;
+    Units[K].Delivered:= True;
+    if not Units[K].Changed then
+    begin
+      // Nothing touched the unit: the fresh copies are identical to it.
+      LError:= Units[K].RP.Drop;
+      if (LError <> '') and (Length(Units[K].Rows) > 0) then
+        Units[K].Rows[High(Units[K].Rows)].Note:= Units[K].Rows[High(Units[K].Rows)].Note + LError;
+    end;
+    for var LRow: TConvertRow in Units[K].Rows do
+    begin
+      Rows:= Rows + [LRow];
+      if Assigned(AProgress) then
+        AProgress(LRow, Length(Rows), Total);
+    end;
+  end;
+
+  // RunUnitLoop.FailUnit for unit K: ARow is the failing book's row. Only AStoppedRun
+  // marks the run's stop (the first unit of a configuration-stopped chunk).
+  procedure FailUnit(K: Integer; var ARow: TConvertRow; const AReason: string; AStatus: TConvertStatus; ABookNo: Integer; AAt: Int64; AStoppedRun: Boolean);
+  var
+    LError: string;
+    LVerb : string;
+  begin
+    Units[K].Finished:= True;
+    ARow.StoppedRun:= AStoppedRun;
+    if (AStatus in [csRefused, csConfigError]) and not Units[K].Changed then
+    begin
+      ARow.Backup   := ''; // nothing written, nothing earlier to undo: Deliver drops the backup
+      ARow.BackupDfm:= '';
+      ARow.Status   := AStatus;
+      ARow.Note     := AReason;
+      Units[K].Rows:= Units[K].Rows + [ARow];
+      Exit;
+    end;
+    Units[K].Changed:= True; // the backup is the restore point the rows name -- keep it
+    Step(rpRestore, K + 1, ABookNo, 0, AAt, '');
+    if not Units[K].RP.Restore(LError) then
+    begin
+      ARow.Status:= csRestoreFailed;
+      ARow.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, Units[K].RP.Names(True)]);
+      Units[K].Rows:= Units[K].Rows + [ARow];
+      Exit;
+    end;
+    case AStatus of
+      csRefused    : LVerb:= 'was refused';
+      csConfigError: LVerb:= 'stopped the run (cast library unusable)';
+      else           LVerb:= 'failed';
+    end; // case
+    for var I: Integer:= 0 to High(Units[K].Rows) do
+      if Units[K].Rows[I].Status = csConverted then
+      begin
+        Units[K].Rows[I].Status:= csRolledBack;
+        Units[K].Rows[I].Note  := Format('undone: %s %s on this unit; restored from %s', [ExtractFileName(ARow.Book), LVerb, Units[K].RP.Names(False)]);
+      end;
+    ARow.Status:= AStatus;
+    ARow.Note  := AReason;
+    Units[K].Rows:= Units[K].Rows + [ARow];
+  end;
+
+  // One convert-apply of book ABookNo over the units AChunk (indices into AUnits).
+  procedure RunChunk(ABookNo: Integer; const AChunk: TArray<Integer>);
+  var
+    LBook    : string;
+    LPaths   : TArray<string>;
+    LJson    : string;
+    LCode    : Integer;
+    LDoc     : TApplyBatch;
+    LAt      : Int64;
+    LRow     : TConvertRow;
+    LEntry   : TApplyRow;
+    LWhy     : string;
+    LReason  : string;
+    LError   : string;
+    LAllBad  : Boolean;
+    LPending : TArray<Integer>;     // positions in AChunk the engine converted
+    LPendRows: TArray<TConvertRow>; // their rows, final once the reindex after the chunk ran
+  begin
+    LBook:= ABooks[ABookNo - 1];
+    SetLength(LPaths, Length(AChunk));
+    for var I: Integer:= 0 to High(AChunk) do
+      LPaths[I]:= AUnits[AChunk[I]];
+    LAt:= Watch.ElapsedMilliseconds;
+    Step(rpApplyBatch, AChunk[0] + 1, ABookNo, Length(AChunk), LAt, '');
+    LCode:= -1;
+    try
+      LCode:= AApplyBatch(LPaths, LBook, LJson);
+    except  // not swallowed: the message becomes an unparseable answer, so the chunk is restored and its rows name it
+      on E: Exception do
+        LJson:= 'engine call raised: ' + E.Message;
+    end; // try
+    // A single --unit is answered with a bare apply/1 (CONVERSION-RULES.md "Batch (1.23.0)").
+    LDoc:= if Length(AChunk) = 1 then BatchOfSingle(LJson, LCode, AFeatures) else ParseApplyBatchJson(LJson, AFeatures);
+    if LCode = ENGINE_EXIT_CONFIG then
+    begin
+      // The run's configuration error (engine 1.28.0): every later call would fail the same way.
+      Stopped:= True;
+      for var I: Integer:= 0 to High(AChunk) do
+      begin
+        LRow:= NewRow(AChunk[I], LBook);
+        if BatchUnitsMatch(LDoc, LPaths) then
+          LRow.Apply:= LDoc.Units[I]
+        else
+          LRow.Apply:= ParseApplyJson(LJson, AFeatures);
+        FailUnit(AChunk[I], LRow, LRow.Apply.Error, csConfigError, ABookNo, LAt, I = 0);
+      end;
+      Exit; // no reindex: the run stops, the Convert tab's final reindex follows
+    end;
+    LWhy:= BatchDistrust(LDoc, LPaths, LCode, LJson, LAllBad);
+    LPending := nil;
+    LPendRows:= nil;
+    if LWhy <> '' then
+    begin
+      // A killed, short, reordered or self-contradicting answer: trust none of the chunk.
+      for var I: Integer:= 0 to High(AChunk) do
+      begin
+        LRow:= NewRow(AChunk[I], LBook);
+        if BatchUnitsMatch(LDoc, LPaths) then
+          LRow.Apply:= LDoc.Units[I];
+        FailUnit(AChunk[I], LRow, BatchUntrustedNote(LWhy), csFailedRestored, ABookNo, LAt, False);
+      end;
+    end
+    else if LAllBad then
+    begin
+      // The book was validated once for the chunk: ONE row, and it is not tried again.
+      Invalid:= Invalid + [LBook];
+      LRow:= NewRow(AChunk[0], LBook);
+      LRow.Apply    := LDoc.Units[0];
+      LRow.Backup   := '';
+      LRow.BackupDfm:= '';
+      LRow.Status   := csBookSkipped;
+      LRow.Note     := 'rules failed the engine''s validation: ' + LRow.Apply.Error;
+      Units[AChunk[0]].Rows:= Units[AChunk[0]].Rows + [LRow];
+    end
+    else
+      for var I: Integer:= 0 to High(AChunk) do
+      begin
+        LEntry:= LDoc.Units[I];
+        LRow:= NewRow(AChunk[I], LBook);
+        LRow.Apply:= LEntry;
+        if not LEntry.Ok then
+        begin
+          LReason:= if ApplyEditSetRefused(LEntry) then EditSetRefusedNote(LEntry) else LEntry.Error;
+          LReason:= LReason + QualifyFixNote(LEntry);
+          if LEntry.Refused then
+            LReason:= LReason + IndexGapHint(LEntry.Error); // an index gap is the index's fault, not the book's
+          FailUnit(AChunk[I], LRow, LReason, if LEntry.Refused or ApplyEditSetRefused(LEntry) then csRefused else csFailedRestored, ABookNo, LAt, False);
+        end
+        else if ApplyHalfWritten(LEntry) then
+          FailUnit(AChunk[I], LRow, HalfWrittenNote(LEntry), csFailedRestored, ABookNo, LAt, False)
+        else
+        begin
+          LPending := LPending + [I];
+          LPendRows:= LPendRows + [LRow];
+        end;
+      end;
+    // ONE reindex after the chunk, whatever it did: the engine's own per-unit reindex
+    // (uses_reindex) may have recorded content the restores above undid.
+    Step(rpReindexAfter, AChunk[0] + 1, ABookNo, Length(AChunk), LAt, BatchSummaryText(LDoc));
+    if TryIndex(AIndex, LError) then
+      for var P: Integer:= 0 to High(LPending) do
+      begin
+        LRow:= LPendRows[P];
+        LRow.Status:= csConverted;
+        LRow.Note  := ConvertedRowNote(LRow.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(LRow.Apply.Glyphs) + QualifyFixNote(LRow.Apply);
+        Units[AChunk[LPending[P]]].Changed:= True;
+        Units[AChunk[LPending[P]]].Rows   := Units[AChunk[LPending[P]]].Rows + [LRow];
+      end
+    else
+      for var P: Integer:= 0 to High(LPending) do
+      begin
+        LRow:= LPendRows[P];
+        FailUnit(AChunk[LPending[P]], LRow, Format(BATCH_REINDEX_FAILED_FMT, [LError]), csFailedRestored, ABookNo, LAt, False);
+      end;
+  end;
+
+  // True when no book after ABookNo is still to run: a unit of this book's chunk is final.
+  function LastLiveBook(ABookNo: Integer): Boolean;
+  begin
+    Result:= True;
+    for var J: Integer:= ABookNo to High(ABooks) do
+      if not MatchText(ABooks[J], Invalid) then
+        Exit(False);
+  end;
+
+  procedure RunBook(ABookNo: Integer);
+  var
+    LActive: TArray<Integer>;
+    LPaths : TArray<string>;
+    LChunk : TArray<Integer>;
+    LAt    : Integer; // position in LActive of the chunk's first unit
+  begin
+    LActive:= nil;
+    LPaths := nil;
+    for var K: Integer:= 0 to High(AUnits) do
+      if not Units[K].Finished then
+      begin
+        LActive:= LActive + [K];
+        LPaths := LPaths + [AUnits[K]];
+      end;
+    LAt:= 0;
+    for var LChunkPaths: TArray<string> in BatchChunks(LPaths, AMaxUnits) do
+    begin
+      if MatchText(ABooks[ABookNo - 1], Invalid) then
+        Exit; // an earlier chunk found the book invalid
+      // Cancel is honoured BETWEEN chunks only: never inside an engine call.
+      if Assigned(ACancelled) and ACancelled() then
+      begin
+        Stopped:= True;
+        Exit;
+      end;
+      LChunk:= Copy(LActive, LAt, Length(LChunkPaths));
+      Inc(LAt, Length(LChunkPaths));
+      RunChunk(ABookNo, LChunk);
+      for var K: Integer in LChunk do
+        if Units[K].Finished or LastLiveBook(ABookNo) then
+          Deliver(K);
+      if Stopped then
+        Exit;
+    end;
+  end;
+
+var
+  LError : string;
+  LOnDisk: Boolean;
+begin
+  Rows   := nil;
+  Invalid:= nil;
+  if Length(ABooks) = 0 then
+    Exit(nil); // no book, no backup
+  Total   := Length(AUnits) * Length(ABooks);
+  Watch   := TStopwatch.StartNew;
+  StepsOff:= False;
+  Stopped := False;
+  SetLength(Units, Length(AUnits));
+  LOnDisk:= False;
+  for var K: Integer:= 0 to High(AUnits) do
+  begin
+    Units[K]:= Default(TBatchUnit);
+    if TFile.Exists(AUnits[K]) then
+      LOnDisk:= True
+    else
+    begin
+      SkipUnit(K, 'source unit not found on disk');
+      Deliver(K);
+    end;
+  end;
+  if not LOnDisk then
+    Exit(Rows);
+  // ONE refresh before the first book (convert-apply patches the .dfm at the index's line
+  // ranges); a failed one touches nothing and every unit is skipped.
+  Step(rpReindexBefore, 0, 0, 0, 0, '');
+  if not TryIndex(AIndex, LError) then
+  begin
+    for var K: Integer:= 0 to High(AUnits) do
+      if not Units[K].Finished then
+      begin
+        SkipUnit(K, 'reindex before apply failed: ' + LError);
+        Deliver(K);
+      end;
+    Exit(Rows);
+  end;
+  // One restore point per unit per run, taken before the first book touches it.
+  for var K: Integer:= 0 to High(AUnits) do
+    if not Units[K].Finished then
+    begin
+      Step(rpBackup, K + 1, 0, 0, Watch.ElapsedMilliseconds, '');
+      if not Units[K].RP.Take(AUnits[K], LError) then
+      begin
+        SkipUnit(K, 'backup failed: ' + LError + Units[K].RP.Drop);
+        Units[K].RP:= Default(TRestorePoint); // dropped: Deliver must not drop it again
+        Deliver(K);
+      end;
+    end;
+  for var B: Integer:= 0 to High(ABooks) do
+  begin
+    if Stopped then
+      Break;
+    if not MatchText(ABooks[B], Invalid) then
+      RunBook(B + 1);
+  end;
+  for var K: Integer:= 0 to High(AUnits) do
+    Deliver(K);
   Result:= Rows;
 end;
 

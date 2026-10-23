@@ -21,8 +21,28 @@ before working on an item.**
   gitignored); waits for OWNER decisions D0-D9 (spec section 12, recommendations given).
   Engine gaps G8/G9/G10 filed `docs\INBOX-2026-10-23-converter-to-engine-migrate-gaps.md`
   (ENGINE lane e3d/migrate-gaps).
-* In flight: N1, D2, B10, B4 plan (Fable), Qualify-all driver check + -UseAlt flake,
-  featuregen `--site` index fields (ENGINE help-line T10), new pin 1.33.0-alpha-20261021-122057 baseline.
+* DONE later the same day: N1 (9941b39e), D2 (ecc90bfd), B10 (45c149e1), Qualify-all driver
+  (dea6c6f4), featuregen site fields (02b11037), **B4 batch mode** (2b713460..eec26734; model
+  2571/5/0, drive-convert-batch 22/0). Pin 1.33.0-alpha-20261021-122057 ADOPTED (2460/5, 14
+  drivers; pin editor = main 1dc238da build).
+* Owed after ENGINE's final deploy (end of day 3, owner rule: no approval-needing step mid-run):
+  `featuregen verify --id convert-apply` / `convert-scaffold --by CONVERTER`; re-pin + baseline.
+* Open todos from this run:
+  * **N7** (medium) a posted BM_CLICK reaches Convert INSIDE the progress window's modal loop ->
+    ConvertClick re-entrant during analysis; N1's Save path not driven separately.
+  * **N8** (decide) ancestor converted + code-only use -> engine "code" / pas_uses "mapped", yet
+    the editor says "inherited code use(s) left" -- may overstate.
+  * **N9** (medium) drive-convert-tab step 3b must abort when the progress window never appears
+    (window=False -> a real Convert runs, cascade 16/10).
+  * **N10** (low) GUI lock stays held by a dead owner (cost D2 ~20 min): add a stale-owner check.
+  * **N11** (medium, N7 class) the 2nd Convert-tab "Add..." BM_CLICK is dropped; posted as
+    WM_COMMAND it opens the Open dialog over TEngineWaitForm (AddClick inside the modal loop),
+    run wedges. drive-convert-batch retries once and documents it.
+  * **FG-M** featuregen: Harvest via `menu-tree --format json`, path-based checks B/C, caption-key
+    parity vector, drop 14 stale exemptions (in flight, branch feat/conv-fgm-menu-tree).
+  * B4 left 44 findings (magic numbers, `C:\fix` fixture paths) on its lines in
+    ConvRulesModelTests.dpr (file total 509, outside the editor DB) -- fold into the D-list test debt.
+  * `GlyphForm.pas:60` unused `dl:ok` marker (review-marker-unused).
 * E3 + this run's worktrees `C:\Projects\Delphi-RAG-lint-wt\conv-*`: owner removes (approval).
 
 ## State at the rewrite
