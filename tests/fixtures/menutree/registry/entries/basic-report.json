@@ -1,0 +1,7 @@
+{
+  "id": "basic-report",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture > Catalog > Basic Report..." }
+  ]
+}

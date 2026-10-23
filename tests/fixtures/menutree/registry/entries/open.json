@@ -1,0 +1,7 @@
+{
+  "id": "open",
+  "owner": "FIXTURE",
+  "surfaces": [
+    { "type": "ide-menu", "path": "Fixture > Open..." }
+  ]
+}
