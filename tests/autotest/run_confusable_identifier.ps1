@@ -10,6 +10,10 @@
   CONTROLS: a lone constant, the SAME identifier in another case is not this
   rule's business, and a routine's locals are their own scope.
 
+  T-06: locals ARE compared with each other inside ONE routine (a_b beside ab in
+  the same var section is the same trap); they are still not compared with the
+  unit level or with another routine's locals.
+
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
@@ -50,6 +54,19 @@ var
 begin
 end;
 
+procedure Q;
+var
+  q_r: Integer;
+  MaxVal: Integer;
+begin
+end;
+
+procedure R;
+var
+  qr: Integer;
+begin
+end;
+
 end.
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
   $raw = (& $Exe lint $u --rule confusable-identifier --json 2>$null | Out-String)
@@ -60,8 +77,12 @@ end.
   Check 'R2 ... the same for two unit-level vars (line 12)' ($lines -contains 12) ''
   Check 'R3 it is a WARNING' (@($hits | Where-Object { $_.severity -ne 'warning' }).Count -eq 0) ''
   Check 'C1 CONTROL: one warning per pair, nothing on the first or the lone const' `
-    (($lines -notcontains 6) -and ($lines -notcontains 8) -and ($lines -notcontains 11) -and ($hits.Count -eq 2)) "count=$($hits.Count)"
-  Check 'C2 CONTROL: a routine''s locals (a_b, ab) are their own scope -- not flagged' ($lines -notcontains 18) ''
+    (($lines -notcontains 6) -and ($lines -notcontains 8) -and ($lines -notcontains 11) -and ($hits.Count -eq 3)) "count=$($hits.Count)"
+  Check 'R4 (T-06) two locals of ONE routine (a_b, ab) differing only by "_" are warned (line 18)' `
+    ((@($hits | Where-Object { $_.start_line -eq 18 -and $_.message -match '"ab" differs from "a_b"' }).Count -eq 1)) "lines: $($lines -join ',')"
+  Check 'C2 CONTROL: locals of DIFFERENT routines (q_r in Q, qr in R) are not compared' `
+    (($lines -notcontains 24) -and ($lines -notcontains 31)) ''
+  Check 'C3 CONTROL: a local (MaxVal) is not compared with a unit-level var (Max_Val)' ($lines -notcontains 25) ''
   $cat = @((& $Exe rules --json 2>$null | ConvertFrom-Json).rules | Where-Object { $_.id -eq 'confusable-identifier' })
   Check 'K1 the rule is in the catalog, naming, warning, on by default' `
     (($cat.Count -eq 1) -and ($cat[0].category -eq 'naming') -and ($cat[0].default_severity -eq 'warning') -and $cat[0].default_enabled) ''
