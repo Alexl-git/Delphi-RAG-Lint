@@ -9,6 +9,22 @@ Open it when picking the next converter job, not at session start.
 Sizes S/M/L; model = haiku / sonnet / session (owner rule 2a). **Measure against the tree
 before working on an item.**
 
+## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- supersedes the lists below
+
+* DONE on local main: A1 re-pin (1.33.0, 10-20), A2/A3 merges (faffc407, d7a289ba),
+  C-1 (ENGINE castlib 8d0e2e3b + test 06439a4e), E2 (3200fc0e), B2 (c8e33da7, caller removed
+  too), B9 (Model part was in faffc407; BDE book lines 8af2f8a5), N3 (e17f455c, 9ff9b242:
+  recapture.ps1 + fixtures on 1.33.0), N2 / D4 / D6 (already in faffc407; verified, N2 mutant
+  RED/GREEN), item F (registry review, 20ffb523). Item F's URL form is
+  `/help/dl/features/<id>/`, not `/help/<id>/` (www-40, 2026-10-23).
+* A4 #migrate: spec + plan written 2026-10-23 (`docs\superpowers\specs|plans\2026-10-23-converter-migrate-slice1*`,
+  gitignored); waits for OWNER decisions D0-D9 (spec section 12, recommendations given).
+  Engine gaps G8/G9/G10 filed `docs\INBOX-2026-10-23-converter-to-engine-migrate-gaps.md`
+  (ENGINE lane e3d/migrate-gaps).
+* In flight: N1, D2, B10, B4 plan (Fable), Qualify-all driver check + -UseAlt flake,
+  featuregen `--site` index fields (ENGINE help-line T10), new pin 1.33.0-alpha-20261021-122057 baseline.
+* E3 + this run's worktrees `C:\Projects\Delphi-RAG-lint-wt\conv-*`: owner removes (approval).
+
 ## State at the rewrite
 
 * Pin `third_party\engine-pinned\1.31.5-alpha-20261019-071827`; re-pin to 1.32.0-alpha
