@@ -1256,11 +1256,19 @@ $proseDocs = [ordered]@{
   'README.md'        = (Join-Path $Repo 'README.md')
   'docs\AI-USAGE.md' = (Join-Path $Repo 'docs\AI-USAGE.md')
 }
+# Lines that START with a `drag-lint-switch ...` code span (README paragraph, AI-USAGE table
+# row) document the SEPARATE exe drag-lint-switch.exe, whose flags (--on, --off, --template ...)
+# are not drag-lint.exe flags and can never be in its --help. Those lines are dropped from the F3
+# scan ONLY (anchored at line start, so a drag-lint flag named in other prose is still checked).
+# Positive control: CONTROL F3s below.
+$SwitchLineRx = '(?m)^(?:\|\s*)?`drag-lint-switch[^
+]*'
+function Get-ProseFlagSet([string]$Text) { return Get-FlagSet ([regex]::Replace($Text, $SwitchLineRx, '')) $ProseRx }
 $proseSets = @{}
 foreach ($name in $proseDocs.Keys) {
   $p = $proseDocs[$name]
   if (-not (Test-Path -LiteralPath $p)) { Check "check 9: $name exists" $false $p; continue }
-  $set = Get-FlagSet (Get-Content -LiteralPath $p -Raw) $ProseRx
+  $set = Get-ProseFlagSet (Get-Content -LiteralPath $p -Raw)
   $proseSets[$name] = $set
   Check "check 9: $name flag list parsed" ($set.Count -gt 50) "($($set.Count) flag(s))"
   $bad = @($set | Where-Object {
@@ -1389,6 +1397,12 @@ if ($proseSets.ContainsKey('README.md')) {
     ($ctlF5Missing -contains $tok) `
     'F5 cannot detect a banner flag absent from the prose, so it can never fail'
 }
+
+# F3s: a drag-lint-switch line's flags are exempt, but a drag-lint flag on any other line is not.
+$ctlSw = Get-ProseFlagSet ("`n``drag-lint-switch --zz-sw-planted``  x`n| ``drag-lint-switch --zz-sw-row`` | y --zz-sw-tail |`n``drag-lint --zz-real-planted`` z")
+Check 'CONTROL F3s drag-lint-switch lines are exempt, other lines are not' `
+  ((-not $ctlSw.Contains('--zz-sw-planted')) -and (-not $ctlSw.Contains('--zz-sw-row')) -and (-not $ctlSw.Contains('--zz-sw-tail')) -and $ctlSw.Contains('--zz-real-planted') -and -not $helpSet.Contains('--zz-real-planted')) `
+  'the switch-line exemption is too wide or too narrow, so F3 is either blind or noisy'
 
 if ($proseSets.ContainsKey('README.md')) {
   $ctlProse = Get-FlagSet ((Get-Content -LiteralPath $proseDocs['README.md'] -Raw) + " ``$tok``") $ProseRx
