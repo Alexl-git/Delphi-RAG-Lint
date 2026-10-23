@@ -1061,6 +1061,45 @@ begin
     'StripDB accepts string only');
 end;
 
+{ C-1: the picker offers StripDB for the string ALIAS TFileName. `accepts` is an
+  exact-name match (no alias walk), so the REPO castlib lists TFileName beside
+  string; the control proves the old `accepts string` list does not offer it. }
+procedure TestConvCatalogTFileNameStripDB;
+const
+  OLD_LIB = 'cast StripDB'#13#10 + '  accepts string'#13#10 + '  yields  string'#13#10 +
+    '  value   strip-db'#13#10 + 'end'#13#10;
+var
+  P   : string;
+  Lib : TCastLib;
+  Defs: TArray<TCastDef>;
+
+  function Offers(const ADefs: TArray<TCastDef>; const AFrom: string): Boolean;
+  var
+    o: TConvOption;
+  begin
+    for o in ConversionsFor(AFrom, ADefs, Lib.Enums) do
+      if SameText(o.CastName, 'StripDB') and (o.Kind = ckValue) then
+        Exit(True);
+    Result := False;
+  end;
+
+begin
+  Defs := LoadCastLibText(OLD_LIB);
+  Check('catalog.tfilename.control.old.string', Offers(Defs, 'string'), 'old list offers string');
+  Check('catalog.tfilename.control.old.notfilename', not Offers(Defs, 'TFileName'),
+    'old `accepts string` must NOT offer TFileName');
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\docs\examples\convrules\casts.castlib'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('catalog.tfilename.repo', 'casts.castlib not found: ' + P);
+    Exit;
+  end;
+  Lib := ParseCastLib(P);
+  Check('catalog.tfilename.repo.offered', Offers(Lib.Casts, 'TFileName'), P);
+  Check('catalog.tfilename.repo.string.kept', Offers(Lib.Casts, 'string'), P);
+end;
+
 procedure TestControlTypesFromNonProjectUnit;
 var
   Exe    : string        ;
@@ -14486,6 +14525,7 @@ begin
     TestControlTypesFromNonProjectUnit;
   TestConvCatalog;
   TestConvCatalogValueCast;
+  TestConvCatalogTFileNameStripDB;
     TestAcceptanceTcxButtonToPool;
     TestQueryLocationParse;
     TestQuerySymbolTieBreak;
