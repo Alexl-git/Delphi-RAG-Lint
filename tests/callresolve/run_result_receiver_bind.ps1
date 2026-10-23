@@ -98,6 +98,24 @@ $r = At 'POS-AFTER-ANON' 'member-access' 'Streaming'
 Check 'POS-AFTER-ANON Result after the anonymous method closes still binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
 
+# review 2026-10-23 (W5-res2): a LOCAL receiver is typed from the nearest
+# same-name declaration at or before the site whose block covers it -- the rule
+# value reads/writes use -- never from the first child of that name. Positive
+# control: the first-match lookup declined both RCV-DUP-* (types differ) and
+# typed RCV-LATE from the TOtherJob local declared AFTER it.
+$r = At 'RCV-DUP-FIRST' 'member-access' 'Streaming'
+Check 'RCV-DUP-FIRST J (first inline var, TJob) binds TJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 1) (Show $r)
+$r = At 'RCV-DUP-SECOND' 'member-access' 'Streaming'
+Check 'RCV-DUP-SECOND J (second inline var, TOtherJob) binds TOtherJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1) (Show $r)
+$r = At 'RCV-LATE' 'member-access' 'Streaming'
+Check 'RCV-LATE GPeer before the inline GPeer is declared never binds TOtherJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 0) (Show $r)
+$r = At 'RCV-INNER-LATE' 'member-access' 'Streaming'
+Check 'RCV-INNER-LATE the inline GPeer: TOtherJob binds TOtherJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1) (Show $r)
+
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
 } finally {
   if ($scratch -and (Test-Path $scratch)) { [System.IO.Directory]::Delete($scratch, $true) }

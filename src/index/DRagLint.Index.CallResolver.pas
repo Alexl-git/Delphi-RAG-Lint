@@ -430,6 +430,21 @@ type
     /// <remarks>Text-based, conservative: a block shape it does not model reads
     /// as closed, which only declines.</remarks>
     function LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
+    /// <summary>Review 2026-10-23 (W5-res2): the local or parameter named AName
+    /// of ARef's enclosing routine that ARef's site sees -- the nearest
+    /// declaration at or before the site whose block covers it, the rule
+    /// ScopeWriteTarget applies to value reads and writes. Used to type a
+    /// receiver, so two same-name inline vars never type it from the first.</summary>
+    /// <param name="ARef">EnclosingSymbolId, FileId, StartLine and StartCol are
+    /// consulted.</param>
+    /// <param name="AName">The identifier, matched case-insensitively.</param>
+    /// <param name="ADeclared">True when the routine declares a local or
+    /// parameter of that name at all, whether or not it covers the site.</param>
+    /// <returns>The declaration in scope at the site; a zero-Id symbol when none
+    /// is declared or none covers the site.</returns>
+    /// <remarks>ADeclared with a zero-Id result is 'ambiguous': the caller
+    /// declines, and the name still shadows fields, unit values and types.</remarks>
+    function LocalInScopeAt(const ARef: TReference; const AName: string; out ADeclared: Boolean): TSymbol;
     /// <summary>Review 2026-10-23 (N-07): whether ARef sits inside an anonymous
     /// method's body within its enclosing routine.</summary>
     /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
@@ -4020,12 +4035,13 @@ var
   L      : TList<TSymbol>;
   S      : TSymbol       ;
   Hits   : Integer       ;
+  Declared: Boolean      ;
 begin
-  { A local or parameter. Same-named locals of DIFFERENT types (sibling
-    for-var loops) type to nothing, and still shadow everything below. }
-  M:= FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam], True);
+  { A local or parameter: the nearest declaration covering the site. One that
+    covers nothing here types to nothing, and still shadows everything below. }
+  M:= LocalInScopeAt(ARef, AName, Declared);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, ARef.FileId));
-  if FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam]).Id > 0 then Exit(0);
+  if Declared then Exit(0);
   EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
   M:= LookupMemberOnType(ClassId, AName);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
@@ -4703,15 +4719,17 @@ begin
   // Both are children of the enclosing ROUTINE. Try them first (an inner name
   // shadows a field), then fall back to the class fields/properties.
   // v23: sibling for-var loops can declare the SAME local name twice under one
-  // qualified name; when their declared types differ the receiver is not typed
-  // from either (decline -> the honest untyped floor), not from the first. The
-  // local still SHADOWS any same-named field or type, so a declined local ends
-  // the search here rather than falling through to the rungs below.
-  Member:= FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam], True);
+  // qualified name. Review 2026-10-23 (W5-res2): the receiver is typed from the
+  // nearest declaration at or before the site whose block covers it (the value
+  // read/write rule), never from the first child of that name; when none covers
+  // the site it declines (the honest untyped floor). The local still SHADOWS any
+  // same-named field or type, so a declined local ends the search here.
+  var Declared: Boolean;
+  Member:= LocalInScopeAt(ACallRef, AReceiverExpr, Declared);
   if Member.Id > 0 then
     Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
-  if FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]).Id > 0 then
-    Exit; // a local/param of that name exists but its type is ambiguous -> 0
+  if Declared then
+    Exit; // a local/param of that name exists but none covers the site -> 0
 
   // --- Kind 9 (N-07, 2026-10-23): the implicit `Result` of the enclosing
   //     FUNCTION -- `Result:= TJob.Create; Result.Streaming:= False;`. Typed
@@ -5259,6 +5277,18 @@ begin
   FWriteScopes.Add(AEnclosingSymbolId, Result);
 end;
 
+{ Inserts AValue into AValues kept NEAREST-LAST-DECLARED first: before the first
+  declaration that starts earlier. }
+procedure InsertNearestFirst(var AValues: TArray<TSymbol>; const AValue: TSymbol);
+var
+  K: Integer;
+begin
+  K:= 0;
+  while (K < Length(AValues)) and ((AValues[K].StartLine > AValue.StartLine)
+         or ((AValues[K].StartLine = AValue.StartLine) and (AValues[K].StartCol > AValue.StartCol))) do Inc(K);
+  Insert(AValue, AValues, K);
+end;
+
 function TCallResolver.ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
   AFileId: Int64; ALine, ACol: Integer; out AReason: string): Int64;
 var
@@ -5267,7 +5297,6 @@ var
   Id     : Int64         ;
   Routine: Boolean       ;
   Values : TArray<TSymbol>;
-  K      : Integer       ;
 begin
   Result := 0;
   AReason:= '';
@@ -5282,14 +5311,7 @@ begin
     for S in Kids do
       if SameText(S.Name, AName) then
       begin
-        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then
-        begin
-          { Kept NEAREST-LAST-DECLARED first: insert before the first earlier one. }
-          K:= 0;
-          while (K < Length(Values)) and ((Values[K].StartLine > S.StartLine)
-                 or ((Values[K].StartLine = S.StartLine) and (Values[K].StartCol > S.StartCol))) do Inc(K);
-          Insert(S, Values, K);
-        end;
+        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then InsertNearestFirst(Values, S);
         Routine:= Routine or (S.Kind in METHOD_KINDS);
       end;
     { Review 2026-10-23: the NEAREST declaration at or before the site whose
@@ -5484,6 +5506,25 @@ begin
   Result:= (ADecl.StartLine < ALine) or ((ADecl.StartLine = ALine) and (ADecl.StartCol <= ACol));
   if Result and InlineVarAt(Lines, ADecl.StartLine, ADecl.StartCol, IsFor) then
     Result:= InlineScopeOpen(CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol), IsFor);
+end;
+
+function TCallResolver.LocalInScopeAt(const ARef: TReference; const AName: string;
+  out ADeclared: Boolean): TSymbol;
+var
+  Kids  : TList<TSymbol>  ;
+  S     : TSymbol         ;
+  Values: TArray<TSymbol> ;
+begin
+  Result   := Default(TSymbol);
+  ADeclared:= False;
+  Kids     := ChildrenOf(ARef.EnclosingSymbolId);
+  if Kids = nil then Exit;
+  Values:= [];
+  for S in Kids do
+    if (S.Kind in [skLocalVar, skParam]) and SameText(S.Name, AName) then InsertNearestFirst(Values, S);
+  ADeclared:= Length(Values) > 0;
+  for S in Values do
+    if LocalScopeCovers(S, ARef.FileId, ARef.StartLine, ARef.StartCol) then Exit(S);
 end;
 
 function TCallResolver.InsideAnonymousMethod(const ARef: TReference): Boolean;
