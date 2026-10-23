@@ -23840,6 +23840,28 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>N-06: drag-lint dump-parse-uses --file PATH -- diagnostic dump of
+/// what the Delphi parser reports for one file's uses clauses, WITHOUT
+/// preprocessing or an index. Line 1 is implementation_line TAB N (0 = none);
+/// then one line per uses entry: use TAB section TAB unit TAB start_line.</summary>
+/// <param name="AArgs">Parsed CLI args; InFile (--file) is the source to parse.</param>
+/// <returns>0 on success, 2 on usage error / missing file.</returns>
+function DoDumpParseUses(const AArgs: TArgs): Integer;
+var
+  P  : IParser;
+  Res: TParseResult;
+  U  : TUnitUse;
+begin
+  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint dump-parse-uses --file PATH'); Exit(2); end;
+  if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
+  P:= TDelphi13Parser.Create;
+  Res:= P.Parse(TFile.ReadAllBytes(AArgs.InFile), AArgs.InFile);
+  Writeln(Format('implementation_line'#9'%d', [Res.ImplementationLine]));
+  for U in Res.UsesEntries do
+    Writeln(Format('use'#9'%s'#9'%s'#9'%d', [UnitUseSectionToStr(U.Section), U.UnitName, U.StartLine]));
+  Result:= 0;
+end; // function
+
 /// <summary>PP-Task-3: drag-lint dump-pp-eval --expr "E" [--define SYM]... [--numeric K=V]...
 /// -- diagnostic dump of the {$IF expr} evaluator. Builds a defines dictionary
 /// (each --define lowercased -> True) and a numeric dictionary (each --numeric
@@ -32701,6 +32723,7 @@ begin
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
     else if Args.Command = 'doc-drift'         then Result:= DoDocDrift        (Args)
     else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
+    else if Args.Command = 'dump-parse-uses'   then Result:= DoDumpParseUses   (Args)
     else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
     else if Args.Command = 'preprocess-file'   then Result:= DoPreprocessFile  (Args)
     else if Args.Command = 'pp-profile'        then Result:= DoPpProfile       (Args)

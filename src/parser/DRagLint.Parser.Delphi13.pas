@@ -146,6 +146,8 @@ type
       symbol lives in; stamped into TSymbol.Section by Emit (agent gap #3:
       tells whether a symbol is usable from another unit). }
     CurrentSection: string;
+    { N-06: 1-based line of the unit's implementation keyword; 0 = none. }
+    ImplementationLine: Integer;
     { v0.42: when True (deep scan), emit read/write/attribute usage references
       for identifiers in expression position, so Find-Usages works for
       variables/components/properties -- not just calls. Off = today's
@@ -727,7 +729,11 @@ begin
   begin
     Child:= ANode.NamedChild(i);
     if Child.NodeType      = 'interface' then WalkSection(Child, AState, uusInterface)
-    else if Child.NodeType = 'implementation' then WalkSection(Child, AState, uusImplementation);
+    else if Child.NodeType = 'implementation' then
+    begin
+      AState.ImplementationLine:= Integer(Child.StartPoint.row) + 1; { N-06 }
+      WalkSection(Child, AState, uusImplementation);
+    end;
   end;
 
   { Stamp each symbol with the unit section it is declared in (gap #3): set
@@ -3279,6 +3285,7 @@ begin
     Result.UsesEntries:= State.UsesEntries.ToArray;
     Result.DiBindings := State.DiBindings .ToArray;
     Result.Literals   := HarvestStringLiterals(Root, Source);
+    Result.ImplementationLine:= State.ImplementationLine; { N-06 }
   finally
     State.Free;
     Tree.Free;

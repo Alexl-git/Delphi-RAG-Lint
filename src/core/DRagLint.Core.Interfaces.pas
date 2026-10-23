@@ -2521,6 +2521,10 @@ type
     UsesEntries: TArray<TUnitUse>     ;
     DiBindings : TArray<TDiBindingRow>; // v8: Spring4D DI registrations
     Literals   : TArray<TStringLiteral>; // v10: indexed string content (text search)
+    // N-06: 1-based line of the unit's `implementation` keyword; 0 for a
+    // program / package / library or a unit without one. Lets the indexer give a
+    // {$I} uses clause the host section its directive sits in.
+    ImplementationLine: Integer;
   end;
 
   /// <remarks>
