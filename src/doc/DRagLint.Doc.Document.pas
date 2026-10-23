@@ -243,7 +243,7 @@ implementation
 
 uses
   System.IOUtils, System.Generics.Collections,
-  DRagLint.Doc.Facts, DRagLint.Doc.Regions,
+  DRagLint.Doc.Facts, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
   DRagLint.Doc.SharedFacts;
 
