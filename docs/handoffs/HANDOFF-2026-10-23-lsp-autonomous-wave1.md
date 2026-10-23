@@ -24,7 +24,7 @@ After the run: G0 = VS Code vs IDE DL-message parity (LSP\LSP-BACKLOG.md section
 |---|---|---|---|
 | S | Delphi-RAG-lint-wt\lsp-server (lsp/server) | S0 | implementer running (session model), no commit at 15:30. Result -> briefs\task-S0-report.md |
 | P | lsp-proxy (lsp/proxy) | P0 | DONE f582e862 (21/21). Session-model REVIEW running; verdict -> briefs\task-P0-review.md. Then fix loop or merge |
-| Q | lsp-quality (lsp/quality) | D1 | COMPLETE + MERGED to main 7dc3b47f. **Docs-sync F3 regression fix running** (sonnet; merged main 36e20dbb into the lane). Report -> briefs\task-D1-docsync-report.md. Review it, merge, then TELL ENGINE (it reported the red). Next C1 needs S0 merged |
+| Q | lsp-quality (lsp/quality) | D1 | COMPLETE + MERGED to main 7dc3b47f. Docs-sync F3 fix MERGED d14f94f9 (ENGINE told); its sonnet REVIEW is OWED (report briefs\task-D1-docsync-report.md). Next C1 needs S0 merged |
 
 **Read the ledger tail first.** Ruling (late 2026-10-23): a task that adds a drag-lint.exe flag (P0: --merge-diagnostics,
 --merge-budget-ms) gets its registry entry + `featuregen build --all` AT ITS MERGE, gated on ok from both teams, so that
