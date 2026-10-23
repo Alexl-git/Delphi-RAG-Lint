@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Generate & Export > Export to Obsidian..."
+      "path": "drag-lint > Generate & Export > Export to Obsidian...",
+      "steps": ["Make sure the project has an index", "drag-lint > Generate & Export > Export to Obsidian...", "Follow the prompts; the notes are written as linked markdown pages"]
     },
     {
       "type": "cli",
@@ -37,6 +38,16 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I turn my index into Obsidian notes?",
+      "command": "drag-lint export obsidian --db <file.sqlite> --output-dir <dir>"
+    },
+    {
+      "ask": "How do I open the vault right after export?",
+      "command": "drag-lint export obsidian --db <file.sqlite> --output-dir <dir> --open"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

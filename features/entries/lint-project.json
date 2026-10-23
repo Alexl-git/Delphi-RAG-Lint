@@ -34,11 +34,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Project Structure Rules (god-class, layering...)..."
+      "path": "drag-lint > Code Quality > Project Structure Rules (god-class, layering...)...",
+      "steps": ["Needs an index of the project", "drag-lint > Code Quality > Project Structure Rules (god-class, layering...)...", "Pick the rule; its project-wide findings are listed"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which classes are too big?",
+      "command": "drag-lint lint-project --db <file.sqlite> --rule god-class"
+    },
+    {
+      "ask": "Does my layering hold?",
+      "command": "drag-lint lint-project --db <file.sqlite> --rule layering-violation --layers <f.json>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

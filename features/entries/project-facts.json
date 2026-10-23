@@ -37,6 +37,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which defines are on and what sets each?",
+      "command": "drag-lint project-facts --dproj <PATH>"
+    },
+    {
+      "ask": "Where does the build write its output?",
+      "command": "drag-lint project-facts --dproj <PATH> --json"
+    }
+  ],
   "notes": "seed: needs own page",
   "access": "cli-only",
   "accessReviewed": {

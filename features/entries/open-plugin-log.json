@@ -11,10 +11,17 @@
   "surfaces": [
     {
       "type": "ide-about",
-      "caption": "Open Plugin Log"
+      "caption": "Open Plugin Log",
+      "steps": ["Open the About and Status window (drag-lint > About)", "Click Open Plugin Log"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What did the drag-lint plugin run, and what errors did it hit?",
+      "command": "drag-lint > About > Open Plugin Log"
+    }
+  ],
   "notes": "seed: group guessed",
   "verified": {
     "date": "2026-10-21",

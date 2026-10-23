@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Find Usages"
+      "caption": "Find Usages",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the node", "Choose Find Usages"]
     },
     {
       "type": "cli",
@@ -44,6 +45,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Where is the symbol of this Structure-tree node used, without opening it?",
+      "command": "drag-lint usages --name <X> --db <db>"
+    },
+    {
+      "ask": "Can I widen the usages listing?",
+      "command": "drag-lint usages --name <X> --width wide --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -18,10 +18,17 @@
     },
     {
       "type": "ide-about",
-      "caption": "Recover Buffer-Compile Files"
+      "caption": "Recover Buffer-Compile Files",
+      "steps": ["Open the About and Status window (drag-lint > About)", "Click Recover Buffer-Compile Files", "It restores any file left overlaid, or says nothing is pending"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "The IDE crashed during a buffer compile; are any of my files left overlaid?",
+      "command": "drag-lint ghost-recover <dproj>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

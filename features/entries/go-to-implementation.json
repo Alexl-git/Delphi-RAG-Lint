@@ -12,10 +12,17 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Go to Implementation"
+      "caption": "Go to Implementation",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the declaration node", "Choose Go to Implementation; the caret lands on the implementation body"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I get from an interface method to its body?",
+      "command": "Structure form > right-click > Go to Implementation"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

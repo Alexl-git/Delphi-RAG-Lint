@@ -11,10 +11,21 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Go to Definition"
+      "path": "drag-lint > Go to Definition",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Go to Definition"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I jump to the declaration of the symbol under my caret?",
+      "command": "drag-lint > Go to Definition"
+    },
+    {
+      "ask": "Where is symbol X declared, from the command line?",
+      "command": "drag-lint query --name X --db <db>"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

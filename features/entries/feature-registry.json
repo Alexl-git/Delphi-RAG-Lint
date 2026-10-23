@@ -22,6 +22,20 @@
   "audience": "both",
   "requires": ["powershell7", "repo-clone"],
   "aliases": ["blast radius", "feature list", "quick help", "registry"],
+  "questions": [
+    {
+      "ask": "How do I register a new feature?",
+      "command": "featuregen add --id <id> --title <t> --group <g> --owner <o> --summary <s> --intro <i> --wiki-page <p> --surface <spec>"
+    },
+    {
+      "ask": "How do I regenerate the index pages after editing an entry?",
+      "command": "featuregen build --all"
+    },
+    {
+      "ask": "Which featuregen verbs exist?",
+      "command": "featuregen --help"
+    }
+  ],
   "access": "repo-tooling",
   "accessReviewed": {
     "date": "2026-10-21",

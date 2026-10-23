@@ -31,11 +31,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > What This Routine Calls (callees)..."
+      "path": "drag-lint > Uses & Dependencies > What This Routine Calls (callees)...",
+      "steps": ["Needs an index of the project", "drag-lint > Uses & Dependencies > What This Routine Calls (callees)...", "Enter or confirm the routine; its resolved outgoing calls are listed"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "What does this routine call?",
+      "command": "drag-lint find-callees --qname <Foo.Bar> --db <db>"
+    },
+    {
+      "ask": "Can I get the outgoing calls as JSON?",
+      "command": "drag-lint find-callees --qname <Foo.Bar> --db <db> --json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

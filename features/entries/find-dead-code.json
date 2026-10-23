@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Find Dead Code..."
+      "path": "drag-lint > Code Quality > Find Dead Code...",
+      "steps": ["Needs an index of the project", "drag-lint > Code Quality > Find Dead Code...", "Review the listed symbols; they are candidates to delete, not proof"]
     },
     {
       "type": "cli",
@@ -34,6 +35,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which symbols does nothing reference?",
+      "command": "drag-lint find-deadcode --db <db>"
+    },
+    {
+      "ask": "Only unused methods, including private ones?",
+      "command": "drag-lint find-deadcode --kind method --include-private --db <db>"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

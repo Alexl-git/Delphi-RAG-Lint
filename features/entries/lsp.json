@@ -42,6 +42,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I start the language server for another editor?",
+      "command": "drag-lint lsp --db <file.sqlite> --stdio"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297",
   "access": "cli-only",
   "accessReviewed": {

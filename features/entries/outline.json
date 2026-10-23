@@ -31,10 +31,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Show Structure"
+      "path": "drag-lint > Show Structure",
+      "steps": ["Open the unit in the editor", "drag-lint > Show Structure", "The Structure form lists the unit's symbols"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What is in this unit?",
+      "command": "drag-lint outline --file <U.pas> --db <db>"
+    },
+    {
+      "ask": "Can I get the outline as JSON?",
+      "command": "drag-lint outline --file <U.pas> --format json"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

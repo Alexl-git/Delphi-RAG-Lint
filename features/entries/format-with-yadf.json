@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Format with YADF"
+      "path": "drag-lint > Format with YADF",
+      "steps": ["Open the unit in the editor", "drag-lint > Format with YADF", "The unit is rewritten in place by YADF"]
     },
     {
       "type": "cli",
@@ -32,6 +33,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I reformat one unit with YADF?",
+      "command": "drag-lint format <file>"
+    },
+    {
+      "ask": "Can I check what it would do without writing?",
+      "command": "drag-lint format <file> --dry-run"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

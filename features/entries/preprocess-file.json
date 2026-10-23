@@ -41,6 +41,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What does this file look like after IFDEF resolution?",
+      "command": "drag-lint preprocess-file --file <PATH>"
+    },
+    {
+      "ask": "What if I define a symbol?",
+      "command": "drag-lint preprocess-file --file <PATH> --define <SYM>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

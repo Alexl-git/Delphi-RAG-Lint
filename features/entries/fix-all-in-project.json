@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Fix all in project"
+      "caption": "Fix all in project",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node", "Choose Fix all in project (it is not on the main menu)"]
     },
     {
       "type": "cli",
@@ -67,6 +68,16 @@
   ],
   "audience": "both",
   "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+  "questions": [
+    {
+      "ask": "How do I fix every auto-fixable finding in the whole project?",
+      "command": "drag-lint lint-all --db <file.sqlite> --fix"
+    },
+    {
+      "ask": "Can I include naming fixes?",
+      "command": "drag-lint lint-all --db <file.sqlite> --fix --fix-naming --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

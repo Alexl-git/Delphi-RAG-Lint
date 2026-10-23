@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Hover at Cursor"
+      "path": "drag-lint > Hover at Cursor",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Hover at Cursor"]
     },
     {
       "type": "cli",
@@ -35,6 +36,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What is the signature, documentation and callers of the symbol under my caret?",
+      "command": "drag-lint hover --qname <Foo.Bar> --db <file.sqlite>"
+    },
+    {
+      "ask": "Can I get the hover card as markdown?",
+      "command": "drag-lint hover --qname <Foo.Bar> --format md"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

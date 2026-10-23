@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Index & Maintenance > Library Drift Check..."
+      "path": "drag-lint > Index & Maintenance > Library Drift Check...",
+      "steps": ["drag-lint > Index & Maintenance > Library Drift Check...", "The registered library roots that have source on disk but nothing in the index are reported"]
     },
     {
       "type": "cli",
@@ -35,6 +36,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Did a third-party update leave library roots unindexed?",
+      "command": "drag-lint library-drift --platform win32"
+    },
+    {
+      "ask": "Can I get the drift as JSON?",
+      "command": "drag-lint library-drift --json"
+    }
+  ],
   "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",

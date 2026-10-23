@@ -27,11 +27,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Inspect Symbol > Helpers of Type..."
+      "path": "drag-lint > Inspect Symbol > Helpers of Type...",
+      "steps": ["Needs an index of the project", "drag-lint > Inspect Symbol > Helpers of Type...", "Enter the type; its helpers are listed"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which record or class helpers extend this type?",
+      "command": "drag-lint helpers-of <T> --db <db>"
+    },
+    {
+      "ask": "Can I get that list as JSON?",
+      "command": "drag-lint helpers-of <T> --json --db <db>"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179",
   "verified": {
     "date": "2026-10-21",
