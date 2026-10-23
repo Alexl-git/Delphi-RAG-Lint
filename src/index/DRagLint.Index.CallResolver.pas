@@ -284,6 +284,29 @@ type
     Unreadable: Int64;
   end;
 
+  /// <summary>B-31: per-run counters of the type_use pass, printed on the calls
+  /// stage's `type-uses:` ResolveLog line.</summary>
+  /// <remarks>Bound + the six declines = the type_use refs the pass was asked about.</remarks>
+  TTypeUseStats = record
+    /// <summary>type_use refs whose refs.symbol_id was set.</summary>
+    Bound     : Int64;
+    /// <summary>Declined: a generic parameter of an enclosing type or routine.</summary>
+    Generic   : Int64;
+    /// <summary>Declined: the name is qualified (`Unit.TType`, `TOuter.TInner`).</summary>
+    Qualified : Int64;
+    /// <summary>Declined: an enclosing routine's text declares the name as a
+    /// local type, which the index does not list.</summary>
+    Unlisted  : Int64;
+    /// <summary>Declined: two or more used units declare the name.</summary>
+    Ambiguous : Int64;
+    /// <summary>Declined: no visible type of the name is in this index (an RTL
+    /// type, or a unit the index does not hold).</summary>
+    NotFound  : Int64;
+    /// <summary>Declined: the source line could not be read, or the file no
+    /// longer matches the index.</summary>
+    Unreadable: Int64;
+  end;
+
   /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
   /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
@@ -380,15 +403,30 @@ type
     // B-28: routine id -> '|name|...|' its text declares as a const or an
     // inline const/var, lowercased; built on first use (LocalDeclNamesOf).
     FLocalDecls: TDictionary<Int64, string>;
+    // B-31: counters of the type_use pass.
+    FTypeUseStats: TTypeUseStats;
+    // B-31: file id -> its type symbols and its root (unit/program) symbol.
+    FFileTypes: TDictionary<Int64, TArray<TSymbol>>;
 
     /// <summary>The names ARoutineId's implementation text declares in a const
-    /// section, or as an inline const / var -- declarations the extractor does
-    /// not emit as symbols -- as '|name|...|', lowercased and cached.</summary>
+    /// or type section, or as an inline const / var -- declarations the extractor
+    /// does not emit as symbols -- as '|name|...|', lowercased and cached.</summary>
     /// <param name="ARoutineId">A routine symbol; its ImplStartLine..ImplEndLine
     /// is scanned, nested routines included (a wider set only declines more).</param>
     /// <param name="AFileId">The file holding that implementation.</param>
     /// <returns>'|' when nothing is declared or the text cannot be read.</returns>
     function LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+
+    /// <summary>The type symbols of AFileId and its root symbol (the one with no
+    /// parent), read once per file and cached.</summary>
+    /// <param name="AFileId">An indexed file.</param>
+    /// <returns>An empty array when the file has no symbols.</returns>
+    function FileTypesOf(AFileId: Int64): TArray<TSymbol>;
+    /// <summary>The scope a ref sits in: its enclosing symbol, else the
+    /// innermost type of its file whose lines span it, else the file's root.</summary>
+    /// <param name="ARef">FileId, StartLine and EnclosingSymbolId are consulted.</param>
+    /// <returns>Default(TSymbol) when the file has no symbols.</returns>
+    function ScopeSymbolAt(const ARef: TReference): TSymbol;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1540,6 +1578,29 @@ type
     /// <summary>Per-run counters of the value-read pass.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
     property ValueReadStats: TValueReadStats read FValueReadStats;
+
+    /// <summary>B-31 (2026-10-23): the type a `type_use` ref names -- certain or
+    /// nothing.</summary>
+    /// <param name="ARef">The type_use ref. FileId, NameText, StartLine, StartCol
+    /// and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise 'unreadable' |
+    /// 'qualified' | 'generic' | 'unlisted' | 'ambiguous' | 'not-found'.</param>
+    /// <returns>The class / interface / record / type / enum id, or 0.</returns>
+    /// <remarks>
+    /// Delphi's order. From the ref's scope (ScopeSymbolAt) outwards: a generic
+    /// parameter of the level declines, a routine whose text declares the name
+    /// as a local type declines ('unlisted' -- the index lists no local types),
+    /// a type child of the level binds (a nested type, then the own unit's
+    /// types). Then the used units: exactly one TOP-LEVEL INTERFACE type of a
+    /// unit in scope binds; two are 'ambiguous' (uses-clause order is not
+    /// modelled). A qualified name is declined rather than guessed. Identity
+    /// only. Counted into TypeUseStats.
+    /// </remarks>
+    function ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>Per-run counters of the type_use pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property TypeUseStats: TTypeUseStats read FTypeUseStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -2135,6 +2196,7 @@ begin
   FUnitFileOf := TDictionary<string, Int64>.Create;
   FWriteScopes:= TDictionary<Int64, TWriteScope>.Create;
   FLocalDecls := TDictionary<Int64, string>.Create;
+  FFileTypes  := TDictionary<Int64, TArray<TSymbol>>.Create;
   FWriteStats := Default(TWriteResolveStats);
   BuildMaps;
 end;
@@ -2147,6 +2209,7 @@ begin
   FWith.Statements    .Free;
   FLineCache .Free;
   FUnitFileOf.Free;
+  FFileTypes.Free;
   FLocalDecls.Free;
   FWriteScopes.Free;
   FStaleFiles.Free;
@@ -5223,8 +5286,8 @@ function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
   end;
 
 const
-  { A line starting with one of these ends a const section. }
-  SECTION_END = '|type|var|begin|procedure|function|constructor|destructor|label|class|asm|threadvar|';
+  { A line starting with one of these ends a const / type section. }
+  SECTION_END = '|var|begin|procedure|function|constructor|destructor|label|asm|threadvar|';
 var
   S      : TSymbol    ;
   Lines  : TStringList;
@@ -5244,11 +5307,11 @@ begin
     begin
       T:= LowerCase(Trim(Lines[I - 1]));
       W:= LeadingIdent(T);
-      if (W = 'const') or (W = 'var') then
+      if (W = 'const') or (W = 'var') or (W = 'type') then
       begin
-        { `const` opens a section; `const X = 1;` / `var X := F;` on one line
-          is also an inline declaration of X. }
-        InConst:= W = 'const';
+        { `const` / `type` open a section; `const X = 1;` / `var X := F;` /
+          `type T = ...` on one line is also a declaration of X. }
+        InConst:= W <> 'var';
         T:= TrimLeft(Copy(T, Length(W) + 1, MaxInt));
         N:= LeadingIdent(T);
         if (N <> '') and DeclShape(Copy(T, Length(N) + 1, MaxInt)) then Result:= Result + N + '|';
@@ -5258,6 +5321,112 @@ begin
         Result:= Result + W + '|';
     end;
   FLocalDecls.Add(ARoutineId, Result);
+end;
+
+function TCallResolver.FileTypesOf(AFileId: Int64): TArray<TSymbol>;
+const
+  TYPE_LIKE: TSymbolKindSet = [skClass, skInterface, skRecord, skTypeAlias, skEnum];
+var
+  S: TSymbol;
+begin
+  if FFileTypes.TryGetValue(AFileId, Result) then Exit;
+  Result:= [];
+  for S in FStore.FindSymbolsByFile(FStore.GetFilePath(AFileId)) do
+    if (S.Kind in TYPE_LIKE) or (S.ParentId <= 0) then Result:= Result + [S];
+  FFileTypes.Add(AFileId, Result);
+end;
+
+function TCallResolver.ScopeSymbolAt(const ARef: TReference): TSymbol;
+var
+  S   : TSymbol;
+  Root: TSymbol;
+begin
+  if ARef.EnclosingSymbolId > 0 then Exit(SymbolById(ARef.EnclosingSymbolId));
+  Result:= Default(TSymbol);
+  Root  := Default(TSymbol);
+  for S in FileTypesOf(ARef.FileId) do
+    if S.ParentId <= 0 then Root:= S
+    else if (S.StartLine <= ARef.StartLine) and (ARef.StartLine <= S.EndLine)
+            and (S.StartLine >= Result.StartLine) then Result:= S;
+  if Result.Id <= 0 then Result:= Root;
+end;
+
+function TCallResolver.ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
+const
+  TYPE_LIKE: TSymbolKindSet = [skClass, skInterface, skRecord, skTypeAlias, skEnum];
+
+  { True when AParams -- a level's generic parameter list as indexed, e.g.
+    'K, V: class' -- names ALc. }
+  function NamesGenericParam(const AParams, ALc: string): Boolean;
+  var
+    Tok: string;
+  begin
+    Result:= False;
+    for Tok in LowerCase(AParams).Split([',', ';', ':', ' ', '<', '>', '(', ')'], TStringSplitOptions.ExcludeEmpty) do
+      if Tok = ALc then Exit(True);
+  end;
+
+var
+  Lines: TStringList     ;
+  Rcv  : string          ;
+  Lc   : string          ;
+  Cur  : TSymbol         ;
+  Depth: Integer         ;
+  Cands: TList<TSymbol>  ;
+  S    : TSymbol         ;
+  Full : TSymbol         ;
+  Count: Integer         ;
+begin
+  Result := 0;
+  AReason:= BareReadSite(ARef, Lines, Rcv);
+  if (AReason = '') and (Rcv <> '') then AReason:= 'qualified';
+  Lc:= LowerCase(ARef.NameText);
+  { 1. The ref's scope outwards: enclosing routines, types, the own unit. }
+  Cur  := ScopeSymbolAt(ARef);
+  Depth:= 0;
+  while (AReason = '') and (Result = 0) and (Cur.Id > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+  begin
+    Inc(Depth);
+    if NamesGenericParam(Cur.GenericParams, Lc) then AReason:= 'generic'
+    else if (Cur.Kind in METHOD_KINDS) and (Pos('|' + Lc + '|', LocalDeclNamesOf(Cur.Id, ARef.FileId)) > 0) then
+      AReason:= 'unlisted'
+    else
+    begin
+      Result:= FindChildOfKind(Cur.Id, ARef.NameText, TYPE_LIKE, False).Id;
+      if Cur.ParentId <= 0 then Cur:= Default(TSymbol)
+      else Cur:= SymbolById(Cur.ParentId);
+    end;
+  end;
+  { 2. The used units: exactly one top-level interface type of the name. }
+  if (AReason = '') and (Result = 0) then
+  begin
+    Count:= 0;
+    if FNameToCands.TryGetValue(Lc, Cands) then
+      for S in Cands do
+        if (S.FileId <> ARef.FileId) and CandInScope(ARef.FileId, S.FileId) then
+        begin
+          Full:= SymbolById(S.Id);
+          if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
+             and (SymbolById(Full.ParentId).ParentId <= 0) then
+          begin
+            Inc(Count);
+            Result:= S.Id;
+          end;
+        end;
+    if Count = 0 then AReason:= 'not-found'
+    else if Count > 1 then
+    begin
+      Result := 0;
+      AReason:= 'ambiguous';
+    end;
+  end;
+  if AReason = '' then Inc(FTypeUseStats.Bound)
+  else if AReason = 'generic' then Inc(FTypeUseStats.Generic)
+  else if AReason = 'qualified' then Inc(FTypeUseStats.Qualified)
+  else if AReason = 'unlisted' then Inc(FTypeUseStats.Unlisted)
+  else if AReason = 'ambiguous' then Inc(FTypeUseStats.Ambiguous)
+  else if AReason = 'not-found' then Inc(FTypeUseStats.NotFound)
+  else Inc(FTypeUseStats.Unreadable);
 end;
 
 function TCallResolver.ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;

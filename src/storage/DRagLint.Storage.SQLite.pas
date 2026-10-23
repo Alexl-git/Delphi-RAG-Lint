@@ -590,6 +590,25 @@ type
       procedure ResolveValueReadRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>B-31 (2026-10-23): the calls stage's SEVENTH stream. Offers
+      /// every `type_use` ref spelled like an indexed type to
+      /// TCallResolver.ResolveTypeUse and sets refs.symbol_id to the type when
+      /// that answer is certain.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: type_use rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>
+      /// IDENTITY ONLY. No other writer binds a `type_use` ref, so NULLing every
+      /// type_use row in scope first can never erase another stream's answer.
+      /// </remarks>
+      procedure ResolveTypeUseRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -12558,6 +12577,70 @@ begin
   end;
 end;
 
+{ B-31: the type_use stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveTypeUseRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  { The candidates: a `type_use` spelled like any indexed type. }
+  TYPE_UNIVERSE = 'refs.kind = ''type_use'' AND refs.name_text COLLATE NOCASE IN ' +
+                  '(SELECT name FROM symbols WHERE kind IN (''class'', ''interface'', ''record'', ''type'', ''enum''))';
+var
+  Suffix : string    ;
+  Q      : TFDQuery  ;
+  Ref    : TReference;
+  Reason : string    ;
+  Id     : Int64     ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE refs.kind = ''type_use'' AND refs.symbol_id IS NOT NULL' + Suffix);  // dl:ok sql-injection-concat@dbbc -- REVIEWED 2026-10-23: Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveMemberReadRefs uses; a temp-table name and an IN-list cannot be parameters.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + TYPE_UNIVERSE + Suffix;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'type_use';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      Id:= AResolver.ResolveTypeUse(Ref, Reason);
+      if Id > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -12606,6 +12689,8 @@ var
   WriteBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
   ValueCandidates: Int64    ; { B-28 value-read stream -- read rows offered to the resolver  }
   ValueBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
+  TypeCandidates : Int64    ; { B-31 type_use stream -- type_use rows offered to the resolver }
+  TypeBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   TWrites        : Double   ; { seconds the write stream took -- printed on its own line     }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
@@ -12691,6 +12776,8 @@ begin
   WriteBound     := 0;
   ValueCandidates:= 0;
   ValueBound     := 0;
+  TypeCandidates := 0;
+  TypeBound      := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   { Split out because it is O(symbols) and independent of how many refs this run
@@ -13041,6 +13128,8 @@ begin
       { B-28 (2026-10-23): the SIXTH stream, after the member reads -- it only
         sees what the three read streams above declined. }
       ResolveValueReadRefs(Resolver, ScopeWhere, StaleWhere, ValueCandidates, ValueBound);
+      { B-31 (2026-10-23): the SEVENTH stream, type_use refs, identity only. }
+      ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
@@ -13207,6 +13296,12 @@ begin
        Resolver.ValueReadStats.Member, Resolver.ValueReadStats.Ambiguous, Resolver.ValueReadStats.NotFound,
        Resolver.ValueReadStats.Routine, Resolver.ValueReadStats.Qualified, Resolver.ValueReadStats.Unlisted,
        Resolver.ValueReadStats.Unreadable]));
+    { B-31 (2026-10-23). The type_use stream, every decline by reason. }
+    ResolveLog(Format('calls      type-uses: %d of %d type_use ref(s) bound; declined generic %d, qualified %d, ' +
+      'unlisted %d, ambiguous %d, not-found %d, unreadable %d',
+      [TypeBound, TypeCandidates,
+       Resolver.TypeUseStats.Generic, Resolver.TypeUseStats.Qualified, Resolver.TypeUseStats.Unlisted,
+       Resolver.TypeUseStats.Ambiguous, Resolver.TypeUseStats.NotFound, Resolver.TypeUseStats.Unreadable]));
     { 2026-09-23 (D13). Every decline by reason, for the same reason as the two
       lines above: a declined write stores nothing anywhere else. }
     ResolveLog(Format('calls      writes: %d of %d write ref(s) bound; declined result %d, own-name %d, ' +
