@@ -865,6 +865,11 @@ type
     /// enum, or 0 when the enum is declared at unit level. Non-zero means the
     /// bare form is only reachable from inside that type or a descendant.</summary>
     OwnerTypeId  : Int64;
+    /// <summary>symbols.id of the ROUTINE declaring the parent enum in its own
+    /// `type` section (W5-ext N-04), or 0. Non-zero means the value is visible
+    /// only from that routine and the routines nested in it, and there it is
+    /// nearer than any unit-level value of the same name.</summary>
+    OwnerRoutineId: Int64;
     /// <summary>The bare identifier as written; matched case-insensitively.</summary>
     Name         : string;
     /// <summary>Fully qualified name; rule 0's grouping key (lowercased).</summary>

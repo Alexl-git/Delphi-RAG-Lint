@@ -6635,6 +6635,7 @@ var
   List: TList<TEnumValueDecl>;
   E   : TEnumValueDecl       ;
   ColId, ColFile, ColEnum, ColOwner: TField;
+  ColRoutine                       : TField;
   ColName, ColQName, ColSection    : TField;
   ColStart, ColEnd                 : TField;
 begin
@@ -6645,7 +6646,9 @@ begin
     Q.SQL.Text  := 'SELECT v.id, v.file_id, v.parent_id AS enum_id, v.name, ' +
                    '       v.qualified_name, v.section, v.start_line, v.end_line, ' +
                    '       CASE WHEN o.kind IN (''class'',''record'',''interface'') ' +
-                   '            THEN o.id ELSE 0 END AS owner_type_id ' +
+                   '            THEN o.id ELSE 0 END AS owner_type_id, ' +
+                   '       CASE WHEN o.kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'') ' +
+                   '            THEN o.id ELSE 0 END AS owner_routine_id ' +
                    'FROM symbols v ' +
                    'JOIN symbols e ON e.id = v.parent_id ' +
                    'LEFT JOIN symbols o ON o.id = e.parent_id ' +
@@ -6657,6 +6660,7 @@ begin
     ColFile   := Q.FieldByName('file_id'       );
     ColEnum   := Q.FieldByName('enum_id'       );
     ColOwner  := Q.FieldByName('owner_type_id' );
+    ColRoutine:= Q.FieldByName('owner_routine_id');
     ColName   := Q.FieldByName('name'          );
     ColQName  := Q.FieldByName('qualified_name');
     ColSection:= Q.FieldByName('section'       );
@@ -6669,6 +6673,7 @@ begin
       E.FileId       := ColFile   .AsLargeInt;
       E.EnumId       := ColEnum   .AsLargeInt;
       E.OwnerTypeId  := ColOwner  .AsLargeInt;
+      E.OwnerRoutineId:= ColRoutine.AsLargeInt;
       E.Name         := ColName   .AsString  ;
       E.QualifiedName:= ColQName  .AsString  ;
       E.Section      := ColSection.AsString  ;

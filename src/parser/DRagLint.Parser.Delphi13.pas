@@ -2657,6 +2657,20 @@ begin
         end;
       end;
     end; // else (nested)
+    { W5-ext (N-04): a routine's own `type` and `const` sections are siblings of
+      its declVars, like nested routines -- and nothing walked them. A local
+      enum's values, a local record, a local const: no symbol, and every typeref
+      and const expression inside them lost its ref. Walked here with THIS
+      routine as the parent, so the names qualify as Unit.Routine.TLocal(.value),
+      the shape EmitRoutineLocals gives local vars. A nested routine's sections
+      are its own defProc's children and are reached by the nested walk below,
+      parented to it. No routine symbol (SelfIdx < 0) -> skipped: a parent of the
+      class or unit would publish a local name at the wrong scope.
+      Guard: run_routine_local_decls.ps1. }
+    if SelfIdx >= 0 then
+      for i:= 0 to ANode.NamedChildCount - 1 do
+        if (ANode.NamedChild(i).NodeType = 'declTypes') or (ANode.NamedChild(i).NodeType = 'declConsts') then
+          Walk(ANode.NamedChild(i), AState, SelfIdx, SelfQName);
     var BodyNode:= ANode.ChildByField('body');
     if not BodyNode.IsNull then
     begin
