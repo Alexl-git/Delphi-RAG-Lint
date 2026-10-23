@@ -41,11 +41,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Compile Buffer (unsaved)"
+      "path": "drag-lint > Compile Buffer (unsaved)",
+      "steps": ["Edit a unit without saving it", "drag-lint > Compile Buffer (unsaved)", "Compiler errors from the unsaved buffer are shown; the original files are restored unchanged"]
     }
   ],
   "audience": "both",
   "pitfalls": ["compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's \"Compile Buffer (unsaved)\". Restores the original on exit."],
+  "questions": [
+    {
+      "ask": "Does my unsaved edit compile?",
+      "command": "drag-lint ghost-check <dproj> --unit <real.pas> --buffer <buf>"
+    },
+    {
+      "ask": "How do I compile several unsaved buffers together?",
+      "command": "drag-lint ghost-check <dproj> --overlays <manifest>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

@@ -25,6 +25,12 @@
   ],
   "audience": "both",
   "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I link my code index to a SQL index?",
+      "command": "drag-lint link-orm --db <projDb.sqlite> --db <sqlDb.sqlite>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

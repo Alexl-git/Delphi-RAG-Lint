@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Format Whole Project with YADF..."
+      "path": "drag-lint > Format Whole Project with YADF...",
+      "steps": ["Save your work", "drag-lint > Format Whole Project with YADF...", "Confirm; every unit in the project is formatted and the index is refreshed"]
     },
     {
       "type": "cli",
@@ -79,6 +80,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I format every unit in the project with YADF?",
+      "command": "drag-lint > Format Whole Project with YADF..."
+    },
+    {
+      "ask": "Can I preview what formatting one file would change?",
+      "command": "drag-lint format <file> --diff"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -39,11 +39,22 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Find Usages..."
+      "path": "drag-lint > Find Usages...",
+      "steps": ["Needs an index of the project", "Put the editor caret on the routine", "drag-lint > Find Usages..."]
     }
   ],
   "audience": "both",
   "pitfalls": ["the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites."],
+  "questions": [
+    {
+      "ask": "Who calls this routine?",
+      "command": "drag-lint query find-callers --name <callee-name> --db <db>"
+    },
+    {
+      "ask": "Only the precise, resolved callers?",
+      "command": "drag-lint query find-callers --name <callee-name> --resolved --db <db>"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466",
   "verified": {
     "date": "2026-10-21",

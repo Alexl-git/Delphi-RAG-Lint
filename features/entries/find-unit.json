@@ -41,12 +41,23 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)..."
+      "path": "drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)...",
+      "steps": ["Needs an index; for an RTL/VCL symbol use the platform library DB", "drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)...", "The declaring unit is named; Yes adds it to the active unit's uses clause, No previews a dry run"]
     }
   ],
   "audience": "both",
   "requires": ["index"],
   "pitfalls": ["for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units."],
+  "questions": [
+    {
+      "ask": "Which unit declares this symbol, so I can add it to uses?",
+      "command": "drag-lint find-unit --name <Symbol> --in <file> --db <db>"
+    },
+    {
+      "ask": "Can I add the unit automatically?",
+      "command": "drag-lint find-unit --name <Symbol> --in <file> --db <db> --apply"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

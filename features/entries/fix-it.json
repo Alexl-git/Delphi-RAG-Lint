@@ -12,7 +12,8 @@
     {
       "type": "ide-context",
       "host": "Structure form",
-      "caption": "Fix it"
+      "caption": "Fix it",
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click the finding node", "Choose Fix it"]
     },
     {
       "type": "cli",
@@ -88,6 +89,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I fix just this one lint finding?",
+      "command": "drag-lint lint <path> --json"
+    },
+    {
+      "ask": "How do I remove an unused unit safely, verified by compiling?",
+      "command": "drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> --apply --remove-unused"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

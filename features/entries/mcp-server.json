@@ -71,6 +71,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I give Claude Code or VS Code access to my index?",
+      "command": "drag-lint mcp-config --all"
+    },
+    {
+      "ask": "Can I preview the config change first?",
+      "command": "drag-lint mcp-config --all --dry-run"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

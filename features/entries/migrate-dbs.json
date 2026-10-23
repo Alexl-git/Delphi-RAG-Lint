@@ -27,10 +27,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG..."
+      "path": "drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG...",
+      "steps": ["drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG...", "Yes applies the move (queued job, LSP stopped); No previews it"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I move project indexes into each project's _D-RAG folder?",
+      "command": "drag-lint migrate-dbs --apply"
+    },
+    {
+      "ask": "What would it move?",
+      "command": "drag-lint migrate-dbs"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

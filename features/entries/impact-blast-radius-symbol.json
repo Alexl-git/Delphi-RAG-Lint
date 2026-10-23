@@ -11,7 +11,8 @@
   "surfaces": [
     {
       "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)..."
+      "path": "drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...",
+      "steps": ["Needs an index of the project", "drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...", "Enter the symbol; the affected code to retest is listed"]
     },
     {
       "type": "cli",
@@ -39,6 +40,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "What breaks if I change this symbol?",
+      "command": "drag-lint impact --qname <Foo.Bar> --db <file.sqlite>"
+    },
+    {
+      "ask": "How far should the impact search reach?",
+      "command": "drag-lint impact --qname <Foo.Bar> --depth N"
+    }
+  ],
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

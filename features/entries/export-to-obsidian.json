@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Generate & Export > Export to Obsidian...",
-      "steps": ["Choose drag-lint > Generate & Export > Export to Obsidian...", "Pick the output folder", "The indexed project is written out as Obsidian vault markdown pages"]
+      "steps": ["Make sure the project has an index", "drag-lint > Generate & Export > Export to Obsidian...", "Follow the prompts; the notes are written as linked markdown pages"]
     },
     {
       "type": "cli",
@@ -40,12 +40,12 @@
   "requires": ["index"],
   "questions": [
     {
-      "ask": "How do I get a browsable wiki of my project symbols in Obsidian?",
-      "command": "drag-lint export obsidian --db <db> --output-dir <dir>"
+      "ask": "How do I turn my index into Obsidian notes?",
+      "command": "drag-lint export obsidian --db <file.sqlite> --output-dir <dir>"
     },
     {
-      "ask": "Can the export folder be opened right away?",
-      "command": "drag-lint export obsidian --db <db> --output-dir <dir> --open"
+      "ask": "How do I open the vault right after export?",
+      "command": "drag-lint export obsidian --db <file.sqlite> --output-dir <dir> --open"
     }
   ],
   "verified": {

@@ -38,6 +38,16 @@
   ],
   "audience": "both",
   "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+  "questions": [
+    {
+      "ask": "List every unit (or class, or enum) in the index.",
+      "command": "drag-lint query --kind <k> --all --db <db>"
+    },
+    {
+      "ask": "Where is a symbol declared?",
+      "command": "drag-lint query --name <symbol-name> --db <db>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

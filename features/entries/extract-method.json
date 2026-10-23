@@ -45,10 +45,21 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)"
+      "path": "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)",
+      "steps": ["Select the statements to extract in the editor", "drag-lint > Extract Method (selection)... or Ctrl+Alt+M", "Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I move a run of statements into its own method?",
+      "command": "drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N>"
+    },
+    {
+      "ask": "Can I preview the extraction without changing the file?",
+      "command": "drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> --json"
+    }
+  ],
   "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319",
   "verified": {
     "date": "2026-10-21",
