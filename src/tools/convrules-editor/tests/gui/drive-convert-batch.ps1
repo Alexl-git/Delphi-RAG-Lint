@@ -259,11 +259,29 @@ function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS 
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 # Looks at least ONCE: with $sec = 0 the old while-loop never looked, so "is the dialog still up" always said no.
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  /* N7/N11: the editor answers 'ConvRulesEditor.Busy' with 2 while busy (an engine wait or an hourglass
+     section), 1 while idle. No answer within the timeout = the main thread is blocked = busy too: a click
+     posted then is dispatched later, inside whatever pump comes next, where the editor refuses it.
+     0 = an editor without the query (answered by DefWindowProc): not busy as far as this can tell. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+'@
 # N1: idle = no progress window / message box / common dialog and the editor enabled, for 2 s running.
+# N7/N11: and the editor itself says it is idle (B::Busy): a main thread blocked between two engine calls
+# shows no window and stays enabled, so the windows alone saw a false idle.
 function WaitIdle($procId, $main, $sec) {
   $idleSince = $null; $t0 = Get-Date
   while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
-    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main)
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
     if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
     Start-Sleep -Milliseconds 200
   }
@@ -492,16 +510,15 @@ function RunScenario([string]$BatchEnv, [string]$Tag) {
   Check "$Tag.books.listed" (@($bookItems | Where-Object { $_ -like 'Fix.rules*' }).Count -eq 1) ($bookItems -join ' | ')
   Click $checkAll
   Start-Sleep -Milliseconds 500
-  # One Add... per unit (the common dialog takes one path). The editor is brought to the foreground first, and a
-  # missing dialog is retried once after the editor has been idle. The second Add's click is lost on every run
-  # (B4 Task 7, todo N11): most likely it lands just before the first Add's follow-up work (harvest / C8 analysis
-  # behind TEngineWaitForm) shows its window, so WaitIdle cannot see it; a WM_COMMAND click instead opened the Open
-  # dialog ON TOP of TEngineWaitForm (re-entrant AddClick, N7's class) and wedged the run.
+  # One Add... per unit (the common dialog takes one path), each after the editor is idle. N11 (fixed 2026-10-23):
+  # the second Add's click used to be lost -- WaitIdle saw a false idle while the main thread was blocked between
+  # the first Add's engine calls, and the click was then dispatched inside the C8 analysis' progress window, where
+  # Windows dropped it. WaitIdle now asks the editor (B::Busy), and a click that still lands in busy work is
+  # refused and reported by the editor (ConvRules.InputGate), never run inside the window. No retry.
   function AddUnit($path) {
+    [void](WaitIdle $script:p.Id $main 60)
     [void][W]::SetForegroundWindow($main)
-    $e = AddViaDialog $script:p.Id $add $path
-    if ($e -like 'no open dialog*') { Write-Host "  retry add $path after: $e"; [void](WaitIdle $script:p.Id $main 60); Start-Sleep -Seconds 3; [void][W]::SetForegroundWindow($main); $e = AddViaDialog $script:p.Id $add $path }
-    return $e
+    return (AddViaDialog $script:p.Id $add $path)
   }
   $e1 = AddUnit $pas1
   $e2 = AddUnit $pas2
