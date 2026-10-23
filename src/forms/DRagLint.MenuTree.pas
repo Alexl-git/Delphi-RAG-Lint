@@ -71,8 +71,6 @@ type
     function AddChild(pChild: TMenuNode): TMenuNode;
     /// <summary>Inserts pChild at pIndex (clamped to 0..Count; takes ownership) and returns it.</summary>
     function InsertChild(pIndex: Integer; pChild: TMenuNode): TMenuNode;
-    /// <summary>Removes pChild from this node's children WITHOUT freeing it.</summary>
-    procedure ExtractChild(pChild: TMenuNode);
     /// <summary>The children, in sibling order.</summary>
     function Children: TObjectList<TMenuNode>;
     /// <summary>The parent node, nil for a root or external root.</summary>
@@ -284,12 +282,6 @@ begin
   FChildren.Insert(I, pChild);
   pChild.AttachTo(Self);
   Result:= pChild;
-end;
-
-procedure TMenuNode.ExtractChild(pChild: TMenuNode);
-begin
-  FChildren.Extract(pChild);
-  pChild.AttachTo(nil);
 end;
 
 procedure TMenuNode.AttachTo(pParent: TMenuNode);
@@ -618,7 +610,7 @@ type
     Depth   : Integer;
   end;
 
-  TWalkCore = class
+  TWalkCore = class  // dl:ok high-response@2a94 -- the walker is one interpreter over one CST: eval, call binding, parenting and the index lookups share the env and file caches, and splitting would hand the same calls to a second class
   private
     FStore     : TSQLiteSymbolStore;
     FProject   : string;
