@@ -356,6 +356,9 @@ type
       /// E5 (ScopeStatusText), or E3 (NoBookText, red) when no book matches; a problem
       /// AddSources hit is appended. Never starts the run. Call after RefreshBooks.</remarks>
       procedure LoadRequest(const AReq: TConvertRequest; const AScope: TConvertScope);
+      /// <summary>The Convert button's window, for ConvertClickLost (N1).</summary>
+      /// <returns>Its HWND; 0 while it has none (it cannot have been clicked).</returns>
+      function ConvertButtonWnd: NativeUInt;
       /// <summary>True from Convert until the worker's results are in.</summary>
       property Running: Boolean read FRunning;
       /// <summary>The scope the next Convert runs with (C12); Kind = skWholeUnit when none.</summary>
@@ -1418,6 +1421,11 @@ begin
   var LRow: TConvertRow:= FRunRows[SelectedRunRow];
   if TQualifyForm.Run(Self, LRow.Book, LRow.Apply.QualifyFixes, LPicks) then
     FHost.SetStatus(FHost.QualifyBook(LRow.Book, LPicks), False);
+end;
+
+function TConvertTab.ConvertButtonWnd: NativeUInt;
+begin
+  Result:= if FBtnConvert.HandleAllocated then NativeUInt(FBtnConvert.Handle) else 0;
 end;
 
 procedure TConvertTab.CancelClick(Sender: TObject);

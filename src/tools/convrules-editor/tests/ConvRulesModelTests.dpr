@@ -15,6 +15,7 @@ uses
   , System.Generics.Collections
   , System.JSON
   , Winapi.Windows
+  , Winapi.Messages // N1: WM_LBUTTONDOWN & co. pin ConvertClickLost's named constants
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
   , ConvRules.Units in '..\ConvRules.Units.pas'
@@ -10161,6 +10162,22 @@ begin
   Check('tab.add.refused.running.wins', SourcesAddRefusal(True, True) = SourcesAddRefusal(True, False), SourcesAddRefusal(True, True));
   Check('tab.add.refused.checking', SourcesAddRefusal(False, True) = 'Inherited instances are being checked -- add the sources again when it finishes.', SourcesAddRefusal(False, True));
   Check('tab.add.allowed', SourcesAddRefusal(False, False) = '', SourcesAddRefusal(False, False));
+  // N1: a click on Convert that the progress window's modal loop swallowed is reported,
+  // never run later (a destructive run does not start by itself).
+  Check('tab.lost.click.win32', (LOST_CLICK_HIT_ERROR = HTERROR) and (LOST_CLICK_LBUTTONDOWN = WM_LBUTTONDOWN) and (LOST_CLICK_LBUTTONDBLCLK = WM_LBUTTONDBLCLK));
+  Check('tab.lost.click.convert', ConvertClickLost(HTERROR, WM_LBUTTONDOWN, 'Validating', True));
+  Check('tab.lost.click.dblclk', ConvertClickLost(HTERROR, WM_LBUTTONDBLCLK, 'Validating', True));
+  Check('tab.lost.click.move', not ConvertClickLost(HTERROR, WM_MOUSEMOVE, 'Validating', True), '(hovering is not a click)');
+  Check('tab.lost.click.release', not ConvertClickLost(HTERROR, WM_LBUTTONUP, 'Validating', True));
+  Check('tab.lost.click.enabled', not ConvertClickLost(HTCLIENT, WM_LBUTTONDOWN, 'Validating', True), '(an enabled window gets the click itself)');
+  Check('tab.lost.click.not.busy', not ConvertClickLost(HTERROR, WM_LBUTTONDOWN, '', True), '(no long call: a dialog of someone else disabled the editor)');
+  Check('tab.lost.click.other', not ConvertClickLost(HTERROR, WM_LBUTTONDOWN, 'Validating', False));
+  Check('tab.lost.click.status', LostConvertClickStatus('Saved Fix.rules.', 'Validating the book')
+    = 'Saved Fix.rules. | Convert was NOT started: it was clicked while the editor was busy (Validating the book). Click Convert again.',
+    LostConvertClickStatus('Saved Fix.rules.', 'Validating the book'));
+  Check('tab.lost.click.status.empty', LostConvertClickStatus('', 'Checking 1 source unit(s)')
+    = 'Convert was NOT started: it was clicked while the editor was busy (Checking 1 source unit(s)). Click Convert again.',
+    LostConvertClickStatus('', 'Checking 1 source unit(s)'));
 
   Row:= Default(TConvertRow);
   Row.UnitPas:= 'x\Desc.pas';

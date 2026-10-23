@@ -58,7 +58,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
   * `drive-engine-wait.ps1` 9 -- progress window, Cancel, retry, cached reload
   * `drive-book-depth.ps1` 21 -- `#depth` combo
-  * `drive-convert-tab.ps1` 23 -- Convert tab end to end (`-ProofNoIndex`)
+  * `drive-convert-tab.ps1` 26 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
   * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
   * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)

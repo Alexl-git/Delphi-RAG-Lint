@@ -12,6 +12,8 @@
 # in the grid and the report; the report is UTF-8 without a BOM and records the final reindex). One convert-apply on this fixture takes ~90-110 s; the wait is 600 s.
 # C16 (2026-10-10): mid-run the status bar shows the progress line (run.progress.status), Reindex project is locked.
 # C17: Conversion > Reindex project after the run (reindex.status) and with Fix.dproj renamed away (reindex.refused.no.project.file).
+# N1 (2026-10-23): a REAL mouse click on Convert while the progress window holds the editor is reported on the
+# status line once idle, and nothing runs (n1.*). Needs the editor visible on the desktop (run under the GUI lock).
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoIndex)
@@ -19,6 +21,13 @@ $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class W {
+  [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] static extern void mouse_event(uint f, int x, int y, uint d, UIntPtr e);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  /* N1: a REAL left click (cursor + button down/up) at the centre of H. A posted BM_CLICK
+     reaches a button even under a modal window; the user's mouse does not. */
+  public static void MouseClick(IntPtr h) { RECT r; GetWindowRect(h, out r); SetCursorPos((r.L + r.R) / 2, (r.T + r.B) / 2); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); }
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc p, IntPtr l);
@@ -251,7 +260,18 @@ public static class CT {
 $script:pass = 0; $script:fail = 0
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
-function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+# Looks at least ONCE: with $sec = 0 the old while-loop never looked, so "is the dialog still up" always said no.
+function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
+# N1: idle = no progress window / message box / common dialog and the editor enabled, for 2 s running.
+function WaitIdle($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 200
+  }
+  return $false
+}
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 # BM_CLICK is POSTED: a sent click blocks this script for as long as the handler runs
@@ -274,6 +294,7 @@ function AddViaDialog($procId, $addBtn, $path) {
   $t0 = Get-Date; while ((WaitCls $procId '#32770' 0) -ne [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 20) { Start-Sleep -Milliseconds 250 }
   if ((WaitCls $procId '#32770' 0) -ne [IntPtr]::Zero) { return "open dialog still up (forms: $(TopsNow $procId))" }
   Start-Sleep -Seconds 2   # AddSources reads the project index (ListUnits) before it writes the status line
+  [void](WaitIdle $procId (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' })[0]) 90)   # and the C8 analysis behind the progress window
   return ''
 }
 # Waits until the status line differs from $Before and is not the run's own
@@ -449,6 +470,30 @@ try {
   # --- 3. Check all ---
   Click $checkAll
   Start-Sleep -Milliseconds 500
+
+  # --- 3b. N1: a Convert click while the progress window holds the editor is REPORTED ---
+  # Adding a unit runs long calls behind the modal progress window (the unit picker's lists,
+  # the C8 analysis). A mouse click on Convert then lands on a disabled window: Windows drops
+  # it, ConvertClick never runs. The editor must say so once it is idle again, and not run.
+  # FixUnit.pas: its C8 analysis (class lookups) reliably outlasts the window's 400 ms delay.
+  [void][W]::SetForegroundWindow($main)
+  Click $add
+  $dlg = WaitCls $p.Id '#32770' 20
+  Start-Sleep -Milliseconds 700
+  [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
+  Click (@(Find $dlg 'Button' '&Open')[0])
+  $wait = [IntPtr]::Zero; $t0 = Get-Date
+  while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } }
+  $disabled = -not [W]::IsWindowEnabled($main)
+  [W]::MouseClick($conv)
+  [void](WaitIdle $p.Id $main 90)
+  $st = Status $main
+  Check 'n1.click.under.progress' (($wait -ne [IntPtr]::Zero) -and $disabled) "(precondition: the click landed while the progress window disabled the editor) window=$($wait -ne [IntPtr]::Zero) disabled=$disabled"
+  Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') $st
+  Check 'n1.lost.click.no.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
+  [void][W]::Send($src, 0x0185, [IntPtr]1, [IntPtr]0)   # LB_SETSEL row 0, then Delete: step 4 starts from an empty list
+  Click $del
+  Start-Sleep -Seconds 1
 
   # --- 4./5. an UNINDEXED unit: Convert refuses, and nothing is touched ---
   $e = AddViaDialog $p.Id $add $loose

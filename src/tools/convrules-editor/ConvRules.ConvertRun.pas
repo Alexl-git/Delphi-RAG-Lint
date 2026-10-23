@@ -657,6 +657,41 @@ function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeS
 /// not run: the prompt counts as busy. A run outranks a check.</remarks>
 function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 
+const
+  /// <summary>N1: Win32 HTERROR -- WM_SETCURSOR's hit test for a press on a disabled window
+  /// (named here: the unit stays free of Winapi).</summary>
+  LOST_CLICK_HIT_ERROR = -2;
+  /// <summary>N1: Win32 WM_LBUTTONDOWN.</summary>
+  LOST_CLICK_LBUTTONDOWN = $0201;
+  /// <summary>N1: Win32 WM_LBUTTONDBLCLK.</summary>
+  LOST_CLICK_LBUTTONDBLCLK = $0203;
+
+/// <summary>PURE (N1): whether a WM_SETCURSOR the main form received is a left press on
+/// the Convert button that Windows is about to drop because a progress window holds the
+/// editor disabled.</summary>
+/// <param name="AHitTest">WM_SETCURSOR's hit-test code; LOST_CLICK_HIT_ERROR (HTERROR)
+/// is what Windows reports for a press on a disabled window.</param>
+/// <param name="AMouseMsg">WM_SETCURSOR's mouse message: only a left press
+/// (LOST_CLICK_LBUTTONDOWN / LOST_CLICK_LBUTTONDBLCLK) counts, never a move or a release.</param>
+/// <param name="ABusyTitle">What the editor is busy with (the progress window's title);
+/// '' = no long call is running, so the disabled window is someone else's business.</param>
+/// <param name="AOnConvertButton">The press is inside the Convert button's screen rectangle.</param>
+/// <returns>True only when all four hold.</returns>
+/// <remarks>Windows never delivers a press on a disabled window: the only trace is this
+/// WM_SETCURSOR (DefWindowProc then beeps and flashes the progress window). So the
+/// Convert handler never runs and could not say anything itself.</remarks>
+function ConvertClickLost(AHitTest: Integer; AMouseMsg: Cardinal; const ABusyTitle: string; AOnConvertButton: Boolean): Boolean;
+
+/// <summary>PURE (N1): the status line once a lost Convert click is reported -- the
+/// current status kept, the notice appended.</summary>
+/// <param name="ACurrent">The status on screen when the busy work ended; '' = none.</param>
+/// <param name="ABusyTitle">The progress window's title: what the editor was doing.</param>
+/// <returns>ACurrent + ' | ' + the notice, or the notice alone when ACurrent is ''.</returns>
+/// <remarks>Report, never queue: a Convert edits units in place, and the editor refuses
+/// work that arrives while it is busy elsewhere too (SourcesAddRefusal, the modal
+/// RunWithProgressDialog), so the click is reported and the user clicks again.</remarks>
+function LostConvertClickStatus(const ACurrent, ABusyTitle: string): string;
+
 /// <summary>PURE: why the project index has no project file to reindex with -- the ONE
 /// text Convert and Conversion &gt; Reindex project refuse with.</summary>
 /// <param name="AProjectDb">The project index.</param>
@@ -1868,6 +1903,8 @@ const
   MIS_TAIL    = ' -- ';
   SOURCES_REFUSED_RUNNING  = 'A conversion is running -- sources cannot be added until it finishes.';
   SOURCES_REFUSED_CHECKING = 'Inherited instances are being checked -- add the sources again when it finishes.';
+  LOST_CONVERT_CLICK_FMT   = 'Convert was NOT started: it was clicked while the editor was busy (%s). Click Convert again.';
+  STATUS_JOIN              = ' | ';
 
 // The engine's mismatched reason read back: True with the three type names when
 // AItem.Reason has exactly MIS_HEAD + AncestorUnit + MIS_AS + Found + MIS_NEITHER + From
@@ -2021,6 +2058,20 @@ begin
     Result:= SOURCES_REFUSED_CHECKING
   else
     Result:= '';
+end;
+
+function ConvertClickLost(AHitTest: Integer; AMouseMsg: Cardinal; const ABusyTitle: string; AOnConvertButton: Boolean): Boolean;
+begin
+  Result:= (AHitTest = LOST_CLICK_HIT_ERROR)
+    and ((AMouseMsg = LOST_CLICK_LBUTTONDOWN) or (AMouseMsg = LOST_CLICK_LBUTTONDBLCLK))
+    and (ABusyTitle <> '') and AOnConvertButton;
+end;
+
+function LostConvertClickStatus(const ACurrent, ABusyTitle: string): string;
+begin
+  Result:= Format(LOST_CONVERT_CLICK_FMT, [ABusyTitle]);
+  if ACurrent <> '' then
+    Result:= ACurrent + STATUS_JOIN + Result;
 end;
 
 const
