@@ -4935,11 +4935,14 @@ var
   UTo  : string       ;
   L    : TList<string>;
   Uo   : TUnitUse     ;
+  Seg  : TDictionary<string, string>; { last dotted segment -> stem; '' = ambiguous }
 begin
   Result.Adj      := TDictionary<string, TList<string>>.Create;
   Result.IntfEdges:= TDictionary<string, Boolean>.Create;
   Result.UnitFile := TDictionary<string, string>.Create;
   Result.UnitFid  := TDictionary<string, Int64>.Create;
+  Seg:= TDictionary<string, string>.Create;
+  try
   try
     for Fid in pStore.GetAllFileIds do
     begin
@@ -4950,6 +4953,18 @@ begin
       if UFrom = '' then Continue;
       Result.UnitFile.AddOrSetValue(UFrom, Path);
       Result.UnitFid .AddOrSetValue(UFrom, Fid );
+      if LastDelimiter('.', UFrom) > 0 then
+      begin
+        var Last:= Copy(UFrom, LastDelimiter('.', UFrom) + 1, MaxInt);
+        if Seg.ContainsKey(Last) then Seg[Last]:= '' else Seg.Add(Last, UFrom);
+      end;
+    end;
+    for Fid in pStore.GetAllFileIds do
+    begin
+      Path:= pStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      UFrom:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(Path, '/', '\', [rfReplaceAll])), ''));
+      if UFrom = '' then Continue;
       if not Result.Adj.TryGetValue(UFrom, L) then
       begin
         L:= TList<string>.Create;
@@ -4959,6 +4974,13 @@ begin
       begin
         UTo:= LowerCase(Uo.UnitName);
         if UTo = '' then Continue;
+        { N-08: a bare name that is no indexed unit maps onto the ONE indexed dotted
+          unit with that last segment (unit scope names), as circular-uses does;
+          ambiguous or dotted -> taken as written (a library unit) }
+        var Mapped: string;
+        if (Pos('.', UTo) = 0) and not Result.UnitFile.ContainsKey(UTo) and Seg.TryGetValue(UTo, Mapped) and
+          (Mapped <> '') and (Mapped <> UFrom) then
+          UTo:= Mapped;
         if not L.Contains(UTo) then L.Add(UTo);
         if Uo.Section = uusInterface then Result.IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
       end;
@@ -4969,6 +4991,9 @@ begin
       FreeCycleGraph(Result); { fix round 1: a raise midway must not leak the partial graph }
       raise;
     end;
+  end;
+  finally
+    Seg.Free;
   end;
 end;
 
