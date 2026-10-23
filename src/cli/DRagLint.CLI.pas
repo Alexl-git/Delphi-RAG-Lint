@@ -32063,6 +32063,7 @@ const
   COMPARE_TEMP_SVG_PREFIX = 'drag-lint-compare-old-';
   COMPARE_SVG_EXT = '.svg';
   COMPARE_STAMP = 'yyyymmdd-hhnn';
+  COMPARE_RUN_STAMP = 'yyyymmdd-hhnnss';
 
 function CompareReadText(const APath: string): string;
 begin
@@ -32205,11 +32206,16 @@ begin
   else Write(Doc);
 end;
 
-{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index. }
+{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index.
+  The new run's bundle goes to a PER-RUN folder under %TEMP%\drag-lint-reports: the bundle name is
+  question + target only, so two runs in the shared folder overwrote each other's chart (INBOX
+  compare item 3). }
 function CompareProduceOptions(const AArgs: TArgs): TProduceOptions;
 begin
   Result:= DefaultProduceOptions;
   Result.EnginePath:= ParamStr(0);
+  Result.OutRoot:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+    Format('compare-run-%s-%d', [FormatDateTime(COMPARE_RUN_STAMP, Now), GetCurrentProcessId]));
   if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
 end;
 
