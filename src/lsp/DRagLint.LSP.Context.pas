@@ -47,10 +47,11 @@ type
     /// <param name="APath">A local path.</param>
     /// <returns>The URI.</returns>
     function FileToUri(const APath: string): string;
-    /// <summary>Every open symbol store. When a loose file's single-unit
-    /// (ephemeral) index is currently held, it comes FIRST; the configured
-    /// --db stores follow in command-line order.</summary>
-    /// <returns>A copy of the store list; may be empty.</returns>
+    /// <summary>The configured --db stores in command-line order; for a
+    /// position in a file use StoresForFile, which prepends that file's own
+    /// ephemeral index.</summary>
+    /// <returns>A copy of the store list; may be empty. Never contains a loose
+    /// file's cached index, whatever was hovered before.</returns>
     function Stores: TArray<ISymbolStore>;
     /// <summary>The stores to consult for a position in APath: the configured
     /// stores, with an ephemeral index of APath prepended when no configured

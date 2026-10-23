@@ -22,6 +22,11 @@
     engine (fixtures\lsp\s0-baseline.json; -Capture rewrites it). The fixture
     path is normalised to <SRC> so the baseline is machine independent.
 
+    CONTEXT.STORES IS HISTORY-FREE (fix round 1, I1). After a loose file is
+    hovered (the server caches its ephemeral index), ping's `stores` count --
+    Length(ILspServerContext.Stores) -- must still be the --db count. RED
+    before the fix: stores=2.
+
   RED before S0: the capability and ping checks FAIL, the baseline PASSES.
 #>
 [CmdletBinding()]
@@ -124,6 +129,29 @@ $uri = 'file:///' + ($file -replace '\\', '/')
 $td  = @{ uri = $uri }
 $pos = @{ line = $callLine; character = $callCol }
 
+# A loose unit OUTSIDE $src, so no --db owns it.
+$looseDir = Join-Path $WorkDir 'loose'; New-Item -ItemType Directory $looseDir | Out-Null
+$looseFile = Join-Path $looseDir 'uLoose.pas'
+WriteAnsi $looseFile @'
+unit uLoose;
+
+interface
+
+procedure LooseProc;
+
+implementation
+
+procedure LooseProc;
+begin
+end;
+
+end.
+'@
+$looseLines = [System.IO.File]::ReadAllLines($looseFile)
+$looseLine  = [Array]::FindIndex($looseLines, [Predicate[string]]{ param($l) $l -match '^procedure LooseProc;' })
+$loosePos   = @{ line = $looseLine; character = $looseLines[$looseLine].IndexOf('LooseProc') + 1 }
+$looseUri   = 'file:///' + ($looseFile -replace '\\', '/')
+
 $m  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
 $m += Frame @{ jsonrpc='2.0'; method='initialized'; params=@{} }
 $m += Frame @{ jsonrpc='2.0'; id=2; method='draglint/ping'; params=@{} }
@@ -134,6 +162,10 @@ $m += Frame @{ jsonrpc='2.0'; id=6; method='textDocument/definition'; params=@{ 
 $m += Frame @{ jsonrpc='2.0'; id=7; method='textDocument/references'; params=@{ textDocument=$td; position=$pos; context=@{ includeDeclaration=$true } } }
 $m += Frame @{ jsonrpc='2.0'; id=8; method='textDocument/references'; params=@{ textDocument=$td; position=$pos; context=@{ includeDeclaration=$false } } }
 $m += Frame @{ jsonrpc='2.0'; id=9; method='draglint/callerCounts'; params=@{ textDocument=$td } }
+# I1: a loose file (owned by no --db) is hovered, which makes the server cache
+# a single-unit ephemeral index for it; ping's `stores` must not count it.
+$m += Frame @{ jsonrpc='2.0'; id=11; method='textDocument/hover'; params=@{ textDocument=@{ uri=$looseUri }; position=$loosePos } }
+$m += Frame @{ jsonrpc='2.0'; id=12; method='draglint/ping'; params=@{} }
 $m += Frame @{ jsonrpc='2.0'; id=10; method='shutdown'; params=@{} }
 $m += Frame @{ jsonrpc='2.0'; method='exit'; params=@{} }
 $inF  = Join-Path $WorkDir 'in.txt'
@@ -167,6 +199,14 @@ Check 'draglint/ping answers pong=true' (($null -ne $ping) -and ($null -ne $ping
 Check 'draglint/ping version equals the --version banner' (($null -ne $ping) -and ($null -ne $ping.result) -and ($ping.result.version -eq $bannerVersion)) `
   "banner=$bannerVersion got=$(if ($ping -and $ping.result) { $ping.result.version })"
 
+Write-Host ''
+Write-Host 'CONTEXT.STORES: configured stores only (I1)' -ForegroundColor Cyan
+Check 'CONTROL: ping reports stores = 1 before any loose file' (($null -ne $ping) -and ($ping.result.stores -eq 1)) "stores=$(if ($ping -and $ping.result) { $ping.result.stores })"
+$looseHover = Reply 11
+Check 'CONTROL: the loose file was indexed (hover names LooseProc)' (($null -ne $looseHover) -and ($raw[11] -match 'LooseProc')) $(if ($null -eq $looseHover) { '<no reply>' } else { $raw[11] })
+$ping2 = Reply 12
+Check 'Stores excludes the cached loose-file index (stores still 1)' (($null -ne $ping2) -and ($ping2.result.stores -eq 1)) "stores=$(if ($ping2 -and $ping2.result) { $ping2.result.stores })"
+
 $nosuch = Reply 3
 Check 'NEGATIVE CONTROL: draglint/nosuch is still -32601' (($null -ne $nosuch) -and ($null -ne $nosuch.error) -and ($nosuch.error.code -eq -32601)) `
   $(if ($null -eq $nosuch) { '<no reply>' } else { $raw[3] })
@@ -194,6 +234,8 @@ if ($Capture) {
   $body = ($current | ConvertTo-Json -Depth 5)
   WriteAnsi $Baseline ($body + "`n")
   Write-Host "  captured baseline -> $Baseline" -ForegroundColor Yellow
+  Write-Host 'CAPTURED -- comparison not run' -ForegroundColor Yellow
+  exit 0
 }
 if (-not (Test-Path $Baseline)) { Check 'baseline file present' $false $Baseline }
 else {
@@ -214,5 +256,5 @@ if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
 } finally {
-  foreach ($d in @("$env:TEMP\drag-lint-feature-registry-$PID")) { if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
+  foreach ($d in @($WorkDir)) { if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
 }

@@ -944,9 +944,12 @@ type
       /// <returns>Paths of the stores that opened and passed the schema check;
       /// a --db that was skipped is not in it.</returns>
       property StorePaths: TArray<string> read FStorePaths;
-      /// <summary>Every open store: the ephemeral single-unit index first when
-      /// one is held, then the --db stores in command-line order.</summary>
-      /// <returns>A new array; empty when nothing opened.</returns>
+      /// <summary>The configured --db stores in command-line order; for a
+      /// position in a file use StoresForFile, which prepends that file's own
+      /// ephemeral index.</summary>
+      /// <returns>A new array; empty when nothing opened. Never contains the
+      /// cached loose-file index, so the answer does not depend on which file
+      /// was hovered earlier.</returns>
       function OpenStores: TArray<ISymbolStore>;
       /// <summary>The body `textDocument/definition` answers for a position.</summary>
       /// <param name="APath">Local path of the document.</param>
@@ -2203,8 +2206,7 @@ end; // function
 
 function TLSPServer.OpenStores: TArray<ISymbolStore>;
 begin
-  if FEphemStore <> nil then Result:= TArray<ISymbolStore>.Create(FEphemStore) + FStores
-  else                       Result:= Copy(FStores);
+  Result:= Copy(FStores);
 end;
 
 function TLSPServer.SelectSymbolAt(const AStores: TArray<ISymbolStore>; const APath, AIdent: string; ALine0, ACol0: Integer; out ASel: TSymbolSelection): Boolean;

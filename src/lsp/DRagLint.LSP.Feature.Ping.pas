@@ -13,7 +13,7 @@ uses
   ;
 
 type
-  /// <summary>Answers `draglint/ping` with {pong: true, version} and
+  /// <summary>Answers `draglint/ping` with {pong: true, version, stores} and
   /// advertises capabilities.draglint.ping = true.</summary>
   /// <remarks>Stateless; registered from this unit's initialization.</remarks>
   TPingFeature = class(TLspFeature)
@@ -25,7 +25,9 @@ type
     /// `ping: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
-    /// <summary>Replies {pong: true, version: DRAGLINT_VERSION}.</summary>
+    /// <summary>Replies {pong: true, version: DRAGLINT_VERSION, stores: N},
+    /// N being Length(ACtx.Stores): the configured --db stores only, never a
+    /// loose file's cached index (the guard pins that through this field).</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">Always `draglint/ping`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
@@ -67,6 +69,7 @@ begin
   var Res: TJSONObject:= TJSONObject.Create;
   Res.AddPair('pong'   , TJSONBool.Create(True));
   Res.AddPair('version', DRAGLINT_VERSION      );
+  Res.AddPair('stores' , TJSONNumber.Create(Length(ACtx.Stores)));
   ACtx.Reply(AId, Res);
 end;
 
