@@ -116,6 +116,7 @@ uses
   DRagLint.Core.LiveDocs in '..\core\DRagLint.Core.LiveDocs.pas',
   DRagLint.LSP.Completion in '..\lsp\DRagLint.LSP.Completion.pas',
   DRagLint.LSP.Proxy in '..\lsp\DRagLint.LSP.Proxy.pas',
+  DRagLint.LSP.Proxy.Merge in '..\lsp\DRagLint.LSP.Proxy.Merge.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',

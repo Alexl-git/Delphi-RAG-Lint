@@ -158,7 +158,7 @@ uses
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
-  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
+  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP  // dl:ok uses-global-census@a9ed -- one const (the merge budget default) is the intended coupling to the proxy options
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
   , DRagLint.Hover      .Returns
@@ -516,6 +516,9 @@ type
     LspProxy    : Boolean; // --proxy
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
+    LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
+    LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
+    LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
@@ -1557,6 +1560,13 @@ begin
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
+    else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
+    else if (A = '--merge-budget-ms') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.LspMergeBudgetMs := StrToIntDef(ParamStr(i), -1);
+      Result.LspMergeBudgetSet:= Result.LspMergeBudgetMs >= 0;   { unreadable or negative: the default }
+    end
     else if A = '--resolve-only' then Result.ResolveOnly:= True
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
@@ -32257,10 +32267,13 @@ begin
         the startup path of the IDE's only Code Insight provider. }
       if Args.LspProxy then
       begin
-        var ProxyOpt: DRagLint.LSP.Proxy.TLspProxyOptions;
+        var ProxyOpt:= Default(DRagLint.LSP.Proxy.TLspProxyOptions);
         ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
         ProxyOpt.ChildArgs   := '';
         ProxyOpt.TraceFile   := Args.LspTraceFile;
+        ProxyOpt.MergeDiagnostics:= Args.LspMergeDiagnostics;
+        ProxyOpt.MergeBudgetMs   := if Args.LspMergeBudgetSet then Args.LspMergeBudgetMs else DRagLint.LSP.Proxy.LSP_MERGE_BUDGET_DEFAULT_MS;
+        ProxyOpt.DbPaths         := Args.DbPaths;
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;

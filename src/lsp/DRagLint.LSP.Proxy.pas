@@ -74,7 +74,32 @@ type
     /// byte-identical with tracing on.</para>
     /// </remarks>
     TraceFile: string;
+    /// <summary>--merge-diagnostics: append drag-lint's lint findings to
+    /// DelphiLSP's publishDiagnostics. Off by default.</summary>
+    MergeDiagnostics: Boolean;
+    /// <summary>Merge drag-lint's completion items into DelphiLSP's. No CLI
+    /// flag yet (merge plan A3); off by default.</summary>
+    MergeCompletion: Boolean;
+    /// <summary>Merge drag-lint's hover text into DelphiLSP's. No CLI flag yet
+    /// (merge plan A4); off by default.</summary>
+    MergeHover: Boolean;
+    /// <summary>Fall back to drag-lint's definition when DelphiLSP has none. No
+    /// CLI flag yet (merge plan A5); off by default.</summary>
+    MergeDefinition: Boolean;
+    /// <summary>--merge-budget-ms: per-frame budget for a merge handler, in
+    /// milliseconds. Over budget, DelphiLSP's bytes are forwarded untouched.
+    /// The CLI sets LSP_MERGE_BUDGET_DEFAULT_MS when the flag is absent; a
+    /// zeroed record means a zero budget.</summary>
+    MergeBudgetMs: Integer;
+    /// <summary>The index databases a merge handler queries (the CLI's --db
+    /// list, unresolved). Read only when a Merge* option is on, and then only
+    /// lazily, so the relay's startup path still opens no database.</summary>
+    DbPaths: TArray<string>;
   end;
+
+const
+  /// <summary>Default per-frame merge budget, in milliseconds.</summary>
+  LSP_MERGE_BUDGET_DEFAULT_MS = 300;
 
 /// <summary>Resolves the DelphiLSP executable to spawn.</summary>
 /// <param name="AOverride">An explicit path; returned as-is when non-empty,
@@ -128,7 +153,16 @@ uses
   , System.Classes
   , DRagLint.Core.JobObject
   , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
+  , DRagLint.LSP.Proxy.Merge { TFrameInterceptor, TProxyMergeEngine -- implementation-only: Merge's interface uses this unit }  // dl:ok circular-uses@5b36 -- implementation-only cycle forced by the P0 contract: Merge takes TLspProxyOptions, Proxy installs the engine
   ;
+
+var
+  { Merge plan P0: the frame interceptor. nil -- the default, and the state of
+    every proxy started without a --merge-* flag -- is the shipped relay,
+    byte-identical by construction because DrainFramed then takes the exact
+    pre-P0 path. Assigned once by RunLspProxy before any pump starts, never
+    cleared, so the pumps read it without a lock. }
+  GInterceptor: TFrameInterceptor = nil;
 
 const
   { The relay copies whatever a single ReadFile hands it. The size is a
@@ -377,6 +411,36 @@ begin
   end;
 end;
 
+{ Merge plan P0: forwards one complete frame through GInterceptor. FAIL OPEN:
+  an interceptor that answers False or raises gets the original bytes
+  forwarded; True forwards AReplacement instead (an empty replacement forwards
+  nothing). Either way the trace records exactly the bytes written. }
+function ForwardIntercepted(ADst: THandle; const ABuf: TBytes; ATotal: Integer;
+  const ADir: string): Boolean;
+var
+  Dir : TMergeDirection;
+  Repl: TBytes;
+  Use : Boolean;
+begin
+  Dir:= if ADir = 'C>S' then mdClientToServer else mdServerToClient;
+  Repl:= nil;
+  try
+    Use:= GInterceptor(Dir, ABuf, ATotal, Repl);
+  except  // dl:ok bare-except@67c3 -- fail-open by design: any merge exception forwards the original frame
+    Use:= False;   { swallowed on purpose: a merge bug must not cost the session }
+  end;
+  if Use then
+  begin
+    TraceFrame(ADir, Repl, Length(Repl));
+    Result:= WriteAll(ADst, Repl, 0, Length(Repl));
+  end
+  else
+  begin
+    TraceFrame(ADir, ABuf, ATotal);
+    Result:= WriteAll(ADst, ABuf, 0, ATotal);
+  end;
+end;
+
 function DrainFramed(ADst: THandle; var ABuf: TBytes; var ALen: Integer;
   const ADir: string): Boolean;
 var
@@ -441,9 +505,17 @@ begin
     if ALen < Total then Exit;    { body still arriving }
 
     { Traced HERE, on the complete frame, and BEFORE the write -- the recorded
-      bytes are exactly the bytes forwarded. }
-    TraceFrame(ADir, ABuf, Total);
-    if not WriteAll(ADst, ABuf, 0, Total) then Exit(False);
+      bytes are exactly the bytes forwarded. With no interceptor this is the
+      shipped relay path, unchanged. }
+    if Assigned(GInterceptor) then
+    begin
+      if not ForwardIntercepted(ADst, ABuf, Total, ADir) then Exit(False);
+    end
+    else
+    begin
+      TraceFrame(ADir, ABuf, Total);
+      if not WriteAll(ADst, ABuf, 0, Total) then Exit(False);
+    end;
     Consume(Total);
   end;
 end;
@@ -562,6 +634,7 @@ var
   Exe        : string;
   CmdLine    : string;
   Code       : DWORD;
+  MergeEngine: TProxyMergeEngine;
 begin
   { Armed BEFORE the child is spawned, so the very first frame -- the IDE's
     `initialize`, which carries initializationOptions -- is captured. Empty
@@ -580,6 +653,22 @@ begin
   begin
     StdErrLine('drag-lint lsp --proxy: --delphi-lsp path does not exist: ' + Exe);
     Exit(EXIT_SPAWN_FAILED);
+  end;
+
+  { Merge plan P0, criterion 19: with every merge flag off NOTHING is
+    constructed and GInterceptor stays nil. The engine is deliberately never
+    freed -- the pumps are unjoined daemons that may still be inside it when
+    this function returns (see TProxyMergeEngine). }
+  if AOptions.MergeDiagnostics or AOptions.MergeCompletion or
+     AOptions.MergeHover or AOptions.MergeDefinition then
+  begin
+    MergeEngine:= TProxyMergeEngine.Create(AOptions);  // dl:ok object-leak@d16a -- deliberate: unjoined daemon pumps may still be inside the engine at return; lives until process exit
+    GInterceptor:=
+      function(ADir: TMergeDirection; const AFrame: TBytes; ALen: Integer;
+        out AReplacement: TBytes): Boolean
+      begin
+        Result:= MergeEngine.Intercept(ADir, AFrame, ALen, AReplacement);
+      end;
   end;
 
   ChildInRd := 0; ChildInWr := 0;
