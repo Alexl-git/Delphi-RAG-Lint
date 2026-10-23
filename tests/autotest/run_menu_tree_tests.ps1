@@ -17,7 +17,7 @@ param(
     [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-tree-tests-$PID",
-    [int]    $MinTests   = 40
+    [int]    $MinTests   = 65
 )
 try {
 $ErrorActionPreference = 'Stop'

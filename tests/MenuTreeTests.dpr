@@ -15,6 +15,7 @@ uses
   , System.IOUtils
   , System.StrUtils
   , DRagLint.MenuTree
+  , DRagLint.MenuDrift
   ;
 
 var
@@ -235,13 +236,146 @@ begin
   end;
 end;
 
-begin  try
+{ ---- Task 6: drift classes on the fixture tree + fixture registry ---- }
+
+function Drift(pTree: TMenuTree; const pRegDir: string; const pEdit: TProc<TMenuRegistry>): TMenuDriftReport;
+var
+  Reg: TMenuRegistry;
+begin
+  Reg:= TMenuRegistry.Create;
+  try
+    Reg.LoadFromDir(pRegDir);
+    if Assigned(pEdit) then pEdit(Reg);
+    Result:= ComputeMenuDrift(pTree, Reg);
+  finally
+    Reg.Free;
+  end;
+end;
+
+procedure RemovePath(pReg: TMenuRegistry; const pPath: string);
+var
+  I: Integer;
+begin
+  for I:= pReg.Surfaces.Count - 1 downto 0 do
+    if pReg.Surfaces[I].Path = pPath then pReg.Surfaces.Delete(I);
+end;
+
+procedure CheckCounts(const pTag: string; pRep: TMenuDriftReport; pMissing, pUnreg, pMoved: Integer);
+begin
+  CheckEq(pTag + ': counts', Format('missing=%d unregistered=%d moved=%d', [pMissing, pUnreg, pMoved]),
+    Format('missing=%d unregistered=%d moved=%d', [pRep.Missing.Count, pRep.Unregistered.Count, pRep.Moved.Count]));
+end;
+
+procedure TestDrift(const pDb, pFixtureDir: string);
+var
+  W     : TMenuWalker;
+  Tree  : TMenuTree;
+  RegDir: string;
+  Rep   : TMenuDriftReport;
+  Base  : Integer;
+  Hand  : TMenuTree;
+  N     : TMenuNode;
+begin
+  RegDir:= TPath.Combine(pFixtureDir, 'registry');
+  W:= TMenuWalker.Create([pDb], TPath.Combine(pFixtureDir, 'MenuTreeFixture.dproj'));
+  try
+    Tree:= W.Walk;
+  finally
+    W.Free;
+  end;
+  try
+    Rep:= Drift(Tree, RegDir, nil);
+    try
+      CheckCounts('unseeded', Rep, 0, 0, 0);
+      Check('unseeded: no drift', not Rep.HasDrift, Rep.ToText);
+      Base:= Rep.Notes.Count;
+    finally
+      Rep.Free;
+    end;
+    Rep:= Drift(Tree, RegDir, procedure(R: TMenuRegistry) begin RemovePath(R, 'Fixture > About'); end);
+    try
+      CheckCounts('entry deleted', Rep, 0, 1, 0);
+      if Rep.Unregistered.Count = 1 then
+        CheckEq('entry deleted: skeleton', '{ "type": "ide-menu", "path": "Fixture > About" }', Rep.Unregistered[0].Skeleton);
+    finally
+      Rep.Free;
+    end;
+    Rep:= Drift(Tree, RegDir, procedure(R: TMenuRegistry)
+      begin
+        RemovePath(R, 'Fixture > Export Everything');
+        R.AddSurface('export', 'Fixture > Export Everything Now');
+      end);
+    try
+      CheckCounts('caption changed', Rep, 1, 0, 0);
+      if Rep.Missing.Count = 1 then
+        CheckEq('caption changed: renamed hint', 'renamed? -> ''Export Everything''', Rep.Missing[0].Hint);
+    finally
+      Rep.Free;
+    end;
+    Rep:= Drift(Tree, RegDir, procedure(R: TMenuRegistry)
+      begin
+        RemovePath(R, 'Fixture > About');
+        R.AddSurface('about', 'Fixture > Catalog > About');
+      end);
+    try
+      CheckCounts('parent changed', Rep, 0, 0, 1);
+      if Rep.Moved.Count = 1 then CheckEq('parent changed: nowAt', 'Fixture > About', Rep.Moved[0].NowAt);
+    finally
+      Rep.Free;
+    end;
+    Rep:= Drift(Tree, RegDir, procedure(R: TMenuRegistry)
+      begin
+        RemovePath(R, 'Fixture > About');
+        R.Exempt.Add('About');
+      end);
+    try
+      CheckCounts('exempt live caption', Rep, 0, 0, 0);
+    finally
+      Rep.Free;
+    end;
+    Rep:= Drift(Tree, RegDir, procedure(R: TMenuRegistry) begin R.Exempt.Add('Catalog'); end);
+    try
+      CheckEq('stale-looking exemption (a submenu) -> one more note', IntToStr(Base + 1), IntToStr(Rep.Notes.Count));
+      CheckCounts('a submenu caption is never unregistered', Rep, 0, 0, 0);
+    finally
+      Rep.Free;
+    end;
+  finally
+    Tree.Free;
+  end;
+
+  { a dynamic node: one note, never a missing for a path under its parent }
+  Hand:= TMenuTree.Create;
+  try
+    N:= Hand.AddRoot('Top', 'u.pas:1');
+    N:= N.AddChild(TMenuNode.Create(mnkDynamic, '<dynamic: S>', 'u.pas:2'));
+    N.Confidence:= mcUnknown;
+    Hand.AddNote('dynamic caption at u.pas:2: X.Caption:= S');
+    Rep:= Drift(Hand, RegDir, procedure(R: TMenuRegistry)
+      begin
+        R.Surfaces.Clear;
+        R.AddSurface('x', 'Top > Something');
+      end);
+    try
+      CheckCounts('dynamic node', Rep, 0, 0, 0);
+      CheckEq('dynamic node: notes', '1', IntToStr(Rep.Notes.Count));
+    finally
+      Rep.Free;
+    end;
+  finally
+    Hand.Free;
+  end;
+end;
+
+begin
+  try
     TestCaptionKeyVector;
     TestToPaths;
     if ParamCount >= 2 then
     begin
       TestWalkerRoot(ParamStr(1), TPath.Combine(ParamStr(2), 'MenuTreeFixture.dproj'));
       TestWalkerFull(ParamStr(1), TPath.Combine(ParamStr(2), 'MenuTreeFixture.dproj'), ParamStr(2));
+      TestDrift(ParamStr(1), ParamStr(2));
     end
     else Check('walker tests need <db> <fixture dir>', False);
     if ParamCount >= 3 then
