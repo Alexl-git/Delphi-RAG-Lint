@@ -11,7 +11,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "test-store-freshness"
+      "verb": "test-store-freshness",
+      "usage": "drag-lint test-store-freshness --db PATH",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "agent",
@@ -23,7 +30,7 @@
   ],
   "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "233a758c69f464298b1cf5f57e96d6f6be4fbd8f197a6e4d8e041a8c7c7967c1"

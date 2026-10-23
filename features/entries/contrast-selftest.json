@@ -11,13 +11,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "contrast-selftest"
+      "verb": "contrast-selftest",
+      "usage": "drag-lint contrast-selftest"
     }
   ],
   "audience": "agent",
   "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "c95fc84e6dffddd5ff019a313955dd75a2ef9e53c50fe130be028d85f1a8af4c"
