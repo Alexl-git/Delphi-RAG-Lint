@@ -14,6 +14,9 @@
 param(
   [string]$Exe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
   [string]$CliPas = (Join-Path $PSScriptRoot '..\src\cli\DRagLint.CLI.pas'),
+  [string]$HelpText = (Join-Path $PSScriptRoot '..\src\cli\DRagLint.CLI.HelpText.pas'),
+  [string]$SrcRoot = (Join-Path $PSScriptRoot '..\src'),
+  [switch]$HelpFromExe,
   [string]$AcceptedUndocumentedControl = '--merge-diagnostics',
   [string]$DocumentedControl = '--trace',
   [string]$OutFile = ''
@@ -28,9 +31,17 @@ for ($n = 0; $n -lt $lines.Count; $n++) {
     if (-not $P.Contains($f)) { $P[$f] = @{ Line = $n + 1; Ctx = $lines[$n].Trim() } }
   }
 }
-$help = (& $Exe --help 2>&1 | Out-String)
+# H from the SAME revision as P: the generated HelpText.pas next to CLI.pas (default), or the exe's --help (-HelpFromExe).
+if ($HelpFromExe) { $help = (& $Exe --help 2>&1 | Out-String) } else { $help = [IO.File]::ReadAllText((Resolve-Path $HelpText).Path) }
+# V = '--x' literals in ANY src unit (verb-local parsers), for classifying H\P rows.
+$V = @{}
+foreach ($u in Get-ChildItem (Resolve-Path $SrcRoot).Path -Recurse -Filter *.pas) {
+  if ($u.Name -eq 'DRagLint.CLI.HelpText.pas') { continue }
+  $ul = [IO.File]::ReadAllLines($u.FullName)
+  for ($k = 0; $k -lt $ul.Count; $k++) { foreach ($mm in [regex]::Matches($ul[$k], "'(--[a-z][A-Za-z0-9-]*)'")) { if (-not $V.ContainsKey($mm.Groups[1].Value)) { $V[$mm.Groups[1].Value] = "$($u.Name):$($k+1)" } } }
+}
 $H = [ordered]@{}
-foreach ($m in [regex]::Matches($help, '(?<![A-Za-z0-9-])(--[a-z][a-z0-9-]*)')) { $H[$m.Groups[1].Value] = 1 }
+foreach ($m in [regex]::Matches($help, '(?<![A-Za-z0-9-])(--[a-z][A-Za-z0-9-]*)')) { $H[$m.Groups[1].Value] = 1 }
 
 function Test-Accepted([string]$flag) {
   $tmp = Join-Path $env:TEMP 'cli-flag-audit-cwd'
@@ -60,7 +71,7 @@ $out.Add('| flag | CLI.pas line | parser line |'); $out.Add('|---|---|---|')
 foreach ($f in $accUndoc) { $out.Add("| ``$f`` | $($P[$f].Line) | ``$($P[$f].Ctx.Replace('|','/'))`` |") }
 $out.Add(''); $out.Add('## Table 2: DOCUMENTED-UNPARSED (in --help, no `A = ''--x''` parser form)')
 $out.Add('| flag | note |'); $out.Add('|---|---|')
-foreach ($f in $docUnparsed) { $out.Add("| ``$f`` | no A-form parser literal (may be parsed by another form / verb-local) |") }
+foreach ($f in $docUnparsed) { $out.Add("| ``$f`` | " + $(if ($V.ContainsKey($f)) { "verb-local parser in $($V[$f])" } else { "UNLOCATED: no '--x' literal in any src unit" }) + " |") }
 $out.Add('')
 $out.Add("Counts: parsed=$($P.Count) documented=$($H.Count) accepted-undocumented=$($accUndoc.Count) documented-unparsed=$($docUnparsed.Count) parsed-undocumented-but-rejected=$($rejected.Count)")
 $out.Add("Engine: $Exe ; CLI.pas: $CliPas")
