@@ -56,6 +56,15 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
+## OWNER RULING R7 (2026-10-23 evening) -- READ FIRST
+No approval-needing command mid-run (deletes, destructive git, Stop-Process, deploys, gh/curl, publish).
+Queue in `.superpowers\sdd\2026-10-23-engine-3day\DEFERRED-APPROVALS.md`; deploy + version bump +
+re-parse move to the END of day 3. Peers (CONVERTER, www-40, lsp-6f) told. Docs-sync is RED on main
+until that deploy (deployed --help lacks --progress) -- expected, do not "fix" it otherwise.
+Merged since 14:20: lint-fp 465f1972, lint-fp2 03b508f6, migrate-gaps 041e5fbb, cycles 6baf2acd,
+apply-batch 25cd99de, help line 136f95c5 (+verify 57088ad3, www page 343d4879). Running: e3d/cli7,
+e3d/menu-impl, e3d/resolver (review fixes; hold for the end bump), e3d/doctools.
+
 ## Next actions (in order)
 1. Merge finished lanes one at a time: review diff, rerun its guard on main, ledger row -> MERGED;
    tell CONVERTER about conversion-related merges (L8).
