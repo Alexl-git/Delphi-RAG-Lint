@@ -273,6 +273,23 @@ Check 'C2  first run on an empty cache is a MISS' ((CacheState $first.Prof) -eq 
 Check 'C2  ...and writes the cache' ((CacheFiles).Count -eq 1) "files: $((CacheFiles).Count)"
 $second = LintOne 'uCycA.pas'
 Check 'C2  the next run is a HIT' ((CacheState $second.Prof) -eq 'hit') "state: $(CacheState $second.Prof)"
+
+# --- C13: the cache lives OUTSIDE the user's indexes ----------------------------
+# Decision 2026-10-23 (lane W6-L): single-file `lint` keeps its rule cache in
+# DRAGLINT_RULE_CACHE_DIR / %LOCALAPPDATA%\drag-lint\cache, keyed per exe build,
+# and never writes the --db or --library-db. A cold (filling) plus a warm run
+# must leave both index files byte-identical. C2 above is the positive control
+# that these runs really wrote a cache entry.
+CacheFiles | Remove-Item -Force
+$dbHash0  = (Get-FileHash $db).Hash
+$libHash0 = (Get-FileHash $lib).Hash
+Check 'C13 SANITY: both index files hash' ($dbHash0 -and $libHash0) "db=$dbHash0 lib=$libHash0"
+$c13a = LintOne 'uCycA.pas'
+$c13b = LintOne 'uCycA.pas'
+Check 'C13 CONTROL: the two runs were a cache MISS then a HIT' (((CacheState $c13a.Prof) -eq 'miss') -and ((CacheState $c13b.Prof) -eq 'hit')) "states: $(CacheState $c13a.Prof) / $(CacheState $c13b.Prof)"
+Check 'C13 single-file lint leaves the --db byte-identical' ((Get-FileHash $db).Hash -eq $dbHash0) ""
+Check 'C13 ...and the --library-db byte-identical' ((Get-FileHash $lib).Hash -eq $libHash0) ""
+Check 'C13 ...and its cache file is NOT beside the --db' (@(CacheFiles | Where-Object { $_.DirectoryName -eq (Split-Path $db -Parent) }).Count -eq 0 -and (CacheFiles).Count -eq 1) "files: $((CacheFiles).FullName -join ', ')"
 $fill = @{ 'uCycA.pas' = Tuples $first.Rows }; $hit = @{ 'uCycA.pas' = Tuples $second.Rows }
 foreach ($u in $UNITS | Where-Object { $_ -ne 'uCycA.pas' }) { $hit[$u] = Tuples (LintOne $u).Rows }
 foreach ($u in $UNITS) {
