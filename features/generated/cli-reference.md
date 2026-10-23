@@ -342,7 +342,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json|text] (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--unit <stem>]] [--format json|text] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -351,6 +351,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
 | `--plan` |  |  |  |
+| `--f2047` |  |  |  |
 | `--format` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--fix` |  |  |  |
