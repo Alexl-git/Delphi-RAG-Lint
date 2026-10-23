@@ -1166,6 +1166,18 @@ type
     StartCol : Integer        ;
     EndLine  : Integer        ;
     EndCol   : Integer        ;
+    // N-06: an entry written inside a {$I} include. OriginPath is the absolute
+    // .inc path ('' = the unit's own text) and IncludeLine the 1-based line of
+    // the {$I} directive in the HOST (0 = inline). For such a row StartLine..
+    // EndCol are coordinates INSIDE the .inc, never in the host.
+    OriginPath : string       ;
+    IncludeLine: Integer      ;
+    /// <summary>N-06: True when this entry came from a {$I} include, so its
+    /// coordinates are in OriginPath, not in the owning file.</summary>
+    /// <returns>True iff OriginPath is non-empty.</returns>
+    /// <remarks>Every uses EDITOR must check this before using StartLine /
+    /// StartCol / EndLine / EndCol as host-file coordinates.</remarks>
+    function FromInclude: Boolean;
   end;
 
   // One 'global-only' uses edge: ReaderFileId depends on DeclFileId for
@@ -2282,6 +2294,13 @@ implementation
 uses
   System.SysUtils
   ;
+
+{ TUnitUse }
+
+function TUnitUse.FromInclude: Boolean;
+begin
+  Result:= OriginPath <> '';
+end;
 
 { TSymbol }
 

@@ -202,6 +202,7 @@ var
   DotPos: Integer ;
 begin
   if AUnitName = '' then Exit;
+  U:= Default(TUnitUse); { N-06: OriginPath '' / IncludeLine 0 = inline }
   U.FileId:= -1; { indexer will fill in from files table }
   U.UnitName:= AUnitName;
   U.Section := ASection;

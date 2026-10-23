@@ -118,6 +118,7 @@ type
       FQInsertMemberAccess   : TFDQuery     ; { 2026-09-16: member_accesses writer }
       FHasMemberAccesses     : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasMemberAccesses }
       FHasEffectCols         : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasEffectCols }
+      FHasUseOriginCols      : Integer      ; { N-06: -1 unprobed, 0 absent, 1 present -- see HasUseOriginCols }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -761,6 +762,18 @@ type
       /// <returns>True iff symbol_facts has effect_witness -- the LAST of the
       /// three ALTERs, so its presence implies all three.</returns>
       function HasEffectCols: Boolean;
+      /// <summary>N-06: True when unit_uses carries origin_path and
+      /// include_line. Migrate ALTERs them with NO schema bump, so a schema-23
+      /// DB indexed before this engine lacks them while reading as current --
+      /// the HasEffectCols pattern. Memoised; Migrate resets it.</summary>
+      /// <returns>True iff unit_uses has include_line, the LAST of the two
+      /// ALTERs.</returns>
+      function HasUseOriginCols: Boolean;
+      /// <summary>N-06: (re)sets the SQL text and parameter types of the three
+      /// unit_uses statements for THIS database's shape, so no statement names
+      /// a column the DB lacks. Called by PrepareStatements and again by Migrate
+      /// after its ALTERs.</summary>
+      procedure ConfigureUnitUseStatements;
       /// <summary>The symbol_facts SELECT column list for THIS database:
       /// SYMBOL_FACTS_BASE_COLS, plus the three effect columns only when
       /// HasEffectCols -- so a reader never names a column the DB lacks.
@@ -3415,6 +3428,7 @@ begin
   FReadOnly      := AReadOnly;
   FHasMemberAccesses:= -1; { probed lazily -- see HasMemberAccesses }
   FHasEffectCols    := -1; { probed lazily -- see HasEffectCols }
+  FHasUseOriginCols := -1; { N-06: probed lazily -- see HasUseOriginCols }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -3509,6 +3523,79 @@ begin
     end;
   end;
   Result:= FHasEffectCols = 1;
+end;
+
+function TSQLiteSymbolStore.HasUseOriginCols: Boolean;
+var
+  Q: TFDQuery;
+begin
+  if FHasUseOriginCols < 0 then
+  begin
+    FHasUseOriginCols:= 0;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      // Same argument as HasEffectCols: sqlite_master always exists and its
+      // stored CREATE TABLE text is rewritten by every ADD COLUMN.
+      Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''unit_uses'' ' +
+                     'AND instr(sql, ''include_line'') > 0 LIMIT 1';
+      Q.Open;
+      if not Q.IsEmpty then FHasUseOriginCols:= 1;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+  Result:= FHasUseOriginCols = 1;
+end;
+
+procedure TSQLiteSymbolStore.ConfigureUnitUseStatements;
+const
+  BASE_COLS = 'target_file_id, start_line, start_col, end_line, end_col';
+var
+  Extra: string;
+begin
+  Extra:= IfThen(HasUseOriginCols, ', origin_path, include_line', '');
+  if FQInsertUnitUse <> nil then
+  begin
+    if FQInsertUnitUse.Active then FQInsertUnitUse.Close;
+    FQInsertUnitUse.SQL.Text:=
+      'INSERT INTO unit_uses ' + '(file_id, unit_name, unit_name_norm, section, in_path, ' + BASE_COLS + Extra + ') ' +
+      'VALUES (:fid, :un, :unn, :sec, :inp, NULL, :sl, :sc, :el, :ec' + IfThen(HasUseOriginCols, ', :op, :il', '') + ')';
+    FQInsertUnitUse.Params.ParamByName('fid').DataType:= ftLargeint;
+    FQInsertUnitUse.Params.ParamByName('un' ).DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('unn').DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('sec').DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('inp').DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('sl' ).DataType:= ftInteger;
+    FQInsertUnitUse.Params.ParamByName('sc' ).DataType:= ftInteger;
+    FQInsertUnitUse.Params.ParamByName('el' ).DataType:= ftInteger;
+    FQInsertUnitUse.Params.ParamByName('ec' ).DataType:= ftInteger;
+    if HasUseOriginCols then
+    begin
+      FQInsertUnitUse.Params.ParamByName('op').DataType:= ftString;
+      FQInsertUnitUse.Params.ParamByName('il').DataType:= ftInteger;
+    end;
+    FQInsertUnitUse.Prepare;
+  end;
+  if FQGetFileUnitUses <> nil then
+  begin
+    if FQGetFileUnitUses.Active then FQGetFileUnitUses.Close;
+    FQGetFileUnitUses.SQL.Text:=
+      'SELECT unit_name, unit_name_norm, section, in_path, ' + BASE_COLS + Extra + ' ' +
+      'FROM unit_uses WHERE file_id = :fid ' + 'ORDER BY section, start_line, start_col';
+    FQGetFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
+    FQGetFileUnitUses.Prepare;
+  end;
+  if FQFindUsersOfUnit <> nil then
+  begin
+    if FQFindUsersOfUnit.Active then FQFindUsersOfUnit.Close;
+    FQFindUsersOfUnit.SQL.Text:=
+      'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' + BASE_COLS + Extra + ' ' +
+      'FROM unit_uses WHERE unit_name_norm = :un';
+    FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
+    FQFindUsersOfUnit.Prepare;
+  end;
 end;
 
 function TSQLiteSymbolStore.SymbolFactsSelectCols: string;
@@ -4053,6 +4140,17 @@ begin
     (the edge says so) and "not resolved at all". It is deliberately NOT a
     substitute for a local edge: a ref never carries both. }
   TryExec('ALTER TABLE refs ADD COLUMN external_target TEXT');
+  // N-06: unit_uses rows extracted from an include directive carry the absolute
+  // .inc path and the host line of the directive (NULL = the unit's own text).
+  // The partial index serves editors and the .inc host-invalidation lookup.
+  TryExec('ALTER TABLE unit_uses ADD COLUMN origin_path TEXT');
+  TryExec('ALTER TABLE unit_uses ADD COLUMN include_line INTEGER');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_unit_uses_origin ON unit_uses(origin_path) WHERE origin_path IS NOT NULL');
+  // The columns may have just appeared, and the constructor may already have
+  // built the unit_uses statements without them (it prepares BEFORE Migrate on a
+  // schema-current DB): forget the memo and re-point them.
+  FHasUseOriginCols:= -1;
+  ConfigureUnitUseStatements;
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -4740,19 +4838,10 @@ begin
   FQInsertCompilerFinding.Prepare;
 
   // v0.40.4: uses-clause queries
-  FQInsertUnitUse:= NewQuery(
-    'INSERT INTO unit_uses ' + '(file_id, unit_name, unit_name_norm, section, in_path, ' + ' target_file_id, start_line, start_col, end_line, end_col) ' +
-    'VALUES (:fid, :un, :unn, :sec, :inp, NULL, :sl, :sc, :el, :ec)');
-  FQInsertUnitUse.Params.ParamByName('fid').DataType:= ftLargeint;
-  FQInsertUnitUse.Params.ParamByName('un' ).DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('unn').DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('sec').DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('inp').DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('sl' ).DataType:= ftInteger;
-  FQInsertUnitUse.Params.ParamByName('sc' ).DataType:= ftInteger;
-  FQInsertUnitUse.Params.ParamByName('el' ).DataType:= ftInteger;
-  FQInsertUnitUse.Params.ParamByName('ec' ).DataType:= ftInteger;
-  FQInsertUnitUse.Prepare;
+  // N-06: SQL text + param types of the three unit_uses statements depend on
+  // whether the DB has origin_path/include_line -- ConfigureUnitUseStatements
+  // (below, after all three exist) sets them.
+  FQInsertUnitUse:= NewQuery('');
 
   { PER-FILE RESUME. Prepared like every other per-file statement so the stamp
     costs a bind, not a parse, on a walk of thousands of files. }
@@ -4761,17 +4850,9 @@ begin
   FQDeleteFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
   FQDeleteFileUnitUses.Prepare;
 
-  FQGetFileUnitUses:= NewQuery(
-    'SELECT unit_name, unit_name_norm, section, in_path, ' + '       target_file_id, start_line, start_col, end_line, end_col ' + 'FROM unit_uses WHERE file_id = :fid ' +
-    'ORDER BY section, start_line, start_col');
-  FQGetFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
-  FQGetFileUnitUses.Prepare;
-
-  FQFindUsersOfUnit:= NewQuery(
-    'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' + '       target_file_id, start_line, start_col, end_line, end_col ' +
-    'FROM unit_uses WHERE unit_name_norm = :un');
-  FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
-  FQFindUsersOfUnit.Prepare;
+  FQGetFileUnitUses:= NewQuery('');
+  FQFindUsersOfUnit:= NewQuery('');
+  ConfigureUnitUseStatements;
 
   // v(ADP3 T4f, register K34): an UPDATE statement resolving target_file_id from
   // SQL used to be built and Prepare'd here. It was DEAD -- nothing ever called
@@ -10666,6 +10747,21 @@ begin
   FQInsertUnitUse.ParamByName('sc').AsInteger:= AUse.StartCol;
   FQInsertUnitUse.ParamByName('el').AsInteger:= AUse.EndLine;
   FQInsertUnitUse.ParamByName('ec').AsInteger:= AUse.EndCol;
+  // N-06: a DB without the columns stores no origin (Migrate adds them on every
+  // writable open, so the guard is defensive).
+  if HasUseOriginCols then
+  begin
+    if AUse.OriginPath = '' then
+    begin
+      FQInsertUnitUse.ParamByName('op').Clear;
+      FQInsertUnitUse.ParamByName('il').Clear;
+    end
+    else
+    begin
+      FQInsertUnitUse.ParamByName('op').AsString := AUse.OriginPath;
+      FQInsertUnitUse.ParamByName('il').AsInteger:= AUse.IncludeLine;
+    end;
+  end;
   FQInsertUnitUse.ExecSQL;
 end;
 
@@ -10695,6 +10791,13 @@ begin
         U.StartCol := FQGetFileUnitUses.FieldByName('start_col' ).AsInteger;
         U.EndLine  := FQGetFileUnitUses.FieldByName('end_line'  ).AsInteger;
         U.EndCol   := FQGetFileUnitUses.FieldByName('end_col'   ).AsInteger;
+        U.OriginPath := '';
+        U.IncludeLine:= 0;
+        if FQGetFileUnitUses.FindField('origin_path') <> nil then { N-06: NULL -> '' / 0 }
+        begin
+          U.OriginPath := FQGetFileUnitUses.FieldByName('origin_path' ).AsString;
+          U.IncludeLine:= FQGetFileUnitUses.FieldByName('include_line').AsInteger;
+        end;
         List.Add(U);
         FQGetFileUnitUses.Next;
       end;
@@ -10798,6 +10901,13 @@ begin
         U.StartCol := FQFindUsersOfUnit.FieldByName('start_col' ).AsInteger;
         U.EndLine  := FQFindUsersOfUnit.FieldByName('end_line'  ).AsInteger;
         U.EndCol   := FQFindUsersOfUnit.FieldByName('end_col'   ).AsInteger;
+        U.OriginPath := '';
+        U.IncludeLine:= 0;
+        if FQFindUsersOfUnit.FindField('origin_path') <> nil then { N-06: NULL -> '' / 0 }
+        begin
+          U.OriginPath := FQFindUsersOfUnit.FieldByName('origin_path' ).AsString;
+          U.IncludeLine:= FQFindUsersOfUnit.FieldByName('include_line').AsInteger;
+        end;
         List.Add(U);
         FQFindUsersOfUnit.Next;
       end;
