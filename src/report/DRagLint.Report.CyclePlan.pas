@@ -4433,10 +4433,12 @@ begin
     { the facts the playbook already prints: MANUAL items (a base class the F5
       gate refused is one, kind base-class; an allowed extraction is mechanical
       since E18 T7), interface edges the index could not resolve, and the
-      per-file steps it can only describe }
+      per-file steps it can only describe. A symbol is named at its declaration
+      line (Sym.StartLine), as the plan, outline and query name it -- not at
+      Decl.First, the start of the move range, which includes its doc-comment }
     for var M in FManual do
       Add((if M.Refusal <> '' then M.Refusal else if M.Kind = mvBlocked then 'blocked-symbol' else 'manual-edit'),
-        M.Sym.Name, PathOf(M.Sym.FileId), M.Reason, M.Decl.First);
+        M.Sym.Name, PathOf(M.Sym.FileId), M.Reason, M.Sym.StartLine);
     if pPlan.HasIntf then
     begin
       for var A in FComp do
