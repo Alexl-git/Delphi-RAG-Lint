@@ -430,6 +430,16 @@ type
     /// <remarks>Text-based, conservative: a block shape it does not model reads
     /// as closed, which only declines.</remarks>
     function LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
+    /// <summary>Review 2026-10-23 (N-07): whether ARef sits inside an anonymous
+    /// method's body within its enclosing routine.</summary>
+    /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
+    /// consulted.</param>
+    /// <returns>True inside an anonymous `function` / `procedure` body, and when
+    /// the routine's text cannot be read; False otherwise.</returns>
+    /// <remarks>An anonymous method is a `function` / `procedure` keyword right
+    /// after `:=`, `(`, `,` or `[`; its body runs from its `begin` to the
+    /// matching `end`.</remarks>
+    function InsideAnonymousMethod(const ARef: TReference): Boolean;
 
     /// <summary>The type symbols of AFileId and its root symbol (the one with no
     /// parent), read once per file and cached.</summary>
@@ -4655,6 +4665,8 @@ begin
   //     falls through to the field rung.
   if SameText(AReceiverExpr, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
   begin
+    { Review 2026-10-23: inside an anonymous method Result is ITS result. }
+    if InsideAnonymousMethod(ACallRef) then Exit;
     RetType:= SignatureReturnType(Encl.Signature);
     if RetType <> '' then Exit(ResolveTypeNameToSymbol(RetType, ACallRef.FileId));
   end;
@@ -5454,6 +5466,46 @@ begin
     if IsFor and Single and (Depth = 0) and (Paren = 0) and (T = ';') then Exit(False); { its one statement }
   end;
   Result:= True;
+end;
+
+function TCallResolver.InsideAnonymousMethod(const ARef: TReference): Boolean;
+var
+  Encl   : TSymbol         ;
+  Lines  : TStringList     ;
+  Toks   : TArray<TCodeTok>;
+  K      : Integer         ;
+  T      : string          ;
+  P      : string          ;
+  Depth  : Integer         ;
+  Pending: Integer         ;
+  Opened : TArray<Integer> ;
+begin
+  Encl := SymbolById(ARef.EnclosingSymbolId);
+  Lines:= LinesOf(ARef.FileId);
+  if (Lines = nil) or (Encl.ImplStartLine <= 0) then Exit(True);
+  Toks   := CodeTokens(Lines, Encl.ImplStartLine, 1, ARef.StartLine, ARef.StartCol);
+  Depth  := 0;
+  Pending:= 0;
+  Opened := [];
+  for K:= 0 to High(Toks) do
+  begin
+    T:= Toks[K].Text;
+    P:= (if K > 0 then Toks[K - 1].Text else '');
+    if ((T = 'function') or (T = 'procedure')) and ((P = ':=') or (P = '(') or (P = ',') or (P = '[')) then
+      Inc(Pending)                                  { an anonymous method's header }
+    else if (T = 'begin') and (Pending > 0) then
+    begin
+      Dec(Pending);
+      Opened:= Opened + [Depth];                    { its body: closes back at Depth }
+      Inc(Depth);
+    end
+    else
+    begin
+      Inc(Depth, BlockDelta(T));
+      if (Length(Opened) > 0) and (Depth = Opened[High(Opened)]) then SetLength(Opened, Length(Opened) - 1);
+    end;
+  end;
+  Result:= (Length(Opened) > 0) or (Pending > 0);
 end;
 
 function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
