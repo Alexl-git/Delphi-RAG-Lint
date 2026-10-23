@@ -359,6 +359,14 @@ pure-diagnostic verbs are broken out in 2b.
 `--out` is accepted everywhere `--output` is, and is deliberately undocumented in
 `--help` (owner ruling 2026-09-22): scripts that use it keep working; write `--output`.
 
+**Exit codes common to every verb.** An unknown VERB exits `2` (`ERROR: unknown command: X`, then the
+banner). An unknown FLAG, and any other fatal (`FATAL: <class>: <message>` on stderr), exits `3` -- the
+same code `ask`, `menu-tree` and `menu-drift` use for a STALE INDEX. Tell the two apart by stderr, not
+by the code: a stale index names the reindex command, a fatal starts `FATAL:`. Left as is on purpose
+(2026-10-23): guards and documented verb contracts (`proptree --progress-interval` on a convert verb,
+`convert-apply --validate-all-blocks`) pin the unknown-flag `3`. A verb's own line in `--help` can
+define further codes.
+
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
 |------|--------------|
