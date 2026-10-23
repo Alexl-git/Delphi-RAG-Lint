@@ -80,6 +80,10 @@ is repeatable. Only public entries (not `internal` / `planned` / removed) take b
 A shipped or experimental entry that no IDE menu, context menu, About button or tool window reaches must say WHY, so a missing menu is a decision and not an oversight. eaturegen review-access sets two optional entry fields: ccess (cli-only = a verb only, epo-tooling = a script or gate run from a clone, standalone-app = a separate program with its own UI) and ccessReviewed {date, by}. udit reports 
 o-access until one is set. An entry that gets an IDE surface later drops the field.
 
+## Verbs that take no flags (noFlags)
+
+`audit` reports `no-flags` for a cli surface that lists no flags. A verb that genuinely takes none (`ghost-recover`, `selftest`, `contrast-selftest`) says so with the optional entry-level field `noFlags: true` (boolean, in `entry.schema.json`); `audit` then skips `no-flags` for that entry. Any other entry with no flags still gets `no-flags`. The marker is the entry owner's claim: remove it when the verb gains a flag.
+
 ## This entry
 
 `featuregen` is registered as an `internal` entry owned by CONVERTER (the stream that

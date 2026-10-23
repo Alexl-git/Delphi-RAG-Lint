@@ -53,7 +53,7 @@ function SurfaceHash(const pEntry: TFeatureEntry; const pLive: TLiveSurface; con
 /// <param name="pHelp">Engine help for surface-changed (see SurfaceHash).</param>
 /// <param name="pToday">The date stale-verified counts from.</param>
 /// <returns>Findings ordered by entry id (ordinal), then in the order thin-leaf, no-usage, no-flags, no-steps, no-questions, no-access,
-/// stale-verified, surface-changed, no-wiki-page. no-usage / no-flags concern cli surfaces; no-steps concerns ide-menu,
+/// stale-verified, surface-changed, no-wiki-page. no-usage / no-flags concern cli surfaces (no-flags is skipped for an entry with noFlags: true); no-steps concerns ide-menu,
 /// ide-context, ide-about and tool-window surfaces. surface-changed needs a stored verified.surfaceHash.</returns>
 function AuditRegistry(const pReg: TRegistry; const pRepo: string; const pLive: TLiveSurface; const pHelp: TLiveHelp;
   pToday: TDateTime): TArray<TAuditFinding>;
@@ -266,7 +266,7 @@ begin
         Add('thin-leaf');
       if lNoUsage then
         Add('no-usage');
-      if lNoFlags then
+      if lNoFlags and not lE.NoFlags then
         Add('no-flags');
       if lNoSteps then
         Add('no-steps');

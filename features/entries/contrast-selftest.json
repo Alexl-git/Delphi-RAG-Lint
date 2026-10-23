@@ -16,6 +16,7 @@
   ],
   "audience": "agent",
   "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
+  "noFlags": true,
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

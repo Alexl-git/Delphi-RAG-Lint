@@ -2790,6 +2790,15 @@ begin
     + ' "summary": "Reachable from the IDE", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "ide-menu", "path": "drag-lint > Has menu" } ], "audience": "both" }', TEncoding.ASCII);
   lF := AuditOf(lCopy, nil, nil, Date);
   Check('Audit.NoAccessPositiveControl', not HasKind(lF, 'has-menu', 'no-access'));
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\nf-marked.json'),
+    '{ "id": "nf-marked", "title": "NF", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "No flags", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "nfmarked", "usage": "drag-lint nfmarked" } ], "audience": "both", "noFlags": true }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\nf-bare.json'),
+    '{ "id": "nf-bare", "title": "NF", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "No flags", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "nfbare", "usage": "drag-lint nfbare" } ], "audience": "both" }', TEncoding.ASCII);
+  lF := AuditOf(lCopy, nil, nil, Date);
+  Check('Audit.NoFlagsMarkerSilencesNoFlags', not HasKind(lF, 'nf-marked', 'no-flags'));
+  Check('Audit.NoFlagsMarkerNegativeControl', HasKind(lF, 'nf-bare', 'no-flags'));
 end;
 
 procedure TestCmdReviewAccess(const pRepo: string);
