@@ -5457,64 +5457,75 @@ begin
 end;
 
 function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+var
+  Toks: TArray<TCodeTok>;
 
-  { The identifier ALine starts with, '' when it starts with anything else. }
-  function LeadingIdent(const ALine: string): string;
-  var
-    P: Integer;
+  { True when token AIdx exists and is an identifier. }
+  function IsName(AIdx: Integer): Boolean;
   begin
-    Result:= '';
-    if (ALine = '') or not IsIdentStart(ALine[1]) then Exit;
-    P:= 1;
-    while (P <= Length(ALine)) and IsIdentPart(ALine[P]) do Inc(P);
-    Result:= Copy(ALine, 1, P - 1);
+    Result:= (AIdx <= High(Toks)) and IsIdentStart(Toks[AIdx].Text[1]);
   end;
 
-  { True when ARest -- the text after a name -- is a declaration's `=` or `:`,
-    not an assignment's `:=`. }
-  function DeclShape(const ARest: string): Boolean;
-  var
-    R: string;
+  { True when token AIdx exists and is a declaration's `=` or `:`. }
+  function IsDeclMark(AIdx: Integer): Boolean;
   begin
-    R:= TrimLeft(ARest);
-    Result:= (R <> '') and ((R[1] = '=') or ((R[1] = ':') and not R.StartsWith(':=')));
+    Result:= (AIdx <= High(Toks)) and ((Toks[AIdx].Text = '=') or (Toks[AIdx].Text = ':'));
   end;
 
 const
-  { A line starting with one of these ends a const / type section. }
+  { After a `;`, one of these ends a const / type section. }
   SECTION_END = '|var|begin|procedure|function|constructor|destructor|label|asm|threadvar|';
 var
-  S      : TSymbol    ;
-  Lines  : TStringList;
-  I      : Integer    ;
-  T      : string     ;
-  W      : string     ;
-  N      : string     ;
-  InConst: Boolean    ;
+  S     : TSymbol    ;
+  Lines : TStringList;
+  K, J  : Integer    ;
+  T     : string     ;
+  Names : string     ;
+  Paren : Integer    ;
+  InSect: Boolean    ;
 begin
   if FLocalDecls.TryGetValue(ARoutineId, Result) then Exit;
-  Result := '|';
-  S      := SymbolById(ARoutineId);
-  Lines  := LinesOf(AFileId);
-  InConst:= False;
+  Result:= '|';
+  S     := SymbolById(ARoutineId);
+  Lines := LinesOf(AFileId);
   if (Lines <> nil) and (S.ImplStartLine > 0) then
-    for I:= S.ImplStartLine to Min(S.ImplEndLine, Lines.Count) do
+  begin
+    { Review 2026-10-23: tokens, not line starts -- `begin const X = 1;` declares
+      X mid-line; a parameter list's `const A` (inside parentheses) does not. }
+    Toks  := CodeTokens(Lines, S.ImplStartLine, 1, Min(S.ImplEndLine, Lines.Count) + 1, 1);
+    Paren := 0;
+    InSect:= False;
+    for K:= 0 to High(Toks) do
     begin
-      T:= LowerCase(Trim(Lines[I - 1]));
-      W:= LeadingIdent(T);
-      if (W = 'const') or (W = 'var') or (W = 'type') then
+      T:= Toks[K].Text;
+      if T = '(' then Inc(Paren)
+      else if T = ')' then Dec(Paren)
+      else if Paren <> 0 then Continue
+      else if (T = 'const') or (T = 'var') or (T = 'type') then
       begin
-        { `const` / `type` open a section; `const X = 1;` / `var X := F;` /
-          `type T = ...` on one line is also a declaration of X. }
-        InConst:= W <> 'var';
-        T:= TrimLeft(Copy(T, Length(W) + 1, MaxInt));
-        N:= LeadingIdent(T);
-        if (N <> '') and DeclShape(Copy(T, Length(N) + 1, MaxInt)) then Result:= Result + N + '|';
+        { The name list after the keyword: `const X = 1`, `var A, B: T`, `var X := F`. }
+        InSect:= T <> 'var';
+        Names := '';
+        J     := K + 1;
+        while IsName(J) do
+        begin
+          Names:= Names + Toks[J].Text + '|';
+          Inc(J);
+          if (J <= High(Toks)) and (Toks[J].Text = ',') then Inc(J) else Break;
+        end;
+        if (Names <> '') and (IsDeclMark(J) or ((J <= High(Toks)) and (Toks[J].Text = ':='))) then
+          Result:= Result + Names;
       end
-      else if Pos('|' + W + '|', SECTION_END) > 0 then InConst:= False
-      else if InConst and (W <> '') and DeclShape(Copy(T, Length(W) + 1, MaxInt)) then
-        Result:= Result + W + '|';
+      else if InSect and (T = ';') and IsName(K + 1) then
+      begin
+        { A const / type section goes on with `Name = ..` / `Name: T = ..`; a
+          record's closing `end` keeps it open; anything else ends it. }
+        if Pos('|' + Toks[K + 1].Text + '|', SECTION_END) > 0 then InSect:= False
+        else if IsDeclMark(K + 2) then Result:= Result + Toks[K + 1].Text + '|'
+        else InSect:= Toks[K + 1].Text = 'end';
+      end;
     end;
+  end;
   FLocalDecls.Add(ARoutineId, Result);
 end;
 
