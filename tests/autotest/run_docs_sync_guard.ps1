@@ -1261,16 +1261,14 @@ $proseDocs = [ordered]@{
 # are not drag-lint.exe flags and can never be in its --help. Only that code SPAN is dropped from
 # the F3 scan (anchored at line start); prose after the span, and other lines, are still checked.
 # Positive control: CONTROL F3s below.
-$SwitchLineRx = '(?m)^(?:\|\s*)?`drag-lint-switch[^`
-]*`'
+# Escaped \r\n, never a raw newline: git checks this file out CRLF on main and LF in worktrees.
+$SwitchLineRx = '(?m)^(?:\|\s*)?`drag-lint-switch[^`\r\n]*`'
 # Prose on a switch line may also name the drag-lint-switch.exe's OWN flags again outside the span
 # (AI-USAGE row: "`--off` backs the whole file up ... `--on` restores ... `--template <file>`").
 # Only these five names, only on a line that starts with the switch span, are dropped; any other
 # flag on that line is still an F3 candidate.
 $SwitchExeFlagRx = '--(?:vscode|status|on|off|template)(?![A-Za-z0-9-])'
-$SwitchStartRx   = '(?m)^(?:\|\s*)?`drag-lint-switch[^`
-]*`[^
-]*$'
+$SwitchStartRx   = '(?m)^(?:\|\s*)?`drag-lint-switch[^`\r\n]*`[^\r\n]*'
 function Get-ProseFlagSet([string]$Text) {
   $t = [regex]::Replace($Text, $SwitchStartRx, { param($m) [regex]::Replace($m.Value, $SwitchExeFlagRx, '') })
   return Get-FlagSet ([regex]::Replace($t, $SwitchLineRx, '')) $ProseRx
