@@ -913,6 +913,11 @@ var
   DefOff   : TArray<string>          ;
   { C2: the file's lines for marker suppression, read once on first use. }
   MarkLines: TArray<string>          ;
+  { I1: partner-site lines and verdict for a duplicate-code finding. }
+  RLines   : TArray<string>          ;
+  PartnerOk: Boolean                 ;
+  RM       : TReviewMarker           ;
+  DataObj  : TJSONObject             ;
 
   { True when ARuleId ships OFF by default, so ShouldKeep may only publish it
     when the project's drag-lint-lint.json opts back in via "enabled".
@@ -1005,6 +1010,14 @@ begin
       DiagObj.AddPair('source', 'drag-lint');
       DiagObj.AddPair('code'   , F.RuleId );
       DiagObj.AddPair('message', F.Message);
+      { I2: a routine-metric marker is hashed against the MEASURED value, so the
+        codeAction needs it back -- publish it as data.metric. }
+      if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId) then
+      begin
+        DataObj:= TJSONObject.Create;
+        DataObj.AddPair('metric', TJSONNumber.Create(F.Metric));
+        DiagObj.AddPair('data', DataObj);
+      end;
 
       Result.AddElement(DiagObj);
     end; // for
@@ -1051,6 +1064,26 @@ begin
     for F in TCloneChecker.Check(AFile) do
     begin
       if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
+      { I1 (C2): the same marker predicate as the lint loop above and as the CLI --
+        a dl:ok duplicate-code on the anchor suppresses, and so does one on the
+        PARTNER site (RelatedLine), verified against the partner's own window. }
+      if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, F.EndLine,
+           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
+      if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
+      begin
+        if SameText(F.RelatedFile, AFile) then RLines:= MarkLines
+        else RLines:= TLiveDocuments.ReadLines(F.RelatedFile);
+        PartnerOk:= False;
+        if F.RelatedLine <= Length(RLines) then
+          for RM in TReviewMarkers.Parse(RLines[F.RelatedLine - 1]) do
+            if SameText(RM.RuleId, F.RuleId) then
+            begin
+              PartnerOk:= (RM.Hash = '') or SameText(RM.Hash, TReviewMarkers.HashWindow(RLines, F.RelatedLine - 1));
+              Break;
+            end;
+        if PartnerOk then Continue;
+      end;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
       DiagObj := TJSONObject.Create;
       StartObj:= TJSONObject.Create;
@@ -1125,6 +1158,8 @@ var
   RangeObj: TJSONObject;
   StartObj: TJSONObject;
   EndObj  : TJSONObject;
+  DataObj : TJSONObject;
+  MetricVal: Integer;
 
   function IntField(const AName: string; ADefault: Integer): Integer;
   begin
@@ -1162,6 +1197,14 @@ begin
       DiagObj.AddPair('source'  , 'drag-lint');
       DiagObj.AddPair('code'    , Rule);
       DiagObj.AddPair('message' , Obj.GetValue<string>('message', ''));
+      { I2: the full-rules path is where routine-metric findings reach the gutter;
+        carry the measured value as data.metric so "Mark as reviewed" can hash it. }
+      if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(Rule) and Obj.TryGetValue<Integer>('metric', MetricVal) then
+      begin
+        DataObj:= TJSONObject.Create;
+        DataObj.AddPair('metric', TJSONNumber.Create(MetricVal));
+        DiagObj.AddPair('data', DataObj);
+      end;
       Result.AddElement(DiagObj);
     end; // for
   finally
@@ -1188,6 +1231,7 @@ var
   FileUri: string;
   EditsArray: TJSONArray;
   ChangesMap: TJSONObject;
+  MarkHash: string;
 begin
   Result:= TJSONArray.Create;
   if (ADiagnostics = nil) or not TFile.Exists(AFile) then Exit;
@@ -1243,7 +1287,19 @@ begin
 
       { Generate the new line with the marker inserted. The message is used as the
         auto-generated reason (comment explaining why this finding was accepted). }
-      NewLineText:= TReviewMarkers.InsertInto(LineText, DiagCode, DiagMsg);
+      { I2: hash exactly as verification does (CLI DoAllow): HashWindow over the
+        anchor line, bound to the published metric for a routine-metric rule. A
+        metric rule without its metric gets NO action -- the marker could never
+        verify (the same refusal as the allow verb). }
+      MarkHash:= TReviewMarkers.HashWindow(Lines.ToStringArray, DiagLine - 1);
+      if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(DiagCode) then
+      begin
+        var DData := Diag.GetValue('data') as TJSONObject;
+        var DMetric := if DData <> nil then DData.GetValue('metric') else nil;
+        if DMetric = nil then Continue;
+        MarkHash:= DRagLint.Lint.RuleCatalog.MetricHash(MarkHash, StrToIntDef(DMetric.Value, 0));
+      end;
+      NewLineText:= TReviewMarkers.InsertInto(LineText, DiagCode, DiagMsg, MarkHash);
       if NewLineText = LineText then Continue; { no change }
 
       { Build the code action with text edit. LSP WorkspaceEdit.changes is a map from

@@ -482,7 +482,7 @@ type
     /// carries AExpectedHash. Only the FIRST marker for the rule on each line is
     /// consulted, exactly as ApplyLineMarkers does. A placeholder, malformed or
     /// stale hash suppresses nothing. False when AStartLine is outside ALines.</returns>
-    /// <remarks>The REPORTER side of ApplyLineMarkers -- the unused, stale,
+    /// <remarks>Excludes the duplicate-code PAIR rule: the partner-site check (a marker on RelatedLine) needs the finding, so callers apply it themselves after this. The REPORTER side of ApplyLineMarkers -- the unused, stale,
     /// placeholder and reason hints -- stays CLI-only; this answers only "is
     /// this finding suppressed". Pure; thread-safe.</remarks>
     class function Suppresses(const ALines: TArray<string>; const ARuleId: string;

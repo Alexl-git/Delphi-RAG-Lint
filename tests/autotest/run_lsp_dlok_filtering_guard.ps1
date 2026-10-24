@@ -29,6 +29,9 @@
     ignore      legacy `drag-lint:ignore with-statement`   -> 1
     span        hashed marker on the statement's END line  -> 1
     codeaction  codeAction -> apply the edit -> save -> republish
+  Plus (I1/I2, fix round 1): duplicate-code with a marker on the anchor, on the
+  partner and a stale one; and codeAction round trips for a lone-keyword anchor
+  (bare-except) and a routine-metric rule (data.metric), and no action without it.
 
   Run from any CWD, pwsh 7. -Exe defaults to the lane engine.
 #>
@@ -41,6 +44,7 @@ try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $Rule = 'with-statement'
+$script:LspArgs = 'lsp'   # the metric variants switch it to 'lsp --full-rules'
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
   $c = if ($ok) { 'Green' } else { 'Red' }
@@ -118,7 +122,7 @@ function Invoke-Lsp([string]$PasFile, [object[]]$Extra) {
   $dir = Split-Path $PasFile
   $in = Join-Path $dir 'lsp-in.txt'; $so = Join-Path $dir 'lsp-out.txt'; $se = Join-Path $dir 'lsp-err.txt'
   [System.IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object System.Text.UTF8Encoding($false)))
-  Start-Process $Exe -ArgumentList 'lsp' -WorkingDirectory $dir -RedirectStandardInput $in `
+  Start-Process $Exe -ArgumentList $script:LspArgs -WorkingDirectory $dir -RedirectStandardInput $in `
     -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait | Out-Null
   $out = if (Test-Path $so) { [System.IO.File]::ReadAllText($so) } else { '' }
   return @{ Uri = $uri; Frames = @(Read-Frames $out) }
@@ -193,6 +197,130 @@ if ($edit) {
   Check 'codeaction : the other finding (line 13) is still published' ($ca -contains 13) ("lsp=[" + ($ca -join ',') + "]")
 }
 
+# ---------- I1: duplicate-code (clone) findings honour a marker on EITHER end ----------
+Write-Host ''
+Write-Host 'duplicate-code: marker on the anchor, on the partner, and neither' -ForegroundColor Cyan
+$Rule = 'duplicate-code'
+$CloneBody = @(
+  "  LTotal := LTotal + ComputeWeight(ASource.Alpha, ASource.Beta);"
+  "  if LTotal > FUpperBound then LTotal := FUpperBound;"
+  "  LScaled := Round(LTotal * FScaleFactor) + FOffsetBase;"
+  "  LBuffer.Append(Format('%s=%d', [ASource.Caption, LScaled]));"
+  "  if not TryResolveTarget(ASource.Handle, LTarget) then Exit(False);"
+  "  LTarget.Rebind(LScaled, FUpperBound - LTotal);"
+  "  FHistory.Add(TSample.Create(LTarget.Id, LScaled, Now));"
+  "  while FHistory.Count > FRetentionLimit do FHistory.Delete(0);"
+  "  LRatio := LScaled / (FUpperBound + FOffsetBase + 1);"
+  "  if LRatio < FMinimumRatio then FlagUnderflow(ASource.Caption, LRatio);"
+  "  LStatus := DescribeRatio(LRatio, FMinimumRatio, FUpperBound);"
+  "  FLogger.Trace('rebind', LStatus, LTarget.Id, LScaled, LRatio);"
+) -join "`r`n"
+function DupRoutine([string]$Name) {
+@"
+function $Name(const ASource: TSourceRec): Boolean;
+var
+  LTotal, LScaled: Integer;
+  LRatio: Double;
+  LTarget: TTarget;
+  LBuffer: TStringBuilder;
+  LStatus: string;
+begin
+  Result := True;
+  LTotal := 0;
+  LBuffer := TStringBuilder.Create;
+$CloneBody
+  LBuffer.Free;
+end;
+"@
+}
+function New-DupFixture([string]$Name) {
+  $dir = Join-Path $WorkDir $Name
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  $f = Join-Path $dir 'uDup.pas'
+  $txt = "unit uDup;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nuses System.SysUtils;`r`n`r`n" +
+         (DupRoutine 'One') + "`r`n`r`n" + (DupRoutine 'Two') + "`r`n`r`nend.`r`n"
+  Write-Ascii $f (($txt -replace "`r`n", "`n") -replace "`n", "`r`n")
+  return $f
+}
+$dupNone = New-DupFixture 'dupnone'
+$cli0 = CliLines $dupNone
+Check 'SETUP: lint reports exactly one duplicate-code finding' ($cli0.Count -eq 1) ("cli=[" + ($cli0 -join ',') + "]")
+if ($cli0.Count -eq 1) {
+  $anchor = [int]$cli0[0]
+  Verify 'dup none (POSITIVE CONTROL)' $dupNone 1 | Out-Null
+  $dupA = New-DupFixture 'dupanchor'
+  & $Exe allow $dupA --fix-line $anchor --fix-rule $Rule --apply 2>&1 | Out-Null
+  Check 'SETUP: allow wrote the anchor marker' ((([IO.File]::ReadAllLines($dupA))[$anchor - 1]) -match 'dl:ok duplicate-code@[0-9a-f]{4}')
+  Verify 'dup marker on the ANCHOR end' $dupA 0 | Out-Null
+  $partner = 0
+  $m = [regex]::Match(((& $Exe lint $dupNone --json 2>$null) -join "`n"), 'also at [^"]*?:(\d+)')
+  if ($m.Success) { $partner = [int]$m.Groups[1].Value }
+  Check 'SETUP: the partner line is known' ($partner -gt 0) "partner=$partner"
+  if ($partner -gt 0) {
+    $dupB = New-DupFixture 'duppartner'
+    & $Exe allow $dupB --fix-line $partner --fix-rule $Rule --apply 2>&1 | Out-Null
+    Check 'SETUP: allow wrote the partner marker' ((([IO.File]::ReadAllLines($dupB))[$partner - 1]) -match 'dl:ok duplicate-code@[0-9a-f]{4}')
+    Verify 'dup marker on the PARTNER end' $dupB 0 | Out-Null
+    $dupS = New-DupFixture 'dupstale'
+    $ls = [IO.File]::ReadAllLines($dupS)
+    $ls[$partner - 1] += "  // dl:ok duplicate-code@$wrong"
+    Write-Ascii $dupS (($ls -join "`r`n") + "`r`n")
+    Verify 'dup STALE partner hash suppresses nothing' $dupS 1 | Out-Null
+  }
+}
+
+# ---------- I2: codeAction hashes the way verification does ----------
+# The diagnostic is taken from the REAL publish (so data.metric travels), the edit
+# applied, the file saved, and the next publish must drop the finding like lint.
+function Invoke-CodeActionRoundTrip([string]$Name, [string]$PasFile, [string]$RuleId) {
+  $script:Rule = $RuleId
+  $r1 = Invoke-Lsp $PasFile @()
+  $pub = @($r1.Frames | Where-Object { $_.method -eq 'textDocument/publishDiagnostics' })[-1]
+  $diag = @($pub.params.diagnostics | Where-Object { $_.code -eq $RuleId })[0]
+  Check "$Name : the finding is published" ($null -ne $diag)
+  if (-not $diag) { return }
+  $req = @{ jsonrpc='2.0'; id=2; method='textDocument/codeAction';
+            params=@{ textDocument=@{ uri=$r1.Uri }; range=$diag.range; context=@{ diagnostics=@($diag) } } }
+  $r2 = Invoke-Lsp $PasFile @($req)
+  $resp = @($r2.Frames | Where-Object { $_.id -eq 2 }) | Select-Object -First 1
+  $edit = $null
+  if ($resp -and $resp.result) {
+    $act = @($resp.result)[0]
+    if ($act) { $chg = $act.edit.changes.PSObject.Properties | Select-Object -First 1; if ($chg) { $edit = @($chg.Value)[0] } }
+  }
+  Check "$Name : codeAction returned a text edit" ($null -ne $edit) ($(if ($edit) { $edit.newText } else { 'no edit' }))
+  if ($edit) {
+    $lines = [System.IO.File]::ReadAllLines($PasFile)
+    $lines[[int]$edit.range.start.line] = $edit.newText
+    Write-Ascii $PasFile (($lines -join "`r`n") + "`r`n")
+    Verify "$Name (after save)" $PasFile 0 | Out-Null
+  }
+}
+function New-RoutineFixture([string]$Name) {
+  $dir = Join-Path $WorkDir $Name
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  $f = Join-Path $dir 'uP.pas'
+  $ls = @('unit uP;','','interface','','procedure A(X: TObject; B, C, D, E, F, G, H, I, J: Integer);','','implementation','',
+          'procedure A(X: TObject; B, C, D, E, F, G, H, I, J: Integer);','begin','  try','    X.Free;','  except','    X := nil;','  end;','end;','','end.')
+  Write-Ascii $f (($ls -join "`r`n") + "`r`n")
+  return $f
+}
+Write-Host ''
+Write-Host 'codeAction round trip: lone-keyword anchor (bare-except) and a metric rule' -ForegroundColor Cyan
+Invoke-CodeActionRoundTrip 'bare-except (anchor on the lone except)' (New-RoutineFixture 'cabare') 'bare-except'
+# routine-metric rules reach the gutter only through the full-rules path (out-of-process lint --json)
+$script:LspArgs = 'lsp --full-rules'
+Invoke-CodeActionRoundTrip 'metric rule too-many-parameters' (New-RoutineFixture 'cametric') 'too-many-parameters'
+# a metric diagnostic WITHOUT data.metric gets no action (the refusal `allow` makes)
+$script:Rule = 'too-many-parameters'
+$nm = New-RoutineFixture 'canometric'
+$nmDiag = @{ range = @{ start = @{ line = 8; character = 0 }; end = @{ line = 8; character = 9 } };
+             severity = 3; source = 'drag-lint'; code = 'too-many-parameters'; message = 'too many parameters' }
+$nmReq = @{ jsonrpc='2.0'; id=2; method='textDocument/codeAction';
+            params=@{ textDocument=@{ uri=('file:///' + ($nm -replace '\\', '/')) }; range=$nmDiag.range; context=@{ diagnostics=@($nmDiag) } } }
+$nmR = Invoke-Lsp $nm @($nmReq)
+$nmResp = @($nmR.Frames | Where-Object { $_.id -eq 2 }) | Select-Object -First 1
+Check 'metric rule without data.metric : NO action offered' ($null -ne $nmResp -and @($nmResp.result).Count -eq 0)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
