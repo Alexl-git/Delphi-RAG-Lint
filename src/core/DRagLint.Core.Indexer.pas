@@ -1150,7 +1150,9 @@ begin
     "unknown". Both halves fail toward re-parsing. }
   var MayResume: Boolean:= (FResumeFingerprint <> '') and
                            SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
-  if ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
+  // N-06: ...unless an include it took a uses clause from changed since its parse.
+  if ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
+    and not FStore.IncludeOriginsChanged(AFilePath) then
   begin
     Inc(FSkippedUpToDate);
     Exit;

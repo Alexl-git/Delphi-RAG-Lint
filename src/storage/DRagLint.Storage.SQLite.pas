@@ -898,6 +898,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      function IncludeOriginsChanged(const APath: string): Boolean;
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta reader.
       /// Tolerates a missing table (a DB from before schema_meta existed) and a missing
       /// key, both as '' -- callers treat that as "unknown", never as an error, exactly
@@ -4936,6 +4937,33 @@ begin
     Q.Free;
   end;
 end; // function
+
+function TSQLiteSymbolStore.IncludeOriginsChanged(const APath: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  if not HasUseOriginCols then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    // Same path match as FileIsUpToDate.
+    Q.SQL.Text:= 'SELECT DISTINCT u.origin_path, f.parsed_at FROM unit_uses u JOIN files f ON f.id = u.file_id ' +
+                 'WHERE (f.path = :p OR LOWER(f.path) = LOWER(:p)) AND u.origin_path IS NOT NULL';
+    Q.ParamByName('p').AsString:= NormalizeStoredPath(APath);
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var Inc_: string:= Q.Fields[0].AsString;
+      if (not TFile.Exists(Inc_))
+        or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > Q.Fields[1].AsLargeInt) then
+        Exit(True);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
 
 // INBOX 2.3: generic schema_meta reader. Tolerates a missing table (a DB from
 // before schema_meta existed) and a missing key, both as '' -- callers treat
