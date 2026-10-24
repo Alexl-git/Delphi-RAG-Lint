@@ -241,6 +241,26 @@ type
     /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
       out AResolvedUnit: string; out AAlreadyUsed: Boolean; APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
+    /// <summary>N-06: the two-store overload that also says WHY no edit was
+    /// computed when the reason is the uses clause living in an include.</summary>
+    /// <param name="ANameStore">As the two-store overload.</param>
+    /// <param name="AUnitStore">As the two-store overload.</param>
+    /// <param name="AName">As the two-store overload.</param>
+    /// <param name="AInFile">As the two-store overload.</param>
+    /// <param name="AResolvedUnit">As the two-store overload.</param>
+    /// <param name="AAlreadyUsed">As the two-store overload; a unit used through
+    /// an include counts as used.</param>
+    /// <param name="AReason">'' when an edit was computed or the usual causes
+    /// apply; the uses-in-include refusal text when the target section's only
+    /// uses entries come from an include (never edited, and a fresh clause
+    /// there would be a second uses clause).</param>
+    /// <param name="APreferInterface">As the two-store overload.</param>
+    /// <returns>The edits; empty with AReason set on the include refusal.</returns>
+    /// <remarks>Include rows are never the insertion anchor: the edit goes after
+    /// the last INLINE entry of the section.</remarks>
+    class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean; out AReason: string;
+      APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
   end;
 
   /// <remarks>
@@ -734,6 +754,31 @@ begin
   end;
 end;
 
+{ N-06: the anchor scan of TFindUnitRefactoring.Build. ALast = the textually last
+  INLINE entry of ASection (an include row is never the anchor: its coordinates
+  are in the .inc); AIncRow = the first include-sourced entry of ASection, or a
+  default record (FromInclude = False) when there is none. }
+procedure PickUsesAnchor(const AUses: TArray<TUnitUse>; ASection: TUnitUseSection;
+  out ALast, AIncRow: TUnitUse; out AHaveLast: Boolean);
+var
+  U: TUnitUse;
+begin
+  ALast:= Default(TUnitUse);
+  AIncRow:= Default(TUnitUse);
+  AHaveLast:= False;
+  for U in AUses do
+    if (U.Section = ASection) and U.FromInclude and not AIncRow.FromInclude then
+      AIncRow:= U;
+  for U in AUses do
+    if (U.Section = ASection) and not U.FromInclude then
+      if (not AHaveLast) or (U.StartLine > ALast.StartLine)
+         or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol)) then
+      begin
+        ALast:= U;
+        AHaveLast:= True;
+      end;
+end;
+
 class function TFindUnitRefactoring.Build(const AStore: ISymbolStore;
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
 begin
@@ -743,6 +788,15 @@ end;
 class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
   APreferInterface: Boolean): TArray<TTextEdit>;
+var
+  Reason: string;
+begin
+  Result:= Build(ANameStore, AUnitStore, AName, AInFile, AResolvedUnit, AAlreadyUsed, Reason, APreferInterface);
+end;
+
+class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;  // dl:ok too-many-parameters@896d, too-many-exit-points@8fee -- REVIEWED 2026-10-23: params = the 7-parameter overload plus the one N-06 out-reason (a record would only rename them); exits = six guard-clause exits (nothing found, self, already used, file not indexed, no keyword line) that predate N-06, whose own exit was folded into the else-if chain
+  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
+  out AReason: string; APreferInterface: Boolean): TArray<TTextEdit>;
 var
   Syms : TArray<TSymbol>;
   S    : TSymbol;
@@ -754,10 +808,12 @@ var
   UnitName: string;
   TargetSection: TUnitUseSection;
   LastInSection: TUnitUse; HaveLast: Boolean;
+  IncRow: TUnitUse;
   Edit: TTextEdit;
   Pair: TPair<string, Integer>;
 begin
   Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
+  AReason:= '';
 
   { 1. resolve the best declaring unit -- against ANameStore, which may be a
     DIFFERENT store than AUnitStore (the type being added to the uses clause
@@ -803,7 +859,8 @@ begin
 
     { 3. choose target section: implementation uses if present, else interface }
     HaveLast:= False;
-    var HasImpl: Boolean:= False; var HasIntf: Boolean:= False;
+    var HasImpl: Boolean:= False;
+    var HasIntf: Boolean:= False;
     for U in Uses_ do
     begin
       if U.Section = uusImplementation then HasImpl:= True;
@@ -815,12 +872,9 @@ begin
     else if HasIntf then TargetSection:= uusInterface
     else TargetSection:= uusImplementation; { fresh block goes to implementation }
 
-    { last entry in the chosen section -> append ', Best' after it }
-    for U in Uses_ do
-      if U.Section = TargetSection then
-        if (not HaveLast) or (U.StartLine > LastInSection.StartLine)
-           or ((U.StartLine = LastInSection.StartLine) and (U.StartCol > LastInSection.StartCol)) then
-        begin LastInSection:= U; HaveLast:= True; end;
+    { last entry in the chosen section -> append ', Best' after it. N-06: an
+      include row is never the anchor (its coordinates are in the .inc). }
+    PickUsesAnchor(Uses_, TargetSection, LastInSection, IncRow, HaveLast);
 
     if HaveLast then
     begin
@@ -830,6 +884,10 @@ begin
       Edit.EndLine:= 0; Edit.Text:= ', ' + Best;
       Result:= [Edit];
     end
+    else if IncRow.FromInclude then
+      { N-06: the section's uses clause lives in an include -- never edited, and
+        a fresh clause here would be a second uses clause. }
+      AReason:= IncludeUsesRefusal('find-unit', IncRow, AInFile)
     else
     begin
       { no uses clause in the file at all -> a fresh "uses Best;" block.

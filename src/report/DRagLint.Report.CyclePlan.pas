@@ -2698,6 +2698,10 @@ function TCyclePlanner.EntryText(const pF: TPlanFile; const pU: TUnitUse): strin
 var
   S: TStringBuilder;
 begin
+  { N-06: an include row's coordinates are inside the .inc, not pF.Lines --
+    name the unit (with its in-path) rather than copy host text. }
+  if pU.FromInclude then
+    Exit(if pU.InPath <> '' then Format('%s in ''%s''', [pU.UnitName, pU.InPath]) else pU.UnitName);
   if pU.StartLine = pU.EndLine then
     Exit(Copy(LineAt(pF.Lines, pU.StartLine), pU.StartCol, pU.EndCol - pU.StartCol));
   S:= TStringBuilder.Create;
@@ -2784,6 +2788,24 @@ begin
   Adds   := ListOf(FUsesAdd, pF.Fid, pSect);
   Dels   := ListOf(FUsesDel, pF.Fid, pSect);
   E      := Default(TFileEdit);
+  { N-06: a section whose uses entries come (partly) from an include is never
+    edited -- the .inc may be shared, and its coordinates are not this file's.
+    ONE manual edit at the include line names the refusal. }
+  { name the include entry the plan would remove when there is one, else the first }
+  var IncIdx: Integer:= -1;
+  for var I:= 0 to High(Entries) do
+    if Entries[I].FromInclude and ((IncIdx < 0) or Dels.Contains(LowerCase(Entries[I].UnitName))) then
+      if (IncIdx < 0) or not Dels.Contains(LowerCase(Entries[IncIdx].UnitName)) then IncIdx:= I;
+  if IncIdx >= 0 then
+  begin
+    E.Kind   := ekManual;
+    E.Refusal:= REFUSAL_USES_IN_INCLUDE;
+    E.First  := Entries[IncIdx].IncludeLine;
+    E.Last   := E.First;
+    E.Note   := IncludeUsesRefusal('cycles --fix', Entries[IncIdx], pF.Path);
+    EditList(pF.Fid).Add(E);
+    Exit;
+  end;
   if Length(Entries) = 0 then
   begin
     if Adds.Count = 0 then Exit;

@@ -142,7 +142,9 @@ type
       /// <remarks>A text scan, deliberately conservative: comments ({ }, (* *), //)
       /// and string literals are skipped, but any other same-named identifier in an
       /// include refuses the rename even if it binds to a different symbol. An .inc
-      /// that is listed but missing on disk is ignored.</remarks>
+      /// that is listed but missing on disk is ignored. N-06: an include that holds
+      /// a uses entry naming the short name (a unit_uses row with origin_path) is
+      /// named too, even when the index keeps no files row for that .inc.</remarks>
       class function IncludeUseReason(const AStore: ISymbolStore; const AQName: string): string;
       /// <summary>Non-empty human reason when the unit declaring AQName has a
       /// BINARY form file (sibling .dfm) that contains the symbol's short name as
@@ -966,6 +968,13 @@ begin
       if SameText(ExtractFileExt(Stamp.Path), '.inc') and FileExists(Stamp.Path)
         and IdentOccursIn(TFile.ReadAllText(Stamp.Path, TEncoding.ANSI), ShortName) then
         Hits.Add(Stamp.Path);
+    // N-06: a uses entry inside an include is a unit_uses row of its HOST with
+    // origin_path set -- authoritative even for an .inc the index keeps no files
+    // row for (one found by the near-search the closure resolver does not do).
+    // Renaming the unit would leave that entry stale.
+    for var U in AStore.FindUsersOfUnit(LowerCase(ShortName)) do
+      if U.FromInclude and (Hits.IndexOf(U.OriginPath) < 0) then
+        Hits.Add(U.OriginPath);
     if Hits.Count = 0 then Exit;
     Hits.Sort;
     Result:= Format('"%s" is used in include file(s) %s -- the index records no ' +

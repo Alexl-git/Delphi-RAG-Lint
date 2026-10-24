@@ -865,6 +865,11 @@ type
     /// enum, or 0 when the enum is declared at unit level. Non-zero means the
     /// bare form is only reachable from inside that type or a descendant.</summary>
     OwnerTypeId  : Int64;
+    /// <summary>symbols.id of the ROUTINE declaring the parent enum in its own
+    /// `type` section (W5-ext N-04), or 0. Non-zero means the value is visible
+    /// only from that routine and the routines nested in it, and there it is
+    /// nearer than any unit-level value of the same name.</summary>
+    OwnerRoutineId: Int64;
     /// <summary>The bare identifier as written; matched case-insensitively.</summary>
     Name         : string;
     /// <summary>Fully qualified name; rule 0's grouping key (lowercased).</summary>
@@ -1161,6 +1166,30 @@ type
     StartCol : Integer        ;
     EndLine  : Integer        ;
     EndCol   : Integer        ;
+    // N-06: an entry written inside a {$I} include. OriginPath is the absolute
+    // .inc path ('' = the unit's own text) and IncludeLine the 1-based line of
+    // the {$I} directive in the HOST (0 = inline). For such a row StartLine..
+    // EndCol are coordinates INSIDE the .inc, never in the host.
+    OriginPath : string       ;
+    IncludeLine: Integer      ;
+    /// <summary>N-06: True when this entry came from a {$I} include, so its
+    /// coordinates are in OriginPath, not in the owning file.</summary>
+    /// <returns>True iff OriginPath is non-empty.</returns>
+    /// <remarks>Every uses EDITOR must check this before using StartLine /
+    /// StartCol / EndLine / EndCol as host-file coordinates.</remarks>
+    function FromInclude: Boolean;
+    /// <summary>N-06: the line a finding about this entry belongs on, in the
+    /// OWNING file: IncludeLine for an include row, else StartLine.</summary>
+    /// <returns>A 1-based host line.</returns>
+    function HostLine: Integer;
+    /// <summary>N-06: the matching column: 1 for an include row (the column of
+    /// the directive is not stored), else StartCol.</summary>
+    /// <returns>A 1-based host column.</returns>
+    function HostCol: Integer;
+    /// <summary>N-06: the lint message suffix naming where an include row's
+    /// entry really is: ' (in include Name.inc, line N)'; '' for an inline row.</summary>
+    /// <returns>The suffix, with its leading space, or ''.</returns>
+    function IncludeSuffix: string;
   end;
 
   // One 'global-only' uses edge: ReaderFileId depends on DeclFileId for
@@ -2272,11 +2301,64 @@ function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
 /// </remarks>
 function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
 
+const
+  /// <summary>N-06: the refusal kind every uses editor reports for an entry
+  /// that lives inside an include file.</summary>
+  REFUSAL_USES_IN_INCLUDE = 'uses-in-include';
+
+/// <summary>N-06: the one refusal text every uses EDITOR prints when the entry
+/// it would edit lives inside an include file (an .inc may be shared by many
+/// hosts, so no editor ever edits one).</summary>
+/// <param name="AVerb">The refusing verb as the user typed it, e.g. 'cycles --fix'.</param>
+/// <param name="AUse">The include row (FromInclude must be True).</param>
+/// <param name="AHostPath">The owning unit's path; only its file name is printed.</param>
+/// <returns>'refused: uses-in-include -- ...' naming the unit, the host, the
+/// include, the host line and the entry's line inside the include.</returns>
+function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
+
 implementation
 
 uses
   System.SysUtils
   ;
+
+function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
+var
+  HostName: string;
+  IncName : string;
+begin
+  HostName:= ExtractFileName(AHostPath);
+  IncName := ExtractFileName(AUse.OriginPath);
+  Result:= Format('refused: %s -- ''%s'' is used by %s through {$I %s} (host line %d; entry at %s:%d). ' +
+    '%s edits only a unit''s own uses clause; edit %s by hand, or inline the clause into %s and reindex.',
+    [REFUSAL_USES_IN_INCLUDE, AUse.UnitName, HostName, IncName, AUse.IncludeLine, IncName, AUse.StartLine,
+     AVerb, IncName, HostName]);
+end;
+
+{ TUnitUse }
+
+function TUnitUse.FromInclude: Boolean;
+begin
+  Result:= OriginPath <> '';
+end;
+
+function TUnitUse.HostLine: Integer;
+begin
+  Result:= if FromInclude then IncludeLine else StartLine;
+end;
+
+function TUnitUse.HostCol: Integer;
+begin
+  Result:= if FromInclude then 1 else StartCol;
+end;
+
+function TUnitUse.IncludeSuffix: string;
+begin
+  if FromInclude then
+    Result:= Format(' (in include %s, line %d)', [ExtractFileName(OriginPath), StartLine])
+  else
+    Result:= '';
+end;
 
 { TSymbol }
 

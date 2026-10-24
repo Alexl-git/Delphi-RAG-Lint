@@ -3036,6 +3036,29 @@ function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason:
       if VisibleHere(S.FileId, S.Section) then Exit(True);
   end;
 
+  { W5-ext (N-04): True when ARoutineId is the ref's enclosing routine or one it
+    is nested in. A routine-local enum's values are in scope only there; the
+    climb stops at the first non-routine parent, as LexicalScopeDeclaresValue's. }
+  function RoutineOnChain(ARoutineId: Int64): Boolean;
+  var
+    ScopeId: Int64  ;
+    Scope  : TSymbol;
+    Depth  : Integer;
+  begin
+    Result := False;
+    ScopeId:= ARef.EnclosingSymbolId;
+    Depth  := 0;
+    while (ScopeId > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+    begin
+      if ScopeId = ARoutineId then Exit(True);
+      Inc(Depth);
+      Scope:= SymbolById(ScopeId);
+      if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
+      if not (SymbolById(Scope.ParentId).Kind in METHOD_KINDS) then Exit;
+      ScopeId:= Scope.ParentId;
+    end;
+  end;
+
 var
   Lc          : string                 ;
   Cands       : TList<TEnumValueDecl>  ;
@@ -3095,8 +3118,15 @@ begin
           end;
       if not OwnerOk then Continue;
     end;
+    if (C.OwnerRoutineId > 0) and not RoutineOnChain(C.OwnerRoutineId) then Continue;
     Visible:= Visible + [C];
   end;
+  { A routine-local value in scope is NEARER than any unit-level one of the
+    same name (the compiler resolves innermost first), so it alone competes. }
+  var LocalOnly: TArray<TEnumValueDecl>:= nil;
+  for var C: TEnumValueDecl in Visible do
+    if C.OwnerRoutineId > 0 then LocalOnly:= LocalOnly + [C];
+  if Length(LocalOnly) > 0 then Visible:= LocalOnly;
 
   { --- rule 0 (owner ruling 4, 2026-09-23). One declaration the index holds
     twice is not an ambiguity, and declining it would lose a real edge for an
@@ -5274,7 +5304,7 @@ begin
       begin
         InUnit:= nil;
         for C in Enums do
-          if (C.FileId = UnitFile)
+          if (C.FileId = UnitFile) and (C.OwnerRoutineId = 0)   { W5-ext: a routine-local value has no Unit.value form }
              and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
             InUnit:= InUnit + [C];
         InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);

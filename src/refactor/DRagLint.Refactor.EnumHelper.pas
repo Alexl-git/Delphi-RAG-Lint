@@ -163,13 +163,16 @@ type
   /// enum's unit has no `implementation` keyword at all (malformed/fragment
   /// safety guard; a normal Delphi unit always has one); no edits.
   /// ehaNotFound: AEnumQName did not resolve to an skEnum symbol; no
-  /// edits.</summary>
+  /// edits.
+  /// ehaUsesInInclude (N-06): System.TypInfo must be added, but the
+  /// implementation uses clause lives in an include file, which is never edited
+  /// (and a fresh clause would be a second one); no edits.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TEnumHelperAction = (ehaBuilt, ehaExists, ehaNoImplSection, ehaNotFound);
+  TEnumHelperAction = (ehaBuilt, ehaExists, ehaNoImplSection, ehaNotFound, ehaUsesInInclude);
 
   /// <summary>Result of TEnumHelperRefactoring.Build: either a ready-to-apply
   /// set of text edits (Action=ehaBuilt) or a refusal with a human-readable
@@ -836,8 +839,14 @@ begin
 
     HaveLastImplUse:= False;
     LastImplUse    := Default(TUnitUse);
+    { N-06: an include row is never the anchor (its coordinates are in the
+      .inc); the bodies still go after the include directive that holds it. }
+    var IncImplUse: TUnitUse:= Default(TUnitUse);
     for U in Uses_ do
-      if U.Section = uusImplementation then
+      if (U.Section = uusImplementation) and U.FromInclude and (U.IncludeLine > IncImplUse.IncludeLine) then
+        IncImplUse:= U;
+    for U in Uses_ do
+      if (U.Section = uusImplementation) and not U.FromInclude then
         if (not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
            or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol)) then
         begin LastImplUse:= U; HaveLastImplUse:= True; end;
@@ -845,6 +854,8 @@ begin
     BodiesLine:= ImplLine;
     if HaveLastImplUse and (LastImplUse.EndLine > BodiesLine) then
       BodiesLine:= LastImplUse.EndLine;
+    if IncImplUse.FromInclude and (IncImplUse.IncludeLine > BodiesLine) then
+      BodiesLine:= IncImplUse.IncludeLine;
 
     { uses edit: only when RTTI ToString/FromString were generated AND
       System.TypInfo is not already visible (interface OR implementation
@@ -858,6 +869,12 @@ begin
     UsesPrefix:= '';
     if Gen.NeedsTypInfo and (not UsesContainsTypInfo(Uses_)) then
     begin
+      if (not HaveLastImplUse) and IncImplUse.FromInclude then
+      begin
+        Result.Action := ehaUsesInInclude;
+        Result.Message:= IncludeUsesRefusal('create-enum-helper', IncImplUse, Res.EnumFilePath);
+        Exit;
+      end;
       if HaveLastImplUse then
       begin
         UsesEdit:= Default(TTextEdit);

@@ -3,6 +3,36 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased -- extractor batch (e3d)
+
+Extractor change: rides the batch's DRAGLINT_EXTRACTOR_VERSION bump (every DB re-parses once).
+
+### Added
+- **`uses` clauses inside `{$I}` includes are indexed (N-06).** A uses clause written in a
+  depth-0 include becomes `unit_uses` rows on the HOST file: section = the host section the
+  directive sits in, coordinates INSIDE the .inc, plus the new columns `origin_path` (the
+  absolute .inc path) and `include_line` (the directive's host line); both NULL for a unit's
+  own text. `cycles`, `circular-uses`, `deps-report`, charts and every other graph consumer
+  now see the edge (fixture `incuses`: IncB -> IncA). Only depth-0 includes; `--no-preprocess`
+  extracts none. A host is re-parsed when an include it took uses from changes.
+- **Refusal kind `uses-in-include`.** No uses EDITOR edits an include (an .inc may be shared):
+  `cycles --fix` / `--plan` refuse a cycle whose fix touches such a section (one manual step
+  at the `{$I}` line), `uses-fix` prints `skipped: <Unit> -- used from include ...` per
+  include row (JSON `skipped_include[]`, `skipped_include_count`), `find-unit` refuses an
+  include-only target section (`No edit computed: refused: uses-in-include ...`),
+  `create-enum-helper` refuses a needed `System.TypInfo` there (action `uses_in_include`),
+  and `rename` of a unit used from an include refuses naming it -- even an .inc with no
+  `files` row.
+- `preprocess-file --include-sites` prints the active include sites (diagnostic); internal
+  verb `dump-parse-uses`.
+
+### Changed
+- Lint findings about an include row (`used-unit-not-resolvable`, `unused-unit-in-uses`,
+  `layering-violation`, per-file `circular-uses`) are reported on the host at the `{$I}` line,
+  the message ending ` (in include <Name.inc>, line <n>)`.
+- Schema: `unit_uses.origin_path TEXT`, `unit_uses.include_line INTEGER` and
+  `idx_unit_uses_origin` -- additive, ALTERed onto older DBs by the next writable open; no
+  schema-version bump, and a read-only open of an older DB keeps working.
 ## v1.33.0-alpha -- 2026-10-20
 
 No extractor change (1.22.0-alpha): no re-parse.
