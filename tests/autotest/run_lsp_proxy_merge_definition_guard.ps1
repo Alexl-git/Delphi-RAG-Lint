@@ -25,6 +25,9 @@
                                  right after it IS in the log);
     references when DelphiLSP -> forwarded (in the stub log), sequenced: the
       advertised it              initialize reply is relayed first;
+    provider false / null     -> NOT advertised (A5 fix M3): set to true and
+                                 answered by the proxy; an options object
+                                 ({}) IS advertised: kept, request forwarded;
     OFF                       -> plain relay; ON differs.
 
   The proxy guards default -Exe to dll-win64; a lane passes its own engine.
@@ -261,6 +264,22 @@ $r6 = Invoke-Raw $Exe $onArgs ([byte[]]($initReq + $didOpen)) $env6 $refReq 1500
 Check 'references IS in the stub log' (LogHas $env6.DRAGLINT_STUB_LOG 'textDocument/references') ''
 $m6 = ReplyOf $r6.Out 9
 Check 'the reply for id 9 is DelphiLSP''s (error: not scripted)' ($m6 -and -not $m6.HasResult -and $m6.Json.ContainsKey('error')) ("body=$(if ($m6) { $m6.Frame.Body } else { '<none>' })")
+
+# --- 6b provider false / options object (A5 fix M3) --------------------------------
+Write-Host ''
+Write-Host '(6b) referencesProvider false = not advertised; workspaceSymbolProvider {} = advertised' -ForegroundColor Cyan
+$initMixed = '{"capabilities":{"hoverProvider":true,"referencesProvider":false,"workspaceSymbolProvider":{}}}'
+$env6b = Script @(@('initialize', 0, $initMixed), @('textDocument/hover', 300, 'null'))
+$r6b = Invoke-Raw $Exe $onArgs ([byte[]]($initReq + $didOpen)) $env6b ([byte[]]($refReq + $symReq + $hoverReq)) 1500
+$m6b = ReplyOf $r6b.Out 1
+$cap6b = if ($m6b -and $m6b.HasResult) { $m6b.Json['result']['capabilities'] } else { $null }
+Check 'referencesProvider false -> true' ($cap6b -and $cap6b['referencesProvider'] -eq $true) ("body=$(if ($m6b) { $m6b.Frame.Body } else { '<none>' })")
+Check 'workspaceSymbolProvider {} kept as an object' ($cap6b -and ($cap6b['workspaceSymbolProvider'] -is [System.Collections.IDictionary])) ''
+Check 'references answered by the proxy (absent from the stub log)' (-not (LogHas $env6b.DRAGLINT_STUB_LOG 'textDocument/references')) ''
+$m6b9 = ReplyOf $r6b.Out 9
+Check 'references reply carries the use on line 13' ($m6b9 -and $m6b9.HasResult -and (HasLoc $m6b9.Json['result'] 13)) ''
+Check 'workspace/symbol forwarded (in the stub log): DelphiLSP advertised it' (LogHas $env6b.DRAGLINT_STUB_LOG 'workspace/symbol') ''
+Check 'positive control: the hover after them IS in the stub log' (LogHas $env6b.DRAGLINT_STUB_LOG 'textDocument/hover') ''
 
 # --- 7 OFF vs ON ------------------------------------------------------------------
 Write-Host ''

@@ -472,6 +472,14 @@ begin
   end;
 end;
 
+{ True when a server capability value advertises the feature: present and
+  neither false nor null (true, or an options object). A5 fix M3. }
+function Advertises(const AValue: TJSONValue): Boolean;
+begin
+  Result:= (AValue <> nil) and not (AValue is TJSONNull) and
+           not ((AValue is TJSONBool) and not TJSONBool(AValue).AsBoolean);
+end;
+
 { True when a definition reply's result says "nothing here": null or an empty
   array (A5: only then is drag-lint's answer used). }
 function IsEmptyLocations(const AResult: TJSONValue): Boolean;
@@ -1024,7 +1032,7 @@ end;
   textDocument/hover (MergeHover) request by id and queues drag-lint's answer
   for it on the worker at once, so it is usually ready before DelphiLSP
   answers. Never delays the frame beyond one JSON parse. }
-procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@6f57 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting
+procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@3bc9, cyclomatic-complexity@13e4 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; the four request kinds share one parse, so the kind selection adds branches, not state)
 var
   Json  : TJSONValue;
   Method: string;
@@ -1173,8 +1181,8 @@ begin
   end;
 end;
 
-{ S>C, the reply to the recorded initialize: adds referencesProvider and
-  workspaceSymbolProvider (true) to result.capabilities when absent, and notes
+{ S>C, the reply to the recorded initialize: sets referencesProvider and
+  workspaceSymbolProvider to true when absent, false or null, and notes
   which ones DelphiLSP advertised itself (Answer then leaves those requests to
   it). Returns True when AReply was changed. }
 function TProxyMergeEngine.MergeInitialize(const AReply: TJSONObject): Boolean;
@@ -1192,15 +1200,17 @@ begin
     TJSONObject(Res).AddPair('capabilities', Caps);
   end
   else if not (Caps is TJSONObject) then Exit;
-  if TJSONObject(Caps).GetValue(CAP_REFERENCES) <> nil then TInterlocked.Exchange(FTheirReferences, 1)
+  if Advertises(TJSONObject(Caps).GetValue(CAP_REFERENCES)) then TInterlocked.Exchange(FTheirReferences, 1)
   else
   begin
+    TJSONObject(Caps).RemovePair(CAP_REFERENCES).Free;   { false / null: replaced }
     TJSONObject(Caps).AddPair(CAP_REFERENCES, TJSONBool.Create(True));
     Result:= True;
   end;
-  if TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL) <> nil then TInterlocked.Exchange(FTheirSymbols, 1)
+  if Advertises(TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL)) then TInterlocked.Exchange(FTheirSymbols, 1)
   else
   begin
+    TJSONObject(Caps).RemovePair(CAP_WORKSPACE_SYMBOL).Free;
     TJSONObject(Caps).AddPair(CAP_WORKSPACE_SYMBOL, TJSONBool.Create(True));
     Result:= True;
   end;
@@ -1418,7 +1428,7 @@ end;
   unioned in; a reply to a recorded hover request gets drag-lint's markdown
   merged in (see Intercept). Waits for drag-lint's answer at most the part of
   the budget left since the request. Runs on the S>C pump thread. }
-function TProxyMergeEngine.MergeReply(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@0299 -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
+function TProxyMergeEngine.MergeReply(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@368d -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting (re-reviewed A5: 13, the initialize and definition branches decline early so a reply never waits needlessly)
   out AReplacement: TBytes): Boolean;
 var
   Json  : TJSONValue;

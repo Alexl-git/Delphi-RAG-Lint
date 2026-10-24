@@ -866,7 +866,7 @@ hover forwards DelphiLSP's reply (or its `null`) byte-identical. Add
 `--merge-definition` and a `textDocument/definition` that DelphiLSP answers
 with `null` or `[]` gets drag-lint's locations instead (a non-empty answer is
 forwarded untouched); DelphiLSP's `initialize` reply gains `referencesProvider`
-and `workspaceSymbolProvider` when it lacks them, and the proxy then answers
+and `workspaceSymbolProvider` when it lacks them (or sets them `false`), and the proxy then answers
 `textDocument/references` and `workspace/symbol` itself from the index --
 those requests never reach DelphiLSP.
 
