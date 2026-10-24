@@ -1,7 +1,6 @@
 # HANDOFF 2026-10-24 -- LSP stream close-out (autonomous run lsp-6f)
 
-State: ALL 20 plan tasks delivered to LOCAL main except the A6 full battery (waits for ENGINE's rc2
-battery window; ENGINE messages lsp-6f when it is over). Nothing pushed, nothing deployed.
+State: COMPLETE. All 20 plan tasks on LOCAL main; final battery 765/806 (rerun of artifacts 101/107), every LSP guard PASS. Nothing pushed, nothing deployed.
 Ledger with every ruling, measurement and lesson: `.superpowers\sdd\2026-10-23-lsp\progress.md`.
 
 ## Delivered (local main)
@@ -21,7 +20,10 @@ Ledger with every ruling, measurement and lesson: `.superpowers\sdd\2026-10-23-l
 Main-side fixes found on the way: docs-sync F3 CRLF regex (0bac5870), duplicate publish dedup (55ca41c3),
 stdout-hygiene closure capture (596fa797).
 
-## Next action
+## Next action (owner)
+None for the run. Owner-owed list below; worktree lsp-battery also to remove.
+
+## Next action (as planned, now done)
 1. On ENGINE's "battery window over": build a PRIVATE main-tree engine in a scratch copy (never dll-win64),
    run `pwsh -File tests\run_battery.ps1` with it, record the number in the ledger; a regression in the
    shipped proxy guards is a STOP (fix round, not a merge).

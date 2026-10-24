@@ -10,9 +10,9 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Standing task lists (not handoffs)
 
-- 2026-10-24 | lsp | CLOSE-OUT (lsp-6f): all tasks on local main; only A6 battery pending (after ENGINE rc2 window) | open | [HANDOFF-2026-10-24-lsp-stream-closeout.md](HANDOFF-2026-10-24-lsp-stream-closeout.md)
-- 2026-10-23 | lsp | AUTONOMOUS run wave 2 (lsp-6f): S0 P0 + docs-sync fix merged; B1 C1 A1-fix running; A3 waits A1; ledger .superpowers\sdd\2026-10-23-lsp\progress.md | open | [HANDOFF-2026-10-23-lsp-autonomous-wave2.md](HANDOFF-2026-10-23-lsp-autonomous-wave2.md)
-- 2026-10-23 | lsp | AUTONOMOUS run wave 1 (lsp-6f) | resumed | [HANDOFF-2026-10-23-lsp-autonomous-wave1.md](HANDOFF-2026-10-23-lsp-autonomous-wave1.md)
+- 2026-10-24 | lsp | CLOSE-OUT (lsp-6f): LSP stream COMPLETE on local main; battery all-LSP-green; owner-owed list inside | closed | [HANDOFF-2026-10-24-lsp-stream-closeout.md](HANDOFF-2026-10-24-lsp-stream-closeout.md)
+- 2026-10-23 | lsp | AUTONOMOUS run wave 2 (lsp-6f) | closed | [HANDOFF-2026-10-23-lsp-autonomous-wave2.md](HANDOFF-2026-10-23-lsp-autonomous-wave2.md)
+- 2026-10-23 | lsp | AUTONOMOUS run wave 1 (lsp-6f) | closed | [HANDOFF-2026-10-23-lsp-autonomous-wave1.md](HANDOFF-2026-10-23-lsp-autonomous-wave1.md)
 - 2026-10-23 | lsp | standing backlog (LSP-BACKLOG.md) | open | [../../LSP/LSP-BACKLOG.md](../../LSP/LSP-BACKLOG.md)
 
 - 2026-10-23 | converter | AUTONOMOUS run wave 3 (owner away 26-30 h, no /clear): D2, B4 batch mode, N9 merged to LOCAL main; pin 20261021 adopted; N7+N11 + N8 in flight; FG-M held for ENGINE deploy | open | [HANDOFF-2026-10-23-converter-autonomous-3day-wave3.md](HANDOFF-2026-10-23-converter-autonomous-3day-wave3.md)
