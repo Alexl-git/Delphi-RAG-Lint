@@ -55,7 +55,7 @@ type
   /// A record rather than TArgs so the engine is testable without the CLI, and
   /// so this unit does not depend on DRagLint.CLI.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.Render (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -87,7 +87,7 @@ type
   /// <returns>An open read-only store, or nil when it cannot be opened.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStoreOpener = reference to function(const pDbPath: string): ISymbolStore;
@@ -125,7 +125,7 @@ type
   /// Injected rather than called directly so this unit stays free of
   /// the CLI, and so a test can drive tier 3 without a compiler.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUnitCompiler = reference to function(const pUnitPath, pProjectPath,
@@ -147,7 +147,7 @@ type
 /// Exit code is deliberately NOT a finding count -- see the unit header.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoLintTree (DRagLint.CLI.pas)</para>
-/// <para>Calls: Copy, Default, DRagLint.Analysis.LintTree.BuildFindings, DRagLint.Analysis.LintTree.CollectUnchecked, DRagLint.Analysis.LintTree.CompileDependents, DRagLint.Analysis.LintTree.ComputeDelta, DRagLint.Analysis.LintTree.ReadBaselineFile, DRagLint.Analysis.LintTree.ReadSourceLines, DRagLint.Analysis.LintTree.Render, DRagLint.Analysis.LintTree.ValidateAndResolve (+14 more)</para>
+/// <para>Calls: Copy, Default, DRagLint.Analysis.LintTree.BuildFindings, DRagLint.Analysis.LintTree.CollectUnchecked, DRagLint.Analysis.LintTree.CompileDependents, DRagLint.Analysis.LintTree.ComputeDelta, DRagLint.Analysis.LintTree.ReadBaselineFile, DRagLint.Analysis.LintTree.ReadSourceLines, DRagLint.Analysis.LintTree.Render, DRagLint.Analysis.LintTree.ValidateAndResolve (+15 more)</para>
 /// <para>Returns: 2; 0</para>
 /// <para>Complexity: 19 (cyclomatic, outer body), 202 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>

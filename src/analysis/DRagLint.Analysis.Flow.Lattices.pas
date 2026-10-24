@@ -34,7 +34,7 @@ type
   /// Display is set at every construction site, so it is never ''. Added for
   /// DRagLint.Doc.SymbolFacts' Mutates fact, which names var/out parameters.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.MarkCaptured (DRagLint.Analysis.Flow.Lattices.pas) (+15 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt (DRagLint.Analysis.Flow.Lattices.pas) (+16 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks, DRagLint.Doc.SymbolFacts, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -57,8 +57,8 @@ type
   /// <summary>Maps a routine's locals/params/Result to dense indices 0..N-1.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TEscape.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Create (DRagLint.Analysis.Flow.Lattices.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks, DRagLint.Doc.SymbolFacts, DRagLint.Refactor.ExtractMethod</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.FreedOperandVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Create (DRagLint.Analysis.Flow.Lattices.pas) (+27 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.FlowChecks, DRagLint.Doc.SymbolFacts, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRoutineVarTable = class
@@ -72,7 +72,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas)</para>
     /// <para>constructor</para>
-    /// <para>Writes: FVars, FByName</para>
+    /// <para>Writes: FVars, FByName, FMultiDecl</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build"/>
@@ -83,7 +83,7 @@ type
     constructor Create;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Reads: FByName, FVars</para>
+    /// <para>Reads: FMultiDecl, FByName, FVars</para>
     /// <para>Pure</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
@@ -97,7 +97,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: FVars.Count.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.EmptyVal (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Join (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+16 more)</para>
+    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.EmptyVal (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Join (DRagLint.Analysis.Flow.Lattices.pas) (+18 more)</para>
     /// <para>Reads: FVars</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
@@ -170,7 +170,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.MarkCaptures (DRagLint.Analysis.Flow.Lattices.pas)</para>
-    /// <para>Reads: FVars</para>
+    /// <para>Reads: FVars   Writes: FVars</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
@@ -188,14 +188,14 @@ type
     /// <returns><!-- drag-lint:auto -->TRoutineVarTable -- Observed: Tbl.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity (DRagLint.Doc.SymbolFacts.pas) (+1 more)</para>
-    /// <para>Calls: AbsoluteTargetIdx, Default, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInlineVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.MarkCaptures, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Create (+11 more)</para>
+    /// <para>Called from: DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.ProcessDefProcs (DRagLint.Diagnostics.DeadCodeChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner (DRagLint.Doc.SymbolFacts.pas) (+2 more)</para>
+    /// <para>Calls: AbsoluteTargetIdx, AddInline, Default, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.OwnNameSegment, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInlineVars (+15 more)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.OwnNameSegment"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const AProc: TTSNode; const ASrc: TBytes): TRoutineVarTable;
@@ -262,7 +262,7 @@ type
   /// behaviour, in which the argument goes into BOTH lists. That is what makes
   /// this change gap-free: an unresolvable callee cannot lose a true positive.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.OracleHitPM (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas)</para>
+  /// <para>Used by: DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.OracleCheckPM (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.OracleHitPM (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TParamMode = (pmUnknown, pmValue, pmConst, pmVar, pmOut);
@@ -320,6 +320,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.GenOf (DRagLint.Analysis.Flow.Lattices.pas)</para>
     /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count</para>
     /// <para>Reads: FVars</para>
     /// <para>Pure</para>
@@ -337,14 +338,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.GenOf (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas)</para>
-    /// <para>Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf</para>
+    /// <para>Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs, DRagLint.Analysis.Flow.Lattices.ApplyWithRecordEntity, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NodeType</para>
     /// <para>Reads: FVars, FSrc, FIsRecordMethodDef, FParamMode</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.IsValuedExit"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.ApplyWithRecordEntity"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TransferDirect(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
@@ -353,14 +354,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas)</para>
-    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect</para>
-    /// <para>Reads: FGen, FGenValid</para>
+    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.EmptyVal, DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect</para>
+    /// <para>Reads: FGen, FGenValid   Writes: FGen, FGenValid</para>
     /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.EmptyVal"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GenOf(const ABlock: TCfgBlock): TDefAsgnVal;
@@ -453,7 +454,7 @@ type
     /// <exception cref="EDefAsgnGenMismatch"><!-- drag-lint:auto exc -->block %d: memoised gen-set disagrees with a direct transfer --</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Equals, DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.GenOf, DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count</para>
+    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Equals, DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.GenOf, DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.VerifyGenMode</para>
     /// <para>Implements: DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer</para>
     /// <para>Reads: FVars</para>
     /// <para>Pure</para>
@@ -461,7 +462,7 @@ type
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.GenOf"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.VerifyGenMode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
@@ -599,7 +600,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TFreedVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count</para>
+    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, TreeSitter.TTSNodeHelper.NodeType</para>
     /// <para>Implements: DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer</para>
     /// <para>Reads: FVars, FSrc</para>
     /// <para>Pure</para>
@@ -607,7 +608,7 @@ type
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Bottom"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TFreedVal): TFreedVal;
@@ -724,7 +725,7 @@ type
     /// <returns><!-- drag-lint:auto -->TArray&lt;Boolean&gt; -- Observed: Copy(AIn).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get</para>
+    /// <para>Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NodeType</para>
     /// <para>Implements: DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer</para>
     /// <para>Complexity: 14 (cyclomatic, outer body), 41 lines (full implementation)</para>
     /// <para>Reads: FVars, FSrc</para>
@@ -733,7 +734,7 @@ type
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Bottom"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
@@ -828,6 +829,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;Boolean&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TEscape.Boundary (DRagLint.Analysis.Flow.Lattices.pas)</para>
     /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count</para>
     /// <para>Implements: DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom</para>
     /// <para>Reads: FVars</para>
@@ -843,8 +845,9 @@ type
     /// <returns><!-- drag-lint:auto -->TArray&lt;Boolean&gt; -- Observed: Bottom.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TEscape.Bottom</para>
     /// <para>Implements: DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary</para>
-    /// <para>Pure</para>
+    /// <para>Effect-free (proven)</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Direction"/>
@@ -875,7 +878,7 @@ type
     /// <returns><!-- drag-lint:auto -->TArray&lt;Boolean&gt; -- Observed: Copy(AIn).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectCallArgs, DRagLint.Analysis.Flow.Lattices.DetectFreedVar, DRagLint.Analysis.Flow.Lattices.ExprIsConstructor, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, FOwns, LowerCase, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectCallArgs, DRagLint.Analysis.Flow.Lattices.DetectFreedVar, DRagLint.Analysis.Flow.Lattices.ExprIsConstructor, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt, FOwns, Integer, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
     /// <para>Implements: DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer</para>
     /// <para>Complexity: 19 (cyclomatic, outer body), 69 lines (full implementation)</para>
     /// <para>Reads: FSrc, FVars, FOwns</para>
@@ -913,14 +916,16 @@ type
 /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False;
-/// NodeText(N.ChildByField('rhs'), ASrc) = 'create'; NodeText(Ent.ChildByField('rhs'),
-/// ASrc) = 'create'.</returns>
+/// (NodeText(N.ChildByField('rhs'), ASrc) = 'create') and not ReceiverIsDynArrayType(N,
+/// ASrc); (NodeText(Ent.ChildByField('rhs'), ASrc) = 'create') and not
+/// ReceiverIsDynArrayType(Ent, ASrc).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.ClassifyReturnSite (DRagLint.Doc.SymbolFacts.pas)</para>
-/// <para>Calls: DRagLint.Analysis.Flow.Lattices.NodeText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Calls: DRagLint.Analysis.Flow.Lattices.NodeText, DRagLint.Analysis.Flow.Lattices.ReceiverIsDynArrayType, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeText"/>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.ReceiverIsDynArrayType"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
@@ -1014,7 +1019,7 @@ function CollectCallArgs(const ANode: TTSNode; const ASrc: TBytes;
 /// <returns><!-- drag-lint:auto -->string -- Observed: LowerCase(Trim(NodeStr(N, ASrc))).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.Flow.Lattices.DetectFreedVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.ExprIsConstructor (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.ConstructorTransfersOwnership (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas) (+3 more)</para>
+/// <para>Called from: DRagLint.Analysis.Flow.Lattices.DetectFreedVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.ExprIsConstructor (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.ReceiverIsDynArrayType (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.ConstructorTransfersOwnership (DRagLint.Diagnostics.FlowChecks.pas) (+4 more)</para>
 /// <para>Calls: DRagLint.Analysis.Flow.Lattices.NodeStr, LowerCase, Trim</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
@@ -1029,18 +1034,18 @@ function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1;
-/// AVars.IndexOfAt(LowerCase(NodeStr(Cur, ASrc)), Integer(Cur.StartByte)); AVars.IndexOf(LowerCase(NodeStr(IdN,
-/// ASrc))).</returns>
+/// AVars.IndexOfAt(LowerCase(NodeStr(Cur, ASrc)), Integer(Cur.StartByte));
+/// AVars.IndexOfAt(LowerCase(NodeStr(IdN, ASrc)), Integer(IdN.StartByte)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.CollectInterfaceDerefs.Walk (DRagLint.Diagnostics.FlowChecks.pas)</para>
-/// <para>Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.FirstOperandChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.FirstOperandChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt, Integer, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 35 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.FirstIdentChild"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.FirstOperandChild"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
-/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -1066,7 +1071,7 @@ function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVa
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Liveness.ApplyItemBackward (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.CollectAndOrLeftDefs.Walk (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.CollectInterfaceDerefs.CollectLocalCallDefs (DRagLint.Diagnostics.FlowChecks.pas) (+3 more)</para>
-/// <para>Calls: AIsRecordMethodDef, AParamMode, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk, IsAddrOfExpr, LeftmostBaseVar, LowerCase, NodeStr, Trim</para>
+/// <para>Calls: AIsRecordMethodDef, AParamMode, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk, Integer, IsAddrOfExpr, LeftmostBaseVar, LowerCase, NodeStr, Trim</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk"/>
 /// <!-- drag-lint:auto END -->
@@ -1107,16 +1112,16 @@ procedure ApplyWithRecordEntity(const AItem: TCfgItem; const ASrc: TBytes;
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1;
-/// AVars.IndexOfAt(LowerCase(NodeStr(Lhs, ASrc)), Integer(Lhs.StartByte)); AVars.IndexOf(LowerCase(NodeStr(IdN,
-/// ASrc))).</returns>
+/// AVars.IndexOfAt(LowerCase(NodeStr(Lhs, ASrc)), Integer(Lhs.StartByte));
+/// AVars.IndexOfAt(LowerCase(NodeStr(IdN, ASrc)), Integer(IdN.StartByte)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Liveness.ApplyItemBackward (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas) (+2 more)</para>
-/// <para>Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt, Integer, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.FirstIdentChild"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
-/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
 /// <!-- drag-lint:auto END -->
@@ -1167,8 +1172,10 @@ function AssignmentBaseIndex(const ANode: TTSNode; const ASrc: TBytes;
 /// back-edge state. Not thread-safe beyond its arguments; it mutates them.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)</para>
-/// <para>Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf</para>
+/// <para>Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf</para>
 /// <para>Mutates: AMust (var), AMay (var)</para>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
