@@ -85,18 +85,115 @@ type
     constructor Create(pKind: TMenuNodeKind; const pCaption, pSource: string);
     destructor Destroy; override;
     /// <summary>Appends pChild (takes ownership) and returns it.</summary>
+    /// <param name="pChild"><!-- drag-lint:auto type -->TMenuNode</param>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
+    /// <para>Reads: FChildren</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddChild(pChild: TMenuNode): TMenuNode;
     /// <summary>Inserts pChild at pIndex (clamped to 0..Count; takes ownership) and returns it.</summary>
+    /// <param name="pIndex"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pChild"><!-- drag-lint:auto type -->TMenuNode</param>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.SetLinkBeginGroup (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
+    /// <para>Reads: FChildren</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function InsertChild(pIndex: Integer; pChild: TMenuNode): TMenuNode;
     /// <summary>The children, in sibling order.</summary>
+    /// <returns><!-- drag-lint:auto -->TObjectList&lt;TMenuNode&gt; -- Observed:
+    /// FChildren.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.GraftCodeBar (DRagLint.FormsMap.pas), DRagLint.FormsMap.GraftCodeMenu (DRagLint.FormsMap.pas), DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas) (+8 more)</para>
+    /// <para>Reads: FChildren</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Children: TObjectList<TMenuNode>;
     /// <summary>The parent node, nil for a root or external root.</summary>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: FParent.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.SetLinkBeginGroup (DRagLint.MenuTree.pas)</para>
+    /// <para>Reads: FParent</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Parent: TMenuNode;
     /// <summary>Caption with '&amp;&amp;' shown as '&amp;' (what a user reads).</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Caption.Replace('&amp;&amp;',
+    /// '&amp;').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuTree.TMenuTree.CollectLeaves (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.Leaves (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DisplayCaption: string;
     /// <summary>MenuCaptionKey of the caption.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: MenuCaptionKey(Caption).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.MenuCaptionKey</para>
+    /// <seealso cref="DRagLint.MenuTree.MenuCaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CaptionKey: string;
     /// <summary>True for the kinds that end a path: item and dynamic.</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Kind in [mnkItem,
+    /// mnkDynamic].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.TMenuTree.CollectLeaves (DRagLint.MenuTree.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsLeaf: Boolean;
   end;
 
@@ -131,6 +228,21 @@ type
     constructor Create;
     destructor Destroy; override;
     /// <summary>Adds a new root node and returns it.</summary>
+    /// <param name="pCaption"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pSource"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: TMenuNode.Create(mnkRoot,
+    /// pCaption, pSource).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.Create, DRagLint.MenuTree.TMenuTree.AdoptRoot</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddRoot(const pCaption, pSource: string): TMenuNode;
     /// <summary>Adopts pNode (already created) as a root.</summary>
     procedure AdoptRoot(pNode: TMenuNode);
@@ -151,18 +263,69 @@ type
     function Notes: TList<string>;
     /// <summary>Every leaf (kind item or dynamic) in tree order, roots first,
     /// then external roots.</summary>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TMenuLeaf&gt; -- Observed: Acc.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuTree.TMenuTree.ToPaths (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.DisplayCaption, DRagLint.MenuTree.TMenuTree.CollectLeaves</para>
+    /// <para>Reads: FRoots, FExternal</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.DisplayCaption"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Leaves: TArray<TMenuLeaf>;
     /// <summary>paths format: one leaf per line,
     /// path TAB handler TAB file:line TAB confidence; a .dfm root (--with-dfm)
     /// follows a '## dfm &lt;Form.component&gt;' line; external roots follow,
     /// each after a '## external &lt;ident&gt;' line.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.MenuConfidenceName, DRagLint.MenuTree.TMenuTree.Leaves, SameText</para>
+    /// <seealso cref="DRagLint.MenuTree.MenuConfidenceName"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.Leaves"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToPaths: string;
     /// <summary>Indented tree: [kind] caption  -> handler  (file:line, confidence).</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuTree.ToText.Emit, MenuConfidenceName, MenuKindName, StringOfChar</para>
+    /// <para>Reads: FRoots, FExternal, FNotes</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.ToText.Emit"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToText: string;
     /// <summary>menu-tree/1 JSON (spec 8).</summary>
     /// <param name="pEngine">Engine version string.</param>
     /// <param name="pProject">The --project path.</param>
     /// <param name="pDb">The project DB path.</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: O.Format(2).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DateToISO8601, DRagLint.MenuTree.NodeJson</para>
+    /// <para>Reads: FRoots, FExternal, FNotes</para>
+    /// <seealso cref="DRagLint.MenuTree.NodeJson"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToJson(const pEngine, pProject, pDb: string): string;
   end;
 
@@ -192,8 +355,20 @@ type
     /// <summary>Walks every builder routine (or only pRootQName and what it
     /// reaches) and returns the tree. The caller owns the result.</summary>
     /// <param name="pRootQName">Qualified name of one builder; '' = all.</param>
+    /// <returns><!-- drag-lint:auto -->TMenuTree -- Observed:
+    /// TWalkCore(FImpl).Walk(pRootQName).</returns>
     /// <exception cref="EMenuTreeStale">A file the walk parsed changed since it was indexed.</exception>
     /// <exception cref="EMenuTreeSetup">pRootQName names no routine with a body.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TWalkCore.Walk, TWalkCore</para>
+    /// <para>Reads: FImpl</para>
+    /// <seealso cref="DRagLint.MenuTree.TWalkCore.Walk"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuWalker.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuWalker.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Walk(const pRootQName: string = ''): TMenuTree;
   end;
 
@@ -208,12 +383,37 @@ function MenuCaptionKey(const pCaption: string): string;
 /// whitespace-'>'-whitespace, each MenuCaptionKey'd, empty ones dropped,
 /// joined with ' > '.</summary>
 /// <param name="pPath">A display path such as 'drag-lint > Reports > Who calls...'.</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: string.Join(PATH_SEP,
+/// Parts.ToArray).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuDrift.MenuFormPathKey (DRagLint.MenuDrift.pas)</para>
+/// <para>Calls: DRagLint.MenuTree.MenuCaptionKey</para>
+/// <seealso cref="DRagLint.MenuTree.MenuCaptionKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuPathKey(const pPath: string): string;
 
 /// <summary>The JSON / text name of a kind ('root', 'submenu', 'item', ...).</summary>
+/// <param name="pKind"><!-- drag-lint:auto type -->TMenuNodeKind</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: KIND_NAMES[pKind].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuKindName(pKind: TMenuNodeKind): string;
 
 /// <summary>The JSON / text name of a confidence ('certain', 'derived', 'unknown').</summary>
+/// <param name="pConfidence"><!-- drag-lint:auto type -->TMenuConfidence</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: CONFIDENCE_NAMES[pConfidence].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToPaths (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuConfidenceName(pConfidence: TMenuConfidence): string;
 
 implementation

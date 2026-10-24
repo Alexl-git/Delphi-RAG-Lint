@@ -51,6 +51,19 @@ type
     procedure AddSurface(const pEntryId, pPath: string; const pForm: string = '');
     /// <summary>True when any surface is an app-menu one (has a form): menu-drift
     /// then compares the .dfm menus too (implies --with-dfm).</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Reads: FSurfaces</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFamilies"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFromDir"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasAppMenus: Boolean;
     /// <summary>Adds the ide-menu surfaces of the family children in a generated
     /// manifest.json ("families": { name: [ child entries ] }) -- e.g. the
@@ -101,12 +114,50 @@ type
     property Unregistered: TList<TDriftUnregistered> read FUnregistered;
     property Notes: TList<string> read FNotes;
     /// <summary>True when any missing, moved or unregistered finding exists (notes never count).</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FMissing.Count &gt; 0) or
+    /// (FMoved.Count &gt; 0) or (FUnregistered.Count &gt; 0).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Reads: FMissing, FMoved, FUnregistered</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.SummaryLine"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToJson"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasDrift: Boolean;
     /// <summary>'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
     function SummaryLine: string;
     /// <summary>MISSING / MOVED / UNREGISTERED / NOTE lines, then the summary line.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.MenuDrift.TMenuDriftReport.SummaryLine</para>
+    /// <para>Reads: FMissing, FMoved, FUnregistered, FNotes</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.SummaryLine"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.HasDrift"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToText: string;
     /// <summary>menu-drift/1 JSON (spec 8).</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: O.Format(2).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Reads: FMissing, FMoved, FUnregistered, FNotes</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.HasDrift"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.SummaryLine"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToJson: string;
   end;
 
