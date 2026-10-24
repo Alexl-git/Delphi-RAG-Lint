@@ -18360,6 +18360,7 @@ begin
     ehaExists         : ActionStr:= 'exists';
     ehaNoImplSection  : ActionStr:= 'no_impl_section';
     ehaNotFound       : ActionStr:= 'not_found';
+    ehaUsesInInclude  : ActionStr:= 'uses_in_include'; { N-06 }
     else                ActionStr:= 'unknown';
   end;
 
@@ -18535,9 +18536,11 @@ begin
     verb was in before, so hand the same store to both halves and let Build
     report what it always did. }
   if UnitStore = nil then UnitStore:= NameStore;
-  Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
+  var IncReason: string;
+  Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already, IncReason);
   if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
   if ResolvedUnit  = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  if (Length(Edits) = 0) and (IncReason <> '') then begin Writeln('No edit computed: ', IncReason); Exit(1); end; { N-06 }
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
   if AArgs.AsJson then
   begin
@@ -23010,6 +23013,7 @@ var
   nMove       : Integer                            ;
   nRemove     : Integer                            ;
   nSkip       : Integer                            ;
+  SkippedInc  : TList<TUnitUse>                     ; { N-06: include rows, reported never edited }
   Items       : TList<TUsesFixItem>                ;
   WantJson    : Boolean                            ;
   LibStore    : ISymbolStore                       ; { forced candidates only; opened on first need }
@@ -23322,6 +23326,20 @@ var
       var DidWrite: Boolean:= AArgs.Apply and ((nMove + nRemove) > 0);
       JRoot.AddPair('applied' , TJSONBool.Create(DidWrite));
       JRoot.AddPair('removeUnused', TJSONBool.Create(AArgs.RemoveUnused));
+      { N-06: entries inside an include -- never candidates, always listed. }
+      var JInc: TJSONArray:= TJSONArray.Create;
+      for var SI in SkippedInc do
+      begin
+        var JO: TJSONObject:= TJSONObject.Create;
+        JO.AddPair('unit'        , SI.UnitName);
+        JO.AddPair('include'     , SI.OriginPath);
+        JO.AddPair('include_line', TJSONNumber.Create(SI.StartLine));
+        JO.AddPair('host_line'   , TJSONNumber.Create(SI.IncludeLine));
+        JO.AddPair('reason'      , IncludeUsesRefusal('uses-fix', SI, SrcPath));
+        JInc.AddElement(JO);
+      end;
+      JRoot.AddPair('skipped_include', JInc);
+      JRoot.AddPair('skipped_include_count', TJSONNumber.Create(SkippedInc.Count));
       { The single most important thing this verb has to say, and the JSON path
         was the ONLY caller that never saw it -- exactly backwards, since it is
         the one putting a button in front of a human. }
@@ -23436,6 +23454,7 @@ begin
   Orig:= TStringList.Create;
   Work:= TStringList.Create;
   Items:= TList<TUsesFixItem>.Create;
+  SkippedInc:= TList<TUnitUse>.Create; { N-06 }
   try
     for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
     ThisStem:= UnitStemOf(AArgs.Target);
@@ -23474,8 +23493,18 @@ begin
     for Uo in UU do
     begin
       uStem:= LowerCase(Uo.UnitName);
-      if not IndexedUnits.ContainsKey(uStem) then Continue;
       if SameText(uStem, ThisStem) then Continue;
+      { N-06: an entry inside an include is never edited (the .inc may be
+        shared, and its coordinates are not this file's) -- reported, skipped. }
+      if Uo.FromInclude then
+      begin
+        SkippedInc.Add(Uo);
+        if not WantJson then
+          Writeln(Format('  skipped: %s -- used from include %s:%d ({$I} at %s:%d); uses-fix edits only the unit''s own uses clause.',
+            [Uo.UnitName, ExtractFileName(Uo.OriginPath), Uo.StartLine, ExtractFileName(SrcPath), Uo.IncludeLine]));
+        Continue;
+      end;
+      if not IndexedUnits.ContainsKey(uStem) then Continue;
 
       { CANDIDACY IS DECIDED FROM THE INDEX; ONLY VERIFICATION COMPILES.
         That split is what lets --only skip the expensive half without changing
@@ -23552,6 +23581,7 @@ begin
       for Uo in UU do
       begin
         if SameText(LowerCase(Uo.UnitName), ThisStem) then Continue;
+        if Uo.FromInclude then Continue; { N-06: reported as skipped_include above }
         if not Selected(Uo.UnitName) or ItemListed(Uo.UnitName) then Continue;
         var IsIntf: Boolean:= Uo.Section = uusInterface;
         var FKind : string := if IsIntf then 'move' else 'remove';
@@ -23595,6 +23625,8 @@ begin
       empty stdout would force the IDE to distinguish "nothing to do" from "the
       engine failed" by exit code alone, and a tab that renders nothing on both
       is how a broken query looks like a clean unit. }
+    if (SkippedInc.Count > 0) and not WantJson then
+      Writeln(Format('-- %d include entr%s skipped (uses-in-include).', [SkippedInc.Count, if SkippedInc.Count = 1 then 'y' else 'ies']));
     if (nMove + nRemove) = 0 then
     begin
       if WantJson then Writeln(ItemsToJson) else Writeln('  Nothing to change.');
@@ -23628,7 +23660,7 @@ begin
     Result:= 0;
   finally
     RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
-    Orig.Free; Work.Free; Items.Free;
+    Orig.Free; Work.Free; Items.Free; SkippedInc.Free;
   end; // try
 end; // begin
 

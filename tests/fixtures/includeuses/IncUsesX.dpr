@@ -7,6 +7,9 @@ program IncUsesX;
 uses
   HostI in 'HostI.pas',
   HostL in 'HostL.pas',
+  HostM in 'HostM.pas',
+  HostN in 'HostN.pas',
+  HostE in 'HostE.pas',
   Leaf in 'Leaf.pas',
   Dead in 'Dead.pas';
 

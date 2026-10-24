@@ -78,6 +78,9 @@
         </DelphiCompile>
         <DCCReference Include="HostI.pas"/>
         <DCCReference Include="HostL.pas"/>
+        <DCCReference Include="HostM.pas"/>
+        <DCCReference Include="HostN.pas"/>
+        <DCCReference Include="HostE.pas"/>
         <DCCReference Include="Leaf.pas"/>
         <DCCReference Include="Dead.pas"/>
         <BuildConfiguration Include="Base">

@@ -241,6 +241,26 @@ type
     /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
       out AResolvedUnit: string; out AAlreadyUsed: Boolean; APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
+    /// <summary>N-06: the two-store overload that also says WHY no edit was
+    /// computed when the reason is the uses clause living in an include.</summary>
+    /// <param name="ANameStore">As the two-store overload.</param>
+    /// <param name="AUnitStore">As the two-store overload.</param>
+    /// <param name="AName">As the two-store overload.</param>
+    /// <param name="AInFile">As the two-store overload.</param>
+    /// <param name="AResolvedUnit">As the two-store overload.</param>
+    /// <param name="AAlreadyUsed">As the two-store overload; a unit used through
+    /// an include counts as used.</param>
+    /// <param name="AReason">'' when an edit was computed or the usual causes
+    /// apply; the uses-in-include refusal text when the target section's only
+    /// uses entries come from an include (never edited, and a fresh clause
+    /// there would be a second uses clause).</param>
+    /// <param name="APreferInterface">As the two-store overload.</param>
+    /// <returns>The edits; empty with AReason set on the include refusal.</returns>
+    /// <remarks>Include rows are never the insertion anchor: the edit goes after
+    /// the last INLINE entry of the section.</remarks>
+    class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean; out AReason: string;
+      APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
   end;
 
   /// <remarks>
@@ -744,6 +764,15 @@ class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolS
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
   APreferInterface: Boolean): TArray<TTextEdit>;
 var
+  Reason: string;
+begin
+  Result:= Build(ANameStore, AUnitStore, AName, AInFile, AResolvedUnit, AAlreadyUsed, Reason, APreferInterface);
+end;
+
+class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;
+  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
+  out AReason: string; APreferInterface: Boolean): TArray<TTextEdit>;
+var
   Syms : TArray<TSymbol>;
   S    : TSymbol;
   Cands: TDictionary<string, Integer>; { unit -> score }
@@ -757,7 +786,7 @@ var
   Edit: TTextEdit;
   Pair: TPair<string, Integer>;
 begin
-  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
+  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False; AReason:= '';
 
   { 1. resolve the best declaring unit -- against ANameStore, which may be a
     DIFFERENT store than AUnitStore (the type being added to the uses clause
@@ -815,13 +844,24 @@ begin
     else if HasIntf then TargetSection:= uusInterface
     else TargetSection:= uusImplementation; { fresh block goes to implementation }
 
-    { last entry in the chosen section -> append ', Best' after it }
+    { last entry in the chosen section -> append ', Best' after it. N-06: an
+      include row is never the anchor (its coordinates are in the .inc). }
+    var IncRow: TUnitUse:= Default(TUnitUse);
     for U in Uses_ do
-      if U.Section = TargetSection then
+      if (U.Section = TargetSection) and U.FromInclude and not IncRow.FromInclude then IncRow:= U;
+    for U in Uses_ do
+      if (U.Section = TargetSection) and not U.FromInclude then
         if (not HaveLast) or (U.StartLine > LastInSection.StartLine)
            or ((U.StartLine = LastInSection.StartLine) and (U.StartCol > LastInSection.StartCol)) then
         begin LastInSection:= U; HaveLast:= True; end;
 
+    if (not HaveLast) and IncRow.FromInclude then
+    begin
+      { N-06: the section's uses clause lives in an include -- never edited, and
+        a fresh clause here would be a second uses clause. }
+      AReason:= IncludeUsesRefusal('find-unit', IncRow, AInFile);
+      Exit;
+    end;
     if HaveLast then
     begin
       { insert ', Best' at the end of the last unit entry (before the ';') }
