@@ -1523,7 +1523,7 @@ type
     FRoutines   : TDictionary<string, TRoutineInfo>;
     FEdgeKeys   : TDictionary<string, Boolean>;
     FEdges      : TList<TNavEdge>;
-    FCodeMenus  : TMenuTree; // not owned; nil = no code-built menus
+    FCodeMenus  : TMenuTree; // dl:ok referenced-never-set@dad6 -- written through the CodeMenus property (write FCodeMenus) by GenerateFormsCsvCore; not owned, nil = no code-built menus
     function TreeFor(const AFormClass: string): TFormDfmTree;
     function LinesOf(const APath: string): TArray<string>;
     function Routine(AStore: TSQLiteSymbolStore; AId: Int64): TRoutineInfo;
