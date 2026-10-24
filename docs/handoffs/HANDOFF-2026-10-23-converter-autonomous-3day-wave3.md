@@ -34,6 +34,15 @@ marker, 450b9267) DONE on the held FG-M branch; owed at the FG-M merge: lint-all
 DB + lint FeatureGenTests.dpr. Only N7+N11 (agent a5e920f63124c9d02) still in flight -- told to
 merge main (N9 6b21a559, N8 e52df7bb) first.
 
+## Update (night): queue EMPTY except deploy-gated + owner items
+Merged to local main: N7+N11 a246e716 (InputGate), N7 Save check 72ec46ed, B4 test-dpr lint
+328f8569, backlog 0c51283d / 313a1dcc. N10 fixed in the scratch gui-lock.ps1. Every backlog
+item A-E is done except A4 (owner D0-D9; goal says spec+plan only -- NOT implemented on purpose)
+and E3 (owner approval). Waiting on ENGINE's final deploy sha (end of day 3), then: merge FG-M +
+FG-N (check ParseMenuTreeJson ignores ENGINE's additive `identPath`; lint-all on the featuregen
+DB), featuregen build --all (ok from 5e + lsp-6f), verify convert-apply / convert-scaffold,
+re-pin + full baseline. Meanwhile: answer peers' build --all asks ("ok" when nothing of ours builds).
+
 ## Next actions
 1. Review + cherry-pick N7/N11; act on N8's verdict (fix via sonnet if the table is clear).
 2. Then: N10 (gui-lock stale-owner check), 44 B4 lint findings in ConvRulesModelTests.dpr, other backlog leftovers.
