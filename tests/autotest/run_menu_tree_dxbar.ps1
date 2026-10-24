@@ -107,10 +107,37 @@ $presets = @(Kids $mm)[0]
 Check 'Presets inserted at 0 into Bars[0], kind submenu, derived' ($null -ne $presets -and $presets.caption -ceq 'Presets' -and $presets.kind -ceq 'submenu' -and $presets.confidence -ceq 'derived') "[$($presets.caption)/$($presets.kind)/$($presets.confidence)]"
 $ext = @($j.external)
 $extIds = ($ext | ForEach-Object { $_.ident }) -join ','
-Check 'only popGridMenu9 stays external (form links grafted)' ($extIds -ceq 'popGridMenu9') $extIds
+# dxbar2: a field link owner is keyed TClass.field -- two classes in uGridPopups9
+# each own a popGridMenu field and must stay two roots (the bug merged them);
+# the unit-global popGridMenu9 is not a field and keeps its bare name
+Check 'external roots: popGridMenu9 + one per class for the popGridMenu field (form links grafted)' ($extIds -ceq 'popGridMenu9,TGridMenu9.popGridMenu,TTreeMenu9.popGridMenu') $extIds
 $gp = $ext | Select-Object -First 1
 $gk = (Kids $gp | ForEach-Object { $_.kind }) -join ','
 Check 'popGridMenu9 children: submenu,separator,item' ($gk -ceq 'submenu,separator,item') $gk
+function ExtOf([string]$Ident) { $ext | Where-Object { $_.ident -ceq $Ident } | Select-Object -First 1 }
+$ga = ExtOf 'TGridMenu9.popGridMenu'
+$tb = ExtOf 'TTreeMenu9.popGridMenu'
+Check 'TGridMenu9.popGridMenu: identPath = uGridPopups9.pas' ($null -ne $ga -and $ga.identPath -like '*\uGridPopups9.pas') "[$($ga.identPath)]"
+$gak = (Kids $ga | ForEach-Object { $_.kind }) -join ','
+Check 'TGridMenu9.popGridMenu children: item,separator,submenu' ($gak -ceq 'item,separator,submenu') $gak
+$tbk = (Kids $tb | ForEach-Object { $_.kind }) -join ','
+Check 'TTreeMenu9.popGridMenu children: item,submenu,header' ($tbk -ceq 'item,submenu,header') $tbk
+# cross-routine: the field sub-item is filled by FillLayouts (walked BEFORE the
+# constructor that links it); the local sub-item is filled by AddViews(sub)
+$pick = Kids $ga | Where-Object { $_.caption -ceq 'Pick Layout' } | Select-Object -First 1
+$pk = (Kids $pick | ForEach-Object { "$($_.kind):$($_.caption)" }) -join ','
+Check 'Pick Layout (field, filled in another method) is a submenu with Compact Layout' ($null -ne $pick -and $pick.kind -ceq 'submenu' -and $pk -ceq 'item:Compact Layout') "[$($pick.kind)] $pk"
+Check 'no external root left for the sub-item field' (@($ext | Where-Object { $_.ident -match 'subLayouts' }).Count -eq 0) $extIds
+$view = Kids $tb | Where-Object { $_.caption -ceq 'Pick View' } | Select-Object -First 1
+$vk = (Kids $view | ForEach-Object { "$($_.kind):$($_.caption)" }) -join ','
+Check "Pick View (passed to AddViews) holds the caller class's Flat View, not TGridMenu9.AddViews" ($vk -ceq 'item:Flat View') $vk
+$exp = @(Kids $tb)[0]
+Check "same-named handler resolves in the item's own class (TTreeMenu9.DoExport)" ($exp.handler -ceq 'uGridPopups9.TTreeMenu9.DoExport') "[$($exp.handler)]"
+# decline: a sub-item filled by a routine the walk cannot follow stays a header, with a note
+$subNotes = @(@($j.notes) | Where-Object { $_ -match '^sub-item without traced items' })
+Check "NOTE sub-item without traced items names 'Recent Views'" ((@($subNotes | Where-Object { $_ -match "'Recent Views'" }).Count -eq 1)) (($subNotes) -join ' | ')
+# positive control for the note: it names only the untraced sub-item, not the two that were followed
+Check 'the sub-item note fires once (not for Pick Layout / Pick View / Select Layout)' ($subNotes.Count -eq 1) "($($subNotes.Count))"
 $notes = @($j.notes)
 Check 'NOTE unlinked bar item btnOrphan' (@($notes | Where-Object { $_ -match 'unlinked bar item' -and $_ -match 'btnOrphan' }).Count -eq 1) (($notes | Select-Object -First 4) -join ' | ')
 Check 'NOTE dynamic caption' (@($notes | Where-Object { $_ -match '^dynamic caption' }).Count -ge 1)
@@ -121,7 +148,7 @@ $off = $null
 try { $off = $offText | ConvertFrom-Json } catch { $off = $null }
 $offIds = @($off.external | ForEach-Object { $_.ident })
 Check 'flag off: no dfm roots' ($null -ne $off -and @($off.roots).Count -eq 0) "($(@($off.roots).Count) roots)"
-Check 'flag off: popGrid and barLists are external roots' (($offIds -ccontains 'popGrid') -and ($offIds -ccontains 'barLists')) ($offIds -join ',')
+Check 'flag off: popGrid and barLists are external roots (form fields: keyed TfrmMain9.<field>)' (($offIds -ccontains 'TfrmMain9.popGrid') -and ($offIds -ccontains 'TfrmMain9.barLists')) ($offIds -join ',')
 
 # --- stale .dfm: exit 3 ---
 [IO.File]::AppendAllText("$fx\uMain9.dfm", "`r`n")

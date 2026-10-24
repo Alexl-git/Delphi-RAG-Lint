@@ -44,6 +44,7 @@ type
     FParented  : Boolean;
     FForm      : string;
     FLinkIndex : Integer;
+    FBarSubItem: Boolean;
     procedure AttachTo(pParent: TMenuNode);
   public
     /// <summary>The node's kind.</summary>
@@ -73,6 +74,10 @@ type
     /// gave this node under an external root; -1 = appended. The --with-dfm graft
     /// inserts the node at this index among the .dfm links.</summary>
     property LinkIndex: Integer read FLinkIndex write FLinkIndex;
+    /// <summary>Walker state: the node was created as a TdxBarSubItem (TdxBarSubItem.Create /
+    /// AddSubItem). One that ends with no traced children settles as a header and the
+    /// walk adds a note naming it.</summary>
+    property BarSubItem: Boolean read FBarSubItem write FBarSubItem;
     /// <summary>Creates a node.</summary>
     /// <param name="pKind">Initial kind; the walker settles it in TMenuTree.Finish.</param>
     /// <param name="pCaption">Caption as written.</param>
@@ -131,7 +136,9 @@ type
     procedure AdoptRoot(pNode: TMenuNode);
     /// <summary>The external root for pIdent as named in pIdentPath, created on
     /// first use.</summary>
-    /// <param name="pIdent">The foreign identifier, e.g. mnuTools.</param>
+    /// <param name="pIdent">The foreign identifier, e.g. mnuTools. A DevExpress link
+    /// owner that is a FIELD of the class whose method links into it is keyed
+    /// TClass.field (two classes in one unit with a field popGridMenu each get two roots).</param>
     /// <param name="pSource">file:line of the first Add under it.</param>
     /// <param name="pIdentPath">File whose code names pIdent. Two forms that
     /// each own an item called mnuTools get two external roots.</param>
@@ -597,6 +604,11 @@ type
     ProcRoutine: string;
     { mvLink: the TLinkState of a DevExpress item link (ItemLinks.Add / Insert(i)) }
     Link       : TObject;
+    { qualified class of the method whose frame evaluated Text ('' outside a
+      method): a bare handler / routine name resolves in that class first }
+    Cls        : string;
+    { Text is a field of Cls: a link owner is keyed TClass.field }
+    IsField    : Boolean;
   end;
 
   { A DevExpress item link the walk is following: whose ItemLinks it is in, at
@@ -667,6 +679,8 @@ type
     Depth  : Integer;
     { first FWith entry this activation may use: a callee never sees its caller's with receivers }
     WithBase: Integer;
+    { qualified class of the running method; '' for a plain routine }
+    Cls     : string;
   end;
 
   /// <summary>What a call runs: the parameter list and body (of a routine or
@@ -680,6 +694,7 @@ type
     Site    : string;
     Derived : Boolean;
     Depth   : Integer;
+    Cls     : string;
   end;
 
   TWalkCore = class  // dl:ok high-response@2a94 -- the walker is one interpreter over one CST: eval, call binding, parenting and the index lookups share the env and file caches, and splitting would hand the same calls to a second class
@@ -697,6 +712,16 @@ type
     FStack     : TList<string>;
     FLinks     : TObjectList<TLinkState>;
     FWith      : TList<TMValue>;
+    { routine qualified name -> qualified class of the method ('' = not a method) }
+    FClassOf   : TDictionary<string, string>;
+    { lower 'class.field' -> the field is declared in that class }
+    FFieldOf   : TDictionary<string, Boolean>;
+    { lower 'TClass.field|path' -> the code node a method of TClass stored in the field }
+    FFieldNodes: TDictionary<string, TMenuNode>;
+    function ClassOfRoutine(const pQName: string): string;
+    function IsClassField(const pCls, pName: string): Boolean;
+    function FieldKey(const pCls, pName, pPath: string): string;
+    procedure GraftFieldRoots;
     function Q(const pSql: string; const pParams: array of string): TFDQuery;
     procedure LoadMenuTypes;
     function IsMenuType(const pName: string): Boolean;
@@ -705,8 +730,8 @@ type
     function Text(const pFrame: TWalkFrame; const pNode: TTSNode): string;
     function Loc(const pFrame: TWalkFrame; const pNode: TTSNode): string;
     function NewEnv: TWalkEnv;
-    function ResolveRoutine(const pName, pFromPath: string): TRoutineInfo;
-    function QualifyHandler(const pText, pFromPath: string): string;
+    function ResolveRoutine(const pName, pFromPath: string; const pCls: string = ''): TRoutineInfo;
+    function QualifyHandler(const pText, pFromPath: string; const pCls: string = ''): string;
     function ConstDecl(const pName, pFromPath: string; out pFile: TWalkFile): TTSNode;
     function IsMenuTypedForeign(const pIdent, pFromPath: string; pUnknown: Boolean = True): Boolean;
     function CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;
@@ -895,6 +920,9 @@ begin
   FStack     := TList<string>.Create;
   FLinks     := TObjectList<TLinkState>.Create(True);
   FWith      := TList<TMValue>.Create;
+  FClassOf   := TDictionary<string, string>.Create;
+  FFieldOf   := TDictionary<string, Boolean>.Create;
+  FFieldNodes:= TDictionary<string, TMenuNode>.Create;
   { spec 5: exit 2 when the project is not in the DB -- at least one indexed
     file must lie under the project's folder. }
   Dir:= IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(pProject)));
@@ -911,6 +939,9 @@ end;
 
 destructor TWalkCore.Destroy;
 begin
+  FFieldNodes.Free;
+  FFieldOf.Free;
+  FClassOf.Free;
   FWith.Free;
   FLinks.Free;
   FStack.Free;
@@ -1067,17 +1098,68 @@ begin
   FEnvs.Add(Result);
 end;
 
-function TWalkCore.ResolveRoutine(const pName, pFromPath: string): TRoutineInfo;
+{ The class a method belongs to: the qualified name without its last segment,
+  when the index declares that as a class / record. }
+function TWalkCore.ClassOfRoutine(const pQName: string): string;
+var
+  QC   : TFDQuery;
+  Owner: string;
+  I    : Integer;
+begin
+  if FClassOf.TryGetValue(LowerCase(pQName), Result) then Exit;
+  Result:= '';
+  I:= pQName.LastIndexOf('.');
+  if I > 0 then
+  begin
+    Owner:= pQName.Substring(0, I);
+    QC:= Q('SELECT 1 AS n FROM symbols WHERE qualified_name = :q COLLATE NOCASE AND kind IN (''class'',''record'') LIMIT 1', [Owner]);
+    try
+      if not QC.Eof then Result:= Owner;
+    finally
+      QC.Free;
+    end;
+  end;
+  FClassOf.Add(LowerCase(pQName), Result);
+end;
+
+function TWalkCore.IsClassField(const pCls, pName: string): Boolean;
+var
+  QF : TFDQuery;
+  Key: string;
+begin
+  Result:= False;
+  if (pCls = '') or (pName = '') then Exit;
+  Key:= LowerCase(pCls + '.' + pName);
+  if FFieldOf.TryGetValue(Key, Result) then Exit;
+  QF:= Q('SELECT 1 AS n FROM symbols WHERE qualified_name = :q COLLATE NOCASE AND kind IN (''field'',''component'') LIMIT 1', [pCls + '.' + pName]);
+  try
+    Result:= not QF.Eof;
+  finally
+    QF.Free;
+  end;
+  FFieldOf.Add(Key, Result);
+end;
+
+{ The key a field's external root and its stored node share: TClass.field (the
+  class's short name, as the root's ident shows it) in the file that names it. }
+function TWalkCore.FieldKey(const pCls, pName, pPath: string): string;
+begin
+  Result:= LowerCase(LastSegment(pCls) + '.' + pName + '|' + pPath);
+end;
+
+function TWalkCore.ResolveRoutine(const pName, pFromPath: string; const pCls: string = ''): TRoutineInfo;
 var
   QR : TFDQuery;
   Key: string;
 begin
-  Key:= LowerCase(pName + '|' + pFromPath);
+  Key:= LowerCase(pName + '|' + pFromPath + '|' + pCls);
   if FRoutines.TryGetValue(Key, Result) then Exit;
   Result:= Default(TRoutineInfo);
+  { the caller's own class first: two classes in one unit may both declare it }
   QR:= Q('SELECT s.qualified_name AS q, f.path AS p, s.impl_start_line AS l FROM symbols s JOIN files f ON f.id = s.file_id '
     + 'WHERE s.name = :n COLLATE NOCASE AND s.impl_start_line > 0 AND s.kind IN (' + ROUTINE_KINDS + ') '
-    + 'ORDER BY (lower(f.path) = :f) DESC, s.id LIMIT 1', [pName, LowerCase(pFromPath)]);
+    + 'ORDER BY (lower(s.qualified_name) = :c) DESC, (lower(f.path) = :f) DESC, s.id LIMIT 1',
+    [pName, LowerCase(pCls + '.' + pName), LowerCase(pFromPath)]);
   try
     if not QR.Eof then
     begin
@@ -1092,7 +1174,7 @@ begin
   FRoutines.Add(Key, Result);
 end;
 
-function TWalkCore.QualifyHandler(const pText, pFromPath: string): string;
+function TWalkCore.QualifyHandler(const pText, pFromPath: string; const pCls: string = ''): string;
 var
   QH   : TFDQuery;
   Name : string;
@@ -1104,6 +1186,8 @@ begin
   I:= pText.LastIndexOf('.');
   if I > 0 then Owner:= LastSegment(pText.Substring(0, I));
   if SameText(Owner, 'Self') then Owner:= '';
+  { a bare handler names a method of the class that assigns it }
+  if Owner = '' then Owner:= LastSegment(pCls);
   QH:= Q('SELECT s.qualified_name AS q FROM symbols s JOIN files f ON f.id = s.file_id '
     + 'WHERE s.name = :n COLLATE NOCASE AND s.kind IN (' + ROUTINE_KINDS + ') '
     + 'ORDER BY (lower(s.qualified_name) LIKE :o) DESC, (lower(f.path) = :f) DESC, s.id LIMIT 1',
@@ -1371,6 +1455,8 @@ begin
   Result.Kind:= mvForeign;
   Result.Text:= if C.Text <> '' then C.Text else Text(pFrame, pNode);
   Result.Path:= pFrame.F.Path;
+  Result.Cls := pFrame.Cls;
+  Result.IsField:= Result.IsField and SameText(Result.Text, Text(pFrame, pNode));
   Result.Conf:= mcUnknown;
 end;
 
@@ -1378,7 +1464,7 @@ function TWalkCore.HandlerOf(const pValue: TMValue): string;
 begin
   case pValue.Kind of
     mvHandler, mvWrapper: Result:= pValue.Handler;
-    mvForeign           : Result:= QualifyHandler(pValue.Text, pValue.Path);
+    mvForeign           : Result:= QualifyHandler(pValue.Text, pValue.Path, pValue.Cls);
     mvProc              : Result:= if pValue.ProcRoutine <> '' then pValue.ProcRoutine else '<anonymous method>';
   else
     Result:= '';
@@ -1408,6 +1494,7 @@ begin
     Result.ProcNode:= pNode;
     Result.ProcPath:= pFrame.F.Path;
     Result.ProcEnv := pFrame.Env;
+    Result.Cls     := pFrame.Cls;
     Exit;
   end;
   if K = 'identifier' then
@@ -1416,6 +1503,8 @@ begin
     Result.Kind:= mvForeign;
     Result.Text:= Text(pFrame, pNode);
     Result.Path:= pFrame.F.Path;
+    Result.Cls := pFrame.Cls;
+    Result.IsField:= IsClassField(pFrame.Cls, Result.Text);
     Exit;
   end;
   if K = 'exprCall' then Exit(EvalCall(pNode, pFrame));
@@ -1453,11 +1542,13 @@ begin
     Result.Kind:= mvForeign;
     Result.Text:= Text(pFrame, pNode);
     Result.Path:= pFrame.F.Path;
+    Result.Cls := pFrame.Cls;
     Exit;
   end;
   Result.Kind:= mvForeign;
   Result.Text:= Text(pFrame, pNode);
   Result.Path:= pFrame.F.Path;
+  Result.Cls := pFrame.Cls;
 end;
 
 function TWalkCore.CreateNode(const pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
@@ -1468,6 +1559,9 @@ begin
   Args:= pCall.ChildByField('args');
   N:= TMenuNode.Create(mnkItem, '', if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pCall));
   if pFrame.Derived then N.Confidence:= mcDerived;
+  { TdxBarSubItem.Create(O) (entity lhs) / X.AddSubItem (rhs) }
+  N.BarSubItem:= TRegEx.IsMatch(Text(pFrame, if Args.IsNull then pCall else pCall.ChildByField('entity')),
+    '(^|\.)(TdxBarSubItem\.Create|AddSubItem)$', [roIgnoreCase]);
   FCreated.Add(N);
   if not Args.IsNull and (Args.NamedChildCount > 0) and (Args.NamedChild(0).NodeType = 'kNil') then FCreatedNil.Add(N);
   Result:= NoValue;
@@ -1545,6 +1639,7 @@ begin
       Callee.Site    := Loc(pFrame, pNode);
       Callee.Derived := True;
       Callee.Depth   := pFrame.Depth + 1;
+      Callee.Cls     := V.Cls;
       Exit(InvokeExpanded(Callee, Vals));
     end;
     Info:= ResolveRoutine(LastSegment(V.ProcRoutine), pFrame.F.Path);
@@ -1569,7 +1664,8 @@ begin
     Result.Path:= pFrame.F.Path;
     Exit;
   end;
-  Info:= ResolveRoutine(Name, pFrame.F.Path);
+  { a bare call inside a method names a method of that class first }
+  Info:= ResolveRoutine(Name, pFrame.F.Path, if E.NodeType = 'identifier' then pFrame.Cls else '');
   if not Info.Found then Exit;
   Result:= InvokeRoutine(Info, Vals, if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pNode), pFrame.Derived, pFrame.Depth + 1);
 end;
@@ -1597,6 +1693,7 @@ begin
     Callee.Site    := pSite;
     Callee.Derived := pDerived;
     Callee.Depth   := pDepth;
+    Callee.Cls     := ClassOfRoutine(pInfo.QName);
     Result:= InvokeExpanded(Callee, pArgs);
   finally
     FStack.Delete(FStack.Count - 1);
@@ -1646,6 +1743,7 @@ begin
   Fr.Derived:= pCallee.Derived;
   Fr.Depth  := pCallee.Depth;
   Fr.WithBase:= FWith.Count;
+  Fr.Cls    := pCallee.Cls;
   Names:= nil;
   if not pCallee.ArgsDecl.IsNull then
     for I:= 0 to pCallee.ArgsDecl.NamedChildCount - 1 do
@@ -1818,6 +1916,18 @@ begin
       V:= EvalArg(R, pFrame);
       if V.Kind = mvForeign then V.Text:= Name;
     end;
+    { a field of the method's class: a link owner stored there is keyed
+      TClass.field; a node stored there is remembered for the methods that
+      link into the field later (GraftFieldRoots) }
+    if (L.NodeType = 'identifier') and IsClassField(pFrame.Cls, Name) then
+    begin
+      if V.Kind = mvForeign then
+      begin
+        V.Cls    := pFrame.Cls;
+        V.IsField:= SameText(V.Text, Name);
+      end
+      else if V.Kind = mvNode then FFieldNodes.AddOrSetValue(FieldKey(pFrame.Cls, Name, pFrame.F.Path), V.Node);
+    end;
     if Name <> '' then pFrame.Env.Vars.AddOrSetValue(LowerCase(Name), V);
     Exit;
   end;
@@ -1913,7 +2023,12 @@ begin
         Ident    := pState.Owner.Text;
         IdentPath:= if pState.Owner.Path <> '' then pState.Owner.Path else pFrame.F.Path;
         if (Ident <> '') and (TRegEx.IsMatch(Ident, DX_BAR_EXPR, [roIgnoreCase]) or IsMenuTypedForeign(Ident, IdentPath)) then
+        begin
+          { a field of the linking method's class: two classes in one unit that
+            each own a popGridMenu are two roots, TClassA.popGridMenu and TClassB.popGridMenu }
+          if pState.Owner.IsField then Ident:= LastSegment(pState.Owner.Cls) + '.' + Ident;
           Result:= FTree.ExternalRoot(Ident, pState.Site, IdentPath);
+        end;
       end;
   end;
 end;
@@ -2044,6 +2159,36 @@ begin
   else if not pNode.HasClick then pNode.Kind:= mnkHeader
   else pNode.Kind:= mnkItem;
   if pNode.Kind <> mnkItem then pNode.Handler:= '';
+  if (pNode.Kind = mnkHeader) and pNode.BarSubItem then
+    FTree.AddNote(Format('sub-item without traced items at %s: %s -- its links are added where the walk cannot follow',
+      [pNode.Source, if pNode.Caption <> '' then QuotedStr(pNode.Caption) else '(no caption)']));
+end;
+
+{ Cross-routine sub-items: a method links items into a FIELD (external root
+  TClass.field) that another method of the class set to a code node; the
+  links move under that node. Runs after every builder, so the walk order of
+  the two methods does not matter. A field that holds no traced node, or a
+  node that sits under the root itself, keeps its external root. }
+procedure TWalkCore.GraftFieldRoots;
+var
+  Ext, Target, P: TMenuNode;
+  C             : TMenuNode;
+begin
+  for Ext in FTree.External.ToArray do
+  begin
+    if not FFieldNodes.TryGetValue(LowerCase(Ext.Ident + '|' + Ext.IdentPath), Target) then Continue;
+    if (Target = Ext) or not Target.Parented then Continue;
+    P:= Target;
+    while (P <> nil) and (P <> Ext) do P:= P.Parent;
+    if P = Ext then Continue;
+    while Ext.Children.Count > 0 do
+    begin
+      C:= Ext.Children.Extract(Ext.Children[0]);
+      C.LinkIndex:= -1;
+      Target.AddChild(C);
+    end;
+    FTree.External.Remove(Ext);
+  end;
 end;
 
 procedure TWalkCore.FreeOrphans(pNote: Boolean);
@@ -2079,6 +2224,7 @@ procedure TWalkCore.Finish;
 var
   N: TMenuNode;
 begin
+  GraftFieldRoots;
   FreeOrphans(True);
   for N in FTree.Roots do Settle(N);
   for N in FTree.External do Settle(N);
@@ -2146,6 +2292,7 @@ begin
         Fr:= Default(TWalkFrame);
         Fr.F  := WF;
         Fr.Env:= NewEnv;
+        Fr.Cls:= ClassOfRoutine(Info.QName);
         FStack.Add(LowerCase(Info.QName));
         try
           WalkStmt(Proc.ChildByField('body'), Fr);

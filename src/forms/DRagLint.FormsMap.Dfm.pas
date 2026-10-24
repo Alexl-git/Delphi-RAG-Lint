@@ -196,7 +196,8 @@ type
     /// sub-item, TMenuItem), &lt;mgr&gt;.Bars[n] (the n-th TdxBar in .dfm order),
     /// &lt;mgr&gt;.MainMenuBar (the IsMainMenu bar), &lt;mgr&gt;.BarByCaption('X') /
     /// BarByOldName('X') (by Caption / Name).</summary>
-    /// <param name="AIdent">The identifier as code wrote it.</param>
+    /// <param name="AIdent">The identifier as code wrote it; a 'TFormClass.' prefix naming
+    /// this form's class (menu-tree's key for a field link owner) is accepted.</param>
     /// <param name="ADerived">Set True when the owner was found by position or
     /// lookup (Bars[n], MainMenuBar, BarBy*) rather than by name.</param>
     /// <returns>The owner node, or nil when nothing here matches.</returns>
@@ -966,6 +967,9 @@ begin
       ADerived:= False;
       Key:= AIdent;
       if Key.StartsWith('Self.', True) then Key:= Key.Substring(Length('Self.'));
+      // menu-tree keys a field link owner by its class: TfrmMain.popGrid names this form's popGrid
+      if (FRoot <> nil) and (FRoot.CompClass <> '') and Key.StartsWith(FRoot.CompClass + '.', True) then
+        Key:= Key.Substring(Length(FRoot.CompClass) + 1);
       if not (Key.Contains('.') or Key.Contains('[') or Key.Contains('(')) then Result:= ItemByName(Key);
     end;
   end;

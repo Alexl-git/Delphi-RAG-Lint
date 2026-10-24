@@ -21,3 +21,9 @@ File menu > Exit	uMain9.TfrmMain9.btnExitClick	certain
 popGridMenu9 > Select Layout > Default Layout	uGridPopup9.TGridPopup9.DoLayout	certain
 popGridMenu9 > Select Layout > Saved Layout	uGridPopup9.TGridPopup9.DoLayout	certain
 popGridMenu9 > Copy Cell	uGridPopup9.TGridPopup9.DoCopy	certain
+## external TGridMenu9.popGridMenu
+TGridMenu9.popGridMenu > Export Rows	uGridPopups9.TGridMenu9.DoExport	certain
+TGridMenu9.popGridMenu > Pick Layout > Compact Layout	uGridPopups9.TGridMenu9.DoPickLayout	certain
+## external TTreeMenu9.popGridMenu
+TTreeMenu9.popGridMenu > Export Nodes	uGridPopups9.TTreeMenu9.DoExport	certain
+TTreeMenu9.popGridMenu > Pick View > Flat View	uGridPopups9.TTreeMenu9.DoPickView	certain
