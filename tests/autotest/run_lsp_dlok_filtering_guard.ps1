@@ -171,6 +171,29 @@ Verify 'no hash'      (New-Fixture 'nohash'      @{ 11 = '  with X do  // dl:ok 
 Verify 'legacy ignore'(New-Fixture 'ignore'      @{ 11 = '  with X do  // drag-lint:ignore with-statement' }) 1 | Out-Null
 Verify 'span end line'(New-Fixture 'span'        @{ 12 = "    Free;  // dl:ok with-statement@$HashHex" }) 1 | Out-Null
 
+# ---------- a rule loaded TWICE (2026-10-23 main sweep) ----------
+# TQueryRuleLoader walks <exe-dir>\rules RECURSIVELY, so a staged engine whose
+# rules\ also holds a nested copy (rules\rules\, from an xcopy into an existing
+# folder) runs every .scm rule twice. `lint` drops the exact duplicates in
+# FinalizeAndOutput; the LSP published both (lsp=[11,13,11,13] cli=[11,13]).
+# The parity spec covers that layout too: stage the engine with a nested copy.
+Write-Host ''
+Write-Host 'a .scm rule loaded twice (nested rules\ copy next to the engine)' -ForegroundColor Cyan
+$DupEngine = Join-Path $WorkDir 'dup-engine'
+New-Item -ItemType Directory -Force $DupEngine | Out-Null
+$ExeDir = Split-Path $Exe
+Copy-Item $Exe $DupEngine -Force
+Copy-Item (Join-Path $ExeDir '*.dll') $DupEngine -Force
+Copy-Item (Join-Path $ExeDir 'rules') (Join-Path $DupEngine 'rules') -Recurse -Force
+Copy-Item (Join-Path $ExeDir 'rules') (Join-Path $DupEngine 'rules\rules') -Recurse -Force
+Check 'SETUP: the staged engine holds the rule twice' `
+  (@(Get-ChildItem (Join-Path $DupEngine 'rules') -Recurse -Filter "$Rule.scm").Count -eq 2) ''
+$RealExe = $Exe
+$Exe = Join-Path $DupEngine (Split-Path $RealExe -Leaf)
+Verify 'rule loaded twice (POSITIVE CONTROL shape)' (New-Fixture 'duprule' @{}) 2 | Out-Null
+Verify 'rule loaded twice, hashed marker' $hashedFile 1 | Out-Null
+$Exe = $RealExe
+
 # ---------- the plugin path: codeAction -> apply edit -> save -> republish ----------
 Write-Host ''
 Write-Host 'codeAction -> InsertInto -> save -> next publish' -ForegroundColor Cyan

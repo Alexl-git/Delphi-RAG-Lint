@@ -1,6 +1,6 @@
 Content-Length: <N>
 
-{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"definitionProvider":true,"referencesProvider":true,"workspaceSymbolProvider":true,"hoverProvider":true,"textDocumentSync":1,"codeActionProvider":true,"completionProvider":{"triggerCharacters":[".","(",","],"resolveProvider":false},"signatureHelpProvider":{"triggerCharacters":["(",","]},"draglint":{"ping":true}},"serverInfo":{"name":"drag-lint LSP","version":"<V>"}}}Content-Length: <N>
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"definitionProvider":true,"referencesProvider":true,"workspaceSymbolProvider":true,"hoverProvider":true,"textDocumentSync":1,"codeActionProvider":true,"completionProvider":{"triggerCharacters":[".","(",","],"resolveProvider":false},"signatureHelpProvider":{"triggerCharacters":["(",","]},"documentSymbolProvider":true,"draglint":{"ping":true},"codeLensProvider":{"resolveProvider":false},"implementationProvider":true,"declarationProvider":true,"renameProvider":{"prepareProvider":true},"semanticTokensProvider":{"legend":{"tokenTypes":["namespace","type","class","interface","enum","function","method","property","variable","parameter","keyword","comment","string","number","operator"],"tokenModifiers":["declaration"]},"full":true},"inlayHintProvider":true,"executeCommandProvider":{"commands":["draglint.showCallers"]}},"serverInfo":{"name":"drag-lint LSP","version":"<V>"}}}Content-Length: <N>
 
 {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///<W>/FxDirty.pas","diagnostics":[]}}Content-Length: <N>
 
