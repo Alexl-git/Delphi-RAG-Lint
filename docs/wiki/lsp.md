@@ -36,6 +36,12 @@ drag-lint add to those answers:
 Status: the flags are accepted now; the diagnostics handler itself lands
 with merge task A1. Until then every message is relayed unchanged.
 
+## Document outline (textDocument/documentSymbol)
+
+`lsp` answers `textDocument/documentSymbol` from the index as a hierarchical `DocumentSymbol[]` (the editor's outline, breadcrumbs and *Go to Symbol in File*): the unit's members at the top level, members nested under their type, locals and parameters left out, 0-based ranges, `selectionRange` on the name token. A file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.DocumentSymbol`); guard: `tests\autotest\run_lsp_document_symbol_guard.ps1`.
+
+`lsp` answers `textDocument/codeLens` with one lens per routine declaration, titled from the index caller counts (`3 callers`, `1 caller`, `0 callers`), range zero-width at (line, 0), command `draglint.showCallers` with arguments `[uri, line]` (implemented by the editor extension). Capability `codeLensProvider: {resolveProvider: false}`; a file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.CodeLens`); guard: `tests\autotest\run_lsp_code_lens_guard.ps1`.
+
 ## Reaching it in the IDE
 
 CLI+internal: the plugin starts this process itself, from

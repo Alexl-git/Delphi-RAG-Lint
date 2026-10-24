@@ -121,6 +121,8 @@ uses
   DRagLint.LSP.Proxy.Merge in '..\lsp\DRagLint.LSP.Proxy.Merge.pas',
   DRagLint.LSP.Context in '..\lsp\DRagLint.LSP.Context.pas',
   DRagLint.LSP.Features in '..\lsp\DRagLint.LSP.Features.pas',
+  DRagLint.LSP.Feature.CodeLens in '..\lsp\DRagLint.LSP.Feature.CodeLens.pas',
+  DRagLint.LSP.Feature.DocumentSymbol in '..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas',
   DRagLint.LSP.Feature.Ping in '..\lsp\DRagLint.LSP.Feature.Ping.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',

@@ -13,7 +13,9 @@ interface
 implementation
 
 uses
-  DRagLint.LSP.Feature.Ping  // dl:ok unused-unit-in-uses@4458 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  DRagLint.LSP.Feature.DocumentSymbol  // dl:ok unused-unit-in-uses@b145 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.Ping  // dl:ok unused-unit-in-uses@45bf -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.CodeLens  // dl:ok unused-unit-in-uses@ed85 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   ;
 
 end.
