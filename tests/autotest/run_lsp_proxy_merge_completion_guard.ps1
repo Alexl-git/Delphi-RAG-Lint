@@ -34,7 +34,12 @@
       (case 1) differs;
     6 bogus --db -> theirs byte-identical, exactly one stderr line names the
       merge;
-    7 decoy: absent from the member list (1), present for the bare request.
+    7 decoy: absent from the member list (1), present for the bare request;
+    8 (A3 fix 3) requests with an empty position: relayed untouched, at most
+      one stderr line; a later valid request still merges;
+    9 (A3 fix 2) a file no index owns: its own declarations are offered;
+   10 (A3 fix 4) --db good --db missing: one stderr line names the missing
+      path, the good index still merges.
 
   The proxy guards default -Exe to dll-win64; a lane passes its own engine.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
@@ -256,6 +261,52 @@ $r7  = Invoke-Raw $Exe $onArgs ([byte[]]($didOpen + $bareReq)) (Script '[]')
 $m7  = Reply7 $r7.Out
 $l7  = if ($m7 -and -not $m7.IsNull) { Labels $m7.Items } else { @() }
 Check 'bare "FI": FIx offered (the index and the tap serve it)' ($l7 -contains 'FIx') ("labels=$($l7 -join ',')")
+
+# --- 8 a request without line / character (A3 fix 3) -----------------------------
+Write-Host ''
+Write-Host '(8) completion requests with no position fields: relayed untouched, at most one stderr line' -ForegroundColor Cyan
+function NoPosReq([int]$id) {
+  return Frame ('{"jsonrpc":"2.0","id":' + $id + ',"method":"textDocument/completion","params":{"textDocument":{"uri":"' + $uri + '"},"position":{}}}')
+}
+$in8  = [byte[]]((NoPosReq 5) + (NoPosReq 6) + $didOpen + $memberReq)
+$env8 = Script $theirs1
+$r8   = Invoke-Raw $Exe $onArgs $in8 $env8
+$m8   = Reply7 $r8.Out
+$e8   = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'could not record' })
+Check 'two position-less requests: at most one stderr line about them' ($e8.Count -le 1) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
+Check 'positive control: the later request 7 in the same session still merges' ($m8 -and ((Pairs $m8.Items) -contains 'FIeld2|5')) ''
+$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+        Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') } |
+        ForEach-Object { @($_['result']['items']).Count })
+Check 'replies 5 and 6 relayed with theirs only (3 items each)' ($n8.Count -eq 2 -and ($n8 | Where-Object { $_ -ne 3 }).Count -eq 0) ("counts=$($n8 -join ',')")
+
+# --- 9 a file no index owns (A3 fix 2) ------------------------------------------------
+Write-Host ''
+Write-Host '(9) a file outside every index: its own declarations are offered' -ForegroundColor Cyan
+$looseDir = Join-Path $WorkDir 'loose'
+New-Item -ItemType Directory $looseDir | Out-Null
+$loose = Join-Path $looseDir 'Lx.pas'
+$looseText = (@('unit Lx;', '', 'interface', '', 'implementation', '', 'var', '  LooseCount: Integer;', '', 'procedure Run;', 'begin',
+                '  LooseCount:= LooseC + 1;', 'end;', '', 'end.', '') -join "`r`n")
+[IO.File]::WriteAllText($loose, $looseText, [Text.Encoding]::ASCII)
+$looseUri  = Uri $loose
+$looseOpen = Frame ('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"' + $looseUri + '","languageId":"pascal","version":1,"text":' + ($looseText | ConvertTo-Json) + '}}}')
+$looseReq  = Frame ('{"jsonrpc":"2.0","id":7,"method":"textDocument/completion","params":{"textDocument":{"uri":"' + $looseUri + '"},"position":{"line":11,"character":21}}}')
+$r9 = Invoke-Raw $Exe $onArgs ([byte[]]($looseOpen + $looseReq)) (Script '[]')
+$m9 = Reply7 $r9.Out
+$l9 = if ($m9 -and -not $m9.IsNull) { Labels $m9.Items } else { @() }
+Check 'unowned file: LooseCount offered (StoresForFile, as plain lsp does)' ($l9 -contains 'LooseCount') ("labels=$($l9 -join ',')")
+
+# --- 10 a --db list with one missing path (A3 fix 4) -----------------------------------
+Write-Host ''
+Write-Host '(10) --db good --db missing: merge still works, one stderr line names the missing path' -ForegroundColor Cyan
+$missing  = Join-Path $WorkDir 'gone-a3fix.sqlite'
+$mixArgs  = @('lsp', '--proxy', '--merge-completion', '--db', $db, '--db', $missing, '--merge-budget-ms', '20000', '--delphi-lsp', $stub)
+$r10 = Invoke-Raw $Exe $mixArgs $in1 $env1
+$m10 = Reply7 $r10.Out
+$e10 = @((Utf8 $r10.Err) -split "\r?\n" | Where-Object { $_.Contains('gone-a3fix.sqlite') })
+Check 'exactly one stderr line names the missing path' ($e10.Count -eq 1) ("lines=$($e10.Count) err=$(Utf8 $r10.Err)")
+Check 'positive control: the good index still merges' ($m10 -and ((Pairs $m10.Items) -contains 'FIeld2|5')) ''
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

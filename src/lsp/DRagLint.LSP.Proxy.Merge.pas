@@ -913,6 +913,8 @@ var
   Full  : Boolean;
   Hover : Boolean;
   Comp  : Boolean;
+  Line0 : Integer;
+  Col0  : Integer;
 begin
   Comp := FOptions.MergeCompletion and (TInterlocked.CompareExchange(FCompletionOff, 0, 0) = 0)
           and FrameContains(AFrame, ALen, METHOD_COMPLETION);
@@ -928,12 +930,16 @@ begin
       if not (Hover or (Comp and (Method = METHOD_COMPLETION))) then Exit;
       IdVal:= TJSONObject(Json).GetValue('id');
       if (IdVal = nil) or not Json.TryGetValue<string>('params.textDocument.uri', Uri)
-         or not Json.TryGetValue<TJSONObject>('params.position', PosObj) then Exit;
+         or not Json.TryGetValue<TJSONObject>('params.position', PosObj)
+         { A3 fix 3: a position without line / character is not ours to answer;
+           relayed untouched, silently (it used to raise an access violation
+           and write one stderr line per request). }
+         or not PosObj.TryGetValue<Integer>('line', Line0)
+         or not PosObj.TryGetValue<Integer>('character', Col0) then Exit;
       { The position exactly as TLSPServer.HandleCompletion converts it: LSP is
         0-based, the completion builder 1-based (hover converts back). }
       P:= TPendingRequest.Create(TLSPServer.FileFromUri(Uri),  // dl:ok object-leak@7e8f -- reference counted: owned by FPending (or Release on the Full path) and by the job (AddRef/Release); Release frees
-        StrToIntDef(PosObj.GetValue('line').Value, 0) + 1,
-        StrToIntDef(PosObj.GetValue('character').Value, 0) + 1);
+        Line0 + 1, Col0 + 1);
       P.FHover:= Hover;
       Key:= IdVal.ToJSON;
       FPendingLock.Enter;
