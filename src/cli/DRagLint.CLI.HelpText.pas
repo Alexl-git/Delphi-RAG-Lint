@@ -183,10 +183,13 @@ begin
   Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
   Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
   Writeln('                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.');
-  Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio''s DelphiLSP,');
+  Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
   Writeln('                               --merge-diagnostics: append drag-lint''s lint findings to DelphiLSP''s publishDiagnostics (one notification, source-tagged); OFF by default.');
+  Writeln('                               --merge-completion: union drag-lint''s completion items into DelphiLSP''s reply, keyed on (label, kind); DelphiLSP''s items first; OFF by default.');
+  Writeln('                               --merge-hover: append drag-lint''s hover facts to DelphiLSP''s hover after a --- rule, or answer with them alone when DelphiLSP has none; OFF by default.');
+  Writeln('                               --merge-definition: drag-lint''s definition when DelphiLSP''s is null or empty; answer references and workspace/symbol in the proxy (DelphiLSP has neither); OFF by default.');
   Writeln('                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP''s bytes untouched (default 300).');
   Writeln('                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\DelphiLSP.exe, the default; 32 = bin\DelphiLSP.exe); --delphi-lsp <path> wins over it.');
   Writeln('                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.');
