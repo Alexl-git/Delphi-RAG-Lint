@@ -10024,7 +10024,6 @@ function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
   const AUnjudgedRules: TArray<string> = nil): TArray<TLintFinding>;
 const
-  MARK = 'drag-lint:ignore';
   { Rules that count a comment as content, so the marker itself stops them
     firing. Measured, not assumed -- see the note at the unused-marker scan. }
   { commented-out-code added 2026-08-13, measured the same way the first two
@@ -10044,11 +10043,6 @@ var
   Emitted   : TDictionary<string, Boolean>       ;
   F         : TLintFinding                       ;
   LineTxt   : string                             ;
-  Rest      : string                             ;
-  Tok       : string                             ;
-  Toks      : TArray<string>                     ;
-  CPos      : Integer                            ;
-  MPos      : Integer                            ;
   Suppressed: Boolean                            ;
   Markers   : TArray<TReviewMarker>              ;
   M         : TReviewMarker                      ;
@@ -10132,22 +10126,10 @@ begin
       begin
         LineTxt:= Lines[F.StartLine - 1];
 
-        { Legacy blanket directive. Deliberately left on its original naive
-          scan: tightening it here would change what existing projects
-          suppress, which is a separate decision from adding dl:ok. }
-        CPos:= Pos('//', LineTxt);
-        MPos:= Pos(MARK, LowerCase(LineTxt));
-        if (CPos > 0) and (MPos > CPos) then
-        begin
-          Rest:= Trim(Copy(LineTxt, MPos + Length(MARK), MaxInt));
-          if Rest = '' then Suppressed:= True
-          else
-          begin
-            Toks:= Rest.Split([' ', ',', #9]);
-            for Tok in Toks do
-              if SameText(Trim(Tok), F.RuleId) then begin Suppressed:= True; Break; end;
-          end;
-        end;
+        { Legacy blanket directive, on its original naive scan. The predicate
+          (and the dl:ok hash below) is shared with the LSP (TReviewMarkers.
+          Suppresses), so the gutter and `lint` cannot disagree (C2). }
+        Suppressed:= TReviewMarkers.IgnoreDirectiveCovers(LineTxt, F.RuleId);
 
         { The accountable form.
 
@@ -10187,7 +10169,7 @@ begin
                 the normalized line is one invariant token, so the hash could never
                 go stale and the marker verified forever however the handler was
                 rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
-              Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
+              Want:= DRagLint.Lint.RuleCatalog.MarkerExpectedHash(Lines, F.RuleId, F.StartLine, F.Metric);
               { A WHOLE-ROUTINE METRIC REVIEW IS BOUND TO ITS NUMBER (T3).
 
                 For these seven rules the hash above is not enough on its own:
@@ -10202,7 +10184,6 @@ begin
                 body-span hash would do the latter, flagging a renamed local
                 across all 58 markers in this class for no reason. }
               var IsMetric: Boolean:= DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId);
-              if IsMetric then Want:= DRagLint.Lint.RuleCatalog.MetricHash(Want, F.Metric);
               if M.Hash = '' then
               begin
                 { Hand-written, no hash: honour it, but say that it cannot be
