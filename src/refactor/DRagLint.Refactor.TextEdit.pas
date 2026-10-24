@@ -786,7 +786,8 @@ var
   Edit: TTextEdit;
   Pair: TPair<string, Integer>;
 begin
-  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False; AReason:= '';
+  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
+  AReason:= '';
 
   { 1. resolve the best declaring unit -- against ANameStore, which may be a
     DIFFERENT store than AUnitStore (the type being added to the uses clause

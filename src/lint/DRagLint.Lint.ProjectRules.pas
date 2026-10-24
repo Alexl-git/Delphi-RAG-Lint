@@ -860,7 +860,9 @@ begin
     if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
     if N = Stem then
     begin
-      ALine:= U.HostLine; ACol:= U.HostCol; { N-06: include rows anchor at the directive }
+      { N-06: include rows anchor at the directive }
+      ALine:= U.HostLine;
+      ACol := U.HostCol;
       Exit;
     end;
   end;

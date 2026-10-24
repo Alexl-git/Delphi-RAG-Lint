@@ -63,6 +63,7 @@ uses
   System.Generics.Collections;
 
 const
+  USES_WORD = 'uses';
   // The synthetic wrapper puts the include body on line 3.
   WRAP_HEAD  = 'unit DragLintInc_;'#10'interface'#10;
   WRAP_TAIL  = #10'implementation'#10'end.'#10;
@@ -75,17 +76,19 @@ end;
 
 function HasUsesWord(const AText: string): Boolean;
 var
-  Low_: string ;
-  P   : Integer;
+  Lowered: string ;
+  P      : Integer;
+  After  : Integer;
 begin
-  Low_:= LowerCase(AText);
-  P:= Pos('uses', Low_);
+  Lowered:= LowerCase(AText);
+  P:= Pos(USES_WORD, Lowered);
   while P > 0 do
   begin
-    if ((P = 1) or not IsIdentChar(Low_[P - 1]))
-      and ((P + 4 > Length(Low_)) or not IsIdentChar(Low_[P + 4])) then
+    After:= P + Length(USES_WORD);
+    if ((P = 1) or not IsIdentChar(Lowered[P - 1]))
+      and ((After > Length(Lowered)) or not IsIdentChar(Lowered[After])) then
       Exit(True);
-    P:= Pos('uses', Low_, P + 4);
+    P:= Pos(USES_WORD, Lowered, After);
   end;
   Result:= False;
 end;

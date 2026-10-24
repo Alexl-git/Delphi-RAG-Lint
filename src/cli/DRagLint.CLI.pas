@@ -18540,7 +18540,11 @@ begin
   Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already, IncReason);
   if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
   if ResolvedUnit  = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
-  if (Length(Edits) = 0) and (IncReason <> '') then begin Writeln('No edit computed: ', IncReason); Exit(1); end; { N-06 }
+  if (Length(Edits) = 0) and (IncReason <> '') then { N-06 }
+  begin
+    Writeln('No edit computed: ', IncReason);
+    Exit(1);
+  end;
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
   if AArgs.AsJson then
   begin
@@ -23660,7 +23664,8 @@ begin
     Result:= 0;
   finally
     RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
-    Orig.Free; Work.Free; Items.Free; SkippedInc.Free;
+    Orig.Free; Work.Free; Items.Free;
+    SkippedInc.Free;
   end; // try
 end; // begin
 
@@ -23886,8 +23891,16 @@ var
   Res: TParseResult;
   U  : TUnitUse;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint dump-parse-uses --file PATH'); Exit(2); end;
-  if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint dump-parse-uses --file PATH');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.InFile) then
+  begin
+    Writeln(Format('File not found: %s', [AArgs.InFile]));
+    Exit(2);
+  end;
   P:= TDelphi13Parser.Create;
   Res:= P.Parse(TFile.ReadAllBytes(AArgs.InFile), AArgs.InFile);
   Writeln(Format('implementation_line'#9'%d', [Res.ImplementationLine]));
@@ -24027,7 +24040,7 @@ begin
   begin
     // N-06: one TSV line per active, resolved include site -- site, depth, line,
     // col, resolved byte count, MD5 of the resolved bytes, absolute path.
-    OutBytes:= Preprocess(InBytes, Options, Sites);
+    Preprocess(InBytes, Options, Sites); // only the sites are printed
     for Site in Sites do
       Writeln(Format('site'#9'%d'#9'%d'#9'%d'#9'%d'#9'%s'#9'%s',
         [Site.Depth, Site.HostLine, Site.HostCol, Length(Site.Resolved),
