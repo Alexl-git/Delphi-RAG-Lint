@@ -13,7 +13,8 @@ uses
   MT.Catalog in 'MT.Catalog.pas',
   MT.Builder in 'MT.Builder.pas',
   MT.Dynamic in 'MT.Dynamic.pas',
-  MT.Dfm in 'MT.Dfm.pas' {FixtureForm};
+  MT.Dfm in 'MT.Dfm.pas' {FixtureForm},
+  MT.TwoClass in 'MT.TwoClass.pas';
 
 begin
   BuildMainMenu(nil);

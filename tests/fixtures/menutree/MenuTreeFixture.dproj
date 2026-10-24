@@ -8,5 +8,6 @@
     <DCCReference Include="MT.Builder.pas"/>
     <DCCReference Include="MT.Dynamic.pas"/>
     <DCCReference Include="MT.Dfm.pas"><Form>FixtureForm</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="MT.TwoClass.pas"/>
   </ItemGroup>
 </Project>

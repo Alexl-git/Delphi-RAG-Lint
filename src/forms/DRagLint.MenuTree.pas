@@ -721,6 +721,7 @@ type
     function ClassOfRoutine(const pQName: string): string;
     function IsClassField(const pCls, pName: string): Boolean;
     function FieldKey(const pCls, pName, pPath: string): string;
+    function OwnerKey(const pIdent, pCls: string; pIsField: Boolean): string;
     procedure GraftFieldRoots;
     function Q(const pSql: string; const pParams: array of string): TFDQuery;
     procedure LoadMenuTypes;
@@ -1145,6 +1146,15 @@ end;
 function TWalkCore.FieldKey(const pCls, pName, pPath: string): string;
 begin
   Result:= LowerCase(LastSegment(pCls) + '.' + pName + '|' + pPath);
+end;
+
+{ The external-root ident of a menu owner: a FIELD of the method's own class is
+  keyed TClass.field (two classes in one unit with a same-named field get two
+  roots); anything else keeps the ident as written. Shared by the VCL Items.Add
+  and the DevExpress link-owner paths. }
+function TWalkCore.OwnerKey(const pIdent, pCls: string; pIsField: Boolean): string;
+begin
+  Result:= if pIsField and (pCls <> '') then LastSegment(pCls) + '.' + pIdent else pIdent;
 end;
 
 function TWalkCore.ResolveRoutine(const pName, pFromPath: string; const pCls: string = ''): TRoutineInfo;
@@ -1805,7 +1815,8 @@ begin
       Base:= pReceiver.ChildByField('lhs');
       if N.Parented then Continue;
       if SameText(LastSegment(Text(pFrame, Base)), 'MainMenu') then FTree.AdoptRoot(N)
-      else FTree.ExternalRoot(Text(pFrame, Base), Loc(pFrame, pReceiver), pFrame.F.Path).AddChild(N);
+      else FTree.ExternalRoot(OwnerKey(Text(pFrame, Base), pFrame.Cls, (Base.NodeType = 'identifier') and IsClassField(pFrame.Cls, Text(pFrame, Base))),
+        Loc(pFrame, pReceiver), pFrame.F.Path).AddChild(N);
       Continue;
     end;
     P:= Eval(pReceiver, pFrame);
@@ -1824,6 +1835,7 @@ begin
     IdentPath:= if P.Path <> '' then P.Path else pFrame.F.Path;
     if not IsMenuTypedForeign(Ident, IdentPath) then Continue;
     if pInsert then N.LinkIndex:= Index;
+    Ident:= OwnerKey(Ident, P.Cls, P.IsField);
     if pInsert and (Index >= 0) then FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).InsertChild(Index, N)
     else FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).AddChild(N);
   end;
@@ -2026,7 +2038,7 @@ begin
         begin
           { a field of the linking method's class: two classes in one unit that
             each own a popGridMenu are two roots, TClassA.popGridMenu and TClassB.popGridMenu }
-          if pState.Owner.IsField then Ident:= LastSegment(pState.Owner.Cls) + '.' + Ident;
+          Ident:= OwnerKey(Ident, pState.Owner.Cls, pState.Owner.IsField);
           Result:= FTree.ExternalRoot(Ident, pState.Site, IdentPath);
         end;
       end;

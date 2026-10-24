@@ -84,7 +84,8 @@ $j = $null
 try { $j = $jsonText | ConvertFrom-Json } catch { $j = $null }
 Check 'menu-tree --format json exits 0 and parses' (($jsonExit -eq 0) -and ($null -ne $j)) "(exit $jsonExit)"
 Check 'json schema = menu-tree/1' ($null -ne $j -and $j.schema -eq 'menu-tree/1') "(got [$($j.schema)])"
-Check 'json: two roots, one external root' ($null -ne $j -and @($j.roots).Count -eq 2 -and @($j.external).Count -eq 1) ''
+# external: TFixtureForm.mnuTools + the four MT.TwoClass field roots (TFirstMenu/TSecondMenu x FMenu/FPopup)
+Check 'json: two roots, five external roots' ($null -ne $j -and @($j.roots).Count -eq 2 -and @($j.external).Count -eq 5) ''
 
 # --- usage: no --db ---
 $err = (& $Exe menu-tree --project $proj 2>&1 | Out-String)

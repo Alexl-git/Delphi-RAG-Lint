@@ -1663,7 +1663,8 @@ begin
   for X in FCodeMenus.External do
   begin
     if not SameText(X.IdentPath, N.PasPath) then Continue;
-    P:= Result.FindMenuItem(Copy(X.Ident, LastDelimiter('.', X.Ident) + 1, MaxInt));
+    P:= Result.FindMenuItem(X.Ident);   { TFormClass.field as menu-tree keys a field root }
+    if P = nil then P:= Result.FindMenuItem(Copy(X.Ident, LastDelimiter('.', X.Ident) + 1, MaxInt));
     if P <> nil then GraftCodeMenu(Result, P, X)
     else
     begin

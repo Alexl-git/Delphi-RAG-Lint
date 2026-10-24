@@ -52,7 +52,7 @@ $json = (& $Exe menu-tree --project "$fx\Demo8.dproj" --db $db --format json 2>$
 Check 'menu-tree exits 0' ($LASTEXITCODE -eq 0)
 $tree = $json | ConvertFrom-Json
 $ext  = @($tree.external)
-Check 'two external roots named mnuTools (one per form, not merged)' ((@($ext | Where-Object { $_.ident -ceq 'mnuTools' })).Count -eq 2) "got $($ext.Count): $(($ext | ForEach-Object { "$($_.ident)@$($_.identPath)" }) -join ', ')"
+Check 'two external roots mnuTools, keyed TClass.mnuTools (one per form, not merged)' ((@($ext | Where-Object { $_.ident -cmatch '^Tfrm(Main|Side)8\.mnuTools$' })).Count -eq 2) "got $($ext.Count): $(($ext | ForEach-Object { "$($_.ident)@$($_.identPath)" }) -join ', ')"
 $mainExt = $ext | Where-Object { $_.identPath -like '*\uMain8.pas' } | Select-Object -First 1
 $sideExt = $ext | Where-Object { $_.identPath -like '*\uSide8.pas' } | Select-Object -First 1
 $mainCaps = @($mainExt.children | ForEach-Object { $_.caption })
