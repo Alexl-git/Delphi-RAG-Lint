@@ -1259,7 +1259,7 @@ begin
         if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
         begin
           Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
-          FreeAndNil(Rule);
+          FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
           Continue;
         end;
         Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
