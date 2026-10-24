@@ -17,6 +17,7 @@ uses
   , DRagLint.LSP.Feature.Ping  // dl:ok unused-unit-in-uses@45bf -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.CodeLens  // dl:ok unused-unit-in-uses@ed85 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.ImplDecl  // dl:ok unused-unit-in-uses@5294 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.Rename  // dl:ok unused-unit-in-uses@6450 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   ;
 
 end.
