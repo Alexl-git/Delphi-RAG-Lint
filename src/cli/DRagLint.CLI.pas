@@ -157,6 +157,7 @@ uses
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
   , DRagLint.MenuTree
+  , DRagLint.MenuTree.Dfm
   , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -467,6 +468,7 @@ type
       gutter with an EMPTY one on exactly the largest files. }
     ProjectRules : Boolean; // --project-rules (per-file doc-drift + missing-doc)
     RemoveUnused : Boolean; // --remove-unused (uses-fix: also comment unused)
+    WithDfm      : Boolean; // --with-dfm (menu-tree / menu-drift: .dfm menus as roots, code links grafted)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
     YadfPath     : string; // --yadf-path <YADF.exe>
@@ -1110,9 +1112,9 @@ end;
 procedure PrintMenuVerbHelp(const AVerb: string);
 begin
   if AVerb = 'menu-drift' then
-    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry''s ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
+    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
   else
-    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)');
+    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
 end; // procedure
 function ParseArgs: TArgs;
 var
@@ -1561,6 +1563,7 @@ begin
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
+    else if A = '--with-dfm'      then Result.WithDfm        := True
     else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
     else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
     else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
@@ -29056,7 +29059,7 @@ end; // function
 
 /// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
 /// (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md, section 5).</summary>
-/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --format text|json|paths, --output.</param>
+/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --with-dfm, --format text|json|paths, --output.</param>
 /// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
 /// unknown --root); 3 stale index (a file it must read changed since it was
 /// indexed -- refused, never answered from); 1 any other error.</returns>
@@ -29094,6 +29097,7 @@ begin
     finally
       Walker.Free;
     end;
+    if AArgs.WithDfm then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
   except
     on E: EMenuTreeStale do
     begin
@@ -29129,7 +29133,7 @@ end; // function
 /// <summary>menu-drift: the code-built menu tree (menu-tree) against the
 /// registry's ide-menu surfaces (spec section 7): MISSING / MOVED /
 /// UNREGISTERED / NOTE lines and 'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
-/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --format text|json, --output.</param>
+/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --with-dfm, --format text|json, --output.</param>
 /// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
 /// project not in the db, unreadable registry); 3 stale index (refused).</returns>
 function DoMenuDrift(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@50e0 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 drift or other)
@@ -29142,6 +29146,7 @@ var
   Rep   : TMenuDriftReport;
   Fmt   : string;
   Txt   : string;
+  RegDir: string;
 begin
   if not ExplicitDbsExist(AArgs, 'menu-drift') then Exit(2);
   if Length(AArgs.DbPaths) = 0 then
@@ -29149,9 +29154,16 @@ begin
     Writeln(ErrOutput, 'menu-drift: need --db <index.sqlite>');
     Exit(2);
   end;
-  if (AArgs.ProjectPath = '') or (AArgs.RegistryDir = '') then
+  { dxBar spec decision 6: an application's registry lives in <project>\_D-RAG\menu-registry }
+  RegDir:= AArgs.RegistryDir;
+  if (RegDir = '') and (AArgs.ProjectPath <> '') then
   begin
-    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir>');
+    RegDir:= TPath.Combine(TPath.Combine(ExtractFilePath(ExpandFileName(AArgs.ProjectPath)), '_D-RAG'), 'menu-registry');
+    if not TDirectory.Exists(RegDir) then RegDir:= '';
+  end;
+  if (AArgs.ProjectPath = '') or (RegDir = '') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir> (or a <project>\_D-RAG\menu-registry folder)');
     Exit(2);
   end;
   Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
@@ -29164,13 +29176,15 @@ begin
   Reg := TMenuRegistry.Create;
   try
     try
-      Reg.LoadFromDir(AArgs.RegistryDir);
+      Reg.LoadFromDir(RegDir);
       Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
       try
         Tree:= Walker.Walk;
       finally
         Walker.Free;
       end;
+      { an app-menu surface is a .dfm menu: compare the .dfm tree too }
+      if AArgs.WithDfm or Reg.HasAppMenus then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
     except
       on E: EMenuTreeStale do
       begin

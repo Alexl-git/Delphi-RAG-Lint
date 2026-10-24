@@ -70,7 +70,9 @@ $raw = [IO.File]::ReadAllText($out)
 $lines = @($raw -split "`r`n" | Where-Object { $_ -ne '' })
 $header = '#,Form,Unit,How to open,Click,Control type,Handler,Opened by,Modal,Before you start,Other ways in,Confidence,Tester result,Notes'
 Check 'header is row 1' ($lines[0] -ceq $header) $lines[0]
-Check 'footer names algorithm v8' ($lines[-1] -match '^,{13}"# forms-csv algorithm v8 \|') $lines[-1]
+# the footer carries the engine's CURRENT algorithm (read from the source, as run_forms_csv_v6.ps1 does): this guard is about v8's code-menu graft, which v9 keeps
+$algo = [regex]::Match([IO.File]::ReadAllText("$PSScriptRoot\..\..\src\forms\DRagLint.FormsMap.pas"), "FORMS_CSV_ALGORITHM\s*=\s*'(\d+)'").Groups[1].Value
+Check "footer names algorithm v$algo (>= 8)" (($algo -ne '') -and ([int]$algo -ge 8) -and ($lines[-1] -match ('^,{13}"# forms-csv algorithm v' + $algo + ' \|'))) $lines[-1]
 $rows = @($lines[1..($lines.Count - 2)] | ConvertFrom-Csv -Header ($header -split ','))
 Check '7 data rows' ($rows.Count -eq 7) "got $($rows.Count)"
 function RowOf([string]$Form) { $rows | Where-Object { $_.Form -ceq $Form } | Select-Object -First 1 }

@@ -195,7 +195,7 @@ const
   // v6: index-first edges (refs + call_edges) with the text scan as fallback, a
   // .dfm-tree location per control (menu / bar / ribbon / tab path), and the
   // tester columns (Click, Handler, Opened by, Modal, Confidence ...).
-  FORMS_CSV_ALGORITHM = '8'; // bump when the edge or path algorithm, or a cell's meaning, changes
+  FORMS_CSV_ALGORITHM = '9'; // bump when the edge or path algorithm, or a cell's meaning, changes
 
   POPUP_FORMS_KEY  = 'popupForms'; // R1: key in <project>\_D-RAG\drag-lint-project.json
   POPUP_NOTE_DEFAULT = 'opened as a popup (declared in drag-lint-project.json)';
@@ -1626,11 +1626,32 @@ begin
   end;
 end;
 
+/// <summary>v9: links the item / submenu children of a code-built DevExpress
+/// link owner (a menu-tree external root) under the .dfm bar / popup /
+/// sub-item AOwner, at the index a code Insert(i) gave them. Separators,
+/// headers and dynamic captions add no way a tester can name: skipped.</summary>
+procedure GraftCodeBar(ATree: TFormDfmTree; AOwner: TFormDfmNode; AFrom: TMenuNode);
+var
+  C      : TMenuNode;
+  Handler: string;
+  Cls    : string;
+begin
+  for C in AFrom.Children do
+  begin
+    if not (C.Kind in [mnkItem, mnkSubmenu]) then Continue;
+    Handler:= Copy(C.Handler, LastDelimiter('.', C.Handler) + 1, MaxInt);
+    if StartsStr('<', C.Handler) then Handler:= '';
+    Cls:= if C.Kind = mnkSubmenu then 'TdxBarSubItem' else 'TdxBarButton';
+    GraftCodeBar(ATree, ATree.AddCodeBarItem(AOwner, C.Caption, Handler, Cls, C.LinkIndex), C);
+  end;
+end;
+
 function TNavBuilder.TreeFor(const AFormClass: string): TFormDfmTree;
 var
-  N: TFormNode;
-  X: TMenuNode;
-  P: TFormDfmNode;
+  N      : TFormNode;
+  X      : TMenuNode;
+  P      : TFormDfmNode;
+  Derived: Boolean;
 begin
   if FTrees.TryGetValue(LowerCase(AFormClass), Result) then Exit;
   Result:= TFormDfmTree.Create;
@@ -1643,7 +1664,13 @@ begin
   begin
     if not SameText(X.IdentPath, N.PasPath) then Continue;
     P:= Result.FindMenuItem(Copy(X.Ident, LastDelimiter('.', X.Ident) + 1, MaxInt));
-    if P <> nil then GraftCodeMenu(Result, P, X);
+    if P <> nil then GraftCodeMenu(Result, P, X)
+    else
+    begin
+      { v9: a DevExpress link owner -- bar, popup, sub-item, Bars[n], MainMenuBar, BarByCaption }
+      P:= Result.FindBarLinkOwner(X.Ident, Derived);
+      if P <> nil then GraftCodeBar(Result, P, X);
+    end;
   end;
 end;
 

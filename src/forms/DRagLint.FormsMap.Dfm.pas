@@ -46,6 +46,7 @@ type
     FIsItem   : Boolean;
     FCollProp : string;
     FProps    : TStringList;
+    FLine     : Integer;
   public
     /// <summary>Creates an empty node under AParent (nil for the form root).</summary>
     /// <param name="AParent">Enclosing object or item; nil for the root.</param>
@@ -68,6 +69,35 @@ type
     property CollProp: string read FCollProp write FCollProp;
     /// <summary>Name=Value pairs in .dfm order; string values decoded.</summary>
     property Props: TStringList read FProps;
+    /// <summary>1-based .dfm line of the object / item header; 0 for a node
+    /// added from code (AddCodeMenuItem / AddCodeBarItem).</summary>
+    property Line: Integer read FLine write FLine;
+  end;
+
+  /// <summary>One .dfm-declared menu surface: where a tester finds a menu
+  /// (a DevExpress bar, bar popup, backstage / application menu, or a VCL
+  /// TMainMenu / TPopupMenu).</summary>
+  /// <remarks>A bar shown in two ribbon tabs is two surfaces (one per prefix).</remarks>
+  TBarSurface = record
+    /// <summary>The bar / popup / backstage / menu node; owned by the tree.</summary>
+    Node  : TFormDfmNode;
+    /// <summary>The forms-csv location prefix, e.g. "Ribbon: Lists > Lists Bar",
+    /// "Main menu", "Toolbar 'X'", "Right-click menu pop", "File menu".</summary>
+    Prefix: string;
+  end;
+
+  /// <summary>One entry of a surface or sub-item, in display order.</summary>
+  TBarLink = record
+    /// <summary>The ItemLinks / Buttons collection item, or the TMenuItem itself
+    /// for a VCL menu.</summary>
+    Link      : TFormDfmNode;
+    /// <summary>The bar item (or TMenuItem) the entry shows; nil when the link's
+    /// ItemName names no component of this .dfm.</summary>
+    Item      : TFormDfmNode;
+    /// <summary>The link's ItemName / Item value (the TMenuItem's name for VCL).</summary>
+    ItemName  : string;
+    /// <summary>BeginGroup = True on the link (a separator before it).</summary>
+    BeginGroup: Boolean;
   end;
 
   /// <summary>Parsed tree of one text .dfm plus the DevExpress link indexes
@@ -80,7 +110,11 @@ type
     FLinkOwners: TObjectDictionary<string, TList<TFormDfmNode>>;
     FBarTabs   : TObjectDictionary<string, TList<TFormDfmNode>>;
     FBackstage : TDictionary<string, Boolean>;
+    FLinkLists : TObjectDictionary<TFormDfmNode, TList<TFormDfmNode>>;
+    FCodeCount : Integer;
     function NewNode(AParent: TFormDfmNode): TFormDfmNode;
+    function LinkListOf(AOwner: TFormDfmNode): TList<TFormDfmNode>;
+    function IsBar(ANode: TFormDfmNode): Boolean;
     procedure AddMulti(ADict: TObjectDictionary<string, TList<TFormDfmNode>>; const AKey: string; ANode: TFormDfmNode);
     procedure BuildIndexes;
     function ReadValue(const ALines: TArray<string>; var AIndex: Integer; const ARaw: string; out AValue: string): Boolean;
@@ -128,6 +162,56 @@ type
     /// <param name="AHandler">Bare OnClick method name; '' for a submenu.</param>
     /// <returns>The new node (class TMenuItem, no component name), owned by the tree.</returns>
     function AddCodeMenuItem(AParent: TFormDfmNode; const ACaption, AHandler: string): TFormDfmNode;
+    /// <summary>The form root (object Name: TClass); nil for an empty tree.</summary>
+    /// <returns>The root node, owned by the tree.</returns>
+    function Root: TFormDfmNode;
+    /// <summary>Every node (objects and collection items, code-added ones too)
+    /// in .dfm order; owned by the tree -- never free or add to it.</summary>
+    property Nodes: TObjectList<TFormDfmNode> read FNodes;
+    /// <summary>Every .dfm-declared menu surface in .dfm order: TdxBar (one
+    /// entry per prefix -- a bar in two ribbon tabs gives two), bar popups,
+    /// backstage views / application menus, VCL TMainMenu and TPopupMenu.</summary>
+    /// <returns>The surfaces; empty for a form without menus.</returns>
+    function BarSurfaces: TArray<TBarSurface>;
+    /// <summary>The entries shown under AOwner, in display order: ItemLinks
+    /// of a bar / sub-item / popup / application menu, Buttons of a backstage
+    /// view, child TMenuItems of a VCL menu or menu item. Code links added by
+    /// AddCodeBarItem are included at their index.</summary>
+    /// <param name="AOwner">A node of this tree; nil gives an empty result.</param>
+    /// <returns>The links (Item nil when ItemName names nothing here).</returns>
+    function LinksOf(AOwner: TFormDfmNode): TArray<TBarLink>;
+    /// <summary>The non-root, non-item component named AName; nil when absent.</summary>
+    /// <param name="AName">Component name, case-insensitive.</param>
+    /// <returns>The node, owned by the tree, or nil.</returns>
+    function ItemByName(const AName: string): TFormDfmNode;
+    /// <summary>The forms-csv location prefixes of a surface or sub-item --
+    /// the strings WaysForHandler puts before an item's caption (without the
+    /// ':' it inserts after "Main menu").</summary>
+    /// <param name="AOwner">A bar, popup, sub-item, backstage view, application
+    /// menu, TMainMenu or TPopupMenu node.</param>
+    /// <returns>One prefix per place AOwner is shown; empty when it is shown nowhere.</returns>
+    function SurfacePrefixes(AOwner: TFormDfmNode): TArray<string>;
+    /// <summary>Resolves the identifier a menu-tree external root carries to
+    /// the .dfm node that owns the links: a component name (bar, popup,
+    /// sub-item, TMenuItem), &lt;mgr&gt;.Bars[n] (the n-th TdxBar in .dfm order),
+    /// &lt;mgr&gt;.MainMenuBar (the IsMainMenu bar), &lt;mgr&gt;.BarByCaption('X') /
+    /// BarByOldName('X') (by Caption / Name).</summary>
+    /// <param name="AIdent">The identifier as code wrote it.</param>
+    /// <param name="ADerived">Set True when the owner was found by position or
+    /// lookup (Bars[n], MainMenuBar, BarBy*) rather than by name.</param>
+    /// <returns>The owner node, or nil when nothing here matches.</returns>
+    function FindBarLinkOwner(const AIdent: string; out ADerived: Boolean): TFormDfmNode;
+    /// <summary>forms-csv v9: adds a bar item built in CODE and links it under
+    /// AOwner at AIndex, so WaysForHandler / LinksOf / SurfacePrefixes see it
+    /// like a .dfm link.</summary>
+    /// <param name="AOwner">A bar / popup / sub-item node of this tree
+    /// (FindBarLinkOwner, or an earlier AddCodeBarItem sub-item); must not be nil.</param>
+    /// <param name="ACaption">Caption as written in code.</param>
+    /// <param name="AHandler">Bare OnClick method name; '' for a sub-item.</param>
+    /// <param name="AClass">Component class, e.g. TdxBarButton or TdxBarSubItem.</param>
+    /// <param name="AIndex">Link position; -1 (or past the end) appends.</param>
+    /// <returns>The new item node (a synthetic component name), owned by the tree.</returns>
+    function AddCodeBarItem(AOwner: TFormDfmNode; const ACaption, AHandler, AClass: string; AIndex: Integer): TFormDfmNode;
   end;
 
 implementation
@@ -136,6 +220,7 @@ uses
   System.StrUtils
   , System.IOUtils
   , System.Generics.Defaults
+  , System.RegularExpressions
   ;
 
 const
@@ -281,10 +366,12 @@ begin
   FLinkOwners:= TObjectDictionary<string, TList<TFormDfmNode>>.Create([doOwnsValues], TIStringComparer.Ordinal);
   FBarTabs   := TObjectDictionary<string, TList<TFormDfmNode>>.Create([doOwnsValues], TIStringComparer.Ordinal);
   FBackstage := TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal);
+  FLinkLists := TObjectDictionary<TFormDfmNode, TList<TFormDfmNode>>.Create([doOwnsValues]);
 end;
 
 destructor TFormDfmTree.Destroy;
 begin
+  FLinkLists.Free;
   FBackstage.Free;
   FBarTabs.Free;
   FLinkOwners.Free;
@@ -377,6 +464,7 @@ begin
       begin
         // "object Name: TClass" / "inherited Name: TClass [2]"
         N:= NewNode(Top);
+        N.Line:= I; // I is already past this line: the 1-based line number
         T:= Trim(Copy(T, Pos(' ', T) + 1, MaxInt));
         P:= Pos(':', T);
         if P > 0 then
@@ -391,6 +479,7 @@ begin
       else if SameText(T, 'item') then
       begin
         N:= NewNode(Top);
+        N.Line  := I;
         N.IsItem:= True;
         if CollStack.Count > 0 then N.CollProp:= CollStack.Peek;
         Stack.Push(N);
@@ -443,6 +532,7 @@ begin
     // item; the collection's owner (a TdxBar, sub-item or popup) is the parent.
     if SameText(N.CollProp, 'ItemLinks') then
     begin
+      LinkListOf(N.Parent).Add(N);
       Ref:= N.Prop('ItemName');
       if Ref = '' then Ref:= N.Prop('Item');
       if Ref <> '' then AddMulti(FLinkOwners, Ref, N.Parent);
@@ -456,6 +546,7 @@ begin
     // Ribbon backstage view buttons: Item names a bar item.
     else if SameText(N.CollProp, 'Buttons') and ContainsText(N.Parent.CompClass, 'Backstage') then
     begin
+      LinkListOf(N.Parent).Add(N);
       Ref:= N.Prop('Item');
       if Ref <> '' then FBackstage.AddOrSetValue(Ref, True);
     end;
@@ -722,6 +813,183 @@ begin
   Result.CompClass:= MENU_ITEM_CLASS;
   Result.Props.Add('Caption=' + ACaption);
   if AHandler <> '' then Result.Props.Add('OnClick=' + AHandler);
+end;
+
+function TFormDfmTree.LinkListOf(AOwner: TFormDfmNode): TList<TFormDfmNode>;
+begin
+  if not FLinkLists.TryGetValue(AOwner, Result) then
+  begin
+    Result:= TList<TFormDfmNode>.Create;
+    FLinkLists.Add(AOwner, Result);
+  end;
+end;
+
+function TFormDfmTree.IsBar(ANode: TFormDfmNode): Boolean;
+begin
+  Result:= SameText(ANode.CompClass, 'TdxBar') or (ANode.IsItem and SameText(ANode.CollProp, 'Bars'));
+end;
+
+function TFormDfmTree.Root: TFormDfmNode;
+begin
+  Result:= FRoot;
+end;
+
+function TFormDfmTree.SurfacePrefixes(AOwner: TFormDfmNode): TArray<string>;
+begin
+  Result:= [];
+  if AOwner = nil then Exit;
+  if ContainsText(AOwner.CompClass, 'Backstage') or ContainsText(AOwner.CompClass, 'ApplicationMenu') then Exit(TArray<string>.Create('File menu'));
+  if SameText(AOwner.CompClass, 'TMainMenu') then Exit(TArray<string>.Create(MAIN_MENU));
+  if SameText(AOwner.CompClass, 'TPopupMenu') then Exit(TArray<string>.Create('Right-click menu ' + AOwner.Name));
+  Result:= BarPrefixes(AOwner, 0);
+end;
+
+function TFormDfmTree.BarSurfaces: TArray<TBarSurface>;
+var
+  Acc: TList<TBarSurface>;
+  N  : TFormDfmNode;
+  S  : TBarSurface;
+  Pre: string;
+  Own: Boolean;
+begin
+  Acc:= TList<TBarSurface>.Create;
+  try
+    for N in FNodes do
+    begin
+      if N = FRoot then Continue;
+      // A surface: a bar, or a non-item menu owner (popup, backstage, application menu, VCL main menu).
+      Own:= (not N.IsItem) and (EndsText('PopupMenu', N.CompClass) or EndsText('BackstageView', N.CompClass)
+        or ContainsText(N.CompClass, 'ApplicationMenu') or SameText(N.CompClass, 'TMainMenu'));
+      if not (Own or IsBar(N)) then Continue;
+      for Pre in SurfacePrefixes(N) do
+      begin
+        S.Node  := N;
+        S.Prefix:= Pre;
+        Acc.Add(S);
+      end;
+    end;
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+function TFormDfmTree.LinksOf(AOwner: TFormDfmNode): TArray<TBarLink>;
+var
+  Acc : TList<TBarLink>;
+  L   : TBarLink;
+  N   : TFormDfmNode;
+  List: TList<TFormDfmNode>;
+begin
+  Result:= [];
+  if AOwner = nil then Exit;
+  Acc:= TList<TBarLink>.Create;
+  try
+    if FLinkLists.TryGetValue(AOwner, List) then
+      for N in List do
+      begin
+        L.Link      := N;
+        L.ItemName  := N.Prop('ItemName');
+        if L.ItemName = '' then L.ItemName:= N.Prop('Item');
+        L.Item      := ItemByName(L.ItemName);
+        L.BeginGroup:= SameText(N.Prop('BeginGroup'), 'True');
+        Acc.Add(L);
+      end
+    else
+      // VCL: the child TMenuItems ARE the entries; Caption '-' is the separator.
+      for N in FNodes do
+        if (N.Parent = AOwner) and SameText(N.CompClass, MENU_ITEM_CLASS) then
+        begin
+          L.Link      := N;
+          L.Item      := N;
+          L.ItemName  := N.Name;
+          L.BeginGroup:= False;
+          Acc.Add(L);
+        end;
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+function TFormDfmTree.ItemByName(const AName: string): TFormDfmNode;
+var
+  N: TFormDfmNode;
+begin
+  Result:= nil;
+  if AName = '' then Exit;
+  for N in FNodes do
+    if (N <> FRoot) and not N.IsItem and SameText(N.Name, AName) then Exit(N);
+end;
+
+function TFormDfmTree.FindBarLinkOwner(const AIdent: string; out ADerived: Boolean): TFormDfmNode;
+var
+  M   : TMatch;
+  N   : TFormDfmNode;
+  Want: Integer;
+  Seen: Integer;
+  Key : string;
+begin
+  Result  := nil;
+  ADerived:= True;
+  // <mgr>.Bars[n]: the n-th TdxBar in .dfm order (the manager's Bars collection order)
+  M:= TRegEx.Match(AIdent, '(?:^|\.)Bars\s*\[\s*(\d+)\s*\]\s*$', [roIgnoreCase]);
+  if M.Success then
+  begin
+    Want:= StrToInt(M.Groups[1].Value);
+    Seen:= 0;
+    for N in FNodes do
+      if IsBar(N) then
+      begin
+        if (Seen = Want) and (Result = nil) then Result:= N;
+        Inc(Seen);
+      end;
+  end
+  else if TRegEx.IsMatch(AIdent, '(?:^|\.)MainMenuBar\s*$', [roIgnoreCase]) then
+  begin
+    for N in FNodes do
+      if (Result = nil) and IsBar(N) and SameText(N.Prop('IsMainMenu'), 'True') then Result:= N;
+  end
+  else
+  begin
+    M:= TRegEx.Match(AIdent, '(?:^|\.)BarBy(Caption|OldName)\s*\(\s*''([^'']*)''\s*\)\s*$', [roIgnoreCase]);
+    if M.Success then
+    begin
+      Key:= M.Groups[2].Value;
+      for N in FNodes do
+        if (Result = nil) and IsBar(N) and (if SameText(M.Groups[1].Value, 'Caption') then SameText(N.Prop('Caption'), Key)
+          else (SameText(N.Prop('OldName'), Key) or SameText(N.Name, Key))) then Result:= N;
+    end
+    else
+    begin
+      // A plain component name (Self. allowed); any other expression names nothing here.
+      ADerived:= False;
+      Key:= AIdent;
+      if Key.StartsWith('Self.', True) then Key:= Key.Substring(Length('Self.'));
+      if not (Key.Contains('.') or Key.Contains('[') or Key.Contains('(')) then Result:= ItemByName(Key);
+    end;
+  end;
+end;
+
+function TFormDfmTree.AddCodeBarItem(AOwner: TFormDfmNode; const ACaption, AHandler, AClass: string; AIndex: Integer): TFormDfmNode;
+var
+  Link: TFormDfmNode;
+  List: TList<TFormDfmNode>;
+begin
+  Inc(FCodeCount);
+  Result:= NewNode(FRoot);
+  Result.Name     := 'codeBarItem' + IntToStr(FCodeCount);
+  Result.CompClass:= AClass;
+  Result.Props.Add('Caption=' + ACaption);
+  if AHandler <> '' then Result.Props.Add('OnClick=' + AHandler);
+  Link:= NewNode(AOwner);
+  Link.IsItem  := True;
+  Link.CollProp:= 'ItemLinks';
+  Link.Props.Add('ItemName=' + Result.Name);
+  List:= LinkListOf(AOwner);
+  if (AIndex >= 0) and (AIndex < List.Count) then List.Insert(AIndex, Link)
+  else List.Add(Link);
+  AddMulti(FLinkOwners, Result.Name, AOwner);
 end;
 
 end.
