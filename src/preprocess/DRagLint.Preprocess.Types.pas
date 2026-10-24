@@ -25,8 +25,8 @@ type
   /// offsets into the input; Line is 0-based (matches lexer.js lineAt).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Preprocess.Lexer.pas), DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
+  /// <para>Used by: declaration (DRagLint.Preprocess.Lexer.pas), DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.IfdefUndefined, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPPChunk = record
@@ -78,7 +78,7 @@ type
   /// (opt-in, matching preprocess.js options.tolerances).
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Preprocess.Types.pas), DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Preprocess.Types.pas), DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -115,8 +115,9 @@ type
 /// <returns><!-- drag-lint:auto -->TPPOptions -- Observed: Default(TPPOptions).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: Default</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function TPPOptionsDefault: TPPOptions;
@@ -137,11 +138,11 @@ function TPPOptionsDefault: TPPOptions;
 /// importing that unit on purpose -- see the duplicate-global note beside its
 /// own tree_sitter_delphi13 declaration.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Parse (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Parse (DRagLint.Parser.Delphi13.pas)</para>
 /// <para>Calls: Copy</para>
 /// <para>Returns: Copy(ASource, 0, Length(ASource))</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function NormalizeLoneCR(const ASource: TBytes): TBytes;

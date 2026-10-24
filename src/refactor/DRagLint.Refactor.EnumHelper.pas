@@ -43,7 +43,7 @@ type
   /// <summary>The set of helper methods requested for one generation run.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.TryParseEnumMethods (DRagLint.CLI.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperMethods = set of TEnumHelperMethod;
@@ -267,7 +267,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
     /// <para>Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase</para>
-    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))</para>
+    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue)); ' + FirstMember + '; ' + AResolve.DescArrayName + '[Self]</para>
     /// <para>Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
@@ -308,16 +308,16 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve, DRagLint.Refactor.EnumHelper.UsesContainsTypInfo, ExtractFileName, Format, TrimLeft</para>
+    /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.IncludeUsesRefusal, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve, DRagLint.Refactor.EnumHelper.UsesContainsTypInfo, ExtractFileName, Format, TrimLeft</para>
     /// <para>Returns: Default(TEnumHelperResult)</para>
-    /// <para>Complexity: 23 (cyclomatic, outer body), 193 lines (full implementation)</para>
+    /// <para>Complexity: 31 (cyclomatic, outer body), 207 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+    /// <seealso cref="DRagLint.Core.Model.IncludeUsesRefusal"/>
+    /// <seealso cref="DRagLint.Core.Model.TUnitUse.FromInclude"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.FindImplementationLine"/>
-    /// <seealso cref="DRagLint.Refactor.EnumHelper.IndentLines"/>
-    /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const AStore: ISymbolStore; const AEnumQName: string;

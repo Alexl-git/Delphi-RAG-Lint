@@ -31,8 +31,9 @@ type
   /// level deep) All $(BDS) and similar macros are expanded.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas) (+17 more)</para>
-  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan, DRagLint.Lint.ProjectChecks, DragLint.Plugin.OptionsFrames</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Coverage.pas), [drag-lint]declaration (DRagLint.Index.DbSelect.pas), [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndex (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas),
+  /// [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.LibraryRoots (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Batch, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.DbSelect, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.Lint.ProjectChecks, DragLint.Plugin.OptionsFrames, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectResolver = class
@@ -127,6 +128,7 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique, HKEY, SameText</para>
       /// <para>Touches: registry</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique"/>
@@ -229,7 +231,7 @@ type
     public
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+13 more)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+16 more)</para>
       /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty</para>
       /// <para>constructor</para>
       /// <para>Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
@@ -343,14 +345,14 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+3 more)</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+4 more)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
@@ -361,13 +363,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms</para>
       /// <para>Returns: EnumLibraryPlatforms; ['Win32', 'Win64']</para>
-      /// <para>Pure</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumRegistryPlatforms: TArray<string>;
