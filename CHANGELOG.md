@@ -5,7 +5,9 @@ breaking changes** until v1.0.
 
 ## [Unreleased] -- next after 1.33.0-alpha
 
-No extractor or resolver change on main: no re-parse.
+**Requires a re-parse.** This section includes the unmerged release branch `e3d/rc2`: extractor
+1.23.0-alpha + resolver 1.13.0-alpha. The first run after the upgrade re-parses every DB once
+(hours on large projects). Items marked [rc2] need that bump; the rest do not.
 
 ### Added
 - **`menu-tree` and `menu-drift` verbs.** `menu-tree --project <X.dproj> --db <db> [--root <caption>]
@@ -33,6 +35,50 @@ No extractor or resolver change on main: no re-parse.
   through `with inst do` is listed on its `pas_uses` row (never rewritten); `convert-validate`
   warns on a `#migrate` form `convert-apply` refuses.
 
+- **LSP proxy (merge mode), all opt-in flags of `lsp --proxy`:** `--merge-completion` (union of
+  Delphi LSP and drag-lint items by label+kind), `--merge-hover` (drag-lint facts appended below
+  Delphi LSP's hover), `--merge-definition` (definition fallback; references and
+  workspace-symbol answered by the proxy), `--delphi-lsp-bits 32|64` (forward to a 32-bit
+  DelphiLSP), `--full-rules` (full built-in rule set on didSave, out of process, cost on stderr).
+  The proxy warms the linter on the first didOpen and honours `dl:ok` / `drag-lint:ignore` markers
+  in published diagnostics.
+- **LSP server features:** documentSymbol, codeLens (caller counts), implementation, declaration,
+  rename + prepareRename (WorkspaceEdit only; refuses with "index out of date" when an edit is
+  not at its exact indexed position), semanticTokens/full, inlayHint (parameter names) and the
+  command `draglint.showCallers`. Hover shows Analysis facts for a symbol with no doc row.
+- **`menu-tree --with-dfm`**: `.dfm` menu surfaces (dxBar bars / ribbon / backstage / popups,
+  VCL menus) are roots with the code-added links grafted in; JSON gains `ident` / `identPath` /
+  `form`; a stale `.dfm` exits 3. The walker follows DevExpress item links
+  (`ItemLinks.Add/Insert/AddButton`, `BeginGroup`, `Bars[n]`) and VCL external roots through
+  `Items.Add` / field `.Add`. `menu-drift` keys app-menu surfaces by (form, path), implies
+  `--with-dfm`, and defaults the registry to `<project>\_D-RAG\menu-registry`.
+- **`forms-csv` algorithm v9** (v8 before): code-added menu items and DevExpress bar items linked
+  in code appear in the bar/popup/sub-item tree of "How to open"; plugin expects algo 9.
+- **`excludeRoots`** in `drag-lint-project.json` carves a vendored subfolder out of an owned root;
+  the `[Tag]entry` grammar of project tags is documented.
+- **`convrules-editor` (converter):** main-window clicks and commands are refused while the
+  editor is busy; a converted-ancestor code use whose `pas_uses` entry is mapped is no longer
+  reported as "left".
+- **Resolver (rc2, requires re-parse):** bare reads of locals, params, consts and vars bind
+  (B-28); `type_use` refs bind to the type they name (B-31); the implicit `Result` receiver is
+  typed from the function's return type (N-07); a local receiver binds the nearest in-scope
+  declaration of its name; chained receivers (`R.Inner.K`) are typed segment by segment.
+- **Extractor (rc2, requires re-parse):** routine-local `const` / `type` sections emit symbols
+  and refs, local enum values are scoped to their routine (N-04); a type alias's target emits
+  `type_use` refs (`TTokList = TList<TTok>`); the member of `Self.X` records receiver `Self`
+  (N-05).
+- **`uses` clauses inside `{$I}` includes are indexed (N-06, rc2).** Depth-0 include uses become
+  `unit_uses` rows on the HOST file (section of the directive, coordinates inside the .inc) with
+  new columns `origin_path` and `include_line` (NULL for a unit's own text); `cycles`,
+  `circular-uses`, `deps-report` and charts see the edge. `--no-preprocess` extracts none. A host
+  is re-parsed when an include it took uses from changes.
+- **Refusal kind `uses-in-include` (rc2).** No uses editor edits an include: `cycles --fix` /
+  `--plan` refuse such a cycle; `uses-fix` prints `skipped: <Unit> -- used from include ...`
+  (JSON `skipped_include[]`, `skipped_include_count`); `find-unit` and `create-enum-helper`
+  refuse an include-only section; `rename` of a unit used from an include refuses, even an .inc
+  with no `files` row.
+- `preprocess-file --include-sites` prints the active include sites (diagnostic); internal verb
+  `dump-parse-uses` (rc2).
 ### Changed
 - `convert-apply` refuses a unit that is not in the index, single and batch (was: proceeded).
 - A `DL_NONE` marker is skipped by the uses reconciliation (no `uses-unit-unresolved` item, no
@@ -49,6 +95,21 @@ No extractor or resolver change on main: no re-parse.
 - Exit codes for an unknown verb (2) and an unknown flag (3, the stale-index code) are
   documented, not renumbered. The `--help` verb reference is generated from the feature registry.
 
+- MCP `rename_symbol` applies the same conflict and include-uses refusals as the CLI.
+- Rename (CLI, MCP, LSP): edits sit on the identifier token, the global implementation header is
+  renamed, snapping happens only off a declaration keyword and never retargets a moved ref; a
+  stale edit refuses (CLI exit 2); a binary `.dfm` is refused.
+- Lint rule loader skips a nested `rules` dir and dedupes stray same-id copies with one stderr
+  warning; the plugin's live lint passes `--db` for units shared by several projects (T-05).
+- `context` callers are scoped to the target constructor (bound refs to other symbols dropped).
+- `menu-tree` / `menu-drift` print their own `--help`; `ghost-check` no longer leaves an empty
+  `_D-RAG` beside the project (only `--in-place` creates it).
+- LSP `publishDiagnostics` drops exact-duplicate findings (parity with the CLI).
+- Lint findings on an include uses row (`used-unit-not-resolvable`, `unused-unit-in-uses`,
+  `layering-violation`, per-file `circular-uses`) are reported on the host at the `{$I}` line,
+  message ending ` (in include <Name.inc>, line <n>)` (rc2).
+- Schema (rc2): `unit_uses.origin_path TEXT`, `unit_uses.include_line INTEGER`,
+  `idx_unit_uses_origin` -- additive, ALTERed on the next writable open; no schema-version bump.
 ### Fixed
 - `context`: the Impl slice refuses a stale anchor instead of showing another routine's body.
 - `document`: `--qname` documents every overload of the name; two declarations on one line are
@@ -65,6 +126,11 @@ No extractor or resolver change on main: no re-parse.
   `referenced-never-set` credits a write through another instance of the same class; the
   Doc.Regions fence constants are accepted.
 - Rule sidecar key `exclude_if_preceded_by` is documented.
+- Lint: `used-before-assignment` treats a member write through an unassigned class local as a read
+  of the base; `referenced-never-set` credits a write through `property P write FField`.
+- Resolver (rc2): anonymous-method `Result` types compare after unit-qualification normalisation;
+  `Result` typing is declined only inside an anonymous method of ANOTHER return type; a local
+  declared after the site is never bound.
 
 ## v1.33.0-alpha -- 2026-10-20
 
