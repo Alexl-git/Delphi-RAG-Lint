@@ -8,10 +8,12 @@ unit DRagLint.LSP.Proxy.Merge;
   owns the merge state (the lazily-opened index, the single worker thread that
   enforces a per-frame time budget).
 
-  P0 SHIPS THE SEAM, NOT A MERGE. TProxyMergeEngine.Intercept answers False for
-  every frame, so a proxy started with a --merge-* flag relays exactly what the
-  plain relay relays. The handlers (diagnostics, completion, hover, definition)
-  arrive in later tasks, each behind its own guard.
+  P0 shipped the seam; A1 adds the first handler, the DIAGNOSTICS merge: with
+  --merge-diagnostics, a DelphiLSP textDocument/publishDiagnostics frame gets
+  drag-lint's findings for the same file appended to its OWN diagnostics array
+  (publishDiagnostics replaces the client's set per URI, so a separate frame
+  would erase, or be erased by, DelphiLSP's compiler errors). The other
+  handlers (completion, hover, definition) arrive in later tasks.
 
   FAIL OPEN, ALWAYS. A handler that raises, overruns its budget or cannot open
   the index makes the relay forward DelphiLSP's original bytes. The engine
@@ -23,7 +25,9 @@ uses
     System.SysUtils
   , System.Classes
   , System.SyncObjs
-  , DRagLint.LSP.Proxy  // dl:ok circular-uses@a9ed -- implementation-only cycle forced by the P0 contract: Merge takes TLspProxyOptions, Proxy installs the engine
+  , System.Generics.Collections
+  , DRagLint.Lint.Linter
+  , DRagLint.LSP.Proxy
   , DRagLint.LSP.Server
   ;
 
@@ -58,7 +62,14 @@ type
   /// process exit.</para>
   /// <para>Thread-safety: Intercept and RunWithinBudget are called from both
   /// pump threads concurrently; Server and RunWithinBudget serialise
-  /// internally.</para>
+  /// internally. The dirty-URI set has its own lock (written by the C&gt;S pump,
+  /// read by the S&gt;C pump). The linter is created and used ONLY on the merge
+  /// worker thread, so it needs none.</para>
+  /// <para>Latency (P0 review I3): only the S&gt;C diagnostics merge calls
+  /// RunWithinBudget; the C&gt;S document tracking runs inline without
+  /// FCallLock, so a diagnostics merge never delays a client request. A later
+  /// handler that also uses RunWithinBudget may wait up to about twice the
+  /// budget for the lock.</para>
   /// </remarks>
   TProxyMergeEngine = class
   private
@@ -75,7 +86,17 @@ type
     FJobFailed  : Boolean;
     FWorker     : TThread;
     FTestEmptyReplacement: Boolean;
+    FLinter      : TLinter;
+    FDirty       : TDictionary<string, Boolean>;
+    FDirtyLock   : TCriticalSection;
+    FBudgetWarned: Boolean;
+    FWarmQueued  : Boolean;
+    FWarming     : Integer;
     procedure WorkerLoop;
+    procedure WarmLinter;
+    function  IsDirty(const APath: string): Boolean;
+    procedure TrackDocument(const AFrame: TBytes; ALen: Integer);
+    function  MergeDiagnostics(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
   public
     /// <summary>Copies the options and starts the merge worker thread.</summary>
     /// <remarks>Test seam: with the environment variable
@@ -93,9 +114,26 @@ type
     /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
     /// <param name="ALen">Byte length of the frame.</param>
     /// <param name="AReplacement">Replacement frame when the result is True.</param>
-    /// <returns>False for every frame in P0 -- the relay forwards the
-    /// original bytes; handlers arrive in later tasks. Under the test seam (see
-    /// Create): True with an empty replacement.</returns>
+    /// <returns>True, with AReplacement set to the rewritten frame, only for an
+    /// S&gt;C textDocument/publishDiagnostics frame when MergeDiagnostics is on,
+    /// the file has no unsaved edits, drag-lint has at least one finding for it
+    /// and the findings were computed within MergeBudgetMs. False otherwise:
+    /// the relay forwards the original bytes. Under the test seam (see Create):
+    /// True with an empty replacement.</returns>
+    /// <remarks>
+    /// <para>C&gt;S frames are never replaced. With MergeDiagnostics on, a
+    /// didChange marks its URI dirty and a didSave, didOpen or didClose clears it; a
+    /// publish for a dirty URI is forwarded unmerged, because drag-lint lints
+    /// the file on DISK and its ranges would not match the edited buffer.</para>
+    /// <para>Fail-open: unparseable JSON, a missing uri or diagnostics array,
+    /// or a lint exception forwards the original frame and writes one stderr
+    /// line naming the merge. The first over-budget refusal writes one stderr
+    /// line, once per process.</para>
+    /// <para>The pre-check is a byte substring scan for the method name, so a
+    /// frame that is not a publishDiagnostics is never parsed. The linter is
+    /// created on the first merge, never at startup, so the first publish of a
+    /// session may overrun the budget and be forwarded unmerged.</para>
+    /// </remarks>
     function Intercept(ADir: TMergeDirection; const AFrame: TBytes; ALen: Integer;
       out AReplacement: TBytes): Boolean;
     /// <summary>Runs AWork on the single merge worker thread and waits at most
@@ -125,18 +163,20 @@ type
 /// <param name="ALen">Byte length of the frame in AFrame.</param>
 /// <returns>The text after the blank line that ends the headers; an empty
 /// string when no header terminator lies within ALen.</returns>
-function FrameBody(const AFrame: TBytes; ALen: Integer): string;  // dl:ok unused-public-symbol@a220 -- shared frame helper of the merge handlers (A1/A3/A4/A5); P0 ships the seam only
+function FrameBody(const AFrame: TBytes; ALen: Integer): string;
 
 /// <summary>Frames a UTF-8 body as one LSP message.</summary>
 /// <param name="ABodyUtf8">The body bytes, already UTF-8.</param>
 /// <returns>`Content-Length: N` CR LF CR LF followed by the body, where N is
 /// the BYTE count of the body.</returns>
-function BuildFrame(const ABodyUtf8: TBytes): TBytes;  // dl:ok unused-public-symbol@5a05 -- shared frame helper of the merge handlers (A1/A3/A4/A5); P0 ships the seam only
+function BuildFrame(const ABodyUtf8: TBytes): TBytes;
 
 implementation
 
 uses
     Winapi.Windows
+  , System.JSON
+  , DRagLint.LSP.Completion
   ;
 
 type
@@ -180,6 +220,41 @@ const
   { The blank line that ends an LSP header block. }
   HEADER_END: array[0..3] of Byte = (13, 10, 13, 10);
 
+  METHOD_PUBLISH_DIAGNOSTICS = 'textDocument/publishDiagnostics';
+  METHOD_DID_CHANGE          = 'textDocument/didChange';
+  METHOD_DID_SAVE            = 'textDocument/didSave';
+  METHOD_DID_OPEN            = 'textDocument/didOpen';
+  METHOD_DID_CLOSE           = 'textDocument/didClose';
+  { The common prefix of the three document notifications tracked above. }
+  METHOD_DID_PREFIX          = 'textDocument/did';
+
+  MERGE_ERR_PREFIX = 'drag-lint lsp --proxy: merge-diagnostics ';
+
+{ True when the ASCII text ANeedle occurs in the first ALen bytes of AFrame.
+  The pre-check of every handler: a frame that cannot match is never decoded
+  or parsed. }
+function FrameContains(const AFrame: TBytes; ALen: Integer; const ANeedle: RawByteString): Boolean;
+var
+  I, J, N: Integer;
+begin
+  N:= Length(ANeedle);
+  if ALen > Length(AFrame) then ALen:= Length(AFrame);
+  for I:= 0 to ALen - N do
+  begin
+    J:= 0;
+    while (J < N) and (AFrame[I + J] = Byte(ANeedle[J + 1])) do Inc(J);
+    if J = N then Exit(True);
+  end;
+  Result:= False;
+end;
+
+{ The dirty-set key of a file path: case-folded, so the client's and the
+  server's spellings of one file agree. }
+function DocKey(const APath: string): string;
+begin
+  Result:= LowerCase(APath);
+end;
+
 function FrameBody(const AFrame: TBytes; ALen: Integer): string;
 var
   I, J : Integer;
@@ -220,6 +295,8 @@ begin
   FJobDone   := TEvent.Create(nil, True , False, '');
   FWorker    := TMergeWorker.Create(Self);
   FTestEmptyReplacement:= GetEnvironmentVariable('DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT') = '1';
+  FDirty    := TDictionary<string, Boolean>.Create;
+  FDirtyLock:= TCriticalSection.Create;
 end;
 
 destructor TProxyMergeEngine.Destroy;
@@ -232,6 +309,9 @@ begin
     FWorker.Free;
   end;
   FServer.Free;
+  FLinter.Free;
+  FDirty.Free;
+  FDirtyLock.Free;
   FJobDone.Free;
   FJobReady.Free;
   FStateLock.Free;
@@ -331,12 +411,196 @@ begin
   end;
 end;
 
-function TProxyMergeEngine.Intercept(ADir: TMergeDirection; const AFrame: TBytes;  // dl:ok unused-parameter@abe1 -- P0 Intercept declines every frame; the signature is the TFrameInterceptor contract
-  ALen: Integer; out AReplacement: TBytes): Boolean;  // dl:ok unused-parameter@76b8 -- P0 Intercept declines every frame; the signature is the TFrameInterceptor contract
+function TProxyMergeEngine.IsDirty(const APath: string): Boolean;
 begin
-  { P0: the seam only. Every frame is forwarded as received. }
+  FDirtyLock.Enter;
+  try
+    Result:= FDirty.ContainsKey(DocKey(APath));
+  finally
+    FDirtyLock.Leave;
+  end;
+end;
+
+{ C>S, first didOpen only: builds the lint engine on the merge worker, off the
+  relay path (budget 0 = enqueue and return at once). TLinter.Create loads every
+  rule file, which takes seconds cold and would otherwise make the FIRST
+  publishDiagnostics of a session miss any budget. Does not touch
+  FBudgetWarned. FWarming tells the S>C side an overrun is the warm-up, not a
+  dead merge. Runs on the C>S pump thread. }
+procedure TProxyMergeEngine.WarmLinter;
+begin
+  if FWarmQueued then Exit;
+  FWarmQueued:= True;
+  TInterlocked.Exchange(FWarming, 1);
+  if not RunWithinBudget(
+    procedure
+    begin
+      try
+        if FLinter = nil then FLinter:= TLinter.Create('');
+      finally
+        TInterlocked.Exchange(FWarming, 0);
+      end;
+    end, 0) then
+    TInterlocked.Exchange(FWarming, 0);
+end;
+
+{ C>S: didChange marks the document dirty, didSave / didOpen / didClose clear it.
+  A first didOpen also warms the linter. Runs on the C>S pump thread, inline
+  (no worker, no FCallLock). }
+procedure TProxyMergeEngine.TrackDocument(const AFrame: TBytes; ALen: Integer);
+var
+  Json  : TJSONValue;
+  Method: string;
+  Uri   : string;
+  Key   : string;
+begin
+  if not FrameContains(AFrame, ALen, METHOD_DID_PREFIX) then Exit;
+  Method:= '';
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if not (Json is TJSONObject) then Exit;
+      if not Json.TryGetValue<string>('method', Method) then Exit;
+      if (Method <> METHOD_DID_CHANGE) and (Method <> METHOD_DID_SAVE) and (Method <> METHOD_DID_OPEN)
+         and (Method <> METHOD_DID_CLOSE) then Exit;
+      if not Json.TryGetValue<string>('params.textDocument.uri', Uri) then Exit;
+      Key:= DocKey(TLSPServer.FileFromUri(Uri));
+      FDirtyLock.Enter;
+      try
+        if Method = METHOD_DID_CHANGE then FDirty.AddOrSetValue(Key, True)
+        else FDirty.Remove(Key);
+      finally
+        FDirtyLock.Leave;
+      end;
+      if Method = METHOD_DID_OPEN then WarmLinter;
+    finally
+      Json.Free;
+    end;
+  except
+    on E: Exception do
+      MergeErrLine(MERGE_ERR_PREFIX + 'could not track ' + Method + ' (' + E.ClassName + ': ' + E.Message + ').');
+  end;
+end;
+
+{ S>C: rewrites a publishDiagnostics frame with drag-lint's findings appended.
+  Runs on the S>C pump thread; the lint itself runs on the merge worker, inside
+  the budget. }
+function TProxyMergeEngine.MergeDiagnostics(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@3a8f -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
+  out AReplacement: TBytes): Boolean;
+var
+  Json  : TJSONValue;
+  Method: string;
+  Uri   : string;
+  Path  : string;
+  Diags : TJSONArray;
+  Items : string;
+  Err   : string;
+  Added : TJSONValue;
+  Elem  : TJSONValue;
+
+  procedure Skip(const AWhy: string);
+  begin
+    MergeErrLine(MERGE_ERR_PREFIX + 'skipped a frame (' + AWhy + '); forwarded unchanged.');
+  end;
+
+begin
+  Result:= False;
   AReplacement:= nil;
-  Result:= FTestEmptyReplacement;
+  if not FrameContains(AFrame, ALen, METHOD_PUBLISH_DIAGNOSTICS) then Exit;
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if not (Json is TJSONObject) then
+      begin
+        Skip('body is not a JSON object');
+        Exit;
+      end;
+      { A frame that merely mentions the method (a response, a log message)
+        is not ours to touch. }
+      if not Json.TryGetValue<string>('method', Method) then Exit;
+      if Method <> METHOD_PUBLISH_DIAGNOSTICS then Exit;
+      if not (Json.TryGetValue<string>('params.uri', Uri) and
+              Json.TryGetValue<TJSONArray>('params.diagnostics', Diags)) then
+      begin
+        Skip('no params.uri or params.diagnostics array');
+        Exit;
+      end;
+      Path:= TLSPServer.FileFromUri(Uri);
+      if IsDirty(Path) then Exit;   { unsaved edits: our on-disk ranges would lie }
+
+      { The job publishes ONLY through the captured strings Items / Err, read
+        after a True return; an over-budget job writes them after this method
+        stopped looking, which is harmless. The job never raises, so a False
+        return means over budget or worker still busy. }
+      Items:= '';
+      Err  := '';
+      if not RunWithinBudget(
+        procedure
+        var
+          Arr: TJSONArray;
+        begin
+          try
+            if FLinter = nil then FLinter:= TLinter.Create('');
+            Arr:= TLspCompletion.BuildDiagnostics(FLinter, Path, nil);
+            try
+              Items:= Arr.ToJSON;
+            finally
+              Arr.Free;
+            end;
+          except  // dl:ok try-except-swallowed@a7c8 -- not swallowed: the message is published through Err and logged by the caller
+            on E: Exception do Err:= E.ClassName + ': ' + E.Message;
+          end;
+        end, FOptions.MergeBudgetMs) then
+      begin
+        if (not FBudgetWarned) and (TInterlocked.CompareExchange(FWarming, 0, 0) = 0) then
+        begin
+          FBudgetWarned:= True;   { S>C pump thread only: no lock needed }
+          MergeErrLine(MERGE_ERR_PREFIX + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
+                       ' ms budget; publishDiagnostics is forwarded unmerged while the merge worker is busy (reported once).');
+        end;
+        Exit;
+      end;
+      if Err <> '' then
+      begin
+        Skip(Err);
+        Exit;
+      end;
+
+      Added:= TJSONObject.ParseJSONValue(Items);
+      try
+        if not (Added is TJSONArray) or (TJSONArray(Added).Count = 0) then Exit;   { clean file: original bytes }
+        for Elem in TJSONArray(Added) do
+          Diags.AddElement(TJSONValue(Elem.Clone));
+      finally
+        Added.Free;
+      end;
+      AReplacement:= BuildFrame(TEncoding.UTF8.GetBytes(Json.ToJSON));
+      Result:= True;
+    finally
+      Json.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      AReplacement:= nil;
+      Result:= False;
+      Skip(E.ClassName + ': ' + E.Message);
+    end;
+  end;
+end;
+
+function TProxyMergeEngine.Intercept(ADir: TMergeDirection; const AFrame: TBytes;
+  ALen: Integer; out AReplacement: TBytes): Boolean;
+begin
+  AReplacement:= nil;
+  if FTestEmptyReplacement then Exit(True);
+  if not FOptions.MergeDiagnostics then Exit(False);
+  if ADir = mdClientToServer then
+  begin
+    TrackDocument(AFrame, ALen);
+    Exit(False);
+  end;
+  Result:= MergeDiagnostics(AFrame, ALen, AReplacement);
 end;
 
 end.

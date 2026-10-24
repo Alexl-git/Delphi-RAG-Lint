@@ -129,8 +129,8 @@ type
   /// (full sync) and stored in TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
   /// original reasoning is intact -- only the text under the caret is live.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Server.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Server.TLspServerContextAdapter.Create (DRagLint.LSP.Server.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLSPServer = class
@@ -390,21 +390,6 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
-      /// <param name="AUri"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto type -->string</returns>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas) (+4 more)</para>
-      /// <para>Calls: Copy, StringReplace</para>
-      /// <para>Pure</para>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeDefinition"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      function FileFromUri(const AUri : string): string;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
@@ -928,10 +913,26 @@ type
       /// </remarks>
       function EnsureLinter: TLinter                                                  ;
     public
+      /// <summary>Maps an LSP file:/// URI to a Windows path (percent-decoded, backslashes). Stateless.</summary>
+      /// <param name="AUri"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas) (+6 more)</para>
+      /// <para>Calls: Copy, StringReplace</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeDefinition"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      class function FileFromUri(const AUri : string): string;
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.Create/1</para>
       /// <para>Overload 1 of 2</para>
       /// <para>constructor</para>
@@ -1542,7 +1543,7 @@ begin
   Result:= True;
 end; // procedure
 
-function TLSPServer.FileFromUri(const AUri: string): string;
+class function TLSPServer.FileFromUri(const AUri: string): string;
 var
   Decoded: string;
 begin
