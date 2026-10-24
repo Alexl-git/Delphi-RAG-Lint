@@ -469,9 +469,21 @@ type
     /// whose return type cannot be shown equal to the routine's.</param>
     /// <returns>The return type text; '' when declined, for a procedure, or
     /// for a signature shape SignatureReturnType does not read.</returns>
-    /// <remarks>Equality is text only (case and blanks ignored): a unit-qualified
-    /// spelling of the same type reads as different and declines.</remarks>
+    /// <remarks>Equality is on text after StripUnitQualifiers (case, blanks and
+    /// unit qualification ignored): `uX.TFoo` equals `TFoo` and
+    /// `System.Integer` equals `Integer`; a qualified OTHER type still
+    /// declines.</remarks>
     function ResultTypeAt(const ARef: TReference; out ADeclined: Boolean): string;
+    /// <summary>B-35 lane R (W5-res2 residue): ATypeText lowercased, blanks
+    /// removed, and every dotted identifier chain stripped of its longest
+    /// leading run of segments that names a unit.</summary>
+    /// <param name="ATypeText">A type spelling, e.g. `uX.TList<System.Integer>`.</param>
+    /// <returns>The normalised text, e.g. `tlist<integer>`.</returns>
+    /// <remarks>A prefix is a unit when UnitNameToFileId finds exactly one unit
+    /// of that name, or it is `System` (always in scope). A nested-type prefix
+    /// (`TOuter.TInner`) names no unit and is kept, so two different nested
+    /// types never compare equal.</remarks>
+    function StripUnitQualifiers(const ATypeText: string): string;
 
     /// <summary>The type symbols of AFileId and its root symbol (the one with no
     /// parent), read once per file and cached.</summary>
@@ -5639,8 +5651,53 @@ var
 begin
   Result    := SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature);
   ADeclined := InsideAnonymousMethod(ARef, AnonType)
-               and ((AnonType = '') or not SameText(AnonType, Result.Replace(' ', '', [rfReplaceAll])));
+               and ((AnonType = '') or (StripUnitQualifiers(AnonType) <> StripUnitQualifiers(Result)));
   if ADeclined then Result:= '';
+end;
+
+function TCallResolver.StripUnitQualifiers(const ATypeText: string): string;
+var
+  K     : Integer;
+  J     : Integer;
+  Chain : string ;
+  Segs  : TArray<string>;
+  Cut   : Integer;
+  Prefix: string ;
+  Out   : TStringBuilder;
+begin
+  Out:= TStringBuilder.Create;
+  try
+    K:= 1;
+    while K <= Length(ATypeText) do
+    begin
+      if not (CharInSet(ATypeText[K], ['A'..'Z', 'a'..'z', '_', '&'])) then
+      begin
+        if ATypeText[K] > ' ' then Out.Append(LowerCase(ATypeText[K]));
+        Inc(K);
+        Continue;
+      end;
+      J:= K;
+      while (J <= Length(ATypeText)) and CharInSet(ATypeText[J], ['A'..'Z', 'a'..'z', '0'..'9', '_', '&', '.']) do Inc(J);
+      Chain:= LowerCase(Copy(ATypeText, K, J - K));
+      K    := J;
+      Segs := Chain.Split(['.']);
+      { The longest leading run of segments that names a unit is dropped; `System`
+        is always in scope, so it counts without an index row. }
+      for Cut:= High(Segs) downto 1 do
+      begin
+        Prefix:= string.Join('.', Segs, 0, Cut);
+        if (Prefix = 'system') or (UnitNameToFileId(Prefix) <> 0) then
+        begin
+          Chain:= string.Join('.', Segs, Cut, Length(Segs) - Cut);
+          Break;
+        end;
+      end;
+      Out.Append(Chain);
+    end;
+    Result:= Out.ToString;
+  finally
+    Out.Free;
+  end;
 end;
 
 function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;

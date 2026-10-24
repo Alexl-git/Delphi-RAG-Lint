@@ -28,6 +28,9 @@ function GetNum: Integer;
 function MakeNumFn: TNumFn;
 function MakeSameAnon: TJob;
 function MakeSameNumFn: TNumFn;
+function MakeQualAnon: TJob;
+function MakeQualNumFn: uResRecv.TNumFn;
+function MakeQualOther: TJob;
 
 type
   TJobFn = reference to function: TJob;
@@ -132,6 +135,41 @@ begin
       Result := GetNum; // PV-ANON-SAME-ADDR
     end;
   Result := H();
+end;
+
+function MakeQualAnon: TJob;
+var
+  G: TJobFn;
+begin
+  G := function: uResRecv.TJob
+    begin
+      Result := TJob.Create;
+      Result.Streaming := True; // QUAL-POS-ANON
+    end;
+  Result := G();
+end;
+
+function MakeQualNumFn: uResRecv.TNumFn;
+var
+  H: TNumFnFn;
+begin
+  H := function: TNumFn
+    begin
+      Result := GetNum; // QUAL-PV-ANON-ADDR
+    end;
+  Result := H();
+end;
+
+function MakeQualOther: TJob;
+var
+  F: TOtherFn;
+begin
+  F := function: uResRecv.TOtherJob
+    begin
+      Result := TOtherJob.Create;
+      Result.Streaming := True; // QUAL-NEG-ANON
+    end;
+  Result := TJob.Create;
 end;
 
 end.

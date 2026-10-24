@@ -152,6 +152,20 @@ $r = EdgesAt 'PV-ANON-SAME-ADDR' 'GetNum'
 Check 'PV-ANON-SAME-ADDR Result := GetNum inside an anonymous function: TNumFn is no call edge (address)' `
   ($r.Count -eq 0) "edges=$($r.Count)"
 
+# B-35 lane R (W5-res2 residue): the comparison normalises unit qualification --
+# `uResRecv.TJob` in a `TJob` function, or `TNumFn` in a `uResRecv.TNumFn`
+# function, is the same type; a qualified OTHER type still declines.
+# Positive control: text equality declined QUAL-POS-ANON and made
+# QUAL-PV-ANON-ADDR a call edge.
+$r = At 'QUAL-POS-ANON' 'member-access' 'Streaming'
+Check 'QUAL-POS-ANON Result inside function: uResRecv.TJob in a TJob function binds TJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
+$r = EdgesAt 'QUAL-PV-ANON-ADDR' 'GetNum'
+Check 'QUAL-PV-ANON-ADDR Result := GetNum inside function: TNumFn in a uResRecv.TNumFn function is no call edge (address)' `
+  ($r.Count -eq 0) "edges=$($r.Count)"
+$r = At 'QUAL-NEG-ANON' 'member-access' 'Streaming'
+Check 'QUAL-NEG-ANON Result inside function: uResRecv.TOtherJob in a TJob function never binds TJob.Streaming' `
+  (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
 } finally {
   if ($scratch -and (Test-Path $scratch)) { [System.IO.Directory]::Delete($scratch, $true) }
