@@ -1176,7 +1176,7 @@ Described in [pp-profile](features/pp-profile.md).
 Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set.
 
 ```text
-drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] (diagnostic: print {$IFDEF}-resolved source to stdout)
+drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1187,6 +1187,7 @@ drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--in
 | `--include-mode` |  |  |  |
 | `--no-near-search` |  |  |  |
 | `--tolerances` |  |  |  |
+| `--include-sites` |  |  |  |
 
 Described in [preprocess-file](features/preprocess-file.md).
 

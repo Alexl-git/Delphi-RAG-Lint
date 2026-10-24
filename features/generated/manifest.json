@@ -1,7 +1,7 @@
 {
   "product": "1.33.0-alpha",
-  "extractor": "1.22.0-alpha",
-  "resolver": "1.12.1-alpha",
+  "extractor": "1.23.0-alpha",
+  "resolver": "1.13.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -8242,7 +8242,7 @@
         {
           "type": "cli",
           "verb": "preprocess-file",
-          "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] (diagnostic: print {$IFDEF}-resolved source to stdout)",
+          "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
           "flags": [
             {
               "name": "--file",
@@ -8264,10 +8264,13 @@
             },
             {
               "name": "--tolerances"
+            },
+            {
+              "name": "--include-sites"
             }
           ],
           "helpOrder": 89,
-          "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
+          "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
         }
       ],
       "audience": "both",
@@ -8279,6 +8282,10 @@
         {
           "ask": "What if I define a symbol?",
           "command": "drag-lint preprocess-file --file <PATH> --define <SYM>"
+        },
+        {
+          "ask": "Which include files did this file pull in, and what did each contribute?",
+          "command": "drag-lint preprocess-file --file <PATH> --include-mode defines-only --include-sites"
         }
       ],
       "access": "cli-only",
@@ -9673,6 +9680,25 @@
         "build": "1.33.0-alpha",
         "surfaceHash": "62c4461cdfa3aefef42ca5c7bf6364c980d541e37290f80e54501f819cc31f00"
       }
+    },
+    {
+      "id": "dump-parse-uses",
+      "title": "dump-parse-uses",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "1.33.0-alpha",
+      "summary": "Diagnostic dump of what the Delphi parser reports for one file's uses clauses and implementation line, without an index",
+      "intro": "Read this only when debugging uses-clause extraction: dump-parse-uses --file PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database.",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "dump-parse-uses"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1."
     },
     {
       "id": "dump-pp-eval",
