@@ -2142,6 +2142,41 @@ begin
   end;
   Result := '';
 end;
+{ Equal helpOrder must sort the same whatever the insertion order (TList.Sort is unstable): tiebreak is the entry id, ordinal. }
+function SortedIds(const pRows: array of TRow): string;
+var
+  lList: TList<TRow>;
+  lRow: TRow;
+begin
+  lList := TList<TRow>.Create;
+  try
+    lList.AddRange(pRows);
+    lList.Sort(TComparer<TRow>.Construct(CompareRows));
+    Result := '';
+    for lRow in lList do
+      Result := Result + lRow.Id + ';';
+  finally
+    lList.Free;
+  end;
+end;
+procedure TestHelpOrderTiebreak;
+var
+  lA, lB, lC: TRow;
+begin
+  lA := Default(TRow);
+  lA.Id := 'menu-tree';
+  lA.Order := 96;
+  lA.EntryIndex := 2;
+  lB := lA;
+  lB.Id := 'register-project';
+  lB.EntryIndex := 1;
+  lC := lA;
+  lC.Id := 'Zeta';
+  lC.EntryIndex := 0;
+  Check('Help.EqualOrderTiebreakNotZero', CompareRows(lA, lB) <> 0, 'equal helpOrder must not compare equal');
+  Check('Help.EqualOrderSameInEitherInsertionOrder', SortedIds([lA, lB, lC]) = SortedIds([lC, lB, lA]), SortedIds([lA, lB, lC]) + ' vs ' + SortedIds([lC, lB, lA]));
+  Check('Help.EqualOrderIdIsOrdinal', SortedIds([lA, lB, lC]) = 'Zeta;menu-tree;register-project;', SortedIds([lA, lB, lC]));
+end;
 procedure TestHelpText(const pRepo: string);
 var
   lReg: TRegistry;
@@ -3058,6 +3093,7 @@ begin
       TestSinceOverride(lRepo);
       TestPositiveControls(lRepo);
       TestHelpText(lRepo);
+      TestHelpOrderTiebreak;
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
       TestCommands(lRepo);

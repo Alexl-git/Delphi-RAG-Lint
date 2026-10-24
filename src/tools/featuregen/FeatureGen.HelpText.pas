@@ -23,6 +23,24 @@ const
   /// <summary>Registry-relative path of the generated unit.</summary>
   HELPTEXT_UNIT_PATH = 'src\cli\DRagLint.CLI.HelpText.pas';
 
+type
+  /// <summary>One public cli surface as a sortable row of the verb reference.</summary>
+  TRow = record
+    Id: string;
+    Verb: string;
+    Sub: string;
+    Order: Integer;
+    EntryIndex: Integer;
+    SurfaceIndex: Integer;
+  end;
+
+/// <summary>Total order of the verb-reference rows.</summary>
+/// <param name="pA">First row.</param>
+/// <param name="pB">Second row.</param>
+/// <returns>Negative, zero or positive. Blocks (Order &gt; 0) first by Order, equal Order by entry Id (ordinal compare), then Verb, Sub, EntryIndex, SurfaceIndex; blockless rows by Verb, Sub, Id, EntryIndex, SurfaceIndex.</returns>
+/// <remarks>TList.Sort is unstable; a tie on Order alone would let the generated block order flip between builds.</remarks>
+function CompareRows(const pA, pB: TRow): Integer;
+
 /// <summary>The lines of the generated verb reference, without Pascal quoting.</summary>
 /// <param name="pReg">Loaded registry.</param>
 /// <returns>Blocks in helpOrder, then blockless surfaces in verb order.</returns>
@@ -40,15 +58,6 @@ uses
   , System.RegularExpressions
   , System.Generics.Collections
   , System.Generics.Defaults;
-
-type
-  TRow = record
-    Verb: string;
-    Sub: string;
-    Order: Integer;
-    EntryIndex: Integer;
-    SurfaceIndex: Integer;
-  end;
 
 const
   USAGE_INDENT = '  ';
@@ -68,13 +77,28 @@ end;
 function CompareRows(const pA, pB: TRow): Integer;
 begin
   if (pA.Order > 0) and (pB.Order > 0) then
-    Exit(pA.Order - pB.Order);
-  if (pA.Order > 0) <> (pB.Order > 0) then
+  begin
+    Result := pA.Order - pB.Order;
+    if Result = 0 then
+      Result := CompareStr(pA.Id, pB.Id);
+  end
+  else if (pA.Order > 0) <> (pB.Order > 0) then
+  begin
     if pA.Order > 0 then
       Exit(-1)
     else
       Exit(1);
-  Result := CompareStr(pA.Verb, pB.Verb);
+  end
+  else
+  begin
+    Result := CompareStr(pA.Verb, pB.Verb);
+    if Result = 0 then
+      Result := CompareStr(pA.Sub, pB.Sub);
+    if Result = 0 then
+      Result := CompareStr(pA.Id, pB.Id);
+  end;
+  if Result = 0 then
+    Result := CompareStr(pA.Verb, pB.Verb);
   if Result = 0 then
     Result := CompareStr(pA.Sub, pB.Sub);
   if Result = 0 then
@@ -98,6 +122,7 @@ begin
       for lS := 0 to High(pReg.Entries[lE].Surfaces) do
         if SameText(pReg.Entries[lE].Surfaces[lS].Kind, 'cli') and (pReg.Entries[lE].Surfaces[lS].Usage <> '') then
         begin
+          lRow.Id := pReg.Entries[lE].Id;
           lRow.Verb := pReg.Entries[lE].Surfaces[lS].Verb;
           lRow.Sub := pReg.Entries[lE].Surfaces[lS].Sub;
           lRow.Order := 0;

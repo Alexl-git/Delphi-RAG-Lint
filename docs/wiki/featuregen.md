@@ -73,7 +73,7 @@ whose id is the verb, or `verb-sub`, wins over a feature entry that merely runs 
 claimed gives the second entry NO block) and writes `help` / `helpOrder`. It forgets earlier blocks first, so it
 is repeatable. Only public entries (not `internal` / `planned` / removed) take blocks. Guard:
 `FeatureGenTests` pins the claim order, and the frozen fixture
-`src\tools\featuregen\tests\fixtures\help-verb-reference-1.33.0.txt` is compared with the deployed exe's output.
+`src\tools\featuregen\tests\fixtures\help-verb-reference-1.33.0.txt` is checked by Help.FrozenBannerPreserved: every line of it must still appear, in order, in featuregen's own verb-reference render (insertions are allowed; no exe is read).
 
 ## Entries with no IDE surface (ccess)
 
