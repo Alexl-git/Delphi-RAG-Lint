@@ -277,7 +277,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  BuildEphemeralStore(const APath: string; AStamp: TDateTime): Boolean;
-    private { S0: reached by TLspServerContextAdapter (same unit), not by other units }
+    public { S0: reached by TLspServerContextAdapter; A3 fix 2: and by the merge proxy (DRagLint.LSP.Proxy.Merge), so its completion sees a file no index owns }
       /// <summary>The store list to answer a request about APath with: FStores
       /// unchanged when some store owns the file, else the ephemeral
       /// single-unit store PREPENDED to FStores.</summary>

@@ -1026,7 +1026,9 @@ begin
       end
       else
       begin
-        Arr:= TLspCompletion.BuildCompletionItems(Stores, P.FPath, P.FLine1, P.FCol1);
+        { A3 fix 2: the stores for THIS file, as HandleCompletion picks them,
+          so a file no index owns still gets its own declarations. }
+        Arr:= TLspCompletion.BuildCompletionItems(S.StoresForFile(P.FPath), P.FPath, P.FLine1, P.FCol1);
         try
           P.FItems:= Arr.ToJSON;
         finally
