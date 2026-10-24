@@ -12,7 +12,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
   /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -24,7 +24,7 @@ type
       /// TList&lt;TDocCommentRegion&gt;.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment</para>
       /// <para>Complexity: 34 (cyclomatic, outer body), 198 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
@@ -40,7 +40,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas) (+3 more)</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Wiki</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -184,7 +184,7 @@ type
       /// ParsePasDoc(ARegion.RawText); ParseLoose (ARegion.RawText).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.EnsureParserRegexes, DRagLint.Parser.DocComments.HasAnyRecognizedTag, DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose, DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline, DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, FillChar</para>
       /// <para>Complexity: 16 (cyclomatic, outer body), 97 lines (full implementation)</para>
       /// <para>Pure</para>

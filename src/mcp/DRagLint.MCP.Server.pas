@@ -116,8 +116,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Model.JsonEscape, DRagLint.Diagnostics.AstChecks.TAstChecker.Check, DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (+26 more)</para>
-      /// <para>Complexity: 93 (cyclomatic, outer body), 450 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Model.JsonEscape, DRagLint.Diagnostics.AstChecks.TAstChecker.Check, DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (+30 more)</para>
+      /// <para>Complexity: 99 (cyclomatic, outer body), 458 lines (full implementation)</para>
       /// <para>Reads: FStore, FLinter</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
@@ -165,13 +165,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Format</para>
+      /// <para>Calls: DRagLint.Core.Model.TSymbolKindHelper.ToText, Format</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatImpactAsJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatSymbols   (const ASymbols : TArray<TSymbol     >): string;
@@ -332,14 +332,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
       /// <para>Reads: FStore</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveStore(const AArgs: TJSONObject): ISymbolStore                                   ;

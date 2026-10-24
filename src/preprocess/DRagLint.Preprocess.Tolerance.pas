@@ -66,7 +66,7 @@ uses
 /// thread-safe with respect to ABytes (in-place edit); the compiled match
 /// patterns are created once per process and are read-only thereafter.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Tolerance.EnsureRegexes, DRagLint.Preprocess.Tolerance.StripCodeLine</para>
 /// <para>Complexity: 27 (cyclomatic, outer body), 83 lines (full implementation)</para>
 /// <para>Mutates: ABytes (var)</para>

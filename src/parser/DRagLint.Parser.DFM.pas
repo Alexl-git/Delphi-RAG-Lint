@@ -15,8 +15,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.Convert.UsesReconcile.ReindexText (DRagLint.Convert.UsesReconcile.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDFMParser = class(TInterfacedObject, IParser)
@@ -26,9 +26,11 @@ type
       /// <summary><!-- drag-lint:auto sum -->TDFMParser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.Convert.UsesReconcile.ReindexText (DRagLint.Convert.UsesReconcile.pas)</para>
+      /// <para>Calls: DRagLint.Parser.DFM.tree_sitter_dfm</para>
       /// <para>constructor</para>
       /// <para>Writes: FLanguage</para>
+      /// <seealso cref="DRagLint.Parser.DFM.tree_sitter_dfm"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
@@ -97,6 +99,7 @@ type
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Create (DRagLint.Parser.DFM.pas)</para>
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -126,13 +129,13 @@ external 'tree-sitter-dfm';
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)</para>
-/// <para>Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+/// <para>Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.tree_sitter_dfm, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
+/// <seealso cref="DRagLint.Parser.DFM.tree_sitter_dfm"/>
 /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
-/// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
