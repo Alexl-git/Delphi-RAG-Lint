@@ -144,6 +144,7 @@ type
     FBs: TArray<TBeta>;
     procedure TwoLoops;
     procedure OneLoop;
+    procedure Late;
   end;
 
 implementation
@@ -164,6 +165,12 @@ end;
 
 procedure THost.OneLoop;
 begin
+  for var Item: TAlpha in FAs do Item.Ping;
+end;
+
+procedure THost.Late;
+begin
+  Item.Ping;
   for var Item: TAlpha in FAs do Item.Ping;
 end;
 
@@ -262,12 +269,19 @@ try {
 
   # --- 11. D1: duplicate local QNs with DIFFERENT signatures DECLINE ----------
   # (final review #2). Both rows exist, so a resolver picking the first would
-  # type line 32's receiver as TAlpha; the decline leaves BOTH TwoLoops calls
-  # without an edge, while the single-loop control keeps its certain edge.
+  # type line 32's receiver as TAlpha; each TwoLoops call binds to its own nearest declaration
+  # (see below); a call with no preceding declaration declines.
   $dl = Sql "SELECT signature FROM symbols WHERE kind='local_var' AND qualified_name='duploc.THost.TwoLoops.Item' ORDER BY start_line"
   Check 'D1 TwoLoops has TWO local_var Item rows with distinct signatures (TAlpha, TBeta)' (($dl.Count -eq 2) -and ($dl[0].signature -eq 'TAlpha') -and ($dl[1].signature -eq 'TBeta')) "sigs=$(@($dl | ForEach-Object signature) -join ',')"
-  $de = Sql "SELECT COUNT(e.ref_id) AS n FROM refs r JOIN symbols s ON s.id=r.enclosing_symbol_id LEFT JOIN call_edges e ON e.ref_id=r.id WHERE r.kind='call' AND r.name_text='Ping' AND s.qualified_name='duploc.THost.TwoLoops'"
-  Check 'D1 neither TwoLoops Item.Ping call is resolved (ambiguous local -> decline, not first-match)' (($de.Count -eq 1) -and ($de[0].n -eq 0)) "edges=$($de[0].n)"
+  # Since d22d73f3 a same-named local binds to the NEAREST declaration that
+  # precedes the call site, so each TwoLoops call binds to ITS OWN loop's type.
+  $de = Sql "SELECT r.start_line AS ln, t.qualified_name AS target FROM refs r JOIN symbols s ON s.id=r.enclosing_symbol_id JOIN call_edges e ON e.ref_id=r.id JOIN symbols t ON t.id=e.target_symbol_id WHERE r.kind='call' AND r.name_text='Ping' AND s.qualified_name='duploc.THost.TwoLoops' ORDER BY r.start_line"
+  $dtg = (@($de | ForEach-Object { "$($_.ln)=$($_.target)" }) -join ',')
+  Check 'D1 each TwoLoops Item.Ping binds to its OWN declaration (1st -> TAlpha.Ping, 2nd -> TBeta.Ping, distinct lines)' (($de.Count -eq 2) -and ($de[0].ln -lt $de[1].ln) -and ($de[0].target -eq 'duploc.TAlpha.Ping') -and ($de[1].target -eq 'duploc.TBeta.Ping')) "edges=$dtg"
+  # Negative control: in Late the first Item.Ping precedes any Item declaration
+  # and must still DECLINE; only the call after the loop declaration binds.
+  $dn = Sql "SELECT r.start_line AS ln, e.target_symbol_id AS tid FROM refs r JOIN symbols s ON s.id=r.enclosing_symbol_id LEFT JOIN call_edges e ON e.ref_id=r.id WHERE r.kind='call' AND r.name_text='Ping' AND s.qualified_name='duploc.THost.Late' ORDER BY r.start_line"
+  Check 'D1 negative control: Late.Item.Ping with no preceding declaration declines; the later one binds' (($dn.Count -eq 2) -and ($null -eq $dn[0].tid) -and ($null -ne $dn[1].tid)) "rows=$(@($dn | ForEach-Object { "$($_.ln):$($_.tid)" }) -join ',')"
   $dc = Sql "SELECT t.qualified_name AS target FROM refs r JOIN symbols s ON s.id=r.enclosing_symbol_id JOIN call_edges e ON e.ref_id=r.id JOIN symbols t ON t.id=e.target_symbol_id WHERE r.kind='call' AND r.name_text='Ping' AND s.qualified_name='duploc.THost.OneLoop'"
   Check 'D1 control: OneLoop Item.Ping still resolves to duploc.TAlpha.Ping (the rung is alive)' (($dc.Count -eq 1) -and ($dc[0].target -eq 'duploc.TAlpha.Ping')) "target=$($dc[0].target)"
 
