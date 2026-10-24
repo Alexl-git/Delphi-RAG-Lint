@@ -526,6 +526,7 @@ type
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
     LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
+    LspMergeCompletion : Boolean; // --merge-completion (merge plan A3; OFF by default)
     LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
@@ -1598,6 +1599,7 @@ begin
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
     else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
+    else if A = '--merge-completion' then Result.LspMergeCompletion:= True
     else if A = '--full-rules' then Result.LspFullRules:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
@@ -32727,7 +32729,9 @@ begin
         ProxyOpt.TraceFile   := Args.LspTraceFile;
         ProxyOpt.MergeDiagnostics:= Args.LspMergeDiagnostics;
         ProxyOpt.MergeBudgetMs   := if Args.LspMergeBudgetSet then Args.LspMergeBudgetMs else DRagLint.LSP.Proxy.LSP_MERGE_BUDGET_DEFAULT_MS;
+        ProxyOpt.MergeCompletion := Args.LspMergeCompletion;
         ProxyOpt.DbPaths         := Args.DbPaths;
+        ProxyOpt.ResolveDbs      := function: TArray<string> begin Result:= ResolveConsumerDbs(Args); end;   { P0 review I1: lazy, on the merge worker }
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;

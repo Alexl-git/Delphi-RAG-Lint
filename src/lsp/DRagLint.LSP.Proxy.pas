@@ -37,6 +37,11 @@ uses
   ;
 
 type
+  /// <summary>Resolves the index databases a merge handler queries when no
+  /// --db was given.</summary>
+  /// <returns>The database paths; empty when none resolves.</returns>
+  TLspDbResolver = reference to function: TArray<string>;
+
   /// <summary>Everything the relay needs to start. All fields are optional;
   /// a zeroed record resolves DelphiLSP from the installed Studio and relays
   /// stdio.</summary>
@@ -77,8 +82,8 @@ type
     /// <summary>--merge-diagnostics: append drag-lint's lint findings to
     /// DelphiLSP's publishDiagnostics. Off by default.</summary>
     MergeDiagnostics: Boolean;
-    /// <summary>Merge drag-lint's completion items into DelphiLSP's. No CLI
-    /// flag yet (merge plan A3); off by default.</summary>
+    /// <summary>--merge-completion: union drag-lint's completion items into
+    /// DelphiLSP's reply, keyed on (label, kind). Off by default.</summary>
     MergeCompletion: Boolean;
     /// <summary>Merge drag-lint's hover text into DelphiLSP's. No CLI flag yet
     /// (merge plan A4); off by default.</summary>
@@ -95,6 +100,13 @@ type
     /// list, unresolved). Read only when a Merge* option is on, and then only
     /// lazily, so the relay's startup path still opens no database.</summary>
     DbPaths: TArray<string>;
+    /// <summary>Called at most once, lazily, when a merge handler first needs
+    /// the index and DbPaths is empty: the CLI's consumer-DB resolution
+    /// (manifest / project / library), so `--proxy` without `--db` finds the
+    /// same indexes plain `lsp` does. nil means DbPaths is the whole list.</summary>
+    /// <remarks>It must write only to stderr: stdout carries the JSON-RPC
+    /// stream. Called on the merge worker thread.</remarks>
+    ResolveDbs: TLspDbResolver;
   end;
 
 const
