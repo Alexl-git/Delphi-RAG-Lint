@@ -48,6 +48,7 @@ uses
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
+  , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
   ;
 
 var
@@ -10421,8 +10422,14 @@ begin
     Code.Line:= CODE_LINE;
     Check('inh.action.code.report.line', Pos('C1: TLabel line 7 -- code use -- ', InheritedReportNote(Code, True)) = 1, InheritedReportNote(Code, True));
     Code.AncestorState:= 'converted';
+    // N8: converted + code stays left unless its pas_uses[] entry is mapped (no entry = not mapped).
     Check('inh.action.code.converted.n1', InheritedLeftNote([Code], False) = '1 inherited code use(s) left: ancestor Base (ancestor converted; retype needs engine N2)', InheritedLeftNote([Code], False));
     Check('inh.action.code.converted.retype', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base converted', InheritedLeftNote([Code], True));
+    Code.PasUseStatus:= 'mapped';
+    Check('inh.action.code.converted.mapped.n1', InheritedLeftNote([Code], False) = '', InheritedLeftNote([Code], False));
+    Check('inh.action.code.converted.mapped.retype', InheritedLeftNote([Code], True) = '', InheritedLeftNote([Code], True));
+    Code.AncestorState:= 'unconverted';
+    Check('inh.action.code.unconverted.mapped.still.left', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base not converted', InheritedLeftNote([Code], True));
     Check('inh.action.unverified.report', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True)
       = 'V1: TLabel line 11 -- ancestor field use not verified against the index (field use could not be checked)', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True));
   end;
@@ -10433,6 +10440,54 @@ begin
     and (Pos('V1:', Joined) > Pos('C1:', Joined)) and (Pos('A1:', Joined) = 0), Joined);
 end;
 
+{ N8: a converted ancestor + code use is NOT left once pas_uses[] says mapped. REAL capture
+  (apply-desc-code-converted-1330.json: inherited Label1 code/converted, pas_uses Label1 mapped); the
+  other statuses and a missing entry are inline variants of the same JSON. }
+procedure TestInheritedCodeMapped;
+const
+  JSON_HEAD = '{"schema":"apply/1","ok":true,"edits_count":1,"component_part":"applied","inherited":[{"name":"Label1","type":"TLabel","line":13,"ancestor_unit":"Anc","ancestor_state":"converted","reason":"declared in Anc","action":"code"}]';
+  NOTE_BASE = '1 edit(s), 0 remaining for manual work';
+  NOTE_LEFT = NOTE_BASE + '; 1 inherited code use(s) left: ancestor Anc converted';
+var
+  Conv, Var1, Var2, Var3: TApplyRow;
+  Row                   : TConvertRow;
+  Lines                 : TArray<string>;
+begin
+  Conv:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), APPLY_FEATURES_ALL);
+  Check('inh.n8.real.linked', (Length(Conv.InheritedLeft) = 1) and (Conv.InheritedLeft[0].PasUseStatus = 'mapped'));
+  Check('inh.n8.real.mapped', (Length(Conv.InheritedLeft) = 1) and IsCodeUseMapped(Conv.InheritedLeft[0]));
+  Check('inh.n8.real.no.left.note', InheritedLeftNote(Conv.InheritedLeft, True) = '', InheritedLeftNote(Conv.InheritedLeft, True));
+  Check('inh.n8.real.row.note', Pos('left', ConvertedRowNote(Conv, True, True)) = 0, ConvertedRowNote(Conv, True, True));
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := Conv;
+  Check('inh.n8.real.no.report.line', Length(InheritedReportLines(Row, True, True)) = 0, string.Join(' | ', InheritedReportLines(Row, True, True)));
+  // Features without afPasUses: no entry is read, so the use is still left.
+  Var1:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), []);
+  Check('inh.n8.gated.still.left', (Length(Var1.InheritedLeft) = 1) and not IsCodeUseMapped(Var1.InheritedLeft[0])
+    and (Pos('inherited code use(s) left', InheritedLeftNote(Var1.InheritedLeft, True)) > 0), InheritedLeftNote(Var1.InheritedLeft, True));
+
+  Var1:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"Label1","from_type":"TLabel","member":"Caption","status":"unmapped","lines":[13],"count":1}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.unmapped.left', InheritedLeftNote(Var1.InheritedLeft, True) = '1 inherited code use(s) left: ancestor Anc converted', InheritedLeftNote(Var1.InheritedLeft, True));
+  Check('inh.n8.unmapped.row.note', ConvertedRowNote(Var1, True, True) = NOTE_LEFT, ConvertedRowNote(Var1, True, True));
+  Row.Apply:= Var1;
+  Lines:= InheritedReportLines(Row, True, True);
+  Check('inh.n8.unmapped.report.line', (Length(Lines) = 1) and (Pos('Label1: TLabel line 13 -- code use -- ancestor Anc converted', Lines[0]) > 0), string.Join(' | ', Lines));
+
+  Var2:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"Other","from_type":"TLabel","member":"Caption","status":"mapped"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.no.matching.entry.left', ConvertedRowNote(Var2, True, True) = NOTE_LEFT, ConvertedRowNote(Var2, True, True));
+  Var2:= ParseApplyJson(JSON_HEAD + '}', APPLY_FEATURES_ALL);
+  Check('inh.n8.no.pas_uses.left', ConvertedRowNote(Var2, True, True) = NOTE_LEFT, ConvertedRowNote(Var2, True, True));
+
+  // Two entries for the instance: all must be mapped.
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"label1","status":"mapped"},{"instance":"Label1","status":"cast-refused"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.one.not.mapped.left', (Length(Var3.InheritedLeft) = 1) and (Var3.InheritedLeft[0].PasUseStatus = 'cast-refused') and (ConvertedRowNote(Var3, True, True) = NOTE_LEFT), ConvertedRowNote(Var3, True, True));
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"label1","status":"mapped"},{"instance":"Label1","status":"mapped"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.all.mapped.quiet', ConvertedRowNote(Var3, True, True) = NOTE_BASE, ConvertedRowNote(Var3, True, True));
+  // Bad shapes never raise and never read as mapped.
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":7,"status":true},"x",null]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.bad.shape.left', ConvertedRowNote(Var3, True, True) = NOTE_LEFT, ConvertedRowNote(Var3, True, True));
+end;
 { B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
   descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
   recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
@@ -11593,37 +11648,41 @@ begin
   Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\' + AName)));
 end;
 
-{ B4 batch mode, pure decisions (ConvRules.ConvertBatch) and the per-unit "unit" key of
-  apply-batch/1. REAL captures from the 1.33.0 pin, fixtures\apply1270\batch-*-1330.json:
-  apply (FixUnit + Second written), readonly (Second.dfm read-only, DescUnit inherits
-  FixForm), only (--only Label1 over 2 units), gap (index-gap refusal), unindexed (Loose.pas
-  is in no --db). }
-procedure TestConvertBatch;
+const
+  // Fixture path prefixes: text only, compared with the engine answer's "unit" key; no file is touched.
+  FIX_DIR       = 'C:\fix\';       // dl:ok hardcoded-absolute-path@8af2 -- REVIEWED 2026-10-23 text only, never opened
+  FIX_DIR_MIXED = 'c:\FIX\';       // dl:ok hardcoded-absolute-path@3bb9 -- REVIEWED 2026-10-23 text only: case-insensitivity probe
+  ARGS_DIR      = 'C:\a\';         // dl:ok hardcoded-absolute-path@227e -- REVIEWED 2026-10-23 text only: argument-string probe
+  ARGS_RULES    = 'C:\r\Fix.rules'; // dl:ok hardcoded-absolute-path@be1d -- REVIEWED 2026-10-23 text only: argument-string probe
+  FIX_UNIT_A    = FIX_DIR + 'FixUnit.pas';
+  FIX_UNIT_B    = FIX_DIR + 'Second.pas';
+  FIX_UNIT_C    = FIX_DIR + 'Third.pas';
+  ARGS_UNIT_1   = ARGS_DIR + 'U1.pas';
+  ARGS_UNIT_2   = ARGS_DIR + 'U2.pas';
+  // Counts and timings the batch checks pin.
+  FIXTURE_UNITS_THREE = 3;       // the readonly / unindexed captures carry three units
+  CHUNK_SAMPLE_UNITS  = 4;       // LUnits length in the unlimited-chunk probe
+  NO_CHUNK_LIMIT      = 0;       // pMax <= 0 means one chunk
+  EXPECTED_BATCH_MAX  = 8;       // BATCH_MAX_UNITS default
+  TIMEOUT_BASE_MS     = 600000;  // one unit: the single-unit timeout
+  TIMEOUT_EXTRA_MS    = 120000;  // added per further unit
+  TIMEOUT_EXTRA_UNITS = EXPECTED_BATCH_MAX - 1;
+
+procedure TestBatchDecisions(var pBatch: TApplyBatch);
 var
-  LBatch   : TApplyBatch;
   LUnits   : TArray<string>;
   LChunks  : TArray<TArray<string>>;
-  LSkip    : TApplyRow;
   LUnitsOne: TArray<string>;
 begin
-  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-apply-1330.json'), APPLY_FEATURES_ALL);
-  LSkip:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
-  Check('f1330.unit.path', (Length(LBatch.Units) = 2) and (LBatch.Units[0].UnitPath = 'C:\fix\FixUnit.pas')
-    and (LBatch.Units[1].UnitPath = 'C:\fix\Second.pas'));
-  // apply-skip-1315.json is a bare apply/1 that DOES carry the key; absence / a wrong type read ''.
-  Check('f1330.unit.path.single.apply', LSkip.UnitPath <> '', LSkip.UnitPath);
-  Check('f1330.unit.path.absent', (ParseApplyJson('{"schema":"apply/1","ok":true}', APPLY_FEATURES_ALL).UnitPath = '')
-    and (ParseApplyJson('{"schema":"apply/1","ok":true,"unit":5}', APPLY_FEATURES_ALL).UnitPath = ''));
-
   // --- BatchUnitsMatch ---
-  LUnits:= ['C:\fix\FixUnit.pas', 'C:\fix\Second.pas'];
-  Check('batch.match.ok', BatchUnitsMatch(LBatch, LUnits));
-  Check('batch.match.ok.case.insensitive', BatchUnitsMatch(LBatch, ['c:\FIX\fixunit.pas', 'C:\fix\Second.pas']));
-  Check('batch.match.short', not BatchUnitsMatch(LBatch, ['C:\fix\FixUnit.pas', 'C:\fix\Second.pas', 'C:\fix\Third.pas']));
-  Check('batch.match.reordered', not BatchUnitsMatch(LBatch, ['C:\fix\Second.pas', 'C:\fix\FixUnit.pas']));
-  LBatch.Units[0].UnitPath:= '';
-  LBatch.Units[1].UnitPath:= '';
-  Check('batch.match.no.unit.key.counts.only', BatchUnitsMatch(LBatch, ['x', 'y']) and not BatchUnitsMatch(LBatch, ['x']));
+  LUnits:= [FIX_UNIT_A, FIX_UNIT_B];
+  Check('batch.match.ok', BatchUnitsMatch(pBatch, LUnits));
+  Check('batch.match.ok.case.insensitive', BatchUnitsMatch(pBatch, [FIX_DIR_MIXED + 'fixunit.pas', FIX_UNIT_B]));
+  Check('batch.match.short', not BatchUnitsMatch(pBatch, [FIX_UNIT_A, FIX_UNIT_B, FIX_UNIT_C]));
+  Check('batch.match.reordered', not BatchUnitsMatch(pBatch, [FIX_UNIT_B, FIX_UNIT_A]));
+  pBatch.Units[0].UnitPath:= '';
+  pBatch.Units[1].UnitPath:= '';
+  Check('batch.match.no.unit.key.counts.only', BatchUnitsMatch(pBatch, ['x', 'y']) and not BatchUnitsMatch(pBatch, ['x']));
   Check('batch.match.invalid.doc', not BatchUnitsMatch(ParseApplyBatchJson('engine died', APPLY_FEATURES_ALL), []));
 
   // --- BatchModeFor ---
@@ -11643,19 +11702,25 @@ begin
   Check('batch.chunks.rest', (Length(LChunks) = 2) and (Length(LChunks[0]) = 2) and (Length(LChunks[1]) = 1)
     and (LChunks[1][0] = 'c'), IntToStr(Length(LChunks)));
   LUnitsOne:= nil;
-  Check('batch.chunks.empty', Length(BatchChunks(LUnitsOne, 8)) = 0);
-  LChunks:= BatchChunks(LUnits, 0);
-  Check('batch.chunks.max.zero', (Length(LChunks) = 1) and (Length(LChunks[0]) = 4), IntToStr(Length(LChunks)));
-  Check('batch.chunks.default.is.eight', BATCH_MAX_UNITS = 8);
+  Check('batch.chunks.empty', Length(BatchChunks(LUnitsOne, EXPECTED_BATCH_MAX)) = 0);
+  LChunks:= BatchChunks(LUnits, NO_CHUNK_LIMIT);
+  Check('batch.chunks.max.zero', (Length(LChunks) = 1) and (Length(LChunks[0]) = CHUNK_SAMPLE_UNITS), IntToStr(Length(LChunks)));
+  Check('batch.chunks.default.is.eight', BATCH_MAX_UNITS = EXPECTED_BATCH_MAX);
 
   // --- BatchTimeoutMs ---
-  Check('batch.timeout.one', (BatchTimeoutMs(600000, 1) = 600000) and (BatchTimeoutMs(600000, 0) = 600000));
-  Check('batch.timeout.eight', BatchTimeoutMs(600000, 8) = 600000 + 7 * 120000, IntToStr(BatchTimeoutMs(600000, 8)));
+  Check('batch.timeout.one', (BatchTimeoutMs(TIMEOUT_BASE_MS, 1) = TIMEOUT_BASE_MS)
+    and (BatchTimeoutMs(TIMEOUT_BASE_MS, 0) = TIMEOUT_BASE_MS));
+  Check('batch.timeout.eight', BatchTimeoutMs(TIMEOUT_BASE_MS, EXPECTED_BATCH_MAX)
+    = TIMEOUT_BASE_MS + TIMEOUT_EXTRA_UNITS * TIMEOUT_EXTRA_MS, IntToStr(BatchTimeoutMs(TIMEOUT_BASE_MS, EXPECTED_BATCH_MAX)));
+end;
 
+procedure TestBatchEngineArgs;
+begin
   // --- BatchApplyArgs (ConvRules.Engine) ---
-  Check('engine.batch.args.two.units', BatchApplyArgs(['C:\a\U1.pas', 'C:\a\U2.pas'], 'C:\r\Fix.rules', ' --db "D1" --db "D2"', '')
-    = 'convert-apply --unit "C:\a\U1.pas" --unit "C:\a\U2.pas" --rules "C:\r\Fix.rules" --db "D1" --db "D2" --apply --no-backup --format json',
-    BatchApplyArgs(['C:\a\U1.pas', 'C:\a\U2.pas'], 'C:\r\Fix.rules', ' --db "D1" --db "D2"', ''));
+  Check('engine.batch.args.two.units', BatchApplyArgs([ARGS_UNIT_1, ARGS_UNIT_2], ARGS_RULES, ' --db "D1" --db "D2"', '')
+    = 'convert-apply --unit "' + ARGS_UNIT_1 + '" --unit "' + ARGS_UNIT_2 + '" --rules "' + ARGS_RULES
+      + '" --db "D1" --db "D2" --apply --no-backup --format json',
+    BatchApplyArgs([ARGS_UNIT_1, ARGS_UNIT_2], ARGS_RULES, ' --db "D1" --db "D2"', ''));
   Check('engine.batch.args.castlib', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', ' --db "D"', ' --castlib "C.castlib"')
     = 'convert-apply --unit "U1.pas" --unit "U2.pas" --rules "R.rules" --db "D" --castlib "C.castlib" --apply --no-backup --format json',
     BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', ' --db "D"', ' --castlib "C.castlib"'));
@@ -11666,14 +11731,19 @@ begin
   // --- BatchUntrustedNote ---
   Check('batch.untrusted.note', BatchUntrustedNote('units[] short') = 'batch apply not trusted: units[] short',
     BatchUntrustedNote('units[] short'));
+end;
 
+procedure TestBatchFixtureEntries;
+var
+  LBatch: TApplyBatch;
+begin
   // --- per-entry classification the batch loop relies on (real captures) ---
   LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-readonly-1330.json'), APPLY_FEATURES_ALL);
-  Check('f1330.readonly.failed.entry', (Length(LBatch.Units) = 3) and not LBatch.Units[1].Ok and not LBatch.Units[1].Refused
+  Check('f1330.readonly.failed.entry', (Length(LBatch.Units) = FIXTURE_UNITS_THREE) and not LBatch.Units[1].Ok and not LBatch.Units[1].Refused
     and (Pos('cannot write', LBatch.Units[1].Error) > 0));
   Check('f1330.readonly.batch.exit2.counts', (LBatch.ExitCode = 2) and (LBatch.FailedCount = 1) and (LBatch.OkCount = 2)
     and not BatchContractBroken(LBatch));
-  Check('f1330.inherited.retyped.in.batch', (Length(LBatch.Units) = 3) and (Length(LBatch.Units[2].InheritedLeft) > 0)
+  Check('f1330.inherited.retyped.in.batch', (Length(LBatch.Units) = FIXTURE_UNITS_THREE) and (Length(LBatch.Units[2].InheritedLeft) > 0)
     and IsRetypedInstance(LBatch.Units[2].InheritedLeft[0]));
   LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-gap-1330.json'), APPLY_FEATURES_ALL);
   Check('f1330.gap.both.refused', (Length(LBatch.Units) = 2) and LBatch.Units[0].Refused and LBatch.Units[1].Refused
@@ -11686,8 +11756,32 @@ begin
   // The editor's Preflight refuses an unindexed unit before the run, so no loop code depends on
   // this; engine 25cd99de refuses it instead (TestBatchRunner batch.unindexed.refused.25cd99de).
   LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-unindexed-1330.json'), APPLY_FEATURES_ALL);
-  Check('f1330.unindexed.ok.no.edits', (Length(LBatch.Units) = 3) and LBatch.Units[1].Ok and (LBatch.Units[1].EditsCount = 0)
-    and (LBatch.OkCount = 3));
+  Check('f1330.unindexed.ok.no.edits', (Length(LBatch.Units) = FIXTURE_UNITS_THREE) and LBatch.Units[1].Ok and (LBatch.Units[1].EditsCount = 0)
+    and (LBatch.OkCount = FIXTURE_UNITS_THREE));
+end;
+
+{ B4 batch mode, pure decisions (ConvRules.ConvertBatch) and the per-unit "unit" key of
+  apply-batch/1. REAL captures from the 1.33.0 pin, fixtures\apply1270\batch-*-1330.json:
+  apply (FixUnit + Second written), readonly (Second.dfm read-only, DescUnit inherits
+  FixForm), only (--only Label1 over 2 units), gap (index-gap refusal), unindexed (Loose.pas
+  is in no --db). }
+procedure TestConvertBatch;
+var
+  LBatch: TApplyBatch;
+  LSkip : TApplyRow;
+begin
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-apply-1330.json'), APPLY_FEATURES_ALL);
+  LSkip:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1330.unit.path', (Length(LBatch.Units) = 2) and (LBatch.Units[0].UnitPath = FIX_UNIT_A)
+    and (LBatch.Units[1].UnitPath = FIX_UNIT_B));
+  // apply-skip-1315.json is a bare apply/1 that DOES carry the key; absence / a wrong type read ''.
+  Check('f1330.unit.path.single.apply', LSkip.UnitPath <> '', LSkip.UnitPath);
+  Check('f1330.unit.path.absent', (ParseApplyJson('{"schema":"apply/1","ok":true}', APPLY_FEATURES_ALL).UnitPath = '')
+    and (ParseApplyJson('{"schema":"apply/1","ok":true,"unit":5}', APPLY_FEATURES_ALL).UnitPath = ''));
+
+  TestBatchDecisions(LBatch);
+  TestBatchEngineArgs;
+  TestBatchFixtureEntries;
 
   // --- BatchOfSingle: a one-unit chunk is answered with a bare apply/1 ---
   LBatch:= BatchOfSingle('{"schema":"apply/1","unit":"C:\\fix\\A.pas","ok":true}', 0, APPLY_FEATURES_ALL);
@@ -15231,6 +15325,55 @@ begin
 end;
 
 { Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+{ ConvRules.InputGate (N7/N11) -- the one queue filter of the main window: while the
+  editor is busy (an engine wait, an hourglass section's nested pump) a click or a
+  command for the main form is refused and reported, never run inside the pump and
+  never queued; the progress window, dialogs and non-input messages always pass. }
+procedure TestInputGate;
+begin
+  Check('gate.win32.keys', (GATE_WM_KEYFIRST = WM_KEYFIRST) and (GATE_WM_KEYLAST = WM_KEYLAST)
+    and (GATE_WM_COMMAND = WM_COMMAND) and (GATE_BM_CLICK = BM_CLICK));
+  Check('gate.win32.mouse', (GATE_WM_MOUSEMOVE = WM_MOUSEMOVE) and (GATE_WM_LBUTTONDOWN = WM_LBUTTONDOWN)
+    and (GATE_WM_LBUTTONDBLCLK = WM_LBUTTONDBLCLK) and (GATE_WM_MOUSELAST = WM_MOUSELAST));
+  Check('gate.win32.nc', (GATE_WM_NCMOUSEMOVE = WM_NCMOUSEMOVE) and (GATE_WM_NCMOUSELAST = WM_NCXBUTTONDBLCLK));
+  Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
+  Check('gate.busy.hourglass', EditorBusy(0, True));
+  Check('gate.idle', not EditorBusy(0, False));
+  // N11: the second Add... (a posted BM_CLICK) and its WM_COMMAND form; N7: Convert.
+  Check('gate.bmclick.refused', GateVerdict(BM_CLICK, True, True) = gvRefuse);
+  Check('gate.command.refused', GateVerdict(WM_COMMAND, True, True) = gvRefuse, '(a button notification or a menu item)');
+  Check('gate.lbutton.refused', GateVerdict(WM_LBUTTONDOWN, True, True) = gvRefuse);
+  Check('gate.dblclk.refused', GateVerdict(WM_LBUTTONDBLCLK, True, True) = gvRefuse);
+  Check('gate.key.dropped', (GateVerdict(WM_KEYDOWN, True, True) = gvDrop) and (GateVerdict(WM_CHAR, True, True) = gvDrop)
+    and (GateVerdict(WM_SYSKEYDOWN, True, True) = gvDrop));
+  Check('gate.mouse.dropped', (GateVerdict(WM_LBUTTONUP, True, True) = gvDrop) and (GateVerdict(WM_RBUTTONDOWN, True, True) = gvDrop)
+    and (GateVerdict(WM_MOUSEWHEEL, True, True) = gvDrop) and (GateVerdict(WM_MOUSEHWHEEL, True, True) = gvDrop));
+  Check('gate.nc.dropped', (GateVerdict(WM_NCLBUTTONDOWN, True, True) = gvDrop) and (GateVerdict(WM_NCXBUTTONDBLCLK, True, True) = gvDrop),
+    '(a title-bar or menu-bar press is not a command to report)');
+  Check('gate.hover.passes', (GateVerdict(WM_MOUSEMOVE, True, True) = gvPass) and (GateVerdict(WM_NCMOUSEMOVE, True, True) = gvPass));
+  Check('gate.paint.passes', (GateVerdict(WM_PAINT, True, True) = gvPass) and (GateVerdict(WM_TIMER, True, True) = gvPass)
+    and (GateVerdict(WM_USER + 1, True, True) = gvPass));
+  Check('gate.other.window.passes', (GateVerdict(BM_CLICK, True, False) = gvPass) and (GateVerdict(WM_KEYDOWN, True, False) = gvPass),
+    '(Cancel and Esc on the progress window, a message box, the Open dialog)');
+  Check('gate.idle.passes', (GateVerdict(BM_CLICK, False, True) = gvPass) and (GateVerdict(WM_COMMAND, False, True) = gvPass)
+    and (GateVerdict(WM_KEYDOWN, False, True) = gvPass));
+  Check('gate.name.add', CommandName('&Add...') = 'Add', CommandName('&Add...'));
+  Check('gate.name.amp', CommandName('Save && close') = 'Save & close', CommandName('Save && close'));
+  Check('gate.name.plain', CommandName('Delete') = 'Delete', CommandName('Delete'));
+  Check('gate.name.empty', (CommandName('') = LOST_COMMAND_UNNAMED) and (LOST_COMMAND_UNNAMED = 'The click'), CommandName(''));
+  Check('gate.status', LostCommandStatus('2 source unit(s) listed.', 'Add', 'Checking 1 source unit(s) for inherited instances')
+    = '2 source unit(s) listed. | Add was NOT run: it was clicked while the editor was busy (Checking 1 source unit(s) for inherited instances). Click it again.',
+    LostCommandStatus('2 source unit(s) listed.', 'Add', 'Checking 1 source unit(s) for inherited instances'));
+  Check('gate.status.empty', LostCommandStatus('', 'Delete', 'Reading the classes of A.pas ...')
+    = 'Delete was NOT run: it was clicked while the editor was busy (Reading the classes of A.pas ...). Click it again.',
+    LostCommandStatus('', 'Delete', 'Reading the classes of A.pas ...'));
+  Check('gate.status.convert.n1', LostCommandStatus('x', 'Convert', 'Validating') = LostConvertClickStatus('x', 'Validating'),
+    '(one text for a lost Convert, however it was lost)');
+  Check('gate.title.wait', BusyTitleFor('Checking 1 source unit(s)', 'Adding ...') = 'Checking 1 source unit(s)', '(the progress window names the work first)');
+  Check('gate.title.status', BusyTitleFor('', ' Reading the classes of A.pas ... ') = 'Reading the classes of A.pas ...');
+  Check('gate.title.unknown', (BusyTitleFor('', '  ') = BUSY_TITLE_UNKNOWN) and (BUSY_TITLE_UNKNOWN = 'another operation'));
+end;
+
 procedure TestConverterMinorsStartup;
 const
   FORM_ERR = '--form "X.pas" does not exist.';
@@ -15400,6 +15543,7 @@ begin
     TestInheritedApply;
     TestInheritedActions;
     TestInheritedCodeUnconverted;
+    TestInheritedCodeMapped;
     TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
@@ -15487,6 +15631,7 @@ begin
     TestConverterMinorsD;
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
+    TestInputGate;
 
     FreeAndNil(GParseBook);
 

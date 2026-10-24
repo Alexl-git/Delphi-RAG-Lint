@@ -21,8 +21,29 @@ before working on an item.**
   gitignored); waits for OWNER decisions D0-D9 (spec section 12, recommendations given).
   Engine gaps G8/G9/G10 filed `docs\INBOX-2026-10-23-converter-to-engine-migrate-gaps.md`
   (ENGINE lane e3d/migrate-gaps).
-* In flight: N1, D2, B10, B4 plan (Fable), Qualify-all driver check + -UseAlt flake,
-  featuregen `--site` index fields (ENGINE help-line T10), new pin 1.33.0-alpha-20261021-122057 baseline.
+* DONE later the same day: N1 (9941b39e), D2 (ecc90bfd), B10 (45c149e1), Qualify-all driver
+  (dea6c6f4), featuregen site fields (02b11037), **B4 batch mode** (2b713460..eec26734; model
+  2571/5/0, drive-convert-batch 22/0). Pin 1.33.0-alpha-20261021-122057 ADOPTED (2460/5, 14
+  drivers; pin editor = main 1dc238da build).
+* Owed after ENGINE's final deploy (end of day 3, owner rule: no approval-needing step mid-run):
+  `featuregen verify --id convert-apply` / `convert-scaffold --by CONVERTER`; re-pin + baseline.
+* DONE in wave 3: **N9** 6b21a559 (drive-convert-tab 3b fails cleanly without the progress
+  window); **N8** e52df7bb (converted-ancestor code use with mapped pas_uses is not "left");
+  **N7 + N11** a246e716 (`ConvRules.InputGate` on Application.OnMessage refuses main-form
+  clicks/commands while busy, reports the first, never queues; `ConvRulesEditor.Busy` message for
+  drivers' WaitIdle; drive-convert-tab 32/0 x6, batch-driver Add retry removed; model 2615/5/0).
+* Open todos from this run:
+  * DONE: **N7 leftover** 72ec46ed (drive-engine-wait 9 -> 16: File|Save under the progress
+    window refused + reported; the Ctrl+S check cannot go red -- regression guard only);
+    B4 test-dpr lint debt 328f8569 (44 -> 0 on B4 lines); **N10** in the run's scratch
+    `gui-lock.ps1` (stale = over 60 min, or over 10 min with no ConvRulesEditor running;
+    positive + negative control passed) -- the lock is scratch, not tracked.
+  * **FG-N** featuregen `"noFlags": true` marker -- done on the held FG-M branch (450b9267).
+  * **FG-M** featuregen: Harvest via `menu-tree --format json`, path-based checks B/C, caption-key
+    parity vector, drop 14 stale exemptions (in flight, branch feat/conv-fgm-menu-tree).
+  * B4 left 44 findings (magic numbers, `C:\fix` fixture paths) on its lines in
+    ConvRulesModelTests.dpr (file total 509, outside the editor DB) -- fold into the D-list test debt.
+  * `GlyphForm.pas:60` unused `dl:ok` marker (review-marker-unused).
 * E3 + this run's worktrees `C:\Projects\Delphi-RAG-lint-wt\conv-*`: owner removes (approval).
 
 ## State at the rewrite

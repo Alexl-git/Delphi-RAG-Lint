@@ -157,6 +157,7 @@ uses
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
   , DRagLint.MenuTree
+  , DRagLint.MenuTree.Dfm
   , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -329,6 +330,7 @@ type
     Interval        : Integer       ;
     Open            : Boolean       ;
     ShowHelp        : Boolean       ;
+    HelpVerb        : string        ; // verb whose OWN help <verb> --help prints (menu-tree, menu-drift); empty = the global banner
     ShowVersion     : Boolean       ;
     // v0.66: ergonomics #12 output/CI flags
     FailOn       : string ; // --fail-on error|warning|info|none (ergonomics #12)
@@ -466,6 +468,7 @@ type
       gutter with an EMPTY one on exactly the largest files. }
     ProjectRules : Boolean; // --project-rules (per-file doc-drift + missing-doc)
     RemoveUnused : Boolean; // --remove-unused (uses-fix: also comment unused)
+    WithDfm      : Boolean; // --with-dfm (menu-tree / menu-drift: .dfm menus as roots, code links grafted)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
     YadfPath     : string; // --yadf-path <YADF.exe>
@@ -522,9 +525,14 @@ type
     // exclusive by construction -- the relay never opens a database, because
     // in relay form it answers nothing itself.
     LspProxy    : Boolean; // --proxy
+    LspDelphiBits: Integer;  // --delphi-lsp-bits <32|64> (0 = not given = 64)
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
     LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
+    LspMergeCompletion : Boolean; // --merge-completion (merge plan A3; OFF by default)
+    LspMergeHover      : Boolean; // --merge-hover (merge plan A4; OFF by default)
+    LspMergeDefinition : Boolean; // --merge-definition (merge plan A5; OFF by default)
+    LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
@@ -1101,6 +1109,16 @@ begin
   Result:= (A = '--help') or (A = '-h') or (A = '-?');
 end;
 
+/// <summary>Prints the own help of a menu verb (menu-tree --help / menu-drift --help): the `help` line of its surface in features\entries\menu-tree.json, not the global banner.</summary>
+/// <param name="AVerb">menu-tree or menu-drift.</param>
+/// <remarks>The text mirrors the registry entry; tests\autotest\run_menu_verb_help.ps1 fails on drift.</remarks>
+procedure PrintMenuVerbHelp(const AVerb: string);
+begin
+  if AVerb = 'menu-drift' then
+    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
+  else
+    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
+end; // procedure
 function ParseArgs: TArgs;
 var
   i: Integer;
@@ -1216,7 +1234,12 @@ begin
       Routing is deliberately to the WHOLE banner for every verb. Per-verb help
       TEXT is a separate product decision with its own docs-sync cost (a third
       surface for run_docs_sync_guard.ps1 to police); not crashing is not. }
-    if IsHelpToken(A) then begin Result.ShowHelp:= True; Exit; end;
+    if IsHelpToken(A) then
+    begin
+      Result.ShowHelp:= True;
+      if (Result.Command = 'menu-tree') or (Result.Command = 'menu-drift') then Result.HelpVerb:= Result.Command;
+      Exit;
+    end;
     if (A = '--db') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1543,6 +1566,7 @@ begin
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
+    else if A = '--with-dfm'      then Result.WithDfm        := True
     else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
     else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
     else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
@@ -1580,7 +1604,18 @@ begin
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
+    else if (A = '--delphi-lsp-bits') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.LspDelphiBits:= StrToIntDef(ParamStr(i), 0);
+      if (Result.LspDelphiBits <> DRagLint.LSP.Proxy.LSP_BITS_32) and (Result.LspDelphiBits <> DRagLint.LSP.Proxy.LSP_BITS_64) then
+        raise Exception.CreateFmt('--delphi-lsp-bits must be 32 or 64, got: %s', [ParamStr(i)]);  // dl:ok raise-bare-exception@feb5 -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. the Unknown argument raise)
+    end
     else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
+    else if A = '--merge-completion' then Result.LspMergeCompletion:= True
+    else if A = '--merge-hover' then Result.LspMergeHover:= True
+    else if A = '--merge-definition' then Result.LspMergeDefinition:= True
+    else if A = '--full-rules' then Result.LspFullRules:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
       Inc(i);
@@ -10006,7 +10041,6 @@ function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
   const AUnjudgedRules: TArray<string> = nil): TArray<TLintFinding>;
 const
-  MARK = 'drag-lint:ignore';
   { Rules that count a comment as content, so the marker itself stops them
     firing. Measured, not assumed -- see the note at the unused-marker scan. }
   { commented-out-code added 2026-08-13, measured the same way the first two
@@ -10026,11 +10060,6 @@ var
   Emitted   : TDictionary<string, Boolean>       ;
   F         : TLintFinding                       ;
   LineTxt   : string                             ;
-  Rest      : string                             ;
-  Tok       : string                             ;
-  Toks      : TArray<string>                     ;
-  CPos      : Integer                            ;
-  MPos      : Integer                            ;
   Suppressed: Boolean                            ;
   Markers   : TArray<TReviewMarker>              ;
   M         : TReviewMarker                      ;
@@ -10114,22 +10143,10 @@ begin
       begin
         LineTxt:= Lines[F.StartLine - 1];
 
-        { Legacy blanket directive. Deliberately left on its original naive
-          scan: tightening it here would change what existing projects
-          suppress, which is a separate decision from adding dl:ok. }
-        CPos:= Pos('//', LineTxt);
-        MPos:= Pos(MARK, LowerCase(LineTxt));
-        if (CPos > 0) and (MPos > CPos) then
-        begin
-          Rest:= Trim(Copy(LineTxt, MPos + Length(MARK), MaxInt));
-          if Rest = '' then Suppressed:= True
-          else
-          begin
-            Toks:= Rest.Split([' ', ',', #9]);
-            for Tok in Toks do
-              if SameText(Trim(Tok), F.RuleId) then begin Suppressed:= True; Break; end;
-          end;
-        end;
+        { Legacy blanket directive, on its original naive scan. The predicate
+          (and the dl:ok hash below) is shared with the LSP (TReviewMarkers.
+          Suppresses), so the gutter and `lint` cannot disagree (C2). }
+        Suppressed:= TReviewMarkers.IgnoreDirectiveCovers(LineTxt, F.RuleId);
 
         { The accountable form.
 
@@ -10169,7 +10186,7 @@ begin
                 the normalized line is one invariant token, so the hash could never
                 go stale and the marker verified forever however the handler was
                 rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
-              Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
+              Want:= DRagLint.Lint.RuleCatalog.MarkerExpectedHash(Lines, F.RuleId, F.StartLine, F.Metric);
               { A WHOLE-ROUTINE METRIC REVIEW IS BOUND TO ITS NUMBER (T3).
 
                 For these seven rules the hash above is not enough on its own:
@@ -10184,7 +10201,6 @@ begin
                 body-span hash would do the latter, flagging a renamed local
                 across all 58 markers in this class for no reason. }
               var IsMetric: Boolean:= DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId);
-              if IsMetric then Want:= DRagLint.Lint.RuleCatalog.MetricHash(Want, F.Metric);
               if M.Hash = '' then
               begin
                 { Hand-written, no hash: honour it, but say that it cannot be
@@ -20637,12 +20653,26 @@ begin
         Writeln('ERROR: cannot rename -- ' + Reason);
         Exit(2);
       end;
+      { rename spec 2.2: event bindings are rewritten in TEXT .dfm only }
+      Reason:= TRenameRefactoring.BinaryDfmReason(KStore, QN);
+      if Reason <> '' then
+      begin
+        Writeln('ERROR: cannot rename -- ' + Reason);
+        Exit(2);
+      end;
       Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
 
     if Length(Edits) = 0 then
     begin Writeln('No edits computed.'); Exit(1); end;
+    { a ref that moved on disk after indexing is refused, never retargeted }
+    var StaleReason: string:= TRenameRefactoring.StaleEditReason(Edits);
+    if StaleReason <> '' then
+    begin
+      Writeln('ERROR: cannot rename -- ' + StaleReason);
+      Exit(2);
+    end;
 
     if AArgs.AsJson then
     begin
@@ -20697,8 +20727,20 @@ begin
     Writeln('ERROR: cannot rename -- ' + IncReason);
     Exit(2);
   end;
+  IncReason:= TRenameRefactoring.BinaryDfmReason(Store, AArgs.QName);
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
+  IncReason:= TRenameRefactoring.StaleEditReason(Edits);
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
 
   if AArgs.DryRun then
   begin
@@ -21419,7 +21461,10 @@ begin
 
   Entries:= TList<TGhostOverlay>.Create;
   try
-    DragDir:= GhostDir(Dproj);
+    { The path only: the shadow default writes nothing beside the project, so
+      the folder is created by the --in-place branch, which journals there
+      (docs\INBOX-ghost-check-leaves-empty-drag-dir.md). }
+    DragDir:= TPath.Combine(ExtractFilePath(Dproj), DRAG_HOME_DIR);
 
     { Build the overlay list from a manifest, or a single --unit/--buffer pair. }
     if AArgs.GhostOverlays <> '' then
@@ -21549,6 +21594,7 @@ begin
         its own write back into the record, and a for-in loop variable is a COPY
         -- the token would be discarded and every restore would fall back to
         "cannot prove ownership". }
+      GhostDir(Dproj);
       for i:= 0 to Entries.Count - 1 do
       begin
         E:= Entries[i];
@@ -29045,7 +29091,7 @@ end; // function
 
 /// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
 /// (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md, section 5).</summary>
-/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --format text|json|paths, --output.</param>
+/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --with-dfm, --format text|json|paths, --output.</param>
 /// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
 /// unknown --root); 3 stale index (a file it must read changed since it was
 /// indexed -- refused, never answered from); 1 any other error.</returns>
@@ -29083,6 +29129,7 @@ begin
     finally
       Walker.Free;
     end;
+    if AArgs.WithDfm then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
   except
     on E: EMenuTreeStale do
     begin
@@ -29118,7 +29165,7 @@ end; // function
 /// <summary>menu-drift: the code-built menu tree (menu-tree) against the
 /// registry's ide-menu surfaces (spec section 7): MISSING / MOVED /
 /// UNREGISTERED / NOTE lines and 'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
-/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --format text|json, --output.</param>
+/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --with-dfm, --format text|json, --output.</param>
 /// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
 /// project not in the db, unreadable registry); 3 stale index (refused).</returns>
 function DoMenuDrift(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@50e0 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 drift or other)
@@ -29131,6 +29178,7 @@ var
   Rep   : TMenuDriftReport;
   Fmt   : string;
   Txt   : string;
+  RegDir: string;
 begin
   if not ExplicitDbsExist(AArgs, 'menu-drift') then Exit(2);
   if Length(AArgs.DbPaths) = 0 then
@@ -29138,9 +29186,16 @@ begin
     Writeln(ErrOutput, 'menu-drift: need --db <index.sqlite>');
     Exit(2);
   end;
-  if (AArgs.ProjectPath = '') or (AArgs.RegistryDir = '') then
+  { dxBar spec decision 6: an application's registry lives in <project>\_D-RAG\menu-registry }
+  RegDir:= AArgs.RegistryDir;
+  if (RegDir = '') and (AArgs.ProjectPath <> '') then
   begin
-    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir>');
+    RegDir:= TPath.Combine(TPath.Combine(ExtractFilePath(ExpandFileName(AArgs.ProjectPath)), '_D-RAG'), 'menu-registry');
+    if not TDirectory.Exists(RegDir) then RegDir:= '';
+  end;
+  if (AArgs.ProjectPath = '') or (RegDir = '') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir> (or a <project>\_D-RAG\menu-registry folder)');
     Exit(2);
   end;
   Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
@@ -29153,13 +29208,15 @@ begin
   Reg := TMenuRegistry.Create;
   try
     try
-      Reg.LoadFromDir(AArgs.RegistryDir);
+      Reg.LoadFromDir(RegDir);
       Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
       try
         Tree:= Walker.Walk;
       finally
         Walker.Free;
       end;
+      { an app-menu surface is a .dfm menu: compare the .dfm tree too }
+      if AArgs.WithDfm or Reg.HasAppMenus then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
     except
       on E: EMenuTreeStale do
       begin
@@ -30816,6 +30873,54 @@ begin
   Result:= 0;
 end; // function
 
+{ selftest own-roots, T-01 half: "excludeRoots" carves a vendored subfolder out
+  of an owned root. Fixture is the sibling folder own-roots-exclude, kept apart
+  so run_lint_own_roots' whole-folder index of own-roots does not change.
+  Returns '' when every assertion holds, else the FIRST failure's detail. }
+function SelfTestOwnRootsExclude(const AFx: string): string;
+var
+  Ex : string   ;
+  Own: TOwnRoots;
+
+  procedure Expect(ACond: Boolean; const ADetail: string);
+  begin
+    if (Result = '') and not ACond then Result:= ADetail;
+  end;
+
+begin
+  Result:= '';
+  Ex    := TPath.GetFullPath(TPath.Combine(AFx, '..\own-roots-exclude'));
+
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'proj'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Length(Own.ExcludeRoots) = 1, 'excludeRoots not read');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\Own.pas')), 'excludeRoots dropped an own file');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'proj\vendor\Lib\Vend.pas')), 'excluded vendor file counted as ours');
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'proj\vendorX\Keep.pas')),
+    'exclude "vendor" wrongly matched sibling prefix "vendorX"');
+
+  { excludeRoots without ownRoots narrows the DEFAULT root. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'only-exclude'));
+  Expect(Own.Error = '', Own.Error);
+  Expect(Own.IsOurs(TPath.Combine(Ex, 'only-exclude\A.pas')), 'exclude-only declaration dropped the default root');
+  Expect(not Own.IsOurs(TPath.Combine(Ex, 'only-exclude\vendor\V.pas')), 'exclude-only declaration did not exclude');
+
+  { Present but not an array, and excluding every own root, are Errors: both
+    would otherwise lint something the author did not intend. }
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'bad-exclude'));
+  Expect(Own.Error <> '', 'non-array "excludeRoots" must set Error');
+  Own:= TOwnRoots.Load(TPath.Combine(Ex, 'all-excluded'));
+  Expect(Own.Error <> '', 'excludeRoots covering every own root must set Error');
+end;
+
+{ Prints OWNROOTS-FAIL: <ADetail> and returns 1, so a failed assertion is one
+  statement: Exit(OwnRootsFail(...)). }
+function OwnRootsFail(const ADetail: string): Integer;
+begin
+  Writeln('OWNROOTS-FAIL: ', ADetail);
+  Result:= 1;
+end;
+
 // selftest own-roots --dir <fixtures\own-roots>: asserts a declared root list is
 // read (including a RELATIVE entry), that a file under a declared root is ours,
 // that a sibling folder outside them is not, that an UNDECLARED project defaults
@@ -30823,7 +30928,7 @@ end; // function
 // Also covers (review round 1): a sibling folder whose NAME EXTENDS a declared
 // root's name is not a prefix match; an explicit "ownRoots": [] is an Error, not
 // a default; and malformed (unparseable) JSON defaults exactly like a missing
-// file, never an Error.
+// file, never an Error. Also T-01: "excludeRoots" (fixture ..\own-roots-exclude).
 // Prints OWNROOTS-OK or OWNROOTS-FAIL: <detail>.
 function DoSelfTestOwnRoots(const AArgs: TArgs): Integer;
 var
@@ -30904,6 +31009,10 @@ begin
   if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
     begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
 
+  { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): kept in its own
+    function so these assertions add one exit here, not nine. }
+  var ExFail: string:= SelfTestOwnRootsExclude(Fx);
+  if ExFail <> '' then Exit(OwnRootsFail(ExFail));
   if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
                   ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
     begin Writeln('OWNROOTS-FAIL: AnchorDirForDb did not resolve the _D-RAG parent'); Exit(1); end;
@@ -32432,6 +32541,24 @@ begin
   end;
 end;
 
+{ The `lsp --proxy` lazy DB resolver, built over a COPY of the parsed arguments.
+
+  This lives OUTSIDE Run on purpose. When Run's own anonymous method captured
+  Args (A3, 24531333), Args moved into the closure's heap frame, so
+  `Args:= ParseArgs` began to go through a compiler temporary that is copied
+  back only on a NORMAL return. A ParseArgs that raised (`lsp --db`, the
+  incident reproduction) therefore left Args.Command empty, and the fatal
+  breadcrumb read `cmd=` -- the command was lost exactly when it is needed.
+  tests\autotest\run_lsp_stdout_hygiene.ps1 pins `cmd=lsp`. Capturing a local
+  copy here keeps Run's Args an ordinary stack variable. }
+function MakeConsumerDbResolver(const pArgs: TArgs): DRagLint.LSP.Proxy.TLspDbResolver;
+var
+  Snapshot: TArgs;
+begin
+  Snapshot:= pArgs;
+  Result:= function: TArray<string> begin Result:= ResolveConsumerDbs(Snapshot); end;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -32440,7 +32567,12 @@ begin
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
   try
     Args:= ParseArgs;
-    if Args.ShowHelp then begin PrintHelp; Exit(0); end;
+    if Args.ShowHelp then
+    begin
+      if Args.HelpVerb <> '' then PrintMenuVerbHelp(Args.HelpVerb)
+      else PrintHelp;
+      Exit(0);
+    end;
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
 
     { A .drag-lint.json DEFAULTS FILE THAT COULD NOT BE READ (1.20.4 Task 4):
@@ -32644,11 +32776,16 @@ begin
       begin
         var ProxyOpt:= Default(DRagLint.LSP.Proxy.TLspProxyOptions);
         ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
+        ProxyOpt.DelphiLspBits:= if Args.LspDelphiBits = DRagLint.LSP.Proxy.LSP_BITS_32 then DRagLint.LSP.Proxy.LSP_BITS_32 else DRagLint.LSP.Proxy.LSP_BITS_64;
         ProxyOpt.ChildArgs   := '';
         ProxyOpt.TraceFile   := Args.LspTraceFile;
         ProxyOpt.MergeDiagnostics:= Args.LspMergeDiagnostics;
         ProxyOpt.MergeBudgetMs   := if Args.LspMergeBudgetSet then Args.LspMergeBudgetMs else DRagLint.LSP.Proxy.LSP_MERGE_BUDGET_DEFAULT_MS;
+        ProxyOpt.MergeCompletion := Args.LspMergeCompletion;
+        ProxyOpt.MergeHover      := Args.LspMergeHover;
+        ProxyOpt.MergeDefinition := Args.LspMergeDefinition;
         ProxyOpt.DbPaths         := Args.DbPaths;
+        ProxyOpt.ResolveDbs      := MakeConsumerDbResolver(Args);   { P0 review I1: lazy, on the merge worker }
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;
@@ -32667,6 +32804,7 @@ begin
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
+      LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance

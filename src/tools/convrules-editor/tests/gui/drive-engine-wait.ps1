@@ -1,7 +1,8 @@
 # Driven GUI check for the engine progress window (feat/engine-1206-adoption, Task 4,
 # 2026-09-30; re-load check job C6): a slow property-tree load shows TEngineWaitForm, one Cancel closes it and
 # stops the WHOLE block load (no second window for the To tree), and a fast load shows
-# nothing at all.
+# nothing at all. Section 3 (N7/N11): a Save (File|Save by menu path, and a real Ctrl+S) issued under the
+# progress window is refused and reported, not run or queued; the book stays byte-identical.
 # Usage: pwsh -File drive-engine-wait.ps1 -Exe <path\ConvRulesEditor.exe>  (put a frozen drag-lint.exe beside it).
 # Writes its fixture books under a fresh %TEMP%\enginewait-<id> folder and deletes it on exit.
 param([string]$Exe)
@@ -360,6 +361,113 @@ try {
   $excused = (-not $okNoWindow) -and $loaded150 -and ($loadedLast) -and (@($kidsAll | Where-Object { $_ -ne 1 }).Count -eq 0)
   if ($excused) { $trail += "[LOAD-EXCUSED: engine start-up floor $floor ms > 150 ms, window is legitimate; cache proven by 1 child per re-load] " }
   Check 'wait.reload.no.window' ($okNoWindow -or $excused) ("$trail$script:idleNote; $e1 $e2 $e $st")
-  Check 'wait.reload.query.cached' (@($kidsAll | Where-Object { $_ -ne 1 }).Count -eq 0) ("engine children per re-load attempt: $($kidsAll -join ',') (1 = proptree only)")} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }[IO.Directory]::Delete($tmp, $true)
+  Check 'wait.reload.query.cached' (@($kidsAll | Where-Object { $_ -ne 1 }).Count -eq 0) ("engine children per re-load attempt: $($kidsAll -join ',') (1 = proptree only)")} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+# --- 3. a Save under the progress window is refused and reported, never run or queued (N7/N11) ---
+# Why THIS driver: it owns the progress window (the slow TcxButton load holds it for ~7 s) and the
+# Cancel that ends it; drive-file-menu.ps1 has no engine wait. Two rounds, each on its own editor and
+# its own copy of the slow book (mtime pinned to 2020, so a Save that ran is visible as a newer
+# mtime even when the bytes it writes equal the old ones):
+#   menu: 'File|Save' invoked by PATH (the registered MAIN_MENU_QUERY_MSG helper) while the window is up;
+#   key : a real Ctrl+S keystroke while the window is up.
+# Expected: file bytes + mtime + sibling files unchanged after the wait ends, no dialog opened, and (menu)
+# the status line names 'Save was NOT run ...'. Then a normal Save of the same kind must work.
+# A real Ctrl+S goes to the foreground window, which is the progress window: the editor's gate drops a key
+# aimed at the main form WITHOUT a notice (GateVerdict gvDrop), so the key round asserts "not run" only.
+# Honest limit (RED proof 2026-10-23, pre-N1 exe): the menu round goes RED there (Save ran: mtime moved, .bak written,
+# no notice), the key round does NOT -- the keystroke lands on the progress window and never reaches the main form's
+# Save in ANY build. save.key.not.run is a regression guard; save.key.idle.runs is its positive control.
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class K {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  /* 'ConvRulesEditor.Busy' (N7/N11): 2 = busy, 1 = idle, 0 = an editor without the query. No answer = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+  /* A tap on Alt lets this process take the foreground (the classic SetForegroundWindow lock workaround). */
+  public static void Nudge() { keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); }
+  public static void CtrlS() {
+    keybd_event(0x11, 0, 0, UIntPtr.Zero); keybd_event(0x53, 0, 0, UIntPtr.Zero);
+    keybd_event(0x53, 0, 2, UIntPtr.Zero); keybd_event(0x11, 0, 2, UIntPtr.Zero);
+  }
+}
+'@
+# Idle = no progress window / message box / common dialog, the editor enabled and not Busy, on 2 polls 1 s apart.
+function SaveIdle($procId, $main, $sec) {
+  $t0 = Get-Date; $good = 0
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $win = @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0
+    if (-not $win -and [K]::IsWindowEnabled($main) -and -not [K]::Busy($main)) { $good++ } else { $good = 0 }
+    if ($good -ge 2) { return $true }
+    Start-Sleep -Seconds 1
+  }
+  return $false
+}
+function SaveRound($how) {
+  # Its own folder: the editor lists every sibling .rules file holding the class (a rule chooser would open).
+  $dir = Join-Path $tmp "save-$how"; [void][IO.Directory]::CreateDirectory($dir)
+  $book = Join-Path $dir "Save.rules"
+  [IO.File]::Copy($slow, $book)
+  $old = New-Object DateTime 2020, 1, 1, 0, 0, 0, ([DateTimeKind]::Utc)
+  [IO.File]::SetLastWriteTimeUtc($book, $old)
+  $bytes0 = [IO.File]::ReadAllBytes($book)
+  $pp = Start-Process $Exe -ArgumentList "`"$book`" --form `"$dfm`"" -PassThru
+  try {
+    $main = WaitCls $pp.Id 'TConvRulesForm' 30
+    Start-Sleep -Seconds 2
+    [void](SaveIdle $pp.Id $main 60)
+    $names0 = (@(Get-ChildItem -LiteralPath $dir -File | ForEach-Object { $_.Name } | Sort-Object)) -join ','
+    $e = OpenClass $main 'TcxButton'
+    $dlg = WaitCls $pp.Id 'TEngineWaitForm' 20
+    $up = ($dlg -ne [IntPtr]::Zero) -and -not [K]::IsWindowEnabled($main)
+    if (-not $up) {
+      Check "save.$how.under.progress" $false "precondition: progress window never appeared or the editor is enabled (open=$e window=$($dlg -ne [IntPtr]::Zero) enabled=$([K]::IsWindowEnabled($main)) main=$main forms: $(TopsNow $pp.Id)); nothing issued"
+      return
+    }
+    if ($how -eq 'key') { [K]::Nudge(); [void][K]::SetForegroundWindow($dlg); Start-Sleep -Milliseconds 300 }
+    $fgw = [K]::GetForegroundWindow(); $fg = ($fgw -eq $dlg)
+    $issued = $true
+    if ($how -eq 'menu') { $issued = [W]::InvokeMenu($main, 'File|Save') } else { [K]::CtrlS() }
+    Check "save.$how.under.progress" ($issued -and ($how -eq 'menu' -or $fg)) "(precondition: issued while the progress window disabled the editor) issued=$issued foreground=$fg (fg window: $([W]::Cls($fgw))/$([W]::Txt($fgw)))"
+    # Anything the Save opened is recorded and closed, so a RED run still ends.
+    $opened = @(); $t0 = Get-Date
+    while (((Get-Date) - $t0).TotalSeconds -lt 2) {
+      foreach ($h in @(Forms $pp.Id | Where-Object { [W]::Cls($_) -in '#32770', 'TMessageForm' })) {
+        $opened += ('{0}/{1}' -f [W]::Cls($h), [W]::Txt($h))
+        if ([W]::Cls($h) -eq '#32770') { Click (@(Find $h 'Button' 'Cancel')[0]) } else { [void][W]::PostMessage($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
+      }
+      Start-Sleep -Milliseconds 200
+    }
+    $btn = if (@([W]::Tops($pp.Id)) -contains $dlg) { @(Find $dlg 'TButton' 'Cancel')[0] } else { $null }
+    if ($btn -ne $null) { Click $btn }
+    $idle = SaveIdle $pp.Id $main 90
+    $st = StatusText $main
+    $same = [IO.File]::Exists($book) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($book)) -eq [Convert]::ToBase64String($bytes0))
+    $mt = [IO.File]::GetLastWriteTimeUtc($book)
+    $names1 = (@(Get-ChildItem -LiteralPath $dir -File | ForEach-Object { $_.Name } | Sort-Object)) -join ','
+    Check "save.$how.not.run" ($idle -and $same -and ($mt -eq $old) -and ($names1 -eq $names0) -and ($opened.Count -eq 0)) ("idle=$idle bytes-same=$same mtime=$($mt.ToString('o')) files=$names1 dialogs: " + ($opened -join ' | '))
+    if ($how -eq 'menu') {
+      Check 'save.menu.refusal.reported' ($st -match 'Save was NOT run: it was clicked while the editor was busy \(.+\)\. Click it again\.$') $st
+    } else {
+      "INFO  save.key.status (a key drop is silent by design)  $st"
+    }
+    # Idle now: the same kind of Save must run (it also proves the Ctrl+S keystroke reaches the editor).
+    if ($how -eq 'menu') { [void][W]::InvokeMenu($main, 'File|Save') } else { [void][K]::SetForegroundWindow($main); Start-Sleep -Milliseconds 300; [K]::CtrlS() }
+    $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 20 -and [IO.File]::GetLastWriteTimeUtc($book) -eq $old) { Start-Sleep -Milliseconds 250 }
+    $ran = [IO.File]::GetLastWriteTimeUtc($book) -gt $old
+    Check "save.$how.idle.runs" $ran ("mtime=" + [IO.File]::GetLastWriteTimeUtc($book).ToString('o') + '; status: ' + (StatusText $main))
+  } finally { Stop-Process -Id $pp.Id -Force -ErrorAction SilentlyContinue }
+}
+SaveRound 'menu'
+SaveRound 'key'
+
+[IO.Directory]::Delete($tmp, $true)
 "RESULT pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { exit 1 }

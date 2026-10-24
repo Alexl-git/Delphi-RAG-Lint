@@ -1,0 +1,6 @@
+{
+  "id": "reset-presets",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Main menu > Presets > Reset Presets" }
+  ]
+}

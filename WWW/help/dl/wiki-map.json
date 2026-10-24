@@ -132,6 +132,7 @@
   "lint-project": "lint-project",
   "lint-tree": "lint-tree",
   "lsp": "lsp",
+  "lsp-proxy-merge": "lsp-full-rules",
   "migrate-dbs": "migrate-dbs",
   "outline": "outline",
   "pp-profile": "pp-profile",

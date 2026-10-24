@@ -792,6 +792,7 @@ begin
   end;
   // Final segment -> the leaf.
   Found:= False;
+  Child:= nil;
   for j:= 0 to Cur.Children.Count - 1 do
     if SameText(Cur.Children[j].Name, Segs[High(Segs)]) then
     begin Child:= Cur.Children[j]; Found:= True; Break; end;

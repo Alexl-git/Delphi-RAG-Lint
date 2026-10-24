@@ -13,6 +13,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) -- Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.
 * [Help line (DL page)](features/ide-help-line.md) -- Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root.
+* [LSP full rule set on save](features/lsp-full-rules.md) -- Runs the full lint rule set on save so the editor shows what the CLI shows.
+* [LSP protocol extensions](features/lsp-protocol-extensions.md) -- Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index.
+* [LSP proxy merge](features/lsp-proxy-merge.md) -- Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session.
+* [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) -- Turns the VS Code Delphi MCP entry off and on with a backup.
 * [Code-built menu tree and registry drift](features/menu-tree.md) -- The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
 
 ## 1.31.5-alpha

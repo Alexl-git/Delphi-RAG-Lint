@@ -63,6 +63,7 @@ contains
   DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas',
   DragLint.Plugin.ProcRun in 'DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.SurfaceSplit in 'DragLint.Plugin.SurfaceSplit.pas',
+  DragLint.Plugin.LiveDbChoice in 'DragLint.Plugin.LiveDbChoice.pas',
   DragLint.Plugin.IndexJob in 'DragLint.Plugin.IndexJob.pas',
   DragLint.Plugin.FanOutState in 'DragLint.Plugin.FanOutState.pas',
   DragLint.Plugin.FanOut in 'DragLint.Plugin.FanOut.pas',

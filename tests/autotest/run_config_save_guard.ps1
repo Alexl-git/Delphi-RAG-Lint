@@ -429,13 +429,11 @@ if ($guiOk) {
             # The Build click fires the autosave before launching the engine. The
             # engine must NOT resolve: RunEngine would otherwise start a real
             # drag-lint.exe. Candidates are ResolveEngineExe's priorities 2 and 3.
-            # The file name is ASSEMBLED: these are paths that must NOT exist, not
-            # an engine this runner runs, and run_exe_freshness.ps1 fails on any
-            # quoted exe literal it cannot resolve statically.
+            # These are paths that must NOT exist, not an engine this runner runs:
+            # the trailing marker exempts them from run_exe_freshness.ps1 (B-33 #6).
             $build = $btns['Build All']
             Check 'G: Build All button found' ($null -ne $build) "buttons: $names"
-            $engName = 'drag' + '-lint.exe'
-            $cands = @((Join-Path $guiDir $engName), [IO.Path]::GetFullPath((Join-Path $guiDir "..\..\third_party\dll-win64\$engName")))
+            $cands = @((Join-Path $guiDir 'drag-lint.exe'), [IO.Path]::GetFullPath((Join-Path $guiDir '..\..\third_party\dll-win64\drag-lint.exe')))   # exe-freshness: absent
             $present = @($cands | Where-Object { Test-Path -LiteralPath $_ })
             Check 'G: no engine resolvable beside the work-dir GUI (Build cannot run one)' ($present.Count -eq 0) ($present -join '; ')
             if ($null -ne $build -and $present.Count -eq 0) {

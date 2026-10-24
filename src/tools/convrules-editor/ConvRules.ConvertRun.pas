@@ -12,7 +12,7 @@ uses
   System.SysUtils
   , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_BOOK_PENDING_SUFFIX travels with BookHasGlyphLinks: the greyed-book text belongs to the glyph gate
   , ConvRules.UnitStatus
-  , ConvRules.WorkList
+  , ConvRules.WorkList  // dl:unit ConvRules.WorkList accepted -- PAS_USE_MAPPED is the status word of the pas_uses row TPasUseRow carries; the same name must not be spelled twice
   ;
 
 type
@@ -53,6 +53,11 @@ type
     /// <summary>`action` (engine 1.26.0 on, with inherited_retype) -- retyped / code /
     /// skipped / unverified; '' when absent (an older engine: every entry was left).</summary>
     Action       : string;
+    /// <summary>The status of the pas_uses[] entries of this instance (Instance = Name, case-insensitive),
+    /// set by ParseApplyJson (engine 1.27.0 pas_uses, afPasUses): 'mapped' when there is at least one
+    /// entry and every one is mapped; else the first entry's status that is not mapped. '' when no
+    /// entry matches or the engine / job has no pas_uses -- never read as mapped.</summary>
+    PasUseStatus : string;
   end;
 
   /// <summary>One apply/1 items[] entry of a 1.27.0 kind the Convert tab reports:
@@ -594,7 +599,10 @@ function EditSetRefusedNote(const ARow: TApplyRow): string;
 /// note's alone).</param>
 /// <returns>'' for none; else 'N inherited instance(s) left: &lt;words&gt;' per distinct
 /// words, first-seen order, joined '; '. An action 'retyped' entry is NOT left and is
-/// not counted (IsRetypedInstance); an action 'code' entry counts as 'N inherited code
+/// not counted (IsRetypedInstance); neither is an action 'code' entry of a converted ancestor
+/// whose pas_uses[] entries are all mapped (IsCodeUseMapped: the engine already rewrote the
+/// code use, nothing is left). A converted + code entry with any other pas_uses status, or no
+/// matching pas_uses entry (an engine without pas_uses), is still counted; an action 'code' entry counts as 'N inherited code
 /// use(s) left: &lt;words&gt;' (state converted: 'ancestor &lt;U&gt; converted' with retype,
 /// else 'ancestor &lt;U&gt; (ancestor converted; retype needs engine N2)'); an action
 /// 'unverified' entry's words are 'ancestor field use not verified against the index'. The words by ancestor_state: unconverted
@@ -628,6 +636,15 @@ function InheritedReportNote(const AItem: TInheritedLeft; ARetypeSupported: Bool
 /// InheritedLeftNote does not count it and InheritedReportLines writes no line for it.
 /// False for 'skipped', 'code', 'unverified' and a missing action (an older engine).</returns>
 function IsRetypedInstance(const AItem: TInheritedLeft): Boolean;
+
+/// <summary>PURE: is this inherited[] entry a code-only use the engine already rewrote?</summary>
+/// <param name="AItem">One inherited[] entry, after ParseApplyJson linked its pas_uses[].</param>
+/// <returns>True for action 'code' (any case) with ancestor_state 'converted' and PasUseStatus
+/// 'mapped': converted and mapped, so NOT left -- InheritedLeftNote does not count it and
+/// InheritedReportLines writes no line for it. False for every other combination, among them
+/// converted + code with an unmapped, refused or missing pas_uses entry (still left), and
+/// action 'skipped' (ancestor not converted).</returns>
+function IsCodeUseMapped(const AItem: TInheritedLeft): Boolean;
 
 /// <summary>PURE: the converted row's note for what the engine retyped.</summary>
 /// <param name="AItems">TApplyRow.InheritedLeft.</param>
@@ -1474,6 +1491,29 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
 
   // apply/1 inherited[] (C8 N1). Read type-checked, never by GetValue<T>: a
   // malformed entry must not cost the whole row (GetValue raises on a mismatch).
+  // Links each inherited[] entry to its pas_uses[] rows (same instance name): PasUseStatus is
+  // 'mapped' only when there is a row and all are mapped, else the first other status.
+  procedure LinkInheritedPasUses(var ARow: TApplyRow);
+  var
+    LStatus: string;
+    LSeen  : Boolean;
+  begin
+    for var I: Integer:= 0 to High(ARow.InheritedLeft) do
+    begin
+      LStatus:= '';
+      LSeen  := False;
+      for var LUse: TPasUseRow in ARow.PasUses do
+        if SameText(LUse.Instance, ARow.InheritedLeft[I].Name) and (ARow.InheritedLeft[I].Name <> '') then
+        begin
+          if not LSeen then
+            LStatus:= LUse.Status
+          else if SameText(LStatus, PAS_USE_MAPPED) then
+            LStatus:= LUse.Status;
+          LSeen:= True;
+        end;
+      ARow.InheritedLeft[I].PasUseStatus:= LStatus;
+    end;
+  end;
   function InheritedItems(AObj: TJSONObject): TArray<TInheritedLeft>;
   var
     LItem: TInheritedLeft;
@@ -1657,6 +1697,7 @@ begin
       Result.QualifyFixes:= QualifyFixes(Obj);
     if (afPasUses in AFeatures) and (Obj.Values['pas_uses'] is TJSONArray) then
       Result.PasUses:= ParsePasUses(TJSONArray(Obj.Values['pas_uses']), Str(Obj, 'unit'), 0);
+    LinkInheritedPasUses(Result);
     // Engine 1.28.2: resolution / candidates[] are this contract only with the capability.
     if not (afPasUsesResolution in AFeatures) then
       for var I: Integer:= 0 to High(Result.PasUses) do
@@ -1983,7 +2024,7 @@ begin
   // never merged under one count. A code-only use counts apart from an instance.
   for var LItem: TInheritedLeft in AItems do
   begin
-    if IsRetypedInstance(LItem) then
+    if IsRetypedInstance(LItem) or IsCodeUseMapped(LItem) then
       Continue;
     LText:= LeftWords(LItem, ARetypeSupported);
     LFmt := if SameText(LItem.Action, ACTION_CODE) then LEFT_CODE_FMT else LEFT_FMT;
@@ -2021,6 +2062,11 @@ end;
 function IsRetypedInstance(const AItem: TInheritedLeft): Boolean;
 begin
   Result:= SameText(AItem.Action, ACTION_RETYPED);
+end;
+
+function IsCodeUseMapped(const AItem: TInheritedLeft): Boolean;
+begin
+  Result:= SameText(AItem.Action, ACTION_CODE) and SameText(AItem.AncestorState, STATE_CONV) and SameText(AItem.PasUseStatus, PAS_USE_MAPPED);
 end;
 
 function InheritedRetypedNote(const AItems: TArray<TInheritedLeft>): string;

@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{9ECF674F-154F-4413-B44B-C1D3A7EAA640}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -154,6 +154,7 @@
         <DCCReference Include="..\forms\DRagLint.FormsMap.pas"/>
         <DCCReference Include="..\forms\DRagLint.FormsMap.Dfm.pas"/>
         <DCCReference Include="..\forms\DRagLint.MenuTree.pas"/>
+        <DCCReference Include="..\forms\DRagLint.MenuTree.Dfm.pas"/>
         <DCCReference Include="..\forms\DRagLint.MenuDrift.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.ClientConfig.pas"/>
@@ -161,6 +162,17 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Completion.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Proxy.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Proxy.Merge.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Context.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Features.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.CodeLens.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.ImplDecl.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.Rename.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.SemanticTokens.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.SyntaxTree.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.InlayHint.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.ExecuteCommand.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.Ping.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="DRagLint.Hover.Renderer.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>

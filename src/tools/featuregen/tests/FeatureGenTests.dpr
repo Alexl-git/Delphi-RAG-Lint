@@ -2109,14 +2109,17 @@ begin
   Result := pA.Replace(#13#10, #10) = pB.Replace(#13#10, #10);
 end;
 
-{ P7: the verb reference frozen from the hand-written banner (1.33.0) must be the PREFIX of what the registry generates, line for line;
-  new verbs may follow it. Returns '' or the first problem. }
+{ P7: no help prose is LOST. Every line of the frozen verb reference (hand-written 1.33.0 banner, re-frozen 2026-10-23 from the
+  registry after deliberate edits: N-02 --rule, lsp C1/C4, cycles, PROGRESS, convert-apply) must appear in what the registry generates,
+  verbatim and in the same order; NEW lines may be inserted anywhere (a new flag line, a new verb). A changed or dropped frozen line
+  fails: a deliberate edit re-freezes that line in the fixture in the same commit. Golden data versus the registry render: no exe is
+  read, so the result does not depend on which drag-lint.exe is deployed. Returns '' or the first problem. }
 function FrozenBannerPrefixProblem(const pRepo: string): string;
 var
   lReg: TRegistry;
   lGen: TArray<string>;
   lFrozen: TArray<string>;
-  lI: Integer;
+  lI, lG, lFrom: Integer;
 begin
   lReg := TRegistry.Create;
   try
@@ -2127,12 +2130,52 @@ begin
   end;
   lFrozen := TFile.ReadAllText(TPath.Combine(pRepo, 'src\tools\featuregen\tests\fixtures\help-verb-reference-1.33.0.txt'), TEncoding.ASCII)
     .Replace(#13#10, #10).TrimRight([#10]).Split([#10]);
-  if Length(lGen) < Length(lFrozen) then
-    Exit(Format('generated %d line(s), frozen banner has %d', [Length(lGen), Length(lFrozen)]));
+  lG := 0;
   for lI := 0 to High(lFrozen) do
-    if lGen[lI] <> lFrozen[lI] then
-      Exit(Format('line %d differs: frozen [%s] generated [%s]', [lI + 1, lFrozen[lI], lGen[lI]]));
+  begin
+    lFrom := lG;
+    while (lG <= High(lGen)) and (lGen[lG] <> lFrozen[lI]) do
+      Inc(lG);
+    if lG > High(lGen) then
+      Exit(Format('frozen line %d changed or dropped (not found in order after generated line %d): [%s]', [lI + 1, lFrom, lFrozen[lI]]));
+    Inc(lG);
+  end;
   Result := '';
+end;
+{ Equal helpOrder must sort the same whatever the insertion order (TList.Sort is unstable): tiebreak is the entry id, ordinal. }
+function SortedIds(const pRows: array of TRow): string;
+var
+  lList: TList<TRow>;
+  lRow: TRow;
+begin
+  lList := TList<TRow>.Create;
+  try
+    lList.AddRange(pRows);
+    lList.Sort(TComparer<TRow>.Construct(CompareRows));
+    Result := '';
+    for lRow in lList do
+      Result := Result + lRow.Id + ';';
+  finally
+    lList.Free;
+  end;
+end;
+procedure TestHelpOrderTiebreak;
+var
+  lA, lB, lC: TRow;
+begin
+  lA := Default(TRow);
+  lA.Id := 'menu-tree';
+  lA.Order := 96;
+  lA.EntryIndex := 2;
+  lB := lA;
+  lB.Id := 'register-project';
+  lB.EntryIndex := 1;
+  lC := lA;
+  lC.Id := 'Zeta';
+  lC.EntryIndex := 0;
+  Check('Help.EqualOrderTiebreakNotZero', CompareRows(lA, lB) <> 0, 'equal helpOrder must not compare equal');
+  Check('Help.EqualOrderSameInEitherInsertionOrder', SortedIds([lA, lB, lC]) = SortedIds([lC, lB, lA]), SortedIds([lA, lB, lC]) + ' vs ' + SortedIds([lC, lB, lA]));
+  Check('Help.EqualOrderIdIsOrdinal', SortedIds([lA, lB, lC]) = 'Zeta;menu-tree;register-project;', SortedIds([lA, lB, lC]));
 end;
 procedure TestHelpText(const pRepo: string);
 var
@@ -2150,7 +2193,8 @@ begin
   Check('Help.GeneratedUnitMatchesRegistry', SameLf(lGen, lDisk), 'run featuregen build --all');
   Check('Help.GeneratedUnitDetectsDrift', not SameLf(lGen, lDisk.Replace('drag-lint outline', 'drag-lint outlinX')), 'positive control');
   Check('Help.GeneratedUnitCarriesOutline', Pos('''  drag-lint outline  ', lGen) > 0, 'usage line of a known verb');
-  Check('Help.FrozenBannerPreserved', FrozenBannerPrefixProblem(pRepo) = '', FrozenBannerPrefixProblem(pRepo));
+  Check('Help.FrozenBannerPreserved', FrozenBannerPrefixProblem(pRepo) = '', FrozenBannerPrefixProblem(pRepo)
+    + ' (a deliberate help edit re-freezes that line in tests\fixtures\help-verb-reference-1.33.0.txt)');
   Check('Help.GeneratedUnitIsAscii', not TRegEx.IsMatch(lGen, '[^\x00-\x7F]'), 'non-ASCII in the generated unit');
 end;
 { Runs the full check with one extra live item; the live surface is restored after. }
@@ -3049,6 +3093,7 @@ begin
       TestSinceOverride(lRepo);
       TestPositiveControls(lRepo);
       TestHelpText(lRepo);
+      TestHelpOrderTiebreak;
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
       TestCommands(lRepo);

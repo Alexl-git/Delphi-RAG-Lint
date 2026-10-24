@@ -108,6 +108,10 @@ uses
     DragLint.Plugin.ProcRun
   , { GReindexDoneHook: re-lint when any reindex lands }
     DragLint.Plugin.JobQueue
+  , { T-05: pure --db choice for a unit shared by several projects }
+    DragLint.Plugin.LiveDbChoice
+  , { TProjectDbMatch: the active project's unique-owner test }
+    DRagLint.Index.Manifest
   ;
 
 const
@@ -288,6 +292,46 @@ begin
   end; // try
 end; // function
 
+var
+  GLiveCandidates    : TDictionary<string, TArray<string>> = nil;
+  GLiveCandidatesLock: TObject = nil;
+
+{ The DBs that contain AFilePath, per `drag-lint resolve-dbs --in --json`. That
+  costs ~3 s (it opens every manifest DB), so a NON-EMPTY answer is cached for
+  the session; an empty one is retried, so a file indexed later is picked up.
+  Called from the live-lint background thread; the cache is lock-guarded. }
+function LiveLintCandidates(const AExe, AFilePath: string): TArray<string>;
+const
+  CResolveTimeoutMs = 15000;
+var
+  Key   : string;
+  Output: string;
+begin
+  Result:= nil;
+  if (AExe = '') or (AFilePath = '') then Exit;
+  Key:= LowerCase(AFilePath);
+  TMonitor.Enter(GLiveCandidatesLock);
+  try
+    if GLiveCandidates.TryGetValue(Key, Result) then Exit;
+  finally
+    TMonitor.Exit(GLiveCandidatesLock);
+  end;
+  if not RunCapture(Format('"%s" resolve-dbs --in "%s" --json', [AExe, AFilePath]), Output, CResolveTimeoutMs) then
+  begin
+    LiveLog('lint: resolve-dbs did not start for ' + AFilePath);
+    Exit;
+  end;
+  Result:= ParseResolveDbsJson(Output);
+  LiveLog(Format('lint: resolve-dbs --in %s -> %d candidate(s)', [AFilePath, Length(Result)]));
+  if Length(Result) = 0 then Exit;
+  TMonitor.Enter(GLiveCandidatesLock);
+  try
+    GLiveCandidates.AddOrSetValue(Key, Result);
+  finally
+    TMonitor.Exit(GLiveCandidatesLock);
+  end;
+end; // function
+
 { ---------- the lint diagnostic provider ---------- }
 { Parses `drag-lint lint <buffer>`'s text output:
     <path>:<line>:<col>  [<severity>] <rule>: <message>             }
@@ -363,11 +407,19 @@ begin
     failing -- an editor buffer in an unindexed folder must still be linted. }
   if (ACtx.FilePath <> '') and not SameText(LintTarget, ACtx.FilePath) then
     Cmd:= Cmd + Format(' --stand-in-for "%s"', [ACtx.FilePath]);
-  var LiveDb: string := '';
-  if ACtx.FilePath <> '' then LiveDb:= ManifestDbForFile(ACtx.FilePath);
-  if LiveDb <> '' then Cmd:= Cmd + Format(' --db "%s"', [LiveDb]);
-  LiveLog(Format('lint: exe=%s target=%s standin=%s db=%s',
-    [ACtx.ExePath, LintTarget, ACtx.FilePath, LiveDb]));
+  { T-05: a SHARED unit (ORM3\COMMON is in four projects' closures) is in no
+    section's folder, so ManifestDbForFile alone answered '' and the run got no
+    --db at all. The candidates come from the engine's own membership answer;
+    the choice (active project, then declared owner, then ALL) is
+    LiveDbChoice.ChooseLiveLintDbs. }
+  var LiveDbs: TArray<string>:= nil;
+  if ACtx.FilePath <> '' then
+    LiveDbs:= ChooseLiveLintDbs(LiveLintCandidates(ACtx.ExePath, ACtx.FilePath),
+      ACtx.ActiveProjectDb, ManifestDbForFile(ACtx.FilePath));
+  if Length(LiveDbs) > 0 then Cmd:= Cmd + ' --db "' + string.Join('" --db "', LiveDbs) + '"';
+  LiveLog(Format('lint: exe=%s target=%s standin=%s active=%s db=%s',
+    [ACtx.ExePath, LintTarget, ACtx.FilePath, ACtx.ActiveProjectDb,
+     if Length(LiveDbs) = 0 then 'NONE (no index contains the file)' else string.Join(';', LiveDbs)]));
   { Cancellable: the handle lands in GLintProc BEFORE the run blocks, so
     SupersedeRunningLint can kill it mid-run. Taken back under the lock before
     it is closed, so a kill can never touch a closed handle. }
@@ -927,6 +979,19 @@ begin
     LiveLog(Format('runner: FIRE file=%s exe=%s bufLen=%d', [FilePath, Exe, Length(BufText)]));
     { The generation this run answers for; an edit after this point supersedes it. }
     var FireGen: Integer:= TInterlocked.CompareExchange(GLintGen, 0, 0);
+    { T-05: the active project's DB is the shared-unit tiebreak, and resolving
+      it needs OTAPI, so it is taken HERE on the main thread. }
+    var ActiveDb: string;
+    try
+      var ActClaimants: TArray<string>:= nil;
+      if ManifestDbForProject(GetActiveProjectFilePath, ActiveDb, ActClaimants) <> pdmUnique then ActiveDb:= '';
+    except
+      on E: Exception do
+      begin
+        LiveLog('runner: active project DB not resolved: ' + E.Message);
+        ActiveDb:= '';
+      end;
+    end;
 
     TThread.CreateAnonymousThread(
       procedure
@@ -938,6 +1003,7 @@ begin
           Ctx.FilePath  := FilePath;
           Ctx.BufferPath:= Tmp;
           Ctx.ExePath   := Exe;
+          Ctx.ActiveProjectDb:= ActiveDb;
           Diags:= AggregateDiagnostics(Ctx); { runs the lint -- background }
           LiveLog(Format('runner: aggregated %d diag(s)', [Length(Diags)]));
         except
@@ -1092,6 +1158,8 @@ end;
 
 initialization
   GLintProcLock:= TObject.Create;
+  GLiveCandidatesLock:= TObject.Create;
+  GLiveCandidates:= TDictionary<string, TArray<string>>.Create;
 
 finalization
 { TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
@@ -1109,6 +1177,8 @@ try LiveLog('finalization: entering StopLiveDiagnostics (UNIT finalization, not 
 try StopLiveDiagnostics; except on E: Exception do DLT('teardown', 'LiveDiagnostics: StopLiveDiagnostics raised ' + E.ClassName + ': ' + E.Message); end;
 { after the runner is stopped: nothing can be holding the lint-handle lock now }
 FreeAndNil(GLintProcLock);
+FreeAndNil(GLiveCandidates);
+FreeAndNil(GLiveCandidatesLock);
 
   DLT('teardown', 'LiveDiagnostics: finalization END');
 

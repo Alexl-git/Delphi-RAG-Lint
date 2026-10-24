@@ -1,4 +1,4 @@
-unit DRagLint.LSP.Proxy;
+unit DRagLint.LSP.Proxy;  // dl:ok circular-uses@3f25 -- implementation-only cycle forced by the P0 contract: Merge's interface takes TLspProxyOptions from this unit, this unit installs TProxyMergeEngine from Merge's implementation uses; it compiles
 
 { v1.7 Task 1 -- the transparent LSP relay.
 
@@ -37,6 +37,11 @@ uses
   ;
 
 type
+  /// <summary>Resolves the index databases a merge handler queries when no
+  /// --db was given.</summary>
+  /// <returns>The database paths; empty when none resolves.</returns>
+  TLspDbResolver = reference to function: TArray<string>;
+
   /// <summary>Everything the relay needs to start. All fields are optional;
   /// a zeroed record resolves DelphiLSP from the installed Studio and relays
   /// stdio.</summary>
@@ -52,6 +57,12 @@ type
     /// a stub server so the relay can be proven without RAD Studio in the
     /// loop.</summary>
     DelphiLspExe: string;
+    /// <summary>Which installed DelphiLSP to resolve when DelphiLspExe is empty:
+    /// 32 selects `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
+    /// itself), anything else selects `bin64\DelphiLSP.exe`. The caller sets 64
+    /// by default; the zero a Default() record carries also means 64. Ignored
+    /// when DelphiLspExe is non-empty.</summary>
+    DelphiLspBits: Integer;
     /// <summary>Extra command line passed through to the child, appended after
     /// the executable. DelphiLSP itself takes no arguments (it self-configures
     /// from the IDE-generated `&lt;Project&gt;.delphilsp.json`), so this exists
@@ -77,14 +88,18 @@ type
     /// <summary>--merge-diagnostics: append drag-lint's lint findings to
     /// DelphiLSP's publishDiagnostics. Off by default.</summary>
     MergeDiagnostics: Boolean;
-    /// <summary>Merge drag-lint's completion items into DelphiLSP's. No CLI
-    /// flag yet (merge plan A3); off by default.</summary>
+    /// <summary>--merge-completion: union drag-lint's completion items into
+    /// DelphiLSP's reply, keyed on (label, kind). Off by default.</summary>
     MergeCompletion: Boolean;
-    /// <summary>Merge drag-lint's hover text into DelphiLSP's. No CLI flag yet
-    /// (merge plan A4); off by default.</summary>
+    /// <summary>--merge-hover: append drag-lint's hover facts to DelphiLSP's
+    /// hover (after a '---' rule), or answer with them alone when DelphiLSP
+    /// has none. Off by default.</summary>
     MergeHover: Boolean;
-    /// <summary>Fall back to drag-lint's definition when DelphiLSP has none. No
-    /// CLI flag yet (merge plan A5); off by default.</summary>
+    /// <summary>--merge-definition: answer textDocument/definition with
+    /// drag-lint's locations when DelphiLSP's reply is null or empty, and
+    /// answer textDocument/references and workspace/symbol in the proxy when
+    /// DelphiLSP does not advertise them (its initialize reply gains both
+    /// providers). Off by default.</summary>
     MergeDefinition: Boolean;
     /// <summary>--merge-budget-ms: per-frame budget for a merge handler, in
     /// milliseconds. Over budget, DelphiLSP's bytes are forwarded untouched.
@@ -95,17 +110,30 @@ type
     /// list, unresolved). Read only when a Merge* option is on, and then only
     /// lazily, so the relay's startup path still opens no database.</summary>
     DbPaths: TArray<string>;
+    /// <summary>Called at most once, lazily, when a merge handler first needs
+    /// the index and DbPaths is empty: the CLI's consumer-DB resolution
+    /// (manifest / project / library), so `--proxy` without `--db` finds the
+    /// same indexes plain `lsp` does. nil means DbPaths is the whole list.</summary>
+    /// <remarks>It must write only to stderr: stdout carries the JSON-RPC
+    /// stream. Called on the merge worker thread.</remarks>
+    ResolveDbs: TLspDbResolver;
   end;
 
 const
   /// <summary>Default per-frame merge budget, in milliseconds.</summary>
   LSP_MERGE_BUDGET_DEFAULT_MS = 300;
+  /// <summary>--delphi-lsp-bits value selecting the 32-bit `bin\DelphiLSP.exe`.</summary>
+  LSP_BITS_32 = 32;
+  /// <summary>--delphi-lsp-bits value (and the default) selecting `bin64\DelphiLSP.exe`.</summary>
+  LSP_BITS_64 = 64;
 
 /// <summary>Resolves the DelphiLSP executable to spawn.</summary>
 /// <param name="AOverride">An explicit path; returned as-is when non-empty,
 /// whether or not it exists, so that a bad --delphi-lsp reports the path the
 /// caller actually asked for rather than a silently substituted default.</param>
-/// <returns>Full path to `bin64\DelphiLSP.exe`, or an empty string when no
+/// <param name="ABits">32 resolves `bin\DelphiLSP.exe`; any other value
+/// resolves `bin64\DelphiLSP.exe` (the default).</param>
+/// <returns>Full path to `bin64\DelphiLSP.exe` (`bin\DelphiLSP.exe` for 32), or an empty string when no
 /// installed Studio could be located.</returns>
 /// <remarks>
 /// The 64-bit binary is deliberate. The IDE currently launches the
@@ -120,7 +148,7 @@ const
 /// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ResolveDelphiLspPath(const AOverride: string): string;
+function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS_64): string;
 
 /// <summary>Runs the transparent relay until the child exits or either stream
 /// closes, then returns the child's exit code.</summary>
@@ -153,7 +181,7 @@ uses
   , System.Classes
   , DRagLint.Core.JobObject
   , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
-  , DRagLint.LSP.Proxy.Merge { TFrameInterceptor, TProxyMergeEngine -- implementation-only: Merge's interface uses this unit }  // dl:ok circular-uses@5b36 -- implementation-only cycle forced by the P0 contract: Merge takes TLspProxyOptions, Proxy installs the engine
+  , DRagLint.LSP.Proxy.Merge { TFrameInterceptor, TProxyMergeEngine -- implementation-only: Merge's interface uses this unit }
   ;
 
 var
@@ -163,6 +191,14 @@ var
     pre-P0 path. Assigned once by RunLspProxy before any pump starts, never
     cleared, so the pumps read it without a lock. }
   GInterceptor: TFrameInterceptor = nil;
+  { Merge plan A5: the C>S answerer. nil unless --merge-definition. A frame it
+    takes (True) is answered by the merge engine and NOT forwarded. Assigned
+    with GInterceptor, never cleared. }
+  GAnswerer: TFrameAnswerer = nil;
+  { Serialises whole-frame writes to the client while an interceptor is set:
+    the S>C pump and the merge worker (a proxy-answered request) both write
+    there. Unused on the plain relay. }
+  GClientLock: TRTLCriticalSection;
 
 const
   { The relay copies whatever a single ReadFile hands it. The size is a
@@ -277,6 +313,8 @@ end;
 
 const
   LSP_HEADER = 'Content-Length:';
+  { The blank line that ends a header block; HeaderEnd points at its CR. }
+  CRLF_CRLF = #13#10#13#10;
 
 { Writes ACount bytes from ABuf. Returns False if the destination closed. }
 function WriteAll(ADst: THandle; const ABuf: TBytes; AStart, ACount: Integer): Boolean;
@@ -425,21 +463,70 @@ var
   Use : Boolean;
 begin
   Dir:= if ADir = 'C>S' then mdClientToServer else mdServerToClient;
+  { A5: a C>S request the merge engine answers itself is consumed here; the
+    engine has committed to exactly one reply. Any exception: forwarded. }
+  if (Dir = mdClientToServer) and Assigned(GAnswerer) then
+  begin
+    try
+      Use:= GAnswerer(ABuf, ATotal);
+    except  // dl:ok bare-except@67c3 -- fail-open by design: any merge exception forwards the original frame
+      Use:= False;
+    end;
+    if Use then
+    begin
+      TraceFrame('C>P', ABuf, ATotal);
+      Exit(True);
+    end;
+  end;
   Repl:= nil;
   try
     Use:= GInterceptor(Dir, ABuf, ATotal, Repl);
   except  // dl:ok bare-except@67c3 -- fail-open by design: any merge exception forwards the original frame
     Use:= False;   { swallowed on purpose: a merge bug must not cost the session }
   end;
-  if Use and (Length(Repl) > 0) then
-  begin
-    TraceFrame(ADir, Repl, Length(Repl));
-    Result:= WriteAll(ADst, Repl, 0, Length(Repl));
-  end
-  else
-  begin
-    TraceFrame(ADir, ABuf, ATotal);
-    Result:= WriteAll(ADst, ABuf, 0, ATotal);
+  if Dir = mdServerToClient then EnterCriticalSection(GClientLock);
+  try
+    if Use and (Length(Repl) > 0) then
+    begin
+      TraceFrame(ADir, Repl, Length(Repl));
+      Result:= WriteAll(ADst, Repl, 0, Length(Repl));
+    end
+    else
+    begin
+      TraceFrame(ADir, ABuf, ATotal);
+      Result:= WriteAll(ADst, ABuf, 0, ATotal);
+    end;
+  finally
+    if Dir = mdServerToClient then LeaveCriticalSection(GClientLock);
+  end;
+end;
+
+{ Merge plan A5: the merge engine's way to the client -- one whole frame,
+  written under GClientLock so it never lands inside a DelphiLSP frame, and
+  traced as 'P>C'. Called on the merge worker (or the C>S pump). }
+function WriteToClient(const AFrame: TBytes): Boolean;
+begin
+  EnterCriticalSection(GClientLock);
+  try
+    TraceFrame('P>C', AFrame, Length(AFrame));
+    Result:= WriteAll(GetStdHandle(STD_OUTPUT_HANDLE), AFrame, 0, Length(AFrame));
+  finally
+    LeaveCriticalSection(GClientLock);
+  end;
+end;
+
+{ A5 fix M1: a pass-through write (bytes outside a whole frame) on the S>C
+  side takes GClientLock too while an interceptor is set, so a proxy-answered
+  reply can never land inside them. The plain relay (no interceptor) and the
+  C>S side write directly, as before. }
+function WritePassThrough(ADst: THandle; const ABuf: TBytes; ACount: Integer; const ADir: string): Boolean;
+begin
+  if not Assigned(GInterceptor) or (ADir = 'C>S') then Exit(WriteAll(ADst, ABuf, 0, ACount));
+  EnterCriticalSection(GClientLock);
+  try
+    Result:= WriteAll(ADst, ABuf, 0, ACount);
+  finally
+    LeaveCriticalSection(GClientLock);
   end;
 end;
 
@@ -476,7 +563,7 @@ begin
       Keep:= TrailingHeaderPrefix(ABuf, ALen);
       Emit:= ALen - Keep;
       if Emit <= 0 then Exit;
-      if not WriteAll(ADst, ABuf, 0, Emit) then Exit(False);
+      if not WritePassThrough(ADst, ABuf, Emit, ADir) then Exit(False);
       Consume(Emit);
       Exit;
     end;
@@ -484,7 +571,7 @@ begin
     if Idx > 0 then
     begin
       { Junk before the header: forward it now, unchanged, and re-examine. }
-      if not WriteAll(ADst, ABuf, 0, Idx) then Exit(False);
+      if not WritePassThrough(ADst, ABuf, Idx, ADir) then Exit(False);
       Consume(Idx);
       Continue;
     end;
@@ -498,8 +585,8 @@ begin
       { A header we cannot read. Forward it and carry on rather than wait for a
         body whose length is unknown -- stalling here would hang the session on
         a malformed message we were never going to interpret anyway. }
-      if not WriteAll(ADst, ABuf, 0, HeaderEnd + 4) then Exit(False);
-      Consume(HeaderEnd + 4);
+      if not WritePassThrough(ADst, ABuf, HeaderEnd + Length(CRLF_CRLF), ADir) then Exit(False);
+      Consume(HeaderEnd + Length(CRLF_CRLF));
       Continue;
     end;
 
@@ -548,7 +635,7 @@ begin
   { EOF. Whatever is still buffered is an incomplete message -- forward it
     anyway. It is the client's data, and a silently swallowed tail is
     indistinguishable from a server that stopped talking. }
-  if Len > 0 then WriteAll(ADst, Acc, 0, Len);
+  if Len > 0 then WritePassThrough(ADst, Acc, Len, ADir);
 end;
 
 constructor TPumpThread.Create(ASrc, ADst: THandle; ACloseSrc, ACloseDst, AFramed: Boolean;
@@ -594,10 +681,11 @@ begin
   WriteFile(H, Raw[1], Length(Raw), N, nil);
 end;
 
-function ResolveDelphiLspPath(const AOverride: string): string;
+function ResolveDelphiLspPath(const AOverride: string; ABits: Integer): string;
 var
   Root: string;
   Diag: string;
+  Sub : string;
 begin
   if AOverride <> '' then Exit(AOverride);
 
@@ -613,10 +701,11 @@ begin
     Exit('');
   end;
 
-  Result:= Root + '\bin64\DelphiLSP.exe';
+  Sub:= if ABits = LSP_BITS_32 then 'bin' else 'bin64';
+  Result:= Root + '\' + Sub + '\DelphiLSP.exe';
   if not FileExists(Result) then
   begin
-    StdErrLine('drag-lint lsp --proxy: no bin64\DelphiLSP.exe under the ' +
+    StdErrLine('drag-lint lsp --proxy: no ' + Sub + '\DelphiLSP.exe under the ' +
                'resolved RAD Studio root ' + Root + '.');
     Result:= '';
   end;
@@ -645,7 +734,9 @@ begin
   { A second in-process call with merge OFF must not inherit the first call's
     interceptor. }
   GInterceptor:= nil;
-  Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe);
+  GAnswerer   := nil;
+  MergeEngine := nil;
+  Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe, AOptions.DelphiLspBits);
   if Exe = '' then
   begin
     { ResolveDelphiLspPath has already printed WHICH step failed -- the root, or
@@ -674,6 +765,15 @@ begin
       begin
         Result:= MergeEngine.Intercept(ADir, AFrame, ALen, AReplacement);
       end;
+    if AOptions.MergeDefinition then
+    begin
+      MergeEngine.ClientWriter:= WriteToClient;
+      GAnswerer:=
+        function(const AFrame: TBytes; ALen: Integer): Boolean
+        begin
+          Result:= MergeEngine.Answer(AFrame, ALen);
+        end;
+    end;
   end;
 
   ChildInRd := 0; ChildInWr := 0;
@@ -776,6 +876,9 @@ begin
       language server that has exited is not coming back, and waiting on the
       client's stdin instead would hang until the IDE happened to type. }
     PumpFramed(ChildOutRd, GetStdHandle(STD_OUTPUT_HANDLE), 'S>C');
+    { A5: a request the proxy took is owed exactly one reply; let the worker
+      write the ones still being computed before the session ends. }
+    if MergeEngine <> nil then MergeEngine.WaitForAnswers(CHILD_REAP_TIMEOUT_MS);
 
     WaitForSingleObject(PI.hProcess, CHILD_REAP_TIMEOUT_MS);
     Code:= 0;
@@ -797,8 +900,10 @@ end;
 
 initialization
   InitializeCriticalSection(GTraceLock);
+  InitializeCriticalSection(GClientLock);
 
 finalization
+  DeleteCriticalSection(GClientLock);
   DeleteCriticalSection(GTraceLock);
 
 end.

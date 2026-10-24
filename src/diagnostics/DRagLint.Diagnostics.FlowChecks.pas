@@ -2449,7 +2449,24 @@ var
             It := Cfg.Blocks[B].Items[I];
             Reads.Clear; CallDefs.Clear;
             if It.Node.NodeType = 'assignment' then
-              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode)
+            begin
+              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
+              { A member/indexed WRITE through a CLASS-typed local (`Obj.K := 1`)
+                reads the base pointer before the store, so the base is a read.
+                The lattice counts a partial write as assigning the base -- right
+                for a record, whose storage is the local itself -- so only a base
+                the store classifies as tcClass is added. tcUnknown stays silent:
+                no `T`-prefix fallback, since records and classes share it.
+                Pinned by tests\autotest\run_uba_class_local_deref_write.ps1. }
+              var BaseIx: Integer := AssignmentBaseIndex(It.Node, PF.Src, Vars);
+              var QualifiedLocalWrite: Boolean := (BaseIx >= 0)
+                 and (AssignmentTargetIndex(It.Node, PF.Src, Vars) < 0)
+                 and (Vars.Get(BaseIx).Kind = vkLocal);
+              if QualifiedLocalWrite and (AStore <> nil)
+                 and (Reads.IndexOf(BaseIx) < 0)
+                 and (AStore.ResolveTypeCategory(Vars.Get(BaseIx).TypeText, AFileId) = tcClass) then
+                Reads.Add(BaseIx);
+            end
             else
               CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
             ApplyWithRecordEntity(It, PF.Src, Vars, Reads, CallDefs, RecMethodDef); { B-14: `with Rec do` }
