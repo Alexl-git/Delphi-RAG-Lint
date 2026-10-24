@@ -17,6 +17,7 @@ uses
   , Winapi.Windows
   , DRagLint.MenuTree
   , DRagLint.MenuDrift
+  , DRagLint.FormsMap.Dfm
   ;
 
 var
@@ -141,6 +142,41 @@ begin
   Result:= False;
   for S in pTree.Notes do
     if Pos(pPart, S) > 0 then Exit(True);
+end;
+
+{ forms-csv v8: a code-added item grafted under a .dfm TMenuItem is found by
+  handler with the full main-menu path; a TMainMenu of the same name is not
+  a graft target; the design-time child stays. }
+procedure TestDfmGraft;
+var
+  T      : TFormDfmTree;
+  Tools  : TFormDfmNode;
+  Sub    : TFormDfmNode;
+  W      : TArray<TNavWay>;
+begin
+  T:= TFormDfmTree.Create;
+  try
+    T.LoadFromLines(['object frmX: TfrmX', '  object mnuMain: TMainMenu', '    object mnuTools: TMenuItem',
+      '      Caption = ''&Tools''', '      object mnuDesign: TMenuItem', '        Caption = ''Design''',
+      '        OnClick = DesignClick', '      end', '    end', '  end', 'end']);
+    Check('graft: no way before the graft (positive control)', Length(T.WaysForHandler('CodeClick')) = 0);
+    Check('graft: a TMainMenu is not a graft target', T.FindMenuItem('mnuMain') = nil);
+    Tools:= T.FindMenuItem('MNUTOOLS');
+    Check('graft: FindMenuItem is case-insensitive', Tools <> nil);
+    if Tools = nil then Exit;
+    T.AddCodeMenuItem(Tools, 'Code &Item', 'CodeClick');
+    Sub:= T.AddCodeMenuItem(Tools, 'More', '');
+    T.AddCodeMenuItem(Sub, 'Deep', 'DeepClick');
+    W:= T.WaysForHandler('CodeClick');
+    CheckEq('graft: item path', 'Main menu: Tools > Code Item', if Length(W) > 0 then W[0].Location else '<none>');
+    CheckEq('graft: item click', 'Code Item', if Length(W) > 0 then W[0].Click else '<none>');
+    W:= T.WaysForHandler('DeepClick');
+    CheckEq('graft: code submenu path', 'Main menu: Tools > More > Deep', if Length(W) > 0 then W[0].Location else '<none>');
+    W:= T.WaysForHandler('DesignClick');
+    CheckEq('graft: design-time child unchanged', 'Main menu: Tools > Design', if Length(W) > 0 then W[0].Location else '<none>');
+  finally
+    T.Free;
+  end;
 end;
 
 procedure TestWalkerRoot(const pDb, pProject: string);
@@ -397,6 +433,7 @@ begin
   try
     TestCaptionKeyVector;
     TestToPaths;
+    TestDfmGraft;
     if ParamCount >= 2 then
     begin
       TestWalkerRoot(ParamStr(1), TPath.Combine(ParamStr(2), 'MenuTreeFixture.dproj'));
