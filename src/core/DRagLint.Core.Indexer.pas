@@ -543,6 +543,7 @@ implementation
 uses
   DRagLint.Doc.SymbolFacts        // dl:unit DRagLint.Doc.SymbolFacts accepted -- v(ADP2 T2): TSymbolFactsAnalyzer, the index-time symbol_facts pass; v23: FIELD_RW_CAP + JoinCappedDisplay travel with it so the facts-inherited post-pass re-joins by the SAME cap rule the parse-time string used
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
+  , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
   ;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
@@ -1069,6 +1070,7 @@ var
   Sha           : string                     ;
   Mtime         : Int64                      ;
   ParseRes      : TParseResult               ;
+  IncSites      : TArray<TPPIncludeSite>     ; { N-06: depth-0+ include sites the preprocess met }
   Token         : TFileTxToken               ;
   Sym           : TSymbol                    ;
   IdxToId       : TDictionary<Integer, Int64>;
@@ -1196,12 +1198,15 @@ begin
       PpOpts.Profile    := FProfile;
       PpOpts.IncludeMode:= 'defines-only';
       PpOpts.BaseDir    := TPath.GetDirectoryName(AFilePath);
-      ParseBytes:= Preprocess(Utf8, PpOpts);
+      // N-06: the 3-arg overload also hands back each active include's child
+      // output, so a uses clause inside it can be extracted below. Same bytes.
+      ParseBytes:= Preprocess(Utf8, PpOpts, IncSites);
     except
       on E: Exception do
       begin
         LogPreprocessFallbackOnce(AFilePath, E);
         ParseBytes:= Utf8;
+        IncSites  := nil;
       end;
     end;
   end
@@ -1210,8 +1215,20 @@ begin
   Inc(GProfPre, ProfNow - TPre);
   var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);
-  Inc(GProfParse, ProfNow - TProf); Inc(GProfFiles);
-  // v0.16: scan doc-comment regions from the source text once per file
+  // N-06: a uses clause inside a depth-0 include becomes host rows carrying
+  // OriginPath / IncludeLine (coordinates inside the .inc). Only for a Delphi
+  // host (.pas/.dpr/.dpk): a DFM has no uses, and an .inc indexed on its own is
+  // never a host. No sites at all under --no-preprocess.
+  if Length(IncSites) > 0 then
+  begin
+    var HostExt: string:= LowerCase(TPath.GetExtension(AFilePath));
+    if (HostExt = '.pas') or (HostExt = '.dpr') or (HostExt = '.dpk') then
+    begin
+      var IncRows: TArray<TUnitUse>:= ExtractIncludeUses(IncSites, Parser, AFilePath, ParseRes.ImplementationLine);
+      if Length(IncRows) > 0 then ParseRes.UsesEntries:= ParseRes.UsesEntries + IncRows;
+    end;
+  end;
+  Inc(GProfParse, ProfNow - TProf); Inc(GProfFiles);  // v0.16: scan doc-comment regions from the source text once per file
   // so we can associate them with symbols by line proximity below.
   // Decode from the bytes the PARSER ACTUALLY SAW (ParseBytes -- preprocessed
   // when enabled, else the transcoded UTF-8) so doc-comment text and symbol line
