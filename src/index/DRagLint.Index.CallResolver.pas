@@ -4740,6 +4740,23 @@ begin
   if (Pos('.', AReceiverExpr) > 0) and IsIdentChain(AReceiverExpr.Split(['.'])) then
   begin
     var Segs: TArray<string>:= AReceiverExpr.Split(['.']);
+    // --- Kind 10 (2026-10-23): a CHAINED VALUE receiver, 'R.Inner' in
+    //     `R.Inner.K := 1`. The head is typed by the single-identifier rungs
+    //     (this function, one segment), then each following segment as a field /
+    //     property of the previous segment's type (ancestors included). A segment
+    //     that cannot be typed ends the walk with NO answer from this rung, and
+    //     the unit-qualified rung below runs exactly as it did before -- so
+    //     'Unit.TType' (an untypable head) is unchanged. Pinned by
+    //     tests\callresolve\run_chained_receiver_bind.ps1.
+    var ChainType: Int64:= TypeReceiver(ACallRef, Segs[0]);
+    var SegIx: Integer:= 1;
+    while (ChainType > 0) and (SegIx <= High(Segs)) do
+    begin
+      var SegMember: TSymbol:= LookupMemberOnType(ChainType, Segs[SegIx]);
+      ChainType:= if SegMember.Id > 0 then ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId) else 0;
+      Inc(SegIx);
+    end;
+    if ChainType > 0 then Exit(ChainType);
     Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
   end;
 
