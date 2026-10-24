@@ -157,6 +157,7 @@ uses
   , DRagLint.Project.Facts
   , DRagLint.FormsMap
   , DRagLint.MenuTree
+  , DRagLint.MenuTree.Dfm
   , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -467,6 +468,7 @@ type
       gutter with an EMPTY one on exactly the largest files. }
     ProjectRules : Boolean; // --project-rules (per-file doc-drift + missing-doc)
     RemoveUnused : Boolean; // --remove-unused (uses-fix: also comment unused)
+    WithDfm      : Boolean; // --with-dfm (menu-tree / menu-drift: .dfm menus as roots, code links grafted)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
     YadfPath     : string; // --yadf-path <YADF.exe>
@@ -523,9 +525,11 @@ type
     // exclusive by construction -- the relay never opens a database, because
     // in relay form it answers nothing itself.
     LspProxy    : Boolean; // --proxy
+    LspDelphiBits: Integer;  // --delphi-lsp-bits <32|64> (0 = not given = 64)
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
     LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
+    LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
@@ -1108,9 +1112,9 @@ end;
 procedure PrintMenuVerbHelp(const AVerb: string);
 begin
   if AVerb = 'menu-drift' then
-    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry''s ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
+    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
   else
-    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)');
+    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
 end; // procedure
 function ParseArgs: TArgs;
 var
@@ -1559,6 +1563,7 @@ begin
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
+    else if A = '--with-dfm'      then Result.WithDfm        := True
     else if (A = '--platform') and (i < ParamCount) then begin Inc(i); Result.CheckPlatform:= ParamStr(i); end
     else if (A = '--framework') and (i < ParamCount) then begin Inc(i); Result.TestFramework:= ParamStr(i); end
     else if (A = '--yadf-path') and (i < ParamCount) then begin Inc(i); Result.YadfPath:= ParamStr(i); end
@@ -1596,7 +1601,15 @@ begin
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
+    else if (A = '--delphi-lsp-bits') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.LspDelphiBits:= StrToIntDef(ParamStr(i), 0);
+      if (Result.LspDelphiBits <> DRagLint.LSP.Proxy.LSP_BITS_32) and (Result.LspDelphiBits <> DRagLint.LSP.Proxy.LSP_BITS_64) then
+        raise Exception.CreateFmt('--delphi-lsp-bits must be 32 or 64, got: %s', [ParamStr(i)]);  // dl:ok raise-bare-exception@feb5 -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. the Unknown argument raise)
+    end
     else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
+    else if A = '--full-rules' then Result.LspFullRules:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
       Inc(i);
@@ -10022,7 +10035,6 @@ function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
   const AUnjudgedRules: TArray<string> = nil): TArray<TLintFinding>;
 const
-  MARK = 'drag-lint:ignore';
   { Rules that count a comment as content, so the marker itself stops them
     firing. Measured, not assumed -- see the note at the unused-marker scan. }
   { commented-out-code added 2026-08-13, measured the same way the first two
@@ -10042,11 +10054,6 @@ var
   Emitted   : TDictionary<string, Boolean>       ;
   F         : TLintFinding                       ;
   LineTxt   : string                             ;
-  Rest      : string                             ;
-  Tok       : string                             ;
-  Toks      : TArray<string>                     ;
-  CPos      : Integer                            ;
-  MPos      : Integer                            ;
   Suppressed: Boolean                            ;
   Markers   : TArray<TReviewMarker>              ;
   M         : TReviewMarker                      ;
@@ -10130,22 +10137,10 @@ begin
       begin
         LineTxt:= Lines[F.StartLine - 1];
 
-        { Legacy blanket directive. Deliberately left on its original naive
-          scan: tightening it here would change what existing projects
-          suppress, which is a separate decision from adding dl:ok. }
-        CPos:= Pos('//', LineTxt);
-        MPos:= Pos(MARK, LowerCase(LineTxt));
-        if (CPos > 0) and (MPos > CPos) then
-        begin
-          Rest:= Trim(Copy(LineTxt, MPos + Length(MARK), MaxInt));
-          if Rest = '' then Suppressed:= True
-          else
-          begin
-            Toks:= Rest.Split([' ', ',', #9]);
-            for Tok in Toks do
-              if SameText(Trim(Tok), F.RuleId) then begin Suppressed:= True; Break; end;
-          end;
-        end;
+        { Legacy blanket directive, on its original naive scan. The predicate
+          (and the dl:ok hash below) is shared with the LSP (TReviewMarkers.
+          Suppresses), so the gutter and `lint` cannot disagree (C2). }
+        Suppressed:= TReviewMarkers.IgnoreDirectiveCovers(LineTxt, F.RuleId);
 
         { The accountable form.
 
@@ -10185,7 +10180,7 @@ begin
                 the normalized line is one invariant token, so the hash could never
                 go stale and the marker verified forever however the handler was
                 rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
-              Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
+              Want:= DRagLint.Lint.RuleCatalog.MarkerExpectedHash(Lines, F.RuleId, F.StartLine, F.Metric);
               { A WHOLE-ROUTINE METRIC REVIEW IS BOUND TO ITS NUMBER (T3).
 
                 For these seven rules the hash above is not enough on its own:
@@ -10200,7 +10195,6 @@ begin
                 body-span hash would do the latter, flagging a renamed local
                 across all 58 markers in this class for no reason. }
               var IsMetric: Boolean:= DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId);
-              if IsMetric then Want:= DRagLint.Lint.RuleCatalog.MetricHash(Want, F.Metric);
               if M.Hash = '' then
               begin
                 { Hand-written, no hash: honour it, but say that it cannot be
@@ -29065,7 +29059,7 @@ end; // function
 
 /// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
 /// (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md, section 5).</summary>
-/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --format text|json|paths, --output.</param>
+/// <param name="AArgs">--project, --db (required), --root &lt;QName&gt;, --with-dfm, --format text|json|paths, --output.</param>
 /// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
 /// unknown --root); 3 stale index (a file it must read changed since it was
 /// indexed -- refused, never answered from); 1 any other error.</returns>
@@ -29103,6 +29097,7 @@ begin
     finally
       Walker.Free;
     end;
+    if AArgs.WithDfm then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
   except
     on E: EMenuTreeStale do
     begin
@@ -29138,7 +29133,7 @@ end; // function
 /// <summary>menu-drift: the code-built menu tree (menu-tree) against the
 /// registry's ide-menu surfaces (spec section 7): MISSING / MOVED /
 /// UNREGISTERED / NOTE lines and 'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
-/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --format text|json, --output.</param>
+/// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --with-dfm, --format text|json, --output.</param>
 /// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
 /// project not in the db, unreadable registry); 3 stale index (refused).</returns>
 function DoMenuDrift(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@50e0 -- verb guard clauses: each Exit is one documented exit code (2 usage / setup, 3 stale, 1 drift or other)
@@ -29151,6 +29146,7 @@ var
   Rep   : TMenuDriftReport;
   Fmt   : string;
   Txt   : string;
+  RegDir: string;
 begin
   if not ExplicitDbsExist(AArgs, 'menu-drift') then Exit(2);
   if Length(AArgs.DbPaths) = 0 then
@@ -29158,9 +29154,16 @@ begin
     Writeln(ErrOutput, 'menu-drift: need --db <index.sqlite>');
     Exit(2);
   end;
-  if (AArgs.ProjectPath = '') or (AArgs.RegistryDir = '') then
+  { dxBar spec decision 6: an application's registry lives in <project>\_D-RAG\menu-registry }
+  RegDir:= AArgs.RegistryDir;
+  if (RegDir = '') and (AArgs.ProjectPath <> '') then
   begin
-    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir>');
+    RegDir:= TPath.Combine(TPath.Combine(ExtractFilePath(ExpandFileName(AArgs.ProjectPath)), '_D-RAG'), 'menu-registry');
+    if not TDirectory.Exists(RegDir) then RegDir:= '';
+  end;
+  if (AArgs.ProjectPath = '') or (RegDir = '') then
+  begin
+    Writeln(ErrOutput, 'menu-drift: need --project <X.dproj> and --registry <features dir> (or a <project>\_D-RAG\menu-registry folder)');
     Exit(2);
   end;
   Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
@@ -29173,13 +29176,15 @@ begin
   Reg := TMenuRegistry.Create;
   try
     try
-      Reg.LoadFromDir(AArgs.RegistryDir);
+      Reg.LoadFromDir(RegDir);
       Walker:= TMenuWalker.Create(AArgs.DbPaths, AArgs.ProjectPath);
       try
         Tree:= Walker.Walk;
       finally
         Walker.Free;
       end;
+      { an app-menu surface is a .dfm menu: compare the .dfm tree too }
+      if AArgs.WithDfm or Reg.HasAppMenus then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
     except
       on E: EMenuTreeStale do
       begin
@@ -32721,6 +32726,7 @@ begin
       begin
         var ProxyOpt:= Default(DRagLint.LSP.Proxy.TLspProxyOptions);
         ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
+        ProxyOpt.DelphiLspBits:= if Args.LspDelphiBits = DRagLint.LSP.Proxy.LSP_BITS_32 then DRagLint.LSP.Proxy.LSP_BITS_32 else DRagLint.LSP.Proxy.LSP_BITS_64;
         ProxyOpt.ChildArgs   := '';
         ProxyOpt.TraceFile   := Args.LspTraceFile;
         ProxyOpt.MergeDiagnostics:= Args.LspMergeDiagnostics;
@@ -32744,6 +32750,7 @@ begin
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
+      LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance

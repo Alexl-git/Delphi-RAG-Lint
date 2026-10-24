@@ -1,0 +1,15 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>Demo8.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uMain8.pas"><Form>frmMain8</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uMenuUtils8.pas"/>
+    <DCCReference Include="uDesign8.pas"><Form>frmDesign8</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uReports8.pas"><Form>frmReports8</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uExport8.pas"><Form>frmExport8</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uDeep8.pas"><Form>frmDeep8</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uSide8.pas"><Form>frmSide8</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uSideChild8.pas"><Form>frmSideChild8</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,6 @@
+{
+  "id": "customers-popup",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Right-click menu popGrid > Customer List" }
+  ]
+}

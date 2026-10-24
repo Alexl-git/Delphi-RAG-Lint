@@ -16,7 +16,9 @@ uses
   , System.StrUtils
   , Winapi.Windows
   , DRagLint.MenuTree
+  , DRagLint.MenuTree.Dfm
   , DRagLint.MenuDrift
+  , DRagLint.FormsMap.Dfm
   ;
 
 var
@@ -143,6 +145,41 @@ begin
     if Pos(pPart, S) > 0 then Exit(True);
 end;
 
+{ forms-csv v8: a code-added item grafted under a .dfm TMenuItem is found by
+  handler with the full main-menu path; a TMainMenu of the same name is not
+  a graft target; the design-time child stays. }
+procedure TestDfmGraft;
+var
+  T      : TFormDfmTree;
+  Tools  : TFormDfmNode;
+  Sub    : TFormDfmNode;
+  W      : TArray<TNavWay>;
+begin
+  T:= TFormDfmTree.Create;
+  try
+    T.LoadFromLines(['object frmX: TfrmX', '  object mnuMain: TMainMenu', '    object mnuTools: TMenuItem',
+      '      Caption = ''&Tools''', '      object mnuDesign: TMenuItem', '        Caption = ''Design''',
+      '        OnClick = DesignClick', '      end', '    end', '  end', 'end']);
+    Check('graft: no way before the graft (positive control)', Length(T.WaysForHandler('CodeClick')) = 0);
+    Check('graft: a TMainMenu is not a graft target', T.FindMenuItem('mnuMain') = nil);
+    Tools:= T.FindMenuItem('MNUTOOLS');
+    Check('graft: FindMenuItem is case-insensitive', Tools <> nil);
+    if Tools = nil then Exit;
+    T.AddCodeMenuItem(Tools, 'Code &Item', 'CodeClick');
+    Sub:= T.AddCodeMenuItem(Tools, 'More', '');
+    T.AddCodeMenuItem(Sub, 'Deep', 'DeepClick');
+    W:= T.WaysForHandler('CodeClick');
+    CheckEq('graft: item path', 'Main menu: Tools > Code Item', if Length(W) > 0 then W[0].Location else '<none>');
+    CheckEq('graft: item click', 'Code Item', if Length(W) > 0 then W[0].Click else '<none>');
+    W:= T.WaysForHandler('DeepClick');
+    CheckEq('graft: code submenu path', 'Main menu: Tools > More > Deep', if Length(W) > 0 then W[0].Location else '<none>');
+    W:= T.WaysForHandler('DesignClick');
+    CheckEq('graft: design-time child unchanged', 'Main menu: Tools > Design', if Length(W) > 0 then W[0].Location else '<none>');
+  finally
+    T.Free;
+  end;
+end;
+
 procedure TestWalkerRoot(const pDb, pProject: string);
 var
   W   : TMenuWalker;
@@ -228,6 +265,47 @@ begin
     Tree:= W.Walk;
     try
       CheckRows('renamed helper', PathRows(TFile.ReadAllText(TPath.Combine(pFixtureDir, 'expected-paths.txt')), False),
+        PathRows(Tree.ToPaths, True));
+    finally
+      Tree.Free;
+    end;
+  finally
+    W.Free;
+  end;
+end;
+
+{ ---- dxBar spec T4: walker code links on the formsmap-v9 fixture ---- }
+
+const
+  { command-line slots the runner passes for the formsmap-v9 copies }
+  ARG_V9_DB   = 4;
+  ARG_V9_DIR  = 5;
+  ARG_V9R_DB  = 6;
+  ARG_V9R_DIR = 7;
+  V9_PROJECT  = 'Demo9.dproj';
+
+procedure TestWalkerDxBar(const pDb, pProject, pFixtureDir, pTag: string);
+var
+  W    : TMenuWalker;
+  Tree : TMenuTree;
+  N    : TMenuNode;
+  Ids  : string;
+  Kinds: string;
+begin
+  W:= TMenuWalker.Create([pDb], pProject);
+  try
+    Tree:= W.Walk;
+    try
+      Ids:= '';
+      for N in Tree.External do Ids:= Ids + (if Ids = '' then '' else ',') + N.Ident;
+      { the helper's popup keeps the CALLER's name (popGrid), never pPopup }
+      CheckEq(pTag + ': external roots (code links before the graft)', 'popGridMenu9,barLists,dxBarManager1.Bars[0],popGrid', Ids);
+      Kinds:= '';
+      if Tree.External.Count > 0 then
+        for N in Tree.External[0].Children do Kinds:= Kinds + (if Kinds = '' then '' else ',') + MenuKindName(N.Kind);
+      CheckEq(pTag + ': with-receiver BeginGroup + Insert(0) order', 'submenu,separator,item', Kinds);
+      AddDfmRoots(Tree, pDb, pProject);
+      CheckRows(pTag + ': --with-dfm paths', PathRows(TFile.ReadAllText(TPath.Combine(pFixtureDir, 'expected-paths.txt')), False),
         PathRows(Tree.ToPaths, True));
     finally
       Tree.Free;
@@ -393,17 +471,84 @@ begin
   end;
 end;
 
+{ ---- dxBar spec T2: the TFormDfmTree structural API ---- }
+
+function LinkNames(const pLinks: TArray<TBarLink>): string;
+var
+  L: TBarLink;
+begin
+  Result:= '';
+  for L in pLinks do Result:= Result + (if Result = '' then '' else ',') + L.ItemName + (if L.BeginGroup then '+' else '');
+end;
+
+procedure TestDfmBarApi(const pDfm: string);
+var
+  T      : TFormDfmTree;
+  S      : TBarSurface;
+  Txt    : string;
+  Derived: Boolean;
+  Bar    : TFormDfmNode;
+  Sub    : TFormDfmNode;
+  Ways   : TArray<TNavWay>;
+begin
+  T:= TFormDfmTree.Create;
+  try
+    T.LoadFromFile(pDfm);
+    Check('dfm api: fixture loaded', (T.Root <> nil) and SameText(T.Root.CompClass, 'TfrmMain9'), pDfm);
+    Txt:= '';
+    for S in T.BarSurfaces do Txt:= Txt + (if Txt = '' then '' else '|') + S.Prefix;
+    CheckEq('dfm api: BarSurfaces in .dfm order',
+      'Main menu|Ribbon: Lists > Lists Bar|Ribbon: Main|Toolbar ''Quick Access Toolbar''|Right-click menu popGrid|File menu', Txt);
+    Bar:= T.ItemByName('barLists');
+    Check('dfm api: ItemByName barLists has a line', (Bar <> nil) and (Bar.Line > 0));
+    CheckEq('dfm api: LinksOf barLists (BeginGroup +)', 'btnCustomers,btnSuppliers+', LinkNames(T.LinksOf(Bar)));
+    CheckEq('dfm api: LinksOf backstage = Buttons', 'btnOptions,btnExit', LinkNames(T.LinksOf(T.ItemByName('dxRibbonBackstageView1'))));
+    CheckEq('dfm api: LinksOf sub-item', 'btnGroups,btnUsers+', LinkNames(T.LinksOf(T.ItemByName('subSetup'))));
+    CheckEq('dfm api: ItemByName class', 'TdxBarSubItem', T.ItemByName('subSetup').CompClass);
+    CheckEq('dfm api: SurfacePrefixes of a sub-item', 'Main menu > Setup', string.Join('|', T.SurfacePrefixes(T.ItemByName('subSetup'))));
+    Check('dfm api: ItemByName unknown = nil', T.ItemByName('nope') = nil);
+    Check('dfm api: Bars[0] = the first TdxBar, derived',
+      (T.FindBarLinkOwner('dxBarManager1.Bars[0]', Derived) = T.ItemByName('barMainMenu')) and Derived);
+    Check('dfm api: Self.barLists by name, not derived', (T.FindBarLinkOwner('Self.barLists', Derived) = Bar) and not Derived);
+    Check('dfm api: MainMenuBar', T.FindBarLinkOwner('dxBarManager1.MainMenuBar', Derived) = T.ItemByName('barMainMenu'));
+    Check('dfm api: BarByCaption', T.FindBarLinkOwner('dxBarManager1.BarByCaption(''Lists Bar'')', Derived) = Bar);
+    Check('dfm api: Bars[9] = nil', T.FindBarLinkOwner('dxBarManager1.Bars[9]', Derived) = nil);
+    { code links: appended to a bar, and a sub-item inserted at 0 with a child }
+    T.AddCodeBarItem(Bar, 'Vendor List', 'btnVendorsClick', 'TdxBarButton', -1);
+    CheckEq('dfm api: code link appended', 'btnCustomers,btnSuppliers+,codeBarItem1', LinkNames(T.LinksOf(Bar)));
+    Ways:= T.WaysForHandler('btnVendorsClick');
+    Check('dfm api: code button way', (Length(Ways) = 1) and (Ways[0].Location = 'Ribbon: Lists > Lists Bar > Vendor List')
+      and (Ways[0].CtrlClass = 'TdxBarButton'), if Length(Ways) > 0 then Ways[0].Location else '(none)');
+    Sub:= T.AddCodeBarItem(T.ItemByName('barMainMenu'), 'Presets', '', 'TdxBarSubItem', 0);
+    T.AddCodeBarItem(Sub, 'Reset Presets', 'btnResetClick', 'TdxBarButton', -1);
+    Check('dfm api: code sub-item inserted at 0', T.LinksOf(T.ItemByName('barMainMenu'))[0].Item = Sub);
+    Ways:= T.WaysForHandler('btnResetClick');
+    Check('dfm api: code sub-item child way', (Length(Ways) = 1) and (Ways[0].Location = 'Main menu: Presets > Reset Presets'),
+      if Length(Ways) > 0 then Ways[0].Location else '(none)');
+  finally
+    T.Free;
+  end;
+end;
+
 begin
   try
     TestCaptionKeyVector;
     TestToPaths;
+    TestDfmGraft;
     if ParamCount >= 2 then
     begin
+      TestDfmBarApi(TPath.Combine(TPath.Combine(ExtractFileDir(ExcludeTrailingPathDelimiter(ParamStr(2))), 'formsmap-v9'), 'uMain9.dfm'));
       TestWalkerRoot(ParamStr(1), TPath.Combine(ParamStr(2), 'MenuTreeFixture.dproj'));
       TestWalkerFull(ParamStr(1), TPath.Combine(ParamStr(2), 'MenuTreeFixture.dproj'), ParamStr(2));
       TestDrift(ParamStr(1), ParamStr(2));
     end
     else Check('walker tests need <db> <fixture dir>', False);
+    if ParamCount >= ARG_V9R_DIR then
+    begin
+      TestWalkerDxBar(ParamStr(ARG_V9_DB), TPath.Combine(ParamStr(ARG_V9_DIR), V9_PROJECT), ParamStr(ARG_V9_DIR), 'dxbar');
+      TestWalkerDxBar(ParamStr(ARG_V9R_DB), TPath.Combine(ParamStr(ARG_V9R_DIR), V9_PROJECT), ParamStr(ARG_V9R_DIR), 'dxbar renamed helper');
+    end
+    else Check('dxbar walker tests need <v9.sqlite> <v9 dir> <v9-renamed.sqlite> <v9-renamed dir>', False);
     if ParamCount >= 3 then
       TestWalkerRenamed(ParamStr(3), TPath.Combine(TPath.Combine(ExtractFilePath(ParamStr(3)), 'renamed'), 'MenuTreeFixture.dproj'), ParamStr(2));
   except

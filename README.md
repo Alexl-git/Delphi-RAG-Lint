@@ -699,7 +699,8 @@ Point your editor's LSP config at `drag-lint.exe lsp --db <path>.sqlite`.
 The server speaks JSON-RPC over stdio.
 
 Capabilities: hover, definition, references, completion, signatureHelp,
-diagnostics (publishDiagnostics on didSave), workspaceSymbols.
+diagnostics (publishDiagnostics on didSave), workspaceSymbols, rename (prepareRename +
+rename: a WorkspaceEdit the editor applies -- the server itself writes no file).
 
 ### MCP server (Claude / Cursor)
 
@@ -838,7 +839,9 @@ predates it answers the standard `-32601`.
 * **Zed** -- tree-sitter highlighting ships today; the language-server
   registration needs a small Rust/WASM extension that is **not yet built** and is
   fully specified for contributors.
-* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`.
+* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`. Add `--full-rules` (OFF by default) to
+  publish the complete built-in rule set on every save instead of the subset; it runs `lint` out-of-process
+  and reports its cost in ms on stderr.
 
 `drag-lint lsp --proxy` is a different shape of the same server: instead of
 answering alone, it spawns RAD Studio's own `bin64\DelphiLSP.exe` and relays
@@ -846,9 +849,16 @@ the protocol between the IDE and it. The IDE's Code Insight manager is
 exclusive -- one server per language -- so registering drag-lint the plain way
 would trade the compiler front end (generics, `with`, inline vars, the unsaved
 buffer) for a symbol index. Proxying removes the either/or. Add
-`--delphi-lsp <path>` to override which server is spawned. Today the relay is
-transparent: byte-for-byte identical to talking to DelphiLSP directly, with
-merging of drag-lint's own answers still to come.
+`--delphi-lsp <path>` to override which server is spawned, or
+`--delphi-lsp-bits 32` to forward to the 32-bit `bin\DelphiLSP.exe` instead of
+the default 64-bit `bin64` one (any value but 32/64 exits 3). By default the relay
+is transparent: byte-for-byte identical to talking to DelphiLSP directly. Add
+`--merge-diagnostics` and drag-lint's lint findings (source `drag-lint`) are
+appended to DelphiLSP's own `textDocument/publishDiagnostics` notification, so
+compiler errors and lint findings arrive in ONE notification per file. It fails
+open: a file with unsaved edits, a clean file, a frame it cannot parse or a lint
+that overruns `--merge-budget-ms <n>` (default 300) forwards DelphiLSP's
+original bytes untouched.
 
 `drag-lint-switch --vscode --status|--on|--off` toggles the `delphi-lsp` entry in a workspace's `.vscode\mcp.json` (backup on `--off`, restore on `--on`; refuses while VS Code runs).
 
@@ -1073,9 +1083,9 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
 | `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
-| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, before-you-start preconditions for every hop, confidence (algorithm v7; a `?` modal always carries its reason in Notes; popup forms the index cannot trace are declared under `popupForms` in the project's `_D-RAG\drag-lint-project.json` -- see docs\wiki\Generate-Test-Helper-CSV.md) | `--output <f.csv>`, `--root <TfrmMAIN>` |
-| `menu-tree --project <dproj> --db <db>` | The menu tree a program BUILDS IN CODE (`TMenuItem.Create` + `Caption :=` + `Add`/`Insert`, item/separator/header helpers recognised by their body, click wrappers, procedural-parameter callbacks, const-array and case-literal captions), read statically from the index + a tree-sitter re-parse; DFM items given code-added children appear as external roots. Exit 0 ran, 2 usage/setup, 3 stale index (refused, never answered) -- see docs\wiki\Menu-Tree.md | `--root <QName>`, `--format text\|json\|paths`, `--output <f>` `<verb> --help` prints this verb's own help. |
-| `menu-drift --project <dproj> --db <db> --registry <features dir>` | The code-built menu tree (`menu-tree`) against the registry's `ide-menu` surfaces, by PATH: MISSING (registered, not built; `renamed?` hint), MOVED (the caption lives under another parent), UNREGISTERED (built, not registered; a skeleton surface line), NOTE (dynamic captions, unparented items, exemptions the kind model no longer needs). Exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index; guarded on the IDE plugin by `run_menu_drift_guard.ps1` | `--format text\|json`, `--output <f>` `<verb> --help` prints this verb's own help. |
+| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, before-you-start preconditions for every hop, confidence (algorithm v9: menu items added in code under a `.dfm` menu item, and DevExpress bar items linked in code into a `.dfm` bar / popup / sub-item, are part of the path; a `?` modal always carries its reason in Notes; popup forms the index cannot trace are declared under `popupForms` in the project's `_D-RAG\drag-lint-project.json` -- see docs\wiki\Generate-Test-Helper-CSV.md) | `--output <f.csv>`, `--root <TfrmMAIN>` |
+| `menu-tree --project <dproj> --db <db>` | The menu tree a program BUILDS IN CODE (`TMenuItem.Create` + `Caption :=` + `Add`/`Insert`, item/separator/header helpers recognised by their body, click wrappers, procedural-parameter callbacks, const-array and case-literal captions), read statically from the index + a tree-sitter re-parse; DFM items given code-added children appear as external roots; `--with-dfm` adds the `.dfm` menus themselves (DevExpress bars / ribbon tabs / backstage / bar popups, VCL `TMainMenu` / `TPopupMenu`) as roots and grafts the code-added links (`ItemLinks.Add` / `Insert`, `Bars[n]`, `with` receivers, helpers) into them. Exit 0 ran, 2 usage/setup, 3 stale index (refused, never answered) -- see docs\wiki\Menu-Tree.md | `--root <QName>`, `--with-dfm`, `--format text\|json\|paths`, `--output <f>` `<verb> --help` prints this verb's own help. |
+| `menu-drift --project <dproj> --db <db> --registry <features dir>` | The code-built menu tree (`menu-tree`) against the registry's `ide-menu` surfaces, by PATH -- and an application's `app-menu` surfaces (`{ "type": "app-menu", "form": "TfrmMain", "path": "Main menu > Lists > Customer List" }`, keyed by form + path; they imply `--with-dfm`; `--registry` defaults to `<project>\_D-RAG\menu-registry`): MISSING (registered, not built; `renamed?` hint), MOVED (the caption lives under another parent), UNREGISTERED (built, not registered; a skeleton surface line), NOTE (dynamic captions, unparented items, exemptions the kind model no longer needs). Exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index; guarded on the IDE plugin by `run_menu_drift_guard.ps1` | `--with-dfm`, `--format text\|json`, `--output <f>` `<verb> --help` prints this verb's own help. |
 | `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const`, `--output <file>` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |
@@ -1110,7 +1120,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | Command | What it does |
 |---|---|
 | [`serve --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Start the **MCP** stdio server -- for AI agents (Claude, Cursor). Nothing in the IDE uses this. |
-| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag. `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and ignored -- editor clients send them, and stdio is the only transport. |
+| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag; `--merge-diagnostics` appends drag-lint's lint findings to DelphiLSP's own publishDiagnostics (fail-open, budget `--merge-budget-ms`, default 300). `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and ignored -- editor clients send them, and stdio is the only transport. |
 
 #### Maintenance
 

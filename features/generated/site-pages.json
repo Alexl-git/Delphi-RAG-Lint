@@ -312,7 +312,7 @@
     "version": "1.33.0-alpha"
   },
   "features/generate-test-helper-csv.md": {
-    "hash": "a90656bc9715c575333639689999e3ec33447f147872030d98d7e38381479b52",
+    "hash": "43cd4e93f5baabd6a2b6961623e69228f16a909c932c3d6e6afeb739a042ab23",
     "version": "1.33.0-alpha"
   },
   "features/ghost-check.md": {
@@ -400,7 +400,7 @@
     "version": "1.33.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "92e04e81ad2fa6e11a52a18bad1ee4549af36388567cf0ecfcbbeb83e864265b",
+    "hash": "e64e7f1eeef7d5823019353560cc9beb3b3e8c7208fdb4080c86d81d4ec1ae2d",
     "version": "1.33.0-alpha"
   },
   "features/maintenance.md": {
@@ -416,7 +416,7 @@
     "version": "1.33.0-alpha"
   },
   "features/menu-tree.md": {
-    "hash": "8891d147bc1d6845e6e2f52580b3594c372a6f36d43cc409afd76873ac5f51ca",
+    "hash": "d4239867044618f369ba017c5f359868dba90e89a975ae845fb6900a395c96cb",
     "version": "1.33.0-alpha"
   },
   "features/migrate-dbs.md": {

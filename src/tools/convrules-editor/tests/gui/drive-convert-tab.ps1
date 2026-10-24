@@ -14,6 +14,8 @@
 # C17: Conversion > Reindex project after the run (reindex.status) and with Fix.dproj renamed away (reindex.refused.no.project.file).
 # N1 (2026-10-23): a REAL mouse click on Convert while the progress window holds the editor is reported on the
 # status line once idle, and nothing runs (n1.*). Needs the editor visible on the desktop (run under the GUI lock).
+# N7/N11 (2026-10-23): POSTED commands under the progress window (WM_COMMAND for Add... and Convert, BM_CLICK for
+# Delete) are refused, the first one reported, none run (n7.*); WaitIdle also asks the editor ('ConvRulesEditor.Busy').
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow)
@@ -262,11 +264,29 @@ function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS 
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 # Looks at least ONCE: with $sec = 0 the old while-loop never looked, so "is the dialog still up" always said no.
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  /* N7/N11: the editor answers 'ConvRulesEditor.Busy' with 2 while busy (an engine wait or an hourglass
+     section), 1 while idle. No answer within the timeout = the main thread is blocked = busy too: a click
+     posted then is dispatched later, inside whatever pump comes next, where the editor refuses it.
+     0 = an editor without the query (answered by DefWindowProc): not busy as far as this can tell. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+'@
 # N1: idle = no progress window / message box / common dialog and the editor enabled, for 2 s running.
+# N7/N11: and the editor itself says it is idle (B::Busy): a main thread blocked between two engine calls
+# shows no window and stays enabled, so the windows alone saw a false idle.
 function WaitIdle($procId, $main, $sec) {
   $idleSince = $null; $t0 = Get-Date
   while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
-    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main)
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
     if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
     Start-Sleep -Milliseconds 200
   }
@@ -504,9 +524,60 @@ try {
     [void](WaitIdle $p.Id $main 90)
     Check 'n1.click.under.progress' $false "precondition: progress window never appeared (window=$($wait -ne [IntPtr]::Zero) disabled=$disabled); click skipped, n1.lost.click.* not evaluated"
   }
-  [void][W]::Send($src, 0x0185, [IntPtr]1, [IntPtr]0)   # LB_SETSEL row 0, then Delete: step 4 starts from an empty list
+  [void](WaitIdle $p.Id $main 30)
+  [void][W]::Send($src, 0x0185, [IntPtr]1, [IntPtr]0)   # LB_SETSEL row 0, then Delete: step 3c starts from an empty list
   Click $del
   Start-Sleep -Seconds 1
+
+  # --- 3c. N7/N11: commands POSTED while the progress window holds the editor are refused, reported, never run ---
+  # A disabled window does not stop a posted message: a WM_COMMAND (BN_CLICKED) reached AddClick / ConvertClick
+  # INSIDE the progress window's modal loop (the Open dialog on top of TEngineWaitForm, a re-entrant Convert),
+  # and a BM_CLICK was dropped without a word (the lost second Add...). While the window is up: WM_COMMAND for
+  # Add..., WM_COMMAND for Convert, BM_CLICK for Delete. None may run; the first is reported once idle.
+  $n0 = [int][W]::Send($src, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero)
+  [void][W]::SetForegroundWindow($main)
+  Click $add
+  $dlg = WaitCls $p.Id '#32770' 20
+  Start-Sleep -Milliseconds 700
+  [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
+  Click (@(Find $dlg 'Button' '&Open')[0])
+  $wait = [IntPtr]::Zero; $t0 = Get-Date
+  while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } }
+  $disabled = -not [W]::IsWindowEnabled($main)
+  if (($wait -ne [IntPtr]::Zero) -and $disabled) {
+    [void][W]::PostMessage([CT]::Parent($add), 0x0111, [IntPtr]::Zero, $add)    # WM_COMMAND, BN_CLICKED (0), lParam = the button
+    [void][W]::PostMessage([CT]::Parent($conv), 0x0111, [IntPtr]::Zero, $conv)
+    Click $del
+    # Anything the posted commands opened is recorded and closed, so a RED run still ends.
+    $opened = @(); $t0 = Get-Date
+    while (((Get-Date) - $t0).TotalSeconds -lt 120) {
+      foreach ($h in @(Forms $p.Id | Where-Object { [W]::Cls($_) -in '#32770', 'TMessageForm' })) {
+        $opened += ('{0}/{1}' -f [W]::Cls($h), [W]::Txt($h))
+        if ([W]::Cls($h) -eq '#32770') { Click (@(Find $h 'Button' 'Cancel')[0]) } else { [void][W]::PostMessage($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
+        Start-Sleep -Milliseconds 500
+      }
+      if ((WaitCls $p.Id 'TEngineWaitForm' 0) -eq [IntPtr]::Zero -and -not [B]::Busy($main) -and [W]::IsWindowEnabled($main)) { break }
+      Start-Sleep -Milliseconds 100
+    }
+    [void](WaitIdle $p.Id $main 90)
+    $st = Status $main
+    $items = [CT]::Items($src)
+    Check 'n7.posted.under.progress' $true "(precondition: posted while the progress window disabled the editor) window=True disabled=$disabled"
+    Check 'n7.add.not.run' ($opened.Count -eq 0) ("dialogs opened by the posted commands: " + ($opened -join ' | '))
+    Check 'n7.convert.not.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
+    Check 'n7.delete.not.run' (($n0 -eq 0) -and ($items.Count -eq 1) -and ($items -contains $pas)) ("before=$n0 items: " + ($items -join ' | '))
+    Check 'n7.refusal.reported' ($st -match 'Add was NOT run: it was clicked while the editor was busy \(.+\)\. Click it again\.$') $st
+  } else {
+    $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and -not ([CT]::Items($src) -contains $pas)) { Start-Sleep -Milliseconds 250 }
+    [void](WaitIdle $p.Id $main 90)
+    Check 'n7.posted.under.progress' $false "precondition: progress window never appeared (window=$($wait -ne [IntPtr]::Zero) disabled=$disabled); nothing posted, n7.* not evaluated"
+  }
+  # Idle now: the same Delete click must work (step 4 starts from an empty list).
+  [void][W]::Send($src, 0x0185, [IntPtr]1, [IntPtr]0)
+  Click $del
+  Start-Sleep -Seconds 1
+  $n = [int][W]::Send($src, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero)
+  Check 'n7.idle.delete.runs' ($n -eq 0) "count=$n"
 
   # --- 4./5. an UNINDEXED unit: Convert refuses, and nothing is touched ---
   $e = AddViaDialog $p.Id $add $loose

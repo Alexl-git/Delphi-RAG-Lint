@@ -275,7 +275,32 @@ function IsRoutineMetricRule(const ARuleId: string): Boolean;
 /// </remarks>
 function MetricHash(const AWindowHash: string; AMetric: Integer): string;
 
+/// <summary>The hash a `dl:ok` marker must carry to verify against a finding:
+/// TReviewMarkers.HashWindow at the anchor line, passed through MetricHash for
+/// a routine-metric rule (IsRoutineMetricRule).</summary>
+/// <param name="ALines">The finding's file, one entry per line.</param>
+/// <param name="ARuleId">The finding's rule id.</param>
+/// <param name="AStartLine">1-based anchor line (TLintFinding.StartLine).</param>
+/// <param name="AMetric">The finding's measured value (TLintFinding.Metric);
+/// ignored for a non-metric rule.</param>
+/// <returns>Four lowercase hex digits.</returns>
+/// <remarks>The ONE definition the CLI's ApplyLineMarkers and the LSP's
+/// BuildDiagnostics both use (C2), feeding TReviewMarkers.Suppresses. Lives
+/// here, not in ReviewMarker, for the same mirror reason as MetricHash. Pure.</remarks>
+function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
+  AStartLine, AMetric: Integer): string;
+
 implementation
+
+uses
+  DRagLint.Lint.ReviewMarker;
+
+function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
+  AStartLine, AMetric: Integer): string;
+begin
+  Result:= TReviewMarkers.HashWindow(ALines, AStartLine - 1);
+  if IsRoutineMetricRule(ARuleId) then Result:= MetricHash(Result, AMetric);
+end;
 
 function IsRoutineMetricRule(const ARuleId: string): Boolean;
 var

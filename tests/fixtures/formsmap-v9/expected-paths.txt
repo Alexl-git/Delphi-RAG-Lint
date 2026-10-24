@@ -1,0 +1,23 @@
+## dfm TfrmMain9.barMainMenu
+Main menu > Presets > Reset Presets	uMain9.TfrmMain9.btnResetClick	derived
+Main menu > Presets > <dynamic: FPresetNames[I]>	uMain9.TfrmMain9.btnPresetClick	unknown
+Main menu > Setup > Groups	uMain9.TfrmMain9.actGroupsExecute	certain
+Main menu > Setup > Users	uMain9.TfrmMain9.btnUsersClick	certain
+## dfm TfrmMain9.barLists
+Ribbon: Lists > Lists Bar > Customer List	uMain9.TfrmMain9.btnCustomersClick	certain
+Ribbon: Lists > Lists Bar > Suppliers	uMain9.TfrmMain9.btnSuppliersClick	certain
+Ribbon: Lists > Lists Bar > Vendor List	uMain9.TfrmMain9.btnVendorsClick	certain
+## dfm TfrmMain9.barHome
+Ribbon: Main > Home Page	uMain9.TfrmMain9.btnHomeClick	certain
+## dfm TfrmMain9.barQAT
+Toolbar 'Quick Access Toolbar' > Customer List	uMain9.TfrmMain9.btnCustomersClick	certain
+## dfm TfrmMain9.popGrid
+Right-click menu popGrid > Customer List	uMain9.TfrmMain9.btnCustomersClick	certain
+Right-click menu popGrid > Export Grid	uMain9.TfrmMain9.btnExportClick	certain
+## dfm TfrmMain9.dxRibbonBackstageView1
+File menu > Options	uMain9.TfrmMain9.btnOptionsClick	certain
+File menu > Exit	uMain9.TfrmMain9.btnExitClick	certain
+## external popGridMenu9
+popGridMenu9 > Select Layout > Default Layout	uGridPopup9.TGridPopup9.DoLayout	certain
+popGridMenu9 > Select Layout > Saved Layout	uGridPopup9.TGridPopup9.DoLayout	certain
+popGridMenu9 > Copy Cell	uGridPopup9.TGridPopup9.DoCopy	certain
