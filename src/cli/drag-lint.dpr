@@ -122,6 +122,7 @@ uses
   DRagLint.LSP.Context in '..\lsp\DRagLint.LSP.Context.pas',
   DRagLint.LSP.Features in '..\lsp\DRagLint.LSP.Features.pas',
   DRagLint.LSP.Feature.CodeLens in '..\lsp\DRagLint.LSP.Feature.CodeLens.pas',
+  DRagLint.LSP.Feature.ImplDecl in '..\lsp\DRagLint.LSP.Feature.ImplDecl.pas',
   DRagLint.LSP.Feature.DocumentSymbol in '..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas',
   DRagLint.LSP.Feature.Ping in '..\lsp\DRagLint.LSP.Feature.Ping.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',

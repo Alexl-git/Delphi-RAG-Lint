@@ -42,6 +42,8 @@ with merge task A1. Until then every message is relayed unchanged.
 
 `lsp` answers `textDocument/codeLens` with one lens per routine declaration, titled from the index caller counts (`3 callers`, `1 caller`, `0 callers`), range zero-width at (line, 0), command `draglint.showCallers` with arguments `[uri, line]` (implemented by the editor extension). Capability `codeLensProvider: {resolveProvider: false}`; a file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.CodeLens`); guard: `tests\autotest\run_lsp_code_lens_guard.ps1`.
 
+`lsp` answers `textDocument/implementation` and `textDocument/declaration` from the symbol under the cursor (the hover resolution). `declaration`: one Location at the interface-section declaration (the forward-declaration line for a forward-declared type). `implementation`: a routine's body line (character 0) and, for a method, the same-named method of every descendant of its owner type (body line, or the declaration when bodiless), ordered by file:line; nothing resolving answers `[]`. Capabilities `implementationProvider` and `declarationProvider` are `true`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ImplDecl`); guard: `tests\autotest\run_lsp_impl_decl_guard.ps1`.
+
 ## Reaching it in the IDE
 
 CLI+internal: the plugin starts this process itself, from
