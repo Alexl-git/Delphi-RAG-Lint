@@ -224,12 +224,23 @@ begin
   end;
 end;
 
+function FindExt(pTree: TMenuTree; const pIdent: string): TMenuNode;
+var
+  N: TMenuNode;
+begin
+  Result:= nil;
+  for N in pTree.External do
+    if N.Ident = pIdent then Exit(N);
+end;
+
 procedure TestWalkerFull(const pDb, pProject, pFixtureDir: string);
 var
-  W   : TMenuWalker;
-  Tree: TMenuTree;
-  Ext : TMenuNode;
+  W     : TMenuWalker;
+  Tree  : TMenuTree;
+  Ext   : TMenuNode;
+  TwoCls: Integer;
 begin
+  TwoCls:= 0;
   W:= TMenuWalker.Create([pDb], pProject);
   try
     Tree:= W.Walk;
@@ -243,8 +254,21 @@ begin
         and (FindChild(FindChild(Tree.Roots[0], 'Catalog'), 'Advanced Group') <> nil));
       Ext:= nil;
       if Tree.External.Count > 0 then Ext:= Tree.External[0];
-      Check('DFM mnuTools children land under external-root mnuTools',
-        (Ext <> nil) and (Ext.Ident = 'mnuTools') and (Ext.Children.Count = 2));
+      { single class (positive control): the form's mnuTools keeps its two children, keyed by its class }
+      Check('DFM mnuTools children land under external-root TFixtureForm.mnuTools',
+        (Ext <> nil) and (Ext.Ident = 'TFixtureForm.mnuTools') and (Ext.Children.Count = 2), IfThen(Ext = nil, '<none>', Ext.Ident));
+      { e3d vcl-roots: two classes in MT.TwoClass with same-named fields stay separate roots }
+      for Ext in Tree.External do
+        if Ext.Ident.StartsWith('TFirstMenu.') or Ext.Ident.StartsWith('TSecondMenu.') then Inc(TwoCls);
+      CheckEq('two classes, same field names: four roots, none merged', '4', IntToStr(TwoCls));
+      Ext:= FindExt(Tree, 'TFirstMenu.FMenu');
+      Check('TFirstMenu.FMenu holds only First Alpha', (Ext <> nil) and (Ext.Children.Count = 1) and (Ext.Children[0].Caption = 'First Alpha'));
+      Ext:= FindExt(Tree, 'TSecondMenu.FMenu');
+      Check('TSecondMenu.FMenu holds only Second Gamma', (Ext <> nil) and (Ext.Children.Count = 1) and (Ext.Children[0].Caption = 'Second Gamma'));
+      Ext:= FindExt(Tree, 'TFirstMenu.FPopup');
+      Check('TFirstMenu.FPopup (Items.Add) holds only First Beta', (Ext <> nil) and (Ext.Children.Count = 1) and (Ext.Children[0].Caption = 'First Beta'));
+      Ext:= FindExt(Tree, 'TSecondMenu.FPopup');
+      Check('TSecondMenu.FPopup (Items.Add) holds only Second Delta', (Ext <> nil) and (Ext.Children.Count = 1) and (Ext.Children[0].Caption = 'Second Delta'));
     finally
       Tree.Free;
     end;

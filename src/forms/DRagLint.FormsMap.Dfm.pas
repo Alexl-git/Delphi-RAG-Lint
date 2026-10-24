@@ -149,7 +149,8 @@ type
     function WaysForCaption(const ACaption: string): TArray<TNavWay>;
     /// <summary>The non-root TMenuItem component named AName; nil when this
     /// .dfm has none (a TMainMenu / TPopupMenu of that name does not count).</summary>
-    /// <param name="AName">Component name, case-insensitive.</param>
+    /// <param name="AName">Component name, case-insensitive; a leading
+    /// TFormClass. (this form's class, as menu-tree keys a field root) is accepted.</param>
     /// <returns>The node, owned by the tree, or nil.</returns>
     function FindMenuItem(const AName: string): TFormDfmNode;
     /// <summary>forms-csv v8: adds a menu item built in CODE (a menu-tree
@@ -800,12 +801,17 @@ end;
 
 function TFormDfmTree.FindMenuItem(const AName: string): TFormDfmNode;
 var
-  N: TFormDfmNode;
+  N  : TFormDfmNode;
+  Key: string;
 begin
   Result:= nil;
   if AName = '' then Exit;
+  Key:= AName;
+  // menu-tree keys a field root by its class: TfrmMain.mnuTools names this form's mnuTools
+  if (FRoot <> nil) and (FRoot.CompClass <> '') and Key.StartsWith(FRoot.CompClass + '.', True) then
+    Key:= Key.Substring(Length(FRoot.CompClass) + 1);
   for N in FNodes do
-    if (N <> FRoot) and not N.IsItem and SameText(N.Name, AName) and SameText(N.CompClass, MENU_ITEM_CLASS) then Exit(N);
+    if (N <> FRoot) and not N.IsItem and SameText(N.Name, Key) and SameText(N.CompClass, MENU_ITEM_CLASS) then Exit(N);
 end;
 
 function TFormDfmTree.AddCodeMenuItem(AParent: TFormDfmNode; const ACaption, AHandler: string): TFormDfmNode;

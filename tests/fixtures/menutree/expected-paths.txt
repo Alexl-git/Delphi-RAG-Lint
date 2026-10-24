@@ -9,6 +9,14 @@ Fixture > Catalog > Summary Report	MT.Builder.DoCatalog	derived
 Fixture > About	MT.Builder.DoAbout	certain
 Fixture Dynamic > Static Leaf	MT.Dynamic.TDynHandlers.DoStatic	certain
 Fixture Dynamic > <dynamic: SomeVar>	MT.Dynamic.TDynHandlers.DoDynamic	unknown
-## external mnuTools
-mnuTools > Code Added Two	MT.Dfm.TFixtureForm.DoTwo	certain
-mnuTools > Code Added One	MT.Dfm.TFixtureForm.DoOne	certain
+## external TFixtureForm.mnuTools
+TFixtureForm.mnuTools > Code Added Two	MT.Dfm.TFixtureForm.DoTwo	certain
+TFixtureForm.mnuTools > Code Added One	MT.Dfm.TFixtureForm.DoOne	certain
+## external TFirstMenu.FMenu
+TFirstMenu.FMenu > First Alpha	MT.TwoClass.TFirstMenu.DoAlpha	certain
+## external TFirstMenu.FPopup
+TFirstMenu.FPopup > First Beta	MT.TwoClass.TFirstMenu.DoBeta	certain
+## external TSecondMenu.FMenu
+TSecondMenu.FMenu > Second Gamma	MT.TwoClass.TSecondMenu.DoGamma	certain
+## external TSecondMenu.FPopup
+TSecondMenu.FPopup > Second Delta	MT.TwoClass.TSecondMenu.DoDelta	certain
