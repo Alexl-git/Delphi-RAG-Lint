@@ -129,7 +129,7 @@ type
   /// (full sync) and stored in TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
   /// original reasoning is intact -- only the text under the caret is live.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas) (+8 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -285,6 +285,9 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;ISymbolStore&gt; -- Observed: FStores;
       /// TArray&lt;ISymbolStore&gt;.Create(FEphemStore) + FStores.</returns>
       /// <remarks>
+      /// NOT thread-safe: building or replacing the ephemeral store mutates
+      /// FEphemStore / FEphemFile / FEphemStamp. Call it only from the thread
+      /// that owns this server (the stdio loop, or the merge proxy's worker).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas) (+2 more)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.AnyStoreOwns, DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore, ExtractFileExt, LowerCase, SameText</para>
@@ -345,7 +348,7 @@ type
       /// <param name="AObj"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleInitialize (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleShutdown (DRagLint.LSP.Server.pas) (+6 more)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleInitialize (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleShutdown (DRagLint.LSP.Server.pas) (+5 more)</para>
       /// <para>Calls: AnsiString, GetStdHandle, IntToStr, Move, WriteFile</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
@@ -413,7 +416,7 @@ type
       /// result null.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.Reply (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendMessage</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
@@ -480,7 +483,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverMarkdown (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (+14 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 33 (cyclomatic, outer body), 255 lines (full implementation)</para>
+      /// <para>Complexity: 35 (cyclomatic, outer body), 269 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <para>Mutates: AOut (out)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -525,15 +528,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.SendMessage</para>
-      /// <para>Complexity: 22 (cyclomatic, outer body), 75 lines (full implementation)</para>
-      /// <para>Reads: FStores</para>
+      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols, DRagLint.LSP.Server.TLSPServer.SendResult</para>
       /// <para>Pure</para>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendResult"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleWorkspaceSymbol(const AId: TJSONValue; const AParams: TJSONObject);
@@ -739,14 +740,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Remove, DRagLint.Core.LiveDocs.TLiveDocuments.SetText, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendRawNotification</para>
-      /// <para>Reads: FStore</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Remove, DRagLint.Core.LiveDocs.TLiveDocuments.SetText, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics, DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.RunFullRulesLint, DRagLint.LSP.Server.TLSPServer.SendRawNotification, Format, SameText, Writeln</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 59 lines (full implementation)</para>
+      /// <para>Reads: FStore, FFullRules</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Remove"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.SetText"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.EnsureLinter"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidOpenOrSave(const AParams: TJSONObject);
@@ -755,8 +757,25 @@ type
       /// <param name="AJson">Receives lint's stdout when the run succeeded.</param>
       /// <returns>True when the child exited 0 within LSP_FULL_RULES_TIMEOUT_MS; False on a spawn
       /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
-      /// <remarks>Blocks the calling thread for at most the timeout. The child never inherits the
-      /// server's stdin/stdout: its handles are a temp file and NUL.</remarks>
+      /// <remarks>
+      /// Blocks the calling thread for at most the timeout. The child never inherits the
+      /// server's stdin/stdout: its handles are a temp file and NUL.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: CloseHandle, CreateFile, CreateProcess, FillChar, GetExitCodeProcess, ParamStr, PChar, TerminateProcess, UniqueString, WaitForSingleObject</para>
+      /// <para>Returns: False; (ExitCode &lt;= 1) and AJson.TrimLeft.StartsWith('[')</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 69 lines (full implementation)</para>
+      /// <para>Reads: FStorePaths</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Mutates: AJson (out)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeDefinition"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function RunFullRulesLint(const AFile: string; out AJson: string): Boolean;
       /// <summary>Stores the client's live buffer text (full sync) so position
       /// lookups see unsaved edits. See TLiveDocuments for why.</summary>
@@ -837,7 +856,7 @@ type
       /// LocationFromSymbol(ASym, FStore).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2 (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2 (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Reads: FStore</para>
@@ -918,7 +937,7 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas) (+6 more)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas) (+8 more)</para>
       /// <para>Calls: Copy, StringReplace</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
@@ -1050,7 +1069,7 @@ type
       /// Every same-named declaration across StoresForFile(APath); when
       /// the file's ephemeral index leads and declares the name, only those.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.Definition (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.Definition (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.EphemeralLeads, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.StoresForFile</para>
       /// <para>Returns: Arr</para>
       /// <para>Reads: FStores</para>
@@ -1071,7 +1090,7 @@ type
       /// <returns>A NEW Location[] array, possibly empty; the caller owns it.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.References (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.References (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromRef/2, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.StoresForFile</para>
       /// <para>Returns: Arr</para>
       /// <para>Reads: FStores</para>
@@ -1087,9 +1106,24 @@ type
       /// <summary>The body `workspace/symbol` answers for a query.</summary>
       /// <param name="AQuery">The client's query; '' answers an empty array.</param>
       /// <returns>A NEW SymbolInformation[] array, possibly empty; the caller owns it.</returns>
-      /// <remarks>Per store, exact-name matches, else up to 50 fuzzy ones; every
+      /// <remarks>
+      /// Per store, exact-name matches, else up to 50 fuzzy ones; every
       /// store contributes. HandleWorkspaceSymbol and the merge proxy (A5) both
-      /// answer from it, so they cannot disagree.</remarks>
+      /// answer from it, so they cannot disagree.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2</para>
+      /// <para>Returns: Arr</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 57 lines (full implementation)</para>
+      /// <para>Reads: FStores</para>
+      /// <para>Catches: Exception (re-raise)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ComputeWorkspaceSymbols(const AQuery: string): TJSONArray;
       /// <summary>The `counts` array `draglint/callerCounts` answers for a file:
       /// one {line, count} per routine line, 0-based, counting distinct call
@@ -1118,7 +1152,7 @@ type
       /// <returns>The markdown; '' exactly when hover answers null.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLspServerContextAdapter.HoverMarkdown (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLspServerContextAdapter.HoverMarkdown (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt</para>
       /// <para>Returns: Comp.MdValue; ''</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHoverAt"/>
