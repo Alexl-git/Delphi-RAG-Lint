@@ -15,7 +15,8 @@ uses
 type
   TGridPopup9 = class
   public
-    procedure Build(pOwner: TComponent);
+    { a TdxBarManager parameter is context, not a link owner: Build is a builder, not a helper }
+    procedure Build(pOwner: TComponent; pMgr: TdxBarManager);
     procedure DoCopy(Sender: TObject);
     procedure DoLayout(Sender: TObject);
   end;
@@ -25,12 +26,16 @@ var
 
 implementation
 
-procedure TGridPopup9.Build(pOwner: TComponent);
+procedure TGridPopup9.Build(pOwner: TComponent; pMgr: TdxBarManager);
 var
   btn: TdxBarButton;
   sub: TdxBarSubItem;
   L  : TdxBarItemLink;
 begin
+  { the popup itself is created here, as uGridPopup.pas does: its links must
+    still land in an external root named popGridMenu9 }
+  popGridMenu9:= TdxBarPopupMenu.Create(pOwner);
+  popGridMenu9.BarManager:= pMgr;
   btn:= TdxBarButton.Create(pOwner);
   btn.Caption:= 'Copy Cell';
   btn.OnClick:= DoCopy;

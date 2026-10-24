@@ -752,8 +752,10 @@ const
     and the types that own ItemLinks (a foreign link owner, a helper's parameter). }
   DX_ITEM_TYPES: array[0..9] of string = ('TdxBarItem', 'TdxBarButton', 'TdxBarLargeButton', 'TdxBarSubItem',
     'TdxBarContainerItem', 'TdxBarListItem', 'TdxBarMRUListItem', 'TdxBarStatic', 'TdxBarLabel', 'TdxBarDBNavButton');
-  DX_OWNER_TYPES: array[0..6] of string = ('TdxBar', 'TdxBarPopupMenu', 'TdxRibbonPopupMenu', 'TdxBarApplicationMenu',
-    'TdxBarSubItem', 'TdxBarContainerItem', 'TdxBarManager');
+  { (TdxBarManager is not one: a manager parameter is context -- a constructor
+    Create(.., AManager: TdxBarManager) that builds a popup is a builder, not a helper) }
+  DX_OWNER_TYPES: array[0..5] of string = ('TdxBar', 'TdxBarPopupMenu', 'TdxRibbonPopupMenu', 'TdxBarApplicationMenu',
+    'TdxBarSubItem', 'TdxBarContainerItem');
   { ItemLinks calls that create the item AND its link }
   DX_LINK_CREATORS: array[0..3] of string = ('AddButton', 'AddSubItem', 'AddItem', 'AddLargeButton');
   { an owner only position or lookup names (decision 7): mgr.Bars[n], mgr.MainMenuBar, mgr.BarByCaption('X') }
@@ -1473,7 +1475,7 @@ begin
   Result.Node:= N;
 end;
 
-function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@877d -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@ca8a -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   E, Args : TTSNode;
   Name    : string;
@@ -1494,6 +1496,15 @@ begin
   if (E.NodeType = 'exprDot') and SameText(Name, 'Create') then
   begin
     if IsMenuType(Text(pFrame, E.ChildByField('lhs'))) then Exit(CreateNode(pNode, pFrame));
+    { dxBar: X := TdxBarPopupMenu.Create(O) -- a link owner, never a click wrapper;
+      the assignment names it after X, so its links land in an external root X }
+    if MatchText(LastSegment(Text(pFrame, E.ChildByField('lhs'))), DX_OWNER_TYPES) or EndsText('PopupMenu', Text(pFrame, E.ChildByField('lhs'))) then
+    begin
+      Result.Kind:= mvForeign;
+      Result.Text:= Text(pFrame, pNode);
+      Result.Path:= pFrame.F.Path;
+      Exit;
+    end;
     if not Args.IsNull and (Args.NamedChildCount > 0) then
     begin
       V:= EvalArg(Args.NamedChild(0), pFrame);
