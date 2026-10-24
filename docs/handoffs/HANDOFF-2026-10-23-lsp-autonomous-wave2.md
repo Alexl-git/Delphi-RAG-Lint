@@ -12,6 +12,7 @@ mode.json key `lspRun` only; never touch top-level `phase` (CONVERTER's slot, sh
 Wakeup cron "13,43 * * * *" is session-only: recreate it in a fresh session.
 
 ## Merged to local main this session
+C1+C3 (87c36989) + featuregen bcc99792 (ENGINE re-verifies lsp). 
 B1+B4 653fac01 (lane S at 1123befe). 
 D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 6633d237, S0 ff250754
 (dpr/dproj conflict resolved by keeping all units; compile-checked by lane S step 0 of B1).
@@ -20,7 +21,7 @@ D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 
 | lane | worktree | task | state |
 |---|---|---|---|
 | S | lsp-server | B2 (sonnet, BASE 1123befe) | B1+B4 merged. On B2 DONE: review (sonnet, verdict in reply) -> merge -> next B3 (session model) |
-| Q | lsp-quality | C3 + C1 fix in combined review | C1 32c2c0e5 + C3 b11a0c48 + C1 fix 87c36989. On APPROVED: ask ENGINE+CONVERTER ok -> merge 87c36989 -> featuregen build --all (lsp.json --full-rules) -> commit regen -> 'done' to both. Then lane Q -> C2 (session model; CLI.pas part gated on e3d/cli7 merged = it IS merged) |
+| Q | lsp-quality | C2 (implementer, session model) | step 0 merge main + build; CLI.pas ApplyLineMarkers part ON (cli7 merged). On DONE: review (session model, verdict in reply) -> merge |
 | P | lsp-proxy | A1 fix round 2 | same A1 fix agent: Server.pas:907 doc regen + one dl:ok circular-uses on Proxy.pas:1. Then merge A1 to main (no new flag) -> lane M A3, lane P C4 |
 | M | lsp-merge | A3 | WAITING for A1 merged. Brief extracted |
 
