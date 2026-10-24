@@ -56,7 +56,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-unit-harvest.ps1` 21 -- Unit Rules harvest (`-ProofNoDestination`)
   * `drive-file-menu.ps1` 19 -- New / Save As / Exit, unsaved guard
   * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
-  * `drive-engine-wait.ps1` 9 -- progress window, Cancel, retry, cached reload
+  * `drive-engine-wait.ps1` 16 -- progress window, Cancel, retry, cached reload; N7 Save under the progress window (menu path + real Ctrl+S) refused, book untouched (the key check is a guard only: it cannot go RED on a pre-N1 exe)
   * `drive-book-depth.ps1` 21 -- `#depth` combo
   * `drive-convert-tab.ps1` 32 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported; N7/N11 (`n7.*`): POSTED WM_COMMAND (Add..., Convert) and BM_CLICK (Delete) under the progress window are refused and reported, none runs (RED on a pre-InputGate exe: Open dialog over the window + a real Convert)
   * `drive-convert-batch.ps1` 22 -- B4 batch mode: 2 units in ONE convert-apply, batch note, `.BCK1` x4, then a `CONVRULES_BATCH=off` relaunch runs per-unit (`-ProofNoBatch` = RED). No retry since N11: every driver's `WaitIdle` also asks the editor (registered message `ConvRulesEditor.Busy`: 2 busy / 1 idle / no answer = blocked = busy), and `ConvRules.InputGate` refuses + reports a click that still lands in busy work
