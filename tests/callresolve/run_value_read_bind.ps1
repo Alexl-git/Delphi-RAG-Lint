@@ -102,16 +102,26 @@ foreach ($p in $pos) {
 }
 
 # check 2 -- declines (or another stream's binding, never a value)
-foreach ($n in @(@('NEG-AMBIGUOUS', 'GClash'), @('NEG-NOT-FOUND', 'GMissing'), @('NEG-WITH', 'L'), @('NEG-RESULT', 'Result'),
-             @('NEG-LOCAL-CONST', 'LIMIT'))) {
+foreach ($n in @(@('NEG-AMBIGUOUS', 'GClash'), @('NEG-NOT-FOUND', 'GMissing'), @('NEG-WITH', 'L'), @('NEG-RESULT', 'Result'))) {
   $r = @(ReadAt $n[0] $n[1])
   $ok = ($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)
   Check "$($n[0]) $($n[1]) stays unbound" $ok ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
 }
+# check 2a (e3d/rc, 2026-10-23) -- a routine-local const. Before extractor
+# 1.23.0 (N-04) it had no symbol, so the only correct answer was a decline;
+# since N-04 it IS a symbol and binding it is correct. Either is accepted --
+# binding ANY other declaration (the routine's parameter, a unit value) fails.
+foreach ($n in @(@('NEG-LOCAL-CONST', 'LIMIT', 'uValUse.TVal.Run.LIMIT'),
+                 @('NEG-INNER-CONST', 'AErr', 'uValUse.TVal.Run.InnerConst.AErr'))) {
+  $r = @(ReadAt $n[0] $n[1])
+  $ok = ($r.Count -eq 1) -and (($null -eq $r[0].symbol_id) -or ($r[0].tq -eq $n[2]))
+  Check "$($n[0]) $($n[1]) stays unbound or binds its own local const $($n[2])" $ok `
+    ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
+}
 # check 2b (review 2026-10-23) -- the unlisted-declaration check runs for the
 # levels INSIDE the one that declares the name: a nested routine's local const
 # hides the outer routine's parameter; a mid-line `begin const X = ..` counts.
-foreach ($n in @(@('NEG-INNER-CONST', 'AErr'), @('NEG-MIDLINE-CONST', 'CHECK_OK'))) {
+foreach ($n in @(,@('NEG-MIDLINE-CONST', 'CHECK_OK'))) {
   $r = @(ReadAt $n[0] $n[1])
   Check "$($n[0]) $($n[1]) stays unbound (unlisted)" (($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)) `
     ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
