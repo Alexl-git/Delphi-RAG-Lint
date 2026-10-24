@@ -20647,6 +20647,13 @@ begin
         Writeln('ERROR: cannot rename -- ' + Reason);
         Exit(2);
       end;
+      { rename spec 2.2: event bindings are rewritten in TEXT .dfm only }
+      Reason:= TRenameRefactoring.BinaryDfmReason(KStore, QN);
+      if Reason <> '' then
+      begin
+        Writeln('ERROR: cannot rename -- ' + Reason);
+        Exit(2);
+      end;
       Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
@@ -20702,6 +20709,12 @@ begin
   if not RoOk then Exit(2);
   { stopgap until 1.22 emits include refs: refuse instead of a partial rename }
   var IncReason: string:= TRenameRefactoring.IncludeUseReason(Store, AArgs.QName);
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
+  IncReason:= TRenameRefactoring.BinaryDfmReason(Store, AArgs.QName);
   if IncReason <> '' then
   begin
     Writeln('ERROR: cannot rename -- ' + IncReason);

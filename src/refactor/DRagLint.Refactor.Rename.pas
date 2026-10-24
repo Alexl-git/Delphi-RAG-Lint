@@ -144,6 +144,24 @@ type
       /// include refuses the rename even if it binds to a different symbol. An .inc
       /// that is listed but missing on disk is ignored.</remarks>
       class function IncludeUseReason(const AStore: ISymbolStore; const AQName: string): string;
+      /// <summary>Non-empty human reason when the unit declaring AQName has a
+      /// BINARY form file (sibling .dfm) that contains the symbol's short name as
+      /// an identifier; '' otherwise. A rename must then be refused: Build rewrites
+      /// event bindings (`OnClick = Button1Click`) only in TEXT .dfm files, which
+      /// the index parses; a binary .dfm is opaque to it, so the form would keep
+      /// the old handler name and fail to load.</summary>
+      /// <param name="AStore">Open index; resolves AQName to its declaring file.
+      /// Must not be nil.</param>
+      /// <param name="AQName">Qualified name of the symbol to rename; only its last
+      /// dot segment is matched (case-insensitive, whole identifier).</param>
+      /// <returns>'' when the symbol is unknown, its unit has no .dfm, the .dfm is
+      /// text, or the binary .dfm does not contain the name; else a message naming
+      /// the .dfm and saying it is binary.</returns>
+      /// <remarks>A byte scan, deliberately conservative: any same-named
+      /// identifier in the binary stream refuses (a component or property of that
+      /// name, too). Binary = the file starts with the resource header byte $FF or
+      /// with the 'TPF0' signature.</remarks>
+      class function BinaryDfmReason(const AStore: ISymbolStore; const AQName: string): string;
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
@@ -205,6 +223,66 @@ begin
   Result:= B.Col - A.Col;
 end;
 
+function IsIdentChar(C: Char): Boolean;
+begin
+  Result:= CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
+// 1-based column of the first whole-identifier, case-insensitive occurrence of
+// AName in ALine at or after AFrom; 0 when there is none.
+function FindIdentFrom(const ALine, AName: string; AFrom: Integer): Integer;
+var
+  P: Integer;
+begin
+  Result:= 0;
+  if AFrom < 1 then AFrom:= 1;
+  for P:= AFrom to Length(ALine) - Length(AName) + 1 do
+    if SameText(Copy(ALine, P, Length(AName)), AName)
+       and ((P = 1) or not IsIdentChar(ALine[P - 1]))
+       and ((P + Length(AName) > Length(ALine)) or not IsIdentChar(ALine[P + Length(AName)])) then
+      Exit(P);
+end;
+
+// Moves each edit's Col onto the identifier it replaces. Index rows can carry a
+// column that is NOT the name token: a routine/property declaration's symbol
+// starts at its `procedure`/`function`/`property` keyword. Apply used to
+// recover from that by scanning forward, but the edit set itself (rename --json,
+// MCP rename_symbol, LSP) reported the keyword column. Scan forward from the
+// stored column first (the name follows the keyword), then from column 1.
+// An edit whose line holds no such identifier keeps its column.
+procedure SnapEditsToToken(AList: TList<TRenameEdit>);
+var
+  Cache: TObjectDictionary<string, TStringList>;
+  Lines: TStringList;
+  Edit : TRenameEdit;
+  I    : Integer;
+  Col  : Integer;
+begin
+  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  try
+    for I:= 0 to AList.Count - 1 do
+    begin
+      Edit:= AList[I];
+      if not Cache.TryGetValue(UpperCase(Edit.FilePath), Lines) then
+      begin
+        Lines:= TStringList.Create;
+        if TFile.Exists(Edit.FilePath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Edit.FilePath));
+        Cache.Add(UpperCase(Edit.FilePath), Lines);
+      end;
+      if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
+      Col:= FindIdentFrom(Lines[Edit.Line - 1], Edit.OldName, Edit.Col);
+      if Col = 0 then Col:= FindIdentFrom(Lines[Edit.Line - 1], Edit.OldName, 1);
+      if (Col > 0) and (Col <> Edit.Col) then
+      begin
+        Edit.Col:= Col;
+        AList[I]:= Edit;
+      end;
+    end;
+  finally
+    Cache.Free;
+  end;
+end;
+
 // ---------------------------------------------------------------------------
 // TRenameRefactoring
 // ---------------------------------------------------------------------------
@@ -263,22 +341,29 @@ begin
           if Sym.ImplStartLine <= ILines.Count then
           begin
             var LnText := ILines[Sym.ImplStartLine - 1];
-            // find ShortName preceded by '.' (the dotted Type.Name member shape)
-            var ScanAt := 1;
-            while ScanAt + Length(ShortName) - 1 <= Length(LnText) do
+            // The name as a whole identifier: preceded by '.' for the dotted
+            // Type.Name member shape, else (a global routine's own impl header,
+            // `function Compute(...)`) the first occurrence on the line.
+            var HitCol  := 0;
+            var ScanAt  := FindIdentFrom(LnText, ShortName, 1);
+            while ScanAt > 0 do
             begin
-              if SameText(Copy(LnText, ScanAt, Length(ShortName)), ShortName)
-                 and (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
+              if HitCol = 0 then HitCol:= ScanAt;
+              if (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
               begin
-                Edit.FilePath := ImplPath;
-                Edit.Line     := Sym.ImplStartLine;
-                Edit.Col      := ScanAt;
-                Edit.OldName  := ShortName;
-                Edit.NewName  := ANewName;
-                List.Add(Edit);
+                HitCol:= ScanAt;
                 Break;
               end;
-              Inc(ScanAt);
+              ScanAt:= FindIdentFrom(LnText, ShortName, ScanAt + 1);
+            end;
+            if HitCol > 0 then
+            begin
+              Edit.FilePath := ImplPath;
+              Edit.Line     := Sym.ImplStartLine;
+              Edit.Col      := HitCol;
+              Edit.OldName  := ShortName;
+              Edit.NewName  := ANewName;
+              List.Add(Edit);
             end;
           end;
         finally
@@ -286,6 +371,10 @@ begin
         end;
       end;
     end;
+
+    // Every edit's Col onto its name token BEFORE the dedup below, so a keyword-
+    // column decl row and a name-column row for the same token collapse.
+    SnapEditsToToken(List);
 
     // Dedup by exact (FilePath, Line, Col). Multiple sources above can legitimately
     // point at the SAME source position: e.g. a bare paren-less method call like
@@ -829,6 +918,32 @@ begin
   finally
     Hits.Free;
   end;
+end;
+
+class function TRenameRefactoring.BinaryDfmReason(const AStore: ISymbolStore;
+  const AQName: string): string;
+const
+  ResHeaderByte = $FF;
+var
+  Syms     : TArray<TSymbol>;
+  ShortName: string;
+  DfmPath  : string;
+  Bytes    : TBytes;
+begin
+  Result:= '';
+  ShortName:= LastDotSegment(AQName);
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if (ShortName = '') or (Length(Syms) = 0) then Exit;
+  DfmPath:= ChangeFileExt(AStore.GetFilePath(Syms[0].FileId), '.dfm');
+  if not FileExists(DfmPath) then Exit;
+  Bytes:= TFile.ReadAllBytes(DfmPath);
+  if Length(Bytes) = 0 then Exit;
+  if (Bytes[0] <> ResHeaderByte) and not TEncoding.ANSI.GetString(Bytes).StartsWith('TPF0') then Exit;
+  if FindIdentFrom(TEncoding.ANSI.GetString(Bytes), ShortName, 1) = 0 then Exit;
+  Result:= Format('%s is a binary .dfm that contains "%s" -- rename only rewrites ' +
+    'event bindings in text .dfm files, so the form would keep the old name. ' +
+    'Convert it to text (IDE: right-click the form > Text DFM, or convert.exe -t) and ' +
+    're-index first.', [DfmPath, ShortName]);
 end;
 
 end.
