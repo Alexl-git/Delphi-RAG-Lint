@@ -27,16 +27,13 @@ uses
 /// Not thread-safe; call from a single thread. Disk scan uses early
 /// exit on first source file found -- no full enumeration of large roots.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDrift (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.Drift.DirHasSource, DRagLint.Index.Drift.NormPath, DRagLint.Index.Drift.NormRoot, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
-/// <para>Returns: nil; Missing</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.TWalkFilter.Create, DRagLint.Index.Drift.AnalyzeLibraryDrift/4</para>
+/// <para>Returns: AnalyzeLibraryDrift(ADbPath, ACurrentRoots, TWalkFilter.Create, Excluded)</para>
 /// <para>Pure</para>
-/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
-/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-/// <seealso cref="DRagLint.Index.Drift.DirHasSource"/>
-/// <seealso cref="DRagLint.Index.Drift.NormPath"/>
-/// <seealso cref="DRagLint.Index.Drift.NormRoot"/>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Core.Interfaces.TWalkFilter.Create"/>
+/// <seealso cref="DRagLint.Index.Drift.AnalyzeLibraryDrift"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>; overload;

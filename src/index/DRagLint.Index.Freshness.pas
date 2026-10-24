@@ -83,8 +83,8 @@ type
   /// <summary>What one freshness sweep found.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Index.Freshness.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Freshness</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.TAskRun.CheckFreshness (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.Freshness (DRagLint.Charts.Producer.Delphi.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Producer.Delphi, DRagLint.CLI, DRagLint.Index.Freshness</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFreshnessReport = record
@@ -115,7 +115,7 @@ type
 /// counts as Missing, on the principle that a freshness check must not be able
 /// to break the command it is advising.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.Charts.Producer.Delphi.Freshness (DRagLint.Charts.Producer.Delphi.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Index.Freshness.StampState</para>
 /// <para>Returns: Default(TFreshnessReport)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
