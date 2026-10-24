@@ -188,6 +188,7 @@ begin
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
   Writeln('                               --merge-diagnostics: append drag-lint''s lint findings to DelphiLSP''s publishDiagnostics (one notification, source-tagged); OFF by default.');
   Writeln('                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP''s bytes untouched (default 300).');
+  Writeln('                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.');
   Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
   Writeln('                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured');

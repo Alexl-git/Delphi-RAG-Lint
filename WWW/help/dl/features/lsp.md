@@ -32,6 +32,7 @@ Full flag list: [lsp in the CLI reference](../cli.md#lsp).
 | `--trace` | `<file>` |  |  |
 | `--merge-diagnostics` |  |  |  |
 | `--merge-budget-ms` | `<n>` |  |  |
+| `--full-rules` |  |  |  |
 
 **Needs:** index
 
@@ -70,8 +71,32 @@ drag-lint add to those answers:
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails
   open and never drops a message.
 
+#### Full rule set on save: `--full-rules` (opt-in)
+
+```text
+drag-lint lsp --db <db> --full-rules
+```
+
+By default the publish on `didOpen`/`didSave` runs a subset of the built-in
+checks. With `--full-rules` the server runs `drag-lint lint "<file>" --json`
+**out-of-process** (the same path the IDE live runner uses; 8000 ms budget),
+publishes that complete finding set in place of the lint subset, and keeps the
+store's compiler findings. **OFF by default**: it costs one `lint` run per save.
+The measured cost is written to stderr on every save:
+`drag-lint lsp: full-rules <file> <ms> ms <n> findings`. On a timeout, a failed
+run or invalid JSON the server falls back to the subset and says so on stderr.
+Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
+second process start) is deliberately NOT built; it can follow if the measured
+cost justifies it.
+
 Status: the flags are accepted now; the diagnostics handler itself lands
 with merge task A1. Until then every message is relayed unchanged.
+
+### Document outline (textDocument/documentSymbol)
+
+`lsp` answers `textDocument/documentSymbol` from the index as a hierarchical `DocumentSymbol[]` (the editor's outline, breadcrumbs and *Go to Symbol in File*): the unit's members at the top level, members nested under their type, locals and parameters left out, 0-based ranges, `selectionRange` on the name token. A file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.DocumentSymbol`); guard: `tests\autotest\run_lsp_document_symbol_guard.ps1`.
+
+`lsp` answers `textDocument/codeLens` with one lens per routine declaration, titled from the index caller counts (`3 callers`, `1 caller`, `0 callers`), range zero-width at (line, 0), command `draglint.showCallers` with arguments `[uri, line]` (implemented by the editor extension). Capability `codeLensProvider: {resolveProvider: false}`; a file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.CodeLens`); guard: `tests\autotest\run_lsp_code_lens_guard.ps1`.
 
 ### Reaching it in the IDE
 

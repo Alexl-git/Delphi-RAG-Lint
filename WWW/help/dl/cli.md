@@ -1056,6 +1056,7 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--trace` | `<file>` |  |  |
 | `--merge-diagnostics` |  |  |  |
 | `--merge-budget-ms` | `<n>` |  |  |
+| `--full-rules` |  |  |  |
 
 Described in [lsp](features/lsp.md).
 
