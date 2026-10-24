@@ -454,6 +454,39 @@ type
     /// </remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string;
       const AHashOverride: string = ''): string; static;
+    /// <summary>True when the legacy `// drag-lint:ignore [&lt;rule-id&gt; ...]`
+    /// directive on the line covers ARuleId: bare, it covers every rule; with a
+    /// list, only the rules named (space, comma or tab separated).</summary>
+    /// <param name="ALineText">One source line, without its line terminator.</param>
+    /// <param name="ARuleId">The finding's rule id; compared case-insensitively.</param>
+    /// <returns>False when the line carries no directive after a `//`.</returns>
+    /// <remarks>Deliberately the original NAIVE scan (first `//`, then the tag
+    /// anywhere after it): tightening it would change what existing projects
+    /// suppress. Pure.</remarks>
+    class function IgnoreDirectiveCovers(const ALineText, ARuleId: string): Boolean; static;
+    /// <summary>The suppression predicate of the CLI's ApplyLineMarkers, as a
+    /// pure function: True when a finding of ARuleId spanning
+    /// AStartLine..AEndLine is dropped by a marker in its file.</summary>
+    /// <param name="ALines">The finding's file, one entry per line (the live
+    /// buffer for the LSP, the disk file for the CLI).</param>
+    /// <param name="ARuleId">The finding's rule id; compared case-insensitively.</param>
+    /// <param name="AStartLine">1-based anchor line of the finding.</param>
+    /// <param name="AEndLine">1-based last line; a value below AStartLine or past
+    /// the file is treated as AStartLine.</param>
+    /// <param name="AExpectedHash">The hash a marker must carry to verify --
+    /// DRagLint.Lint.RuleCatalog.MarkerExpectedHash (the window hash, with the
+    /// metric folded in for a routine-metric rule). Passed in, not computed here,
+    /// so this unit stays pure and mirror-safe.</param>
+    /// <returns>True when (1) IgnoreDirectiveCovers holds on AStartLine, or (2)
+    /// a `dl:ok` marker for ARuleId on any line of the span carries no hash or
+    /// carries AExpectedHash. Only the FIRST marker for the rule on each line is
+    /// consulted, exactly as ApplyLineMarkers does. A placeholder, malformed or
+    /// stale hash suppresses nothing. False when AStartLine is outside ALines.</returns>
+    /// <remarks>Excludes the duplicate-code PAIR rule: the partner-site check (a marker on RelatedLine) needs the finding, so callers apply it themselves after this. The REPORTER side of ApplyLineMarkers -- the unused, stale,
+    /// placeholder and reason hints -- stays CLI-only; this answers only "is
+    /// this finding suppressed". Pure; thread-safe.</remarks>
+    class function Suppresses(const ALines: TArray<string>; const ARuleId: string;
+      AStartLine, AEndLine: Integer; const AExpectedHash: string): Boolean; static;
   end;
 
 const
@@ -1234,6 +1267,50 @@ begin
     Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Kept[0].Reason);
 
   Result:= TrimRight(Prefix + Body);
+end;
+
+{ ---------------------------------------------------------------------------
+  Suppression -- the predicate ApplyLineMarkers (CLI) and BuildDiagnostics
+  (LSP) share, so the gutter and `lint` cannot disagree about a marked line.
+  --------------------------------------------------------------------------- }
+
+class function TReviewMarkers.IgnoreDirectiveCovers(const ALineText, ARuleId: string): Boolean;
+const
+  IGNORE_MARK = 'drag-lint:ignore';
+var
+  CPos, MPos: Integer;
+  Rest      : string ;
+  Tok       : string ;
+begin
+  CPos:= Pos('//', ALineText);
+  MPos:= Pos(IGNORE_MARK, LowerCase(ALineText));
+  if (CPos = 0) or (MPos <= CPos) then Exit(False);
+  Rest:= Trim(Copy(ALineText, MPos + Length(IGNORE_MARK), MaxInt));
+  if Rest = '' then Exit(True);
+  for Tok in Rest.Split([' ', ',', #9]) do
+    if SameText(Trim(Tok), ARuleId) then Exit(True);
+  Result:= False;
+end;
+
+class function TReviewMarkers.Suppresses(const ALines: TArray<string>; const ARuleId: string;
+  AStartLine, AEndLine: Integer; const AExpectedHash: string): Boolean;
+var
+  MarkHi: Integer      ;
+  ML    : Integer      ;
+  M     : TReviewMarker;
+begin
+  if (AStartLine < 1) or (AStartLine > Length(ALines)) then Exit(False);
+  if IgnoreDirectiveCovers(ALines[AStartLine - 1], ARuleId) then Exit(True);
+  MarkHi:= AStartLine;
+  if (AEndLine > MarkHi) and (AEndLine <= Length(ALines)) then MarkHi:= AEndLine;
+  for ML:= AStartLine to MarkHi do
+    for M in Parse(ALines[ML - 1]) do
+    begin
+      if not SameText(M.RuleId, ARuleId) then Continue;
+      if (M.Hash = '') or SameText(M.Hash, AExpectedHash) then Exit(True);
+      Break; { first marker for the rule on this line decides it, as in ApplyLineMarkers }
+    end;
+  Result:= False;
 end;
 
 end.
