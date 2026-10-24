@@ -99,7 +99,7 @@ $home9 = RootOf 'TfrmMain9.barHome'
 $hk = (Kids $home9 | ForEach-Object { $_.kind }) -join ','
 Check 'barHome children: header (TdxBarStatic), item' ($hk -ceq 'header,item') $hk
 $mm = RootOf 'TfrmMain9.barMainMenu'
-$setup = Kids $mm | Where-Object { $_.caption -ceq '&Setup' } | Select-Object -First 1
+$setup = Kids $mm | Where-Object { $_.caption -ceq 'Setup' } | Select-Object -First 1
 $sk = (Kids $setup | ForEach-Object { $_.kind }) -join ','
 Check 'Setup submenu: item,separator,item (BeginGroup)' ($sk -ceq 'item,separator,item') $sk
 $presets = Kids $mm | Select-Object -First 1

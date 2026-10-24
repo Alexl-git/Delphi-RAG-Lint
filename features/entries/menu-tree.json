@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "menu-tree",
-      "usage": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; exit 0 ran, 2 usage/setup, 3 stale index)",
+      "usage": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; --with-dfm adds the .dfm menus with code links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)",
       "flags": [
         {
           "name": "--project",
@@ -27,6 +27,9 @@
           "arg": "<QName>"
         },
         {
+          "name": "--with-dfm"
+        },
+        {
           "name": "--format",
           "arg": "text|json|paths"
         },
@@ -36,12 +39,12 @@
         }
       ],
       "helpOrder": 96,
-      "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)"]
+      "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)"]
     },
     {
       "type": "cli",
       "verb": "menu-drift",
-      "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
+      "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
       "flags": [
         {
           "name": "--project",
@@ -56,6 +59,9 @@
           "arg": "<features dir>"
         },
         {
+          "name": "--with-dfm"
+        },
+        {
           "name": "--format",
           "arg": "text|json"
         },
@@ -65,7 +71,7 @@
         }
       ],
       "helpOrder": 97,
-      "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry's ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
+      "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry's ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
     }
   ],
   "audience": "both",

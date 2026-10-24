@@ -42,6 +42,8 @@ type
     FDisabled  : Boolean;
     FHasClick  : Boolean;
     FParented  : Boolean;
+    FForm      : string;
+    FLinkIndex : Integer;
     procedure AttachTo(pParent: TMenuNode);
   public
     /// <summary>The node's kind.</summary>
@@ -65,6 +67,12 @@ type
     property HasClick: Boolean read FHasClick write FHasClick;
     /// <summary>Walker state: the node was placed under a parent or made a root.</summary>
     property Parented: Boolean read FParented write FParented;
+    /// <summary>Form class of a .dfm-declared root (menu-tree --with-dfm); '' otherwise.</summary>
+    property Form: string read FForm write FForm;
+    /// <summary>Walker state: the link index a code Insert(i, ..) / ItemLinks.Insert(i)
+    /// gave this node under an external root; -1 = appended. The --with-dfm graft
+    /// inserts the node at this index among the .dfm links.</summary>
+    property LinkIndex: Integer read FLinkIndex write FLinkIndex;
     /// <summary>Creates a node.</summary>
     /// <param name="pKind">Initial kind; the walker settles it in TMenuTree.Finish.</param>
     /// <param name="pCaption">Caption as written.</param>
@@ -100,6 +108,10 @@ type
     Confidence: TMenuConfidence;
     /// <summary>True when the leaf sits under an external root.</summary>
     External  : Boolean;
+    /// <summary>Form class of the .dfm root the leaf sits under; '' for code roots.</summary>
+    Form      : string;
+    /// <summary>Ident (Form.component) of the .dfm root the leaf sits under; '' otherwise.</summary>
+    RootIdent : string;
   end;
 
   /// <summary>The code-built menus of one run: roots, external roots and notes.
@@ -109,7 +121,7 @@ type
     FRoots   : TObjectList<TMenuNode>;
     FExternal: TObjectList<TMenuNode>;
     FNotes   : TList<string>;
-    procedure CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pAcc: TList<TMenuLeaf>);
+    procedure CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pRoot: TMenuNode; pAcc: TList<TMenuLeaf>);
   public
     constructor Create;
     destructor Destroy; override;
@@ -134,7 +146,8 @@ type
     /// then external roots.</summary>
     function Leaves: TArray<TMenuLeaf>;
     /// <summary>paths format: one leaf per line,
-    /// path TAB handler TAB file:line TAB confidence; external roots follow,
+    /// path TAB handler TAB file:line TAB confidence; a .dfm root (--with-dfm)
+    /// follows a '## dfm &lt;Form.component&gt;' line; external roots follow,
     /// each after a '## external &lt;ident&gt;' line.</summary>
     function ToPaths: string;
     /// <summary>Indented tree: [kind] caption  -> handler  (file:line, confidence).</summary>
@@ -267,6 +280,7 @@ begin
   Caption   := pCaption;
   Source    := pSource;
   Confidence:= mcCertain;
+  FLinkIndex:= -1;
 end;
 
 destructor TMenuNode.Destroy;
@@ -389,7 +403,7 @@ begin
   Result:= FNotes;
 end;
 
-procedure TMenuTree.CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pAcc: TList<TMenuLeaf>);
+procedure TMenuTree.CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pRoot: TMenuNode; pAcc: TList<TMenuLeaf>);
 var
   C   : TMenuNode;
   Path: string;
@@ -409,9 +423,11 @@ begin
       L.Kind      := C.Kind;
       L.Confidence:= C.Confidence;
       L.External  := pExternal;
+      L.Form      := pRoot.Form;
+      L.RootIdent := if pExternal then '' else pRoot.Ident;
       pAcc.Add(L);
     end;
-    if C.Children.Count > 0 then CollectLeaves(C, Path, pExternal, pAcc);
+    if C.Children.Count > 0 then CollectLeaves(C, Path, pExternal, pRoot, pAcc);
   end;
 end;
 
@@ -422,8 +438,8 @@ var
 begin
   Acc:= TList<TMenuLeaf>.Create;
   try
-    for N in FRoots do CollectLeaves(N, N.DisplayCaption, False, Acc);
-    for N in FExternal do CollectLeaves(N, N.Ident, True, Acc);
+    for N in FRoots do CollectLeaves(N, N.DisplayCaption, False, N, Acc);
+    for N in FExternal do CollectLeaves(N, N.Ident, True, N, Acc);
     Result:= Acc.ToArray;
   finally
     Acc.Free;
@@ -435,13 +451,17 @@ var
   SB     : TStringBuilder;
   L      : TMenuLeaf;
   LastExt: string;
+  LastDfm: string;
   Ext    : string;
 begin
   SB:= TStringBuilder.Create;
   try
     LastExt:= '';
+    LastDfm:= '';
     for L in Leaves do
     begin
+      if (L.RootIdent <> '') and (L.RootIdent <> LastDfm) then SB.Append('## dfm ').Append(L.RootIdent).Append(sLineBreak);
+      LastDfm:= L.RootIdent;
       if L.External then
       begin
         Ext:= L.Path.Split([PATH_SEP])[0];
@@ -503,6 +523,13 @@ begin
   begin
     Result.AddPair('caption', pNode.Caption);
     Result.AddPair('captionKey', pNode.CaptionKey);
+    { a .dfm root (--with-dfm): Form.component, the .dfm path, the form class }
+    if pNode.Ident <> '' then
+    begin
+      Result.AddPair('ident', pNode.Ident);
+      Result.AddPair('identPath', pNode.IdentPath);
+      Result.AddPair('form', pNode.Form);
+    end;
   end;
   if pNode.Handler <> '' then Result.AddPair('handler', pNode.Handler);
   Result.AddPair('source', pNode.Source);

@@ -9,7 +9,7 @@ IDE is needed.
 ## CLI
 
 ```
-drag-lint menu-tree --project <X.dproj> --db <db> [--root <QName>] [--format text|json|paths] [--output <f>]
+drag-lint menu-tree --project <X.dproj> --db <db> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]
 ```
 
 * `text` (default): an indented tree, `[kind] caption  -> handler  (file:line, confidence)`,
@@ -22,6 +22,43 @@ drag-lint menu-tree --project <X.dproj> --db <db> [--root <QName>] [--format tex
   identifier -- for a DFM item, the form's own `.pas`) instead of a caption.
   Two forms that each own an item called `mnuTools` give two external roots.
 * `--root <QName>` walks one builder routine (and what it reaches) only.
+* `--with-dfm` adds the `.dfm` menus too (see below).
+
+## `.dfm` menus: `--with-dfm`
+
+Every text `.dfm` the index lists under the project's folder is read at query
+time (no extractor change) and each menu surface it declares becomes a root:
+
+| Surface | Root caption (= the forms-csv location prefix) |
+|---|---|
+| `TdxBar` with `IsMainMenu = True` | `Main menu` |
+| `TdxBar` shown in a ribbon tab (`Groups.ToolbarName`) | `Ribbon: <Tab> > <Bar>` (the bar caption is dropped when it repeats the tab's); one root per tab |
+| any other `TdxBar` | `Toolbar '<Bar>'` |
+| `TdxBarPopupMenu` / `TdxRibbonPopupMenu` / VCL `TPopupMenu` | `Right-click menu <name>` |
+| `TdxRibbonBackstageView` `Buttons`, `TdxBarApplicationMenu` | `File menu` |
+| VCL `TMainMenu` | `Main menu` |
+
+Under it: the `ItemLinks` in order (an item linked N times is N nodes),
+`TdxBarSubItem` / `TdxBarContainerItem` = submenu (followed 8 levels deep,
+a sub-item linked under itself stops), `TdxBarStatic` / `TdxBarLabel` =
+header, any other bar item = item whose handler is its `OnClick` else its
+`Action`'s `OnExecute`; `BeginGroup = True` puts a separator before the link.
+Captions lose their accelerators, as in forms-csv. A root carries `ident`
+(`<FormClass>.<component>`), `identPath` (the `.dfm`) and `form`; in the
+`paths` format it follows a `## dfm <FormClass>.<component>` line.
+
+Code-added links are then GRAFTED: an external root the walker made in a
+form's `.pas` whose identifier is one of that form's components (bar, popup,
+sub-item, `TMenuItem`), `<mgr>.Bars[n]` (the n-th `TdxBar` in `.dfm` order),
+`<mgr>.MainMenuBar` or `<mgr>.BarByCaption('X')` / `BarByOldName('X')` moves
+under that node (into every place it is shown) and disappears from
+`external`; a code `Insert(i)` keeps its index. Found by position or lookup =
+`derived`. External roots in units with no `.dfm` stay external.
+
+Notes: `unlinked bar item <Form>.<name>` (declared, linked nowhere), `link to
+unknown component`, `binary .dfm not read`, `inherited form not read`
+(ancestor merge is deferred). A `.dfm` that changed since it was indexed is
+refused with exit 3, like a `.pas`.
 
 Exit codes: 0 it ran; 2 usage or setup (no `--db`, project not in the db,
 unknown `--root`); 3 stale index -- a file the walk must read changed since it

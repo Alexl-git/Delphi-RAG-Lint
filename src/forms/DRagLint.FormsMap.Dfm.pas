@@ -165,6 +165,9 @@ type
     /// <summary>The form root (object Name: TClass); nil for an empty tree.</summary>
     /// <returns>The root node, owned by the tree.</returns>
     function Root: TFormDfmNode;
+    /// <summary>Every node (objects and collection items, code-added ones too)
+    /// in .dfm order; owned by the tree -- never free or add to it.</summary>
+    property Nodes: TObjectList<TFormDfmNode> read FNodes;
     /// <summary>Every .dfm-declared menu surface in .dfm order: TdxBar (one
     /// entry per prefix -- a bar in two ribbon tabs gives two), bar popups,
     /// backstage views / application menus, VCL TMainMenu and TPopupMenu.</summary>
