@@ -25,14 +25,14 @@ An index IS required. The project's DB lives at
 `drag-lint resolve-dbs --project <X.dproj>` if unsure. The form `.dfm` files
 are also read directly (text `.dfm` only) to work out menu and tab paths.
 
-## Columns (algorithm v7)
+## Columns (algorithm v8)
 
 | Column | Meaning |
 |---|---|
 | `#` | Row number. |
 | `Form` | The form's design-time name, e.g. `frmAssignGroups`. |
 | `Unit` | The unit that holds it. |
-| `How to open` | Full path from the main form. Each hop after the first says which form it happens on: `Main menu: Setup > Groups > Assign Groups -> in frmGroups: Edit Group`. Locations read `Main menu: ...`, `Ribbon: <tab> > <group> > <item>`, `Toolbar '<bar>' > ...`, `File menu > ...` (ribbon backstage), `Right-click menu <name>: ...`, or `Tab '<sheet>' > <control>`. Menu accelerators (`&`) are stripped. |
+| `How to open` | Full path from the main form. Each hop after the first says which form it happens on: `Main menu: Setup > Groups > Assign Groups -> in frmGroups: Edit Group`. Locations read `Main menu: ...`, `Ribbon: <tab> > <group> > <item>`, `Toolbar '<bar>' > ...`, `File menu > ...` (ribbon backstage), `Right-click menu <name>: ...`, or `Tab '<sheet>' > <control>`. Menu accelerators (`&`) are stripped. Since v8 a menu item added IN CODE under a `.dfm` menu item (`X := TMenuItem.Create(Self); X.Caption := ..; mnuTools.Add(X)` in `FormCreate`, or through a helper such as `AddMenuItem(mnuTools, 'Export', Handler)`) is part of the menu path, read by the [Menu Tree](Menu-Tree.md) walker. |
 | `Click` | Caption of the control on the last hop; `[name]` when it has no caption; a gesture in brackets when it is not a plain click, e.g. `[grid] (double-click)`. |
 | `Control type` | Its class, e.g. `TMenuItem`, `TdxBarLargeButton`, `TButton`. |
 | `Handler` | The event handler that control runs, `TfrmX.btnFooClick`. |
@@ -67,7 +67,7 @@ file or key is normal; a malformed file is ignored with one line on stderr, and 
 The engine carries no project's form names of its own.
 
 The last line is a provenance footer in the `Notes` column:
-`# forms-csv algorithm v7 | db: <path> | schema v<n> | <timestamp>`. The IDE
+`# forms-csv algorithm v8 | db: <path> | schema v<n> | <timestamp>`. The IDE
 plugin warns about a stale engine when this version differs from what it
 expects.
 

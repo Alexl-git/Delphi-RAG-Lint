@@ -13,7 +13,11 @@ compile closure + their `.dfm` siblings) -- use it when one folder holds
 several projects, or when the DB spans more than the project you are
 reviewing. `--quiet` suppresses per-file progress lines written to stderr.
 `--lint-third-party` restores the old unscoped whole-index count instead of
-only the project's own roots. `--disable id,...` turns off specific rule ids;
+only the project's own roots. The own roots come from `ownRoots` in
+`<project>\_D-RAG\drag-lint-project.json` (default: the project folder);
+`excludeRoots` carves a vendored subfolder out of them, e.g.
+`{ "ownRoots": ["."], "excludeRoots": ["vendor"] }` -- an excluded folder is
+named in the skip block like any third-party root. `--disable id,...` turns off specific rule ids;
 `--output` writes the report to a file; `--json` emits JSON.
 
 The shared Output/CI flags also apply: `--format sarif`, `--fail-on <level>`,

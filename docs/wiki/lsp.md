@@ -14,6 +14,76 @@ IDE plugin uses `lsp`.
 drag-lint lsp --db <file.sqlite>
 ```
 
+### Proxy mode: merging drag-lint into DelphiLSP
+
+```
+drag-lint lsp --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]
+```
+
+`--proxy` relays every LSP message between the IDE and RAD Studio's own
+DelphiLSP, so the compiler front end keeps answering. The merge flags let
+drag-lint add to those answers:
+
+- `--merge-diagnostics` -- append drag-lint's lint findings to DelphiLSP's
+  `textDocument/publishDiagnostics` (one notification, source-tagged). OFF by
+  default; with every merge flag off the proxy relays DelphiLSP's bytes
+  unchanged.
+- `--merge-budget-ms <n>` -- the per-frame time budget of a merge handler
+  (default 300). A handler that overruns it, raises, or cannot open the index
+  makes the proxy forward DelphiLSP's original bytes untouched; merging fails
+  open and never drops a message.
+
+### Full rule set on save: `--full-rules` (opt-in)
+
+```
+drag-lint lsp --db <db> --full-rules
+```
+
+By default the publish on `didOpen`/`didSave` runs a subset of the built-in
+checks. With `--full-rules` the server runs `drag-lint lint "<file>" --json`
+**out-of-process** (the same path the IDE live runner uses; 8000 ms budget),
+publishes that complete finding set in place of the lint subset, and keeps the
+store's compiler findings. **OFF by default**: it costs one `lint` run per save.
+The measured cost is written to stderr on every save:
+`drag-lint lsp: full-rules <file> <ms> ms <n> findings`. On a timeout, a failed
+run or invalid JSON the server falls back to the subset and says so on stderr.
+Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
+second process start) is deliberately NOT built; it can follow if the measured
+cost justifies it.
+
+
+How the diagnostics merge behaves:
+
+- drag-lint's findings for the file (lint rules honouring the up-tree
+  `drag-lint-lint.json`, syntax errors, clones -- the same set plain
+  `drag-lint lsp` publishes) are appended to the `diagnostics` array of
+  DelphiLSP's own notification, tagged `source: "drag-lint"`. One
+  notification, because `publishDiagnostics` replaces the IDE's set for that
+  file: a separate one would erase the compiler errors.
+- A file with a `didChange` since its last `didSave` / `didOpen` / `didClose` is relayed
+  unmerged: drag-lint lints the file on disk, and its ranges would not match
+  the edited buffer. Saving brings the findings back.
+- The first didOpen of a session warms drag-lint's lint engine on the merge
+  worker, off the relay path (loading the rules takes seconds cold); a publish
+  that arrives while it still warms is relayed unmerged and does not use up the
+  once-only over-budget stderr line.
+- A clean file is relayed byte-for-byte.
+- Fail-open: a frame that cannot be parsed or lacks `uri` / `diagnostics`, or
+  a lint exception, forwards DelphiLSP's bytes and writes one stderr line
+  naming the merge. A lint that overruns the budget forwards the original too;
+  the first overrun is reported once on stderr. `--merge-budget-ms 0` never
+  waits, so nothing is merged.
+- With `--trace`, the trace records the frame actually forwarded (the merged
+  one).
+
+## Document outline (textDocument/documentSymbol)
+
+`lsp` answers `textDocument/documentSymbol` from the index as a hierarchical `DocumentSymbol[]` (the editor's outline, breadcrumbs and *Go to Symbol in File*): the unit's members at the top level, members nested under their type, locals and parameters left out, 0-based ranges, `selectionRange` on the name token. A file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.DocumentSymbol`); guard: `tests\autotest\run_lsp_document_symbol_guard.ps1`.
+
+`lsp` answers `textDocument/codeLens` with one lens per routine declaration, titled from the index caller counts (`3 callers`, `1 caller`, `0 callers`), range zero-width at (line, 0), command `draglint.showCallers` with arguments `[uri, line]` (implemented by the editor extension). Capability `codeLensProvider: {resolveProvider: false}`; a file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.CodeLens`); guard: `tests\autotest\run_lsp_code_lens_guard.ps1`.
+
+`lsp` answers `textDocument/implementation` and `textDocument/declaration` from the symbol under the cursor (the hover resolution). `declaration`: one Location at the interface-section declaration (the forward-declaration line for a forward-declared type). `implementation`: a routine's body line (character 0) and, for a method, the same-named method of every descendant of its owner type (body line, or the declaration when bodiless), ordered by file:line; nothing resolving answers `[]`. Capabilities `implementationProvider` and `declarationProvider` are `true`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ImplDecl`); guard: `tests\autotest\run_lsp_impl_decl_guard.ps1`.
+
 ## Reaching it in the IDE
 
 CLI+internal: the plugin starts this process itself, from
