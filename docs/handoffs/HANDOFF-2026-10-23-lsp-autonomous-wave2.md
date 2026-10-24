@@ -18,15 +18,14 @@ B1+B4 653fac01 (lane S at 1123befe).
 D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 6633d237, S0 ff250754
 (dpr/dproj conflict resolved by keeping all units; compile-checked by lane S step 0 of B1).
 
-## Lanes now (updated 2026-10-24 early)
-Merged to local main: S0 P0 A1 C4 B1 B2 B3 B4 B5 B6 C1 C2 C3 + docs-sync fix (featuregen 6633d237 bcc99792 308b0325).
+## Lanes now (updated 2026-10-24)
+ALL FEATURE TASKS MERGED to local main: S0 P0 A1 A3 A4 A5 B1-B6 C1-C5 C7 D1 (+ docs-sync fix, main-fix dedup 55ca41c3, B3 exact-position follow-up 56670f3c; featuregen regens 6633d237 bcc99792 308b0325 89effba5).
+Remaining: A6 close-out.
 | lane | worktree | task | state |
 |---|---|---|---|
-| S | lsp-server | main verification sweep (sonnet) | merge main e33e3d7b (keep-both conflicts, UNCOMPILED), build, fix stale dl:ok hashes in Features.pas ("merge-fix:"), run ALL lsp guards. If a merge-fix commit appears: merge it to main |
-| M | lsp-merge | A5 (+ queued "A4 fix:" commits) | A3 24531333 + A3 fixes 3b7d7d8e + A4 7b98c6e7 approved-with-fixes. After: review A5 + scoped re-review A4 fix -> ask ENGINE+CONVERTER ok -> merge lane M -> featuregen build --all (lsp.json --merge-completion, --merge-hover, A5 flags) -> "done" |
-| P, Q | -- | -- | all their tasks merged |
-Then A6 close-out (lane Q, sonnet; controller does gated steps).
-KNOWN on main: run_lsp_rename_guard 'ref moved on disk' FAIL = ENGINE regression 86444e3c, ENGINE fixing in e3d/rename-fix2 (do not change the guard). yadf_mirror red = owner re-copy (ledger). New INBOX: docs\INBOX-lsp-ephemeral-index-cost.md (ENGINE).
+| Q | lsp-quality | A6 part 1 (sonnet) | registry (4 LSP entries + team LSP, wiki lsp-proxy-merge.md), whole-branch lint sweep, owed items (plan wording, C1 baseline masks capabilities, spec notes, INBOX retirements, LSP-BACKLOG) |
+Controller after part 1: review -> merge -> GATE featuregen build --all (ok ENGINE + CONVERTER) -> featuregen verify --id <LSP ids> --by LSP -> full battery tests\run_battery.ps1 with a PRIVATE main-built engine AFTER ENGINE's rc2 battery window (ENGINE messages first) -> close-out handoff HANDOFF-2026-10-2x-lsp-stream-closeout.md + RESUME row -> mode.json lspRun phase complete (NEVER the top-level phase; message ENGINE + CONVERTER first).
+Owner-owed at the end: YADF mirror re-copy (ledger), stray .superpowers\sdd\2026-10-24-placeholder, worktree/branch removal for lsp-server/proxy/merge/quality/audit, 12+ orphan drag-lint processes, PLAN-lsp-toggle-switch.md step-4 status (untracked main file), G0 VS Code vs IDE parity, Appendix A live-IDE items (A2 C6 D3 E).
 Reviewers (analyst) cannot write files: ask for the verdict in the reply.
 
 ## Next actions
