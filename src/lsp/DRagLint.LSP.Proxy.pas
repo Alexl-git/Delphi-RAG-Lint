@@ -47,8 +47,8 @@ type
   /// stdio.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create (DRagLint.LSP.Proxy.Merge.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy, DRagLint.LSP.Proxy.Merge</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLspProxyOptions = record
@@ -142,7 +142,7 @@ const
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
 /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot, DRagLint.LSP.Proxy.StdErrLine, FileExists</para>
-/// <para>Returns: ''; Root + '\bin64\DelphiLSP.exe'</para>
+/// <para>Returns: ''; Root + '\' + Sub + '\DelphiLSP.exe'</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
 /// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
@@ -161,15 +161,15 @@ function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS
 /// JSON-RPC stream and desynchronise the client.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-/// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath, DRagLint.LSP.Proxy.StdErrLine, DRagLint.LSP.Proxy.TPumpThread.Create, FileExists, FillChar (+9 more)</para>
+/// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WaitForAnswers, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath (+13 more)</para>
 /// <para>Returns: EXIT_SPAWN_FAILED; Integer(Code)</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 151 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 185 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
-/// <seealso cref="DRagLint.LSP.Proxy.PumpFramed"/>
-/// <seealso cref="DRagLint.LSP.Proxy.ResolveDelphiLspPath"/>
-/// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
-/// <seealso cref="DRagLint.LSP.Proxy.TPumpThread.Create"/>
+/// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+/// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create"/>
+/// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept"/>
+/// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WaitForAnswers"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunLspProxy(const AOptions: TLspProxyOptions): Integer;

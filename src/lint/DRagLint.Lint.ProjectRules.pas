@@ -54,7 +54,7 @@ type
   /// of them is safe.
   /// The caller owns the returned store's lifetime for the whole run.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
@@ -63,7 +63,7 @@ type
   /// <remarks>
   /// Stateless; reads the supplied open store. Never raises.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -98,10 +98,10 @@ type
     /// per-file rules contribute findings for that file only.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ASiblingStore, ChangeFileExt, CollectFrom, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+37 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
+    /// <para>Calls: ASiblingStore, AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile (+44 more)</para>
     /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Found; nil; Findings.ToArray</para>
-    /// <para>Complexity: 63 (cyclomatic, outer body), 768 lines (full implementation)</para>
+    /// <para>Complexity: 72 (cyclomatic, outer body), 822 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -137,7 +137,7 @@ type
     /// matching no layer are ignored (e.g. RTL/third-party). Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format (+6 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)</para>
     /// <para>Catches: Exception (swallowed)</para>
@@ -146,7 +146,7 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
-    /// <seealso cref="DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf"/>
+    /// <seealso cref="DRagLint.Core.Model.TUnitUse.HostCol"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function CheckLayering(const AStore: ISymbolStore; const AConfigPath: string): TArray<TLintFinding>;
@@ -187,10 +187,10 @@ type
 /// Runs ONE Tarjan pass over the unit graph and is the single
 /// implementation; the finding-only view is a projection of this. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: Copy, CouplingLines, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect, Format, IntToStr (+6 more)</para>
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCycleParticipants (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: ChangeFileExt, Copy, CouplingLines, CycleFixPointer, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (+9 more)</para>
 /// <para>Returns: nil; Findings.ToArray</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 339 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 362 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>

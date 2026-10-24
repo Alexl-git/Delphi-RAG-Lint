@@ -123,7 +123,7 @@ type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoRules.AddParamsJson (DRagLint.CLI.pas)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Lint.RuleCatalog.pas), [drag-lint]DRagLint.CLI.DoRules (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoRules.AddParamsJson (DRagLint.CLI.pas), [drag-lint]DRagLint.Lint.RuleCatalog.MkParam (DRagLint.Lint.RuleCatalog.pas), [drag-lint]DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B (DRagLint.Lint.RuleCatalog.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog, DragLint.Plugin.LintOptionsFrame</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -245,7 +245,7 @@ type
 /// <returns>True for the seven ids in ROUTINE_METRIC_RULES.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson (DRagLint.LSP.Completion.pas) (+1 more)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: False</para>
 /// <para>Pure</para>
@@ -267,7 +267,7 @@ function IsRoutineMetricRule(const ARuleId: string): Boolean;
 /// FROM changes -- the same kind of move f709bea already made once when HashLine
 /// became HashWindow.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.MarkerExpectedHash (DRagLint.Lint.RuleCatalog.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
 /// <para>Calls: Copy, IntToStr, LowerCase</para>
 /// <para>Returns: LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4))</para>
 /// <para>Pure</para>
