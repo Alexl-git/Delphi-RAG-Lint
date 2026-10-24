@@ -152,6 +152,8 @@ const
   // v1.2.1 port change #2: how many parent levels the nearest-first {$I} search
   // climbs (preprocess.js options.searchLevels default 3).
   SEARCH_LEVELS = 3;
+  // N-06: the LF byte; the include site's host column counts back to the line start.
+  LF_BYTE = 10;
 
 var
   // v1.2.1 port change #2: process-lifetime cache of directory listings for the
@@ -385,7 +387,8 @@ var
       Site:= Default(TPPIncludeSite);
       Site.HostLine:= AChunk.Line + 1;
       K:= AChunk.SrcStart;
-      while (K > 0) and (Bytes[K - 1] <> 10) do Dec(K);
+      while (K > 0) and (Bytes[K - 1] <> LF_BYTE) do
+        Dec(K);
       Site.HostCol:= AChunk.SrcStart - K + 1;
       Site.Depth  := ADepth;
       Site.Path   := Resolved;

@@ -1230,7 +1230,9 @@ begin
       if Length(IncRows) > 0 then ParseRes.UsesEntries:= ParseRes.UsesEntries + IncRows;
     end;
   end;
-  Inc(GProfParse, ProfNow - TProf); Inc(GProfFiles);  // v0.16: scan doc-comment regions from the source text once per file
+  Inc(GProfParse, ProfNow - TProf);
+  Inc(GProfFiles);
+  // v0.16: scan doc-comment regions from the source text once per file
   // so we can associate them with symbols by line proximity below.
   // Decode from the bytes the PARSER ACTUALLY SAW (ParseBytes -- preprocessed
   // when enabled, else the transcoded UTF-8) so doc-comment text and symbol line

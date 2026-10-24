@@ -161,7 +161,7 @@ uses
   , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
-  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP  // dl:ok uses-global-census@a9ed -- one const (the merge budget default) is the intended coupling to the proxy options
+  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
   , DRagLint.Hover      .Returns
@@ -23995,7 +23995,11 @@ var
   Sites   : TArray<TPPIncludeSite>;
   Site    : TPPIncludeSite   ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]'); Exit(2); end;
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]');
+    Exit(2);
+  end;
   if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
 
   InBytes:= TFile.ReadAllBytes(AArgs.InFile);
@@ -31065,9 +31069,15 @@ begin
   if Own.Declared then
     begin Writeln('OWNROOTS-FAIL: non-object JSON root must not count as declared'); Exit(1); end;
   if Own.Error <> '' then
-    begin Writeln('OWNROOTS-FAIL: non-object JSON root must default, not error'); Exit(1); end;
+    begin
+      Writeln('OWNROOTS-FAIL: non-object JSON root must default, not error');
+      Exit(1);
+    end;
   if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
-    begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
+    begin
+      Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder');
+      Exit(1);
+    end;
 
   { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): kept in its own
     function so these assertions add one exit here, not nine. }
@@ -32602,11 +32612,13 @@ begin
 end;
 
 function Run: Integer;
+const
+  SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
 var
   Args: TArgs;
 begin
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
-  if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
+  if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(SELFTEST_SCHEMA_DB_ARG)));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then

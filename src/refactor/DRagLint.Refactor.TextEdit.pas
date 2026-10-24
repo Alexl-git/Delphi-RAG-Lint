@@ -754,6 +754,31 @@ begin
   end;
 end;
 
+{ N-06: the anchor scan of TFindUnitRefactoring.Build. ALast = the textually last
+  INLINE entry of ASection (an include row is never the anchor: its coordinates
+  are in the .inc); AIncRow = the first include-sourced entry of ASection, or a
+  default record (FromInclude = False) when there is none. }
+procedure PickUsesAnchor(const AUses: TArray<TUnitUse>; ASection: TUnitUseSection;
+  out ALast, AIncRow: TUnitUse; out AHaveLast: Boolean);
+var
+  U: TUnitUse;
+begin
+  ALast:= Default(TUnitUse);
+  AIncRow:= Default(TUnitUse);
+  AHaveLast:= False;
+  for U in AUses do
+    if (U.Section = ASection) and U.FromInclude and not AIncRow.FromInclude then
+      AIncRow:= U;
+  for U in AUses do
+    if (U.Section = ASection) and not U.FromInclude then
+      if (not AHaveLast) or (U.StartLine > ALast.StartLine)
+         or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol)) then
+      begin
+        ALast:= U;
+        AHaveLast:= True;
+      end;
+end;
+
 class function TFindUnitRefactoring.Build(const AStore: ISymbolStore;
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
 begin
@@ -769,7 +794,7 @@ begin
   Result:= Build(ANameStore, AUnitStore, AName, AInFile, AResolvedUnit, AAlreadyUsed, Reason, APreferInterface);
 end;
 
-class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;
+class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;  // dl:ok too-many-parameters@896d, too-many-exit-points@8fee -- REVIEWED 2026-10-23: params = the 7-parameter overload plus the one N-06 out-reason (a record would only rename them); exits = six guard-clause exits (nothing found, self, already used, file not indexed, no keyword line) that predate N-06, whose own exit was folded into the else-if chain
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
   out AReason: string; APreferInterface: Boolean): TArray<TTextEdit>;
 var
@@ -783,6 +808,7 @@ var
   UnitName: string;
   TargetSection: TUnitUseSection;
   LastInSection: TUnitUse; HaveLast: Boolean;
+  IncRow: TUnitUse;
   Edit: TTextEdit;
   Pair: TPair<string, Integer>;
 begin
@@ -833,7 +859,8 @@ begin
 
     { 3. choose target section: implementation uses if present, else interface }
     HaveLast:= False;
-    var HasImpl: Boolean:= False; var HasIntf: Boolean:= False;
+    var HasImpl: Boolean:= False;
+    var HasIntf: Boolean:= False;
     for U in Uses_ do
     begin
       if U.Section = uusImplementation then HasImpl:= True;
@@ -847,22 +874,8 @@ begin
 
     { last entry in the chosen section -> append ', Best' after it. N-06: an
       include row is never the anchor (its coordinates are in the .inc). }
-    var IncRow: TUnitUse:= Default(TUnitUse);
-    for U in Uses_ do
-      if (U.Section = TargetSection) and U.FromInclude and not IncRow.FromInclude then IncRow:= U;
-    for U in Uses_ do
-      if (U.Section = TargetSection) and not U.FromInclude then
-        if (not HaveLast) or (U.StartLine > LastInSection.StartLine)
-           or ((U.StartLine = LastInSection.StartLine) and (U.StartCol > LastInSection.StartCol)) then
-        begin LastInSection:= U; HaveLast:= True; end;
+    PickUsesAnchor(Uses_, TargetSection, LastInSection, IncRow, HaveLast);
 
-    if (not HaveLast) and IncRow.FromInclude then
-    begin
-      { N-06: the section's uses clause lives in an include -- never edited, and
-        a fresh clause here would be a second uses clause. }
-      AReason:= IncludeUsesRefusal('find-unit', IncRow, AInFile);
-      Exit;
-    end;
     if HaveLast then
     begin
       { insert ', Best' at the end of the last unit entry (before the ';') }
@@ -871,6 +884,10 @@ begin
       Edit.EndLine:= 0; Edit.Text:= ', ' + Best;
       Result:= [Edit];
     end
+    else if IncRow.FromInclude then
+      { N-06: the section's uses clause lives in an include -- never edited, and
+        a fresh clause here would be a second uses clause. }
+      AReason:= IncludeUsesRefusal('find-unit', IncRow, AInFile)
     else
     begin
       { no uses clause in the file at all -> a fresh "uses Best;" block.
