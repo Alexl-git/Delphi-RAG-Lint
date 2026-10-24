@@ -1204,6 +1204,7 @@ begin
       var RenRefuse:= TRenameRefactoring.BinaryDfmReason(RenStore, RenQName);
       var RenEdits: TArray<TRenameEdit>:= nil;
       if RenRefuse = '' then RenEdits:= TRenameRefactoring.Build(RenStore, RenQName, RenTo);
+      if (RenRefuse = '') and (Length(RenEdits) > 0) then RenRefuse:= TRenameRefactoring.StaleEditReason(RenEdits);
       if RenRefuse <> '' then
         ResultText:= '{"edits":[],"files_touched":0,"applied":false,' + '"error":"cannot rename -- ' + JsonEscape(RenRefuse) + '"}'
       else if Length(RenEdits) = 0 then

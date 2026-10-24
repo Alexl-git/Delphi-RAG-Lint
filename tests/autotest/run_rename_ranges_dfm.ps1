@@ -244,6 +244,26 @@ Check 'B sources unchanged' ((Snapshot $b) -ceq $before)
 $r = Run-Rename $b @('--kind', 'symbol', '--name', 'Unit1.TForm1.Helper', '--to', 'Helper2', '--json')
 Check 'B unrelated rename not refused' ($r.Exit -eq 0) "exit=$($r.Exit)"
 
+Write-Host 'Fixture S: a ref whose line shifted after indexing is refused, nothing written' -ForegroundColor Cyan
+# One line inserted after `implementation`: the impl header and the call to Compute sit one line
+# lower than the index says. Editing by the recorded rows would rename only the interface decl.
+$s = New-Fixture 'S'
+$sp = Join-Path $s.Src 'Unit1.pas'
+Write-Ascii $sp ((Get-Content -Raw $sp) -replace "implementation\r\n", "implementation`r`n// shifted`r`n")
+$before = Snapshot $s
+foreach ($f in @(
+    @{ N = '--json';  A = @('--kind', 'symbol', '--name', 'Unit1.Compute', '--to', 'Compute2', '--json') },
+    @{ N = '--apply'; A = @('--kind', 'symbol', '--name', 'Unit1.Compute', '--to', 'Compute2', '--apply', '--no-backup') })) {
+  $r = Run-Rename $s $f.A
+  Check "S $($f.N) exits 2"            ($r.Exit -eq 2)                   "exit=$($r.Exit)"
+  Check "S $($f.N) says out of date"   ($r.Out -match 'out of date')     ($r.Out -split "`n" | Select-Object -Last 1)
+}
+Check 'S sources unchanged' ((Snapshot $s) -ceq $before)
+# Positive control: the same rename on the unshifted fixture R applies.
+$r = Run-Rename $r1 @('--kind', 'symbol', '--name', 'Unit1.Compute', '--to', 'Compute2', '--apply', '--no-backup')
+Check 'R unshifted Compute --apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
+Check 'R unshifted Compute fully renamed' (-not ((Get-Content -Raw (Join-Path $r1.Src 'Unit1.pas')) -cmatch '\bCompute\b'))
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

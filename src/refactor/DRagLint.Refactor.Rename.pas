@@ -162,6 +162,19 @@ type
       /// name, too). Binary = the file starts with the resource header byte $FF or
       /// with the 'TPF0' signature.</remarks>
       class function BinaryDfmReason(const AStore: ISymbolStore; const AQName: string): string;
+      /// <summary>Non-empty human reason when any edit's recorded position no
+      /// longer holds its old name on disk; '' when every edit is still in place.
+      /// A rename must then be refused: the file changed after it was indexed, and
+      /// rewriting whatever now sits there would corrupt it.</summary>
+      /// <param name="AEdits">Edits as Build / BuildLocal return them (Col already
+      /// snapped from a declaration keyword onto the name).</param>
+      /// <returns>'' when, for every edit, the file exists and OldName sits at
+      /// (Line, Col) as a whole identifier (case-insensitive); else a message
+      /// "index out of date for File:Line ..." naming the first stale edit.</returns>
+      /// <remarks>Never scans for the name elsewhere: a reference that moved on
+      /// disk (other line, or other column on its line) is stale, not retargeted.
+      /// Reads each file once.</remarks>
+      class function StaleEditReason(const AEdits: TArray<TRenameEdit>): string;
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
@@ -195,6 +208,9 @@ type
   end;
 
 implementation
+
+uses
+  System.StrUtils;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -247,9 +263,50 @@ end;
 // column that is NOT the name token: a routine/property declaration's symbol
 // starts at its `procedure`/`function`/`property` keyword. Apply used to
 // recover from that by scanning forward, but the edit set itself (rename --json,
-// MCP rename_symbol, LSP) reported the keyword column. Scan forward from the
-// stored column first (the name follows the keyword), then from column 1.
-// An edit whose line holds no such identifier keeps its column.
+// MCP rename_symbol, LSP) reported the keyword column. Only that shape moves:
+// the stored column must start a declaration keyword run (`class procedure`,
+// `function`, `property`, ...) that is followed, on the SAME line, by the name.
+// Anything else keeps its column -- a reference that moved on disk must stay
+// where the index says so StaleEditReason / the LSP refuse it, never be
+// silently retargeted to a later same-named token (11477a8c regression).
+function IsIdentAt(const ALine, AName: string; ACol: Integer): Boolean;
+var
+  InRange, OpenEdge, CloseEdge: Boolean;
+begin
+  InRange  := (ACol >= 1) and (ACol + Length(AName) - 1 <= Length(ALine));
+  if not InRange then Exit(False);
+  OpenEdge := (ACol = 1) or not IsIdentChar(ALine[ACol - 1]);
+  CloseEdge:= (ACol + Length(AName) > Length(ALine)) or not IsIdentChar(ALine[ACol + Length(AName)]);
+  Result   := OpenEdge and CloseEdge and SameText(Copy(ALine, ACol, Length(AName)), AName);
+end;
+
+// Column of AName after the declaration keyword run that starts at ACol; 0 when
+// ACol does not start such a run or the run is not followed by AName.
+function NameAfterDeclKeywords(const ALine, AName: string; ACol: Integer): Integer;
+const
+  DeclKeywords: array[0..6] of string = ('class', 'procedure', 'function',
+    'constructor', 'destructor', 'property', 'operator');
+var
+  P, Q    : Integer;
+  Tok     : string;
+  Keywords: Integer;
+begin
+  Result  := 0;
+  Keywords:= 0;
+  P       := ACol;
+  while (P >= 1) and (P <= Length(ALine)) do
+  begin
+    Q:= P;
+    while (Q <= Length(ALine)) and IsIdentChar(ALine[Q]) do Inc(Q);
+    Tok:= Copy(ALine, P, Q - P);
+    if (Keywords > 0) and IsIdentAt(ALine, AName, P) then Exit(P);
+    if not MatchText(Tok, DeclKeywords) then Exit;
+    Inc(Keywords);
+    P:= Q;
+    while (P <= Length(ALine)) and CharInSet(ALine[P], [' ', #9]) do Inc(P);
+  end;
+end;
+
 procedure SnapEditsToToken(AList: TList<TRenameEdit>);
 var
   Cache: TObjectDictionary<string, TStringList>;
@@ -270,9 +327,9 @@ begin
         Cache.Add(UpperCase(Edit.FilePath), Lines);
       end;
       if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
-      Col:= FindIdentFrom(Lines[Edit.Line - 1], Edit.OldName, Edit.Col);
-      if Col = 0 then Col:= FindIdentFrom(Lines[Edit.Line - 1], Edit.OldName, 1);
-      if (Col > 0) and (Col <> Edit.Col) then
+      if IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then Continue;
+      Col:= NameAfterDeclKeywords(Lines[Edit.Line - 1], Edit.OldName, Edit.Col);
+      if Col > 0 then
       begin
         Edit.Col:= Col;
         AList[I]:= Edit;
@@ -944,6 +1001,32 @@ begin
     'event bindings in text .dfm files, so the form would keep the old name. ' +
     'Convert it to text (IDE: right-click the form > Text DFM, or convert.exe -t) and ' +
     're-index first.', [DfmPath, ShortName]);
+end;
+
+class function TRenameRefactoring.StaleEditReason(const AEdits: TArray<TRenameEdit>): string;
+var
+  Cache: TObjectDictionary<string, TStringList>;
+  Lines: TStringList;
+  Edit : TRenameEdit;
+begin
+  Result:= '';
+  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  try
+    for Edit in AEdits do
+    begin
+      if not Cache.TryGetValue(UpperCase(Edit.FilePath), Lines) then
+      begin
+        Lines:= TStringList.Create;
+        Cache.Add(UpperCase(Edit.FilePath), Lines);
+        if TFile.Exists(Edit.FilePath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Edit.FilePath));
+      end;
+      if (Edit.Line < 1) or (Edit.Line > Lines.Count) or not IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then
+        Exit(Format('index out of date for %s:%d (no "%s" at column %d) -- save and reindex, then retry',
+          [Edit.FilePath, Edit.Line, Edit.OldName, Edit.Col]));
+    end;
+  finally
+    Cache.Free;
+  end;
 end;
 
 end.

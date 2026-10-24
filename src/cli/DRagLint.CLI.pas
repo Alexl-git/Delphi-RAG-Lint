@@ -20660,6 +20660,13 @@ begin
 
     if Length(Edits) = 0 then
     begin Writeln('No edits computed.'); Exit(1); end;
+    { a ref that moved on disk after indexing is refused, never retargeted }
+    var StaleReason: string:= TRenameRefactoring.StaleEditReason(Edits);
+    if StaleReason <> '' then
+    begin
+      Writeln('ERROR: cannot rename -- ' + StaleReason);
+      Exit(2);
+    end;
 
     if AArgs.AsJson then
     begin
@@ -20722,6 +20729,12 @@ begin
   end;
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
+  IncReason:= TRenameRefactoring.StaleEditReason(Edits);
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
 
   if AArgs.DryRun then
   begin
