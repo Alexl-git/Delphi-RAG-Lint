@@ -2301,11 +2301,39 @@ function IsGuiFrameworkPrefix(const ANamespaceSegment: string): Boolean;
 /// </remarks>
 function CrossesGuiFramework(const AInheritor, ACandidate: TSymbol): Boolean;
 
+const
+  /// <summary>N-06: the refusal kind every uses editor reports for an entry
+  /// that lives inside an include file.</summary>
+  REFUSAL_USES_IN_INCLUDE = 'uses-in-include';
+
+/// <summary>N-06: the one refusal text every uses EDITOR prints when the entry
+/// it would edit lives inside an include file (an .inc may be shared by many
+/// hosts, so no editor ever edits one).</summary>
+/// <param name="AVerb">The refusing verb as the user typed it, e.g. 'cycles --fix'.</param>
+/// <param name="AUse">The include row (FromInclude must be True).</param>
+/// <param name="AHostPath">The owning unit's path; only its file name is printed.</param>
+/// <returns>'refused: uses-in-include -- ...' naming the unit, the host, the
+/// include, the host line and the entry's line inside the include.</returns>
+function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
+
 implementation
 
 uses
   System.SysUtils
   ;
+
+function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
+var
+  HostName: string;
+  IncName : string;
+begin
+  HostName:= ExtractFileName(AHostPath);
+  IncName := ExtractFileName(AUse.OriginPath);
+  Result:= Format('refused: %s -- ''%s'' is used by %s through {$I %s} (host line %d; entry at %s:%d). ' +
+    '%s edits only a unit''s own uses clause; edit %s by hand, or inline the clause into %s and reindex.',
+    [REFUSAL_USES_IN_INCLUDE, AUse.UnitName, HostName, IncName, AUse.IncludeLine, IncName, AUse.StartLine,
+     AVerb, IncName, HostName]);
+end;
 
 { TUnitUse }
 
