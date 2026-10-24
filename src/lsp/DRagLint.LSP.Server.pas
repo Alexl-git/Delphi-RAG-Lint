@@ -3629,7 +3629,7 @@ begin
       try
         AJson:= TFile.ReadAllText(TmpPath, TEncoding.UTF8);
       except
-        AJson:= ''; { never raise out of didSave: the caller falls back to the subset }
+        on Exception do AJson:= ''; { never raise out of didSave: the caller falls back to the subset }
       end;
       Result:= (ExitCode <= 1) and AJson.TrimLeft.StartsWith('[');
     finally
@@ -3642,7 +3642,7 @@ begin
     try
       TFile.Delete(TmpPath);
     except
-      { a leftover temp file is harmless; raising out of didSave is not }
+      on Exception do TmpPath:= ''; { a leftover temp file is harmless; raising out of didSave is not }
     end;
   end;
 end; // function
