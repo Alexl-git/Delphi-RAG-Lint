@@ -77,6 +77,7 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="HostI.pas"/>
+        <DCCReference Include="HostL.pas"/>
         <DCCReference Include="Leaf.pas"/>
         <DCCReference Include="Dead.pas"/>
         <BuildConfiguration Include="Base">

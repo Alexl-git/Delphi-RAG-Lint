@@ -13362,19 +13362,21 @@ begin
   var AnyIntf: Integer:= 0;
   for var U in AStore.GetUnitUsesForFile(AFileId) do
   begin
-    if U.StartLine <= 0 then Continue;
+    { N-06: HostLine -- an include row anchors at its directive in THIS file. }
+    var HL: Integer:= U.HostLine;
+    if HL <= 0 then Continue;
     if U.Section = uusImplementation then
     begin
-      if (AnyImpl = 0) or (U.StartLine < AnyImpl) then AnyImpl:= U.StartLine;
+      if (AnyImpl = 0) or (HL < AnyImpl) then AnyImpl:= HL;
     end
-    else if (AnyIntf = 0) or (U.StartLine < AnyIntf) then AnyIntf:= U.StartLine;
+    else if (AnyIntf = 0) or (HL < AnyIntf) then AnyIntf:= HL;
     var Target: string:= LowerCase(U.UnitName);
     if (Target = MyStem) or not MatchText(Target, Mine) then Continue;
     if U.Section = uusImplementation then
     begin
-      if (ImplLine = 0) or (U.StartLine < ImplLine) then ImplLine:= U.StartLine;
+      if (ImplLine = 0) or (HL < ImplLine) then ImplLine:= HL;
     end
-    else if (IntfLine = 0) or (U.StartLine < IntfLine) then IntfLine:= U.StartLine;
+    else if (IntfLine = 0) or (HL < IntfLine) then IntfLine:= HL;
   end;
   if ImplLine = 0 then ImplLine:= IntfLine;
   { Fix round 1 (controller ruling): no line-bearing entry names another unit of the cycle --

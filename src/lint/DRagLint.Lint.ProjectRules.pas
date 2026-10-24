@@ -860,7 +860,7 @@ begin
     if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
     if N = Stem then
     begin
-      ALine:= U.StartLine; ACol:= U.StartCol;
+      ALine:= U.HostLine; ACol:= U.HostCol; { N-06: include rows anchor at the directive }
       Exit;
     end;
   end;
@@ -1199,7 +1199,7 @@ begin
                   { Trailing on the entry's own line, or alone on the line
                     directly above it. Anything else records the intent but does
                     not suppress -- see the remarks. }
-                  if (U.StartLine = L) or ((U.StartLine = L + 1) and Alone) then
+                  if (U.HostLine = L) or ((U.HostLine = L + 1) and Alone) then { N-06: host line }
                     Placed:= True;
                 end;
 
@@ -4108,11 +4108,12 @@ begin
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
                 else
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                UF.Message  := UF.Message + U.IncludeSuffix; { N-06 }
                 UF.FilePath := Path;
-                UF.StartLine:= U.StartLine;
-                UF.StartCol := U.StartCol;
-                UF.EndLine  := U.StartLine;
-                UF.EndCol   := U.StartCol + Length(U.UnitName);
+                UF.StartLine:= U.HostLine;
+                UF.StartCol := U.HostCol;
+                UF.EndLine  := U.HostLine;
+                UF.EndCol   := U.HostCol + Length(U.UnitName);
                 Findings.Add(UF);
               end;
             end; // for U
@@ -4457,12 +4458,12 @@ begin
           F:= Default(TLintFinding);
           F.RuleId  := 'layering-violation';
           F.Severity:= 'warning';
-          F.Message := Format('Layering violation: %s (layer %s) must not use %s (layer %s)', [UsingUnit, UsingLayer, U.UnitName, TgtLayer]);
+          F.Message := Format('Layering violation: %s (layer %s) must not use %s (layer %s)', [UsingUnit, UsingLayer, U.UnitName, TgtLayer]) + U.IncludeSuffix; { N-06 }
           F.FilePath:= Path;
-          F.StartLine:= U.StartLine;
-          F.StartCol := U.StartCol;
-          F.EndLine:= U.StartLine;
-          F.EndCol := U.StartCol + Length(U.UnitName);
+          F.StartLine:= U.HostLine;
+          F.StartCol := U.HostCol;
+          F.EndLine:= U.HostLine;
+          F.EndCol := U.HostCol + Length(U.UnitName);
           Findings.Add(F);
           if Findings.Count >= 500 then Break;
         end;

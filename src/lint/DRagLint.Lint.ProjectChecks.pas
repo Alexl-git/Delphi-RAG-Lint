@@ -456,12 +456,14 @@ begin
           'Unit ''%s'' is used but resolves to no known unit (not a project ' +
           'member, not in the library, not a known alias or RTL unit). Add its ' +
           'folder or library to the index, add the unit to the project, or ' +
-          'remove the use.', [U.UnitName]);
+          'remove the use.', [U.UnitName]) + U.IncludeSuffix; { N-06 }
         F.FilePath  := SrcPath;
-        F.StartLine := U.StartLine;
-        F.StartCol  := U.StartCol;
-        F.EndLine   := U.EndLine;
-        F.EndCol    := U.EndCol;
+        { N-06: an include row's coordinates are inside the .inc -- anchor at the
+          host's include directive instead. }
+        F.StartLine := U.HostLine;
+        F.StartCol  := U.HostCol;
+        F.EndLine   := if U.FromInclude then U.IncludeLine else U.EndLine;
+        F.EndCol    := if U.FromInclude then 1 else U.EndCol;
         Findings.Add(F);
       end;
     end;

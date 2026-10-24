@@ -1178,6 +1178,18 @@ type
     /// <remarks>Every uses EDITOR must check this before using StartLine /
     /// StartCol / EndLine / EndCol as host-file coordinates.</remarks>
     function FromInclude: Boolean;
+    /// <summary>N-06: the line a finding about this entry belongs on, in the
+    /// OWNING file: IncludeLine for an include row, else StartLine.</summary>
+    /// <returns>A 1-based host line.</returns>
+    function HostLine: Integer;
+    /// <summary>N-06: the matching column: 1 for an include row (the column of
+    /// the directive is not stored), else StartCol.</summary>
+    /// <returns>A 1-based host column.</returns>
+    function HostCol: Integer;
+    /// <summary>N-06: the lint message suffix naming where an include row's
+    /// entry really is: ' (in include Name.inc, line N)'; '' for an inline row.</summary>
+    /// <returns>The suffix, with its leading space, or ''.</returns>
+    function IncludeSuffix: string;
   end;
 
   // One 'global-only' uses edge: ReaderFileId depends on DeclFileId for
@@ -2300,6 +2312,24 @@ uses
 function TUnitUse.FromInclude: Boolean;
 begin
   Result:= OriginPath <> '';
+end;
+
+function TUnitUse.HostLine: Integer;
+begin
+  Result:= if FromInclude then IncludeLine else StartLine;
+end;
+
+function TUnitUse.HostCol: Integer;
+begin
+  Result:= if FromInclude then 1 else StartCol;
+end;
+
+function TUnitUse.IncludeSuffix: string;
+begin
+  if FromInclude then
+    Result:= Format(' (in include %s, line %d)', [ExtractFileName(OriginPath), StartLine])
+  else
+    Result:= '';
 end;
 
 { TSymbol }
