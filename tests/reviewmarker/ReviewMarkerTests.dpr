@@ -4,6 +4,8 @@ program ReviewMarkerTests;
 
 uses
   System.SysUtils,
+  DRagLint.Core.Model in '..\..\src\core\DRagLint.Core.Model.pas',
+  DRagLint.Lint.RuleCatalog in '..\..\src\lint\DRagLint.Lint.RuleCatalog.pas',
   DRagLint.Lint.ReviewMarker in '..\..\src\lint\DRagLint.Lint.ReviewMarker.pas';
 
 var

@@ -20,7 +20,7 @@ unit DRagLint.Lint.ReviewMarker;
 interface
 
 uses
-  System.SysUtils, System.Hash;
+  System.SysUtils, System.Hash, DRagLint.Core.Model;
 
 type
   /// <summary>One `dl:ok &lt;rule-id&gt;[@&lt;hash&gt;]` entry parsed off a source
@@ -454,6 +454,40 @@ type
     /// </remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string;
       const AHashOverride: string = ''): string; static;
+    /// <summary>True when the legacy `// drag-lint:ignore [&lt;rule-id&gt; ...]`
+    /// directive on the line covers ARuleId: bare, it covers every rule; with a
+    /// list, only the rules named (space, comma or tab separated).</summary>
+    /// <param name="ALineText">One source line, without its line terminator.</param>
+    /// <param name="ARuleId">The finding's rule id; compared case-insensitively.</param>
+    /// <returns>False when the line carries no directive after a `//`.</returns>
+    /// <remarks>Deliberately the original NAIVE scan (first `//`, then the tag
+    /// anywhere after it): tightening it would change what existing projects
+    /// suppress. Pure.</remarks>
+    class function IgnoreDirectiveCovers(const ALineText, ARuleId: string): Boolean; static;
+    /// <summary>The hash a `dl:ok` marker must carry to verify against
+    /// AFinding: the code window at the finding's StartLine (HashWindow), with
+    /// the routine metric folded in for a whole-routine metric rule
+    /// (RuleCatalog.IsRoutineMetricRule / MetricHash).</summary>
+    /// <param name="ALines">The finding's file, one entry per line.</param>
+    /// <param name="AFinding">The finding; StartLine is 1-based.</param>
+    /// <returns>4 lowercase hex chars.</returns>
+    /// <remarks>Pure.</remarks>
+    class function ExpectedHash(const ALines: TArray<string>; const AFinding: TLintFinding): string; static;
+    /// <summary>The suppression predicate of the CLI's ApplyLineMarkers, as a
+    /// pure function: True when AFinding is dropped by a marker in its file.</summary>
+    /// <param name="ALines">The finding's file, one entry per line (the live
+    /// buffer for the LSP, the disk file for the CLI).</param>
+    /// <param name="AFinding">The finding to test; StartLine/EndLine are 1-based.</param>
+    /// <returns>True when (1) IgnoreDirectiveCovers holds on StartLine, or (2)
+    /// a `dl:ok` marker for the finding's rule on any line of
+    /// StartLine..EndLine carries no hash or carries ExpectedHash. Only the
+    /// FIRST marker for the rule on each line is consulted, exactly as
+    /// ApplyLineMarkers does. A placeholder, malformed or stale hash
+    /// suppresses nothing. False when StartLine is outside ALines.</returns>
+    /// <remarks>The REPORTER side of ApplyLineMarkers -- the unused, stale,
+    /// placeholder and reason hints -- stays CLI-only; this answers only "is
+    /// this finding suppressed". Pure; thread-safe.</remarks>
+    class function Suppresses(const ALines: TArray<string>; const AFinding: TLintFinding): Boolean; static;
   end;
 
 const
@@ -471,7 +505,7 @@ const
 implementation
 
 uses
-  System.RegularExpressions;
+  System.RegularExpressions, DRagLint.Lint.RuleCatalog;
 
 { ---------------------------------------------------------------------------
   Normalisation
@@ -1234,6 +1268,55 @@ begin
     Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Kept[0].Reason);
 
   Result:= TrimRight(Prefix + Body);
+end;
+
+{ ---------------------------------------------------------------------------
+  Suppression -- the predicate ApplyLineMarkers (CLI) and BuildDiagnostics
+  (LSP) share, so the gutter and `lint` cannot disagree about a marked line.
+  --------------------------------------------------------------------------- }
+
+class function TReviewMarkers.IgnoreDirectiveCovers(const ALineText, ARuleId: string): Boolean;
+const
+  IGNORE_MARK = 'drag-lint:ignore';
+var
+  CPos, MPos: Integer;
+  Rest      : string ;
+  Tok       : string ;
+begin
+  CPos:= Pos('//', ALineText);
+  MPos:= Pos(IGNORE_MARK, LowerCase(ALineText));
+  if (CPos = 0) or (MPos <= CPos) then Exit(False);
+  Rest:= Trim(Copy(ALineText, MPos + Length(IGNORE_MARK), MaxInt));
+  if Rest = '' then Exit(True);
+  for Tok in Rest.Split([' ', ',', #9]) do
+    if SameText(Trim(Tok), ARuleId) then Exit(True);
+  Result:= False;
+end;
+
+class function TReviewMarkers.ExpectedHash(const ALines: TArray<string>; const AFinding: TLintFinding): string;
+begin
+  Result:= HashWindow(ALines, AFinding.StartLine - 1);
+  if IsRoutineMetricRule(AFinding.RuleId) then Result:= MetricHash(Result, AFinding.Metric);
+end;
+
+class function TReviewMarkers.Suppresses(const ALines: TArray<string>; const AFinding: TLintFinding): Boolean;
+var
+  MarkHi: Integer      ;
+  ML    : Integer      ;
+  M     : TReviewMarker;
+begin
+  if (AFinding.StartLine < 1) or (AFinding.StartLine > Length(ALines)) then Exit(False);
+  if IgnoreDirectiveCovers(ALines[AFinding.StartLine - 1], AFinding.RuleId) then Exit(True);
+  MarkHi:= AFinding.StartLine;
+  if (AFinding.EndLine > MarkHi) and (AFinding.EndLine <= Length(ALines)) then MarkHi:= AFinding.EndLine;
+  for ML:= AFinding.StartLine to MarkHi do
+    for M in Parse(ALines[ML - 1]) do
+    begin
+      if not SameText(M.RuleId, AFinding.RuleId) then Continue;
+      if (M.Hash = '') or SameText(M.Hash, ExpectedHash(ALines, AFinding)) then Exit(True);
+      Break; { first marker for the rule on this line decides it, as in ApplyLineMarkers }
+    end;
+  Result:= False;
 end;
 
 end.

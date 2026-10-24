@@ -911,6 +911,8 @@ var
   { FP3c: the default-disabled set this surface must honour, exactly as
     FinalizeAndOutput does for the CLI. }
   DefOff   : TArray<string>          ;
+  { C2: the file's lines for marker suppression, read once on first use. }
+  MarkLines: TArray<string>          ;
 
   { True when ARuleId ships OFF by default, so ShouldKeep may only publish it
     when the project's drag-lint-lint.json opts back in via "enabled".
@@ -976,6 +978,11 @@ begin
     for F in Findings do
     begin
       if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
+      { C2: a `dl:ok` / `drag-lint:ignore` marker suppresses here exactly as in
+        `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
+        dropped (or the "Mark as reviewed" action would change nothing). }
+      if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
+      if TReviewMarkers.Suppresses(MarkLines, F) then Continue;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
       DiagObj:= TJSONObject.Create;
