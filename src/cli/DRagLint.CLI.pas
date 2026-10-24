@@ -6897,7 +6897,7 @@ begin
         Hit.ExportsUsed:= 0;
         { With no export surface the reference scan below cannot run, so the one
           line number we can honestly report is the `uses` clause itself. }
-        if ExportsKnown then Hit.FirstLine:= 0 else Hit.FirstLine:= Use.StartLine;
+        if ExportsKnown then Hit.FirstLine:= 0 else Hit.FirstLine:= Use.HostLine; // N-06: the include directive's line for an include row
 
         var Used: TDictionary<string, Boolean> := TDictionary<string, Boolean>.Create;
         try
