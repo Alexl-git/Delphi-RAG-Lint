@@ -772,7 +772,8 @@ type
       /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
       /// <remarks>Blocks the calling thread for at most the timeout. The child never inherits the
       /// server's stdin/stdout: its handles are a temp file and NUL.</remarks>
-      function RunFullRulesLint(const AFile: string; out AJson: string): Boolean;      /// <summary>Stores the client's live buffer text (full sync) so position
+      function RunFullRulesLint(const AFile: string; out AJson: string): Boolean;
+      /// <summary>Stores the client's live buffer text (full sync) so position
       /// lookups see unsaved edits. See TLiveDocuments for why.</summary>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -3604,7 +3605,11 @@ begin
     Si.hStdInput  := HNul;
     Si.hStdOutput := HOut;
     Si.hStdError  := HNul;
+    { I1: hand the child the server's OWN index list so it resolves the same stores
+      (used-unit-not-resolvable and friends need them). }
     Cmd:= '"' + ParamStr(0) + '" lint "' + AFile + '" --json';
+    for var DbP in FStorePaths do
+      if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
     UniqueString(Cmd);
     if not CreateProcess(PChar(ParamStr(0)), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
@@ -3621,7 +3626,11 @@ begin
         a good run; anything else falls back to the subset. }
       CloseHandle(HOut);
       HOut:= INVALID_HANDLE_VALUE;
-      AJson:= TFile.ReadAllText(TmpPath, TEncoding.UTF8);
+      try
+        AJson:= TFile.ReadAllText(TmpPath, TEncoding.UTF8);
+      except
+        AJson:= ''; { never raise out of didSave: the caller falls back to the subset }
+      end;
       Result:= (ExitCode <= 1) and AJson.TrimLeft.StartsWith('[');
     finally
       CloseHandle(Pi.hThread);
@@ -3630,7 +3639,11 @@ begin
   finally
     if HOut <> INVALID_HANDLE_VALUE then CloseHandle(HOut);
     if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
-    TFile.Delete(TmpPath);
+    try
+      TFile.Delete(TmpPath);
+    except
+      { a leftover temp file is harmless; raising out of didSave is not }
+    end;
   end;
 end; // function
 

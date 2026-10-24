@@ -19,6 +19,8 @@
 param(
   [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$BaselineExe = '',
+  [string]$OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt",
+  [switch]$CaptureOffBaseline,
   [string]$WorkDir     = "$env:TEMP\drag-lint-lsp-full-rules-$PID"
 )
 try {
@@ -102,10 +104,46 @@ Check 'flag ON, clean fixture: cost line reports 0 findings' ($mc.Success -and $
 $gone = RunLsp $Exe (Join-Path $WorkDir 'Nope.pas') @('--full-rules') 'gone'
 Check 'flag ON, missing file: server survives and publishes an empty set' ($gone.Out -match '"diagnostics":\[\]') ''
 
-if ($BaselineExe -and (Test-Path $BaselineExe)) {
+# ---- I1 (fix round 1): the child must get the server's own --db list ----------
+# used-unit-not-resolvable / unused-unit-in-uses need the index; `lint --json` with
+# no --db reports neither. The fixture unit is INDEXED in $dbDir, so the result
+# depends on the DB reaching the child.
+Write-Host 'LSP --full-rules passes the server --db list to the child lint' -ForegroundColor Cyan
+$dbDir = Join-Path $WorkDir 'dbsrc'
+New-Item -ItemType Directory -Force $dbDir | Out-Null
+[IO.File]::WriteAllText((Join-Path $dbDir 'FxBase.pas'), (@('unit FxBase;','','interface','','type','  TBase = class','  end;','','implementation','','end.') -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
+$UsesF = Join-Path $dbDir 'FxUses.pas'
+[IO.File]::WriteAllText($UsesF, (@('unit FxUses;','','interface','','implementation','','uses FxBase, NoSuchUnitAnywhere;','','end.') -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
+$dbFile = Join-Path $WorkDir 'fx.sqlite'
+$null = & $Exe index $dbDir --db $dbFile 2>&1
+$cliNoDb = (& $Exe lint $UsesF --json 2>&1) -join "`n"
+$cliDb   = (& $Exe lint $UsesF --db $dbFile --json 2>&1) -join "`n"
+Check 'CONTROL: lint --json WITHOUT --db lacks used-unit-not-resolvable' ($cliNoDb -notmatch '"used-unit-not-resolvable"') ''
+Check 'CONTROL: lint --json WITH --db reports used-unit-not-resolvable' ($cliDb -match '"used-unit-not-resolvable"') ''
+$dbOn = RunLsp $Exe $UsesF @('--db', $dbFile, '--full-rules') 'dbon'
+Check 'flag ON with --db: the DB-dependent finding used-unit-not-resolvable IS published' ($dbOn.Codes -contains 'used-unit-not-resolvable') ''
+
+# ---- I2 (fix round 1): OFF-path byte identity is NEVER silently skipped ------
+function NormOff([string]$s) {
+  $w = $WorkDir -replace '\\', '/'
+  $n = (($s -replace [regex]::Escape($WorkDir), '<W>') -replace [regex]::Escape($w), '<W>')
+  # the engine version (and so the frame length) moves with every release; neither is the OFF-path contract
+  return (($n -replace '"version":"[^"]*"', '"version":"<V>"') -replace 'Content-Length: \d+', 'Content-Length: <N>')
+}
+$offNorm = NormOff $off.Out
+if ($CaptureOffBaseline) {
+  [IO.File]::WriteAllText($OffBaseline, $offNorm, (New-Object Text.UTF8Encoding($false)))
+  Write-Host "  captured OFF-path baseline -> $OffBaseline" -ForegroundColor Yellow
+} elseif ($BaselineExe -and (Test-Path $BaselineExe)) {
   $base = RunLsp ((Resolve-Path $BaselineExe).Path) $DirtyF @() 'base'
-  Check 'flag OFF: publish stdout is byte-identical to the pre-change engine' ($base.Out -ceq $off.Out) ("len " + $base.Out.Length + " vs " + $off.Out.Length)
-} else { Write-Host '  [SKIP] byte-identity: pass -BaselineExe <pre-change drag-lint.exe>' -ForegroundColor Yellow }
+  Check 'flag OFF: publish stdout is byte-identical to the pre-change engine (-BaselineExe)' ($base.Out -ceq $off.Out) ("len " + $base.Out.Length + " vs " + $off.Out.Length)
+} elseif (Test-Path $OffBaseline) {
+  $rec = [IO.File]::ReadAllText($OffBaseline)
+  Check 'flag OFF: publish stdout is byte-identical to the recorded baseline fixture' ($offNorm -ceq $rec) ("len " + $rec.Length + " vs " + $offNorm.Length)
+  Check 'flag OFF: the recorded baseline is not vacuous (initialize result + publishDiagnostics)' (($rec -match 'publishDiagnostics') -and ($rec -match 'capabilities')) ''
+} else {
+  Check 'flag OFF: byte-identity baseline present (-BaselineExe or fixtures\lsp\c1-off-baseline.txt)' $false 'absent -- refusing to skip silently'
+}
 } catch { Write-Host "FATAL: $_" -ForegroundColor Red; exit 2 }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
