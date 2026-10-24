@@ -219,7 +219,8 @@ type
     /// <summary>The drag-lint LSP server over the index, created on first
     /// use: Options.DbPaths, or Options.ResolveDbs() when that list is empty
     /// (P0 review I1: resolved lazily, never on the relay's startup path).
-    /// Paths that do not exist are dropped before the server is created.</summary>
+    /// Paths that do not exist are dropped before the server is created; when
+    /// only some are missing, one stderr line names them.</summary>
     /// <returns>The server, or nil when no database exists or the server could
     /// not be created; the failure is reported once on stderr and never
     /// retried (fail-open).</returns>
@@ -737,6 +738,7 @@ function TProxyMergeEngine.Server: TLSPServer;
 var
   Dbs  : TArray<string>;
   Found: TArray<string>;
+  Gone : TArray<string>;
   D    : string;
 begin
   FServerLock.Enter;
@@ -748,8 +750,9 @@ begin
         Dbs:= FOptions.DbPaths;
         if (Length(Dbs) = 0) and Assigned(FOptions.ResolveDbs) then Dbs:= FOptions.ResolveDbs();
         Found:= nil;
+        Gone := nil;
         for D in Dbs do
-          if FileExists(D) then Found:= Found + [D];
+          if FileExists(D) then Found:= Found + [D] else Gone:= Gone + [D];
         { Checked here, not left to TLSPServer.Create: it skips a missing path
           with a line of its own and opens nothing, which would cost the
           session a second, less specific stderr line. }
@@ -758,7 +761,14 @@ begin
                        (if Length(Dbs) = 0 then 'no --db and none resolved' else string.Join(', ', Dbs)) +
                        '); relaying DelphiLSP unchanged.')
         else
+        begin
+          { A3 fix 4: a partly missing list is named, in one line; the merge
+            goes on with the paths that exist. }
+          if Length(Gone) > 0 then
+            MergeErrLine('drag-lint lsp --proxy: merge index database(s) not found, skipped (' +
+                         string.Join(', ', Gone) + '); merging from the rest.');
           FServer:= TLSPServer.Create(Found);
+        end;
       except
         on E: Exception do
         begin
