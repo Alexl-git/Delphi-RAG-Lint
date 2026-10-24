@@ -2726,6 +2726,20 @@ begin
       if (Length(Symbols) > 50) and (ResolvedQName = '') then
         Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_', [Length(Filtered), Length(Symbols)]));
 
+      { C3: an undocumented symbol still has index facts (Directives:, Complexity:,
+        ...). Append the SAME Phase-2 fact lines the doc branch renders, only when
+        the popup describes exactly ONE symbol (several overloads would misattribute). }
+      if Length(Filtered) = 1 then
+      begin
+        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions);
+        var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
+        if Length(NdLines) > 0 then
+        begin
+          Sb.AppendLine('');
+          Sb.AppendLine('**Analysis facts:**');
+          for var NdLine in NdLines do Sb.AppendLine('- ' + NdLine);
+        end;
+      end;
       MdValue:= Sb.ToString;
     finally
       Sb.Free;
