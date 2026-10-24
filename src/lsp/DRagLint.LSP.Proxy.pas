@@ -85,8 +85,9 @@ type
     /// <summary>--merge-completion: union drag-lint's completion items into
     /// DelphiLSP's reply, keyed on (label, kind). Off by default.</summary>
     MergeCompletion: Boolean;
-    /// <summary>Merge drag-lint's hover text into DelphiLSP's. No CLI flag yet
-    /// (merge plan A4); off by default.</summary>
+    /// <summary>--merge-hover: append drag-lint's hover facts to DelphiLSP's
+    /// hover (after a '---' rule), or answer with them alone when DelphiLSP
+    /// has none. Off by default.</summary>
     MergeHover: Boolean;
     /// <summary>Fall back to drag-lint's definition when DelphiLSP has none. No
     /// CLI flag yet (merge plan A5); off by default.</summary>

@@ -19,8 +19,14 @@ unit DRagLint.LSP.Proxy.Merge;
   computed at once on the merge worker; DelphiLSP's reply for that id gets
   drag-lint's items appended when their (label, kind) is not already there.
   The client's didOpen/didChange/didSave/didClose texts are tapped into the
-  live-document overlay, so completion sees the buffer, not the disk. The
-  other handlers (hover, definition) arrive in later tasks.
+  live-document overlay, so completion sees the buffer, not the disk.
+
+  A4 adds the HOVER merge on the same request-id table: with --merge-hover, a
+  client textDocument/hover request is recorded by id and drag-lint's hover
+  markdown (TLSPServer.ComputeHoverMarkdown, the plain server's own hover) is
+  computed at once on the merge worker; DelphiLSP's reply for that id gets it
+  appended after a '---' rule, or carries it alone when DelphiLSP has none.
+  The definition handler arrives in a later task.
 
   FAIL OPEN, ALWAYS. A handler that raises, overruns its budget or cannot open
   the index makes the relay forward DelphiLSP's original bytes. The engine
@@ -118,6 +124,8 @@ type
     FDocLock     : TCriticalSection;
     FCompletionOff   : Integer;
     FCompletionWarned: Integer;
+    FHoverOff        : Integer;
+    FHoverWarned     : Integer;
     procedure WorkerLoop;
     procedure WarmUp;
     function  Enqueue(const AWork: TProc): Boolean;
@@ -125,9 +133,10 @@ type
     procedure TrackDocument(const AFrame: TBytes; ALen: Integer);
     procedure QueueDocUpdate(const APath: string; ARemove: Boolean; const AText: string);
     procedure FlushDocUpdates;
-    procedure RecordCompletion(const AFrame: TBytes; ALen: Integer);
+    procedure RecordRequest(const AFrame: TBytes; ALen: Integer);
     procedure ComputeCompletion(APending: TObject);
-    function  MergeCompletionReply(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
+    procedure ComputeHover(APending: TObject);
+    function  MergeReply(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
     function  MergeDiagnostics(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
   public
     /// <summary>Copies the options and starts the merge worker thread.</summary>
@@ -152,10 +161,23 @@ type
     /// and the findings were computed within MergeBudgetMs; (2) an S&gt;C reply
     /// to a recorded textDocument/completion request when MergeCompletion is
     /// on, drag-lint's items were computed within MergeBudgetMs of the request
-    /// and at least one of them has a (label, kind) the reply lacks. False
-    /// otherwise: the relay forwards the original bytes. Under the test seam
-    /// (see Create): True with an empty replacement.</returns>
+    /// and at least one of them has a (label, kind) the reply lacks; (3) an S&gt;C
+    /// reply to a recorded textDocument/hover request when MergeHover is on and
+    /// drag-lint's hover markdown is non-empty and was computed within
+    /// MergeBudgetMs of the request. False otherwise: the relay forwards the
+    /// original bytes. Under the test seam (see Create): True with an empty
+    /// replacement.</returns>
     /// <remarks>
+    /// <para>Hover merge (spec criteria 15, 16): DelphiLSP's contents present
+    /// and drag-lint's non-empty -> contents becomes a markdown MarkupContent
+    /// whose value is DelphiLSP's text, LF LF '---' LF LF, then drag-lint's;
+    /// every other field of the reply (range) is kept. DelphiLSP's contents is
+    /// normalised to markdown FIRST: a MarkupContent keeps its value, a
+    /// MarkedString string stays as is, a (language, value) MarkedString
+    /// becomes a fenced code block, an array joins its normalised parts with
+    /// LF LF. DelphiLSP null -> drag-lint's markdown alone; neither, drag-lint
+    /// empty, an error reply, over budget or an exception -> DelphiLSP's bytes
+    /// forwarded unchanged.</para>
     /// <para>Completion union (spec criteria 11-14): DelphiLSP's items come
     /// first, unchanged and in order; drag-lint's follow, each only when its
     /// (label, kind) is not already present, so the merged list has no
@@ -230,12 +252,14 @@ uses
   ;
 
 type
-  { One recorded textDocument/completion request: where the caret was, and
-    drag-lint's items once the worker computed them. Shared by the C>S pump
+  { One recorded textDocument/completion or textDocument/hover request: where
+    the caret was, and drag-lint's answer once the worker computed it (FItems:
+    the completion items as a JSON array, or the hover markdown, '' for none;
+    FHover tells which). Shared by the C>S pump
     (creates it), the merge worker (fills it) and the S>C pump (reads it), so it
     is reference counted: whoever releases last frees it. FItems / FErr /
     FElapsed are written before Done is set and read only after it is. }
-  TPendingCompletion = class
+  TPendingRequest = class
   private   { unit-visible: only this unit's engine reads and writes them }
     FRefs: Integer;
     FPath     : string;
@@ -246,6 +270,7 @@ type
     FItems    : string;
     FErr      : string;
     FDone     : TEvent;
+    FHover    : Boolean;
   public
     constructor Create(const APath: string; ALine1, ACol1: Integer);
     destructor Destroy; override;
@@ -305,12 +330,16 @@ const
 
   METHOD_COMPLETION = 'textDocument/completion';
   MERGE_COMPLETION_PREFIX = 'drag-lint lsp --proxy: merge-completion ';
+  METHOD_HOVER = 'textDocument/hover';
+  MERGE_HOVER_PREFIX = 'drag-lint lsp --proxy: merge-hover ';
+  { Between DelphiLSP's hover text and drag-lint's facts (spec criterion 15). }
+  HOVER_SEPARATOR = #10#10'---'#10#10;
   { Bounds that keep a client that never sees a reply (cancelled requests) or a
     burst of keystrokes from growing the engine's state without limit. }
   QUEUE_MAX   = 8;
   PENDING_MAX = 64;
 
-constructor TPendingCompletion.Create(const APath: string; ALine1, ACol1: Integer);
+constructor TPendingRequest.Create(const APath: string; ALine1, ACol1: Integer);
 begin
   inherited Create;
   FRefs     := 1;
@@ -321,18 +350,18 @@ begin
   FDone     := TEvent.Create(nil, True, False, '');
 end;
 
-destructor TPendingCompletion.Destroy;
+destructor TPendingRequest.Destroy;
 begin
   FDone.Free;
   inherited Destroy;
 end;
 
-procedure TPendingCompletion.AddRef;
+procedure TPendingRequest.AddRef;
 begin
   TInterlocked.Increment(FRefs);
 end;
 
-procedure TPendingCompletion.Release;
+procedure TPendingRequest.Release;
 begin
   if TInterlocked.Decrement(FRefs) = 0 then Free;
 end;
@@ -400,6 +429,69 @@ begin
   finally
     Seen.Free;
   end;
+end;
+
+{ A hover reply's contents as markdown text, whatever shape it came in: a
+  MarkupContent keeps its value; a MarkedString string stays as is; a
+  (language, value) MarkedString becomes a fenced code block; an array joins
+  its normalised, non-empty parts with a blank line. '' for anything else. }
+function HoverContentsToMarkdown(const AContents: TJSONValue): string;
+var
+  Obj : TJSONObject;
+  Lang: TJSONValue;
+  Val : TJSONValue;
+  Elem: TJSONValue;
+  Part: string;
+begin
+  Result:= '';
+  if AContents is TJSONArray then
+  begin
+    for Elem in TJSONArray(AContents) do
+    begin
+      Part:= HoverContentsToMarkdown(Elem);
+      if Part = '' then Continue;
+      Result:= if Result = '' then Part else Result + #10#10 + Part;
+    end;
+  end
+  else if AContents is TJSONObject then
+  begin
+    Obj := TJSONObject(AContents);
+    Val := Obj.GetValue('value');
+    Lang:= Obj.GetValue('language');
+    if not (Val is TJSONString) then Exit;
+    if (Obj.GetValue('kind') = nil) and (Lang is TJSONString) then
+      Result:= '```' + Lang.Value + #10 + Val.Value + #10 + '```'
+    else Result:= Val.Value;
+  end
+  else if (AContents is TJSONString) and not (AContents is TJSONNumber) then Result:= AContents.Value;
+end;
+
+{ Puts drag-lint's hover markdown AOurs (non-empty) into AReply's result:
+  a null result becomes a markdown MarkupContent of AOurs alone; an object
+  result gets its contents replaced by a markdown MarkupContent of DelphiLSP's
+  normalised text, the separator, then AOurs (AOurs alone when DelphiLSP's text
+  is empty); its other fields are kept. Returns True when AReply was changed. }
+function MergeHoverResult(const AReply: TJSONObject; const AOurs: string): Boolean;
+var
+  Res     : TJSONValue;
+  Theirs  : string;
+  Contents: TJSONObject;
+begin
+  Res:= AReply.GetValue('result');
+  if not ((Res is TJSONNull) or (Res is TJSONObject)) then Exit(False);
+  Theirs:= if Res is TJSONObject then HoverContentsToMarkdown(TJSONObject(Res).GetValue('contents')) else '';
+  Contents:= TJSONObject.Create;
+  Contents.AddPair('kind', 'markdown');
+  Contents.AddPair('value', if Theirs = '' then AOurs else Theirs + HOVER_SEPARATOR + AOurs);
+  if Res is TJSONNull then
+  begin
+    Res:= TJSONObject.Create;
+    AReply.RemovePair('result').Free;
+    AReply.AddPair('result', Res);
+  end
+  else TJSONObject(Res).RemovePair('contents').Free;
+  TJSONObject(Res).AddPair('contents', Contents);
+  Result:= True;
 end;
 
 type
@@ -524,7 +616,7 @@ begin
   end;
   FServer.Free;
   FLinter.Free;
-  for var Left: TObject in FPending.Values do TPendingCompletion(Left).Release;
+  for var Left: TObject in FPending.Values do TPendingRequest(Left).Release;
   FPending.Free;
   FPendingLock.Free;
   FDocUpdates.Free;
@@ -710,7 +802,7 @@ begin
     begin
       try
         if FOptions.MergeDiagnostics and (FLinter = nil) then FLinter:= TLinter.Create('');
-        if FOptions.MergeCompletion then Server;   { opens the index; a failure is reported there }
+        if FOptions.MergeCompletion or FOptions.MergeHover then Server;   { opens the index; a failure is reported there }
       finally
         TInterlocked.Exchange(FWarming, 0);
       end;
@@ -719,7 +811,7 @@ begin
 end;
 
 { C>S: with MergeDiagnostics, didChange marks the document dirty and didSave /
-  didOpen / didClose clear it; with MergeCompletion, the text the notification
+  didOpen / didClose clear it; with MergeCompletion or MergeHover, the text the notification
   implies is queued for the live-document overlay. A first didOpen also warms
   the worker. Runs on the C>S pump thread, inline (no worker, no FCallLock). }
 procedure TProxyMergeEngine.TrackDocument(const AFrame: TBytes; ALen: Integer);
@@ -754,7 +846,7 @@ begin
           FDirtyLock.Leave;
         end;
       end;
-      if FOptions.MergeCompletion then
+      if FOptions.MergeCompletion or FOptions.MergeHover then
       begin
         Upd:= LiveUpdateOf(Method, Json, LiveText);
         if Upd <> luNone then QueueDocUpdate(Path, Upd = luRemove, LiveText);
@@ -804,43 +896,52 @@ begin
     else TLiveDocuments.SetText(U.Path, U.Text);
 end;
 
-{ C>S: records a textDocument/completion request by id and queues drag-lint's
-  items for it on the worker at once, so they are usually ready before
-  DelphiLSP answers. Never delays the frame beyond one JSON parse. }
-procedure TProxyMergeEngine.RecordCompletion(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@8491 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting
+{ C>S: records a textDocument/completion (MergeCompletion) or
+  textDocument/hover (MergeHover) request by id and queues drag-lint's answer
+  for it on the worker at once, so it is usually ready before DelphiLSP
+  answers. Never delays the frame beyond one JSON parse. }
+procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@6f57 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting
 var
   Json  : TJSONValue;
   Method: string;
   Uri   : string;
   IdVal : TJSONValue;
   PosObj: TJSONObject;
-  P     : TPendingCompletion;
+  P     : TPendingRequest;
   Key   : string;
   Old   : TObject;
   Full  : Boolean;
+  Hover : Boolean;
+  Comp  : Boolean;
 begin
-  if TInterlocked.CompareExchange(FCompletionOff, 0, 0) <> 0 then Exit;
-  if not FrameContains(AFrame, ALen, METHOD_COMPLETION) then Exit;
+  Comp := FOptions.MergeCompletion and (TInterlocked.CompareExchange(FCompletionOff, 0, 0) = 0)
+          and FrameContains(AFrame, ALen, METHOD_COMPLETION);
+  Hover:= FOptions.MergeHover and (TInterlocked.CompareExchange(FHoverOff, 0, 0) = 0)
+          and FrameContains(AFrame, ALen, METHOD_HOVER);
+  if not (Comp or Hover) then Exit;
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
     try
       if not (Json is TJSONObject) then Exit;
-      if not Json.TryGetValue<string>('method', Method) or (Method <> METHOD_COMPLETION) then Exit;
+      if not Json.TryGetValue<string>('method', Method) then Exit;
+      Hover:= Hover and (Method = METHOD_HOVER);
+      if not (Hover or (Comp and (Method = METHOD_COMPLETION))) then Exit;
       IdVal:= TJSONObject(Json).GetValue('id');
       if (IdVal = nil) or not Json.TryGetValue<string>('params.textDocument.uri', Uri)
          or not Json.TryGetValue<TJSONObject>('params.position', PosObj) then Exit;
       { The position exactly as TLSPServer.HandleCompletion converts it: LSP is
-        0-based, the completion builder 1-based. }
-      P:= TPendingCompletion.Create(TLSPServer.FileFromUri(Uri),  // dl:ok object-leak@7cfa -- reference counted: owned by FPending (or Release on the Full path) and by the job (AddRef/Release); Release frees
+        0-based, the completion builder 1-based (hover converts back). }
+      P:= TPendingRequest.Create(TLSPServer.FileFromUri(Uri),  // dl:ok object-leak@7e8f -- reference counted: owned by FPending (or Release on the Full path) and by the job (AddRef/Release); Release frees
         StrToIntDef(PosObj.GetValue('line').Value, 0) + 1,
         StrToIntDef(PosObj.GetValue('character').Value, 0) + 1);
+      P.FHover:= Hover;
       Key:= IdVal.ToJSON;
       FPendingLock.Enter;
       try
         Full:= FPending.Count >= PENDING_MAX;
         if not Full then
         begin
-          if FPending.TryGetValue(Key, Old) then TPendingCompletion(Old).Release;   { a reused id: the stale entry goes }
+          if FPending.TryGetValue(Key, Old) then TPendingRequest(Old).Release;   { a reused id: the stale entry goes }
           FPending.AddOrSetValue(Key, P);
         end;
       finally
@@ -852,13 +953,45 @@ begin
         Exit;
       end;
       P.AddRef;   { the job's reference }
-      if not Enqueue(procedure begin ComputeCompletion(P); end) then P.Release;
+      if not Enqueue(
+        procedure
+        begin
+          if P.FHover then ComputeHover(P) else ComputeCompletion(P);
+        end) then P.Release;
     finally
       Json.Free;
     end;
   except
     on E: Exception do
-      MergeErrLine(MERGE_COMPLETION_PREFIX + 'could not record a request (' + E.ClassName + ': ' + E.Message + ').');
+      MergeErrLine((if Hover then MERGE_HOVER_PREFIX else MERGE_COMPLETION_PREFIX) +
+                   'could not record a request (' + E.ClassName + ': ' + E.Message + ').');
+  end;
+end;
+
+{ Worker thread: drag-lint's hover markdown for one recorded request, the
+  same text plain `lsp` answers (TLSPServer.ComputeHoverMarkdown, which reads
+  the live-document overlay). Publishes only through the record, like
+  ComputeCompletion. No index turns hover merging off for the session (Server
+  reports the failure once). }
+procedure TProxyMergeEngine.ComputeHover(APending: TObject);
+var
+  P: TPendingRequest;
+  S: TLSPServer;
+begin
+  P:= TPendingRequest(APending);
+  try
+    try
+      FlushDocUpdates;
+      S:= Server;
+      if S = nil then TInterlocked.Exchange(FHoverOff, 1)
+      else P.FItems:= S.ComputeHoverMarkdown(P.FPath, P.FLine1 - 1, P.FCol1 - 1);
+    except   { not swallowed: the message is published through P.FErr and logged by the S>C side }
+      on E: Exception do P.FErr:= E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    P.FElapsed:= GetTickCount64 - P.FStartTick;
+    P.FDone.SetEvent;
+    P.Release;
   end;
 end;
 
@@ -868,12 +1001,12 @@ end;
   with one stderr line (Server reports its own failures). }
 procedure TProxyMergeEngine.ComputeCompletion(APending: TObject);
 var
-  P     : TPendingCompletion;
+  P     : TPendingRequest;
   S     : TLSPServer;
   Stores: TArray<ISymbolStore>;
   Arr   : TJSONArray;
 begin
-  P:= TPendingCompletion(APending);
+  P:= TPendingRequest(APending);
   try
     try
       FlushDocUpdates;
@@ -905,19 +1038,22 @@ begin
 end;
 
 { S>C: a reply to a recorded completion request gets drag-lint's items
-  unioned in (see Intercept). Waits for them at most the part of the budget
-  left since the request. Runs on the S>C pump thread. }
-function TProxyMergeEngine.MergeCompletionReply(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@a36d -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
+  unioned in; a reply to a recorded hover request gets drag-lint's markdown
+  merged in (see Intercept). Waits for drag-lint's answer at most the part of
+  the budget left since the request. Runs on the S>C pump thread. }
+function TProxyMergeEngine.MergeReply(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@0299 -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
   out AReplacement: TBytes): Boolean;
 var
   Json  : TJSONValue;
   IdVal : TJSONValue;
   Obj   : TObject;
-  P     : TPendingCompletion;
+  P     : TPendingRequest;
   Remain: Int64;
   Ours  : TJSONValue;
   Empty : Boolean;
+  Prefix: string;
 begin
+  Prefix:= MERGE_COMPLETION_PREFIX;
   Result:= False;
   AReplacement:= nil;
   FPendingLock.Enter;
@@ -940,32 +1076,42 @@ begin
         if FPending.TryGetValue(IdVal.ToJSON, Obj) then
         begin
           FPending.Remove(IdVal.ToJSON);
-          P:= TPendingCompletion(Obj);
+          P:= TPendingRequest(Obj);
         end;
       finally
         FPendingLock.Leave;
       end;
       if (P = nil) or (TJSONObject(Json).GetValue('result') = nil) then Exit;   { not ours, or an error reply }
+      if P.FHover then Prefix:= MERGE_HOVER_PREFIX;
       Remain:= Int64(P.FStartTick) + FOptions.MergeBudgetMs - Int64(GetTickCount64);
       if Remain < 0 then Remain:= 0;
       if (P.FDone.WaitFor(Cardinal(Remain)) <> wrSignaled) or (P.FElapsed > UInt64(FOptions.MergeBudgetMs)) then
       begin
-        if TInterlocked.Exchange(FCompletionWarned, 1) = 0 then
-          MergeErrLine(MERGE_COMPLETION_PREFIX + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
-                       ' ms budget; the completion reply is forwarded unmerged (reported once).');
+        if (if P.FHover then TInterlocked.Exchange(FHoverWarned, 1) else TInterlocked.Exchange(FCompletionWarned, 1)) = 0 then
+          MergeErrLine(Prefix + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
+                       ' ms budget; the ' + (if P.FHover then 'hover' else 'completion') +
+                       ' reply is forwarded unmerged (reported once).');
         Exit;
       end;
       if P.FErr <> '' then
       begin
-        MergeErrLine(MERGE_COMPLETION_PREFIX + 'skipped a reply (' + P.FErr + '); forwarded unchanged.');
+        MergeErrLine(Prefix + 'skipped a reply (' + P.FErr + '); forwarded unchanged.');
         Exit;
       end;
-      Ours:= TJSONObject.ParseJSONValue(P.FItems);
-      try
-        if not (Ours is TJSONArray) or (TJSONArray(Ours).Count = 0) then Exit;   { nothing to add: original bytes }
-        if not UnionCompletion(TJSONObject(Json), TJSONArray(Ours)) then Exit;
-      finally
-        Ours.Free;
+      if P.FHover then
+      begin
+        { neither, or nothing of ours to add: original bytes (criterion 16b) }
+        if (P.FItems = '') or not MergeHoverResult(TJSONObject(Json), P.FItems) then Exit;
+      end
+      else
+      begin
+        Ours:= TJSONObject.ParseJSONValue(P.FItems);
+        try
+          if not (Ours is TJSONArray) or (TJSONArray(Ours).Count = 0) then Exit;   { nothing to add: original bytes }
+          if not UnionCompletion(TJSONObject(Json), TJSONArray(Ours)) then Exit;
+        finally
+          Ours.Free;
+        end;
       end;
       AReplacement:= BuildFrame(TEncoding.UTF8.GetBytes(Json.ToJSON));
       Result:= True;
@@ -978,7 +1124,7 @@ begin
     begin
       AReplacement:= nil;
       Result:= False;
-      MergeErrLine(MERGE_COMPLETION_PREFIX + 'skipped a reply (' + E.ClassName + ': ' + E.Message + '); forwarded unchanged.');
+      MergeErrLine(Prefix + 'skipped a reply (' + E.ClassName + ': ' + E.Message + '); forwarded unchanged.');
     end;
   end;
 end;
@@ -1097,11 +1243,11 @@ begin
   if FTestEmptyReplacement then Exit(True);
   if ADir = mdClientToServer then
   begin
-    if FOptions.MergeDiagnostics or FOptions.MergeCompletion then TrackDocument(AFrame, ALen);
-    if FOptions.MergeCompletion then RecordCompletion(AFrame, ALen);
+    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover then TrackDocument(AFrame, ALen);
+    if FOptions.MergeCompletion or FOptions.MergeHover then RecordRequest(AFrame, ALen);
     Exit(False);
   end;
-  if FOptions.MergeCompletion and MergeCompletionReply(AFrame, ALen, AReplacement) then Exit(True);
+  if (FOptions.MergeCompletion or FOptions.MergeHover) and MergeReply(AFrame, ALen, AReplacement) then Exit(True);
   Result:= FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement);
 end;
 
