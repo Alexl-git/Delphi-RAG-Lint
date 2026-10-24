@@ -399,6 +399,22 @@
     "hash": "0c6c9d862e84900d5f2fb68a43227a858aed86cf42e07946f82efed85054e306",
     "version": "1.33.0-alpha"
   },
+  "features/lsp-full-rules.md": {
+    "hash": "d05739f0ee343723800c6209f019c15cea1c1634bbbfa1b3edfbe24e9268165d",
+    "version": "1.33.0-alpha"
+  },
+  "features/lsp-protocol-extensions.md": {
+    "hash": "a09c4c2be559be251fc5dc029ab9489b19b97a516ffb57cbafa53b22529d2bed",
+    "version": "1.33.0-alpha"
+  },
+  "features/lsp-proxy-merge.md": {
+    "hash": "b8d7e34592217cb2dafd6a26a56c9735652b4996069a929011fa3dcbc8ccc39d",
+    "version": "1.33.0-alpha"
+  },
+  "features/lsp-switch-vscode.md": {
+    "hash": "594e0958697b4c00a30f5c517b0a3354f3d81198792092529f26e96f2fdd9e8c",
+    "version": "1.33.0-alpha"
+  },
   "features/lsp.md": {
     "hash": "ea35ac7f2efa1437b0e1b4edca57dae44366aa0e5aed874d41f8fb0a00209565",
     "version": "1.33.0-alpha"
@@ -408,11 +424,11 @@
     "version": "1.33.0-alpha"
   },
   "features/mcp-config-writer.md": {
-    "hash": "b5ce12d05e04127581811b4cebca961fbc040f73784e33a3d9a15d6f1327e65b",
+    "hash": "6fc50b4f8bfa3e2d871c0401bddfabd11e16ef32fc268d1c2bf45cb23634f8a5",
     "version": "1.33.0-alpha"
   },
   "features/mcp-server.md": {
-    "hash": "6f91f483ae1c3bdeb796e3ba661270c03bd5e06ea10c79560bdf7635ea98823b",
+    "hash": "1459b6ed0ebeccda46c2604507d7e26d3f3ec75b2e6756ab3bf95e8a5e87c83e",
     "version": "1.33.0-alpha"
   },
   "features/menu-tree.md": {
@@ -560,11 +576,11 @@
     "version": "1.33.0-alpha"
   },
   "features/serve.md": {
-    "hash": "fb1bf0f1238c3a72bbcafbd5f802758a4ae316a3b52a97bab7a5122918c026e7",
+    "hash": "9d7aa0b55db8b6fcaad1e3aa4a84845b7d147597aca4af49947b4dd6dec53612",
     "version": "1.33.0-alpha"
   },
   "features/setup-installer.md": {
-    "hash": "0a192cbf986c2cc53c7c63d5e74910db9872ffde3d49c9393a660ff2263aefff",
+    "hash": "fc7b39fb6c5059cd489a8116d9d7e299fc99f425da83a209e692c47e561d6c55",
     "version": "1.33.0-alpha"
   },
   "features/shared-unit.md": {
@@ -656,15 +672,15 @@
     "version": "1.33.0-alpha"
   },
   "features/workspace-add.md": {
-    "hash": "e96ec2cb8ea681375d703a5b63d893d82d3cbf744d7e48fb6e5376fd1ad995ab",
+    "hash": "c1b34fbe30bf0b2711f442490ed7ace6adad782853c9d74155c823687e78279f",
     "version": "1.33.0-alpha"
   },
   "features/workspace-index.md": {
-    "hash": "1037da01a6e4d76f084671ed800377e8d90658cc4ed7d96c6045bbc85593ae2f",
+    "hash": "896cac0214e5c931c7698f168e3d6cbc0d17a5b71a215b27aad0eb78d26ebb1f",
     "version": "1.33.0-alpha"
   },
   "features/workspace-status.md": {
-    "hash": "ec9ed1f6dd53ff193f1dd31abd2f2b42d4510c011912dafebd2c5d98e9fb7861",
+    "hash": "38f4f82cea85012f8ce6b89ceafb7ae1e5323e0926adbf76687aeafe6e70f7a7",
     "version": "1.33.0-alpha"
   }
 }

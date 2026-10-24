@@ -1062,7 +1062,11 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--full-rules` |  |  |  |
 | `--delphi-lsp-bits` | `32\|64` |  |  |
 
-Described in [lsp](features/lsp.md).
+Described in:
+
+* [lsp](features/lsp.md)
+* [LSP full rule set on save](features/lsp-full-rules.md)
+* [LSP proxy merge](features/lsp-proxy-merge.md)
 
 ### mcp-config
 

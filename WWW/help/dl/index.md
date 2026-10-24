@@ -232,6 +232,10 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [ide-release](features/ide-release.md) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request | 1.13.0-alpha |
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
+| [LSP full rule set on save](features/lsp-full-rules.md) | Runs the full lint rule set on save so the editor shows what the CLI shows | 1.33.0-alpha |
+| [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index | 1.33.0-alpha |
+| [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session | 1.33.0-alpha |
+| [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 15 tools | 0.4.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |

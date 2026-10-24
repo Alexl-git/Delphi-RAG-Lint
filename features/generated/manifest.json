@@ -95,6 +95,12 @@
       "title": "Charts team",
       "order": 30,
       "summary": "Chart questions, charts\\src scripts, forms-csv, the Reports submenu."
+    },
+    {
+      "id": "LSP",
+      "title": "LSP team",
+      "order": 40,
+      "summary": "The drag-lint LSP server: proxy merge, protocol extensions, full rules, the VS Code switch."
     }
   ],
   "entries": [
@@ -8820,6 +8826,127 @@
       "homeOrder": 20
     },
     {
+      "id": "lsp-full-rules",
+      "title": "LSP full rule set on save",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Runs the full lint rule set on save so the editor shows what the CLI shows",
+      "intro": "Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lsp",
+          "example": "drag-lint lsp --db <file.sqlite> --full-rules"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+      }
+    },
+    {
+      "id": "lsp-protocol-extensions",
+      "title": "LSP protocol extensions",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index",
+      "intro": "Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "lsp",
+          "method": "textDocument/documentSymbol"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/implementation"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/declaration"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/rename"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/codeLens"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/semanticTokens/full"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/inlayHint"
+        },
+        {
+          "type": "lsp",
+          "method": "workspace/executeCommand"
+        },
+        {
+          "type": "lsp",
+          "method": "draglint/ping"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c1294941637d6b47f90f1ba5b5b942c37de2b7884c87acc1811fe5f106cab49d"
+      }
+    },
+    {
+      "id": "lsp-proxy-merge",
+      "title": "LSP proxy merge",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session",
+      "intro": "Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and the merge flags add drag-lint results.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lsp",
+          "example": "drag-lint lsp --proxy --delphi-lsp-bits 32 --merge-diagnostics --merge-budget-ms 300 --merge-completion --merge-hover --merge-definition"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+      }
+    },
+    {
       "id": "lsp",
       "title": "lsp",
       "group": "editor-integration",
@@ -9174,6 +9301,36 @@
         "by": "CHARTS",
         "build": "1.33.0-alpha",
         "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
+    },
+    {
+      "id": "lsp-switch-vscode",
+      "title": "Switch VS Code Delphi MCP entry",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Turns the VS Code Delphi MCP entry off and on with a backup",
+      "intro": "Read this when VS Code's own Delphi MCP server and drag-lint should not both run. drag-lint-switch removes the entry with a backup and restores it later.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "drag-lint-switch.exe",
+          "menu": "drag-lint-switch --vscode --off"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3066be030c3e7cdd35b2545403e6508f5b48c9f730c2ec8a926914f4d507e709"
       }
     },
     {
