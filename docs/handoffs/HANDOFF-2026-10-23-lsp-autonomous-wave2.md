@@ -18,8 +18,8 @@ D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 
 ## Lanes now (updated ~20:00, context checkpoint at 81%)
 | lane | worktree | task | state |
 |---|---|---|---|
-| S | lsp-server | B4 (+ queued B1 fix round 1) | ONE sonnet agent: B4 on top of B1 bc7ff420, then "B1 fix:" commits (range-contains-selectionRange clamp, edge fixtures). Then: review B4 + scoped re-review B1 fix, merge B1+B4 to main |
-| Q | lsp-quality | C1 review + C3 | C1 32c2c0e5 DONE (ms recorded in ledger), sonnet review running; C3 (sonnet) running stacked on C1. C1 merge needs featuregen build --all (lsp.json +--full-rules) gated ok both teams |
+| S | lsp-server | B2 (sonnet, on 1123befe) | B1 bc7ff420 + B4 78ee3533 + B1 fix 1123befe DONE; combined review -> task-B4-review.md; on APPROVED merge lane S at 1123befe to main |
+| Q | lsp-quality | C1 fix round 1 (queued on C3 agent) | C3 b11a0c48 DONE (needs review); C1 32c2c0e5 review treated as fix round (child --db, byte-identity skip). Merge C1+C3 needs featuregen build --all (gated ok both teams) |
 | P | lsp-proxy | A1 fix round 2 | same A1 fix agent: Server.pas:907 doc regen + one dl:ok circular-uses on Proxy.pas:1. Then merge A1 to main (no new flag) -> lane M A3, lane P C4 |
 | M | lsp-merge | A3 | WAITING for A1 merged. Brief extracted |
 
