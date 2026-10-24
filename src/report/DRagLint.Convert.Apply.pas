@@ -128,7 +128,7 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.SummarizeUnlinked (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.RemovalLeavesUnconverted (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ConvertedInstancesOf (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindDescendantUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.SplitOnlyNames (DRagLint.Convert.Apply.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -222,7 +222,7 @@ type
   /// DELIBERATE removal counts as remainder at all is an open question for the
   /// converter side -- see docs\converter\apply-remainder-contract.md.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ApplyItemKindName (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses.Warn (DRagLint.Convert.Apply.pas) (+2 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyItemKind = (
@@ -349,7 +349,7 @@ type
   /// afWarnings; afConverted, afAccessSites and afCreatorSites describe work
   /// that WAS done.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ApplyFieldName (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.InstItem (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.Item (DRagLint.Convert.Apply.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyField = (afConverted, afAccessSites, afCreatorSites, afTodos,
@@ -368,7 +368,7 @@ type
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas) (+7 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertApply.MergeInferred (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson.ItemJson (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) (+32 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -409,7 +409,7 @@ type
   /// only in `converted[]` prose; RuleLine still points at the `#link` under its
   /// `#convert` header, which is the line to edit if the carry was wrong.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.EmitResolved (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -531,8 +531,8 @@ type
   /// emitted only when BuildApplyPlan's AWarnUnlinked is True -- so a caller
   /// that silences the warning still gets the count.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply.MergeInferred (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyReport = record
@@ -580,7 +580,7 @@ type
   /// even when Ok=True (e.g. a field declaration that could not be located, or
   /// a ToType whose unit could not be resolved for the uses-add).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildUnitRulesOnlyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.RefuseUnapplicablePlan (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -637,7 +637,7 @@ type
   /// would be built from a property tree that does not reflect the type's
   /// real current shape.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -657,6 +657,16 @@ type
     FRows: Integer;
   public
     /// <summary>Creates an empty fact set.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.RefFactsFor (DRagLint.Convert.Apply.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FKeys</para>
+    /// <seealso cref="DRagLint.Convert.Apply.TRefFacts.Add"/>
+    /// <seealso cref="DRagLint.Convert.Apply.TRefFacts.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.Apply.TRefFacts.Has"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Keys.</summary>
     destructor Destroy; override;
@@ -947,7 +957,7 @@ function QualifyInferredText(const AFix: TQualifyFix): string;
 /// vacuously fresh (nothing to check) -- callers should have already
 /// validated ARules has at least one #convert rule before reaching here.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
 /// <para>Calls: BareTypeTail, CheckTypeFreshness, Default, DRagLint.Convert.Apply.CheckFreshness.CheckOnce, UpperCase</para>
 /// <para>Returns: Default(TFreshnessResult)</para>
 /// <seealso cref="DRagLint.Convert.Apply.CheckFreshness.CheckOnce"/>
@@ -1214,16 +1224,16 @@ procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfm
 /// otherwise (including every instance skipped by a re-emit failure).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BookHasUnitRules, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (+32 more)</para>
-/// <para>Returns: Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
-/// <para>Complexity: 21 (cyclomatic, outer body), 941 lines (full implementation)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
+/// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+67 more)</para>
+/// <para>Returns: if Length(Picked) = 1 then Spelling; Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
+/// <para>Complexity: 28 (cyclomatic, outer body), 1465 lines (full implementation)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.AddCodeEntries"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.InstItem"/>
-/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites"/>
-/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
@@ -1291,7 +1301,7 @@ function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas,
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
 /// the real per-instance re-emit). Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.RemovalLeavesUnconverted (DRagLint.Convert.Apply.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ConvertedInstancesOf (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.RemovalLeavesUnconverted (DRagLint.Convert.Apply.pas) (+1 more)</para>
 /// <para>Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim</para>
 /// <para>Returns: nil; List.ToArray</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>

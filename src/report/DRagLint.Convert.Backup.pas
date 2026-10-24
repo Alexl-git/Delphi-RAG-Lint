@@ -45,7 +45,7 @@ uses
 /// probes); not atomic -- a concurrent writer could race this, which is
 /// acceptable for drag-lint's single-user CLI usage.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.BackUpChanged (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas)</para>
 /// <para>Calls: IntToStr</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -97,8 +97,8 @@ procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string
 /// recovery map pointing at the (untouched) .BCK backups.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
-/// <para>Calls: Format</para>
-/// <para>Touches: file system</para>
+/// <para>Calls: DRagLint.Convert.Backup.AppendRecoveryBlock, Format</para>
+/// <seealso cref="DRagLint.Convert.Backup.AppendRecoveryBlock"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
