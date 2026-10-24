@@ -615,6 +615,19 @@ function Get-CliVerbFlagMap {
   foreach ($c in (Get-ArgsCallees -Span $preSpan -Self 'Run')) {
     foreach ($f in (Get-Closure -Start $c -Routines $routines)) { [void]$global.Add($f) }
   }
+  # REFUSAL-ONLY fields. Run reads these before dispatch only to REFUSE a bad
+  # command line (N-02, fbd4be91: a second, different --rule exits 2). Reading a
+  # field to reject it does not make its flag belong to every verb -- --rule is
+  # still lint's / lint-all's / rules', and must stay on THEIR lines. Without
+  # this, --rule joined the pinned cross-verb set and was exempted from every
+  # verb's gap count (verbs affected fell 27 -> 26 with no banner change).
+  # Named, not inferred: a field missing from the pre-dispatch span throws, so a
+  # rename or a moved check cannot leave a dead entry here.
+  foreach ($p in @('RuleConflict')) {
+    if (-not $global.Remove($p)) {
+      throw "refusal-only field '$p' is no longer read before dispatch -- renamed or moved? update CliFlagVerbMap.ps1"
+    }
+  }
   # The SHARED DATABASE RESOLVER is cross-verb plumbing too, wherever it is
   # called from. Until 1.20.4 Run called ResolveConsumerDbs(Args) before the
   # dispatch, so the pre-dispatch closure above measured its fields (--platform,

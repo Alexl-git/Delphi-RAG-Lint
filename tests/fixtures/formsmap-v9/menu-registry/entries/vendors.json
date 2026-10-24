@@ -1,0 +1,6 @@
+{
+  "id": "vendors",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Ribbon: Lists > Lists Bar > Vendor List" }
+  ]
+}

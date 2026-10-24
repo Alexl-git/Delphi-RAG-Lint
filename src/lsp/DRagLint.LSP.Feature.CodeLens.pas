@@ -3,7 +3,7 @@ unit DRagLint.LSP.Feature.CodeLens;
 { `textDocument/codeLens` -- one "<n> callers" lens above every routine
   declaration, from the same index counts as draglint/callerCounts
   (ILspServerContext.CallerCounts). The lens runs the client command
-  `draglint.showCallers` (implemented by the editor extension, B6) with
+  `draglint.showCallers` (answered by workspace/executeCommand, B6) with
   [uri, line]. Registered through the S0 feature registry exactly as
   DRagLint.LSP.Feature.Ping is. }
 

@@ -699,7 +699,8 @@ Point your editor's LSP config at `drag-lint.exe lsp --db <path>.sqlite`.
 The server speaks JSON-RPC over stdio.
 
 Capabilities: hover, definition, references, completion, signatureHelp,
-diagnostics (publishDiagnostics on didSave), workspaceSymbols.
+diagnostics (publishDiagnostics on didSave), workspaceSymbols, rename (prepareRename +
+rename: a WorkspaceEdit the editor applies -- the server itself writes no file).
 
 ### MCP server (Claude / Cursor)
 
@@ -848,7 +849,9 @@ the protocol between the IDE and it. The IDE's Code Insight manager is
 exclusive -- one server per language -- so registering drag-lint the plain way
 would trade the compiler front end (generics, `with`, inline vars, the unsaved
 buffer) for a symbol index. Proxying removes the either/or. Add
-`--delphi-lsp <path>` to override which server is spawned. By default the relay
+`--delphi-lsp <path>` to override which server is spawned, or
+`--delphi-lsp-bits 32` to forward to the 32-bit `bin\DelphiLSP.exe` instead of
+the default 64-bit `bin64` one (any value but 32/64 exits 3). By default the relay
 is transparent: byte-for-byte identical to talking to DelphiLSP directly. Add
 `--merge-diagnostics` and drag-lint's lint findings (source `drag-lint`) are
 appended to DelphiLSP's own `textDocument/publishDiagnostics` notification, so
@@ -1012,7 +1015,7 @@ before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Del
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| `rename --kind symbol --name <q> --to <new> --db <db>` | Cross-unit rename (declaration + every reference). Refuses (exit 2, naming the file) when the old name is used in an indexed `.inc` include: refs inside `{$I}` text are not indexed until extractor 1.22 | `--apply`, `--no-backup`, `--json` |
+| `rename --kind symbol --name <q> --to <new> --db <db>` | Cross-unit rename (declaration + every reference). Refuses (exit 2, naming the file) when the old name is used in an indexed `.inc` include: refs inside `{$I}` text are not indexed until extractor 1.22. Renaming an event handler also rewrites its `OnClick = Name` binding in the form's text `.dfm`; a binary `.dfm` that holds the name refuses (exit 2, naming the `.dfm`). `--json` reports each edit at the identifier it replaces | `--apply`, `--no-backup`, `--json` |
 | `rename --kind param --file <f> --line <L> --col <C> --to <new>` | Routine-local rename (parameter/variable) | `--apply` |
 | `find-unit --name <X> --in <file> --apply` | Add the declaring unit to `uses` | |
 | [`safe-delete`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/safe-delete) `--name <q> --db <db>` | Delete a symbol iff it has zero references | `--apply`, `--json` |
@@ -1093,9 +1096,9 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
 | `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
-| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, before-you-start preconditions for every hop, confidence (algorithm v8: menu items added in code under a `.dfm` menu item are part of the path; a `?` modal always carries its reason in Notes; popup forms the index cannot trace are declared under `popupForms` in the project's `_D-RAG\drag-lint-project.json` -- see docs\wiki\Generate-Test-Helper-CSV.md) | `--output <f.csv>`, `--root <TfrmMAIN>` |
-| `menu-tree --project <dproj> --db <db>` | The menu tree a program BUILDS IN CODE (`TMenuItem.Create` + `Caption :=` + `Add`/`Insert`, item/separator/header helpers recognised by their body, click wrappers, procedural-parameter callbacks, const-array and case-literal captions), read statically from the index + a tree-sitter re-parse; DFM items given code-added children appear as external roots. Exit 0 ran, 2 usage/setup, 3 stale index (refused, never answered) -- see docs\wiki\Menu-Tree.md | `--root <QName>`, `--format text\|json\|paths`, `--output <f>` `<verb> --help` prints this verb's own help. |
-| `menu-drift --project <dproj> --db <db> --registry <features dir>` | The code-built menu tree (`menu-tree`) against the registry's `ide-menu` surfaces, by PATH: MISSING (registered, not built; `renamed?` hint), MOVED (the caption lives under another parent), UNREGISTERED (built, not registered; a skeleton surface line), NOTE (dynamic captions, unparented items, exemptions the kind model no longer needs). Exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index; guarded on the IDE plugin by `run_menu_drift_guard.ps1` | `--format text\|json`, `--output <f>` `<verb> --help` prints this verb's own help. |
+| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, before-you-start preconditions for every hop, confidence (algorithm v9: menu items added in code under a `.dfm` menu item, and DevExpress bar items linked in code into a `.dfm` bar / popup / sub-item, are part of the path; a `?` modal always carries its reason in Notes; popup forms the index cannot trace are declared under `popupForms` in the project's `_D-RAG\drag-lint-project.json` -- see docs\wiki\Generate-Test-Helper-CSV.md) | `--output <f.csv>`, `--root <TfrmMAIN>` |
+| `menu-tree --project <dproj> --db <db>` | The menu tree a program BUILDS IN CODE (`TMenuItem.Create` + `Caption :=` + `Add`/`Insert`, item/separator/header helpers recognised by their body, click wrappers, procedural-parameter callbacks, const-array and case-literal captions), read statically from the index + a tree-sitter re-parse; DFM items given code-added children appear as external roots; `--with-dfm` adds the `.dfm` menus themselves (DevExpress bars / ribbon tabs / backstage / bar popups, VCL `TMainMenu` / `TPopupMenu`) as roots and grafts the code-added links (`ItemLinks.Add` / `Insert`, `Bars[n]`, `with` receivers, helpers) into them. Exit 0 ran, 2 usage/setup, 3 stale index (refused, never answered) -- see docs\wiki\Menu-Tree.md | `--root <QName>`, `--with-dfm`, `--format text\|json\|paths`, `--output <f>` `<verb> --help` prints this verb's own help. |
+| `menu-drift --project <dproj> --db <db> --registry <features dir>` | The code-built menu tree (`menu-tree`) against the registry's `ide-menu` surfaces, by PATH -- and an application's `app-menu` surfaces (`{ "type": "app-menu", "form": "TfrmMain", "path": "Main menu > Lists > Customer List" }`, keyed by form + path; they imply `--with-dfm`; `--registry` defaults to `<project>\_D-RAG\menu-registry`): MISSING (registered, not built; `renamed?` hint), MOVED (the caption lives under another parent), UNREGISTERED (built, not registered; a skeleton surface line), NOTE (dynamic captions, unparented items, exemptions the kind model no longer needs). Exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index; guarded on the IDE plugin by `run_menu_drift_guard.ps1` | `--with-dfm`, `--format text\|json`, `--output <f>` `<verb> --help` prints this verb's own help. |
 | `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const`, `--output <file>` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |

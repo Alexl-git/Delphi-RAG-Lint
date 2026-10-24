@@ -17,13 +17,16 @@ uses
   ;
 
 type
-  /// <summary>One ide-menu surface of the registry.</summary>
+  /// <summary>One ide-menu surface of the registry, or (dxBar spec decision 6)
+  /// an app-menu surface of an application's registry.</summary>
   TRegistrySurface = record
     /// <summary>Id of the entry that owns the surface.</summary>
     EntryId: string;
     /// <summary>The path as written in the entry.</summary>
     Path   : string;
-    /// <summary>MenuPathKey(Path).</summary>
+    /// <summary>Form class of an app-menu surface; '' for ide-menu.</summary>
+    Form   : string;
+    /// <summary>MenuFormPathKey(Form, Path).</summary>
     Key    : string;
   end;
 
@@ -36,13 +39,19 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    /// <summary>Reads pDir\entries\*.json (surfaces of type ide-menu), the family
+    /// <summary>Reads pDir\entries\*.json (surfaces of type ide-menu, and app-menu with its form), the family
     /// children of pDir\generated\manifest.json and pDir\exemptions.json (the keys of "captions").</summary>
     /// <param name="pDir">A features directory (the repo's features\, or a fixture's registry\).</param>
     /// <exception cref="EMenuDriftSetup">pDir\entries is missing or an entry is not valid JSON.</exception>
     procedure LoadFromDir(const pDir: string);
     /// <summary>Adds one surface (tests, or a loader).</summary>
-    procedure AddSurface(const pEntryId, pPath: string);
+    /// <param name="pEntryId">Owning entry id.</param>
+    /// <param name="pPath">The path as written.</param>
+    /// <param name="pForm">Form class of an app-menu surface; '' for ide-menu.</param>
+    procedure AddSurface(const pEntryId, pPath: string; const pForm: string = '');
+    /// <summary>True when any surface is an app-menu one (has a form): menu-drift
+    /// then compares the .dfm menus too (implies --with-dfm).</summary>
+    function HasAppMenus: Boolean;
     /// <summary>Adds the ide-menu surfaces of the family children in a generated
     /// manifest.json ("families": { name: [ child entries ] }) -- e.g. the
     /// chart-questions children, one per Reports item. A missing file adds nothing.</summary>
@@ -113,6 +122,14 @@ type
 /// Order inside a submenu is not compared.</remarks>
 function ComputeMenuDrift(pTree: TMenuTree; pRegistry: TMenuRegistry): TMenuDriftReport;
 
+/// <summary>The drift key of a path on a form: MenuPathKey(pPath), prefixed
+/// with the lowercased form class and '|' when pForm is not ''. ide-menu
+/// surfaces and code roots have no form, so their keys are unchanged.</summary>
+/// <param name="pForm">Form class ('' for none).</param>
+/// <param name="pPath">A display path.</param>
+/// <returns>The key; an app-menu key never equals an ide-menu key.</returns>
+function MenuFormPathKey(const pForm, pPath: string): string;
+
 implementation
 
 uses
@@ -141,22 +158,51 @@ begin
   inherited Destroy;
 end;
 
-procedure TMenuRegistry.AddSurface(const pEntryId, pPath: string);
+function MenuFormPathKey(const pForm, pPath: string): string;
+begin
+  Result:= if pForm = '' then MenuPathKey(pPath) else LowerCase(pForm) + '|' + MenuPathKey(pPath);
+end;
+
+procedure TMenuRegistry.AddSurface(const pEntryId, pPath: string; const pForm: string = '');
 var
   S: TRegistrySurface;
 begin
   S.EntryId:= pEntryId;
   S.Path   := pPath;
-  S.Key    := MenuPathKey(pPath);
+  S.Form   := pForm;
+  S.Key    := MenuFormPathKey(pForm, pPath);
   FSurfaces.Add(S);
+end;
+
+function TMenuRegistry.HasAppMenus: Boolean;
+var
+  S: TRegistrySurface;
+begin
+  Result:= False;
+  for S in FSurfaces do
+    if S.Form <> '' then Exit(True);
+end;
+
+{ an ide-menu surface, or an app-menu one with its form }
+procedure AddEntrySurfaces(pReg: TMenuRegistry; const pId: string; pArr: TJSONArray);
+var
+  Item: TJSONValue;
+  Typ : string;
+begin
+  for Item in pArr do
+    if (Item is TJSONObject) and TJSONObject(Item).TryGetValue<string>('type', Typ) then
+    begin
+      if SameText(Typ, 'ide-menu') then pReg.AddSurface(pId, TJSONObject(Item).GetValue<string>('path', ''))
+      else if SameText(Typ, 'app-menu') then
+        pReg.AddSurface(pId, TJSONObject(Item).GetValue<string>('path', ''), TJSONObject(Item).GetValue<string>('form', ''));
+    end;
 end;
 
 procedure TMenuRegistry.LoadFromDir(const pDir: string);
 var
-  F, Id, Typ: string;
+  F, Id     : string;
   V         : TJSONValue;
   Arr       : TJSONArray;
-  Item      : TJSONValue;
   Caps      : TJSONObject;
   Pair      : TJSONPair;
 begin
@@ -172,10 +218,7 @@ begin
     end;
     try
       Id:= TJSONObject(V).GetValue<string>('id', TPath.GetFileNameWithoutExtension(F));
-      if TJSONObject(V).TryGetValue<TJSONArray>('surfaces', Arr) then
-        for Item in Arr do
-          if (Item is TJSONObject) and TJSONObject(Item).TryGetValue<string>('type', Typ) and SameText(Typ, 'ide-menu') then
-            AddSurface(Id, TJSONObject(Item).GetValue<string>('path', ''));
+      if TJSONObject(V).TryGetValue<TJSONArray>('surfaces', Arr) then AddEntrySurfaces(Self, Id, Arr);
     finally
       V.Free;
     end;
@@ -199,8 +242,7 @@ var
   Fam     : TJSONPair;
   Child   : TJSONValue;
   Arr     : TJSONArray;
-  Item    : TJSONValue;
-  Id, Typ : string;
+  Id      : string;
 begin
   if not TFile.Exists(pManifest) then Exit;
   V:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pManifest, TEncoding.UTF8));
@@ -212,9 +254,7 @@ begin
           if (Child is TJSONObject) and TJSONObject(Child).TryGetValue<TJSONArray>('surfaces', Arr) then
           begin
             Id:= TJSONObject(Child).GetValue<string>('id', Fam.JsonString.Value);
-            for Item in Arr do
-              if (Item is TJSONObject) and TJSONObject(Item).TryGetValue<string>('type', Typ) and SameText(Typ, 'ide-menu') then
-                AddSurface(Id, TJSONObject(Item).GetValue<string>('path', ''));
+            AddEntrySurfaces(Self, Id, Arr);
           end;
   finally
     V.Free;
@@ -391,14 +431,14 @@ end;
 
 { stale-looking exemption (spec 7 note row): an exempted caption that the
   kind model now sees as a container / header / root -- it no longer needs exempting }
-procedure CollectContainers(pNode: TMenuNode; const pPrefix: string; pAcc: TList<string>);
+procedure CollectContainers(pNode: TMenuNode; const pPrefix, pForm: string; pAcc: TList<string>);
 var
   C   : TMenuNode;
   Path: string;
 begin
   Path:= if pPrefix = '' then pNode.DisplayCaption else pPrefix + PATH_SEP + pNode.DisplayCaption;
-  if pNode.Kind in [mnkRoot, mnkSubmenu] then pAcc.Add(MenuPathKey(Path));
-  for C in pNode.Children do CollectContainers(C, Path, pAcc);
+  if pNode.Kind in [mnkRoot, mnkSubmenu] then pAcc.Add(MenuFormPathKey(pForm, Path));
+  for C in pNode.Children do CollectContainers(C, Path, pForm, pAcc);
 end;
 
 procedure CollectStructural(pNode: TMenuNode; pAcc: TDictionary<string, TMenuNodeKind>);
@@ -445,14 +485,14 @@ begin
       if L.External then Continue;
       if L.Kind = mnkDynamic then
       begin
-        DynParents.Add(MenuPathKey(L.ParentPath));
+        DynParents.Add(MenuFormPathKey(L.Form, L.ParentPath));
         Continue;
       end;
       Live.Add(L);
-      LiveKeys.AddOrSetValue(MenuPathKey(L.Path), Live.Count - 1);
+      LiveKeys.AddOrSetValue(MenuFormPathKey(L.Form, L.Path), Live.Count - 1);
     end;
     for I:= 0 to pRegistry.Surfaces.Count - 1 do RegKeys.AddOrSetValue(pRegistry.Surfaces[I].Key, I);
-    for N in pTree.Roots do CollectContainers(N, '', Containers);
+    for N in pTree.Roots do CollectContainers(N, '', N.Form, Containers);
 
     { missing / moved }
     for R in pRegistry.Surfaces do
@@ -464,7 +504,7 @@ begin
       if DynParents.Contains(PK) then Continue;  { the dynamic item may be it; its note says so }
       Best:= -1;
       for I:= 0 to Live.Count - 1 do
-        if MenuCaptionKey(Live[I].Caption) = LK then
+        if (MenuCaptionKey(Live[I].Caption) = LK) and SameText(Live[I].Form, R.Form) then
         begin
           Best:= I;
           Break;
@@ -475,7 +515,7 @@ begin
         Mov.Entry:= R.EntryId;
         Mov.NowAt:= Live[Best].Path;
         Result.Moved.Add(Mov);
-        MovedTo.Add(MenuPathKey(Live[Best].Path));
+        MovedTo.Add(MenuFormPathKey(Live[Best].Form, Live[Best].Path));
         Continue;
       end;
       Miss.Path := R.Path;
@@ -485,7 +525,7 @@ begin
       P:= MIN_CAPTION_PREFIX - 1;
       for I:= 0 to Live.Count - 1 do
       begin
-        K:= MenuPathKey(Live[I].Path);
+        K:= MenuFormPathKey(Live[I].Form, Live[I].Path);
         if (ParentKey(K) <> PK) or RegKeys.ContainsKey(K) then Continue;
         if CommonPrefix(LeafKey(K), LK) > P then
         begin
@@ -500,7 +540,7 @@ begin
     { unregistered }
     for L in Live do
     begin
-      K:= MenuPathKey(L.Path);
+      K:= MenuFormPathKey(L.Form, L.Path);
       if RegKeys.ContainsKey(K) or MovedTo.Contains(K) then Continue;
       Covered:= False;
       for R in pRegistry.Surfaces do
@@ -521,7 +561,8 @@ begin
       Unr.Path    := L.Path;
       Unr.Handler := L.Handler;
       Unr.Source  := L.Source;
-      Unr.Skeleton:= '{ "type": "ide-menu", "path": ' + JsonText(L.Path) + ' }';
+      Unr.Skeleton:= if L.Form = '' then '{ "type": "ide-menu", "path": ' + JsonText(L.Path) + ' }'
+        else '{ "type": "app-menu", "form": ' + JsonText(L.Form) + ', "path": ' + JsonText(L.Path) + ' }';
       Result.Unregistered.Add(Unr);
     end;
 

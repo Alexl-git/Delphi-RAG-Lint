@@ -1,0 +1,17 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>Demo9.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uMain9.pas"><Form>frmMain9</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uBarUtils9.pas"/>
+    <DCCReference Include="uGridPopup9.pas"/>
+    <DCCReference Include="uGridPopups9.pas"/>
+    <DCCReference Include="uA9.pas"><Form>frmA9</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uB9.pas"><Form>frmB9</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uC9.pas"><Form>frmC9</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uD9.pas"><Form>frmD9</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uE9.pas"><Form>frmE9</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uF9.pas"><Form>frmF9</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>

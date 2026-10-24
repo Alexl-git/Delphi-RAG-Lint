@@ -57,6 +57,12 @@ type
     /// a stub server so the relay can be proven without RAD Studio in the
     /// loop.</summary>
     DelphiLspExe: string;
+    /// <summary>Which installed DelphiLSP to resolve when DelphiLspExe is empty:
+    /// 32 selects `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
+    /// itself), anything else selects `bin64\DelphiLSP.exe`. The caller sets 64
+    /// by default; the zero a Default() record carries also means 64. Ignored
+    /// when DelphiLspExe is non-empty.</summary>
+    DelphiLspBits: Integer;
     /// <summary>Extra command line passed through to the child, appended after
     /// the executable. DelphiLSP itself takes no arguments (it self-configures
     /// from the IDE-generated `&lt;Project&gt;.delphilsp.json`), so this exists
@@ -116,12 +122,18 @@ type
 const
   /// <summary>Default per-frame merge budget, in milliseconds.</summary>
   LSP_MERGE_BUDGET_DEFAULT_MS = 300;
+  /// <summary>--delphi-lsp-bits value selecting the 32-bit `bin\DelphiLSP.exe`.</summary>
+  LSP_BITS_32 = 32;
+  /// <summary>--delphi-lsp-bits value (and the default) selecting `bin64\DelphiLSP.exe`.</summary>
+  LSP_BITS_64 = 64;
 
 /// <summary>Resolves the DelphiLSP executable to spawn.</summary>
 /// <param name="AOverride">An explicit path; returned as-is when non-empty,
 /// whether or not it exists, so that a bad --delphi-lsp reports the path the
 /// caller actually asked for rather than a silently substituted default.</param>
-/// <returns>Full path to `bin64\DelphiLSP.exe`, or an empty string when no
+/// <param name="ABits">32 resolves `bin\DelphiLSP.exe`; any other value
+/// resolves `bin64\DelphiLSP.exe` (the default).</param>
+/// <returns>Full path to `bin64\DelphiLSP.exe` (`bin\DelphiLSP.exe` for 32), or an empty string when no
 /// installed Studio could be located.</returns>
 /// <remarks>
 /// The 64-bit binary is deliberate. The IDE currently launches the
@@ -136,7 +148,7 @@ const
 /// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ResolveDelphiLspPath(const AOverride: string): string;
+function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS_64): string;
 
 /// <summary>Runs the transparent relay until the child exits or either stream
 /// closes, then returns the child's exit code.</summary>
@@ -669,10 +681,11 @@ begin
   WriteFile(H, Raw[1], Length(Raw), N, nil);
 end;
 
-function ResolveDelphiLspPath(const AOverride: string): string;
+function ResolveDelphiLspPath(const AOverride: string; ABits: Integer): string;
 var
   Root: string;
   Diag: string;
+  Sub : string;
 begin
   if AOverride <> '' then Exit(AOverride);
 
@@ -688,10 +701,11 @@ begin
     Exit('');
   end;
 
-  Result:= Root + '\bin64\DelphiLSP.exe';
+  Sub:= if ABits = LSP_BITS_32 then 'bin' else 'bin64';
+  Result:= Root + '\' + Sub + '\DelphiLSP.exe';
   if not FileExists(Result) then
   begin
-    StdErrLine('drag-lint lsp --proxy: no bin64\DelphiLSP.exe under the ' +
+    StdErrLine('drag-lint lsp --proxy: no ' + Sub + '\DelphiLSP.exe under the ' +
                'resolved RAD Studio root ' + Root + '.');
     Result:= '';
   end;
@@ -722,7 +736,7 @@ begin
   GInterceptor:= nil;
   GAnswerer   := nil;
   MergeEngine := nil;
-  Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe);
+  Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe, AOptions.DelphiLspBits);
   if Exe = '' then
   begin
     { ResolveDelphiLspPath has already printed WHICH step failed -- the root, or

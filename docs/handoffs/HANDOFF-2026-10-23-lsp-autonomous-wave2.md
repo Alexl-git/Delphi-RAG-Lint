@@ -12,21 +12,21 @@ mode.json key `lspRun` only; never touch top-level `phase` (CONVERTER's slot, sh
 Wakeup cron "13,43 * * * *" is session-only: recreate it in a fresh session.
 
 ## Merged to local main this session
+A1 34e8cf20. 
 C1+C3 (87c36989) + featuregen bcc99792 (ENGINE re-verifies lsp). 
 B1+B4 653fac01 (lane S at 1123befe). 
 D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 6633d237, S0 ff250754
 (dpr/dproj conflict resolved by keeping all units; compile-checked by lane S step 0 of B1).
 
-## Lanes now (updated ~20:00, context checkpoint at 81%)
+## Lanes now (updated 2026-10-24 early)
+Merged to local main: S0 P0 A1 C4 B1 B2 B3 B4 B5 B6 C1 C2 C3 + docs-sync fix (featuregen 6633d237 bcc99792 308b0325).
 | lane | worktree | task | state |
 |---|---|---|---|
-| S | lsp-server | B2 (sonnet, BASE 1123befe) | B1+B4 merged. On B2 DONE: review (sonnet, verdict in reply) -> merge -> next B3 (session model) |
-| Q | lsp-quality | C2 (implementer, session model) | step 0 merge main + build; CLI.pas ApplyLineMarkers part ON (cli7 merged). On DONE: review (session model, verdict in reply) -> merge |
-| P | lsp-proxy | A1 fix round 2 | same A1 fix agent: Server.pas:907 doc regen + one dl:ok circular-uses on Proxy.pas:1. Then merge A1 to main (no new flag) -> lane M A3, lane P C4 |
-| M | lsp-merge | A3 | WAITING for A1 merged. Brief extracted |
-
-Main compiles after S0 merge ff250754 (verified by lane S + lane Q builds).
-lsp-quality worktree: encoding guard fails on ITS disk copy of run_docs_sync_guard.ps1 (LF) -- artifact, ignore.
+| S | lsp-server | main verification sweep (sonnet) | merge main e33e3d7b (keep-both conflicts, UNCOMPILED), build, fix stale dl:ok hashes in Features.pas ("merge-fix:"), run ALL lsp guards. If a merge-fix commit appears: merge it to main |
+| M | lsp-merge | A5 (+ queued "A4 fix:" commits) | A3 24531333 + A3 fixes 3b7d7d8e + A4 7b98c6e7 approved-with-fixes. After: review A5 + scoped re-review A4 fix -> ask ENGINE+CONVERTER ok -> merge lane M -> featuregen build --all (lsp.json --merge-completion, --merge-hover, A5 flags) -> "done" |
+| P, Q | -- | -- | all their tasks merged |
+Then A6 close-out (lane Q, sonnet; controller does gated steps).
+KNOWN on main: run_lsp_rename_guard 'ref moved on disk' FAIL = ENGINE regression 86444e3c, ENGINE fixing in e3d/rename-fix2 (do not change the guard). yadf_mirror red = owner re-copy (ledger). New INBOX: docs\INBOX-lsp-ephemeral-index-cost.md (ENGINE).
 Reviewers (analyst) cannot write files: ask for the verdict in the reply.
 
 ## Next actions
