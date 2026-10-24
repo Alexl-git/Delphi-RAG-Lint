@@ -33,8 +33,11 @@ before working on an item.**
   clicks/commands while busy, reports the first, never queues; `ConvRulesEditor.Busy` message for
   drivers' WaitIdle; drive-convert-tab 32/0 x6, batch-driver Add retry removed; model 2615/5/0).
 * Open todos from this run:
-  * **N7 leftover** N1's Save path is still not driven separately.
-  * **N10** (low) GUI lock stays held by a dead owner (cost D2 ~20 min): add a stale-owner check.
+  * DONE: **N7 leftover** 72ec46ed (drive-engine-wait 9 -> 16: File|Save under the progress
+    window refused + reported; the Ctrl+S check cannot go red -- regression guard only);
+    B4 test-dpr lint debt 328f8569 (44 -> 0 on B4 lines); **N10** in the run's scratch
+    `gui-lock.ps1` (stale = over 60 min, or over 10 min with no ConvRulesEditor running;
+    positive + negative control passed) -- the lock is scratch, not tracked.
   * **FG-N** featuregen `"noFlags": true` marker -- done on the held FG-M branch (450b9267).
   * **FG-M** featuregen: Harvest via `menu-tree --format json`, path-based checks B/C, caption-key
     parity vector, drop 14 stale exemptions (in flight, branch feat/conv-fgm-menu-tree).
