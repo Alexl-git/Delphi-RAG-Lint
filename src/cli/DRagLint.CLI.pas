@@ -528,6 +528,7 @@ type
     LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
     LspMergeCompletion : Boolean; // --merge-completion (merge plan A3; OFF by default)
     LspMergeHover      : Boolean; // --merge-hover (merge plan A4; OFF by default)
+    LspMergeDefinition : Boolean; // --merge-definition (merge plan A5; OFF by default)
     LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
@@ -1602,6 +1603,7 @@ begin
     else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
     else if A = '--merge-completion' then Result.LspMergeCompletion:= True
     else if A = '--merge-hover' then Result.LspMergeHover:= True
+    else if A = '--merge-definition' then Result.LspMergeDefinition:= True
     else if A = '--full-rules' then Result.LspFullRules:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
@@ -32733,6 +32735,7 @@ begin
         ProxyOpt.MergeBudgetMs   := if Args.LspMergeBudgetSet then Args.LspMergeBudgetMs else DRagLint.LSP.Proxy.LSP_MERGE_BUDGET_DEFAULT_MS;
         ProxyOpt.MergeCompletion := Args.LspMergeCompletion;
         ProxyOpt.MergeHover      := Args.LspMergeHover;
+        ProxyOpt.MergeDefinition := Args.LspMergeDefinition;
         ProxyOpt.DbPaths         := Args.DbPaths;
         ProxyOpt.ResolveDbs      := function: TArray<string> begin Result:= ResolveConsumerDbs(Args); end;   { P0 review I1: lazy, on the merge worker }
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));

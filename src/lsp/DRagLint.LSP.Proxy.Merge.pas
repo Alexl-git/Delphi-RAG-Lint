@@ -26,7 +26,14 @@ unit DRagLint.LSP.Proxy.Merge;
   markdown (TLSPServer.ComputeHoverMarkdown, the plain server's own hover) is
   computed at once on the merge worker; DelphiLSP's reply for that id gets it
   appended after a '---' rule, or carries it alone when DelphiLSP has none.
-  The definition handler arrives in a later task.
+
+  A5 adds the DEFINITION fallback and the requests DelphiLSP does not serve:
+  with --merge-definition, a recorded textDocument/definition whose reply is
+  null or [] gets drag-lint's locations instead (a non-empty reply wins); the
+  initialize reply gains referencesProvider / workspaceSymbolProvider when it
+  lacks them, and the client's textDocument/references / workspace/symbol
+  requests are then ANSWERED here (Answer, written through ClientWriter) and
+  never forwarded.
 
   FAIL OPEN, ALWAYS. A handler that raises, overruns its budget or cannot open
   the index makes the relay forward DelphiLSP's original bytes. The engine
@@ -39,6 +46,7 @@ uses
   , System.Classes
   , System.SyncObjs
   , System.Generics.Collections
+  , System.JSON
   , DRagLint.Lint.Linter
   , DRagLint.LSP.Proxy
   , DRagLint.LSP.Server
@@ -62,6 +70,21 @@ type
   /// a frame by leaving the replacement unset.</returns>
   TFrameInterceptor = reference to function(ADir: TMergeDirection; const AFrame: TBytes;
     ALen: Integer; out AReplacement: TBytes): Boolean;
+
+  /// <summary>Called by the relay with every complete C&gt;S frame before the
+  /// interceptor (merge plan A5).</summary>
+  /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
+  /// <param name="ALen">Byte length of the frame in AFrame.</param>
+  /// <returns>True when the proxy answers this request itself: the frame is
+  /// NOT forwarded and exactly one reply reaches the client. False (or any
+  /// exception): the frame goes on as usual.</returns>
+  TFrameAnswerer = reference to function(const AFrame: TBytes; ALen: Integer): Boolean;
+
+  /// <summary>Writes one complete frame to the client, serialised with the
+  /// relay's own S&gt;C writes.</summary>
+  /// <param name="AFrame">The whole frame, headers included.</param>
+  /// <returns>False when the client end is closed.</returns>
+  TClientWriter = reference to function(const AFrame: TBytes): Boolean;
 
   /// <summary>Owns the merge state of one proxy process: the options, the
   /// lazily-created drag-lint LSP server over the index, and the single merge
@@ -97,6 +120,16 @@ type
       Text  : string;
       Remove: Boolean;
     end;
+    { One request the proxy answers itself (A5). }
+    TAnswerJob = record
+      Id         : string;    { the request id, as JSON }
+      Symbols    : Boolean;   { workspace/symbol; else textDocument/references }
+      Query      : string;
+      Path       : string;    { '' when the request named no usable position }
+      Line0      : Integer;
+      Col0       : Integer;
+      IncludeDecl: Boolean;
+    end;
   private
     FOptions    : TLspProxyOptions;
     FServer     : TLSPServer;
@@ -126,6 +159,13 @@ type
     FCompletionWarned: Integer;
     FHoverOff        : Integer;
     FHoverWarned     : Integer;
+    FDefinitionOff   : Integer;
+    FDefinitionWarned: Integer;
+    FTheirReferences : Integer;
+    FTheirSymbols    : Integer;
+    FClientWriter    : TClientWriter;
+    FAnswersOut      : Integer;
+    FAnswersIdle     : TEvent;
     procedure WorkerLoop;
     procedure WarmUp;
     function  Enqueue(const AWork: TProc): Boolean;
@@ -136,6 +176,11 @@ type
     procedure RecordRequest(const AFrame: TBytes; ALen: Integer);
     procedure ComputeCompletion(APending: TObject);
     procedure ComputeHover(APending: TObject);
+    procedure ComputeDefinition(APending: TObject);
+    function  MergeInitialize(const AReply: TJSONObject): Boolean;
+    procedure AnswerOnWorker(const AJob: TAnswerJob);
+    procedure SendAnswer(const AId, AResultJson: string);
+    procedure EndAnswer;
     function  MergeReply(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
     function  MergeDiagnostics(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
   public
@@ -164,7 +209,13 @@ type
     /// and at least one of them has a (label, kind) the reply lacks; (3) an S&gt;C
     /// reply to a recorded textDocument/hover request when MergeHover is on and
     /// drag-lint's hover markdown is non-empty and was computed within
-    /// MergeBudgetMs of the request. False otherwise: the relay forwards the
+    /// MergeBudgetMs of the request; (4) an S&gt;C reply to a recorded
+    /// textDocument/definition when MergeDefinition is on, the reply's result
+    /// is null or [] and drag-lint found at least one location within
+    /// MergeBudgetMs (the result becomes drag-lint's Location[]); (5) the S&gt;C
+    /// reply to the recorded initialize when MergeDefinition is on and its
+    /// capabilities lack referencesProvider or workspaceSymbolProvider (the
+    /// missing ones are added as true). False otherwise: the relay forwards the
     /// original bytes. Under the test seam (see Create): True with an empty
     /// replacement.</returns>
     /// <remarks>
@@ -216,6 +267,28 @@ type
     /// <remarks>Callers are serialised. A job that overruns keeps running to
     /// completion on the worker; it is never killed.</remarks>
     function RunWithinBudget(const AWork: TProc; ABudgetMs: Integer): Boolean;
+    /// <summary>The relay's C&gt;S answerer (TFrameAnswerer) for this engine.</summary>
+    /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
+    /// <param name="ALen">Byte length of the frame.</param>
+    /// <returns>True for a textDocument/references or workspace/symbol request
+    /// (one with an id) when MergeDefinition is on, ClientWriter is set and
+    /// DelphiLSP's initialize reply did not advertise that provider: drag-lint
+    /// answers it (TLSPServer.ComputeReferences / ComputeWorkspaceSymbols, on
+    /// the merge worker) and the relay must NOT forward it. False otherwise,
+    /// and for a frame that does not parse.</returns>
+    /// <remarks>Once True, exactly one reply is written through ClientWriter:
+    /// [] when no index opens, the computation raises (one stderr line) or the
+    /// worker queue is full. The C&gt;S pump never waits for the worker.</remarks>
+    function Answer(const AFrame: TBytes; ALen: Integer): Boolean;
+    /// <summary>Waits until every request Answer took has been replied to.</summary>
+    /// <param name="ATimeoutMs">Longest wait, in milliseconds.</param>
+    /// <returns>True when none is outstanding (any more).</returns>
+    /// <remarks>RunLspProxy calls it once the S&gt;C stream ended, so a reply
+    /// still being computed is not lost to process exit.</remarks>
+    function WaitForAnswers(ATimeoutMs: Cardinal): Boolean;
+    /// <summary>Where Answer's replies go; set by RunLspProxy before any pump
+    /// starts. Unset, Answer declines every frame.</summary>
+    property ClientWriter: TClientWriter write FClientWriter;
     /// <summary>The drag-lint LSP server over the index, created on first
     /// use: Options.DbPaths, or Options.ResolveDbs() when that list is empty
     /// (P0 review I1: resolved lazily, never on the relay's startup path).
@@ -246,17 +319,21 @@ implementation
 
 uses
     Winapi.Windows
-  , System.JSON
   , DRagLint.Core.Interfaces
   , DRagLint.Core.LiveDocs
   , DRagLint.LSP.Completion
   ;
 
 type
-  { One recorded textDocument/completion or textDocument/hover request: where
-    the caret was, and drag-lint's answer once the worker computed it (FItems:
-    the completion items as a JSON array, or the hover markdown, '' for none;
-    FHover tells which). Shared by the C>S pump
+  { What a recorded request is; it decides who computes ours and how the reply
+    is merged. rkInitialize computes nothing (A5: the reply's capabilities). }
+  TRequestKind = (rkCompletion, rkHover, rkDefinition, rkInitialize);
+
+  { One recorded textDocument/completion, hover, definition or initialize
+    request: where the caret was, and drag-lint's answer once the worker
+    computed it (FItems: the completion items or the definition locations as a
+    JSON array, or the hover markdown; '' for none; FKind tells which). Shared
+    by the C>S pump
     (creates it), the merge worker (fills it) and the S>C pump (reads it), so it
     is reference counted: whoever releases last frees it. FItems / FErr /
     FElapsed are written before Done is set and read only after it is. }
@@ -271,7 +348,7 @@ type
     FItems    : string;
     FErr      : string;
     FDone     : TEvent;
-    FHover    : Boolean;
+    FKind     : TRequestKind;
   public
     constructor Create(const APath: string; ALine1, ACol1: Integer);
     destructor Destroy; override;
@@ -333,6 +410,13 @@ const
   MERGE_COMPLETION_PREFIX = 'drag-lint lsp --proxy: merge-completion ';
   METHOD_HOVER = 'textDocument/hover';
   MERGE_HOVER_PREFIX = 'drag-lint lsp --proxy: merge-hover ';
+  METHOD_DEFINITION       = 'textDocument/definition';
+  METHOD_INITIALIZE       = 'initialize';
+  METHOD_REFERENCES       = 'textDocument/references';
+  METHOD_WORKSPACE_SYMBOL = 'workspace/symbol';
+  MERGE_DEFINITION_PREFIX = 'drag-lint lsp --proxy: merge-definition ';
+  CAP_REFERENCES       = 'referencesProvider';
+  CAP_WORKSPACE_SYMBOL = 'workspaceSymbolProvider';
   { Between DelphiLSP's hover text and drag-lint's facts (spec criterion 15). }
   HOVER_SEPARATOR = #10#10'---'#10#10;
   { Bounds that keep a client that never sees a reply (cancelled requests) or a
@@ -365,6 +449,34 @@ end;
 procedure TPendingRequest.Release;
 begin
   if TInterlocked.Decrement(FRefs) = 0 then Free;
+end;
+
+{ The stderr prefix of the merge a request kind belongs to. }
+function PrefixOf(AKind: TRequestKind): string;
+begin
+  case AKind of
+    rkHover                    : Result:= MERGE_HOVER_PREFIX;
+    rkDefinition, rkInitialize : Result:= MERGE_DEFINITION_PREFIX;
+    else Result:= MERGE_COMPLETION_PREFIX;
+  end;
+end;
+
+{ The word a budget line uses for a request kind. }
+function KindName(AKind: TRequestKind): string;
+begin
+  case AKind of
+    rkHover     : Result:= 'hover';
+    rkDefinition: Result:= 'definition';
+    rkInitialize: Result:= 'initialize';
+    else Result:= 'completion';
+  end;
+end;
+
+{ True when a definition reply's result says "nothing here": null or an empty
+  array (A5: only then is drag-lint's answer used). }
+function IsEmptyLocations(const AResult: TJSONValue): Boolean;
+begin
+  Result:= (AResult is TJSONNull) or ((AResult is TJSONArray) and (TJSONArray(AResult).Count = 0));
 end;
 
 { The dedup key of one completion item: its label and its kind ('' when the
@@ -604,6 +716,7 @@ begin
   FPendingLock:= TCriticalSection.Create;
   FDocUpdates := TDictionary<string, TDocUpdate>.Create;
   FDocLock    := TCriticalSection.Create;
+  FAnswersIdle:= TEvent.Create(nil, True, True, '');
 end;
 
 destructor TProxyMergeEngine.Destroy;
@@ -622,6 +735,7 @@ begin
   FPendingLock.Free;
   FDocUpdates.Free;
   FDocLock.Free;
+  FAnswersIdle.Free;
   FQueue.Free;
   FDirty.Free;
   FDirtyLock.Free;
@@ -812,7 +926,7 @@ begin
     begin
       try
         if FOptions.MergeDiagnostics and (FLinter = nil) then FLinter:= TLinter.Create('');
-        if FOptions.MergeCompletion or FOptions.MergeHover then Server;   { opens the index; a failure is reported there }
+        if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then Server;   { opens the index; a failure is reported there }
       finally
         TInterlocked.Exchange(FWarming, 0);
       end;
@@ -856,7 +970,7 @@ begin
           FDirtyLock.Leave;
         end;
       end;
-      if FOptions.MergeCompletion or FOptions.MergeHover then
+      if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
       begin
         Upd:= LiveUpdateOf(Method, Json, LiveText);
         if Upd <> luNone then QueueDocUpdate(Path, Upd = luRemove, LiveText);
@@ -923,6 +1037,10 @@ var
   Full  : Boolean;
   Hover : Boolean;
   Comp  : Boolean;
+  Def   : Boolean;
+  Init  : Boolean;
+  Kind  : TRequestKind;
+  Path  : string;
   Line0 : Integer;
   Col0  : Integer;
 begin
@@ -930,27 +1048,44 @@ begin
           and FrameContains(AFrame, ALen, METHOD_COMPLETION);
   Hover:= FOptions.MergeHover and (TInterlocked.CompareExchange(FHoverOff, 0, 0) = 0)
           and FrameContains(AFrame, ALen, METHOD_HOVER);
-  if not (Comp or Hover) then Exit;
+  Def  := FOptions.MergeDefinition and (TInterlocked.CompareExchange(FDefinitionOff, 0, 0) = 0)
+          and FrameContains(AFrame, ALen, METHOD_DEFINITION);
+  Init := FOptions.MergeDefinition and FrameContains(AFrame, ALen, '"' + METHOD_INITIALIZE + '"');
+  if not (Comp or Hover or Def or Init) then Exit;
+  Kind:= rkCompletion;
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
     try
       if not (Json is TJSONObject) then Exit;
       if not Json.TryGetValue<string>('method', Method) then Exit;
-      Hover:= Hover and (Method = METHOD_HOVER);
-      if not (Hover or (Comp and (Method = METHOD_COMPLETION))) then Exit;
+      if Hover and (Method = METHOD_HOVER) then Kind:= rkHover
+      else if Comp and (Method = METHOD_COMPLETION) then Kind:= rkCompletion
+      else if Def and (Method = METHOD_DEFINITION) then Kind:= rkDefinition
+      else if Init and (Method = METHOD_INITIALIZE) then Kind:= rkInitialize
+      else Exit;
       IdVal:= TJSONObject(Json).GetValue('id');
-      if (IdVal = nil) or not Json.TryGetValue<string>('params.textDocument.uri', Uri)
-         or not Json.TryGetValue<TJSONObject>('params.position', PosObj)
-         { A3 fix 3: a position without line / character is not ours to answer;
-           relayed untouched, silently (it used to raise an access violation
-           and write one stderr line per request). }
-         or not PosObj.TryGetValue<Integer>('line', Line0)
-         or not PosObj.TryGetValue<Integer>('character', Col0) then Exit;
+      if IdVal = nil then Exit;
+      Path := '';
+      Line0:= 0;
+      Col0 := 0;
+      if Kind <> rkInitialize then
+      begin
+        if not Json.TryGetValue<string>('params.textDocument.uri', Uri)
+           or not Json.TryGetValue<TJSONObject>('params.position', PosObj)
+           { A3 fix 3: a position without line / character is not ours to answer;
+             relayed untouched, silently (it used to raise an access violation
+             and write one stderr line per request). }
+           or not PosObj.TryGetValue<Integer>('line', Line0)
+           or not PosObj.TryGetValue<Integer>('character', Col0) then Exit;
+        Path:= TLSPServer.FileFromUri(Uri);
+      end;
       { The position exactly as TLSPServer.HandleCompletion converts it: LSP is
-        0-based, the completion builder 1-based (hover converts back). }
-      P:= TPendingRequest.Create(TLSPServer.FileFromUri(Uri),  // dl:ok object-leak@7e8f -- reference counted: owned by FPending (or Release on the Full path) and by the job (AddRef/Release); Release frees
-        Line0 + 1, Col0 + 1);
-      P.FHover:= Hover;
+        0-based, the completion builder 1-based (hover and definition convert
+        back). }
+      P:= TPendingRequest.Create(Path, Line0 + 1, Col0 + 1);  // dl:ok object-leak@f6d1 -- reference counted: owned by FPending (or Release on the Full path) and by the job (AddRef/Release); Release frees
+      P.FKind:= Kind;
+      { initialize: nothing to compute; MergeReply edits the capabilities. }
+      if Kind = rkInitialize then P.FDone.SetEvent;
       Key:= IdVal.ToJSON;
       FPendingLock.Enter;
       try
@@ -968,20 +1103,229 @@ begin
         P.Release;
         Exit;
       end;
+      if Kind = rkInitialize then Exit;
       P.AddRef;   { the job's reference }
       if not Enqueue(
         procedure
         begin
-          if P.FHover then ComputeHover(P) else ComputeCompletion(P);
+          case P.FKind of
+            rkHover     : ComputeHover(P);
+            rkDefinition: ComputeDefinition(P);
+            else ComputeCompletion(P);
+          end;
         end) then P.Release;
     finally
       Json.Free;
     end;
   except
     on E: Exception do
-      MergeErrLine((if Hover then MERGE_HOVER_PREFIX else MERGE_COMPLETION_PREFIX) +
-                   'could not record a request (' + E.ClassName + ': ' + E.Message + ').');
+      MergeErrLine(PrefixOf(Kind) + 'could not record a request (' + E.ClassName + ': ' + E.Message + ').');
   end;
+end;
+
+{ Worker thread: drag-lint's definition locations for one recorded request
+  (TLSPServer.ComputeDefinition, the plain server's own F12). Publishes only
+  through the record, like ComputeHover. No index turns the definition
+  fallback off for the session (Server reports the failure once). }
+procedure TProxyMergeEngine.ComputeDefinition(APending: TObject);
+var
+  P  : TPendingRequest;
+  S  : TLSPServer;
+  Arr: TJSONArray;
+begin
+  P:= TPendingRequest(APending);
+  try
+    try
+      FlushDocUpdates;
+      S:= Server;
+      if S = nil then TInterlocked.Exchange(FDefinitionOff, 1)
+      else
+      begin
+        Arr:= S.ComputeDefinition(P.FPath, P.FLine1 - 1, P.FCol1 - 1);
+        try
+          P.FItems:= Arr.ToJSON;
+        finally
+          Arr.Free;
+        end;
+      end;
+    except   { not swallowed: the message is published through P.FErr and logged by the S>C side }
+      on E: Exception do P.FErr:= E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    P.FElapsed:= GetTickCount64 - P.FStartTick;
+    P.FDone.SetEvent;
+    P.Release;
+  end;
+end;
+
+{ S>C, the reply to the recorded initialize: adds referencesProvider and
+  workspaceSymbolProvider (true) to result.capabilities when absent, and notes
+  which ones DelphiLSP advertised itself (Answer then leaves those requests to
+  it). Returns True when AReply was changed. }
+function TProxyMergeEngine.MergeInitialize(const AReply: TJSONObject): Boolean;
+var
+  Res : TJSONValue;
+  Caps: TJSONValue;
+begin
+  Result:= False;
+  Res:= AReply.GetValue('result');
+  if not (Res is TJSONObject) then Exit;
+  Caps:= TJSONObject(Res).GetValue('capabilities');
+  if Caps = nil then
+  begin
+    Caps:= TJSONObject.Create;
+    TJSONObject(Res).AddPair('capabilities', Caps);
+  end
+  else if not (Caps is TJSONObject) then Exit;
+  if TJSONObject(Caps).GetValue(CAP_REFERENCES) <> nil then TInterlocked.Exchange(FTheirReferences, 1)
+  else
+  begin
+    TJSONObject(Caps).AddPair(CAP_REFERENCES, TJSONBool.Create(True));
+    Result:= True;
+  end;
+  if TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL) <> nil then TInterlocked.Exchange(FTheirSymbols, 1)
+  else
+  begin
+    TJSONObject(Caps).AddPair(CAP_WORKSPACE_SYMBOL, TJSONBool.Create(True));
+    Result:= True;
+  end;
+end;
+
+function TProxyMergeEngine.Answer(const AFrame: TBytes; ALen: Integer): Boolean;  // dl:ok too-many-exit-points@698f -- each Exit before the commit point is a decline (the frame is forwarded); one flat guard sequence reads better than nesting
+var
+  Json  : TJSONValue;
+  Method: string;
+  Uri   : string;
+  IdVal : TJSONValue;
+  IncDecl: TJSONValue;
+  Refs  : Boolean;
+  Syms  : Boolean;
+  Job   : TAnswerJob;
+begin
+  Result:= False;
+  if not FOptions.MergeDefinition or not Assigned(FClientWriter) then Exit;
+  Refs:= (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
+  Syms:= (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
+  if not (Refs or Syms) then Exit;
+  Method:= '';
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if not (Json is TJSONObject) or not Json.TryGetValue<string>('method', Method) then Exit;
+      Refs:= Refs and (Method = METHOD_REFERENCES);
+      Syms:= Syms and (Method = METHOD_WORKSPACE_SYMBOL);
+      if not (Refs or Syms) then Exit;
+      IdVal:= TJSONObject(Json).GetValue('id');
+      if IdVal = nil then Exit;   { a notification of that name is not a request we owe }
+      Job.Id         := IdVal.ToJSON;
+      Job.Symbols    := Syms;
+      Job.Query      := '';
+      Job.Path       := '';
+      Job.Line0      := 0;
+      Job.Col0       := 0;
+      Job.IncludeDecl:= True;   { as TLSPServer.HandleReferences defaults it }
+      if Syms then
+      begin
+        if not Json.TryGetValue<string>('params.query', Job.Query) then Job.Query:= '';
+      end
+      else
+      begin
+        if Json.TryGetValue<string>('params.textDocument.uri', Uri) and
+           Json.TryGetValue<Integer>('params.position.line', Job.Line0) and
+           Json.TryGetValue<Integer>('params.position.character', Job.Col0) then
+          Job.Path:= TLSPServer.FileFromUri(Uri);
+        IncDecl:= Json.FindValue('params.context.includeDeclaration');
+        if IncDecl is TJSONBool then Job.IncludeDecl:= TJSONBool(IncDecl).AsBoolean;
+      end;
+    finally
+      Json.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      MergeErrLine(MERGE_DEFINITION_PREFIX + 'could not read a ' + Method + ' request (' + E.ClassName + ': ' +
+                   E.Message + '); forwarded to DelphiLSP.');
+      Exit(False);
+    end;
+  end;
+  { From here the request is ours: exactly one reply, [] at worst. }
+  FStateLock.Enter;
+  try
+    Inc(FAnswersOut);
+    FAnswersIdle.ResetEvent;
+  finally
+    FStateLock.Leave;
+  end;
+  if not Enqueue(
+    procedure
+    begin
+      AnswerOnWorker(Job);
+    end) then
+  begin
+    SendAnswer(Job.Id, '[]');
+    EndAnswer;
+  end;
+  Result:= True;
+end;
+
+{ Worker thread: computes and writes the reply to one request Answer took. }
+procedure TProxyMergeEngine.AnswerOnWorker(const AJob: TAnswerJob);
+var
+  S   : TLSPServer;
+  Arr : TJSONArray;
+  Body: string;
+begin
+  Body:= '[]';
+  try
+    try
+      FlushDocUpdates;
+      S:= Server;
+      Arr:= nil;
+      if S <> nil then
+        if AJob.Symbols then Arr:= S.ComputeWorkspaceSymbols(AJob.Query)
+        else if AJob.Path <> '' then Arr:= S.ComputeReferences(AJob.Path, AJob.Line0, AJob.Col0, AJob.IncludeDecl);
+      if Arr <> nil then
+        try
+          Body:= Arr.ToJSON;
+        finally
+          Arr.Free;
+        end;
+    except
+      on E: Exception do
+        MergeErrLine(MERGE_DEFINITION_PREFIX + 'answered a request with [] (' + E.ClassName + ': ' + E.Message + ').');
+    end;
+    SendAnswer(AJob.Id, Body);
+  finally
+    EndAnswer;
+  end;
+end;
+
+{ Writes the JSON-RPC reply (id AId, result AResultJson) to the client. }
+procedure TProxyMergeEngine.SendAnswer(const AId, AResultJson: string);
+begin
+  try
+    FClientWriter(BuildFrame(TEncoding.UTF8.GetBytes('{"jsonrpc":"2.0","id":' + AId + ',"result":' + AResultJson + '}')));
+  except
+    on E: Exception do
+      MergeErrLine(MERGE_DEFINITION_PREFIX + 'could not write a reply (' + E.ClassName + ': ' + E.Message + ').');
+  end;
+end;
+
+{ One request Answer took has been replied to. }
+procedure TProxyMergeEngine.EndAnswer;
+begin
+  FStateLock.Enter;
+  try
+    Dec(FAnswersOut);
+    if FAnswersOut <= 0 then FAnswersIdle.SetEvent;
+  finally
+    FStateLock.Leave;
+  end;
+end;
+
+function TProxyMergeEngine.WaitForAnswers(ATimeoutMs: Cardinal): Boolean;
+begin
+  Result:= FAnswersIdle.WaitFor(ATimeoutMs) = wrSignaled;
 end;
 
 { Worker thread: drag-lint's hover markdown for one recorded request, the
@@ -1070,6 +1414,7 @@ var
   Ours  : TJSONValue;
   Empty : Boolean;
   Prefix: string;
+  Warned: Integer;
 begin
   Prefix:= MERGE_COMPLETION_PREFIX;
   Result:= False;
@@ -1100,14 +1445,27 @@ begin
         FPendingLock.Leave;
       end;
       if (P = nil) or (TJSONObject(Json).GetValue('result') = nil) then Exit;   { not ours, or an error reply }
-      if P.FHover then Prefix:= MERGE_HOVER_PREFIX;
+      Prefix:= PrefixOf(P.FKind);
+      if P.FKind = rkInitialize then
+      begin
+        if not MergeInitialize(TJSONObject(Json)) then Exit;   { both advertised: original bytes }
+        AReplacement:= BuildFrame(TEncoding.UTF8.GetBytes(Json.ToJSON));
+        Exit(True);
+      end;
+      { definition: a non-empty reply wins outright, without waiting for ours }
+      if (P.FKind = rkDefinition) and not IsEmptyLocations(TJSONObject(Json).GetValue('result')) then Exit;
       Remain:= Int64(P.FStartTick) + FOptions.MergeBudgetMs - Int64(GetTickCount64);
       if Remain < 0 then Remain:= 0;
       if (P.FDone.WaitFor(Cardinal(Remain)) <> wrSignaled) or (P.FElapsed > UInt64(FOptions.MergeBudgetMs)) then
       begin
-        if (if P.FHover then TInterlocked.Exchange(FHoverWarned, 1) else TInterlocked.Exchange(FCompletionWarned, 1)) = 0 then
+        case P.FKind of
+          rkHover     : Warned:= TInterlocked.Exchange(FHoverWarned, 1);
+          rkDefinition: Warned:= TInterlocked.Exchange(FDefinitionWarned, 1);
+          else Warned:= TInterlocked.Exchange(FCompletionWarned, 1);
+        end;
+        if Warned = 0 then
           MergeErrLine(Prefix + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
-                       ' ms budget; the ' + (if P.FHover then 'hover' else 'completion') +
+                       ' ms budget; the ' + KindName(P.FKind) +
                        ' reply is forwarded unmerged (reported once).');
         Exit;
       end;
@@ -1116,10 +1474,21 @@ begin
         MergeErrLine(Prefix + 'skipped a reply (' + P.FErr + '); forwarded unchanged.');
         Exit;
       end;
-      if P.FHover then
+      if P.FKind = rkHover then
       begin
         { neither, or nothing of ours to add: original bytes (criterion 16b) }
         if (P.FItems = '') or not MergeHoverResult(TJSONObject(Json), P.FItems) then Exit;
+      end
+      else if P.FKind = rkDefinition then
+      begin
+        Ours:= TJSONObject.ParseJSONValue(P.FItems);
+        try
+          if not (Ours is TJSONArray) or (TJSONArray(Ours).Count = 0) then Exit;   { neither: original bytes }
+          TJSONObject(Json).RemovePair('result').Free;
+          TJSONObject(Json).AddPair('result', TJSONValue(Ours.Clone));
+        finally
+          Ours.Free;
+        end;
       end
       else
       begin
@@ -1261,11 +1630,13 @@ begin
   if FTestEmptyReplacement then Exit(True);
   if ADir = mdClientToServer then
   begin
-    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover then TrackDocument(AFrame, ALen);
-    if FOptions.MergeCompletion or FOptions.MergeHover then RecordRequest(AFrame, ALen);
+    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
+      TrackDocument(AFrame, ALen);
+    if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then RecordRequest(AFrame, ALen);
     Exit(False);
   end;
-  if (FOptions.MergeCompletion or FOptions.MergeHover) and MergeReply(AFrame, ALen, AReplacement) then Exit(True);
+  if (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition) and
+     MergeReply(AFrame, ALen, AReplacement) then Exit(True);
   Result:= FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement);
 end;
 

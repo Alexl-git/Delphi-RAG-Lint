@@ -17,7 +17,7 @@ drag-lint lsp --db <file.sqlite>
 ### Proxy mode: merging drag-lint into DelphiLSP
 
 ```
-drag-lint lsp --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-budget-ms <n>]
+drag-lint lsp --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]
 ```
 
 `--proxy` relays every LSP message between the IDE and RAD Studio's own
@@ -34,6 +34,13 @@ drag-lint add to those answers:
   after a `---` rule (DelphiLSP's MarkedString shapes are normalised to
   markdown first), or answer with drag-lint's hover alone when DelphiLSP has
   none; neither forwards `null` unchanged. OFF by default.
+- `--merge-definition` -- when DelphiLSP answers `textDocument/definition`
+  with `null` or `[]`, answer with drag-lint's locations instead (a non-empty
+  answer wins). DelphiLSP advertises no references or workspace-symbol
+  provider, so the proxy adds both to its `initialize` reply and answers
+  `textDocument/references` and `workspace/symbol` itself from the index;
+  those requests are never forwarded (one reply each, `[]` when no index
+  opens). OFF by default.
 - `--merge-budget-ms <n>` -- the per-frame time budget of a merge handler
   (default 300). A handler that overruns it, raises, or cannot open the index
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails

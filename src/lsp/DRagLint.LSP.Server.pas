@@ -1084,6 +1084,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+      /// <summary>The body `workspace/symbol` answers for a query.</summary>
+      /// <param name="AQuery">The client's query; '' answers an empty array.</param>
+      /// <returns>A NEW SymbolInformation[] array, possibly empty; the caller owns it.</returns>
+      /// <remarks>Per store, exact-name matches, else up to 50 fuzzy ones; every
+      /// store contributes. HandleWorkspaceSymbol and the merge proxy (A5) both
+      /// answer from it, so they cannot disagree.</remarks>
+      function ComputeWorkspaceSymbols(const AQuery: string): TJSONArray;
       /// <summary>The `counts` array `draglint/callerCounts` answers for a file:
       /// one {line, count} per routine line, 0-based, counting distinct call
       /// sites across every --db store.</summary>
@@ -1827,37 +1834,32 @@ begin
 end;
 
 procedure TLSPServer.HandleWorkspaceSymbol(const AId: TJSONValue; const AParams: TJSONObject);
+{ A5: a thin envelope over ComputeWorkspaceSymbols, which the merge proxy also
+  answers from. }
 var
-  Reply   : TJSONObject    ;
-  Arr     : TJSONArray     ;
-  QueryStr: string         ;
-  Symbols : TArray<TSymbol>;
-  Sym     : TSymbol        ;
-  SymObj  : TJSONObject    ;
-  Loc     : TJSONObject    ;
-  StIdx   : Integer        ;
-  StCur   : ISymbolStore   ;
+  QueryStr: string;
 begin
-  Reply:= TJSONObject.Create;
-  Arr  := TJSONArray .Create;
-  try
-    Reply.AddPair('jsonrpc', '2.0');
-    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-    if Length(FStores) = 0 then
-    begin
-      Reply.AddPair('result', Arr);
-      SendMessage(Reply);
-      Exit;
-    end;
-    QueryStr:= '';
-    if (AParams <> nil) and (AParams.GetValue('query') <> nil) then QueryStr:= AParams.GetValue('query').Value;
-    if QueryStr = '' then
-    begin
-      Reply.AddPair('result', Arr);
-      SendMessage(Reply);
-      Exit;
-    end;
+  QueryStr:= '';
+  if (AParams <> nil) and (AParams.GetValue('query') <> nil) then QueryStr:= AParams.GetValue('query').Value;
+  SendResult(AId, ComputeWorkspaceSymbols(QueryStr));
+end; // procedure
 
+function TLSPServer.ComputeWorkspaceSymbols(const AQuery: string): TJSONArray;
+const
+  { At most this many fuzzy matches per store when no exact name matches. }
+  FUZZY_MAX_PER_STORE = 50;
+var
+  Arr    : TJSONArray     ;
+  Symbols: TArray<TSymbol>;
+  Sym    : TSymbol        ;
+  SymObj : TJSONObject    ;
+  StIdx  : Integer        ;
+  StCur  : ISymbolStore   ;
+  Kind   : Integer        ;
+begin
+  Arr:= TJSONArray.Create;
+  try
+    if (Length(FStores) = 0) or (AQuery = '') then Exit(Arr);
     { v0.40.3: iterate every store, merge results. For each store, prefer
       exact-name matches; fall back to fuzzy when exact returns nothing.
       Per-store fallback is intentional -- if project DB has an exact hit
@@ -1865,13 +1867,10 @@ begin
     for StIdx:= 0 to High(FStores) do
     begin
       StCur:= FStores[StIdx];
-      Symbols:= StCur.FindSymbolsByExactName(QueryStr);
-      if Length(Symbols) = 0 then Symbols:= StCur.FindSymbolsFuzzy(QueryStr, 50);
+      Symbols:= StCur.FindSymbolsByExactName(AQuery);
+      if Length(Symbols) = 0 then Symbols:= StCur.FindSymbolsFuzzy(AQuery, FUZZY_MAX_PER_STORE);
       for Sym in Symbols do
       begin
-        SymObj:= TJSONObject.Create;
-        SymObj.AddPair('name', Sym.Name);
-        var Kind: Integer;
         case Sym.Kind of
           skClass     : Kind:= 5;
           skInterface : Kind:= 11;
@@ -1889,19 +1888,20 @@ begin
           skComponent : Kind:= 8;
           else Kind:= 1;
         end; // case
+        SymObj:= TJSONObject.Create;
+        Arr.AddElement(SymObj);
+        SymObj.AddPair('name', Sym.Name);
         SymObj.AddPair('kind', TJSONNumber.Create(Kind));
         SymObj.AddPair('containerName', Sym.QualifiedName);
-        Loc:= LocationFromSymbol(Sym, StCur);
-        SymObj.AddPair('location', Loc);
-        Arr.AddElement(SymObj);
+        SymObj.AddPair('location', LocationFromSymbol(Sym, StCur));
       end; // for
     end; // for
-    Reply.AddPair('result', Arr);
-    SendMessage(Reply);
-  finally
-    Reply.Free;
+  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Arr.Free;
+    raise;
   end; // try
-end; // procedure
+  Result:= Arr;
+end; // function
 
 procedure TLSPServer.HandleDefinition(const AId: TJSONValue; const AParams: TJSONObject);
 { S0: a thin envelope over ComputeDefinition, which features reach through
