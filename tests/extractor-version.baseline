@@ -1011,4 +1011,7 @@
 #   (run_routine_local_decls.ps1); (3) Self.X members record receiver_text 'Self' at insert
 #   (run_self_member_receiver.ps1). The 1.13.0 resolver bump rides this re-parse.
 #   Superseded: 1.22.0-alpha|b0ebd891bb62c90df07ef65544a8b84982ffebdd4870f23125d1200012bc51ca
-1.23.0-alpha|112f33afd1fe85edfebfb8b8bd4b32015ba21f03981b917e8432f34c69fa19e0
+#   2026-10-24 (e3d/rc2): re-pinned WITHOUT a bump (1.23.0-alpha never released): rc2 also carries
+#   e3d/n06 (N-06) + e3d/ext2 extraction changes; the same one re-parse covers them.
+#   Superseded: 1.23.0-alpha|112f33afd1fe85edfebfb8b8bd4b32015ba21f03981b917e8432f34c69fa19e0
+1.23.0-alpha|8d7945982f34bd88b42bbcf32fbd26f968f9032479f2e64ac4f2120b7aa1357a
