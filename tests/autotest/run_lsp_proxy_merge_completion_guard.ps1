@@ -35,8 +35,8 @@
     6 bogus --db -> theirs byte-identical, exactly one stderr line names the
       merge;
     7 decoy: absent from the member list (1), present for the bare request;
-    8 (A3 fix 3) requests with an empty position: relayed untouched, at most
-      one stderr line; a later valid request still merges;
+    8 (A3 fix 3) requests with an empty position: relayed untouched, NO
+      stderr line (A4 fix M2); a later valid request still merges;
     9 (A3 fix 2) a file no index owns: its own declarations are offered;
    10 (A3 fix 4) --db good --db missing: one stderr line names the missing
       path, the good index still merges.
@@ -264,7 +264,7 @@ Check 'bare "FI": FIx offered (the index and the tap serve it)' ($l7 -contains '
 
 # --- 8 a request without line / character (A3 fix 3) -----------------------------
 Write-Host ''
-Write-Host '(8) completion requests with no position fields: relayed untouched, at most one stderr line' -ForegroundColor Cyan
+Write-Host '(8) completion requests with no position fields: relayed untouched, no stderr line' -ForegroundColor Cyan
 function NoPosReq([int]$id) {
   return Frame ('{"jsonrpc":"2.0","id":' + $id + ',"method":"textDocument/completion","params":{"textDocument":{"uri":"' + $uri + '"},"position":{}}}')
 }
@@ -273,7 +273,7 @@ $env8 = Script $theirs1
 $r8   = Invoke-Raw $Exe $onArgs $in8 $env8
 $m8   = Reply7 $r8.Out
 $e8   = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'could not record' })
-Check 'two position-less requests: at most one stderr line about them' ($e8.Count -le 1) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
+Check 'two position-less requests: no stderr line about them' ($e8.Count -eq 0) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
 Check 'positive control: the later request 7 in the same session still merges' ($m8 -and ((Pairs $m8.Items) -contains 'FIeld2|5')) ''
 $n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
         Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') } |
