@@ -982,7 +982,8 @@ begin
         `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
         dropped (or the "Mark as reviewed" action would change nothing). }
       if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
-      if TReviewMarkers.Suppresses(MarkLines, F) then Continue;
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, F.EndLine,
+           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
       DiagObj:= TJSONObject.Create;
