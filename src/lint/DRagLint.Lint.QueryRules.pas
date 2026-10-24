@@ -1214,6 +1214,18 @@ begin
   end; // try
 end; // function
 
+{ True when ScmPath sits below a sub-directory (relative to ARulesDir) named `rules`. }
+function IsUnderNestedRulesDir(const ARulesDir, AScmPath: string): Boolean;
+var
+  Rel : string;
+  Part: string;
+begin
+  Result:= False;
+  Rel:= ExtractFilePath(ExtractRelativePath(IncludeTrailingPathDelimiter(ARulesDir), AScmPath));
+  for Part in Rel.Split([PathDelim]) do
+    if SameText(Part, 'rules') then Exit(True);
+end; // function
+
 { TQueryRuleLoader }
 
 class function TQueryRuleLoader.LoadAll(const ALanguage: PTSLanguage; const ARulesDir: string): TArray<TQueryRule>;
@@ -1224,18 +1236,33 @@ var
   Source  : string           ;
   Rule    : TQueryRule       ;
   List    : TList<TQueryRule>;
+  Seen    : TDictionary<string, string>;
+  FirstAt : string           ;
 begin
   SetLength(Result, 0);
   if not TDirectory.Exists(ARulesDir) then Exit;
   Files:= TDirectory.GetFiles(ARulesDir, '*.scm', TSearchOption.soAllDirectories);
+  // Key = rule id + file name: one id may legitimately span several forms (hardcoded-credential
+  // const + assignment), but the same id in the same-named file twice is a stray copy.
+  TArray.Sort<string>(Files); // deterministic: first path wins a duplicate
   List:= TList<TQueryRule>.Create;
+  Seen:= TDictionary<string, string>.Create;
   try
     for ScmPath in Files do
     begin
+      // A nested directory named `rules` is an xcopy accident, never a rule folder.
+      if IsUnderNestedRulesDir(ARulesDir, ScmPath) then Continue;
       JsonPath:= ChangeFileExt(ScmPath, '.json');
       try
         Source:= TFile.ReadAllText(ScmPath, TEncoding.UTF8);
         Rule:= TQueryRule.Create(ALanguage, Source, ScmPath, JsonPath);
+        if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
+        begin
+          Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
+          FreeAndNil(Rule);
+          Continue;
+        end;
+        Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
         List.Add(Rule);
       except
         on E: Exception do Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, E.Message]));
@@ -1243,6 +1270,7 @@ begin
     end;
     Result:= List.ToArray;
   finally
+    Seen.Free;
     List.Free;
   end; // try
 end; // function
