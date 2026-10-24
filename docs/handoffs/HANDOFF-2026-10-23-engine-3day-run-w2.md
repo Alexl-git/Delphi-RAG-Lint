@@ -56,6 +56,17 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
+## STATE 2026-10-25 ~03:00 (day 3) -- ledger is authoritative
+Merged since day-2 note: menu-t11 63918fb8, FP3 11b10aed, dxbar c3140d22, dxbar2 4237e02c, guard-repair
+1c646b52, rename-fix 86444e3c + rename-fix2 70d0851b, fn-uba 8751050c, small-1 5e197d2f, t05 2360e382,
+vcl-roots 0a80556b, mcp-rename 78cdd10a (+ regens). Main guards green except docs-sync (stale deployed exe).
+RUNNING: RC2 (e3d/rc2 = main + resolver3 + n06 + ext2 + bumps extractor 1.23.0 / resolver 1.13.0 + full
+battery ~4 h). NEXT after RC2 green: merge e3d/rc2 to main -> CHANGELOG [Unreleased] -> DRAGLINT_VERSION
+(1.34.0-alpha) -> deploy engine + BPLs ONLY if no approval prompt (else queue) -> library + project re-parse ->
+deferred verifies (lsp, menu-tree, ide-help-line, f2047) -> notify CONVERTER (FG-M/FG-N merge, verify, re-pin),
+www-40 (cycles refusal line, publish menu article), lsp-6f -> B-41 doc regen -> final handoff + owner report.
+Owner decision list: docs\superpowers\plans\2026-10-25-owner-decisions.md.
+
 ## STATE 2026-10-24 (day 2) -- ledger is authoritative
 Owner away ~26 h from 10-24 morning; R8: avoid EVERY approval prompt (no edits outside the repo/scratch;
 new code lanes use Agent isolation "worktree"); do not stop for /clear -- keep working through compaction.
