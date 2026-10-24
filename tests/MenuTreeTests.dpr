@@ -16,6 +16,7 @@ uses
   , System.StrUtils
   , Winapi.Windows
   , DRagLint.MenuTree
+  , DRagLint.MenuTree.Dfm
   , DRagLint.MenuDrift
   , DRagLint.FormsMap.Dfm
   ;
@@ -273,6 +274,47 @@ begin
   end;
 end;
 
+{ ---- dxBar spec T4: walker code links on the formsmap-v9 fixture ---- }
+
+const
+  { command-line slots the runner passes for the formsmap-v9 copies }
+  ARG_V9_DB   = 4;
+  ARG_V9_DIR  = 5;
+  ARG_V9R_DB  = 6;
+  ARG_V9R_DIR = 7;
+  V9_PROJECT  = 'Demo9.dproj';
+
+procedure TestWalkerDxBar(const pDb, pProject, pFixtureDir, pTag: string);
+var
+  W    : TMenuWalker;
+  Tree : TMenuTree;
+  N    : TMenuNode;
+  Ids  : string;
+  Kinds: string;
+begin
+  W:= TMenuWalker.Create([pDb], pProject);
+  try
+    Tree:= W.Walk;
+    try
+      Ids:= '';
+      for N in Tree.External do Ids:= Ids + (if Ids = '' then '' else ',') + N.Ident;
+      { the helper's popup keeps the CALLER's name (popGrid), never pPopup }
+      CheckEq(pTag + ': external roots (code links before the graft)', 'popGridMenu9,barLists,dxBarManager1.Bars[0],popGrid', Ids);
+      Kinds:= '';
+      if Tree.External.Count > 0 then
+        for N in Tree.External[0].Children do Kinds:= Kinds + (if Kinds = '' then '' else ',') + MenuKindName(N.Kind);
+      CheckEq(pTag + ': with-receiver BeginGroup + Insert(0) order', 'submenu,separator,item', Kinds);
+      AddDfmRoots(Tree, pDb, pProject);
+      CheckRows(pTag + ': --with-dfm paths', PathRows(TFile.ReadAllText(TPath.Combine(pFixtureDir, 'expected-paths.txt')), False),
+        PathRows(Tree.ToPaths, True));
+    finally
+      Tree.Free;
+    end;
+  finally
+    W.Free;
+  end;
+end;
+
 { ---- Task 6: drift classes on the fixture tree + fixture registry ---- }
 
 function Drift(pTree: TMenuTree; const pRegDir: string; const pEdit: TProc<TMenuRegistry>): TMenuDriftReport;
@@ -501,6 +543,12 @@ begin
       TestDrift(ParamStr(1), ParamStr(2));
     end
     else Check('walker tests need <db> <fixture dir>', False);
+    if ParamCount >= ARG_V9R_DIR then
+    begin
+      TestWalkerDxBar(ParamStr(ARG_V9_DB), TPath.Combine(ParamStr(ARG_V9_DIR), V9_PROJECT), ParamStr(ARG_V9_DIR), 'dxbar');
+      TestWalkerDxBar(ParamStr(ARG_V9R_DB), TPath.Combine(ParamStr(ARG_V9R_DIR), V9_PROJECT), ParamStr(ARG_V9R_DIR), 'dxbar renamed helper');
+    end
+    else Check('dxbar walker tests need <v9.sqlite> <v9 dir> <v9-renamed.sqlite> <v9-renamed dir>', False);
     if ParamCount >= 3 then
       TestWalkerRenamed(ParamStr(3), TPath.Combine(TPath.Combine(ExtractFilePath(ParamStr(3)), 'renamed'), 'MenuTreeFixture.dproj'), ParamStr(2));
   except

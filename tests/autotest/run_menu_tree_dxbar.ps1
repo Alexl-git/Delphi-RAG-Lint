@@ -51,7 +51,8 @@ function Compare-Rows($Want, $Got) {
     }
     return ,$bad
 }
-function Kids($Node) { if ($null -eq $Node) { return ,@() } return ,@($Node.children) }
+# children as a pipeline (NOT wrapped in one array object: Where-Object over a wrapped array tests the whole array)
+function Kids($Node) { if ($null -eq $Node) { return } foreach ($c in @($Node.children)) { $c } }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
@@ -102,7 +103,7 @@ $mm = RootOf 'TfrmMain9.barMainMenu'
 $setup = Kids $mm | Where-Object { $_.caption -ceq 'Setup' } | Select-Object -First 1
 $sk = (Kids $setup | ForEach-Object { $_.kind }) -join ','
 Check 'Setup submenu: item,separator,item (BeginGroup)' ($sk -ceq 'item,separator,item') $sk
-$presets = Kids $mm | Select-Object -First 1
+$presets = @(Kids $mm)[0]
 Check 'Presets inserted at 0 into Bars[0], kind submenu, derived' ($null -ne $presets -and $presets.caption -ceq 'Presets' -and $presets.kind -ceq 'submenu' -and $presets.confidence -ceq 'derived') "[$($presets.caption)/$($presets.kind)/$($presets.confidence)]"
 $ext = @($j.external)
 $extIds = ($ext | ForEach-Object { $_.ident }) -join ','

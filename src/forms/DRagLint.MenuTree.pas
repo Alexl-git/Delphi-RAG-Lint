@@ -1,4 +1,4 @@
-unit DRagLint.MenuTree;
+unit DRagLint.MenuTree;  // dl:ok unit-too-large@d0c5 -- TWalkCore is one interpreter class (see its high-response review); the dxBar link shapes are its methods and cannot move to another unit without splitting the class
 
 /// <summary>Code-built menu reader (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md):
 /// the menu tree a Delphi program BUILDS IN CODE, recovered statically. This
@@ -577,7 +577,7 @@ type
   TWalkEnv = class;
 
   /// <summary>What an expression evaluates to, as far as menus care.</summary>
-  TMVKind = (mvNone, mvNil, mvNode, mvCaptions, mvHandler, mvProc, mvWrapper, mvForeign);
+  TMVKind = (mvNone, mvNil, mvNode, mvCaptions, mvHandler, mvProc, mvWrapper, mvForeign, mvLink);
 
   TMValue = record
     Kind    : TMVKind;
@@ -595,6 +595,34 @@ type
     ProcPath   : string;
     ProcEnv    : TWalkEnv;
     ProcRoutine: string;
+    { mvLink: the TLinkState of a DevExpress item link (ItemLinks.Add / Insert(i)) }
+    Link       : TObject;
+  end;
+
+  { A DevExpress item link the walk is following: whose ItemLinks it is in, at
+    which index (-1 = appended), and the item / BeginGroup once assigned. Owned
+    by TWalkCore.FLinks; values only reference it. }
+  TLinkState = class
+  private
+    FOwner     : TMValue;
+    FIndex     : Integer;
+    FDerived   : Boolean;
+    FItem      : TMenuNode;
+    FBeginGroup: Boolean;
+    FSite      : string;
+  public
+    { Eval of P in P.ItemLinks }
+    property Owner: TMValue read FOwner write FOwner;
+    { Insert(i) index; -1 = appended }
+    property Index: Integer read FIndex write FIndex;
+    { a non-literal Insert index: appended, derived }
+    property Derived: Boolean read FDerived write FDerived;
+    { the linked item once known; nil before Item := X }
+    property Item: TMenuNode read FItem write FItem;
+    { BeginGroup := True was seen: a separator before the item }
+    property BeginGroup: Boolean read FBeginGroup write FBeginGroup;
+    { file:line reported for the link }
+    property Site: string read FSite write FSite;
   end;
 
   TWalkEnv = class
@@ -637,6 +665,8 @@ type
     Site   : string;
     Derived: Boolean;
     Depth  : Integer;
+    { first FWith entry this activation may use: a callee never sees its caller's with receivers }
+    WithBase: Integer;
   end;
 
   /// <summary>What a call runs: the parameter list and body (of a routine or
@@ -665,6 +695,8 @@ type
     FMenuTypes : TList<string>;
     FRoutines  : TDictionary<string, TRoutineInfo>;
     FStack     : TList<string>;
+    FLinks     : TObjectList<TLinkState>;
+    FWith      : TList<TMValue>;
     function Q(const pSql: string; const pParams: array of string): TFDQuery;
     procedure LoadMenuTypes;
     function IsMenuType(const pName: string): Boolean;
@@ -687,6 +719,14 @@ type
     function CreateNode(const pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
     procedure Parenting(const pReceiver, pArgs: TTSNode; pInsert: Boolean; const pFrame: TWalkFrame);
     procedure SetProp(pTarget: TMenuNode; const pProp: string; const pRhs, pStmt: TTSNode; const pFrame: TWalkFrame);
+    function DxBarCall(const pCall, pEntity, pArgs: TTSNode; const pName: string; const pFrame: TWalkFrame; out pValue: TMValue): Boolean;
+    function LinkCall(const pOwnerExpr: TTSNode; const pName: string; const pArgs, pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
+    function LinkOwnerNode(pState: TLinkState; const pFrame: TWalkFrame): TMenuNode;
+    procedure PlaceLinkItem(pState: TLinkState; pItem: TMenuNode; const pFrame: TWalkFrame);
+    procedure SetLinkBeginGroup(pState: TLinkState);
+    function TopWith(const pFrame: TWalkFrame): TMValue;
+    procedure WalkWith(const pNode: TTSNode; const pFrame: TWalkFrame);
+    function WithAssign(const pName: string; const pRhs, pStmt: TTSNode; const pFrame: TWalkFrame): Boolean;
     function Invoke(const pCallee: TCallee; const pArgs: TArray<TMValue>): TMValue;
     function InvokeExpanded(const pCallee: TCallee; const pArgs: TArray<TMValue>): TMValue;
     function InvokeRoutine(const pInfo: TRoutineInfo; const pArgs: TArray<TMValue>; const pSite: string;
@@ -706,8 +746,18 @@ const
   ROUTINE_KINDS = '''procedure'',''function'',''method'',''constructor'',''destructor''';
   { Statement kinds whose named children are walked as statements (spec 4.2,
     "if .. then .. else": both branches; loops: the body once). }
-  COMPOUND_KINDS: array[0..12] of string = ('block', 'statements', 'if', 'ifElse', 'for', 'foreach', 'while',
-    'repeat', 'case', 'caseCase', 'try', 'exceptionHandler', 'with');
+  COMPOUND_KINDS: array[0..11] of string = ('block', 'statements', 'if', 'ifElse', 'for', 'foreach', 'while',
+    'repeat', 'case', 'caseCase', 'try', 'exceptionHandler');
+  { dxBar spec section 2: DevExpress bar item types (menu nodes when created)
+    and the types that own ItemLinks (a foreign link owner, a helper's parameter). }
+  DX_ITEM_TYPES: array[0..9] of string = ('TdxBarItem', 'TdxBarButton', 'TdxBarLargeButton', 'TdxBarSubItem',
+    'TdxBarContainerItem', 'TdxBarListItem', 'TdxBarMRUListItem', 'TdxBarStatic', 'TdxBarLabel', 'TdxBarDBNavButton');
+  DX_OWNER_TYPES: array[0..6] of string = ('TdxBar', 'TdxBarPopupMenu', 'TdxRibbonPopupMenu', 'TdxBarApplicationMenu',
+    'TdxBarSubItem', 'TdxBarContainerItem', 'TdxBarManager');
+  { ItemLinks calls that create the item AND its link }
+  DX_LINK_CREATORS: array[0..3] of string = ('AddButton', 'AddSubItem', 'AddItem', 'AddLargeButton');
+  { an owner only position or lookup names (decision 7): mgr.Bars[n], mgr.MainMenuBar, mgr.BarByCaption('X') }
+  DX_BAR_EXPR = '(\bBars\s*\[|\bMainMenuBar$|\bBarBy(Caption|OldName)\s*\()';
 
 function NodeLine(const pNode: TTSNode): Integer;
 begin
@@ -729,6 +779,12 @@ var
 begin
   I:= pText.LastIndexOf('.');
   Result:= if I >= 0 then pText.Substring(I + 1) else pText;
+end;
+
+{ dxBar: P.ItemLinks -- the collection whose Add / Insert / AddButton make links }
+function IsItemLinksExpr(const pNode: TTSNode; const pText: string): Boolean;
+begin
+  Result:= (pNode.NodeType = 'exprDot') and SameText(LastSegment(pText), 'ItemLinks');
 end;
 
 { Delphi string literal text -> value: 'a''b' -> a'b, #65 -> A, adjacent parts joined. }
@@ -835,6 +891,8 @@ begin
   FMenuTypes := TList<string>.Create;
   FRoutines  := TDictionary<string, TRoutineInfo>.Create;
   FStack     := TList<string>.Create;
+  FLinks     := TObjectList<TLinkState>.Create(True);
+  FWith      := TList<TMValue>.Create;
   { spec 5: exit 2 when the project is not in the DB -- at least one indexed
     file must lie under the project's folder. }
   Dir:= IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(pProject)));
@@ -851,6 +909,8 @@ end;
 
 destructor TWalkCore.Destroy;
 begin
+  FWith.Free;
+  FLinks.Free;
   FStack.Free;
   FRoutines.Free;
   FMenuTypes.Free;
@@ -889,8 +949,10 @@ var
   Pairs  : TList<TPair<string, string>>;
   Pair   : TPair<string, string>;
   NameFld, AncFld: TField;
+  S      : string;
 begin
   FMenuTypes.Add('TMenuItem');
+  for S in DX_ITEM_TYPES do FMenuTypes.Add(S);
   Pairs:= TList<TPair<string, string>>.Create;
   try
     QA:= Q('SELECT s.name AS n, a.ancestor_name AS a FROM type_ancestors a JOIN symbols s ON s.id = a.symbol_id', []);
@@ -1113,7 +1175,7 @@ begin
   finally
     QI.Free;
   end;
-  Result:= IsMenuType(Sig) or TRegEx.IsMatch(Sig, '^T\w*Menu$', [roIgnoreCase]);
+  Result:= IsMenuType(Sig) or MatchText(LastSegment(Sig), DX_OWNER_TYPES) or TRegEx.IsMatch(Sig, '^T\w*Menu$', [roIgnoreCase]);
 end;
 
 { spec 4.3 case/if row: F's body assigns only literals to Result (or Exit('lit')). }
@@ -1321,11 +1383,12 @@ begin
   end;
 end;
 
-function TWalkCore.Eval(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@7c98 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.Eval(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@baa6 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   K   : string;
   L   : TTSNode;
   LV  : TMValue;
+  R   : string;
 begin
   Result:= NoValue;
   if pNode.IsNull then Exit;
@@ -1357,13 +1420,28 @@ begin
   if K = 'exprDot' then
   begin
     L:= pNode.ChildByField('lhs');
+    R:= Text(pFrame, pNode.ChildByField('rhs'));
+    { dxBar: P.ItemLinks.Add / AddButton / AddSubItem written without parentheses }
+    if IsItemLinksExpr(L, Text(pFrame, L)) and (SameText(R, 'Add') or MatchText(R, DX_LINK_CREATORS)) then
+      Exit(LinkCall(L.ChildByField('lhs'), R, Default(TTSNode), pNode, pFrame));
+    { dxBar: mgr.AddButton / mgr.AddSubItem -- an item, unparented until linked }
+    if SameText(R, 'AddButton') or SameText(R, 'AddSubItem') then Exit(CreateNode(pNode, pFrame));
     { W.HandleClick where W wraps a handler: followed one level (spec 4.2) }
     if L.NodeType = 'exprCall' then LV:= Eval(L, pFrame)
     else if L.NodeType = 'identifier' then
     begin
       if not pFrame.Env.Vars.TryGetValue(LowerCase(Text(pFrame, L)), LV) then LV:= NoValue;
     end
+    else if SameText(R, 'Item') then LV:= Eval(L, pFrame)
     else LV:= NoValue;
+    { dxBar: Link.Item once the link's item is known }
+    if (LV.Kind = mvLink) and SameText(R, 'Item') and (TLinkState(LV.Link).Item <> nil) then
+    begin
+      Result:= NoValue;
+      Result.Kind:= mvNode;
+      Result.Node:= TLinkState(LV.Link).Item;
+      Exit;
+    end;
     if LV.Kind = mvWrapper then
     begin
       Result.Kind   := mvHandler;
@@ -1395,7 +1473,7 @@ begin
   Result.Node:= N;
 end;
 
-function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@d80b -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@877d -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   E, Args : TTSNode;
   Name    : string;
@@ -1410,6 +1488,7 @@ begin
   E   := pNode.ChildByField('entity');
   Args:= pNode.ChildByField('args');
   Name:= if E.NodeType = 'exprDot' then Text(pFrame, E.ChildByField('rhs')) else Text(pFrame, E);
+  if DxBarCall(pNode, E, Args, Name, pFrame, Result) then Exit;
   { X.Create(Owner): a menu node when X is TMenuItem or a descendant; else a
     one-level click wrapper when its first argument is a handler (spec 4.2) }
   if (E.NodeType = 'exprDot') and SameText(Name, 'Create') then
@@ -1555,6 +1634,7 @@ begin
   Fr.Site   := pCallee.Site;
   Fr.Derived:= pCallee.Derived;
   Fr.Depth  := pCallee.Depth;
+  Fr.WithBase:= FWith.Count;
   Names:= nil;
   if not pCallee.ArgsDecl.IsNull then
     for I:= 0 to pCallee.ArgsDecl.NamedChildCount - 1 do
@@ -1634,6 +1714,7 @@ begin
     Ident:= if P.Text <> '' then P.Text else Text(pFrame, pReceiver);
     IdentPath:= if P.Path <> '' then P.Path else pFrame.F.Path;
     if not IsMenuTypedForeign(Ident, IdentPath) then Continue;
+    if pInsert then N.LinkIndex:= Index;
     if pInsert and (Index >= 0) then FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).InsertChild(Index, N)
     else FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).AddChild(N);
   end;
@@ -1671,12 +1752,12 @@ begin
   else if SameText(pProp, 'Enabled') and (pRhs.NodeType = 'kFalse') then pTarget.Disabled:= True;
 end;
 
-procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@85f6 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@cbf0 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   K       : string;
   I       : Integer;
   L, R, T : TTSNode;
-  V       : TMValue;
+  V, W    : TMValue;
   Name    : string;
 begin
   if pNode.IsNull then Exit;
@@ -1697,9 +1778,15 @@ begin
     Eval(pNode, pFrame);
     Exit;
   end;
+  if K = 'with' then
+  begin
+    WalkWith(pNode, pFrame);
+    Exit;
+  end;
   if K <> 'assignment' then Exit;
   L:= pNode.ChildByField('lhs');
   R:= pNode.ChildByField('rhs');
+  if (L.NodeType = 'identifier') and WithAssign(Text(pFrame, L), R, pNode, pFrame) then Exit;
   if (L.NodeType = 'identifier') or (L.NodeType = 'varAssignDef') then
   begin
     if L.NodeType = 'varAssignDef' then
@@ -1727,11 +1814,206 @@ begin
   begin
     T:= L.ChildByField('lhs');
     V:= Eval(T, pFrame);   { also runs pAddItem(..) in pAddItem(..).Tag := I }
+    { dxBar: Link.Item := X / Link.BeginGroup := True }
+    if (V.Kind = mvLink) and SameText(Text(pFrame, L.ChildByField('rhs')), 'Item') then
+    begin
+      W:= Eval(R, pFrame);
+      if W.Kind = mvNode then PlaceLinkItem(TLinkState(V.Link), W.Node, pFrame);
+      Exit;
+    end;
+    if (V.Kind = mvLink) and SameText(Text(pFrame, L.ChildByField('rhs')), 'BeginGroup') then
+    begin
+      if R.NodeType = 'kTrue' then SetLinkBeginGroup(TLinkState(V.Link));
+      Exit;
+    end;
     if V.Kind = mvNode then SetProp(V.Node, Text(pFrame, L.ChildByField('rhs')), R, pNode, pFrame)
     else Eval(R, pFrame);
     Exit;
   end;
   Eval(R, pFrame);
+end;
+
+{ ---- dxBar item links (spec 2026-10-24-dxbar-menus.md section 2) ---- }
+
+{ P.ItemLinks.Add / Add(X) / Insert(i) / AddButton / AddSubItem / AddItem(C):
+  a link value owned by Eval(P); the creators also make the item, linked. }
+function TWalkCore.LinkCall(const pOwnerExpr: TTSNode; const pName: string; const pArgs, pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
+var
+  S  : TLinkState;
+  X  : TMValue;
+  Idx: Integer;
+begin
+  S:= TLinkState.Create;
+  FLinks.Add(S);
+  S.Owner:= Eval(pOwnerExpr, pFrame);
+  S.Index:= -1;
+  S.Site := if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pCall);
+  if SameText(pName, 'Insert') and not pArgs.IsNull and (pArgs.NamedChildCount > 0) then
+  begin
+    { a non-literal index appends, and the item is only derived }
+    S.Derived:= not TryStrToInt(Text(pFrame, pArgs.NamedChild(0)), Idx);
+    S.Index  := if S.Derived then -1 else Idx;
+  end;
+  Result:= NoValue;
+  Result.Kind:= mvLink;
+  Result.Link:= S;
+  if SameText(pName, 'Add') and not pArgs.IsNull and (pArgs.NamedChildCount > 0) then
+  begin
+    X:= Eval(pArgs.NamedChild(0), pFrame);
+    if X.Kind = mvNode then PlaceLinkItem(S, X.Node, pFrame);
+  end
+  else if MatchText(pName, DX_LINK_CREATORS) then
+    PlaceLinkItem(S, CreateNode(pCall, pFrame).Node, pFrame);
+end;
+
+{ The dxBar call shapes of EvalCall: a TdxBarItemLink(E) cast is E;
+  P.ItemLinks.Add(X) / Insert(i) / AddItem(C) / AddButton() make a link;
+  mgr.AddButton() / AddSubItem() make an unparented item. }
+function TWalkCore.DxBarCall(const pCall, pEntity, pArgs: TTSNode; const pName: string; const pFrame: TWalkFrame; out pValue: TMValue): Boolean;
+var
+  Lhs: TTSNode;
+begin
+  pValue:= NoValue;
+  Result:= True;
+  Lhs:= if pEntity.NodeType = 'exprDot' then pEntity.ChildByField('lhs') else Default(TTSNode);
+  if (pEntity.NodeType = 'identifier') and SameText(pName, 'TdxBarItemLink') and not pArgs.IsNull and (pArgs.NamedChildCount = 1) then
+    pValue:= Eval(pArgs.NamedChild(0), pFrame)
+  else if not Lhs.IsNull and IsItemLinksExpr(Lhs, Text(pFrame, Lhs))
+    and (SameText(pName, 'Add') or SameText(pName, 'Insert') or MatchText(pName, DX_LINK_CREATORS)) then
+    pValue:= LinkCall(Lhs.ChildByField('lhs'), pName, pArgs, pCall, pFrame)
+  else if not Lhs.IsNull and (SameText(pName, 'AddButton') or SameText(pName, 'AddSubItem')) then
+    pValue:= CreateNode(pCall, pFrame)
+  else
+    Result:= False;
+end;
+
+{ The node a link's item goes under: a code node, or the external root named
+  after the owner as the CALLER wrote it (a bar / popup / sub-item component,
+  or mgr.Bars[n] / MainMenuBar / BarByCaption -- decision 7); nil otherwise. }
+function TWalkCore.LinkOwnerNode(pState: TLinkState; const pFrame: TWalkFrame): TMenuNode;
+var
+  Ident, IdentPath: string;
+begin
+  Result:= nil;
+  case pState.Owner.Kind of
+    mvNode: Result:= pState.Owner.Node;
+    mvForeign:
+      begin
+        Ident    := pState.Owner.Text;
+        IdentPath:= if pState.Owner.Path <> '' then pState.Owner.Path else pFrame.F.Path;
+        if (Ident <> '') and (TRegEx.IsMatch(Ident, DX_BAR_EXPR, [roIgnoreCase]) or IsMenuTypedForeign(Ident, IdentPath)) then
+          Result:= FTree.ExternalRoot(Ident, pState.Site, IdentPath);
+      end;
+  end;
+end;
+
+procedure TWalkCore.PlaceLinkItem(pState: TLinkState; pItem: TMenuNode; const pFrame: TWalkFrame);
+var
+  P  : TMenuNode;
+  Sep: TMenuNode;
+  I  : Integer;
+begin
+  pState.Item:= pItem;
+  if pItem.Parented then Exit;   { linked once already: the first link places it }
+  P:= LinkOwnerNode(pState, pFrame);
+  if (P = nil) or (P = pItem) then Exit;
+  if pState.Derived then pItem.Confidence:= MaxConf(pItem.Confidence, mcDerived);
+  I:= pState.Index;
+  if pState.BeginGroup then
+  begin
+    Sep:= TMenuNode.Create(mnkSeparator, '-', pState.Site);
+    if I >= 0 then
+    begin
+      P.InsertChild(I, Sep);
+      Sep.LinkIndex:= I;
+      Inc(I);
+    end
+    else P.AddChild(Sep);
+  end;
+  if I >= 0 then P.InsertChild(I, pItem) else P.AddChild(pItem);
+  if P.Kind = mnkExternalRoot then pItem.LinkIndex:= I;
+end;
+
+procedure TWalkCore.SetLinkBeginGroup(pState: TLinkState);
+var
+  P  : TMenuNode;
+  Sep: TMenuNode;
+begin
+  if pState.BeginGroup then Exit;
+  pState.BeginGroup:= True;
+  { BeginGroup after Item: the separator goes in front of the placed item }
+  if (pState.Item = nil) or (pState.Item.Parent = nil) then Exit;
+  P:= pState.Item.Parent;
+  Sep:= TMenuNode.Create(mnkSeparator, '-', pState.Site);
+  Sep.LinkIndex:= pState.Item.LinkIndex;
+  P.InsertChild(P.Children.IndexOf(pState.Item), Sep);
+end;
+
+function TWalkCore.TopWith(const pFrame: TWalkFrame): TMValue;
+begin
+  Result:= if FWith.Count > pFrame.WithBase then FWith[FWith.Count - 1] else NoValue;
+end;
+
+{ with E1, E2 do S: the receivers are evaluated once, S runs with the last one
+  on top; a bare Item / BeginGroup (or Caption / OnClick / Action / Enabled)
+  applies to it. }
+procedure TWalkCore.WalkWith(const pNode: TTSNode; const pFrame: TWalkFrame);
+var
+  I, Pushed: Integer;
+  C        : TTSNode;
+  InBody   : Boolean;
+begin
+  Pushed:= 0;
+  InBody:= False;
+  try
+    for I:= 0 to pNode.NamedChildCount - 1 do
+    begin
+      C:= pNode.NamedChild(I);
+      if C.NodeType = 'kWith' then Continue;
+      if C.NodeType = 'kDo' then InBody:= True
+      else if InBody then WalkStmt(C, pFrame)
+      else
+      begin
+        FWith.Add(Eval(C, pFrame));
+        Inc(Pushed);
+      end;
+    end;
+  finally
+    while Pushed > 0 do
+    begin
+      FWith.Delete(FWith.Count - 1);
+      Dec(Pushed);
+    end;
+  end;
+end;
+
+{ A bare `Name := R` inside a with: True when the with receiver took it. }
+function TWalkCore.WithAssign(const pName: string; const pRhs, pStmt: TTSNode; const pFrame: TWalkFrame): Boolean;
+var
+  W, V: TMValue;
+begin
+  Result:= False;
+  if pFrame.Env.Vars.ContainsKey(LowerCase(pName)) then Exit;
+  W:= TopWith(pFrame);
+  if W.Kind = mvLink then
+  begin
+    if SameText(pName, 'Item') then
+    begin
+      V:= Eval(pRhs, pFrame);
+      if V.Kind = mvNode then PlaceLinkItem(TLinkState(W.Link), V.Node, pFrame);
+      Result:= True;
+    end
+    else if SameText(pName, 'BeginGroup') then
+    begin
+      if pRhs.NodeType = 'kTrue' then SetLinkBeginGroup(TLinkState(W.Link));
+      Result:= True;
+    end;
+  end
+  else if (W.Kind = mvNode) and MatchText(pName, ['Caption', 'OnClick', 'Action', 'Enabled']) then
+  begin
+    SetProp(W.Node, pName, pRhs, pStmt, pFrame);
+    Result:= True;
+  end;
 end;
 
 { spec 4.2 row 3 + 4.1: the kind a node settles on once the walk is over. }
@@ -1836,7 +2118,7 @@ begin
           begin
             if SameText(Info.QName, pRootQName) then Infos.Add(Info);
           end
-          else if not TRegEx.IsMatch(Params, ':\s*(' + Names.Replace('''', '').Replace(',', '|') + ')\b', [roIgnoreCase]) then
+          else if not TRegEx.IsMatch(Params, ':\s*(' + Names.Replace('''', '').Replace(',', '|') + '|' + string.Join('|', DX_OWNER_TYPES) + ')\b', [roIgnoreCase]) then
             Infos.Add(Info);
           QB.Next;
         end;

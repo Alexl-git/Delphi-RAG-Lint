@@ -77,7 +77,11 @@ from old code.
 | `P.Add(X)` / `P.Insert(i, X)` | X under P; `MainMenu.Items.Add(X)` or `AddActionMenu(.., X, ..)` makes X a root; a menu-typed field / component / variable that is not a node of this run (a DFM item, a looked-up IDE menu) becomes an external root |
 | a call that passes a node, an anonymous method, or a menu-typed component the index knows (`AddMenuItem(mnuTools, ..)`) | the callee's body is walked with its parameters bound -- this is how helpers such as `AddItem(Parent, 'Caption', Handler)` are recognised: by what their body does, never by their name. A parent passed in from outside keeps the CALLER's name: the external root is `mnuTools` in the form's file, not the helper's parameter |
 | `if .. then .. else` | both branches; the same node added on both is one root |
-
+| `X := TdxBarButton.Create(O)` (any DevExpress bar item type: `TdxBarLargeButton`, `TdxBarSubItem`, `TdxBarStatic`, ...) | a node, as for `TMenuItem` |
+| `L := P.ItemLinks.Add; L.Item := X`, `P.ItemLinks.Add.Item := X`, `P.ItemLinks.Insert(i).Item := X`, `TdxBarItemLink(P.ItemLinks.Insert(i))` | X under P at i; `L.BeginGroup := True` puts a separator before it; a non-literal index appends (derived) |
+| `with P.ItemLinks.Add do begin BeginGroup := True; Item := X end` | the same through the `with` receiver (a bare `Caption` / `OnClick` under `with <node> do` too) |
+| `P.ItemLinks.Add(X)`; `P.ItemLinks.AddButton` / `AddSubItem` / `AddItem(C)`; `mgr.AddButton` | X under P; a new node under P (`L.Item.Caption := ..` reaches it); a new unparented node |
+| a DevExpress owner the run did not build (`barLists`, `popGrid`, `mgr.Bars[0]`, `mgr.MainMenuBar`, `mgr.BarByCaption('X')`) | an external root under that name -- `--with-dfm` grafts it into the form's `.dfm` |
 A node created with `Create(nil)` and never added is a root; any other node
 never added is a note (`unparented item`).
 
