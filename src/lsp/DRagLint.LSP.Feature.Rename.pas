@@ -12,7 +12,8 @@ unit DRagLint.LSP.Feature.Rename;
   rename, the spec's case-insensitive rule), a use inside an indexed .inc, plus
   a new name that is not an identifier, a position that resolves to nothing
   this document's store declares, and an edit whose token is no longer where
-  the index says (stale index or unsaved buffer).
+  the index says (stale index or unsaved buffer), the declaration's
+  edit included -- no edit is ever retargeted by a forward scan.
 
   Column units: IdentifierAtPosition takes a tree-sitter BYTE column while rename
   passes a UTF-16 column, so a non-ASCII character earlier on the line makes it
@@ -47,8 +48,8 @@ type
     /// the position resolves to no symbol the document's own store
     /// (StoresForFile[0]) declares. rename replies a WorkspaceEdit
     /// {changes: {uri: TextEdit[]}}: one TextEdit per TRenameRefactoring.Build
-    /// edit, its range the OldName token found at or after the edit's column
-    /// on its line, newText the new name.</summary>
+    /// edit, its range the OldName token starting exactly at the edit's column
+    /// as a whole word (every edit, the declaration included), newText the new name.</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">One of the two methods.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
@@ -106,18 +107,6 @@ begin
     if TFile.Exists(APath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
   end;
   if (ALine1 >= 1) and (ALine1 <= Lines.Count) then Result:= Lines[ALine1 - 1] else Result:= '';
-end;
-
-// 0-based start of the first whole-identifier, case-insensitive AWord in ALine at or after ACol0; -1 when absent.
-function FindWord(const ALine, AWord: string; ACol0: Integer): Integer;
-begin
-  Result:= -1;
-  if ACol0 < 0 then ACol0:= 0;
-  for var I: Integer:= ACol0 + 1 to Length(ALine) - Length(AWord) + 1 do
-    if SameText(Copy(ALine, I, Length(AWord)), AWord)
-       and ((I = 1) or not IsIdentChar(ALine[I - 1]))
-       and ((I + Length(AWord) > Length(ALine)) or not IsIdentChar(ALine[I + Length(AWord)])) then
-      Exit(I - 1);
 end;
 
 function PositionJson(ALine0, AChar0: Integer): TJSONObject;
@@ -208,7 +197,7 @@ begin
 end;
 
 // '' and AResult = the WorkspaceEdit, or the refusal message and AResult = nil.
-function BuildWorkspaceEdit(const ACtx: ILspServerContext; const AEdits: TArray<TRenameEdit>; const ADecl: TRenameEdit; out AResult: TJSONObject): string;
+function BuildWorkspaceEdit(const ACtx: ILspServerContext; const AEdits: TArray<TRenameEdit>; out AResult: TJSONObject): string;
 begin
   Result:= '';
   AResult:= nil;
@@ -220,10 +209,9 @@ begin
     begin
       var DiskTxt: string:= DiskLine(Cache, Ed.FilePath, Ed.Line);
       var Col0: Integer;
-      // The declaration edit sits at the symbol's StartCol (the `function` keyword): only it scans forward to the name.
-      // A reference must start exactly where the index says, or the file changed after indexing.
-      if SameText(Ed.FilePath, ADecl.FilePath) and (Ed.Line = ADecl.Line) and (Ed.Col = ADecl.Col) then Col0:= FindWord(DiskTxt, Ed.OldName, Ed.Col - 1)
-      else if SameText(Copy(DiskTxt, Ed.Col, Length(Ed.OldName)), Ed.OldName) and ((Ed.Col = 1) or not IsIdentChar(DiskTxt[Ed.Col - 1])) and ((Ed.Col + Length(Ed.OldName) > Length(DiskTxt)) or not IsIdentChar(DiskTxt[Ed.Col + Length(Ed.OldName)])) then Col0:= Ed.Col - 1
+      // Build reports the identifier token's column for EVERY edit, the declaration included: each must start exactly there
+      // as a whole word, or the file changed after indexing (a forward scan could retarget a shifted token).
+      if SameText(Copy(DiskTxt, Ed.Col, Length(Ed.OldName)), Ed.OldName) and ((Ed.Col = 1) or not IsIdentChar(DiskTxt[Ed.Col - 1])) and ((Ed.Col + Length(Ed.OldName) > Length(DiskTxt)) or not IsIdentChar(DiskTxt[Ed.Col + Length(Ed.OldName)])) then Col0:= Ed.Col - 1
       else Col0:= -1;
       // The live buffer must hold the same token, or the client would rewrite the wrong text.
       // IdentifierAtPosition takes a tree-sitter BYTE column, B3 passes a UTF-16 column: a non-ASCII char earlier on the line makes it refuse (fail-safe).
@@ -297,11 +285,7 @@ begin
     if Length(Edits) = 0 then Reason:= Format('no edits computed for %s', [QN]);
   end;
   var Res: TJSONObject:= nil;
-  var Decl: TRenameEdit:= Default(TRenameEdit);
-  Decl.FilePath:= T.Store.GetFilePath(T.Sym.FileId);
-  Decl.Line:= T.Sym.StartLine;
-  Decl.Col:= T.Sym.StartCol;
-  if Reason = '' then Reason:= BuildWorkspaceEdit(ACtx, Edits, Decl, Res);
+  if Reason = '' then Reason:= BuildWorkspaceEdit(ACtx, Edits, Res);
   if Reason <> '' then
   begin
     ACtx.ReplyError(AId, ERR_REQUEST_FAILED, 'cannot rename -- ' + Reason);
