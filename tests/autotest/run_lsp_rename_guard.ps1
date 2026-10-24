@@ -233,6 +233,16 @@ $after = [System.IO.File]::ReadAllBytes($file)
 Check 'server wrote nothing: fixture bytes unchanged' ([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after))
 Check 'server wrote nothing: no .bak file' (@(Get-ChildItem $src -Filter '*.bak').Count -eq 0)
 
+# STALE DECLARATION: shift the declaration sideways on disk after indexing (the whole line indented, so Build cannot snap off the keyword). The
+# index still records the old name column; a forward scan would retarget it, so the whole rename must be refused.
+$declOrig = [System.IO.File]::ReadAllText($file)
+$declLines = [System.IO.File]::ReadAllLines($file)
+$declLines[$lDecl] = $declLines[$lDecl] -replace '^(\s*function)', '    $1'
+WriteAnsi $file ($declLines -join "`r`n")
+$rs = Session @(@{ method='textDocument/rename'; line=$lCall1; col=(ColOf $lCall1 'Compute'); newName='Calc' })
+Check 'rename after the declaration moved sideways on disk: refused -32803 "out of date"' ($rs.err.ContainsKey(11) -and $rs.err[11].code -eq -32803 -and $rs.err[11].message -match 'out of date') $(if ($rs.err.ContainsKey(11)) { $rs.err[11].message } else { 'no error' })
+WriteAnsi $file $declOrig
+
 # STALE INDEX: shift a call right on disk after indexing. The index still says col 2; a forward scan would
 # silently retarget the later token, so the reference edit must be refused (-32803, "out of date").
 $staleLines = [System.IO.File]::ReadAllLines($file)
