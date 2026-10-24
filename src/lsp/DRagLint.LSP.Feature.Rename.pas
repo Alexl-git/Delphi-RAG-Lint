@@ -289,6 +289,7 @@ begin
   // The spec's collision rule applies only when the names differ beyond case.
   if not SameText(T.Sym.Name, NewName) then Reason:= TRenameRefactoring.ConflictReason(T.Store, QN, NewName);
   if Reason = '' then Reason:= TRenameRefactoring.IncludeUseReason(T.Store, QN);
+  if Reason = '' then Reason:= TRenameRefactoring.BinaryDfmReason(T.Store, QN);
   var Edits: TArray<TRenameEdit>;
   if Reason = '' then
   begin
