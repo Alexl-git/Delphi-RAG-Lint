@@ -6,6 +6,7 @@
     <DCCReference Include="uMain9.pas"><Form>frmMain9</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uBarUtils9.pas"/>
     <DCCReference Include="uGridPopup9.pas"/>
+    <DCCReference Include="uGridPopups9.pas"/>
     <DCCReference Include="uA9.pas"><Form>frmA9</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uB9.pas"><Form>frmB9</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uC9.pas"><Form>frmC9</Form><FormType>dfm</FormType></DCCReference>

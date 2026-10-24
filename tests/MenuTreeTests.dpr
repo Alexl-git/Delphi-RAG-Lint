@@ -298,8 +298,11 @@ begin
     try
       Ids:= '';
       for N in Tree.External do Ids:= Ids + (if Ids = '' then '' else ',') + N.Ident;
-      { the helper's popup keeps the CALLER's name (popGrid), never pPopup }
-      CheckEq(pTag + ': external roots (code links before the graft)', 'popGridMenu9,barLists,dxBarManager1.Bars[0],popGrid', Ids);
+      { the helper's popup keeps the CALLER's name (popGrid), never pPopup; a
+        field link owner is keyed by its class (TfrmMain9.popGrid), so the two
+        popGridMenu fields of uGridPopups9 stay two roots (dxbar2) }
+      CheckEq(pTag + ': external roots (code links before the graft)',
+        'popGridMenu9,TGridMenu9.popGridMenu,TTreeMenu9.popGridMenu,TfrmMain9.barLists,dxBarManager1.Bars[0],TfrmMain9.popGrid', Ids);
       Kinds:= '';
       if Tree.External.Count > 0 then
         for N in Tree.External[0].Children do Kinds:= Kinds + (if Kinds = '' then '' else ',') + MenuKindName(N.Kind);
