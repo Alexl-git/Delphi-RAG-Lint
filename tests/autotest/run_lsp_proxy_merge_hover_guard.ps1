@@ -42,7 +42,9 @@
     9      (A4 fix M3) more hovers than the worker queue holds, while the
            index opens: an overflowed request is dropped from the id table,
            so its reply is forwarded at once and no over-budget line is
-           written (inconclusive, not failed, when nothing overflowed).
+           written. 56 requests in one write against a queue of 8 force the
+           overflow; a run where none overflowed FAILS (A5 fix M5), so the
+           case can never pass vacuously.
 
   The proxy guards default -Exe to dll-win64; a lane passes its own engine.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
@@ -276,9 +278,9 @@ Check 'both position-less hovers got DelphiLSP''s reply, unmerged' ($n8.Count -e
 
 # --- 9 queue overflow (A4 fix M3) ------------------------------------------------------------------
 Write-Host ''
-Write-Host '(9) more hovers than the worker queue holds: an overflowed reply does not wait out the budget' -ForegroundColor Cyan
+Write-Host '(9) 56 hovers against a queue of 8: an overflowed reply does not wait out the budget' -ForegroundColor Cyan
 $many = [byte[]]$didOpen
-foreach ($id in 101..124) {
+foreach ($id in 101..156) {
   $many += Frame ('{"jsonrpc":"2.0","id":' + $id + ',"method":"textDocument/hover","params":{"textDocument":{"uri":"' + $uri + '"},"position":{"line":13,"character":8}}}')
 }
 $qArgs = @('lsp', '--proxy', '--merge-hover', '--db', $db, '--merge-budget-ms', '4000', '--delphi-lsp', $stub)
@@ -286,10 +288,10 @@ $r9 = Invoke-Raw $Exe $qArgs $many (Script $theirs1)
 $rep9 = @(Split-Frames $r9.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
           Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -ge 101) -and $_.ContainsKey('result') })
 $unmerged = @($rep9 | Where-Object { $_['result']['contents']['value'] -eq 'THEIRS-MD' }).Count
-Check 'all 24 hovers answered' ($rep9.Count -eq 24) ("n=$($rep9.Count)")
+Check 'all 56 hovers answered' ($rep9.Count -eq 56) ("n=$($rep9.Count)")
 Check 'positive control: some hovers merged' (($rep9.Count - $unmerged) -gt 0) ("merged=$($rep9.Count - $unmerged)")
 Check 'no over-budget line (an overflowed request no longer waits for an answer nobody computes)' (-not ((Utf8 $r9.Err) -match 'merge-hover over its')) ("unmerged=$unmerged err=$(Utf8 $r9.Err)")
-if ($unmerged -eq 0) { Write-Host '  [NOTE] nothing overflowed the queue this run: case 9 is inconclusive' -ForegroundColor Yellow }
+Check 'positive control: the queue DID overflow (some replies unmerged)' ($unmerged -gt 0) ("unmerged=$unmerged")
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
