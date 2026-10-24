@@ -1,0 +1,6 @@
+{
+  "id": "options",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "File menu > Options" }
+  ]
+}

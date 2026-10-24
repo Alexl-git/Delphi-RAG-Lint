@@ -91,6 +91,16 @@ Builders are found through the index: routines whose body references
 
 ## Drift against the registry: `menu-drift`
 
+An APPLICATION's menus are registered the same way, in `<project>\_D-RAG\menu-registry\`
+(`entries\*.json` + `exemptions.json`; `--registry` defaults to it), with
+`app-menu` surfaces that name the form:
+`{ "type": "app-menu", "form": "TfrmMain", "path": "Main menu > Lists > Customer List" }`.
+Keys are (form, path); an `ide-menu` surface has no form. Any `app-menu`
+surface makes menu-drift read the `.dfm` menus too (as `--with-dfm`). An item
+linked in N places is N paths: register each, or the others are `UNREGISTERED`;
+the `UNREGISTERED` skeleton of a `.dfm` leaf is an `app-menu` surface.
+Guarded by `tests\autotest\run_menu_drift_app.ps1`.
+
 ```
 drag-lint menu-drift --project <X.dproj> --db <db> --registry <features dir> [--format text|json] [--output <f>]
 ```

@@ -1,0 +1,6 @@
+{
+  "id": "export-grid",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Right-click menu popGrid > Export Grid" }
+  ]
+}

@@ -44,7 +44,7 @@
     {
       "type": "cli",
       "verb": "menu-drift",
-      "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
+      "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths and app-menu (form, path) surfaces, which imply --with-dfm; --registry defaults to <project>\\_D-RAG\\menu-registry: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
       "flags": [
         {
           "name": "--project",
@@ -71,7 +71,7 @@
         }
       ],
       "helpOrder": 97,
-      "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry's ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
+      "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry's ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\\_D-RAG\\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
     }
   ],
   "audience": "both",

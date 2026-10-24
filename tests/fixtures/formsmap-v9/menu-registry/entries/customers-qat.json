@@ -1,0 +1,6 @@
+{
+  "id": "customers-qat",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Toolbar 'Quick Access Toolbar' > Customer List" }
+  ]
+}
