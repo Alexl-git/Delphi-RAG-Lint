@@ -1201,7 +1201,10 @@ begin
         SendError(AId, -32602, 'rename_symbol requires to');
         Exit;
       end;
-      var RenRefuse:= TRenameRefactoring.BinaryDfmReason(RenStore, RenQName);
+      { same refusal order as the CLI rename: conflict, include use, binary dfm }
+      var RenRefuse:= TRenameRefactoring.ConflictReason(RenStore, RenQName, RenTo);
+      if RenRefuse = '' then RenRefuse:= TRenameRefactoring.IncludeUseReason(RenStore, RenQName);
+      if RenRefuse = '' then RenRefuse:= TRenameRefactoring.BinaryDfmReason(RenStore, RenQName);
       var RenEdits: TArray<TRenameEdit>:= nil;
       if RenRefuse = '' then RenEdits:= TRenameRefactoring.Build(RenStore, RenQName, RenTo);
       if (RenRefuse = '') and (Length(RenEdits) > 0) then RenRefuse:= TRenameRefactoring.StaleEditReason(RenEdits);
