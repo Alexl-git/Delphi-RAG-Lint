@@ -41,7 +41,7 @@ type
 /// <returns>One TProjectMember per input path, in the same order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
