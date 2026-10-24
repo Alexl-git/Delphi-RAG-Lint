@@ -2676,6 +2676,47 @@ var
         AReadMaps, AWriteMaps, AFieldMaps);
   end;
 
+  { A property whose write specifier IS a field (`write FX`) writes that field every
+    time the property is assigned -- from any unit, so it cannot be seen in the
+    defProcs. Credit one write to the field. A `write SetX` accessor is left to the
+    defProc scan of SetX; a read-only property credits nothing. AClsIdx = -1 until a
+    known class is entered. }
+  procedure CreditPropertyFieldWrites(const ANode: TTSNode;
+    AClassMap: TDictionary<string, Integer>;
+    AWriteMaps: TArray<TDictionary<string, Integer>>;
+    AFieldMaps: TArray<TDictionary<string, Boolean>>; AClsIdx: Integer);
+  var
+    I     : Integer;
+    Idx   : Integer;
+    SNode : TTSNode;
+    SName : string ;
+    Cnt   : Integer;
+  begin
+    if ANode.IsNull then Exit;
+    Idx:= AClsIdx;
+    if ANode.NodeType = 'declType' then
+    begin
+      if not AClassMap.TryGetValue(LowerCase(Trim(NodeStr(ANode.ChildByField('name')))), Idx) then
+        Idx:= -1;
+    end
+    else if (ANode.NodeType = 'declProp') and (Idx >= 0) then
+    begin
+      SNode:= ANode.ChildByField('setter');
+      if not SNode.IsNull then
+      begin
+        SName:= LowerCase(Trim(NodeStr(SNode)));
+        if AFieldMaps[Idx].ContainsKey(SName) then
+        begin
+          Cnt:= 0; AWriteMaps[Idx].TryGetValue(SName, Cnt);
+          AWriteMaps[Idx].AddOrSetValue(SName, Cnt + 1);
+        end;
+      end;
+      Exit;
+    end;
+    for I:= 0 to ANode.NamedChildCount - 1 do
+      CreditPropertyFieldWrites(ANode.NamedChild(I), AClassMap, AWriteMaps, AFieldMaps, Idx);
+  end;
+
   { Main referenced-never-set check. }
   procedure CheckReferencedNeverSet;
   var
@@ -2715,6 +2756,7 @@ var
         { Walk all defProc nodes, classify refs for each class. }
         ProcessDefProcs(PF.Tree.RootNode, ClassMap, Classes,
           ReadMaps, WriteMaps, FieldMaps);
+        CreditPropertyFieldWrites(PF.Tree.RootNode, ClassMap, WriteMaps, FieldMaps, -1);
 
         { Emit findings for fields with >= 1 read and 0 writes. }
         for I:= 0 to Classes.Count - 1 do
