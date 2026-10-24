@@ -980,6 +980,25 @@ begin
         so the gutter cannot disagree with the CLI about a non-string target. }
       Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(AFile, AStore, AStore.FindFileIdByPath(AFile), Rebuilt);
     end;
+    { Exact duplicates are ONE finding, as in the CLI's FinalizeAndOutput (step
+      0a, same key). The rule loader walks <exe-dir>\rules recursively, so a
+      nested copy of the folder runs every .scm rule twice; lint printed each
+      finding once and the gutter showed it twice. First occurrence wins. }
+    var Seen: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      var Uniq: TArray<TLintFinding>:= nil;
+      for F in Findings do
+      begin
+        var Key: string:= LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + IntToStr(F.StartCol)
+                          + '|' + LowerCase(F.RuleId) + '|' + F.Message;
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+        Uniq:= Uniq + [F];
+      end;
+      Findings:= Uniq;
+    finally
+      Seen.Free;
+    end;
     for F in Findings do
     begin
       if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
