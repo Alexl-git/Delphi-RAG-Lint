@@ -180,7 +180,7 @@ type
       FInitialized : Boolean             ;
       FShuttingDown: Boolean             ;
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
-      FFullRules   : Boolean             ; { C1: --full-rules; OFF by default } // dl:ok referenced-never-set@c208 -- written through the FullRules property (write FFullRules) by the CLI
+      FFullRules   : Boolean             ; { C1: --full-rules; OFF by default }
       { S0 feature registry: one instance per registered TLspFeature class, owned;
         the method table points into it (not owned). FContext is the adapter
         every feature is handed -- see DRagLint.LSP.Context. }

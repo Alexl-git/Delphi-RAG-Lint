@@ -128,7 +128,20 @@ function NormOff([string]$s) {
   $w = $WorkDir -replace '\\', '/'
   $n = (($s -replace [regex]::Escape($WorkDir), '<W>') -replace [regex]::Escape($w), '<W>')
   # the engine version (and so the frame length) moves with every release; neither is the OFF-path contract
-  return (($n -replace '"version":"[^"]*"', '"version":"<V>"') -replace 'Content-Length: \d+', 'Content-Length: <N>')
+  $n = (($n -replace '"version":"[^"]*"', '"version":"<V>"') -replace 'Content-Length: \d+', 'Content-Length: <N>')
+  # the initialize `capabilities` object grows with every new provider (C1 -> B1..B6 -> A3..A5); it is not the
+  # OFF-path publish contract either, so it is masked. The publishDiagnostics frames stay byte-compared.
+  $k = $n.IndexOf('"capabilities":{')
+  if ($k -ge 0) {
+    $start = $k + '"capabilities":'.Length
+    $depth = 0; $end = -1
+    for ($i = $start; $i -lt $n.Length; $i++) {
+      $c = $n[$i]
+      if ($c -eq '{') { $depth++ } elseif ($c -eq '}') { $depth--; if ($depth -eq 0) { $end = $i; break } }
+    }
+    if ($end -ge 0) { $n = $n.Substring(0, $start) + '"<CAPS>"' + $n.Substring($end + 1) }
+  }
+  return $n
 }
 $offNorm = NormOff $off.Out
 if ($CaptureOffBaseline) {
