@@ -166,6 +166,9 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.CodeLens.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.ImplDecl.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.SemanticTokens.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.SyntaxTree.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.InlayHint.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.ExecuteCommand.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.Ping.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
