@@ -699,7 +699,8 @@ Point your editor's LSP config at `drag-lint.exe lsp --db <path>.sqlite`.
 The server speaks JSON-RPC over stdio.
 
 Capabilities: hover, definition, references, completion, signatureHelp,
-diagnostics (publishDiagnostics on didSave), workspaceSymbols.
+diagnostics (publishDiagnostics on didSave), workspaceSymbols, rename (prepareRename +
+rename: a WorkspaceEdit the editor applies -- the server itself writes no file).
 
 ### MCP server (Claude / Cursor)
 
