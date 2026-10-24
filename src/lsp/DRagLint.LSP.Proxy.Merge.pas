@@ -27,7 +27,7 @@ uses
   , System.SyncObjs
   , System.Generics.Collections
   , DRagLint.Lint.Linter
-  , DRagLint.LSP.Proxy  // dl:ok circular-uses@a9ed -- implementation-only cycle forced by the P0 contract: Merge takes TLspProxyOptions, Proxy installs the engine
+  , DRagLint.LSP.Proxy
   , DRagLint.LSP.Server
   ;
 
