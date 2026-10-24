@@ -364,7 +364,8 @@ banner). An unknown FLAG, and any other fatal (`FATAL: <class>: <message>` on st
 same code `ask`, `menu-tree` and `menu-drift` use for a STALE INDEX. Tell the two apart by stderr, not
 by the code: a stale index names the reindex command, a fatal starts `FATAL:`. Left as is on purpose
 (2026-10-23): guards and documented verb contracts (`proptree --progress-interval` on a convert verb,
-`convert-apply --validate-all-blocks`) pin the unknown-flag `3`. A verb's own line in `--help` can
+`convert-apply` given its retired validate-all-blocks switch, which every `#convert` block now gets
+by default) pin the unknown-flag `3`. A verb's own line in `--help` can
 define further codes.
 
 **Query / search (find symbols, callers, text)**
