@@ -142,27 +142,36 @@ end;
 function BuildNode(const ASym: TSymbol; const AKids: TDictionary<Int64, TSymList>; const ALines: TArray<string>): TJSONObject;
 begin
   Result:= TJSONObject.Create;
-  var SLine: Integer:= ASym.StartLine - 1;
-  var SCol : Integer:= ASym.StartCol  - 1;
-  var ELine: Integer:= ASym.EndLine   - 1;
-  var ECol : Integer:= ASym.EndCol    - 1;
-  if (ELine < SLine) or ((ELine = SLine) and (ECol < SCol + Length(ASym.Name))) then
-  begin
-    ELine:= SLine;
-    ECol := SCol + Length(ASym.Name);
+  try
+    var SLine: Integer:= ASym.StartLine - 1;
+    var SCol : Integer:= ASym.StartCol  - 1;
+    var ELine: Integer:= ASym.EndLine   - 1;
+    var ECol : Integer:= ASym.EndCol    - 1;
+    var NCol : Integer:= NameColumn(ASym, ALines);
+    // range must contain selectionRange (LSP): the end is clamped against the
+    // NAME token's end (NCol + Length), not the declaration keyword's start.
+    if (ELine < SLine) or ((ELine = SLine) and (ECol < NCol + Length(ASym.Name))) then
+    begin
+      ELine:= SLine;
+      ECol := NCol + Length(ASym.Name);
+    end;
+    Result.AddPair('name', ASym.Name);
+    Result.AddPair('kind', TJSONNumber.Create(LspKind(ASym.Kind)));
+    Result.AddPair('range', Range(SLine, SCol, ELine, ECol));
+    Result.AddPair('selectionRange', Range(SLine, NCol, SLine, NCol + Length(ASym.Name)));
+    var Kids: TSymList;
+    if (ASym.Kind in ROUTINE_KINDS) or not AKids.TryGetValue(ASym.Id, Kids) then Exit;
+    var Arr: TJSONArray:= TJSONArray.Create;
+    Result.AddPair('children', Arr);
+    for var K: TSymbol in Kids do Arr.AddElement(BuildNode(K, AKids, ALines));
+  except
+    on Exception do
+    begin
+      Result.Free;
+      raise;
+    end;
   end;
-  Result.AddPair('name', ASym.Name);
-  Result.AddPair('kind', TJSONNumber.Create(LspKind(ASym.Kind)));
-  Result.AddPair('range', Range(SLine, SCol, ELine, ECol));
-  var NCol: Integer:= NameColumn(ASym, ALines);
-  Result.AddPair('selectionRange', Range(SLine, NCol, SLine, NCol + Length(ASym.Name)));
-  var Kids: TSymList;
-  if (ASym.Kind in ROUTINE_KINDS) or not AKids.TryGetValue(ASym.Id, Kids) then Exit;
-  var Arr: TJSONArray:= TJSONArray.Create;
-  Result.AddPair('children', Arr);
-  for var K: TSymbol in Kids do Arr.AddElement(BuildNode(K, AKids, ALines));
 end;
-
 class function TLspDocumentSymbolFeature.Methods: TArray<string>;
 begin
   Result:= [DOCSYM_METHOD];
@@ -219,7 +228,15 @@ begin
           L.Add(S);
         end;
       end;
-      for var R: TSymbol in Roots do Res.AddElement(BuildNode(R, Kids, Lines));
+      try
+        for var R: TSymbol in Roots do Res.AddElement(BuildNode(R, Kids, Lines));
+      except
+        on Exception do
+        begin
+          Res.Free;
+          raise;
+        end;
+      end;
     finally
       for var L: TSymList in Kids.Values do L.Free;
       Kids .Free;

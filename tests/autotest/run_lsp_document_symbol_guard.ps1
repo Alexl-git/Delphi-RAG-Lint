@@ -109,6 +109,50 @@ end;
 end.
 '@
 
+$edge = Join-Path $src 'uEdge.pas'
+WriteAnsi $edge @'
+unit uEdge;
+
+interface
+
+type
+  TEdge = class
+  public
+    procedure Over(A: Integer); overload;
+    procedure Over(const S: string); overload;
+    class procedure Make;
+  end;
+
+{ Spare } procedure Spare;
+
+procedure
+  Wrapped2;
+
+implementation
+
+procedure TEdge.Over(A: Integer);
+begin
+end;
+
+procedure TEdge.Over(const S: string);
+begin
+end;
+
+class procedure TEdge.Make;
+begin
+end;
+
+procedure Spare;
+begin
+end;
+
+procedure Wrapped2;
+begin
+end;
+
+end.
+'@
+
 $db = Join-Path $WorkDir 'sym.sqlite'
 & $Exe index $src --db $db 2>&1 | Out-Null
 Check 'fixture indexed' (Test-Path $db)
@@ -191,6 +235,52 @@ $all = @(AllNames $top)
 Check 'no local variable T anywhere' (-not ($all -contains 'T')) "all=$($all -join ',')"
 Check 'CONTROL: the routine Driver does appear' ($all -contains 'Driver')
 Check 'Driver has no children' ($null -eq $drv.children)
+
+# I1 (B1 fix round 1): range must CONTAIN selectionRange at every depth, for
+# every symbol of BOTH fixtures. RED before the fix: a routine whose declaration
+# keyword sits left of a short range end produced selectionRange past range.end.
+function Before($a, $b) { ($a.line -lt $b.line) -or ($a.line -eq $b.line -and $a.character -le $b.character) }
+function Walk($arr, $acc) { foreach ($s in $arr) { $acc.Add($s); if ($s.children) { Walk @($s.children) $acc } } }
+function ContainmentBad($arr) {
+  $acc = New-Object System.Collections.Generic.List[object]
+  Walk $arr $acc
+  return @($acc | Where-Object { -not ((Before $_.range.start $_.selectionRange.start) -and (Before $_.selectionRange.end $_.range.end)) } | ForEach-Object { $_.name })
+}
+$bad = ContainmentBad $top
+Check 'range contains selectionRange for every symbol (uLens)' ($bad.Count -eq 0) "bad=$($bad -join ',')"
+
+# I2: edge-case declarations.
+$ep = $edge -replace '\\', '/'
+$euri = 'file:///' + $ep.Substring(0,1).ToLower() + '%3A' + $ep.Substring(2)
+$re = Session $euri
+Check 'edge file answered' ($null -ne $re.sym)
+if ($null -ne $re.sym) {
+  $elines = [System.IO.File]::ReadAllLines($edge)
+  function ELineOf([string]$p) { for ($i = 0; $i -lt $elines.Count; $i++) { if ($elines[$i] -match $p) { return $i } } return -1 }
+  $etop = @($re.sym[0])
+  Check 'edge control: top level = TEdge,Spare,Wrapped2' ((($etop | % { $_.name }) -join ',') -eq 'TEdge,Spare,Wrapped2') "got=$(($etop | % { $_.name }) -join ',')"
+  $bad = ContainmentBad $etop
+  Check 'range contains selectionRange for every symbol (uEdge)' ($bad.Count -eq 0) "bad=$($bad -join ',')"
+  $edgeCls = Find $etop 'TEdge'
+  $ech = @($edgeCls.children)
+  Check 'overload pair: two Over children plus Make' ((($ech | % { $_.name }) -join ',') -eq 'Over,Over,Make') "got=$(($ech | % { $_.name }) -join ',')"
+  $o1 = ELineOf '^\s*procedure Over\(A'
+  $o2 = ELineOf '^\s*procedure Over\(const'
+  Check 'overload 1 on its own declaration line' ($ech[0].range.start.line -eq $o1) "want=$o1 got=$($ech[0].range.start.line)"
+  Check 'overload 2 on its own declaration line' ($ech[1].range.start.line -eq $o2) "want=$o2 got=$($ech[1].range.start.line)"
+  $oc = $elines[$o2].IndexOf('Over')
+  Check 'overload 2 selectionRange is the name token' ($ech[1].selectionRange.start.character -eq $oc -and $ech[1].selectionRange.end.character -eq $oc + 4) "want=$oc got=$($ech[1].selectionRange.start.character)"
+  $ml = ELineOf '^\s*class procedure Make'
+  $mc = $elines[$ml].IndexOf('Make')
+  Check 'class procedure: kind 6, selectionRange is Make (not the keyword)' ($ech[2].kind -eq 6 -and $ech[2].selectionRange.start.character -eq $mc -and $ech[2].selectionRange.end.character -eq $mc + 4) "want=$mc got=$($ech[2].selectionRange.start.character)"
+  $sp = Find $etop 'Spare'
+  $sl = ELineOf '^\{ Spare \} procedure Spare;'
+  $sc = $elines[$sl].LastIndexOf('Spare')
+  Check 'name in a comment before the declaration: selectionRange is the declared name' ($sp.selectionRange.start.line -eq $sl -and $sp.selectionRange.start.character -eq $sc) "want=$sc got=$($sp.selectionRange.start.character)"
+  $w = Find $etop 'Wrapped2'
+  $wl = ELineOf '^procedure$'
+  Check 'multi-line declaration: selectionRange stays on the declaration line (keyword-column fallback)' ($w.selectionRange.start.line -eq $w.range.start.line -and $w.range.start.line -eq $wl) "want=$wl got=$($w.range.start.line)/$($w.selectionRange.start.line)"
+}
 
 # Unknown file -> [].
 $r2 = Session 'file:///c%3A/no/such/dir/Nope.pas'
