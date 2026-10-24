@@ -17,8 +17,12 @@ drag-lint lsp --db <file.sqlite>
 ### Proxy mode: merging drag-lint into DelphiLSP
 
 ```
-drag-lint lsp --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]
+drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]
 ```
+
+`--delphi-lsp-bits 32` forwards to `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
+itself) instead of the default `bin64` one; capabilities are identical, only the process
+width differs. Any value other than 32 or 64 exits 3.
 
 `--proxy` relays every LSP message between the IDE and RAD Studio's own
 DelphiLSP, so the compiler front end keeps answering. The merge flags let

@@ -848,7 +848,9 @@ the protocol between the IDE and it. The IDE's Code Insight manager is
 exclusive -- one server per language -- so registering drag-lint the plain way
 would trade the compiler front end (generics, `with`, inline vars, the unsaved
 buffer) for a symbol index. Proxying removes the either/or. Add
-`--delphi-lsp <path>` to override which server is spawned. By default the relay
+`--delphi-lsp <path>` to override which server is spawned, or
+`--delphi-lsp-bits 32` to forward to the 32-bit `bin\DelphiLSP.exe` instead of
+the default 64-bit `bin64` one (any value but 32/64 exits 3). By default the relay
 is transparent: byte-for-byte identical to talking to DelphiLSP directly. Add
 `--merge-diagnostics` and drag-lint's lint findings (source `drag-lint`) are
 appended to DelphiLSP's own `textDocument/publishDiagnostics` notification, so

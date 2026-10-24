@@ -523,6 +523,7 @@ type
     // exclusive by construction -- the relay never opens a database, because
     // in relay form it answers nothing itself.
     LspProxy    : Boolean; // --proxy
+    LspDelphiBits: Integer;  // --delphi-lsp-bits <32|64> (0 = not given = 64)
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
     LspMergeDiagnostics: Boolean; // --merge-diagnostics (merge plan P0; OFF by default)
@@ -1597,6 +1598,13 @@ begin
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
+    else if (A = '--delphi-lsp-bits') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.LspDelphiBits:= StrToIntDef(ParamStr(i), 0);
+      if (Result.LspDelphiBits <> DRagLint.LSP.Proxy.LSP_BITS_32) and (Result.LspDelphiBits <> DRagLint.LSP.Proxy.LSP_BITS_64) then
+        raise Exception.CreateFmt('--delphi-lsp-bits must be 32 or 64, got: %s', [ParamStr(i)]);  // dl:ok raise-bare-exception@feb5 -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. the Unknown argument raise)
+    end
     else if A = '--merge-diagnostics' then Result.LspMergeDiagnostics:= True
     else if A = '--full-rules' then Result.LspFullRules:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
@@ -32723,6 +32731,7 @@ begin
       begin
         var ProxyOpt:= Default(DRagLint.LSP.Proxy.TLspProxyOptions);
         ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
+        ProxyOpt.DelphiLspBits:= if Args.LspDelphiBits = DRagLint.LSP.Proxy.LSP_BITS_32 then DRagLint.LSP.Proxy.LSP_BITS_32 else DRagLint.LSP.Proxy.LSP_BITS_64;
         ProxyOpt.ChildArgs   := '';
         ProxyOpt.TraceFile   := Args.LspTraceFile;
         ProxyOpt.MergeDiagnostics:= Args.LspMergeDiagnostics;
