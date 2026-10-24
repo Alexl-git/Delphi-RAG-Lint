@@ -301,6 +301,8 @@ end;
 
 const
   LSP_HEADER = 'Content-Length:';
+  { The blank line that ends a header block; HeaderEnd points at its CR. }
+  CRLF_CRLF = #13#10#13#10;
 
 { Writes ACount bytes from ABuf. Returns False if the destination closed. }
 function WriteAll(ADst: THandle; const ABuf: TBytes; AStart, ACount: Integer): Boolean;
@@ -501,6 +503,21 @@ begin
   end;
 end;
 
+{ A5 fix M1: a pass-through write (bytes outside a whole frame) on the S>C
+  side takes GClientLock too while an interceptor is set, so a proxy-answered
+  reply can never land inside them. The plain relay (no interceptor) and the
+  C>S side write directly, as before. }
+function WritePassThrough(ADst: THandle; const ABuf: TBytes; ACount: Integer; const ADir: string): Boolean;
+begin
+  if not Assigned(GInterceptor) or (ADir = 'C>S') then Exit(WriteAll(ADst, ABuf, 0, ACount));
+  EnterCriticalSection(GClientLock);
+  try
+    Result:= WriteAll(ADst, ABuf, 0, ACount);
+  finally
+    LeaveCriticalSection(GClientLock);
+  end;
+end;
+
 function DrainFramed(ADst: THandle; var ABuf: TBytes; var ALen: Integer;
   const ADir: string): Boolean;
 var
@@ -534,7 +551,7 @@ begin
       Keep:= TrailingHeaderPrefix(ABuf, ALen);
       Emit:= ALen - Keep;
       if Emit <= 0 then Exit;
-      if not WriteAll(ADst, ABuf, 0, Emit) then Exit(False);
+      if not WritePassThrough(ADst, ABuf, Emit, ADir) then Exit(False);
       Consume(Emit);
       Exit;
     end;
@@ -542,7 +559,7 @@ begin
     if Idx > 0 then
     begin
       { Junk before the header: forward it now, unchanged, and re-examine. }
-      if not WriteAll(ADst, ABuf, 0, Idx) then Exit(False);
+      if not WritePassThrough(ADst, ABuf, Idx, ADir) then Exit(False);
       Consume(Idx);
       Continue;
     end;
@@ -556,8 +573,8 @@ begin
       { A header we cannot read. Forward it and carry on rather than wait for a
         body whose length is unknown -- stalling here would hang the session on
         a malformed message we were never going to interpret anyway. }
-      if not WriteAll(ADst, ABuf, 0, HeaderEnd + 4) then Exit(False);
-      Consume(HeaderEnd + 4);
+      if not WritePassThrough(ADst, ABuf, HeaderEnd + Length(CRLF_CRLF), ADir) then Exit(False);
+      Consume(HeaderEnd + Length(CRLF_CRLF));
       Continue;
     end;
 
@@ -606,7 +623,7 @@ begin
   { EOF. Whatever is still buffered is an incomplete message -- forward it
     anyway. It is the client's data, and a silently swallowed tail is
     indistinguishable from a server that stopped talking. }
-  if Len > 0 then WriteAll(ADst, Acc, 0, Len);
+  if Len > 0 then WritePassThrough(ADst, Acc, Len, ADir);
 end;
 
 constructor TPumpThread.Create(ASrc, ADst: THandle; ACloseSrc, ACloseDst, AFramed: Boolean;
