@@ -271,6 +271,23 @@ $jp2 = @(Publishes $j2.Out | Where-Object { $_.Frame.Body.Contains('stub-after-o
 Check 'after didChange + didClose: the publish is merged' ($jp1.Count -eq 1 -and ($jp1[0].Sources -contains 'drag-lint')) ("count=$($jp1.Count)")
 Check 'after didChange + didOpen: the publish is merged' ($jp2.Count -eq 1 -and ($jp2[0].Sources -contains 'drag-lint')) ("count=$($jp2.Count)")
 
+# --- (k) a publish DURING the warm-up is not an over-budget event (A3 fix 1) ----
+Write-Host ''
+Write-Host '(k) didOpen + an immediate publish (default budget): no "over its budget" line' -ForegroundColor Cyan
+# The publish lands while the first-didOpen warm-up (cold TLinter.Create, seconds)
+# still occupies the worker. That is the warm-up, not a dead merge: the frame is
+# forwarded unmerged, silently. Positive control: the SAME engine, with no
+# didOpen (so no warm-up) and a 1 ms budget, DOES write the line -- the stderr
+# capture and the message text are live.
+$pubK = PublishBody $dirtyUri 'stub-during-warmup-6666'
+$k1   = Invoke-Raw $Exe $defArgs ([byte[]]((DocNote 'textDocument/didOpen' $dirtyUri) + (Frame $pubK)))
+$kp   = @(Publishes $k1.Out | Where-Object { $_.Frame.Body.Contains('stub-during-warmup-6666') })
+Check 'the publish arrived during the warm-up (forwarded unmerged)' ($kp.Count -eq 1 -and -not ($kp[0].Sources -contains 'drag-lint')) ("count=$($kp.Count) sources=$($kp[0].Sources -join ',')")
+Check 'no "over its ... budget" line during the warm-up' (-not ((Utf8 $k1.Err) -match 'over its \d+ ms budget')) ("err=$(Utf8 $k1.Err)")
+$oneArgs = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '1', '--delphi-lsp', $stub)
+$k2 = Push $oneArgs (PublishBody $dirtyUri 'stub-no-warmup-7777')
+Check 'positive control: no warm-up, 1 ms budget -> the line IS written' ((Utf8 $k2.Err) -match 'over its 1 ms budget') ("err=$(Utf8 $k2.Err)")
+
 Write-Host ''
 Write-Host '(h) non-ASCII message: Content-Length is the UTF-8 byte count' -ForegroundColor Cyan
 $uMsg  = 'stub-umlaut-' + [char]0x00FC + '-end'

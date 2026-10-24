@@ -17,7 +17,7 @@ drag-lint lsp --db <file.sqlite>
 ### Proxy mode: merging drag-lint into DelphiLSP
 
 ```
-drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]
+drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]
 ```
 
 `--delphi-lsp-bits 32` forwards to `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
@@ -32,6 +32,19 @@ drag-lint add to those answers:
   `textDocument/publishDiagnostics` (one notification, source-tagged). OFF by
   default; with every merge flag off the proxy relays DelphiLSP's bytes
   unchanged.
+- `--merge-completion` -- union drag-lint's completion items into DelphiLSP's
+  reply, keyed on (label, kind); DelphiLSP's items stay first. OFF by default.
+- `--merge-hover` -- append drag-lint's hover facts to DelphiLSP's hover,
+  after a `---` rule (DelphiLSP's MarkedString shapes are normalised to
+  markdown first), or answer with drag-lint's hover alone when DelphiLSP has
+  none; neither forwards `null` unchanged. OFF by default.
+- `--merge-definition` -- when DelphiLSP answers `textDocument/definition`
+  with `null` or `[]`, answer with drag-lint's locations instead (a non-empty
+  answer wins). DelphiLSP advertises no references or workspace-symbol
+  provider, so the proxy adds both to its `initialize` reply and answers
+  `textDocument/references` and `workspace/symbol` itself from the index;
+  those requests are never forwarded (one reply each, `[]` when no index
+  opens). OFF by default.
 - `--merge-budget-ms <n>` -- the per-frame time budget of a merge handler
   (default 300). A handler that overruns it, raises, or cannot open the index
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails
@@ -55,6 +68,28 @@ Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
 second process start) is deliberately NOT built; it can follow if the measured
 cost justifies it.
 
+
+How the completion merge behaves:
+
+- Each `textDocument/completion` request is recorded by id, and drag-lint's
+  items for that caret are computed at once on the merge worker, so they are
+  usually ready before DelphiLSP answers. The index is the `--db` list, or
+  -- with no `--db` -- the indexes plain `drag-lint lsp` resolves (manifest,
+  project, library), opened lazily on the first `didOpen` or request.
+- The client's `didOpen` / `didChange` / `didSave` / `didClose` texts are
+  tapped into drag-lint's live-buffer overlay, so member completion sees what
+  is typed, not what was last saved.
+- On DelphiLSP's reply: its items first, unchanged and in order; each
+  drag-lint item follows only when its (label, kind) is not already present
+  (the same label under another kind legitimately appears twice). A
+  `CompletionList` object, a bare array and `null` are all handled; an
+  empty or null list becomes drag-lint's items alone.
+- Fail-open: no drag-lint items, an error reply, or drag-lint not finished
+  within `--merge-budget-ms` of the request (reported once on stderr)
+  forwards the reply byte-identical. No index at all (a `--db` that does
+  not exist, nothing resolved, no store opened) writes ONE stderr line and
+  turns completion merging off for the session.
+- Guard: `tests\autotest\run_lsp_proxy_merge_completion_guard.ps1`.
 
 How the diagnostics merge behaves:
 

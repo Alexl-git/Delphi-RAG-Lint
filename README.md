@@ -858,7 +858,20 @@ appended to DelphiLSP's own `textDocument/publishDiagnostics` notification, so
 compiler errors and lint findings arrive in ONE notification per file. It fails
 open: a file with unsaved edits, a clean file, a frame it cannot parse or a lint
 that overruns `--merge-budget-ms <n>` (default 300) forwards DelphiLSP's
-original bytes untouched.
+original bytes untouched. Add `--merge-completion` and drag-lint's completion
+items (from the `--db` index, or the indexes plain `lsp` would resolve) are
+appended to DelphiLSP's reply when their (label, kind) is not already there;
+DelphiLSP's items stay first. No drag-lint items, no index, or drag-lint over
+the budget forwards DelphiLSP's reply byte-identical. Add --merge-hover and
+drag-lint's hover facts (the same text plain `lsp` shows) follow DelphiLSP's
+hover after a `---` rule, or stand alone when DelphiLSP has none; no drag-lint
+hover forwards DelphiLSP's reply (or its `null`) byte-identical. Add
+`--merge-definition` and a `textDocument/definition` that DelphiLSP answers
+with `null` or `[]` gets drag-lint's locations instead (a non-empty answer is
+forwarded untouched); DelphiLSP's `initialize` reply gains `referencesProvider`
+and `workspaceSymbolProvider` when it lacks them (or sets them `false`), and the proxy then answers
+`textDocument/references` and `workspace/symbol` itself from the index --
+those requests never reach DelphiLSP.
 
 `drag-lint-switch --vscode --status|--on|--off` toggles the `delphi-lsp` entry in a workspace's `.vscode\mcp.json` (backup on `--off`, restore on `--on`; refuses while VS Code runs).
 
@@ -1120,7 +1133,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | Command | What it does |
 |---|---|
 | [`serve --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Start the **MCP** stdio server -- for AI agents (Claude, Cursor). Nothing in the IDE uses this. |
-| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-budget-ms <n>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag; `--merge-diagnostics` appends drag-lint's lint findings to DelphiLSP's own publishDiagnostics (fail-open, budget `--merge-budget-ms`, default 300). `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and ignored -- editor clients send them, and stdio is the only transport. |
+| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag; `--merge-diagnostics` appends drag-lint's lint findings to DelphiLSP's own publishDiagnostics; `--merge-completion` unions drag-lint's completion items into DelphiLSP's reply, keyed on (label, kind) (both fail-open, budget `--merge-budget-ms`, default 300). `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and ignored -- editor clients send them, and stdio is the only transport. |
 
 #### Maintenance
 
