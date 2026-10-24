@@ -180,7 +180,13 @@ for ($i = 0; $i -lt 10000; $i++) { [void]$sb.Append("  X := X + $i; // step`r`n"
 [void]$sb.Append("end;`r`n`r`nend.`r`n")
 [System.IO.File]::WriteAllText($bigFile, $sb.ToString(), (New-Object System.Text.ASCIIEncoding))
 $bigDb = Join-Path $WorkDir 'big.sqlite'
-& $Exe index $bigSrc --db $bigDb 2>&1 | Out-Null
+$idxOut = & $Exe index $bigSrc --db $bigDb 2>&1
+$idxExit = $LASTEXITCODE
+if ($idxExit -ne 0 -or -not (Test-Path $bigDb) -or (Get-Item $bigDb).Length -le 0) {
+  Write-Host ('FAIL: timing-block index did not produce a DB (exit=' + $idxExit + ')') -ForegroundColor Red
+  $idxOut | Select-Object -Last 5 | ForEach-Object { Write-Host $_ }
+  exit 1
+}
 $bm  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
 $bm += Frame @{ jsonrpc='2.0'; id=11; method='textDocument/semanticTokens/full'; params=@{ textDocument=@{ uri=('file:///' + ($bigFile -replace '\\', '/')) } } }
 $bm += Frame @{ jsonrpc='2.0'; id=2; method='shutdown'; params=@{} }
