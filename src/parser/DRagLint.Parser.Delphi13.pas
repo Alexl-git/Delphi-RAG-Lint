@@ -146,6 +146,8 @@ type
       symbol lives in; stamped into TSymbol.Section by Emit (agent gap #3:
       tells whether a symbol is usable from another unit). }
     CurrentSection: string;
+    { N-06: 1-based line of the unit's implementation keyword; 0 = none. }
+    ImplementationLine: Integer;
     { v0.42: when True (deep scan), emit read/write/attribute usage references
       for identifiers in expression position, so Find-Usages works for
       variables/components/properties -- not just calls. Off = today's
@@ -167,7 +169,10 @@ type
       const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False; const APropAccess: string = '';
       const ADirectives: string = ''; AVisExplicit: Boolean = True; const AGenericParams: string = ''
     ): Integer;
-    procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
+    { AReceiver is persisted as refs.receiver_text at insert time (N-05: the
+      member of `Self.X`). '' keeps the column NULL, as every other ref has it
+      until the call stream computes one. }
+    procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string = '');
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
   end;
 
@@ -197,6 +202,7 @@ var
   DotPos: Integer ;
 begin
   if AUnitName = '' then Exit;
+  U:= Default(TUnitUse); { N-06: OriginPath '' / IncludeLine 0 = inline }
   U.FileId:= -1; { indexer will fill in from files table }
   U.UnitName:= AUnitName;
   U.Section := ASection;
@@ -212,7 +218,7 @@ begin
   if DotPos > 0 then Stem:= Copy(Stem, DotPos + 1, MaxInt);
 end; // procedure
 
-procedure TWalkState.EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
+procedure TWalkState.EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string);
 var
   Ref: TReference;
 begin
@@ -220,6 +226,7 @@ begin
   Ref:= Default(TReference);
   Ref.Kind    := AKind;
   Ref.NameText:= ANameText;
+  Ref.ReceiverText:= AReceiver;
   Ref.SymbolId:= 0; // unresolved at parse time
   Ref.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
   Ref.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
@@ -723,7 +730,11 @@ begin
   begin
     Child:= ANode.NamedChild(i);
     if Child.NodeType      = 'interface' then WalkSection(Child, AState, uusInterface)
-    else if Child.NodeType = 'implementation' then WalkSection(Child, AState, uusImplementation);
+    else if Child.NodeType = 'implementation' then
+    begin
+      AState.ImplementationLine:= Integer(Child.StartPoint.row) + 1; { N-06 }
+      WalkSection(Child, AState, uusImplementation);
+    end;
   end;
 
   { Stamp each symbol with the unit section it is declared in (gap #3): set
@@ -1220,6 +1231,9 @@ begin
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  { W5-ext: walk the target so `= type TBase` records a type_use for TBase, as
+    the plain alias now does (run_alias_rhs_refs.ps1). }
+  Walk(WrapNode, AState, AParentSymbolIdx, AParentQualifiedName);
   Result:= True;
 end; // function
 
@@ -1339,6 +1353,12 @@ begin
       end;
   end;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', Her);
+  { W5-ext: the TARGET is a type USE. This handler Exits the dispatch, so nothing
+    else visits the typeref -- `TTokList = TList<TTok>` emitted no ref for TList
+    or TTok, and lint-all called System.Generics.Collections unused. One call,
+    no other walker reaches this node, so it cannot double-emit
+    (run_alias_rhs_refs.ps1 asserts exactly one row per target name). }
+  EmitTypeUseReference(RefNode, AState);
   Result:= True;
 end; // function
 
@@ -2648,6 +2668,20 @@ begin
         end;
       end;
     end; // else (nested)
+    { W5-ext (N-04): a routine's own `type` and `const` sections are siblings of
+      its declVars, like nested routines -- and nothing walked them. A local
+      enum's values, a local record, a local const: no symbol, and every typeref
+      and const expression inside them lost its ref. Walked here with THIS
+      routine as the parent, so the names qualify as Unit.Routine.TLocal(.value),
+      the shape EmitRoutineLocals gives local vars. A nested routine's sections
+      are its own defProc's children and are reached by the nested walk below,
+      parented to it. No routine symbol (SelfIdx < 0) -> skipped: a parent of the
+      class or unit would publish a local name at the wrong scope.
+      Guard: run_routine_local_decls.ps1. }
+    if SelfIdx >= 0 then
+      for i:= 0 to ANode.NamedChildCount - 1 do
+        if (ANode.NamedChild(i).NodeType = 'declTypes') or (ANode.NamedChild(i).NodeType = 'declConsts') then
+          Walk(ANode.NamedChild(i), AState, SelfIdx, SelfQName);
     var BodyNode:= ANode.ChildByField('body');
     if not BodyNode.IsNull then
     begin
@@ -2808,7 +2842,10 @@ begin
       if (not L.IsNull) and (L.NodeType = 'identifier') and SameText(Trim(NodeText(L, AState.Source)), 'Self') then
       begin
         var R:= ANode.ChildByField('rhs');
-        if (not R.IsNull) and (R.NodeType = 'identifier') then AState.EmitRef('read', NodeText(R, AState.Source), R);
+        { N-05: record the receiver. Inside `with P do ... Self.X`, a bare X binds
+          to P while Self.X is the routine's own member; without receiver_text the
+          two rows were indistinguishable and consumers re-read the source text. }
+        if (not R.IsNull) and (R.NodeType = 'identifier') then AState.EmitRef('read', NodeText(R, AState.Source), R, 'Self');
       end;
       // Ref-gap G: capture the MEMBER of a NON-Self dotted access (obj.Member) as a
       // 'member-access' ref, so the component-conversion applier can find instance-
@@ -2888,7 +2925,7 @@ begin
            and (not DotMember.IsNull) and (DotMember.NodeType = 'identifier') then
         begin
           AState.EmitRef('read', NodeText(DotBase, AState.Source), DotBase);
-          AState.EmitRef('write', NodeText(DotMember, AState.Source), DotMember);
+          AState.EmitRef('write', NodeText(DotMember, AState.Source), DotMember, 'Self');   { N-05 }
           SelfMemberLhs:= True;
         end;
       end;
@@ -3249,6 +3286,7 @@ begin
     Result.UsesEntries:= State.UsesEntries.ToArray;
     Result.DiBindings := State.DiBindings .ToArray;
     Result.Literals   := HarvestStringLiterals(Root, Source);
+    Result.ImplementationLine:= State.ImplementationLine; { N-06 }
   finally
     State.Free;
     Tree.Free;

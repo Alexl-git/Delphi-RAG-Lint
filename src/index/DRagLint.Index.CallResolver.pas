@@ -248,6 +248,65 @@ type
     Unreadable: Int64;
   end;
 
+  /// <summary>B-28: per-run counters of the bare value-read pass, printed on the
+  /// calls stage's `value-reads:` ResolveLog line.</summary>
+  /// <remarks>
+  /// Every DECLINE is counted by reason: a declined read stores nothing, so
+  /// these numbers are its only trace. Bound + the nine declines = the read
+  /// refs the pass was asked about.
+  /// </remarks>
+  TValueReadStats = record
+    /// <summary>Reads whose refs.symbol_id was set to a local, param, const or var.</summary>
+    Bound     : Int64;
+    /// <summary>Declined: `Result` -- an implicit variable with no symbol row.</summary>
+    ResultVar : Int64;
+    /// <summary>Declined: the name of an enclosing function (its result).</summary>
+    OwnName   : Int64;
+    /// <summary>Declined: an enclosing `with` target may supply the name.</summary>
+    WithScope : Int64;
+    /// <summary>Declined: the name is a property or field -- the member-read
+    /// stream's binding, which also writes the member_accesses row.</summary>
+    Member    : Int64;
+    /// <summary>Declined: two or more declarations are equally near.</summary>
+    Ambiguous : Int64;
+    /// <summary>Declined: nothing of the name is visible in this index.</summary>
+    NotFound  : Int64;
+    /// <summary>Declined: the nearest declaration is a routine, type or enum value.</summary>
+    Routine   : Int64;
+    /// <summary>Declined: a receiver qualifies the read (`A.X`, `Self.X`).</summary>
+    Qualified : Int64;
+    /// <summary>Declined: the scope walk answered from the class or unit, but an
+    /// enclosing routine's text declares the name in a way the index does not
+    /// list (a local or inline const, an inline var).</summary>
+    Unlisted  : Int64;
+    /// <summary>Declined: the source line could not be read, or the file no
+    /// longer matches the index.</summary>
+    Unreadable: Int64;
+  end;
+
+  /// <summary>B-31: per-run counters of the type_use pass, printed on the calls
+  /// stage's `type-uses:` ResolveLog line.</summary>
+  /// <remarks>Bound + the six declines = the type_use refs the pass was asked about.</remarks>
+  TTypeUseStats = record
+    /// <summary>type_use refs whose refs.symbol_id was set.</summary>
+    Bound     : Int64;
+    /// <summary>Declined: a generic parameter of an enclosing type or routine.</summary>
+    Generic   : Int64;
+    /// <summary>Declined: the name is qualified (`Unit.TType`, `TOuter.TInner`).</summary>
+    Qualified : Int64;
+    /// <summary>Declined: an enclosing routine's text declares the name as a
+    /// local type, which the index does not list.</summary>
+    Unlisted  : Int64;
+    /// <summary>Declined: two or more used units declare the name.</summary>
+    Ambiguous : Int64;
+    /// <summary>Declined: no visible type of the name is in this index (an RTL
+    /// type, or a unit the index does not hold).</summary>
+    NotFound  : Int64;
+    /// <summary>Declined: the source line could not be read, or the file no
+    /// longer matches the index.</summary>
+    Unreadable: Int64;
+  end;
+
   /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
   /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
@@ -339,6 +398,103 @@ type
     FUnitFileOf : TDictionary<string, Int64>;
     // D13: enclosing routine id -> its TWriteScope, built on first use.
     FWriteScopes: TDictionary<Int64, TWriteScope>;
+    // B-28: counters of the bare value-read pass.
+    FValueReadStats: TValueReadStats;
+    // B-28: routine id -> '|name|...|' its text declares as a const or an
+    // inline const/var, lowercased; built on first use (LocalDeclNamesOf).
+    FLocalDecls: TDictionary<Int64, string>;
+    // B-31: counters of the type_use pass.
+    FTypeUseStats: TTypeUseStats;
+    // B-31: file id -> its type symbols and its root (unit/program) symbol.
+    FFileTypes: TDictionary<Int64, TArray<TSymbol>>;
+
+    /// <summary>The names ARoutineId's implementation text declares in a const
+    /// or type section, or as an inline const / var -- declarations the extractor
+    /// does not emit as symbols -- as '|name|...|', lowercased and cached.</summary>
+    /// <param name="ARoutineId">A routine symbol; its ImplStartLine..ImplEndLine
+    /// is scanned, nested routines included (a wider set only declines more).</param>
+    /// <param name="AFileId">The file holding that implementation.</param>
+    /// <returns>'|' when nothing is declared or the text cannot be read.</returns>
+    function LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+    /// <summary>Review 2026-10-23: whether the scope of ADecl, a local
+    /// variable or parameter, covers position (ALine, ACol).</summary>
+    /// <param name="ADecl">A local_var or param symbol of the routine at the site.</param>
+    /// <param name="AFileId">The file holding the site and the declaration.</param>
+    /// <param name="ALine">The site's line.</param>
+    /// <param name="ACol">The site's column.</param>
+    /// <returns>True for a parameter; for a var-section variable declared at or
+    /// before the site (an anonymous method's var section can follow it). For an INLINE `var` it is True only when the declaration lies
+    /// at or before the site and the block it sits in -- a `for var` loop's body,
+    /// else the enclosing begin/try/case/repeat block -- has not closed before
+    /// the site. False when the text cannot be read.</returns>
+    /// <remarks>Text-based, conservative: a block shape it does not model reads
+    /// as closed, which only declines.</remarks>
+    function LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
+    /// <summary>Review 2026-10-23 (W5-res2): the local or parameter named AName
+    /// of ARef's enclosing routine that ARef's site sees -- the nearest
+    /// declaration at or before the site whose block covers it, the rule
+    /// ScopeWriteTarget applies to value reads and writes. Used to type a
+    /// receiver, so two same-name inline vars never type it from the first.</summary>
+    /// <param name="ARef">EnclosingSymbolId, FileId, StartLine and StartCol are
+    /// consulted.</param>
+    /// <param name="AName">The identifier, matched case-insensitively.</param>
+    /// <param name="ADeclared">True when the routine declares a local or
+    /// parameter of that name at all, whether or not it covers the site.</param>
+    /// <returns>The declaration in scope at the site; a zero-Id symbol when none
+    /// is declared or none covers the site.</returns>
+    /// <remarks>ADeclared with a zero-Id result is 'ambiguous': the caller
+    /// declines, and the name still shadows fields, unit values and types.</remarks>
+    function LocalInScopeAt(const ARef: TReference; const AName: string; out ADeclared: Boolean): TSymbol;
+    /// <summary>Review 2026-10-23 (N-07, W5-res2): whether ARef sits inside an
+    /// anonymous method's body within its enclosing routine, and the declared
+    /// return type of the innermost one.</summary>
+    /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
+    /// consulted.</param>
+    /// <param name="AReturnType">The innermost open anonymous method's return
+    /// type text, lowercased with blanks removed (`tlist<tjob>`); '' for an
+    /// anonymous procedure, outside one, or when it cannot be read.</param>
+    /// <returns>True inside an anonymous `function` / `procedure` body (or its
+    /// header), and when the routine's text cannot be read; False otherwise.</returns>
+    /// <remarks>An anonymous method is a `function` / `procedure` keyword right
+    /// after `:=`, `(`, `,` or `[`; its body runs from its `begin` to the
+    /// matching `end`.</remarks>
+    function InsideAnonymousMethod(const ARef: TReference; out AReturnType: string): Boolean;
+    /// <summary>Review 2026-10-23 (W5-res2): the type of the implicit `Result`
+    /// at ARef -- the enclosing routine's declared return type, unless ARef sits
+    /// in an anonymous method whose own return type is not textually the same
+    /// (then that `Result` is the anonymous method's, of another type).</summary>
+    /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
+    /// consulted.</param>
+    /// <param name="ADeclined">True when ARef is inside an anonymous method
+    /// whose return type cannot be shown equal to the routine's.</param>
+    /// <returns>The return type text; '' when declined, for a procedure, or
+    /// for a signature shape SignatureReturnType does not read.</returns>
+    /// <remarks>Equality is on text after StripUnitQualifiers (case, blanks and
+    /// unit qualification ignored): `uX.TFoo` equals `TFoo` and
+    /// `System.Integer` equals `Integer`; a qualified OTHER type still
+    /// declines.</remarks>
+    function ResultTypeAt(const ARef: TReference; out ADeclined: Boolean): string;
+    /// <summary>B-35 lane R (W5-res2 residue): ATypeText lowercased, blanks
+    /// removed, and every dotted identifier chain stripped of its longest
+    /// leading run of segments that names a unit.</summary>
+    /// <param name="ATypeText">A type spelling, e.g. `uX.TList<System.Integer>`.</param>
+    /// <returns>The normalised text, e.g. `tlist<integer>`.</returns>
+    /// <remarks>A prefix is a unit when UnitNameToFileId finds exactly one unit
+    /// of that name, or it is `System` (always in scope). A nested-type prefix
+    /// (`TOuter.TInner`) names no unit and is kept, so two different nested
+    /// types never compare equal.</remarks>
+    function StripUnitQualifiers(const ATypeText: string): string;
+
+    /// <summary>The type symbols of AFileId and its root symbol (the one with no
+    /// parent), read once per file and cached.</summary>
+    /// <param name="AFileId">An indexed file.</param>
+    /// <returns>An empty array when the file has no symbols.</returns>
+    function FileTypesOf(AFileId: Int64): TArray<TSymbol>;
+    /// <summary>The scope a ref sits in: its enclosing symbol, else the
+    /// innermost type of its file whose lines span it, else the file's root.</summary>
+    /// <param name="ARef">FileId, StartLine and EnclosingSymbolId are consulted.</param>
+    /// <returns>Default(TSymbol) when the file has no symbols.</returns>
+    function ScopeSymbolAt(const ARef: TReference): TSymbol;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1171,12 +1327,19 @@ type
     /// nearest first.</summary>
     /// <param name="AScope">The write's enclosing scope.</param>
     /// <param name="AName">The identifier as written.</param>
+    /// <param name="AFileId">The file of the site.</param>
+    /// <param name="ALine">The site's line.</param>
+    /// <param name="ACol">The site's column.</param>
     /// <param name="AReason">OUT: '' when bound or when nothing here declares
-    /// the name (the unit rung decides then); 'routine' or 'own-name' for a
-    /// decline.</param>
+    /// the name (the unit rung decides then); 'routine', 'own-name' or
+    /// 'ambiguous' for a decline.</param>
     /// <returns>The local / parameter / const / var / field / property id, or 0.</returns>
+    /// <remarks>Review 2026-10-23: a level may hold several value declarations
+    /// of the name (`for var i` twice). The NEAREST one at or before the site
+    /// whose scope covers it answers (LocalScopeCovers); when none covers it
+    /// the level declines 'ambiguous' rather than fall back to the first.</remarks>
     function ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
-      out AReason: string): Int64;
+      AFileId: Int64; ALine, ACol: Integer; out AReason: string): Int64;
     /// <summary>The unit rung of a bare write: the unit-level var/const named
     /// ALc declared in ARefFileId itself or, when it declares nothing of that
     /// name, in the interface of a unit it uses.</summary>
@@ -1461,6 +1624,60 @@ type
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
     /// pass.</remarks>
     property WriteStats: TWriteResolveStats read FWriteStats;
+
+    /// <summary>B-28 (2026-10-23): the local / parameter / const / var a bare
+    /// `read` ref names, by the scope walk of a bare write -- certain or nothing.</summary>
+    /// <param name="ARef">The read ref. FileId, NameText, StartLine, StartCol and
+    /// EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise 'unreadable' |
+    /// 'qualified' | 'result' | 'with-scope' | 'member' | 'own-name' | 'routine'
+    /// | 'ambiguous' | 'not-found' | 'unlisted'.</param>
+    /// <returns>The local_var / param / const / var id, or 0 for every decline.</returns>
+    /// <remarks>
+    /// The lookup order is ResolveWriteRef's: the `with` scope at the site (a
+    /// member of a typed target is the member-read stream's, 'member'; an
+    /// undecidable target declines 'with-scope'), the lexical levels of the
+    /// routine and the routines around it, the enclosing class chain, the own
+    /// unit, the interfaces of the used units. The first scope that declares the
+    /// name answers. Only a value kind binds: a property or field is declined
+    /// 'member' (ResolveBareMemberRead binds it and writes its member_accesses
+    /// row), a routine / type / enum value 'routine'. A receiver-qualified read,
+    /// `Self.X` included, is 'qualified'. The extractor emits no symbol for a
+    /// routine's local const or an inline const, so a binding is declined
+    /// 'unlisted' when a routine NEARER than the answering scope -- every
+    /// enclosing routine when the class or unit answered, the inner levels when
+    /// an outer routine did -- declares the name that way in its text
+    /// (LocalDeclNamesOf). Identity only -- the caller writes
+    /// refs.symbol_id and nothing else. Counted into ValueReadStats.
+    /// </remarks>
+    function ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>Per-run counters of the value-read pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property ValueReadStats: TValueReadStats read FValueReadStats;
+
+    /// <summary>B-31 (2026-10-23): the type a `type_use` ref names -- certain or
+    /// nothing.</summary>
+    /// <param name="ARef">The type_use ref. FileId, NameText, StartLine, StartCol
+    /// and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise 'unreadable' |
+    /// 'qualified' | 'generic' | 'unlisted' | 'ambiguous' | 'not-found'.</param>
+    /// <returns>The class / interface / record / type / enum id, or 0.</returns>
+    /// <remarks>
+    /// Delphi's order. From the ref's scope (ScopeSymbolAt) outwards: a generic
+    /// parameter of the level declines, a routine whose text declares the name
+    /// as a local type declines ('unlisted' -- the index lists no local types),
+    /// a type child of the level binds (a nested type -- of the level's
+    /// resolved ancestors too, nearest first -- then the own unit's types). Then the used units: exactly one TOP-LEVEL INTERFACE type of a
+    /// unit in scope binds; two are 'ambiguous' (uses-clause order is not
+    /// modelled). A qualified name is declined rather than guessed. Identity
+    /// only. Counted into TypeUseStats.
+    /// </remarks>
+    function ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>Per-run counters of the type_use pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property TypeUseStats: TTypeUseStats read FTypeUseStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -2055,6 +2272,8 @@ begin
   FMemberReadStats:= Default(TMemberReadStats);
   FUnitFileOf := TDictionary<string, Int64>.Create;
   FWriteScopes:= TDictionary<Int64, TWriteScope>.Create;
+  FLocalDecls := TDictionary<Int64, string>.Create;
+  FFileTypes  := TDictionary<Int64, TArray<TSymbol>>.Create;
   FWriteStats := Default(TWriteResolveStats);
   BuildMaps;
 end;
@@ -2067,6 +2286,8 @@ begin
   FWith.Statements    .Free;
   FLineCache .Free;
   FUnitFileOf.Free;
+  FFileTypes.Free;
+  FLocalDecls.Free;
   FWriteScopes.Free;
   FStaleFiles.Free;
   FChildCache.Free;
@@ -2815,6 +3036,29 @@ function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason:
       if VisibleHere(S.FileId, S.Section) then Exit(True);
   end;
 
+  { W5-ext (N-04): True when ARoutineId is the ref's enclosing routine or one it
+    is nested in. A routine-local enum's values are in scope only there; the
+    climb stops at the first non-routine parent, as LexicalScopeDeclaresValue's. }
+  function RoutineOnChain(ARoutineId: Int64): Boolean;
+  var
+    ScopeId: Int64  ;
+    Scope  : TSymbol;
+    Depth  : Integer;
+  begin
+    Result := False;
+    ScopeId:= ARef.EnclosingSymbolId;
+    Depth  := 0;
+    while (ScopeId > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+    begin
+      if ScopeId = ARoutineId then Exit(True);
+      Inc(Depth);
+      Scope:= SymbolById(ScopeId);
+      if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
+      if not (SymbolById(Scope.ParentId).Kind in METHOD_KINDS) then Exit;
+      ScopeId:= Scope.ParentId;
+    end;
+  end;
+
 var
   Lc          : string                 ;
   Cands       : TList<TEnumValueDecl>  ;
@@ -2874,8 +3118,15 @@ begin
           end;
       if not OwnerOk then Continue;
     end;
+    if (C.OwnerRoutineId > 0) and not RoutineOnChain(C.OwnerRoutineId) then Continue;
     Visible:= Visible + [C];
   end;
+  { A routine-local value in scope is NEARER than any unit-level one of the
+    same name (the compiler resolves innermost first), so it alone competes. }
+  var LocalOnly: TArray<TEnumValueDecl>:= nil;
+  for var C: TEnumValueDecl in Visible do
+    if C.OwnerRoutineId > 0 then LocalOnly:= LocalOnly + [C];
+  if Length(LocalOnly) > 0 then Visible:= LocalOnly;
 
   { --- rule 0 (owner ruling 4, 2026-09-23). One declaration the index holds
     twice is not an ambiguity, and declining it would lose a real edge for an
@@ -3198,6 +3449,162 @@ begin
       else
         Result:= IsIdentStart(ALine[W]) and SameText(Copy(ALine, W, K - W), 'with');
     end;
+end;
+
+type
+  { One code token of a routine's text: a lowercased identifier, keyword or
+    number, `:=`, or one punctuation character. }
+  TCodeTok = record
+    Text: string ;
+    Line: Integer;
+    Col : Integer;
+  end;
+
+{ Review 2026-10-23: the code tokens of ALines (1-based lines and columns) from
+  (AFromLine, AFromCol) up to, not including, (AToLine, AToCol). Comments --
+  braces, paren-star, `//` -- and string literals are skipped; the start is
+  assumed to lie outside a comment. }
+function CodeTokens(ALines: TStringList; AFromLine, AFromCol, AToLine, AToCol: Integer): TArray<TCodeTok>;
+var
+  Toks   : TList<TCodeTok>;
+  S      : string         ;
+  K      : Integer        ;
+  Ln     : Integer        ;
+  InBrace: Boolean        ;
+  InStar : Boolean        ;
+
+  { True when S[K] opens the two-character token ATwo. }
+  function OpensPair(const ATwo: string): Boolean;
+  begin
+    Result:= (K < Length(S)) and (S[K] = ATwo[1]) and (S[K + 1] = ATwo[2]);
+  end;
+
+  { Consumes S[K] when it is comment, string or blank text, or opens a comment
+    or string, advancing K past what it consumed. False leaves K untouched. }
+  function SkipNonCode: Boolean;
+  begin
+    Result:= True;
+    if InBrace then
+      InBrace:= S[K] <> '}'
+    else if InStar then
+    begin
+      InStar:= not OpensPair('*)');
+      if not InStar then Inc(K);
+    end
+    else if S[K] = '{' then
+      InBrace:= True
+    else if OpensPair('(*') then
+    begin
+      InStar:= True;
+      Inc(K);
+    end
+    else if S[K] = '''' then
+    begin
+      Inc(K);
+      while (K <= Length(S)) and (S[K] <> '''') do Inc(K);
+    end
+    else
+      Result:= CharInSet(S[K], [' ', #9]);
+    if Result then Inc(K);
+  end;
+
+  { Adds the token at S[K] -- an identifier or number, `:=`, or one character. }
+  procedure TakeToken;
+  var
+    Tok: TCodeTok;
+    W  : Integer ;
+  begin
+    W:= K;
+    if IsIdentPart(S[K]) then
+      while (K <= Length(S)) and IsIdentPart(S[K]) do Inc(K)
+    else if OpensPair(':=') then
+      Inc(K, 2)
+    else
+      Inc(K);
+    Tok.Text:= LowerCase(Copy(S, W, K - W));
+    Tok.Line:= Ln;
+    Tok.Col := W;
+    Toks.Add(Tok);
+  end;
+
+begin
+  Toks   := TList<TCodeTok>.Create;
+  InBrace:= False;
+  InStar := False;
+  try
+    for Ln:= Max(AFromLine, 1) to Min(AToLine, ALines.Count) do
+    begin
+      S:= ALines[Ln - 1];
+      K:= (if Ln = AFromLine then Max(AFromCol, 1) else 1);
+      while (K <= Length(S)) and ((Ln < AToLine) or (K < AToCol)) do
+        if SkipNonCode then Continue
+        else if OpensPair('//') then Break
+        else TakeToken;
+    end;
+    Result:= Toks.ToArray;
+  finally
+    Toks.Free;
+  end;
+end;
+
+{ Review 2026-10-23: the block-depth change a statement-level token makes --
+  +1 for a token that opens a block closed by `end` / `until`, -1 for those. }
+function BlockDelta(const ATok: string): Integer;
+begin
+  if Pos('|' + ATok + '|', '|begin|try|case|repeat|asm|record|') > 0 then Result:= 1
+  else if Pos('|' + ATok + '|', '|end|until|') > 0 then Result:= -1
+  else Result:= 0;
+end;
+
+{ Review 2026-10-23: whether the local declared at (ALine, ACol) is an INLINE
+  `var` -- `var` right before its name, past earlier names of the same list
+  (`var A, B: T`). AIsFor: it is a `for var` loop variable. }
+function InlineVarAt(ALines: TStringList; ALine, ACol: Integer; out AIsFor: Boolean): Boolean;
+var
+  Head: TArray<TCodeTok>;
+  K   : Integer         ;
+begin
+  Head:= CodeTokens(ALines, ALine, 1, ALine, ACol);
+  K   := High(Head);
+  while (K >= 1) and (Head[K].Text = ',') do Dec(K, 2);
+  Result:= (K >= 0) and (Head[K].Text = 'var');
+  AIsFor:= Result and (K >= 1) and (Head[K - 1].Text = 'for');
+end;
+
+{ Review 2026-10-23: whether the block an inline declaration sits in is still
+  open after AToks -- the tokens from the declaration to a site. A `for var`
+  loop's scope is its body: the begin..end after `do`, or the one statement up
+  to its `;`. Any other inline var lives to the end of its enclosing block. }
+function InlineScopeOpen(const AToks: TArray<TCodeTok>; AIsFor: Boolean): Boolean;
+var
+  K     : Integer;
+  T     : string ;
+  InBody: Boolean;
+  Single: Boolean;
+  Depth : Integer;
+  Paren : Integer;
+begin
+  Result:= True;
+  InBody:= not AIsFor;
+  Single:= False;
+  Depth := 0;
+  Paren := 0;
+  for K:= 0 to High(AToks) do
+  begin
+    T:= AToks[K].Text;
+    if (T = '(') or (T = '[') then Inc(Paren)
+    else if (T = ')') or (T = ']') then Dec(Paren);
+    if not InBody then
+    begin
+      { The loop header: the body starts after its `do`. }
+      InBody:= (T = 'do') and (Paren = 0);
+      Single:= InBody and (K < High(AToks)) and (AToks[K + 1].Text <> 'begin');
+      Continue;
+    end;
+    Inc(Depth, BlockDelta(T));
+    if (Depth < 0) or (AIsFor and (Depth = 0) and (if Single then (T = ';') and (Paren = 0) else T = 'end')) then
+      Exit(False);
+  end;
 end;
 
 { Scans ABefore -- a line up to a read ref standing as a whole argument --
@@ -3687,12 +4094,13 @@ var
   L      : TList<TSymbol>;
   S      : TSymbol       ;
   Hits   : Integer       ;
+  Declared: Boolean      ;
 begin
-  { A local or parameter. Same-named locals of DIFFERENT types (sibling
-    for-var loops) type to nothing, and still shadow everything below. }
-  M:= FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam], True);
+  { A local or parameter: the nearest declaration covering the site. One that
+    covers nothing here types to nothing, and still shadows everything below. }
+  M:= LocalInScopeAt(ARef, AName, Declared);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, ARef.FileId));
-  if FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam]).Id > 0 then Exit(0);
+  if Declared then Exit(0);
   EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
   M:= LookupMemberOnType(ClassId, AName);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
@@ -3972,7 +4380,12 @@ begin
   if Rcv <> '' then
     Result:= LookupMemberOnType(TypeReceiver(ARef, Rcv), Leaf).Signature
   else if SameText(Leaf, 'Result') then
-    Result:= SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature)
+  begin
+    { Review 2026-10-23 (W5-res2): inside an anonymous method Result is ITS
+      result -- '' unless its return type is the routine's. }
+    var AnonDeclined: Boolean;
+    Result:= ResultTypeAt(ARef, AnonDeclined);
+  end
   else
   begin
     Scratch:= TList<TSymbol>.Create;
@@ -4302,6 +4715,7 @@ var
   ClassId : Int64  ;
   Member  : TSymbol;
   CastType: string ;
+  RetType : string ;
 begin
   Result:= 0;
   if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
@@ -4356,6 +4770,23 @@ begin
   if (Pos('.', AReceiverExpr) > 0) and IsIdentChain(AReceiverExpr.Split(['.'])) then
   begin
     var Segs: TArray<string>:= AReceiverExpr.Split(['.']);
+    // --- Kind 10 (2026-10-23): a CHAINED VALUE receiver, 'R.Inner' in
+    //     `R.Inner.K := 1`. The head is typed by the single-identifier rungs
+    //     (this function, one segment), then each following segment as a field /
+    //     property of the previous segment's type (ancestors included). A segment
+    //     that cannot be typed ends the walk with NO answer from this rung, and
+    //     the unit-qualified rung below runs exactly as it did before -- so
+    //     'Unit.TType' (an untypable head) is unchanged. Pinned by
+    //     tests\callresolve\run_chained_receiver_bind.ps1.
+    var ChainType: Int64:= TypeReceiver(ACallRef, Segs[0]);
+    var SegIx: Integer:= 1;
+    while (ChainType > 0) and (SegIx <= High(Segs)) do
+    begin
+      var SegMember: TSymbol:= LookupMemberOnType(ChainType, Segs[SegIx]);
+      ChainType:= if SegMember.Id > 0 then ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId) else 0;
+      Inc(SegIx);
+    end;
+    if ChainType > 0 then Exit(ChainType);
     Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
   end;
 
@@ -4369,15 +4800,33 @@ begin
   // Both are children of the enclosing ROUTINE. Try them first (an inner name
   // shadows a field), then fall back to the class fields/properties.
   // v23: sibling for-var loops can declare the SAME local name twice under one
-  // qualified name; when their declared types differ the receiver is not typed
-  // from either (decline -> the honest untyped floor), not from the first. The
-  // local still SHADOWS any same-named field or type, so a declined local ends
-  // the search here rather than falling through to the rungs below.
-  Member:= FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam], True);
+  // qualified name. Review 2026-10-23 (W5-res2): the receiver is typed from the
+  // nearest declaration at or before the site whose block covers it (the value
+  // read/write rule), never from the first child of that name; when none covers
+  // the site it declines (the honest untyped floor). The local still SHADOWS any
+  // same-named field or type, so a declined local ends the search here.
+  var Declared: Boolean;
+  Member:= LocalInScopeAt(ACallRef, AReceiverExpr, Declared);
   if Member.Id > 0 then
     Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
-  if FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]).Id > 0 then
-    Exit; // a local/param of that name exists but its type is ambiguous -> 0
+  if Declared then
+    Exit; // a local/param of that name exists but none covers the site -> 0
+
+  // --- Kind 9 (N-07, 2026-10-23): the implicit `Result` of the enclosing
+  //     FUNCTION -- `Result:= TJob.Create; Result.Streaming:= False;`. Typed
+  //     from the routine's declared return type. No symbol row exists for
+  //     Result, so a local or parameter named Result (only legal outside a
+  //     function) was already answered above; a routine with no return type
+  //     falls through to the field rung.
+  if SameText(AReceiverExpr, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
+  begin
+    { Review 2026-10-23: inside an anonymous method Result is ITS result --
+      typed only when its return type is the routine's (W5-res2). }
+    var AnonDeclined: Boolean;
+    RetType:= ResultTypeAt(ACallRef, AnonDeclined);
+    if AnonDeclined then Exit;
+    if RetType <> '' then Exit(ResolveTypeNameToSymbol(RetType, ACallRef.FileId));
+  end;
 
   // --- Kind 2: FIELD 'FBar.M' / Kind 3: PROPERTY 'Prop.M' -> member's type.
   //     Members are children of the enclosing class.
@@ -4855,7 +5304,7 @@ begin
       begin
         InUnit:= nil;
         for C in Enums do
-          if (C.FileId = UnitFile)
+          if (C.FileId = UnitFile) and (C.OwnerRoutineId = 0)   { W5-ext: a routine-local value has no Unit.value form }
              and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
             InUnit:= InUnit + [C];
         InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
@@ -4911,13 +5360,26 @@ begin
   FWriteScopes.Add(AEnclosingSymbolId, Result);
 end;
 
+{ Inserts AValue into AValues kept NEAREST-LAST-DECLARED first: before the first
+  declaration that starts earlier. }
+procedure InsertNearestFirst(var AValues: TArray<TSymbol>; const AValue: TSymbol);
+var
+  K: Integer;
+begin
+  K:= 0;
+  while (K < Length(AValues)) and ((AValues[K].StartLine > AValue.StartLine)
+         or ((AValues[K].StartLine = AValue.StartLine) and (AValues[K].StartCol > AValue.StartCol))) do Inc(K);
+  Insert(AValue, AValues, K);
+end;
+
 function TCallResolver.ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
-  out AReason: string): Int64;
+  AFileId: Int64; ALine, ACol: Integer; out AReason: string): Int64;
 var
   Kids   : TList<TSymbol>;
   S      : TSymbol       ;
   Id     : Int64         ;
   Routine: Boolean       ;
+  Values : TArray<TSymbol>;
 begin
   Result := 0;
   AReason:= '';
@@ -4928,12 +5390,22 @@ begin
     Kids:= ChildrenOf(Id);
     if Kids = nil then Continue;
     Routine:= False;
+    Values := [];
     for S in Kids do
       if SameText(S.Name, AName) then
       begin
-        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then Exit(S.Id);
+        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then InsertNearestFirst(Values, S);
         Routine:= Routine or (S.Kind in METHOD_KINDS);
       end;
+    { Review 2026-10-23: the NEAREST declaration at or before the site whose
+      scope covers it -- two `for var i` loops declare two i's. }
+    if Length(Values) > 0 then
+    begin
+      for S in Values do
+        if LocalScopeCovers(S, AFileId, ALine, ACol) then Exit(S.Id);
+      AReason:= 'ambiguous';
+      Exit;
+    end;
     if Routine then
     begin
       AReason:= 'routine';
@@ -5096,12 +5568,439 @@ begin
   end
   else if (AReason = '') and not ViaSelf then
   begin
-    Result:= ScopeWriteTarget(Scope, ARef.NameText, AReason);
+    Result:= ScopeWriteTarget(Scope, ARef.NameText, ARef.FileId, ARef.StartLine, ARef.StartCol, AReason);
     { Nothing nearer declares the name: the unit, then the units it uses. }
     if (Result = 0) and (AReason = '') then
       Result:= UnitScopeWriteTarget(ARef.FileId, LowerCase(ARef.NameText), AReason);
   end;
   TallyWrite(AReason);
+end;
+
+function TCallResolver.LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
+var
+  Lines: TStringList;
+  IsFor: Boolean    ;
+begin
+  if ADecl.Kind <> skLocalVar then Exit(True);
+  Lines:= LinesOf(AFileId);
+  if (Lines = nil) or (ADecl.StartLine < 1) or (ADecl.StartLine > Lines.Count) then Exit(False);
+  { Never a declaration after the site -- an anonymous method's var section
+    can follow it. A var-section variable then covers the rest of its routine. }
+  Result:= (ADecl.StartLine < ALine) or ((ADecl.StartLine = ALine) and (ADecl.StartCol <= ACol));
+  if Result and InlineVarAt(Lines, ADecl.StartLine, ADecl.StartCol, IsFor) then
+    Result:= InlineScopeOpen(CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol), IsFor);
+end;
+
+function TCallResolver.LocalInScopeAt(const ARef: TReference; const AName: string;
+  out ADeclared: Boolean): TSymbol;
+var
+  Kids  : TList<TSymbol>  ;
+  S     : TSymbol         ;
+  Values: TArray<TSymbol> ;
+begin
+  Result   := Default(TSymbol);
+  ADeclared:= False;
+  Kids     := ChildrenOf(ARef.EnclosingSymbolId);
+  if Kids = nil then Exit;
+  Values:= [];
+  for S in Kids do
+    if (S.Kind in [skLocalVar, skParam]) and SameText(S.Name, AName) then InsertNearestFirst(Values, S);
+  ADeclared:= Length(Values) > 0;
+  for S in Values do
+    if LocalScopeCovers(S, ARef.FileId, ARef.StartLine, ARef.StartCol) then Exit(S);
+end;
+
+{ The return type text of the anonymous method whose `function` keyword is
+  AToks[AHeader]: the tokens after the optional parameter list's `:` up to the
+  body or a declaration section, joined (already lowercased, so `tlist<tjob>`).
+  '' for a procedure or a header this does not read. }
+function AnonReturnType(const AToks: TArray<TCodeTok>; AHeader: Integer): string;
+const
+  BODY_START = '|begin|var|const|type|label|';
+var
+  K    : Integer;
+  Depth: Integer;
+  Parts: TArray<string>;
+begin
+  Result:= '';
+  K     := AHeader + 1;
+  Depth := 0;
+  while (K <= High(AToks)) and ((Depth > 0) or (AToks[K].Text = '(')) do
+  begin
+    if AToks[K].Text = '(' then Inc(Depth)
+    else if AToks[K].Text = ')' then Dec(Depth);
+    Inc(K);
+  end;
+  if (K > High(AToks)) or (AToks[K].Text <> ':') then Exit;
+  Parts:= [];
+  Inc(K);
+  while (K <= High(AToks)) and (Pos('|' + AToks[K].Text + '|', BODY_START) = 0) do
+  begin
+    Parts:= Parts + [AToks[K].Text];
+    Inc(K);
+  end;
+  Result:= string.Join('', Parts);
+end;
+
+function TCallResolver.InsideAnonymousMethod(const ARef: TReference; out AReturnType: string): Boolean;
+var
+  Encl   : TSymbol         ;
+  Lines  : TStringList     ;
+  Toks   : TArray<TCodeTok>;
+  K      : Integer         ;
+  T      : string          ;
+  P      : string          ;
+  Depth  : Integer         ;
+  Headers: TArray<Integer> ;
+  Opened : TArray<Integer> ;
+  OpenHdr: TArray<Integer> ;
+begin
+  AReturnType:= '';
+  Encl := SymbolById(ARef.EnclosingSymbolId);
+  Lines:= LinesOf(ARef.FileId);
+  if (Lines = nil) or (Encl.ImplStartLine <= 0) then Exit(True);
+  Toks   := CodeTokens(Lines, Encl.ImplStartLine, 1, ARef.StartLine, ARef.StartCol);
+  Depth  := 0;
+  Headers:= [];
+  Opened := [];
+  OpenHdr:= [];
+  for K:= 0 to High(Toks) do
+  begin
+    T:= Toks[K].Text;
+    P:= (if K > 0 then Toks[K - 1].Text else '');
+    if ((T = 'function') or (T = 'procedure')) and (Pos('|' + P + '|', '|:=|(|,|[|') > 0) then
+      Headers:= Headers + [K]                       { an anonymous method's header }
+    else if (T = 'begin') and (Length(Headers) > 0) then
+    begin
+      Opened := Opened + [Depth];                   { its body: closes back at Depth }
+      OpenHdr:= OpenHdr + [Headers[High(Headers)]];
+      SetLength(Headers, Length(Headers) - 1);
+      Inc(Depth);
+    end
+    else
+    begin
+      Inc(Depth, BlockDelta(T));
+      if (Length(Opened) > 0) and (Depth = Opened[High(Opened)]) then
+      begin
+        SetLength(Opened, Length(Opened) - 1);
+        SetLength(OpenHdr, Length(OpenHdr) - 1);
+      end;
+    end;
+  end;
+  Result:= (Length(Opened) > 0) or (Length(Headers) > 0);
+  if (Length(Headers) = 0) and (Length(OpenHdr) > 0) then
+    AReturnType:= AnonReturnType(Toks, OpenHdr[High(OpenHdr)]);
+end;
+
+function TCallResolver.ResultTypeAt(const ARef: TReference; out ADeclined: Boolean): string;
+var
+  AnonType: string;
+begin
+  Result    := SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature);
+  ADeclined := InsideAnonymousMethod(ARef, AnonType)
+               and ((AnonType = '') or (StripUnitQualifiers(AnonType) <> StripUnitQualifiers(Result)));
+  if ADeclined then Result:= '';
+end;
+
+function TCallResolver.StripUnitQualifiers(const ATypeText: string): string;
+var
+  K     : Integer;
+  J     : Integer;
+  Chain : string ;
+  Segs  : TArray<string>;
+  Cut   : Integer;
+  Prefix: string ;
+  Out   : TStringBuilder;
+begin
+  Out:= TStringBuilder.Create;
+  try
+    K:= 1;
+    while K <= Length(ATypeText) do
+    begin
+      if not (CharInSet(ATypeText[K], ['A'..'Z', 'a'..'z', '_', '&'])) then
+      begin
+        if ATypeText[K] > ' ' then Out.Append(LowerCase(ATypeText[K]));
+        Inc(K);
+        Continue;
+      end;
+      J:= K;
+      while (J <= Length(ATypeText)) and CharInSet(ATypeText[J], ['A'..'Z', 'a'..'z', '0'..'9', '_', '&', '.']) do Inc(J);
+      Chain:= LowerCase(Copy(ATypeText, K, J - K));
+      K    := J;
+      Segs := Chain.Split(['.']);
+      { The longest leading run of segments that names a unit is dropped; `System`
+        is always in scope, so it counts without an index row. }
+      for Cut:= High(Segs) downto 1 do
+      begin
+        Prefix:= string.Join('.', Segs, 0, Cut);
+        if (Prefix = 'system') or (UnitNameToFileId(Prefix) <> 0) then
+        begin
+          Chain:= string.Join('.', Segs, Cut, Length(Segs) - Cut);
+          Break;
+        end;
+      end;
+      Out.Append(Chain);
+    end;
+    Result:= Out.ToString;
+  finally
+    Out.Free;
+  end;
+end;
+
+function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+var
+  Toks: TArray<TCodeTok>;
+
+  { True when token AIdx exists and is an identifier. }
+  function IsName(AIdx: Integer): Boolean;
+  begin
+    Result:= (AIdx <= High(Toks)) and IsIdentStart(Toks[AIdx].Text[1]);
+  end;
+
+  { True when token AIdx exists and is a declaration's `=` or `:`. }
+  function IsDeclMark(AIdx: Integer): Boolean;
+  begin
+    Result:= (AIdx <= High(Toks)) and ((Toks[AIdx].Text = '=') or (Toks[AIdx].Text = ':'));
+  end;
+
+const
+  { After a `;`, one of these ends a const / type section. }
+  SECTION_END = '|var|begin|procedure|function|constructor|destructor|label|asm|threadvar|';
+var
+  S     : TSymbol    ;
+  Lines : TStringList;
+  K, J  : Integer    ;
+  T     : string     ;
+  Names : string     ;
+  Paren : Integer    ;
+  InSect: Boolean    ;
+begin
+  if FLocalDecls.TryGetValue(ARoutineId, Result) then Exit;
+  Result:= '|';
+  S     := SymbolById(ARoutineId);
+  Lines := LinesOf(AFileId);
+  if (Lines <> nil) and (S.ImplStartLine > 0) then
+  begin
+    { Review 2026-10-23: tokens, not line starts -- `begin const X = 1;` declares
+      X mid-line; a parameter list's `const A` (inside parentheses) does not. }
+    Toks  := CodeTokens(Lines, S.ImplStartLine, 1, Min(S.ImplEndLine, Lines.Count) + 1, 1);
+    Paren := 0;
+    InSect:= False;
+    for K:= 0 to High(Toks) do
+    begin
+      T:= Toks[K].Text;
+      if T = '(' then Inc(Paren)
+      else if T = ')' then Dec(Paren)
+      else if Paren <> 0 then Continue
+      else if (T = 'const') or (T = 'var') or (T = 'type') then
+      begin
+        { The name list after the keyword: `const X = 1`, `var A, B: T`, `var X := F`. }
+        InSect:= T <> 'var';
+        Names := '';
+        J     := K + 1;
+        while IsName(J) do
+        begin
+          Names:= Names + Toks[J].Text + '|';
+          Inc(J);
+          if (J <= High(Toks)) and (Toks[J].Text = ',') then Inc(J) else Break;
+        end;
+        if (Names <> '') and (IsDeclMark(J) or ((J <= High(Toks)) and (Toks[J].Text = ':='))) then
+          Result:= Result + Names;  // dl:ok concat-in-loop@e316 -- REVIEWED 2026-10-23: a routine declares a handful of local names; the cached string stays tiny.
+      end
+      else if InSect and (T = ';') and IsName(K + 1) then
+      begin
+        { A const / type section goes on with `Name = ..` / `Name: T = ..`; a
+          record's closing `end` keeps it open; anything else ends it. }
+        if Pos('|' + Toks[K + 1].Text + '|', SECTION_END) > 0 then InSect:= False
+        else if IsDeclMark(K + 2) then Result:= Result + Toks[K + 1].Text + '|'
+        else InSect:= Toks[K + 1].Text = 'end';
+      end;
+    end;
+  end;
+  FLocalDecls.Add(ARoutineId, Result);
+end;
+
+function TCallResolver.FileTypesOf(AFileId: Int64): TArray<TSymbol>;
+const
+  TYPE_LIKE: TSymbolKindSet = [skClass, skInterface, skRecord, skTypeAlias, skEnum];
+var
+  S: TSymbol;
+begin
+  if FFileTypes.TryGetValue(AFileId, Result) then Exit;
+  Result:= [];
+  for S in FStore.FindSymbolsByFile(FStore.GetFilePath(AFileId)) do
+    if (S.Kind in TYPE_LIKE) or (S.ParentId <= 0) then Result:= Result + [S];
+  FFileTypes.Add(AFileId, Result);
+end;
+
+function TCallResolver.ScopeSymbolAt(const ARef: TReference): TSymbol;
+var
+  S   : TSymbol;
+  Root: TSymbol;
+begin
+  if ARef.EnclosingSymbolId > 0 then Exit(SymbolById(ARef.EnclosingSymbolId));
+  Result:= Default(TSymbol);
+  Root  := Default(TSymbol);
+  for S in FileTypesOf(ARef.FileId) do
+    if S.ParentId <= 0 then Root:= S
+    else if (S.StartLine <= ARef.StartLine) and (ARef.StartLine <= S.EndLine)
+            and (S.StartLine >= Result.StartLine) then Result:= S;
+  if Result.Id <= 0 then Result:= Root;
+end;
+
+function TCallResolver.ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
+const
+  TYPE_LIKE: TSymbolKindSet = [skClass, skInterface, skRecord, skTypeAlias, skEnum];
+
+  { True when AParams -- a level's generic parameter list as indexed, e.g.
+    'K, V: class' -- names ALc. }
+  function NamesGenericParam(const AParams, ALc: string): Boolean;
+  var
+    Tok: string;
+  begin
+    Result:= False;
+    for Tok in LowerCase(AParams).Split([',', ';', ':', ' ', '<', '>', '(', ')'], TStringSplitOptions.ExcludeEmpty) do
+      if Tok = ALc then Exit(True);
+  end;
+
+var
+  Lines: TStringList     ;
+  Rcv  : string          ;
+  Lc   : string          ;
+  Cur  : TSymbol         ;
+  Depth: Integer         ;
+  Cands: TList<TSymbol>  ;
+  S    : TSymbol         ;
+  Full : TSymbol         ;
+  Count: Integer         ;
+  Anc  : TTypeAncestor   ;
+begin
+  Result := 0;
+  AReason:= BareReadSite(ARef, Lines, Rcv);
+  if (AReason = '') and (Rcv <> '') then AReason:= 'qualified';
+  Lc:= LowerCase(ARef.NameText);
+  { 1. The ref's scope outwards: enclosing routines, types, the own unit. }
+  Cur  := ScopeSymbolAt(ARef);
+  Depth:= 0;
+  while (AReason = '') and (Result = 0) and (Cur.Id > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+  begin
+    Inc(Depth);
+    if NamesGenericParam(Cur.GenericParams, Lc) then AReason:= 'generic'
+    else if (Cur.Kind in METHOD_KINDS) and (Pos('|' + Lc + '|', LocalDeclNamesOf(Cur.Id, ARef.FileId)) > 0) then
+      AReason:= 'unlisted'
+    else
+    begin
+      Result:= FindChildOfKind(Cur.Id, ARef.NameText, TYPE_LIKE, False).Id;
+      { Review 2026-10-23: an ancestor's nested type is in scope too, nearest
+        ancestor first, before any enclosing or used-unit type. }
+      if (Result = 0) and (Cur.Kind in [skClass, skRecord, skInterface]) then
+        for Anc in AncestorsOf(Cur.Id) do
+          if Anc.Resolved and (Anc.SymbolId > 0) then
+          begin
+            Result:= FindChildOfKind(Anc.SymbolId, ARef.NameText, TYPE_LIKE, False).Id;
+            if Result > 0 then Break;
+          end;
+      if Cur.ParentId <= 0 then Cur:= Default(TSymbol)
+      else Cur:= SymbolById(Cur.ParentId);
+    end;
+  end;
+  { 2. The used units: exactly one top-level interface type of the name. }
+  if (AReason = '') and (Result = 0) then
+  begin
+    Count:= 0;
+    if FNameToCands.TryGetValue(Lc, Cands) then
+      for S in Cands do
+        if (S.FileId <> ARef.FileId) and CandInScope(ARef.FileId, S.FileId) then
+        begin
+          Full:= SymbolById(S.Id);
+          if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
+             and (SymbolById(Full.ParentId).ParentId <= 0) then
+          begin
+            Inc(Count);
+            Result:= S.Id;
+          end;
+        end;
+    if Count = 0 then AReason:= 'not-found'
+    else if Count > 1 then
+    begin
+      Result := 0;
+      AReason:= 'ambiguous';
+    end;
+  end;
+  if AReason = '' then Inc(FTypeUseStats.Bound)
+  else if AReason = 'generic' then Inc(FTypeUseStats.Generic)
+  else if AReason = 'qualified' then Inc(FTypeUseStats.Qualified)
+  else if AReason = 'unlisted' then Inc(FTypeUseStats.Unlisted)
+  else if AReason = 'ambiguous' then Inc(FTypeUseStats.Ambiguous)
+  else if AReason = 'not-found' then Inc(FTypeUseStats.NotFound)
+  else Inc(FTypeUseStats.Unreadable);
+end;
+
+function TCallResolver.ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
+const
+  VALUE_KINDS: TSymbolKindSet = [skLocalVar, skParam, skConstDecl, skVarDecl];
+var
+  Lines: TStringList    ;
+  Rcv  : string         ;
+  WType: Int64          ;
+  WKind: TWithMemberKind;
+  Scope: TWriteScope    ;
+  Id     : Int64          ;
+  Lc     : string         ;
+  Parent : Int64          ;
+begin
+  Result := 0;
+  AReason:= BareReadSite(ARef, Lines, Rcv);
+  if (AReason = '') and (Rcv <> '') then AReason:= 'qualified'
+  else if (AReason = '') and SameText(ARef.NameText, 'Result') then AReason:= 'result';
+  if AReason = '' then
+    case WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WType, WKind) of
+      wvUndecided: AReason:= 'with-scope';
+      wvMember   : AReason:= 'member';
+    end;
+  if AReason = '' then
+  begin
+    Scope := WriteScopeOf(ARef.EnclosingSymbolId);
+    Lc    := LowerCase(ARef.NameText);
+    Result:= ScopeWriteTarget(Scope, ARef.NameText, ARef.FileId, ARef.StartLine, ARef.StartCol, AReason);
+    if (Result = 0) and (AReason = '') then
+      Result:= UnitScopeWriteTarget(ARef.FileId, Lc, AReason);
+    if (Result > 0) and not (SymbolById(Result).Kind in VALUE_KINDS) then
+    begin
+      Result := 0;
+      AReason:= 'member';
+    end;
+    { A local const or inline declaration the index does not list is nearer
+      than the scope that answered when a routine INSIDE that scope declares
+      it: every lexical level below the answering one (all of them when the
+      class or unit answered) must not declare the name in its text. Review
+      2026-10-23: a nested routine's const hides the outer routine's param. }
+    if Result > 0 then
+    begin
+      Parent:= SymbolById(Result).ParentId;
+      for Id in Scope.Chain do
+      begin
+        if Id = Parent then Break;
+        if Pos('|' + Lc + '|', LocalDeclNamesOf(Id, ARef.FileId)) > 0 then
+        begin
+          Result := 0;
+          AReason:= 'unlisted';
+          Break;
+        end;
+      end;
+    end;
+  end;
+  if AReason = '' then Inc(FValueReadStats.Bound)
+  else if AReason = 'result' then Inc(FValueReadStats.ResultVar)
+  else if AReason = 'own-name' then Inc(FValueReadStats.OwnName)
+  else if AReason = 'with-scope' then Inc(FValueReadStats.WithScope)
+  else if AReason = 'member' then Inc(FValueReadStats.Member)
+  else if AReason = 'ambiguous' then Inc(FValueReadStats.Ambiguous)
+  else if AReason = 'not-found' then Inc(FValueReadStats.NotFound)
+  else if AReason = 'routine' then Inc(FValueReadStats.Routine)
+  else if AReason = 'qualified' then Inc(FValueReadStats.Qualified)
+  else if AReason = 'unlisted' then Inc(FValueReadStats.Unlisted)
+  else Inc(FValueReadStats.Unreadable);
 end;
 
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;

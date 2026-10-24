@@ -143,6 +143,13 @@ src/storage/DRagLint.Storage.SQLite.pas::GetUnitScopeEdges
 # does not, and is listed by the closure rule.
 src/storage/DRagLint.Storage.SQLite.pas::ResolveMemberReadRefs
 src/storage/DRagLint.Storage.SQLite.pas::WriteMemberAccess
+# BARE VALUE READS (2026-10-23, B-28). A SIXTH calls-stage stream
+# (ResolveValueReadRefs -> TCallResolver.ResolveBareValueRead) writes
+# refs.symbol_id for bare `read` refs of a local / param / const / var.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveValueReadRefs
+# TYPE USES (2026-10-23, B-31). A SEVENTH stream (ResolveTypeUseRefs ->
+# TCallResolver.ResolveTypeUse) writes refs.symbol_id for type_use refs.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeUseRefs
 # The with scope PARSES THE SOURCE inside the resolver, with the byte transform
 # the indexer applies, so a with body's line/column lands in the coordinates
 # refs are stored in. These two decide those coordinates, and so which ref a

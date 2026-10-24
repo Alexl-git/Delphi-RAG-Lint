@@ -528,6 +528,11 @@ Form 'AmpForm' 'Classes, LibOld' @('&implementation: Integer;', 'E1: ELibOld;', 
 Form 'CvForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
 Form 'CvUForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
 Form 'CvPForm' 'Classes, LibOld, LibNew' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+# N-06: CvPForm with its whole interface uses clause moved into CvIForm.Uses.inc --
+# LibNew is used, through an include, so the #convert add must not happen either.
+Form 'CvIForm' 'Classes, LibOld, LibNew' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+W 'CvIForm.Uses.inc' "uses`n  Classes, LibOld, LibNew;`n"
+W 'CvIForm.pas' ((Text 'CvIForm.pas').Replace("uses`r`n  Classes, LibOld, LibNew;", '{$I CvIForm.Uses.inc}'))
 Form 'SecIForm' 'Classes, LibOldS' @('Old1: TOldS;') 'LibDupI' @('procedure Run;') @'
 procedure TSecIForm.Run;
 var
@@ -552,7 +557,7 @@ W 'P.dpr' (@('program P;', '', 'uses',
   '  LibSolo, LibNest, LibHelp2, LibOldS, LibDupI,',
   '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm, EncForm, Enc2Form, NfForm, Base2Form, Desc2Form,',
   '  TieUForm, TieMForm, W2iForm, O2Form, SoloForm, W5bForm, SecForm, SecIForm,',
-  '  LibANest2, LibZSolo2, TieCForm, TieRForm, TieR2Form, TieSForm, Solo2Form, AmpForm, CvForm, CvUForm, CvPForm;', '', 'begin', 'end.') -join "`n")
+  '  LibANest2, LibZSolo2, TieCForm, TieRForm, TieR2Form, TieSForm, Solo2Form, AmpForm, CvForm, CvUForm, CvPForm, CvIForm;', '', 'begin', 'end.') -join "`n")
 
 # ---- books ------------------------------------------------------------------
 W 'old.rules'   "#convert TOld -> TNew`n#link Caption <- Caption`n#unuse LibOld`n"
@@ -797,6 +802,12 @@ Check 'F4 ... with #unuse LibOld (the capture shape): remove LibOld AND add LibN
 $r = J 'CvPForm.pas' 'cv.rules'
 Check 'F4 control: LibNew already in the uses -- no add row, uses_added 0' `
   (($r.Code -eq 0) -and ((AddRows $r).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
+# N-06: the same with the interface clause in an include: present via the include
+$ciBefore = (Text 'CvIForm.pas') + '|' + (Text 'CvIForm.Uses.inc')
+$r = J 'CvIForm.pas' 'cv.rules'
+Check 'N06 LibNew used through {$I CvIForm.Uses.inc}: no add row, uses_added 0 (already used via include)' `
+  (($r.Code -eq 0) -and ((AddRows $r).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
+Check 'N06 the dry run leaves CvIForm.pas and its include byte-identical' (((Text 'CvIForm.pas') + '|' + (Text 'CvIForm.Uses.inc')) -ceq $ciBefore) ''
 # ---- A7-9: an interface name is not satisfied by an implementation-only unit -
 $r = J 'SecForm.pas' 'olds.rules'
 $rm = Rows $r 'remove'

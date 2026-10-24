@@ -218,6 +218,7 @@ $UndocumentedOnPurpose = [ordered]@{
   'test-store-freshness'= 'store-freshness probe used by a test runner; requires --db and does nothing else.'
   'dump-pp-lex'         = 'diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.'
   'dump-pp-eval'        = 'diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.'
+  'dump-parse-uses'     = 'diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1.'
   'resolve-uses'        = 'diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.'
   'convert-reemit'      = 'internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\.'
 }

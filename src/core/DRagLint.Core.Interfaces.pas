@@ -223,7 +223,17 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
-    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
+    /// <summary>N-06: True when APath took a uses clause from an include file
+    /// (a unit_uses row with origin_path) and that include is now missing or
+    /// was modified after APath's last parse -- so the host must be re-parsed
+    /// even though its own bytes are unchanged.</summary>
+    /// <param name="APath">The host file, as for FileIsUpToDate.</param>
+    /// <returns>False for a host with no include rows, an unindexed path, or a
+    /// DB without the origin columns.</returns>
+    /// <remarks>Only includes that ALREADY contributed a uses row are watched: an
+    /// include that gains its first uses clause is seen when the host itself
+    /// changes or the run is forced. Read-only.</remarks>
+    function IncludeOriginsChanged(const APath: string): Boolean;    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
     // schema_meta key. Used to carry the INDEXER FINGERPRINT -- see
     // TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
     // byte-identical file. '' when the key (or the table) is absent.
@@ -2521,6 +2531,10 @@ type
     UsesEntries: TArray<TUnitUse>     ;
     DiBindings : TArray<TDiBindingRow>; // v8: Spring4D DI registrations
     Literals   : TArray<TStringLiteral>; // v10: indexed string content (text search)
+    // N-06: 1-based line of the unit's `implementation` keyword; 0 for a
+    // program / package / library or a unit without one. Lets the indexer give a
+    // {$I} uses clause the host section its directive sits in.
+    ImplementationLine: Integer;
   end;
 
   /// <remarks>

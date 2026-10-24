@@ -96,6 +96,7 @@ uses
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
+  , System.Hash
   , System.IOUtils
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
   , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
@@ -161,7 +162,7 @@ uses
   , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
-  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP  // dl:ok uses-global-census@a9ed -- one const (the merge budget default) is the intended coupling to the proxy options
+  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
   , DRagLint.Hover      .Returns
@@ -630,6 +631,7 @@ type
     PpIncludeMode: string     ; // --include-mode <off|defines-only>  ('' => default 'off')
     PpNoNearSearch: Boolean   ; // --no-near-search  (v1.2.1 #2) strict BaseDir-only include resolution
     PpTolerances : Boolean    ; // --tolerances  (v1.2.1 #5) opt-in dcc-tolerance ';' replacement pass
+    PpIncludeSites: Boolean  ; // --include-sites (N-06) preprocess-file prints the active include sites instead of the source
     // PP-Task-7: pp-profile define-profile resolver diagnostic verb
     PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
     // PP-Task-9: index-time preprocessing. Preprocessing is ON by default in the
@@ -1726,6 +1728,7 @@ begin
     else if A = '--no-near-search' then Result.PpNoNearSearch:= True
     // v1.2.1 port change #5: opt into the dcc-tolerance pass.
     else if A = '--tolerances' then Result.PpTolerances:= True
+    else if A = '--include-sites' then Result.PpIncludeSites:= True
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -6913,7 +6916,7 @@ begin
         Hit.ExportsUsed:= 0;
         { With no export surface the reference scan below cannot run, so the one
           line number we can honestly report is the `uses` clause itself. }
-        if ExportsKnown then Hit.FirstLine:= 0 else Hit.FirstLine:= Use.StartLine;
+        if ExportsKnown then Hit.FirstLine:= 0 else Hit.FirstLine:= Use.HostLine; // N-06: the include directive's line for an include row
 
         var Used: TDictionary<string, Boolean> := TDictionary<string, Boolean>.Create;
         try
@@ -13359,19 +13362,21 @@ begin
   var AnyIntf: Integer:= 0;
   for var U in AStore.GetUnitUsesForFile(AFileId) do
   begin
-    if U.StartLine <= 0 then Continue;
+    { N-06: HostLine -- an include row anchors at its directive in THIS file. }
+    var HL: Integer:= U.HostLine;
+    if HL <= 0 then Continue;
     if U.Section = uusImplementation then
     begin
-      if (AnyImpl = 0) or (U.StartLine < AnyImpl) then AnyImpl:= U.StartLine;
+      if (AnyImpl = 0) or (HL < AnyImpl) then AnyImpl:= HL;
     end
-    else if (AnyIntf = 0) or (U.StartLine < AnyIntf) then AnyIntf:= U.StartLine;
+    else if (AnyIntf = 0) or (HL < AnyIntf) then AnyIntf:= HL;
     var Target: string:= LowerCase(U.UnitName);
     if (Target = MyStem) or not MatchText(Target, Mine) then Continue;
     if U.Section = uusImplementation then
     begin
-      if (ImplLine = 0) or (U.StartLine < ImplLine) then ImplLine:= U.StartLine;
+      if (ImplLine = 0) or (HL < ImplLine) then ImplLine:= HL;
     end
-    else if (IntfLine = 0) or (U.StartLine < IntfLine) then IntfLine:= U.StartLine;
+    else if (IntfLine = 0) or (HL < IntfLine) then IntfLine:= HL;
   end;
   if ImplLine = 0 then ImplLine:= IntfLine;
   { Fix round 1 (controller ruling): no line-bearing entry names another unit of the cycle --
@@ -18355,6 +18360,7 @@ begin
     ehaExists         : ActionStr:= 'exists';
     ehaNoImplSection  : ActionStr:= 'no_impl_section';
     ehaNotFound       : ActionStr:= 'not_found';
+    ehaUsesInInclude  : ActionStr:= 'uses_in_include'; { N-06 }
     else                ActionStr:= 'unknown';
   end;
 
@@ -18530,9 +18536,15 @@ begin
     verb was in before, so hand the same store to both halves and let Build
     report what it always did. }
   if UnitStore = nil then UnitStore:= NameStore;
-  Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
+  var IncReason: string;
+  Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already, IncReason);
   if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
   if ResolvedUnit  = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  if (Length(Edits) = 0) and (IncReason <> '') then { N-06 }
+  begin
+    Writeln('No edit computed: ', IncReason);
+    Exit(1);
+  end;
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
   if AArgs.AsJson then
   begin
@@ -23031,6 +23043,7 @@ var
   nMove       : Integer                            ;
   nRemove     : Integer                            ;
   nSkip       : Integer                            ;
+  SkippedInc  : TList<TUnitUse>                     ; { N-06: include rows, reported never edited }
   Items       : TList<TUsesFixItem>                ;
   WantJson    : Boolean                            ;
   LibStore    : ISymbolStore                       ; { forced candidates only; opened on first need }
@@ -23343,6 +23356,20 @@ var
       var DidWrite: Boolean:= AArgs.Apply and ((nMove + nRemove) > 0);
       JRoot.AddPair('applied' , TJSONBool.Create(DidWrite));
       JRoot.AddPair('removeUnused', TJSONBool.Create(AArgs.RemoveUnused));
+      { N-06: entries inside an include -- never candidates, always listed. }
+      var JInc: TJSONArray:= TJSONArray.Create;
+      for var SI in SkippedInc do
+      begin
+        var JO: TJSONObject:= TJSONObject.Create;
+        JO.AddPair('unit'        , SI.UnitName);
+        JO.AddPair('include'     , SI.OriginPath);
+        JO.AddPair('include_line', TJSONNumber.Create(SI.StartLine));
+        JO.AddPair('host_line'   , TJSONNumber.Create(SI.IncludeLine));
+        JO.AddPair('reason'      , IncludeUsesRefusal('uses-fix', SI, SrcPath));
+        JInc.AddElement(JO);
+      end;
+      JRoot.AddPair('skipped_include', JInc);
+      JRoot.AddPair('skipped_include_count', TJSONNumber.Create(SkippedInc.Count));
       { The single most important thing this verb has to say, and the JSON path
         was the ONLY caller that never saw it -- exactly backwards, since it is
         the one putting a button in front of a human. }
@@ -23457,6 +23484,7 @@ begin
   Orig:= TStringList.Create;
   Work:= TStringList.Create;
   Items:= TList<TUsesFixItem>.Create;
+  SkippedInc:= TList<TUnitUse>.Create; { N-06 }
   try
     for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
     ThisStem:= UnitStemOf(AArgs.Target);
@@ -23495,8 +23523,18 @@ begin
     for Uo in UU do
     begin
       uStem:= LowerCase(Uo.UnitName);
-      if not IndexedUnits.ContainsKey(uStem) then Continue;
       if SameText(uStem, ThisStem) then Continue;
+      { N-06: an entry inside an include is never edited (the .inc may be
+        shared, and its coordinates are not this file's) -- reported, skipped. }
+      if Uo.FromInclude then
+      begin
+        SkippedInc.Add(Uo);
+        if not WantJson then
+          Writeln(Format('  skipped: %s -- used from include %s:%d ({$I} at %s:%d); uses-fix edits only the unit''s own uses clause.',
+            [Uo.UnitName, ExtractFileName(Uo.OriginPath), Uo.StartLine, ExtractFileName(SrcPath), Uo.IncludeLine]));
+        Continue;
+      end;
+      if not IndexedUnits.ContainsKey(uStem) then Continue;
 
       { CANDIDACY IS DECIDED FROM THE INDEX; ONLY VERIFICATION COMPILES.
         That split is what lets --only skip the expensive half without changing
@@ -23573,6 +23611,7 @@ begin
       for Uo in UU do
       begin
         if SameText(LowerCase(Uo.UnitName), ThisStem) then Continue;
+        if Uo.FromInclude then Continue; { N-06: reported as skipped_include above }
         if not Selected(Uo.UnitName) or ItemListed(Uo.UnitName) then Continue;
         var IsIntf: Boolean:= Uo.Section = uusInterface;
         var FKind : string := if IsIntf then 'move' else 'remove';
@@ -23616,6 +23655,8 @@ begin
       empty stdout would force the IDE to distinguish "nothing to do" from "the
       engine failed" by exit code alone, and a tab that renders nothing on both
       is how a broken query looks like a clean unit. }
+    if (SkippedInc.Count > 0) and not WantJson then
+      Writeln(Format('-- %d include entr%s skipped (uses-in-include).', [SkippedInc.Count, if SkippedInc.Count = 1 then 'y' else 'ies']));
     if (nMove + nRemove) = 0 then
     begin
       if WantJson then Writeln(ItemsToJson) else Writeln('  Nothing to change.');
@@ -23650,6 +23691,7 @@ begin
   finally
     RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
     Orig.Free; Work.Free; Items.Free;
+    SkippedInc.Free;
   end; // try
 end; // begin
 
@@ -23863,6 +23905,36 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>N-06: drag-lint dump-parse-uses --file PATH -- diagnostic dump of
+/// what the Delphi parser reports for one file's uses clauses, WITHOUT
+/// preprocessing or an index. Line 1 is implementation_line TAB N (0 = none);
+/// then one line per uses entry: use TAB section TAB unit TAB start_line.</summary>
+/// <param name="AArgs">Parsed CLI args; InFile (--file) is the source to parse.</param>
+/// <returns>0 on success, 2 on usage error / missing file.</returns>
+function DoDumpParseUses(const AArgs: TArgs): Integer;
+var
+  P  : IParser;
+  Res: TParseResult;
+  U  : TUnitUse;
+begin
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint dump-parse-uses --file PATH');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.InFile) then
+  begin
+    Writeln(Format('File not found: %s', [AArgs.InFile]));
+    Exit(2);
+  end;
+  P:= TDelphi13Parser.Create;
+  Res:= P.Parse(TFile.ReadAllBytes(AArgs.InFile), AArgs.InFile);
+  Writeln(Format('implementation_line'#9'%d', [Res.ImplementationLine]));
+  for U in Res.UsesEntries do
+    Writeln(Format('use'#9'%s'#9'%s'#9'%d', [UnitUseSectionToStr(U.Section), U.UnitName, U.StartLine]));
+  Result:= 0;
+end; // function
+
 /// <summary>PP-Task-3: drag-lint dump-pp-eval --expr "E" [--define SYM]... [--numeric K=V]...
 /// -- diagnostic dump of the {$IF expr} evaluator. Builds a defines dictionary
 /// (each --define lowercased -> True) and a numeric dictionary (each --numeric
@@ -23907,6 +23979,16 @@ begin
   Result:= 0;
 end; // function
 
+// N-06: lowercase hex MD5 of ABytes (preprocess-file --include-sites digest).
+function Md5Hex(const ABytes: TBytes): string;
+var
+  H: THashMD5;
+begin
+  H:= THashMD5.Create;
+  H.Update(ABytes);
+  Result:= LowerCase(H.HashAsString);
+end;
+
 /// <summary>PP-Task-4/6: drag-lint preprocess-file --file PATH [--define SYM]...
 /// [--numeric K=V]... [--include-mode off|defines-only] -- diagnostic dump of the
 /// chunk processor. Reads --file as raw BYTES, builds a TDefineProfile from the
@@ -23923,6 +24005,7 @@ end; // function
 /// (--tolerances, v1.2.1 #5) opts into the dcc-tolerance ';' replacement pass
 /// (offset-identity preserved -- replacement, never insertion).</param>
 /// <returns>0 on success, 2 on usage error / missing file.</returns>
+
 function DoPreprocessFile(const AArgs: TArgs): Integer;
 var
   InBytes : TBytes           ;
@@ -23935,8 +24018,14 @@ var
   Pairs   : TList<TPair<string, Integer>>;
   StdOut  : THandle          ;
   Written : DWORD            ;
+  Sites   : TArray<TPPIncludeSite>;
+  Site    : TPPIncludeSite   ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]'); Exit(2); end;
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]');
+    Exit(2);
+  end;
   if not FileExists(AArgs.InFile) then begin Writeln(Format('File not found: %s', [AArgs.InFile])); Exit(2); end;
 
   InBytes:= TFile.ReadAllBytes(AArgs.InFile);
@@ -23976,6 +24065,18 @@ begin
   // matching the JS default. Explicit assignment -- Options is a local record,
   // so an unset Boolean would be stack garbage, not False.
   Options.Tolerances:= AArgs.PpTolerances;
+
+  if AArgs.PpIncludeSites then
+  begin
+    // N-06: one TSV line per active, resolved include site -- site, depth, line,
+    // col, resolved byte count, MD5 of the resolved bytes, absolute path.
+    Preprocess(InBytes, Options, Sites); // only the sites are printed
+    for Site in Sites do
+      Writeln(Format('site'#9'%d'#9'%d'#9'%d'#9'%d'#9'%s'#9'%s',
+        [Site.Depth, Site.HostLine, Site.HostCol, Length(Site.Resolved),
+         Md5Hex(Site.Resolved), Site.Path]));
+    Exit(0);
+  end;
 
   OutBytes:= Preprocess(InBytes, Options);
 
@@ -31005,9 +31106,15 @@ begin
   if Own.Declared then
     begin Writeln('OWNROOTS-FAIL: non-object JSON root must not count as declared'); Exit(1); end;
   if Own.Error <> '' then
-    begin Writeln('OWNROOTS-FAIL: non-object JSON root must default, not error'); Exit(1); end;
+    begin
+      Writeln('OWNROOTS-FAIL: non-object JSON root must default, not error');
+      Exit(1);
+    end;
   if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
-    begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
+    begin
+      Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder');
+      Exit(1);
+    end;
 
   { T-01 excludeRoots (INBOX-ownroots-cannot-exclude-vendor): kept in its own
     function so these assertions add one exit here, not nine. }
@@ -32560,11 +32667,13 @@ begin
 end;
 
 function Run: Integer;
+const
+  SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
 var
   Args: TArgs;
 begin
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
-  if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
+  if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(SELFTEST_SCHEMA_DB_ARG)));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then
@@ -32728,6 +32837,7 @@ begin
     else if Args.Command = 'dump-refs'         then Result:= DoDumpRefs        (Args)
     else if Args.Command = 'doc-drift'         then Result:= DoDocDrift        (Args)
     else if Args.Command = 'dump-pp-lex'       then Result:= DoDumpPpLex       (Args)
+    else if Args.Command = 'dump-parse-uses'   then Result:= DoDumpParseUses   (Args)
     else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
     else if Args.Command = 'preprocess-file'   then Result:= DoPreprocessFile  (Args)
     else if Args.Command = 'pp-profile'        then Result:= DoPpProfile       (Args)

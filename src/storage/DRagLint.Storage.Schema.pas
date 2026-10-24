@@ -192,7 +192,11 @@ const
     '  unit_name_norm  TEXT NOT NULL,' + '  section         TEXT NOT NULL,' + // interface|implementation|program|package
     '  in_path         TEXT,' + // text from `in ''...''`; NULL if absent
     '  target_file_id  INTEGER REFERENCES files(id) ON DELETE SET NULL,' + '  start_line      INTEGER NOT NULL,' + '  start_col       INTEGER NOT NULL,' +
-    '  end_line        INTEGER,' + '  end_col         INTEGER' + ')',
+    '  end_line        INTEGER,' + '  end_col         INTEGER,' +
+    // N-06: an entry inside a {$I} include -- absolute .inc path and the host
+    // line of the directive; both NULL for the unit's own text. Also ALTERed onto
+    // older tables by Migrate(), which owns idx_unit_uses_origin (never here).
+    '  origin_path     TEXT,' + '  include_line    INTEGER' + ')',
 
     'CREATE INDEX IF NOT EXISTS idx_unit_uses_file ' + '  ON unit_uses(file_id)', 'CREATE INDEX IF NOT EXISTS idx_unit_uses_unit_norm ' + '  ON unit_uses(unit_name_norm)',
     'CREATE INDEX IF NOT EXISTS idx_unit_uses_section ' + '  ON unit_uses(section)', 'CREATE INDEX IF NOT EXISTS idx_unit_uses_target ' +

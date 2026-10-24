@@ -16,7 +16,10 @@
     calls Helper.  ASSERT: every rename form exits 2, names body.inc, and the
     sources are byte-identical afterwards.
   FIXTURE B (positive control): same host, but body.inc mentions Helper only
-    in a comment and a string literal.  ASSERT: rename --apply exits 0 and
+    in a comment and a string literal.
+  FIXTURE C (N-06): renaming UNIT IncA, whose only other use is a uses entry in
+    shared\IncB.Uses.inc -- an include with no files row (near-search only).
+    ASSERT: exit 2 naming that .inc, sources byte-identical.  ASSERT: rename --apply exits 0 and
     the declaration IS rewritten (so the refusal in A is the .inc check, not
     a broken rename).
 #>
@@ -128,6 +131,28 @@ Write-Host $r.Out
 Check 'B legacy --apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
 $hostAfter = Get-Content -Raw (Join-Path $b.Src 'uHost.pas')
 Check 'B declaration rewritten' ($hostAfter -cmatch 'function Helper2: Integer;')
+
+# ------- C (N-06): a UNIT named in a uses clause that lives in an include the -------
+# index keeps NO files row for (found by the preprocessor's near-search in a
+# subdir, which the closure resolver does not do). The include row (unit_uses
+# origin_path) is the only evidence; renaming the unit must refuse naming it.
+Write-Host 'Fixture C: unit IncA is used from shared\IncB.Uses.inc (no files row)' -ForegroundColor Cyan
+$cDir = Join-Path $WorkDir 'C'
+Copy-Item (Resolve-Path "$PSScriptRoot\..\fixtures\cyclefix\incuses").Path $cDir -Recurse
+New-Item -ItemType Directory (Join-Path $cDir 'shared') | Out-Null
+Move-Item (Join-Path $cDir 'IncB.Uses.inc') (Join-Path $cDir 'shared\IncB.Uses.inc')
+$cDb = Join-Path $WorkDir 'C.sqlite'
+Push-Location $WorkDir
+try { & $Exe index --project (Join-Path $cDir 'IncUses.dproj') --db $cDb --library-db none 2>&1 | Out-Null } finally { Pop-Location }
+Check 'C index exits 0' ($LASTEXITCODE -eq 0)
+$cSnap = (Get-ChildItem $cDir -Recurse -File -Include *.pas, *.inc, *.dpr | Sort-Object FullName | ForEach-Object { $_.Name + '=' + (Get-Content -Raw $_.FullName) }) -join '|'
+Push-Location $WorkDir
+try { $o = & $Exe rename --kind symbol --name IncA --to IncZ --apply --db $cDb 2>&1; $cRc = $LASTEXITCODE } finally { Pop-Location }
+$cOut = $o -join "`n"
+Check 'C rename of unit IncA exits 2' ($cRc -eq 2) "exit=$cRc"
+Check 'C names shared\IncB.Uses.inc' ($cOut -match 'shared\\IncB\.Uses\.inc') ($cOut -split "`n" | Select-Object -Last 1)
+$cAfter = (Get-ChildItem $cDir -Recurse -File -Include *.pas, *.inc, *.dpr | Sort-Object FullName | ForEach-Object { $_.Name + '=' + (Get-Content -Raw $_.FullName) }) -join '|'
+Check 'C sources unchanged' ($cAfter -ceq $cSnap)
 
 } catch {
   Write-Host "FATAL: $_" -ForegroundColor Red

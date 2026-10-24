@@ -339,6 +339,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [diff](diff) | `diff` |  |
 | [doc-facts-selftest](Maintenance) | `doc-facts-selftest` | internal |
 | [dump-call-edges](dump-call-edges) | `dump-call-edges` |  |
+| [dump-parse-uses](Maintenance) | `dump-parse-uses` | internal |
 | [dump-pp-eval](Maintenance) | `dump-pp-eval` | internal |
 | [dump-pp-lex](Maintenance) | `dump-pp-lex` | internal |
 | [dump-refs](dump-refs) | `dump-refs` |  |

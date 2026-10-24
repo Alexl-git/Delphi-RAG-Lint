@@ -30,6 +30,7 @@ Full flag list: [preprocess-file in the CLI reference](../cli.md#preprocess-file
 | `--include-mode` |  |  |  |
 | `--no-near-search` |  |  |  |
 | `--tolerances` |  |  |  |
+| `--include-sites` |  |  |  |
 
 ## Details
 

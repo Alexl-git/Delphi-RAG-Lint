@@ -118,6 +118,7 @@ type
       FQInsertMemberAccess   : TFDQuery     ; { 2026-09-16: member_accesses writer }
       FHasMemberAccesses     : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasMemberAccesses }
       FHasEffectCols         : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasEffectCols }
+      FHasUseOriginCols      : Integer      ; { N-06: -1 unprobed, 0 absent, 1 present -- see HasUseOriginCols }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -567,6 +568,48 @@ type
       procedure ResolveWriteRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>B-28 (2026-10-23): the calls stage's SIXTH stream, last of the
+      /// READS. Offers every `read` ref the enum, parenless and member streams
+      /// left unbound, spelled like a local, parameter, const or var, to
+      /// TCallResolver.ResolveBareValueRead and sets refs.symbol_id when that
+      /// answer is certain.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: read rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>
+      /// IDENTITY ONLY, as the write stream: no call_edges, no member_accesses
+      /// row. NULLs what it wrote on an earlier pass first -- a `read` bound to a
+      /// local_var / param / const / var; no other stream binds a `read` to one --
+      /// so a scoped run never keeps a binding the engine no longer derives. Runs
+      /// AFTER the other three read streams so it only sees what they declined.
+      /// </remarks>
+      procedure ResolveValueReadRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
+      /// <summary>B-31 (2026-10-23): the calls stage's SEVENTH stream. Offers
+      /// every `type_use` ref spelled like an indexed type to
+      /// TCallResolver.ResolveTypeUse and sets refs.symbol_id to the type when
+      /// that answer is certain.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: type_use rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>
+      /// IDENTITY ONLY. No other writer binds a `type_use` ref, so NULLing every
+      /// type_use row in scope first can never erase another stream's answer.
+      /// </remarks>
+      procedure ResolveTypeUseRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -761,6 +804,18 @@ type
       /// <returns>True iff symbol_facts has effect_witness -- the LAST of the
       /// three ALTERs, so its presence implies all three.</returns>
       function HasEffectCols: Boolean;
+      /// <summary>N-06: True when unit_uses carries origin_path and
+      /// include_line. Migrate ALTERs them with NO schema bump, so a schema-23
+      /// DB indexed before this engine lacks them while reading as current --
+      /// the HasEffectCols pattern. Memoised; Migrate resets it.</summary>
+      /// <returns>True iff unit_uses has include_line, the LAST of the two
+      /// ALTERs.</returns>
+      function HasUseOriginCols: Boolean;
+      /// <summary>N-06: (re)sets the SQL text and parameter types of the three
+      /// unit_uses statements for THIS database's shape, so no statement names
+      /// a column the DB lacks. Called by PrepareStatements and again by Migrate
+      /// after its ALTERs.</summary>
+      procedure ConfigureUnitUseStatements;
       /// <summary>The symbol_facts SELECT column list for THIS database:
       /// SYMBOL_FACTS_BASE_COLS, plus the three effect columns only when
       /// HasEffectCols -- so a reader never names a column the DB lacks.
@@ -885,6 +940,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      function IncludeOriginsChanged(const APath: string): Boolean;
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta reader.
       /// Tolerates a missing table (a DB from before schema_meta existed) and a missing
       /// key, both as '' -- callers treat that as "unknown", never as an error, exactly
@@ -3415,6 +3471,7 @@ begin
   FReadOnly      := AReadOnly;
   FHasMemberAccesses:= -1; { probed lazily -- see HasMemberAccesses }
   FHasEffectCols    := -1; { probed lazily -- see HasEffectCols }
+  FHasUseOriginCols := -1; { N-06: probed lazily -- see HasUseOriginCols }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -3509,6 +3566,79 @@ begin
     end;
   end;
   Result:= FHasEffectCols = 1;
+end;
+
+function TSQLiteSymbolStore.HasUseOriginCols: Boolean;
+var
+  Q: TFDQuery;
+begin
+  if FHasUseOriginCols < 0 then
+  begin
+    FHasUseOriginCols:= 0;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      // Same argument as HasEffectCols: sqlite_master always exists and its
+      // stored CREATE TABLE text is rewritten by every ADD COLUMN.
+      Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''unit_uses'' ' +
+                     'AND instr(sql, ''include_line'') > 0 LIMIT 1';
+      Q.Open;
+      if not Q.IsEmpty then FHasUseOriginCols:= 1;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+  Result:= FHasUseOriginCols = 1;
+end;
+
+procedure TSQLiteSymbolStore.ConfigureUnitUseStatements;
+const
+  BASE_COLS = 'target_file_id, start_line, start_col, end_line, end_col';
+var
+  Extra: string;
+begin
+  Extra:= IfThen(HasUseOriginCols, ', origin_path, include_line', '');
+  if FQInsertUnitUse <> nil then
+  begin
+    if FQInsertUnitUse.Active then FQInsertUnitUse.Close;
+    FQInsertUnitUse.SQL.Text:=
+      'INSERT INTO unit_uses ' + '(file_id, unit_name, unit_name_norm, section, in_path, ' + BASE_COLS + Extra + ') ' +
+      'VALUES (:fid, :un, :unn, :sec, :inp, NULL, :sl, :sc, :el, :ec' + IfThen(HasUseOriginCols, ', :op, :il', '') + ')';
+    FQInsertUnitUse.Params.ParamByName('fid').DataType:= ftLargeint;
+    FQInsertUnitUse.Params.ParamByName('un' ).DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('unn').DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('sec').DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('inp').DataType:= ftString;
+    FQInsertUnitUse.Params.ParamByName('sl' ).DataType:= ftInteger;
+    FQInsertUnitUse.Params.ParamByName('sc' ).DataType:= ftInteger;
+    FQInsertUnitUse.Params.ParamByName('el' ).DataType:= ftInteger;
+    FQInsertUnitUse.Params.ParamByName('ec' ).DataType:= ftInteger;
+    if HasUseOriginCols then
+    begin
+      FQInsertUnitUse.Params.ParamByName('op').DataType:= ftString;
+      FQInsertUnitUse.Params.ParamByName('il').DataType:= ftInteger;
+    end;
+    FQInsertUnitUse.Prepare;
+  end;
+  if FQGetFileUnitUses <> nil then
+  begin
+    if FQGetFileUnitUses.Active then FQGetFileUnitUses.Close;
+    FQGetFileUnitUses.SQL.Text:=
+      'SELECT unit_name, unit_name_norm, section, in_path, ' + BASE_COLS + Extra + ' ' +
+      'FROM unit_uses WHERE file_id = :fid ' + 'ORDER BY section, start_line, start_col';
+    FQGetFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
+    FQGetFileUnitUses.Prepare;
+  end;
+  if FQFindUsersOfUnit <> nil then
+  begin
+    if FQFindUsersOfUnit.Active then FQFindUsersOfUnit.Close;
+    FQFindUsersOfUnit.SQL.Text:=
+      'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' + BASE_COLS + Extra + ' ' +
+      'FROM unit_uses WHERE unit_name_norm = :un';
+    FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
+    FQFindUsersOfUnit.Prepare;
+  end;
 end;
 
 function TSQLiteSymbolStore.SymbolFactsSelectCols: string;
@@ -4053,6 +4183,17 @@ begin
     (the edge says so) and "not resolved at all". It is deliberately NOT a
     substitute for a local edge: a ref never carries both. }
   TryExec('ALTER TABLE refs ADD COLUMN external_target TEXT');
+  // N-06: unit_uses rows extracted from an include directive carry the absolute
+  // .inc path and the host line of the directive (NULL = the unit's own text).
+  // The partial index serves editors and the .inc host-invalidation lookup.
+  TryExec('ALTER TABLE unit_uses ADD COLUMN origin_path TEXT');
+  TryExec('ALTER TABLE unit_uses ADD COLUMN include_line INTEGER');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_unit_uses_origin ON unit_uses(origin_path) WHERE origin_path IS NOT NULL');
+  // The columns may have just appeared, and the constructor may already have
+  // built the unit_uses statements without them (it prepares BEFORE Migrate on a
+  // schema-current DB): forget the memo and re-point them.
+  FHasUseOriginCols:= -1;
+  ConfigureUnitUseStatements;
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -4457,8 +4598,8 @@ begin
     '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
-    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
-    'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec, :esid)');
+    'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id, receiver_text) ' +
+    'VALUES (:sid, :fid, :kind, :name, :sl, :sc, :el, :ec, :esid, :rcv)');
   FQInsertCallEdge:= NewQuery(
     'INSERT OR REPLACE INTO call_edges(ref_id, target_symbol_id, confidence, receiver_type_symbol_id) ' +
     'VALUES (:rid, :tid, :conf, :rtid)');
@@ -4740,19 +4881,10 @@ begin
   FQInsertCompilerFinding.Prepare;
 
   // v0.40.4: uses-clause queries
-  FQInsertUnitUse:= NewQuery(
-    'INSERT INTO unit_uses ' + '(file_id, unit_name, unit_name_norm, section, in_path, ' + ' target_file_id, start_line, start_col, end_line, end_col) ' +
-    'VALUES (:fid, :un, :unn, :sec, :inp, NULL, :sl, :sc, :el, :ec)');
-  FQInsertUnitUse.Params.ParamByName('fid').DataType:= ftLargeint;
-  FQInsertUnitUse.Params.ParamByName('un' ).DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('unn').DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('sec').DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('inp').DataType:= ftString;
-  FQInsertUnitUse.Params.ParamByName('sl' ).DataType:= ftInteger;
-  FQInsertUnitUse.Params.ParamByName('sc' ).DataType:= ftInteger;
-  FQInsertUnitUse.Params.ParamByName('el' ).DataType:= ftInteger;
-  FQInsertUnitUse.Params.ParamByName('ec' ).DataType:= ftInteger;
-  FQInsertUnitUse.Prepare;
+  // N-06: SQL text + param types of the three unit_uses statements depend on
+  // whether the DB has origin_path/include_line -- ConfigureUnitUseStatements
+  // (below, after all three exist) sets them.
+  FQInsertUnitUse:= NewQuery('');
 
   { PER-FILE RESUME. Prepared like every other per-file statement so the stamp
     costs a bind, not a parse, on a walk of thousands of files. }
@@ -4761,17 +4893,9 @@ begin
   FQDeleteFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
   FQDeleteFileUnitUses.Prepare;
 
-  FQGetFileUnitUses:= NewQuery(
-    'SELECT unit_name, unit_name_norm, section, in_path, ' + '       target_file_id, start_line, start_col, end_line, end_col ' + 'FROM unit_uses WHERE file_id = :fid ' +
-    'ORDER BY section, start_line, start_col');
-  FQGetFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
-  FQGetFileUnitUses.Prepare;
-
-  FQFindUsersOfUnit:= NewQuery(
-    'SELECT file_id, unit_name, unit_name_norm, section, in_path, ' + '       target_file_id, start_line, start_col, end_line, end_col ' +
-    'FROM unit_uses WHERE unit_name_norm = :un');
-  FQFindUsersOfUnit.Params.ParamByName('un').DataType:= ftString;
-  FQFindUsersOfUnit.Prepare;
+  FQGetFileUnitUses:= NewQuery('');
+  FQFindUsersOfUnit:= NewQuery('');
+  ConfigureUnitUseStatements;
 
   // v(ADP3 T4f, register K34): an UPDATE statement resolving target_file_id from
   // SQL used to be built and Prepare'd here. It was DEAD -- nothing ever called
@@ -4855,6 +4979,33 @@ begin
     Q.Free;
   end;
 end; // function
+
+function TSQLiteSymbolStore.IncludeOriginsChanged(const APath: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  if not HasUseOriginCols then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    // Same path match as FileIsUpToDate.
+    Q.SQL.Text:= 'SELECT DISTINCT u.origin_path, f.parsed_at FROM unit_uses u JOIN files f ON f.id = u.file_id ' +
+                 'WHERE (f.path = :p OR LOWER(f.path) = LOWER(:p)) AND u.origin_path IS NOT NULL';
+    Q.ParamByName('p').AsString:= NormalizeStoredPath(APath);
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var Inc_: string:= Q.Fields[0].AsString;
+      if (not TFile.Exists(Inc_))
+        or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > Q.Fields[1].AsLargeInt) then
+        Exit(True);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
 
 // INBOX 2.3: generic schema_meta reader. Tolerates a missing table (a DB from
 // before schema_meta existed) and a missing key, both as '' -- callers treat
@@ -5177,6 +5328,11 @@ begin
   FQInsertRef.ParamByName('esid').DataType:= ftLargeint;
   if ARef.EnclosingSymbolId > 0 then FQInsertRef.ParamByName('esid').AsLargeInt:= ARef.EnclosingSymbolId
   else FQInsertRef.ParamByName('esid').Clear;
+  { N-05: a receiver the PARSER knows (the member of `Self.X`). Empty stays
+    NULL -- the call stream fills its own refs later, unchanged. }
+  FQInsertRef.ParamByName('rcv').DataType:= ftString;
+  if ARef.ReceiverText <> '' then FQInsertRef.ParamByName('rcv').AsString:= ARef.ReceiverText
+  else FQInsertRef.ParamByName('rcv').Clear;
   FQInsertRef.ExecSQL;
 end;
 
@@ -6635,6 +6791,7 @@ var
   List: TList<TEnumValueDecl>;
   E   : TEnumValueDecl       ;
   ColId, ColFile, ColEnum, ColOwner: TField;
+  ColRoutine                       : TField;
   ColName, ColQName, ColSection    : TField;
   ColStart, ColEnd                 : TField;
 begin
@@ -6645,7 +6802,9 @@ begin
     Q.SQL.Text  := 'SELECT v.id, v.file_id, v.parent_id AS enum_id, v.name, ' +
                    '       v.qualified_name, v.section, v.start_line, v.end_line, ' +
                    '       CASE WHEN o.kind IN (''class'',''record'',''interface'') ' +
-                   '            THEN o.id ELSE 0 END AS owner_type_id ' +
+                   '            THEN o.id ELSE 0 END AS owner_type_id, ' +
+                   '       CASE WHEN o.kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'') ' +
+                   '            THEN o.id ELSE 0 END AS owner_routine_id ' +
                    'FROM symbols v ' +
                    'JOIN symbols e ON e.id = v.parent_id ' +
                    'LEFT JOIN symbols o ON o.id = e.parent_id ' +
@@ -6657,6 +6816,7 @@ begin
     ColFile   := Q.FieldByName('file_id'       );
     ColEnum   := Q.FieldByName('enum_id'       );
     ColOwner  := Q.FieldByName('owner_type_id' );
+    ColRoutine:= Q.FieldByName('owner_routine_id');
     ColName   := Q.FieldByName('name'          );
     ColQName  := Q.FieldByName('qualified_name');
     ColSection:= Q.FieldByName('section'       );
@@ -6669,6 +6829,7 @@ begin
       E.FileId       := ColFile   .AsLargeInt;
       E.EnumId       := ColEnum   .AsLargeInt;
       E.OwnerTypeId  := ColOwner  .AsLargeInt;
+      E.OwnerRoutineId:= ColRoutine.AsLargeInt;
       E.Name         := ColName   .AsString  ;
       E.QualifiedName:= ColQName  .AsString  ;
       E.Section      := ColSection.AsString  ;
@@ -10656,6 +10817,21 @@ begin
   FQInsertUnitUse.ParamByName('sc').AsInteger:= AUse.StartCol;
   FQInsertUnitUse.ParamByName('el').AsInteger:= AUse.EndLine;
   FQInsertUnitUse.ParamByName('ec').AsInteger:= AUse.EndCol;
+  // N-06: a DB without the columns stores no origin (Migrate adds them on every
+  // writable open, so the guard is defensive).
+  if HasUseOriginCols then
+  begin
+    if AUse.OriginPath = '' then
+    begin
+      FQInsertUnitUse.ParamByName('op').Clear;
+      FQInsertUnitUse.ParamByName('il').Clear;
+    end
+    else
+    begin
+      FQInsertUnitUse.ParamByName('op').AsString := AUse.OriginPath;
+      FQInsertUnitUse.ParamByName('il').AsInteger:= AUse.IncludeLine;
+    end;
+  end;
   FQInsertUnitUse.ExecSQL;
 end;
 
@@ -10685,6 +10861,13 @@ begin
         U.StartCol := FQGetFileUnitUses.FieldByName('start_col' ).AsInteger;
         U.EndLine  := FQGetFileUnitUses.FieldByName('end_line'  ).AsInteger;
         U.EndCol   := FQGetFileUnitUses.FieldByName('end_col'   ).AsInteger;
+        U.OriginPath := '';
+        U.IncludeLine:= 0;
+        if FQGetFileUnitUses.FindField('origin_path') <> nil then { N-06: NULL -> '' / 0 }
+        begin
+          U.OriginPath := FQGetFileUnitUses.FieldByName('origin_path' ).AsString;
+          U.IncludeLine:= FQGetFileUnitUses.FieldByName('include_line').AsInteger;
+        end;
         List.Add(U);
         FQGetFileUnitUses.Next;
       end;
@@ -10788,6 +10971,13 @@ begin
         U.StartCol := FQFindUsersOfUnit.FieldByName('start_col' ).AsInteger;
         U.EndLine  := FQFindUsersOfUnit.FieldByName('end_line'  ).AsInteger;
         U.EndCol   := FQFindUsersOfUnit.FieldByName('end_col'   ).AsInteger;
+        U.OriginPath := '';
+        U.IncludeLine:= 0;
+        if FQFindUsersOfUnit.FindField('origin_path') <> nil then { N-06: NULL -> '' / 0 }
+        begin
+          U.OriginPath := FQFindUsersOfUnit.FieldByName('origin_path' ).AsString;
+          U.IncludeLine:= FQFindUsersOfUnit.FieldByName('include_line').AsInteger;
+        end;
         List.Add(U);
         FQFindUsersOfUnit.Next;
       end;
@@ -12517,6 +12707,139 @@ begin
   end;
 end;
 
+{ B-28: the bare value-read stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveValueReadRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  VALUE_KINDS_SQL = '(''local_var'', ''param'', ''const'', ''var'')';
+  { The candidates: a still-unbound `read` spelled like any value declaration. }
+  VALUE_UNIVERSE  = 'refs.kind = ''read'' AND refs.symbol_id IS NULL AND refs.name_text COLLATE NOCASE IN ' +
+                    '(SELECT name FROM symbols WHERE kind IN ' + VALUE_KINDS_SQL + ')';
+  { What this stream wrote on an earlier pass. }
+  VALUE_WRITTEN   = 'refs.kind = ''read'' AND refs.symbol_id IN ' +
+                    '(SELECT id FROM symbols WHERE kind IN ' + VALUE_KINDS_SQL + ')';
+var
+  Suffix : string    ;
+  Q      : TFDQuery  ;
+  Ref    : TReference;
+  Reason : string    ;
+  Id     : Int64     ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + VALUE_WRITTEN + Suffix);  // dl:ok sql-injection-concat@9ac3 -- REVIEWED 2026-10-23: Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveMemberReadRefs uses; a temp-table name and an IN-list cannot be parameters.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + VALUE_UNIVERSE + Suffix;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'read';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      Id:= AResolver.ResolveBareValueRead(Ref, Reason);
+      if Id > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
+{ B-31: the type_use stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveTypeUseRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  { The candidates: a `type_use` spelled like any indexed type. }
+  TYPE_UNIVERSE = 'refs.kind = ''type_use'' AND refs.name_text COLLATE NOCASE IN ' +
+                  '(SELECT name FROM symbols WHERE kind IN (''class'', ''interface'', ''record'', ''type'', ''enum''))';
+var
+  Suffix : string    ;
+  Q      : TFDQuery  ;
+  Ref    : TReference;
+  Reason : string    ;
+  Id     : Int64     ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE refs.kind = ''type_use'' AND refs.symbol_id IS NOT NULL' + Suffix);  // dl:ok sql-injection-concat@dbbc -- REVIEWED 2026-10-23: Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveMemberReadRefs uses; a temp-table name and an IN-list cannot be parameters.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + TYPE_UNIVERSE + Suffix;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'type_use';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      Id:= AResolver.ResolveTypeUse(Ref, Reason);
+      if Id > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -12563,6 +12886,10 @@ var
   MemberBound     : Int64   ; { of those, the rows bound to a property or field            }
   WriteCandidates: Int64    ; { D13 write stream -- write rows offered to the resolver      }
   WriteBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
+  ValueCandidates: Int64    ; { B-28 value-read stream -- read rows offered to the resolver  }
+  ValueBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
+  TypeCandidates : Int64    ; { B-31 type_use stream -- type_use rows offered to the resolver }
+  TypeBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   TWrites        : Double   ; { seconds the write stream took -- printed on its own line     }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
@@ -12646,6 +12973,10 @@ begin
   MemberBound     := 0;
   WriteCandidates:= 0;
   WriteBound     := 0;
+  ValueCandidates:= 0;
+  ValueBound     := 0;
+  TypeCandidates := 0;
+  TypeBound      := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   { Split out because it is O(symbols) and independent of how many refs this run
@@ -12993,6 +13324,11 @@ begin
       { 1.8.0 (D14 + D16a): the FOURTH stream, last of the READS, over the `read` refs the two
         streams above left unbound -- see ResolveMemberReadRefs' remarks. }
       ResolveMemberReadRefs(Resolver, ScopeWhere, StaleWhere, MemberCandidates, MemberBound);
+      { B-28 (2026-10-23): the SIXTH stream, after the member reads -- it only
+        sees what the three read streams above declined. }
+      ResolveValueReadRefs(Resolver, ScopeWhere, StaleWhere, ValueCandidates, ValueBound);
+      { B-31 (2026-10-23): the SEVENTH stream, type_use refs, identity only. }
+      ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
@@ -13150,6 +13486,21 @@ begin
       [Resolver.WithStats.Statements, Resolver.WithStats.Files,
        Resolver.WithStats.CallBound, Resolver.WithStats.CallDeclined,
        Resolver.WithStats.ReceiverTyped, Resolver.WithStats.ReceiverDeclined]));
+    { B-28 (2026-10-23). The value-read stream, every decline by reason. }
+    ResolveLog(Format('calls      value-reads: %d of %d bare read(s) bound to a local/param/const/var; ' +
+      'declined result %d, own-name %d, with-scope %d, member %d, ambiguous %d, not-found %d, routine %d, ' +
+      'qualified %d, unlisted %d, unreadable %d',
+      [ValueBound, ValueCandidates,
+       Resolver.ValueReadStats.ResultVar, Resolver.ValueReadStats.OwnName, Resolver.ValueReadStats.WithScope,
+       Resolver.ValueReadStats.Member, Resolver.ValueReadStats.Ambiguous, Resolver.ValueReadStats.NotFound,
+       Resolver.ValueReadStats.Routine, Resolver.ValueReadStats.Qualified, Resolver.ValueReadStats.Unlisted,
+       Resolver.ValueReadStats.Unreadable]));
+    { B-31 (2026-10-23). The type_use stream, every decline by reason. }
+    ResolveLog(Format('calls      type-uses: %d of %d type_use ref(s) bound; declined generic %d, qualified %d, ' +
+      'unlisted %d, ambiguous %d, not-found %d, unreadable %d',
+      [TypeBound, TypeCandidates,
+       Resolver.TypeUseStats.Generic, Resolver.TypeUseStats.Qualified, Resolver.TypeUseStats.Unlisted,
+       Resolver.TypeUseStats.Ambiguous, Resolver.TypeUseStats.NotFound, Resolver.TypeUseStats.Unreadable]));
     { 2026-09-23 (D13). Every decline by reason, for the same reason as the two
       lines above: a declined write stores nothing anywhere else. }
     ResolveLog(Format('calls      writes: %d of %d write ref(s) bound; declined result %d, own-name %d, ' +
