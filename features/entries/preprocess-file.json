@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "preprocess-file",
-      "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] (diagnostic: print {$IFDEF}-resolved source to stdout)",
+      "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
       "flags": [
         {
           "name": "--file",
@@ -34,10 +34,13 @@
         },
         {
           "name": "--tolerances"
+        },
+        {
+          "name": "--include-sites"
         }
       ],
       "helpOrder": 89,
-      "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
+      "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
     }
   ],
   "audience": "both",
@@ -49,6 +52,10 @@
     {
       "ask": "What if I define a symbol?",
       "command": "drag-lint preprocess-file --file <PATH> --define <SYM>"
+    },
+    {
+      "ask": "Which include files did this file pull in, and what did each contribute?",
+      "command": "drag-lint preprocess-file --file <PATH> --include-mode defines-only --include-sites"
     }
   ],
   "access": "cli-only",
