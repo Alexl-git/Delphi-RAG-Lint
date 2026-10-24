@@ -62,12 +62,11 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Core.Encoding
   , DRagLint.Core.LiveDocs
-  , DRagLint.Parser.Delphi13
+  , DRagLint.LSP.SyntaxTree
   ;
 
 const
@@ -190,9 +189,11 @@ begin
     or ((Length(AType) >= 2) and (AType[1] = KEYWORD_PREFIX) and CharInSet(AType[2], ['A'..'Z']));
 end;
 
-procedure WalkSyntax(const ANode: TTSNode; const ASource: TBytes; const AMap: TByteMap; const AToks: TList<TSemTok>);
+/// Emits ANode as one syntactic token class when it is one; False when it is
+/// none (the walk then descends into it).
+function AddSyntaxToken(const ANode: TTSNode; const ASource: TBytes; const AMap: TByteMap; const AToks: TList<TSemTok>): Boolean;
 begin
-  if ANode.IsNull then Exit;
+  Result:= True;
   var S: Integer:= Integer(ANode.StartByte);
   var E: Integer:= Integer(ANode.EndByte);
   var T: string:= ANode.NodeType;
@@ -205,8 +206,26 @@ begin
   else if IsKeywordType(ANode, T) and IsAlphaSpan(ASource, S, E) then
     AddSpan(AToks, AMap, S, E, TT_KEYWORD, MOD_NONE)
   else
-    for var I: Integer:= 0 to ANode.ChildCount - 1 do
-      WalkSyntax(ANode.Child(I), ASource, AMap, AToks);
+    Result:= False;
+end;
+
+/// Iterative pre-order walk with a TTSTreeCursor (O(1) per step; no
+/// recursion, so a deep tree cannot overflow the stack). A node that is a
+/// token is not descended into.
+procedure WalkSyntax(const ARoot: TTSNode; const ASource: TBytes; const AMap: TByteMap; const AToks: TList<TSemTok>);
+begin
+  if ARoot.IsNull then Exit;
+  var Cur: TTSTreeCursor:= TTSTreeCursor.Create(ARoot);
+  try
+    while True do
+    begin
+      if (not AddSyntaxToken(Cur.CurrentNode, ASource, AMap, AToks)) and Cur.GotoFirstChild then Continue;
+      while not Cur.GotoNextSibling do
+        if not Cur.GotoParent then Exit;
+    end;
+  finally
+    Cur.Free;
+  end;
 end;
 
 function DeclTokenType(AKind: TSymbolKind): Integer;
@@ -227,12 +246,51 @@ begin
   end;
 end;
 
+/// Code[I] (1-based, like ALine[I]) is True when character I is code: not
+/// inside a // comment, a { } or (* *) comment, or a '...' string literal. An
+/// unclosed block comment covers the rest of the line.
+function CodeMask(const ALine: string): TArray<Boolean>;
+begin
+  SetLength(Result, Length(ALine) + 1);
+  var I: Integer:= 1;
+  while I <= Length(ALine) do
+  begin
+    var C: Char:= ALine[I];
+    var Next: Char:= if I < Length(ALine) then ALine[I + 1] else #0;
+    if (C = '/') and (Next = '/') then Exit // the rest stays False
+    else if C = '{' then
+    begin
+      var E: Integer:= Pos('}', ALine, I + 1);
+      if E = 0 then Exit;
+      I:= E + 1;
+    end
+    else if (C = '(') and (Next = '*') then
+    begin
+      var E: Integer:= Pos('*)', ALine, I + 2);
+      if E = 0 then Exit;
+      I:= E + 2;
+    end
+    else if C = '''' then
+    begin
+      var E: Integer:= Pos('''', ALine, I + 1); // '' inside a literal re-opens at the next quote
+      if E = 0 then Exit;
+      I:= E + 1;
+    end
+    else
+    begin
+      Result[I]:= True;
+      Inc(I);
+    end;
+  end;
+end;
+
 /// Zero-based UTF-16 column of the whole-word, case-insensitive AName on
 /// ALine at or after AFromCol0; -1 when it is not there (the buffer moved
 /// since the index was built, or the name is not on its start line).
 function NameColumn(const AName, ALine: string; AFromCol0: Integer): Integer;
 begin
   Result:= -1;
+  var Code: TArray<Boolean>:= CodeMask(ALine);
   var LName: string:= LowerCase(AName);
   var LLine: string:= LowerCase(ALine);
   var From: Integer:= if AFromCol0 < 0 then 1 else AFromCol0 + 1;
@@ -243,7 +301,7 @@ begin
     var After: Integer:= P + Length(AName);
     var BeforeOk: Boolean:= (P = 1) or not CharInSet(ALine[P - 1], ['A'..'Z', 'a'..'z', '0'..'9', '_']);
     var AfterOk : Boolean:= (After > Length(ALine)) or not CharInSet(ALine[After], ['A'..'Z', 'a'..'z', '0'..'9', '_']);
-    if BeforeOk and AfterOk then Exit(P - 1);
+    if BeforeOk and AfterOk and Code[P] then Exit(P - 1);
     From:= P + 1;
   end;
 end;
@@ -281,6 +339,9 @@ begin
     begin
       Result:= A.Line - B.Line;
       if Result = 0 then Result:= A.Col - B.Col;
+      // tiebreak on one start: the declaration wins, then the longer token
+      if Result = 0 then Result:= (B.Mods and MOD_DECLARATION) - (A.Mods and MOD_DECLARATION);
+      if Result = 0 then Result:= B.Len - A.Len;
     end));
   Result:= TJSONArray.Create;
   var PrevLine: Integer:= 0;
@@ -346,29 +407,11 @@ begin
       if not FromOverlay then Source:= EnsureUtf8Bytes(Source); // overlay bytes are UTF-8 already (see IdentifierAtPosition)
       var Map: TByteMap;
       Map.Build(Source);
-      var Parser: TTSParser:= TTSParser.Create;
+      var Tree: TTSTree:= ParseDelphiUtf8(Source);
       try
-        Parser.Language:= tree_sitter_delphi13;
-        var Tree: TTSTree:= Parser.Parse(
-          function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-          begin
-            var Remaining: Integer:= Length(Source) - Integer(AByteIndex);
-            if Remaining <= 0 then
-            begin
-              ABytesRead:= 0;
-              Exit(nil);
-            end;
-            SetLength(Result, Remaining);
-            Move(Source[AByteIndex], Result[0], Remaining);
-            ABytesRead:= Remaining;
-          end, TTSInputEncoding.TSInputEncodingUTF8);
-        try
-          if Tree <> nil then WalkSyntax(Tree.RootNode, Source, Map, Toks);
-        finally
-          Tree.Free;
-        end;
+        if Tree <> nil then WalkSyntax(Tree.RootNode, Source, Map, Toks);
       finally
-        Parser.Free;
+        Tree.Free;
       end;
       var Stores: TArray<ISymbolStore>:= Copy(ACtx.StoresForFile(Path)); // a local copy; the server's list is never touched
       AddDeclarations(Stores, Path, SplitLines(TEncoding.UTF8.GetString(Source)), Toks);

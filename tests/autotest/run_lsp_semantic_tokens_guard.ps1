@@ -159,6 +159,46 @@ Check 'multi-line comment split per line (2 tokens, full line widths)' ((Has { $
 $gone = $res[12]
 Check 'unknown file answers {data: []} (not an error)' ($res.ContainsKey(12) -and -not $err.ContainsKey(12) -and $null -ne $gone -and @($gone.data).Count -eq 0 -and ($gone.PSObject.Properties.Name -contains 'data'))
 
+# TIMING BUDGET (B5 fix round 1, I1). A ~20k-line unit -- one 10k-element
+# const array and one 10k-statement block, the two widest nodes a real unit
+# has -- generated here, indexed into its OWN db (an unindexed file would time
+# the ephemeral index instead of this handler), then ONE request timed as a
+# whole lsp session. Measured 2026-10-23: the recursive Child(I) walk 0.8-0.9 s,
+# the cursor walk the same -- tree-sitter's ts_node_child skips hidden repeat
+# subtrees, so the recursive walk was NOT quadratic at this size and this
+# control has NO red on the pre-fix engine. It is a regression budget: a
+# handler that turns quadratic (or re-reads the source per node) blows it.
+# Positive control: the big request must still return tokens.
+$BudgetMs = 6000
+$bigSrc = Join-Path $WorkDir 'big'; New-Item -ItemType Directory $bigSrc | Out-Null
+$bigFile = Join-Path $bigSrc 'uBig.pas'
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.Append("unit uBig;`r`n`r`ninterface`r`n`r`nconst`r`n  CBig: array[0..9999] of Integer = (`r`n")
+for ($i = 0; $i -lt 9999; $i++) { [void]$sb.Append("    $i,`r`n") }
+[void]$sb.Append("    9999);`r`n`r`nprocedure Big;`r`n`r`nimplementation`r`n`r`nprocedure Big;`r`nvar`r`n  X: Integer;`r`nbegin`r`n  X := 0;`r`n")
+for ($i = 0; $i -lt 10000; $i++) { [void]$sb.Append("  X := X + $i; // step`r`n") }
+[void]$sb.Append("end;`r`n`r`nend.`r`n")
+[System.IO.File]::WriteAllText($bigFile, $sb.ToString(), (New-Object System.Text.ASCIIEncoding))
+$bigDb = Join-Path $WorkDir 'big.sqlite'
+& $Exe index $bigSrc --db $bigDb 2>&1 | Out-Null
+$bm  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
+$bm += Frame @{ jsonrpc='2.0'; id=11; method='textDocument/semanticTokens/full'; params=@{ textDocument=@{ uri=('file:///' + ($bigFile -replace '\\', '/')) } } }
+$bm += Frame @{ jsonrpc='2.0'; id=2; method='shutdown'; params=@{} }
+$bigIn = Join-Path $WorkDir 'bigin.txt'; $bigOut = Join-Path $WorkDir 'bigout.txt'
+[System.IO.File]::WriteAllText($bigIn, $bm, (New-Object System.Text.ASCIIEncoding))
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+Start-Process $Exe -ArgumentList @('lsp', '--db', $bigDb) -WorkingDirectory $WorkDir `
+  -RedirectStandardInput $bigIn -RedirectStandardOutput $bigOut `
+  -RedirectStandardError (Join-Path $WorkDir 'bigerr.txt') -NoNewWindow -Wait | Out-Null
+$sw.Stop()
+$bigData = 0
+foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($bigOut), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  if ($o.id -eq 11 -and $null -ne $o.result) { $bigData = @($o.result.data).Count }
+}
+Check 'CONTROL: the 20k-line request returns tokens' ($bigData -gt 0) "data=$bigData"
+Check "the 20k-line request finishes under $BudgetMs ms" ($sw.ElapsedMilliseconds -lt $BudgetMs) "elapsed=$($sw.ElapsedMilliseconds) ms"
+
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
