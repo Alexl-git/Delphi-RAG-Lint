@@ -36,7 +36,13 @@
     4 (16b) neither -> null forwarded byte-identical;
     5      ours empty, theirs present -> byte-identical;
     6      OFF (--db, no --merge-hover) = plain relay; ON differs;
-    7      stub delay 200 ms, --merge-budget-ms 10 -> byte-identical.
+    7      stub delay 200 ms, --merge-budget-ms 10 -> byte-identical;
+    8      (A4 fix M2) hovers with an empty position: relayed untouched, no
+           stderr line; a later valid hover still merges;
+    9      (A4 fix M3) more hovers than the worker queue holds, while the
+           index opens: an overflowed request is dropped from the id table,
+           so its reply is forwarded at once and no over-budget line is
+           written (inconclusive, not failed, when nothing overflowed).
 
   The proxy guards default -Exe to dll-win64; a lane passes its own engine.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
@@ -251,6 +257,39 @@ $r7 = Invoke-Raw $Exe $tightArgs $fieldReq $env7
 $p7 = Invoke-Raw $Exe $plainArgs $fieldReq $env7
 Check 'over budget: ON = plain relay' (Same $r7.Out $p7.Out) ("on=$($r7.Out.Length) plain=$($p7.Out.Length)")
 Check 'it was the budget that declined (stderr names it)' ((Utf8 $r7.Err) -match 'merge-hover over its 10 ms budget') ("err=$(Utf8 $r7.Err)")
+
+# --- 8 no position (A4 fix M2) -------------------------------------------------------------------
+Write-Host ''
+Write-Host '(8) hover requests with no position fields: relayed untouched, no stderr line' -ForegroundColor Cyan
+function NoPosHover([int]$id) {
+  return Frame ('{"jsonrpc":"2.0","id":' + $id + ',"method":"textDocument/hover","params":{"textDocument":{"uri":"' + $uri + '"},"position":{}}}')
+}
+$in8 = [byte[]]((NoPosHover 5) + (NoPosHover 6) + $fieldReq)
+$r8  = Invoke-Raw $Exe $onArgs $in8 (Script $theirs1)
+$e8  = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'merge-hover' })
+Check 'two position-less hovers: no merge-hover stderr line' ($e8.Count -eq 0) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
+$m8 = Reply7 $r8.Out
+Check 'positive control: the later hover 7 in the same session still merges' ($m8 -and $m8.Value -eq ('THEIRS-MD' + $Sep + $ours)) ("value=$(Show $m8.Value)")
+$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+        Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') -and $_['result']['contents']['value'] -eq 'THEIRS-MD' })
+Check 'both position-less hovers got DelphiLSP''s reply, unmerged' ($n8.Count -eq 2) ("n=$($n8.Count)")
+
+# --- 9 queue overflow (A4 fix M3) ------------------------------------------------------------------
+Write-Host ''
+Write-Host '(9) more hovers than the worker queue holds: an overflowed reply does not wait out the budget' -ForegroundColor Cyan
+$many = [byte[]]$didOpen
+foreach ($id in 101..124) {
+  $many += Frame ('{"jsonrpc":"2.0","id":' + $id + ',"method":"textDocument/hover","params":{"textDocument":{"uri":"' + $uri + '"},"position":{"line":13,"character":8}}}')
+}
+$qArgs = @('lsp', '--proxy', '--merge-hover', '--db', $db, '--merge-budget-ms', '4000', '--delphi-lsp', $stub)
+$r9 = Invoke-Raw $Exe $qArgs $many (Script $theirs1)
+$rep9 = @(Split-Frames $r9.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+          Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -ge 101) -and $_.ContainsKey('result') })
+$unmerged = @($rep9 | Where-Object { $_['result']['contents']['value'] -eq 'THEIRS-MD' }).Count
+Check 'all 24 hovers answered' ($rep9.Count -eq 24) ("n=$($rep9.Count)")
+Check 'positive control: some hovers merged' (($rep9.Count - $unmerged) -gt 0) ("merged=$($rep9.Count - $unmerged)")
+Check 'no over-budget line (an overflowed request no longer waits for an answer nobody computes)' (-not ((Utf8 $r9.Err) -match 'merge-hover over its')) ("unmerged=$unmerged err=$(Utf8 $r9.Err)")
+if ($unmerged -eq 0) { Write-Host '  [NOTE] nothing overflowed the queue this run: case 9 is inconclusive' -ForegroundColor Yellow }
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

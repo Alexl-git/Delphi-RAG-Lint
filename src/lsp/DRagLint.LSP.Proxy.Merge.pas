@@ -1113,7 +1113,22 @@ begin
             rkDefinition: ComputeDefinition(P);
             else ComputeCompletion(P);
           end;
-        end) then P.Release;
+        end) then
+      begin
+        { A4 fix M3: the queue is full, so nothing will ever answer for this
+          id; drop its entry too, or its reply would wait out the budget. }
+        P.Release;   { the job's reference }
+        FPendingLock.Enter;
+        try
+          if FPending.TryGetValue(Key, Old) and (Old = P) then
+          begin
+            FPending.Remove(Key);
+            P.Release;   { FPending's reference }
+          end;
+        finally
+          FPendingLock.Leave;
+        end;
+      end;
     finally
       Json.Free;
     end;
