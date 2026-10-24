@@ -1,0 +1,35 @@
+{
+  "id": "lsp-proxy-merge",
+  "title": "LSP proxy merge",
+  "group": "editor-integration",
+  "owner": "LSP",
+  "status": "shipped",
+  "since": "1.33.0-alpha",
+  "summary": "Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session",
+  "intro": "Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and the merge flags add drag-lint results.",
+  "wikiPage": "lsp-proxy-merge",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lsp",
+      "example": "drag-lint lsp --proxy --delphi-lsp-bits 32 --merge-diagnostics --merge-budget-ms 300 --merge-completion --merge-hover --merge-definition"
+    }
+  ],
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-24",
+    "by": "LSP"
+  },
+  "lastVerified": {
+    "date": "2026-10-24",
+    "by": "LSP",
+    "build": "1.33.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-24",
+    "by": "LSP",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+  }
+}

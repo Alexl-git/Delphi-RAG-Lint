@@ -1,0 +1,66 @@
+{
+  "id": "lsp-protocol-extensions",
+  "title": "LSP protocol extensions",
+  "group": "editor-integration",
+  "owner": "LSP",
+  "status": "shipped",
+  "since": "1.33.0-alpha",
+  "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index",
+  "intro": "Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index.",
+  "wikiPage": "lsp-proxy-merge",
+  "surfaces": [
+    {
+      "type": "lsp",
+      "method": "textDocument/documentSymbol"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/implementation"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/declaration"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/rename"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/codeLens"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/semanticTokens/full"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/inlayHint"
+    },
+    {
+      "type": "lsp",
+      "method": "workspace/executeCommand"
+    },
+    {
+      "type": "lsp",
+      "method": "draglint/ping"
+    }
+  ],
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-24",
+    "by": "LSP"
+  },
+  "lastVerified": {
+    "date": "2026-10-24",
+    "by": "LSP",
+    "build": "1.33.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-24",
+    "by": "LSP",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "c1294941637d6b47f90f1ba5b5b942c37de2b7884c87acc1811fe5f106cab49d"
+  }
+}

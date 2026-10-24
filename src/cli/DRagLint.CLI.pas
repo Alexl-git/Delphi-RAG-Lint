@@ -32541,6 +32541,24 @@ begin
   end;
 end;
 
+{ The `lsp --proxy` lazy DB resolver, built over a COPY of the parsed arguments.
+
+  This lives OUTSIDE Run on purpose. When Run's own anonymous method captured
+  Args (A3, 24531333), Args moved into the closure's heap frame, so
+  `Args:= ParseArgs` began to go through a compiler temporary that is copied
+  back only on a NORMAL return. A ParseArgs that raised (`lsp --db`, the
+  incident reproduction) therefore left Args.Command empty, and the fatal
+  breadcrumb read `cmd=` -- the command was lost exactly when it is needed.
+  tests\autotest\run_lsp_stdout_hygiene.ps1 pins `cmd=lsp`. Capturing a local
+  copy here keeps Run's Args an ordinary stack variable. }
+function MakeConsumerDbResolver(const pArgs: TArgs): DRagLint.LSP.Proxy.TLspDbResolver;
+var
+  Snapshot: TArgs;
+begin
+  Snapshot:= pArgs;
+  Result:= function: TArray<string> begin Result:= ResolveConsumerDbs(Snapshot); end;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -32767,7 +32785,7 @@ begin
         ProxyOpt.MergeHover      := Args.LspMergeHover;
         ProxyOpt.MergeDefinition := Args.LspMergeDefinition;
         ProxyOpt.DbPaths         := Args.DbPaths;
-        ProxyOpt.ResolveDbs      := function: TArray<string> begin Result:= ResolveConsumerDbs(Args); end;   { P0 review I1: lazy, on the merge worker }
+        ProxyOpt.ResolveDbs      := MakeConsumerDbResolver(Args);   { P0 review I1: lazy, on the merge worker }
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;
