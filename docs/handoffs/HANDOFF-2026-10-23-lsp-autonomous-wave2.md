@@ -12,6 +12,7 @@ mode.json key `lspRun` only; never touch top-level `phase` (CONVERTER's slot, sh
 Wakeup cron "13,43 * * * *" is session-only: recreate it in a fresh session.
 
 ## Merged to local main this session
+A1 34e8cf20. 
 C1+C3 (87c36989) + featuregen bcc99792 (ENGINE re-verifies lsp). 
 B1+B4 653fac01 (lane S at 1123befe). 
 D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 6633d237, S0 ff250754
@@ -22,8 +23,8 @@ D1 docs-sync fix (cd90e3f7 + 0bac5870 CRLF regex fix), P0 6aa06bb4 + featuregen 
 |---|---|---|---|
 | S | lsp-server | B2 (sonnet, BASE 1123befe) | B1+B4 merged. On B2 DONE: review (sonnet, verdict in reply) -> merge -> next B3 (session model) |
 | Q | lsp-quality | C2 (implementer, session model) | step 0 merge main + build; CLI.pas ApplyLineMarkers part ON (cli7 merged). On DONE: review (session model, verdict in reply) -> merge |
-| P | lsp-proxy | A1 fix round 2 | same A1 fix agent: Server.pas:907 doc regen + one dl:ok circular-uses on Proxy.pas:1. Then merge A1 to main (no new flag) -> lane M A3, lane P C4 |
-| M | lsp-merge | A3 | WAITING for A1 merged. Brief extracted |
+| P | lsp-proxy | C4 (sonnet) | adds --delphi-lsp-bits -> build --all at merge, gated |
+| M | lsp-merge | A3 (session model) | adds --merge-completion -> build --all at merge, gated. Then A4 |
 
 Main compiles after S0 merge ff250754 (verified by lane S + lane Q builds).
 lsp-quality worktree: encoding guard fails on ITS disk copy of run_docs_sync_guard.ps1 (LF) -- artifact, ignore.
