@@ -607,6 +607,11 @@ foreach ($k in @('N1','N2','N3','N4','N5','N6')) {
     # shadows the enum value -- so its symbol_id is now that local, not NULL.
     # What N1 guards is unchanged: a write never binds to the ENUM VALUE.
     CheckN 6 ("{0} binds to the shadowing LOCAL, never the enum value (D13)" -f $k) (@($r).Count -eq 1 -and $r[0].qn -eq 'uEnumUse.UseIt.cmdShadow') ($r | ConvertTo-Json -Compress)
+  } elseif ($k -in @('N2','N3')) {
+    # B-28 (value-read stream): a READ of the shadowing local (N2) / own-unit const (N3)
+    # now binds to that VALUE. The guard is unchanged: never the enum value.
+    $want = @{ N2 = 'uEnumUse.UseIt.cmdShadow'; N3 = 'uEnumUse.cmdClash' }[$k]
+    CheckN 6 ("{0} binds to the shadowing value {1}, never the enum value (B-28)" -f $k, $want) (@($r).Count -eq 1 -and $r[0].qn -eq $want) ($r | ConvertTo-Json -Compress)
   } else {
     CheckN 6 ("{0} symbol_id IS NULL" -f $k) (IsNull $r) ($r | ConvertTo-Json -Compress)
   }

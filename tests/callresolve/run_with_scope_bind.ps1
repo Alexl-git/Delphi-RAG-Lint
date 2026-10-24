@@ -167,8 +167,9 @@ try {
   Check 'OWN-FIELD  a bare own-class FIELD read binds TWsHost.FCountH, mode read, no accessor (DEC-19)' `
     (@($r | Where-Object { $_.kind -eq 'read' -and $_.sq -eq 'uWsUse.TWsHost.FCountH' -and $_.mode -eq 'read' -and $null -eq $_.aq }).Count -eq 1) (Show $r)
   $r = RefsAt 'OWN-SHADOW' 'TotalP'
-  Check 'OWN-SHADOW  a local named TotalP shadows the property: unbound' `
-    (($r.Count -ge 1) -and (@($r | Where-Object { $_.kind -eq 'read' -and $null -ne $_.sq }).Count -eq 0)) (Show $r)
+  # B-28: the value-read stream binds the read to the shadowing LOCAL; never the property.
+  Check 'OWN-SHADOW  a local named TotalP shadows the property: never bound to it' `
+    (($r.Count -ge 1) -and (@($r | Where-Object { $_.kind -eq 'read' -and $null -ne $_.sq -and $_.sq -ne 'uWsUse.TWsHost.Shadow.TotalP' }).Count -eq 0)) (Show $r)
 
   Write-Host '--- Self.X: the explicit qualifier names the class member, property OR field'
   foreach ($c in @(@{ M = 'SELF-FIELD';       N = 'FCountH'; Q = 'uWsUse.TWsHost.FCountH' },
