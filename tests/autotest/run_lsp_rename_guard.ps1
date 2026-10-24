@@ -118,6 +118,7 @@ function Session([array]$reqs) {
   foreach ($q in $reqs) {
     $id++
     $p = @{ textDocument=@{ uri=$uri }; position=@{ line=$q.line; character=$q.col } }
+    if ($q.ContainsKey('raw')) { $p = @{} + $q.raw }
     if ($q.ContainsKey('newName')) { $p.newName = $q.newName }
     $m += Frame @{ jsonrpc='2.0'; id=$id; method=$q.method; params=$p }
   }
@@ -166,7 +167,11 @@ $reqs = @(
   @{ method='textDocument/rename'; line=$lDecl;  col=$cDecl; newName='begin' },                        # 17
   @{ method='textDocument/rename'; line=$lDecl;  col=$cDecl; newName='Init' },                         # 18
   @{ method='textDocument/rename'; line=$lDecl;  col=$cDecl; newName='1bad' },                         # 19
-  @{ method='textDocument/rename'; line=$lBlank; col=0; newName='Calc' }                               # 20
+  @{ method='textDocument/rename'; line=$lBlank; col=0; newName='Calc' },                              # 20
+  @{ method='textDocument/rename'; raw=@{ textDocument='x'; position=@{ line=0; character=0 } }; newName='Calc' },   # 21
+  @{ method='textDocument/rename'; raw=@{ textDocument=@{ uri=$uri }; position=5 }; newName='Calc' },                # 22
+  @{ method='textDocument/rename'; raw=@{ textDocument=@{ uri=$uri } }; newName='Calc' },                           # 23
+  @{ method='textDocument/prepareRename'; raw=@{ textDocument=7; position='p' } }                                   # 24
 )
 $r = Session $reqs
 $caps = $r.init.capabilities
@@ -206,9 +211,35 @@ Check 'rename to an existing sibling (Init): error -32803' ($r.err.ContainsKey(1
 Check 'rename to a non-identifier (1bad): error -32803' ($r.err.ContainsKey(19) -and $r.err[19].code -eq -32803) $(if ($r.err.ContainsKey(19)) { $r.err[19].message } else { 'no error' })
 Check 'rename on whitespace: error -32803' ($r.err.ContainsKey(20) -and $r.err[20].code -eq -32803) $(if ($r.err.ContainsKey(20)) { $r.err[20].message } else { 'no error' })
 
+# Malformed params must answer -32602 (rename) / null (prepareRename), never raise EInvalidCast.
+foreach ($id in 21, 22, 23) {
+  Check "rename with a non-object textDocument/position or none: error -32602 (id $id)" ($r.err.ContainsKey($id) -and $r.err[$id].code -eq -32602) $(if ($r.err.ContainsKey($id)) { $r.err[$id].message } else { 'no error' })
+}
+Check 'prepareRename with malformed params answers null' ($r.res.ContainsKey(24) -and $null -eq $r.res[24][0] -and -not $r.err.ContainsKey(24))
+
+# The returned edits, applied back-to-front to the fixture text, give the renamed text.
+$text = [System.IO.File]::ReadAllText($file)
+$tl = $text -split "`r`n"
+$e13 = EditsOf $r.res[13][0]
+foreach ($ed in @($e13.edits | Sort-Object @{Expression={$_.range.start.line}; Descending=$true}, @{Expression={$_.range.start.character}; Descending=$true})) {
+  $ln = $tl[$ed.range.start.line]
+  $tl[$ed.range.start.line] = $ln.Substring(0, $ed.range.start.character) + $ed.newText + $ln.Substring($ed.range.end.character)
+}
+$applied = $tl -join "`r`n"
+$expected = $text -creplace 'Compute', 'Calc'
+Check 'applying the edits back-to-front yields the fixture with Compute renamed to Calc' ($applied -ceq $expected)
+
 $after = [System.IO.File]::ReadAllBytes($file)
 Check 'server wrote nothing: fixture bytes unchanged' ([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after))
 Check 'server wrote nothing: no .bak file' (@(Get-ChildItem $src -Filter '*.bak').Count -eq 0)
+
+# STALE INDEX: shift a call right on disk after indexing. The index still says col 2; a forward scan would
+# silently retarget the later token, so the reference edit must be refused (-32803, "out of date").
+$staleLines = [System.IO.File]::ReadAllLines($file)
+$staleLines[$lCall1] = '  Inc(Tmp); ' + $staleLines[$lCall1].TrimStart()
+WriteAnsi $file ($staleLines -join "`r`n")
+$rs = Session @(@{ method='textDocument/rename'; line=$lDecl; col=$cDecl; newName='Calc' })
+Check 'rename after a ref moved on disk: refused -32803 "out of date"' ($rs.err.ContainsKey(11) -and $rs.err[11].code -eq -32803 -and $rs.err[11].message -match 'out of date') $(if ($rs.err.ContainsKey(11)) { $rs.err[11].message } else { 'no error' })
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green

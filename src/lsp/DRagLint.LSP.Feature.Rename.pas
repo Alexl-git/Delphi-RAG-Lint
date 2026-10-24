@@ -14,6 +14,10 @@ unit DRagLint.LSP.Feature.Rename;
   this document's store declares, and an edit whose token is no longer where
   the index says (stale index or unsaved buffer).
 
+  Column units: IdentifierAtPosition takes a tree-sitter BYTE column while rename
+  passes a UTF-16 column, so a non-ASCII character earlier on the line makes it
+  refuse the edit (fail-safe, never a wrong rewrite).
+
   Registered through the S0 feature registry exactly as
   DRagLint.LSP.Feature.ImplDecl is. No extractor change. }
 
@@ -140,15 +144,26 @@ type
     Store: ISymbolStore; // the document's own store: StoresForFile(Path)[0]
   end;
 
+// True when textDocument is an object holding a uri and position is an object (no EInvalidCast on a malformed request).
+function ParamsShapeOk(const AParams: TJSONObject; out ADoc, APos: TJSONObject): Boolean;
+begin
+  ADoc:= nil;
+  APos:= nil;
+  if AParams = nil then Exit(False);
+  if AParams.GetValue('textDocument') is TJSONObject then ADoc:= TJSONObject(AParams.GetValue('textDocument'));
+  if AParams.GetValue('position') is TJSONObject then APos:= TJSONObject(AParams.GetValue('position'));
+  Result:= (ADoc <> nil) and (APos <> nil) and (ADoc.GetValue('uri') <> nil);
+end;
+
 // True when the position names a symbol that the document's own store declares (so Build can find it by qualified name).
 function ResolveTarget(const ACtx: ILspServerContext; const AParams: TJSONObject; out ATarget: TRenameTarget): Boolean;
 begin
   Result:= False;
   ATarget:= Default(TRenameTarget);
   if AParams = nil then Exit;
-  var Doc: TJSONObject:= AParams.GetValue('textDocument') as TJSONObject;
-  var PosObj: TJSONObject:= AParams.GetValue('position') as TJSONObject;
-  if (Doc = nil) or (Doc.GetValue('uri') = nil) then Exit;
+  var Doc: TJSONObject:= nil;
+  var PosObj: TJSONObject:= nil;
+  if not ParamsShapeOk(AParams, Doc, PosObj) then Exit;
   ATarget.Path:= ACtx.FileFromUri(Doc.GetValue('uri').Value);
   if (ATarget.Path = '') or not IntField(PosObj, 'line', ATarget.Line0) or not IntField(PosObj, 'character', ATarget.Col0) then Exit;
   var HitStore: ISymbolStore;
@@ -193,7 +208,7 @@ begin
 end;
 
 // '' and AResult = the WorkspaceEdit, or the refusal message and AResult = nil.
-function BuildWorkspaceEdit(const ACtx: ILspServerContext; const AEdits: TArray<TRenameEdit>; out AResult: TJSONObject): string;
+function BuildWorkspaceEdit(const ACtx: ILspServerContext; const AEdits: TArray<TRenameEdit>; const ADecl: TRenameEdit; out AResult: TJSONObject): string;
 begin
   Result:= '';
   AResult:= nil;
@@ -203,10 +218,17 @@ begin
   try
     for var Ed: TRenameEdit in AEdits do
     begin
-      var Col0: Integer:= FindWord(DiskLine(Cache, Ed.FilePath, Ed.Line), Ed.OldName, Ed.Col - 1);
+      var DiskTxt: string:= DiskLine(Cache, Ed.FilePath, Ed.Line);
+      var Col0: Integer;
+      // The declaration edit sits at the symbol's StartCol (the `function` keyword): only it scans forward to the name.
+      // A reference must start exactly where the index says, or the file changed after indexing.
+      if SameText(Ed.FilePath, ADecl.FilePath) and (Ed.Line = ADecl.Line) and (Ed.Col = ADecl.Col) then Col0:= FindWord(DiskTxt, Ed.OldName, Ed.Col - 1)
+      else if SameText(Copy(DiskTxt, Ed.Col, Length(Ed.OldName)), Ed.OldName) and ((Ed.Col = 1) or not IsIdentChar(DiskTxt[Ed.Col - 1])) and ((Ed.Col + Length(Ed.OldName) > Length(DiskTxt)) or not IsIdentChar(DiskTxt[Ed.Col + Length(Ed.OldName)])) then Col0:= Ed.Col - 1
+      else Col0:= -1;
       // The live buffer must hold the same token, or the client would rewrite the wrong text.
+      // IdentifierAtPosition takes a tree-sitter BYTE column, B3 passes a UTF-16 column: a non-ASCII char earlier on the line makes it refuse (fail-safe).
       if (Col0 < 0) or not SameText(ACtx.IdentifierAtPosition(Ed.FilePath, Ed.Line - 1, Col0), Ed.OldName) then
-        Exit(Format('the index is out of date at %s:%d (no "%s" there) -- save and reindex, then retry', [Ed.FilePath, Ed.Line, Ed.OldName]));
+        Exit(Format('index out of date for %s:%d (no "%s" there) -- save and reindex, then retry', [Ed.FilePath, Ed.Line, Ed.OldName]));
       var Key: string:= UpperCase(Ed.FilePath) + '|' + IntToStr(Ed.Line) + '|' + IntToStr(Col0);
       if Seen.ContainsKey(Key) then Continue;
       Seen.Add(Key, True);
@@ -236,9 +258,13 @@ procedure HandleRename(const ACtx: ILspServerContext; const AId: TJSONValue; con
 begin
   var NewNameVal: TJSONValue:= nil;
   if AParams <> nil then NewNameVal:= AParams.GetValue('newName');
-  if not (NewNameVal is TJSONString) then
+  var ShapeDoc, ShapePos: TJSONObject;
+  var ParamsErr: string:= '';
+  if not (NewNameVal is TJSONString) then ParamsErr:= 'rename: newName (string) is required'
+  else if not ParamsShapeOk(AParams, ShapeDoc, ShapePos) then ParamsErr:= 'rename: textDocument {uri} and position {line, character} are required';
+  if ParamsErr <> '' then
   begin
-    ACtx.ReplyError(AId, ERR_INVALID_PARAMS, 'rename: newName (string) is required');
+    ACtx.ReplyError(AId, ERR_INVALID_PARAMS, ParamsErr);
     Exit;
   end;
   var NewName: string:= NewNameVal.Value;
@@ -270,7 +296,11 @@ begin
     if Length(Edits) = 0 then Reason:= Format('no edits computed for %s', [QN]);
   end;
   var Res: TJSONObject:= nil;
-  if Reason = '' then Reason:= BuildWorkspaceEdit(ACtx, Edits, Res);
+  var Decl: TRenameEdit:= Default(TRenameEdit);
+  Decl.FilePath:= T.Store.GetFilePath(T.Sym.FileId);
+  Decl.Line:= T.Sym.StartLine;
+  Decl.Col:= T.Sym.StartCol;
+  if Reason = '' then Reason:= BuildWorkspaceEdit(ACtx, Edits, Decl, Res);
   if Reason <> '' then
   begin
     ACtx.ReplyError(AId, ERR_REQUEST_FAILED, 'cannot rename -- ' + Reason);
