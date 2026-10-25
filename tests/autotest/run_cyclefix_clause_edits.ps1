@@ -191,7 +191,13 @@ try {
        Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" },
     @{ N = 'leading-last'; In = "uses`r`n  System.SysUtils`r`n  , CfBeta.Untangle`r`n  , CfBeta;";
        Out = "uses`r`n  System.SysUtils`r`n  , CfBeta.Untangle;`r`n" },
-    @{ N = 'last-comment'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle,`r`n  // note`r`n  CfBeta;";
+    # W6 C5: a non-conditional directive ({$REGION}/{$ENDREGION}/{$WARN}/{$HINTS}/{$MESSAGE}) in the clause is trivia, kept byte for byte
+    @{ N = 'c5-warn-last'; In = "uses`r`n  System.SysUtils {`$WARN SYMBOL_PLATFORM OFF},`r`n  CfBeta;";
+       Out = "uses`r`n  System.SysUtils {`$WARN SYMBOL_PLATFORM OFF},`r`n  CfBeta.Untangle;`r`n" },
+    @{ N = 'c5-region-only'; In = "uses {`$REGION 'peer'}`r`n  CfBeta {`$ENDREGION};";
+       Out = "uses {`$REGION 'peer'}`r`n  CfBeta.Untangle {`$ENDREGION};`r`n" },
+    @{ N = 'c5-hints-last'; In = "uses`r`n  System.SysUtils, {`$HINTS OFF}`r`n  CfBeta;";
+       Out = "uses`r`n  System.SysUtils, {`$HINTS OFF}`r`n  CfBeta.Untangle;`r`n" },    @{ N = 'last-comment'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle,`r`n  // note`r`n  CfBeta;";
        Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n"; Keep = "  CfBeta.Untangle;`r`n  // note`r`n`r`n" }
   )
   foreach ($k in $cases) {

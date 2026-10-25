@@ -40,6 +40,7 @@ needs a re-parse.
 - Docs: `excludeRoots` is described in `docs\INDEXING-AND-DB-ARCHITECTURE.md`; guard `run_allow_refuses_codeless_line` follows the H2 `///` -> declaration contract (W6-misc).
 - Tests: `run_pas_uses_with_members.ps1` pins `pas_uses` with-members and RTL-ancestor classification (X3, T-16).
 - `cycles --fix` A4 (owner ruling 2026-10-25, "plan anyway"): a baseline that fails ONLY with `F2047 Circular unit reference` on a unit of the Part A group being fixed no longer refuses `dirty-baseline`; the plan is made and the build after the edit is the proof (`baseline.status` = `f2047-in-group`; a failed after-build says the baseline already failed). Any other dirty baseline, or an F2047 in another group, still refuses; guard `run_cyclefix_f2047_baseline.ps1` (W6).
+- `cycles --fix` C5: `{$REGION}` / `{$ENDREGION}` / `{$WARN}` / `{$HINTS}` / `{$MESSAGE}` inside a uses clause are trivia for the clause lexer (kept byte for byte), so a clause edit no longer refuses `directive` on them; conditional directives still refuse. Guard: `run_cyclefix_clause_edits.ps1` c5-* cases (W6).
 
 ### Fixed
 - Write helpers and ename: a BOM-less UTF-8 file stays UTF-8 on write; ename columns are CHARACTER columns as the shared reader decodes the file (UTF-8 with or without BOM, ANSI), Apply writes through the shared encoding-preserving writer, and ename reports the binary / unindexed .dfm files it leaves alone (W5-D). Guards: `run_rename_encoding.ps1`, `run_rename_dfm_skipped.ps1`, `run_textedit_encoding.ps1`.
