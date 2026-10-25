@@ -17,6 +17,7 @@ uses
   , Winapi.Windows
   , Winapi.Messages // N1: WM_LBUTTONDOWN & co. pin ConvertClickLost's named constants
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
+  , ConvRules.TextEncoding in '..\ConvRules.TextEncoding.pas'
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
   , ConvRules.Units in '..\ConvRules.Units.pas'
   , ConvRules.Casts in '..\ConvRules.Casts.pas'
@@ -15488,6 +15489,12 @@ begin
   TestCapabilityProbeTexts;
 end;
 
+{$I inc\EncodingLevelTests.inc}
+{$I inc\EncodingReadersTests.inc}
+{$I inc\EncodingEngineTests.inc}
+{$I inc\EncodingApplyTests.inc}
+{$I inc\EncodingTabTests.inc}
+
 begin
   try
     if ResolveExe <> '' then
@@ -15736,6 +15743,11 @@ begin
     TestConverterMinorsStartup;
     TestInputGate;
     TestCapabilityProbe;
+    TestEncodingLevels;
+    TestEncodingReaders;
+    TestEncodingEngine;
+    TestEncodingApply;
+    TestEncodingTab;
 
     FreeAndNil(GParseBook);
 

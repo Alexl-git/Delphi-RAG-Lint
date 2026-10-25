@@ -1,0 +1,3 @@
+procedure TestEncodingTab;
+begin
+end;

@@ -15,6 +15,7 @@ uses
   , Vcl.Styles
   , ConvRules.Theme in 'ConvRules.Theme.pas'
   , ConvRules.Model in 'ConvRules.Model.pas'
+  , ConvRules.TextEncoding in 'ConvRules.TextEncoding.pas'
   , ConvRules.Glyph in 'ConvRules.Glyph.pas'
   , ConvRules.Units in 'ConvRules.Units.pas'
   , ConvRules.Casts in 'ConvRules.Casts.pas'
