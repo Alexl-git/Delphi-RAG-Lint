@@ -55,6 +55,7 @@ uses
   , ConvRules.ConvertTab  // TConvertTab: a field's type
   , ConvRules.WorkListTab // TWorkListTab: a field's type
   , ConvRules.ValidateScope // TValidateJob: a method parameter's type, so INTERFACE-visible
+  , ConvRules.TextEncoding // TTextLevel: a field's type, so INTERFACE-visible
   ;
 
 const
@@ -107,6 +108,9 @@ type
       FEngine   : TEngineAdapter;
       FFilePath : string        ;
       FSnapshot : string        ; // FBook.Snapshot at load / New / last successful save
+      FBookLevel: TTextLevel    ; // the open book's encoding: detected on open, tlAscii7 for a new book; File > Encoding sets it, Save checks against it
+      FUtf16BomNoted: Boolean   ; // NOTE_UTF16_BOM_ADDED already shown for this book (D-B: said once)
+      FMnuEncoding: array[TTextLevel] of TMenuItem; // File > Encoding radio items; tlUtf16 has none (D-B: never written without a BOM)
       FActiveHdr: Integer       ; // index of the selected #convert node (-1 none)
       { Set by OpenOwningRuleEntry immediately before a cross-book LoadFile call,
         cleared in a finally right after -- tells LoadFile's auto-select-first-rule
@@ -1360,6 +1364,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ThemeMenuClick(Sender: TObject);
+      /// <summary>File &gt; Encoding item handler: sets the open book's encoding to the
+      /// item's level (Tag = Ord(TTextLevel)). Nothing is written; the next Save /
+      /// Save As checks the text against it and asks when it would lose characters.</summary>
+      /// <param name="Sender">The clicked TMenuItem.</param>
+      procedure EncodingMenuClick(Sender: TObject);
+      /// <summary>Makes ALevel the open book's encoding: FBookLevel, the File &gt;
+      /// Encoding radio check, and the file label's suffix '  [&lt;LevelName&gt;]'.</summary>
+      /// <param name="ALevel">The level; tlUtf16 checks no menu item (there is none).</param>
+      /// <remarks>Call it AFTER anything that rewrites FLblFile.Caption: it replaces an
+      /// existing '  [' suffix, so calling it twice never stacks two.</remarks>
+      procedure SetBookLevel(ALevel: TTextLevel);
       { Builds FTypePopup and hangs it on both the grid and the pool. Called from
       BuildUI after both controls exist. }
       /// <summary><!-- drag-lint:auto sum -->Builds FTypePopup and hangs it on both the
@@ -2929,7 +2944,11 @@ end; // destructor
 procedure TConvRulesForm.BuildMenu;
 const { Indexed by TThemePref -- keep in step with ConvRules.Theme's declaration order. }
   CAPTIONS: array[TThemePref] of string = ('Follow &IDE', '&Light', '&Dark');
+  { Indexed by TTextLevel; '' = no item (tlUtf16, D-B). }
+  ENCODING_CAPTIONS: array[TTextLevel] of string = ('ASCII-7', 'ASCII-8 (ANSI)', 'UTF-8', 'UTF-8 with BOM', '', 'UTF-16 with BOM');
 var
+  LEncoding: TMenuItem ;
+  L        : TTextLevel;
   LMenu   : TMainMenu ;
   LMapping: TMenuItem ;
   LUnits  : TMenuItem ;
@@ -2952,6 +2971,26 @@ begin
   AddMenuCmd(FMnuFile, '&Open...'   , 'Open a conversion .rules file', DoLoad, ShortCut(Ord('O'), [ssCtrl]));
   FMiFileSave  := AddMenuCmd(FMnuFile, '&Save'      , 'Write the canonical DSL back (.bak backup, then validate)', DoSaveClick, ShortCut(Ord('S'), [ssCtrl]));
   FMiFileSaveAs:= AddMenuCmd(FMnuFile, 'Save &As...', 'Save the rule book under a new name', DoSaveAsClick, ShortCut(Ord('S'), [ssCtrl, ssShift]));
+  { The book's encoding (spec 4.1 / 4.2.5): the checked item is what Save and Save As
+    write. No bare UTF-16 item -- a UTF-16 book is always saved with a BOM (D-B). }
+  LEncoding:= TMenuItem.Create(Self);
+  LEncoding.Caption:= 'E&ncoding';
+  LEncoding.Hint   := 'The encoding Save and Save As write this rule book in (checked before every save)';
+  FMnuFile.Add(LEncoding);
+  for L:= Low(TTextLevel) to High(TTextLevel) do
+  begin
+    FMnuEncoding[L]:= nil;
+    if ENCODING_CAPTIONS[L] <> '' then
+    begin
+      FMnuEncoding[L]:= TMenuItem.Create(Self);
+      FMnuEncoding[L].Caption  := ENCODING_CAPTIONS[L];
+      FMnuEncoding[L].RadioItem:= True;
+      FMnuEncoding[L].Tag      := Ord(L);
+      FMnuEncoding[L].Checked  := (L = FBookLevel);
+      FMnuEncoding[L].OnClick  := EncodingMenuClick;
+      LEncoding.Add(FMnuEncoding[L]);
+    end;
+  end;
   AddMenuCmd(FMnuFile, '-', '', nil);
   AddMenuCmd(FMnuFile, '&Validate'  , 'Run convert-validate over the current model', DoValidate);
   FMiFileCurate:= AddMenuCmd(FMnuFile, '&Curate...' , 'Split / copy / delete / merge blocks across several rule-books, or compose them into one file for the engine', DoCurate);
@@ -3012,6 +3051,32 @@ end; // procedure
 procedure TConvRulesForm.ThemeMenuClick(Sender: TObject);
 begin
   SetThemePref(TThemePref((Sender as TMenuItem).Tag));
+end;
+
+procedure TConvRulesForm.EncodingMenuClick(Sender: TObject);
+begin
+  SetBookLevel(TTextLevel((Sender as TMenuItem).Tag));
+  SetStatus(Format('Encoding set to %s -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
+end;
+
+procedure TConvRulesForm.SetBookLevel(ALevel: TTextLevel);
+const
+  SUFFIX_START = '  [';
+var
+  LCaption: string ;
+  LPos    : Integer;
+begin
+  FBookLevel:= ALevel;
+  for var L: TTextLevel:= Low(TTextLevel) to High(TTextLevel) do
+    if FMnuEncoding[L] <> nil then
+      FMnuEncoding[L].Checked:= (L = ALevel);
+  if FLblFile = nil then
+    Exit;
+  LCaption:= FLblFile.Caption;
+  LPos:= Pos(SUFFIX_START, LCaption);
+  if LPos > 0 then
+    LCaption:= Copy(LCaption, 1, LPos - 1);
+  FLblFile.Caption:= LCaption + SUFFIX_START + LevelName(ALevel) + ']';
 end;
 
 function TConvRulesForm.AddMenuCmd(AParent: TMenuItem; const ACaption, AHint: string; AHandler: TNotifyEvent; AShortCut: TShortCut): TMenuItem;
@@ -4523,7 +4588,21 @@ begin
     SetStatus('File not found: ' + APath);
     Exit;
   end;
-  LoadText(TFile.ReadAllText(APath), APath);
+  // Spec 4.1: the book's encoding is detected from its bytes, kept for Save and shown.
+  var LDetected: TDetectedText;
+  var LText: string:= ReadTextDetect(APath, LDetected);
+  LoadText(LText, APath);
+  FUtf16BomNoted:= False;
+  SetBookLevel(LDetected.Level);
+  var LNote: string:= '';
+  if not LDetected.Sure then
+    LNote:= ' -- ' + LDetected.Note;
+  var LLoaded: string:= Format('Loaded %s (%s)%s', [ExtractFileName(APath), LevelName(LDetected.Level), LNote]);
+  // LoadText's auto-select may have reported a failure (red): keep it beside ours.
+  if FStatusIsError then
+    SetError(LLoaded + ' -- ' + FLblStatus.Caption)
+  else
+    SetStatus(LLoaded);
 end; // procedure
 
 procedure TConvRulesForm.LoadText(const AText, APath: string);
@@ -7092,6 +7171,8 @@ begin
       FValidatePending:= nil;
       FFilePath:= NewPath;
       FLblFile.Caption:= NewPath;
+      FUtf16BomNoted:= False;
+      SetBookLevel(tlAscii7); // a new book, as File > New
       FActiveHdr:= -1;
       RefreshRulesList;
       RefreshUnitList;
@@ -7458,6 +7539,7 @@ begin
       R:= RunScopedValidation(AText, AJobs,
         function(const AValidated, AFrom, ATo: string): string
         begin
+          // Task 4: ValidateTextAt -- switch to it with FBookLevel once lane E lands, so the temp file gets the real bytes (G5)
           Result:= FEngine.ValidateText(AValidated, AFrom, ATo, ACancel).Output;
         end,
         function: Boolean
@@ -7610,6 +7692,8 @@ begin
     Exit;
   FFilePath:= '';
   LoadText('', '');
+  FUtf16BomNoted:= False;
+  SetBookLevel(tlAscii7);
   SetStatus('New rule book -- File > Save As... to give it a name.');
 end;
 
@@ -7674,6 +7758,7 @@ begin
         Exit;
       FFilePath:= Dlg.FileName;
       FLblFile.Caption:= FFilePath;
+      SetBookLevel(FBookLevel); // the label's encoding suffix
     finally Dlg.Free; end;
   end; // if
 
@@ -7682,24 +7767,9 @@ begin
   // a file the user picked in a Save As that did not complete. Once they are on disk,
   // the new path stays and the snapshot is taken even if validation / rescan raises.
   try
-    // 1) backup existing
-    if TFile.Exists(FFilePath) then
-    begin
-      Bak:= BackupPath(FFilePath);
-      try
-        TFile.Copy(FFilePath, Bak);
-      except
-        on E: Exception do
-        begin
-          SetStatus('Backup failed: ' + E.Message);
-          Exit;
-        end;
-      end; // try
-    end;
-
-    // 2) write canonical DSL (ASCII/CRLF) -- only COMPLETE rules (a #convert block
-    //    with at least one #link). A From/To pair with nothing mapped yet is scratch
-    //    and is not persisted.
+    // 1) the canonical DSL (CRLF) -- only COMPLETE rules (a #convert block with at
+    //    least one #link). A From/To pair with nothing mapped yet is scratch and is
+    //    not persisted.
     var dropped  : Integer                                                ;
     var lineNodes: TArray<TRuleNode>                                      ;
     var outText  : string:= FBook.SaveCompleteWithMap(dropped, lineNodes);
@@ -7720,8 +7790,54 @@ begin
       Exit;
     end;
 
-    TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
+    // 2) the encoding check (spec 4.2), BEFORE the backup: a Cancel here leaves
+    //    neither the book nor a stray .Bak behind.
+    var LDecision: TPreSaveDecision:= PreSaveDecision(outText, FBookLevel);
+    var LWriteLevel: TTextLevel:= LDecision.WriteLevel;
+    if LDecision.Action = psaAsk then
+    begin
+      var LLostText: string:= LostCharsText(LDecision.Lost);
+      if LDecision.LostTotal > Length(LDecision.Lost) then
+        LLostText:= LLostText + sLineBreak + Format('... and %d more', [LDecision.LostTotal - Length(LDecision.Lost)]);
+      if MessageDlg(Format(ASK_SAVE_FMT, [LDecision.LostTotal, ExtractFileName(FFilePath), LevelName(LDecision.WriteLevel), sLineBreak, LLostText, sLineBreak + sLineBreak, LevelName(LDecision.RaiseTo)]),
+          mtWarning, [mbYes, mbCancel], 0) <> mrYes then
+      begin
+        SetStatus('Save cancelled -- nothing was written.');
+        Exit;
+      end;
+      LWriteLevel:= LDecision.RaiseTo;
+    end;
+
+    // 3) backup existing
+    if TFile.Exists(FFilePath) then
+    begin
+      Bak:= BackupPath(FFilePath);
+      try
+        TFile.Copy(FFilePath, Bak);
+      except
+        on E: Exception do
+        begin
+          SetStatus('Backup failed: ' + E.Message);
+          Exit;
+        end;
+      end; // try
+    end;
+
+    // 4) write at the checked level. The book takes that level only once the bytes
+    //    are on disk, so a failed backup above leaves the book's encoding as it was.
+    WriteTextAtLevel(FFilePath, outText, LWriteLevel);
     LBytesWritten:= True;
+    var LLevelText: string:= '';
+    if LWriteLevel <> FBookLevel then
+    begin
+      LLevelText:= ' as ' + LevelName(LWriteLevel);
+      SetBookLevel(LWriteLevel);
+    end;
+    var LNoteText: string:= '';
+    if (LDecision.Action = psaWrite) and (LDecision.Note <> '') and not ((LDecision.Note = NOTE_UTF16_BOM_ADDED) and FUtf16BomNoted) then
+      LNoteText:= ' ' + LDecision.Note;
+    if LDecision.Note = NOTE_UTF16_BOM_ADDED then
+      FUtf16BomNoted:= True;
 
     // 3) validate what was saved: the syntax pass over the whole text, plus each
     //    block that CHANGED since the last load / save with its OWN From/To pair
@@ -7734,7 +7850,7 @@ begin
       droppedMsg:= Format(' (%d empty rule(s) not saved)', [dropped]);
     var isError: Boolean;
     var verdict: string:= RunScopedValidate(outText, lineNodes, ChangedBlockJobs(FSnapshot, outText, FValidatePending), isError);
-    var LSaveText: string:= Format('Saved %s (backup %s)%s. Validate: %s', [ExtractFileName(FFilePath), ExtractFileName(Bak), droppedMsg, verdict]);
+    var LSaveText: string:= Format('Saved %s%s (backup %s)%s.%s Validate: %s', [ExtractFileName(FFilePath), LLevelText, ExtractFileName(Bak), droppedMsg, LNoteText, verdict]);
     if isError then
       SetError(LSaveText)
     else
@@ -7779,6 +7895,7 @@ begin
         FLblFile.Caption:= LOldPath
       else
         FLblFile.Caption:= '(new rule book)';
+      SetBookLevel(FBookLevel); // the label's encoding suffix
     end;
   end; // try
 end; // function
