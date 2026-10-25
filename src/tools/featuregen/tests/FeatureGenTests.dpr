@@ -635,7 +635,7 @@ begin
           lLeaf := ReadSiteFile(lOutA, lRel);
           if (lArr.Items[lI].GetValue<string>('id') <> lIds[lI]) or (lArr.Items[lI].GetValue<string>('order') <> lOrders[lI])  // dl:ok boolean-expression-complexity@6b4c -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
             or (lRel <> 'features/' + lIds[lI] + '.md') or (Pos(#10'order: ' + lOrders[lI] + #10, lLeaf) = 0)
-            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)  // dl:ok redundant-parentheses@35ad -- REVIEWED 2026-10-20: engine false positive (the parentheses are the generic call argument list), see docs\INBOX-redundant-parentheses-generic-call.md
+            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)
             or (lArr.Items[lI].GetValue<string>('since') = '') or (lArr.Items[lI].GetValue<string>('group') = '')
             or (lArr.Items[lI].GetValue<string>('summary') = '') then
             Inc(lBad);
