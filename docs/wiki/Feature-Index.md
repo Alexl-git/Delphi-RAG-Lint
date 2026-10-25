@@ -406,6 +406,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [large-magic-number](rules#large-magic-number) -- bug-patterns, info
 * [layering-violation](rules#layering-violation) -- project-wide, warning
 * [length-zero-compare](rules#length-zero-compare) -- bug-patterns, info
+* [line-too-long](rules#line-too-long) -- structure, warning
 * [local-field-prefix](rules#local-field-prefix) -- naming, info, fixable
 * [local-var-casing](rules#local-var-casing) -- naming, info, fixable
 * [locale-sensitive-conversion](rules#locale-sensitive-conversion) -- platform, warning

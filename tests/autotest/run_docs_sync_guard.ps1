@@ -1119,9 +1119,8 @@ $FlagUndocumentedOnPurpose = [ordered]@{
   '--from-block'      = '(a) convert-reemit input; that verb is itself exempt'
   '--selftest-fts5'   = '(c) pre-dispatch self-test (Run, ParamStr(1)), driven by a runner under tests\'
   '--selftest-schema' = '(c) pre-dispatch self-test, same'
-  '--use-ignore'      = '(b) no-op alias of the DEFAULT; --no-use-ignore is the documented switch'
-  '--dir'             = '(b) alias of the positional <path> every verb documents'
-  '--out'             = '(b) alias of --output, silent by owner ruling 2026-09-22 (docs\INBOX-output-flag-canonicalisation.md)'
+  # 2026-10-25: --use-ignore, --dir and --out left this table -- 7143cdd8 (END-D2 flag audit) documents all
+  # three on their verbs' --help lines (--out as 'alias --out' of --output), and F2x flagged the entries stale.
 }
 # The ONE exempt flag a prose doc may name, and the doc that may name it. The
 # ruling above asked for docs\AI-USAGE.md to record that the alias exists, and
@@ -1129,7 +1128,6 @@ $FlagUndocumentedOnPurpose = [ordered]@{
 # banner. Two-way asserted (F3x): each entry must still be exempt AND still be
 # named in its doc, so this cannot quietly become a suppression list.
 $ProseMayNameExemptAlias = [ordered]@{
-  '--out' = 'docs\AI-USAGE.md'
 }
 # Not parsed through the `A = '...'` chain, so the scan cannot see them; listed
 # by name WITH the handler that must still exist, so deleting the handler makes

@@ -12447,6 +12447,26 @@
         "wikiAnchor": "length-zero-compare"
       },
       {
+        "id": "rule.line-too-long",
+        "title": "line-too-long",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Line longer than 1020 characters -- dcc64 compiles it only at some file offsets (F2069) (structure, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule line-too-long"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "line-too-long"
+      },
+      {
         "id": "rule.local-field-prefix",
         "title": "local-field-prefix",
         "group": "linting",
