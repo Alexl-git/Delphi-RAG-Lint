@@ -224,6 +224,10 @@ type
     /// <summary>R2: the ancestor a receiver that does not implement IInterface is cast
     /// through; '' when no line needs a cast.</summary>
     CastAncestor: string;
+    /// <summary>R1 (A2): True when the declaring unit would leave the program after the cut (only the
+    /// consumer used it and the .dpr does not list it); the plan then adds it to the .dpr uses
+    /// (and a DCCReference to the .dproj when absent) instead of refusing unit-leaves-program.</summary>
+    RegisterDecl: Boolean;
   end;
 
 const
@@ -336,6 +340,20 @@ function SurfaceGuid(const pText: string): string;
 /// TObject and a chain ending at a name no index declares give False.</returns>
 function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; const pClass: TSymbol;
   out pAncestor: string): Boolean;
+
+/// <summary>Whether a bare name inside a method body is a member of the method's own class or of an
+/// ancestor (C3: Delphi binds it there, never to a same-named routine of a used unit).</summary>
+/// <param name="pProject">The project index; must not be nil.</param>
+/// <param name="pLibrary">The platform library index, or nil (the walk then stops at the first
+/// ancestor the project does not declare).</param>
+/// <param name="pEnclosingId">symbols.id of the routine whose body holds the reference.</param>
+/// <param name="pName">The identifier.</param>
+/// <returns>True when the routine is a member of a class (or record) and pName is a field, method,
+/// property or constant of that type or of an ancestor reached through symbols.heritage; False for
+/// a standalone routine, an unknown enclosing id, or a chain that ends before the name is found.</returns>
+/// <remarks>Reads the index only. Parameters and locals do not count as members.</remarks>
+function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId: Int64;
+  const pName: string): Boolean;
 
 /// <summary>Recipe R2, member hand-over through an extracted interface: the edge A -&gt; B is
 /// `is` / `as` tests against ONE class of B plus reads of its fields and properties; the
@@ -886,22 +904,77 @@ begin
     Result:= Cand;
 end;
 
+// The lines with every comment (line, brace and paren-star; the last two across lines) and string
+// literal blanked; the line count and numbering are unchanged. C3: a name that only a comment
+// mentions is no code. A compiler directive is a brace comment here as well.
+function CodeOnlyLines(const pLines: TArray<string>): TArray<string>;
+var
+  InBrace, InParen: Boolean;
+begin
+  SetLength(Result, Length(pLines));
+  InBrace:= False;
+  InParen:= False;
+  for var L:= 0 to High(pLines) do
+  begin
+    var S:= pLines[L];
+    var SB:= TStringBuilder.Create;
+    try
+      var I:= 1;
+      while I <= Length(S) do
+      begin
+        var C:= S[I];
+        var N:= if I < Length(S) then S[I + 1] else #0;
+        if InBrace then
+          InBrace:= C <> '}'
+        else if InParen then
+        begin
+          if (C = '*') and (N = ')') then
+          begin
+            InParen:= False;
+            Inc(I);
+          end;
+        end
+        else if C = '{' then InBrace:= True
+        else if (C = '(') and (N = '*') then
+        begin
+          InParen:= True;
+          Inc(I);
+        end
+        else if (C = '/') and (N = '/') then Break
+        else if C = '''' then
+        begin
+          Inc(I);
+          while (I <= Length(S)) and ((S[I] <> '''') or ((I < Length(S)) and (S[I + 1] = ''''))) do
+            Inc(I, if S[I] = '''' then 2 else 1);
+          SB.Append(''''' ');
+        end
+        else SB.Append(C);
+        Inc(I);
+      end;
+      Result[L]:= SB.ToString;
+    finally
+      SB.Free;
+    end;
+  end;
+end;
+
 { J4, conservative: the call runs in the consumer's initialization section, or
-  that section names the routine that holds the call. }
+  that section names the routine that holds the call (as code: a comment naming it is not a use). }
 function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
 begin
   Result:= '';
-  var Init:= LastKeywordLine(pLines, 'initialization');
+  var Code:= CodeOnlyLines(pLines);
+  var Init:= LastKeywordLine(Code, 'initialization');
   if Init = 0 then Exit;
-  var Stop:= LastKeywordLine(pLines, 'end.');
-  if Stop < Init then Stop:= Length(pLines) + 1;
+  var Stop:= LastKeywordLine(Code, 'end.');
+  if Stop < Init then Stop:= Length(Code) + 1;
   if (pRef.Line > Init) and (pRef.Line < Stop) then
     Exit(Format('the call at line %d runs in the initialization section of `%s`, before the variable ' +
       'may be assigned', [pRef.Line, pUnit]));
   var Encl:= pRef.Enclosing.Substring(pRef.Enclosing.LastIndexOf('.') + 1);
   if Encl = '' then Exit;
   for var L:= Init + 1 to Stop - 1 do
-    if TRegEx.IsMatch(BareCode(LineOf(pLines, L)), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then
+    if TRegEx.IsMatch(LineOf(Code, L), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then
       Exit(Format('`%s` (it makes the call at line %d) is named at line %d, in the initialization section of ' +
         '`%s`: it may run before the variable is assigned', [Encl, pRef.Line, L, pUnit]));
 end;
@@ -1446,6 +1519,37 @@ begin
     Cur:= Next;
   end;
   Result:= pType <> '';
+end;
+
+function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId: Int64;
+  const pName: string): Boolean;
+var
+  Idx  : TTypeIndex;
+  Cur  : TStoredType;
+  Next : TStoredType;
+begin
+  Result:= False;
+  if (pProject = nil) or (pEnclosingId <= 0) or (pName = '') then Exit;
+  var S:= pProject.GetSymbolById(pEnclosingId);
+  for var Up:= 1 to CMaxAncestorHops do
+  begin
+    if S.Id <= 0 then Exit;
+    if S.Kind in [skClass, skRecord] then Break;
+    if (S.Kind in [skUnit, skProgram, skPackage]) or (S.ParentId <= 0) then Exit;
+    S:= pProject.GetSymbolById(S.ParentId);
+  end;
+  if not (S.Kind in [skClass, skRecord]) then Exit;
+  Idx.Project:= pProject;
+  Idx.Lib    := pLibrary;
+  Cur.Sym    := S;
+  Cur.Store  := pProject;
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    var M:= Cur.Store.FindChildSymbolByName(Cur.Sym.Id, pName);
+    if (M.Id > 0) and not (M.Kind in [skParam, skLocalVar]) then Exit(True);
+    if not Idx.Find(Idx.ParentOf(Cur), Idx.IsLib(Cur), Next) then Exit;
+    Cur:= Next;
+  end;
 end;
 
 // The code of a line without string literals and brace comments.

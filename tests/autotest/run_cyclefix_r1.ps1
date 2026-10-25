@@ -33,13 +33,14 @@
   (k) a second overload in R1Title -- `refused: overloaded-routine` (the index binds an overload's
       call by name; the pointer type could mirror the wrong signature -- E2010 seen).
   Fix round 2 (RED on the round-1 engine / with the refusal disabled):
-  (l) tests\fixtures\cyclefix\r1stillused: TR1Form calls its INHERITED class method R1Note; the
-      planner binds the bare name to R1Title.R1Note -- `refused: edge-still-used`.
+  (l) tests\fixtures\cyclefix\r1stillused: TR1Form calls its INHERITED class method R1Note. Round 2 refused
+      this as edge-still-used (the planner bound the bare name to R1Title.R1Note); since C3 (2026-10-25)
+      the inherited member wins and the edge is cut.
   (n) `export; stdcall;` -- an unclassified directive refuses (stdcall is no longer silently lost).
   (o) `R1Title.R1TitleCount` -- any name qualified by the declaring unit refuses `qualified-ref`.
   (p) `TR1Local.R1TitleOf` -- a same-named method through a non-unit receiver does NOT refuse.
   Final review F2 (RED on the 038c6b75 engine):
-  (q) r1extend with R1Title in neither the .dpr nor the .dproj: R1Form is its only user, so after the
+  (q) [A2: no longer refused, the plan adds the .dpr uses entry] r1extend with R1Title in neither the .dpr nor the .dproj: R1Form is its only user, so after the
       cut it drops out of the program and the pointer stays nil -- `refused: unit-leaves-program`.
       POSITIVE CONTROL: listed in the .dpr only -- still cut. A DCCReference alone -- still refused.
   The compile of every applied tree is run_cyclefix_r1_dcc.ps1 (needs RAD Studio).
@@ -379,9 +380,8 @@ try {
   Check 'l0 indexed' ((Invoke-Index (Join-Path $su 'R1StillUsed.dproj') $dbSu 'l') -eq 0)
   $pl = Get-Cycles $dbSu 'l' @('--plan')
   $txL = (Get-CycleBlock $pl.Out 1) -join "`n"
-  Check 'l1 refused: edge-still-used naming R1Note (the uses entry of R1Title stays)' `
-    ($txL.Contains('refused: edge-still-used -- the implementation section of `R1Form.pas` still uses `R1Title`: `R1Note` line 31') -and
-     ($pl.Dump[1].verdict -eq 'refused') -and (($pl.Dump[1].refusals -split ',') -contains 'edge-still-used')) "[$($pl.Dump[1].verdict) / $($pl.Dump[1].refusals)]"
+  Check 'l1 C3: the inherited R1Note is a class member, not a use of R1Title -- the edge is cut (run_cyclefix_c3_false_positives.ps1 holds the control)' `
+    (-not $txL.Contains('refused: edge-still-used') -and ($pl.Dump[1].verdict -eq 'mechanical')) "[$($pl.Dump[1].verdict) / $($pl.Dump[1].refusals)]"
   Write-Host '== (n) an unlisted directive before stdcall' -ForegroundColor Cyan
   $vn = Get-Variant 'r1export' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; export; stdcall;`r`n`r`nimplementation"
   Check 'n1 `export; stdcall;`: refused: unsupported-directive naming export (stdcall is not silently lost)' `
@@ -405,16 +405,18 @@ try {
   $dprLine   = "  R1Title in 'R1Title.pas',`r`n"
   $dprojLine = "        <DCCReference Include=`"R1Title.pas`"/>`r`n"
   $vq = Get-Variant 'r1unlisted' 'R1Extend.dpr' $dprLine '' 'R1Extend.dproj' $dprojLine ''
-  Check 'q1 refused: unit-leaves-program (R1Title would drop out; its initialization never assigns the pointer)' `
-    ($vq.Ok -and $vq.Text.Contains('refused: unit-leaves-program -- `R1Title` is used only by `R1Form.pas` and `R1Extend.dpr` does not list it') -and
-     ($vq.Dump.verdict -eq 'refused') -and (($vq.Dump.refusals -split ',') -contains 'unit-leaves-program')) "[$($vq.Dump.verdict) / $($vq.Dump.refusals)]"
+  Check 'q1 A2: mechanical -- R1Title is registered in the .dpr uses and the .dproj (was refused: unit-leaves-program)' `
+    ($vq.Ok -and ($vq.Dump.verdict -eq 'mechanical') -and -not $vq.Text.Contains('unit-leaves-program') -and
+     $vq.Text.Contains("R1Title in 'R1Title.pas'") -and $vq.Text.Contains('<DCCReference Include="R1Title.pas"/>') -and
+     $vq.Text.Contains('joins the program''s uses')) "[$($vq.Dump.verdict) / $($vq.Dump.refusals)]"
   $vq2 = Get-Variant 'r1dprlisted' 'R1Extend.dproj' $dprojLine ''
-  Check 'q2 positive control: listed in the .dpr (no DCCReference) -- still cut by R1, no refusal' `
-    ($vq2.Ok -and ($vq2.Dump.verdict -eq 'mechanical') -and $vq2.Text.Contains('by **routine-call inversion**')) "[$($vq2.Dump.verdict) / $($vq2.Dump.refusals)]"
+  Check 'q2 positive control: listed in the .dpr (no DCCReference) -- cut by R1 with NO program edit' `
+    ($vq2.Ok -and ($vq2.Dump.verdict -eq 'mechanical') -and $vq2.Text.Contains('by **routine-call inversion**') -and
+     -not $vq2.Text.Contains("R1Title in 'R1Title.pas'") -and -not $vq2.Text.Contains('joins the program''s uses')) "[$($vq2.Dump.verdict) / $($vq2.Dump.refusals)]"
   $vq3 = Get-Variant 'r1dprojonly' 'R1Extend.dpr' $dprLine ''
-  Check 'q3 a DCCReference alone does not keep it linked: refused: unit-leaves-program' `
-    ($vq3.Ok -and ($vq3.Dump.verdict -eq 'refused') -and (($vq3.Dump.refusals -split ',') -contains 'unit-leaves-program')) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"
-} finally {
+  Check 'q3 a DCCReference alone does not link it: the .dpr line is added, no second DCCReference' `
+    ($vq3.Ok -and ($vq3.Dump.verdict -eq 'mechanical') -and $vq3.Text.Contains("R1Title in 'R1Title.pas'") -and
+     (([regex]::Matches($vq3.Text, 'DCCReference Include="R1Title.pas"')).Count -eq 0)) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"} finally {
   $env:DRAGLINT_TEST_DUMP_PLAN = $null
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

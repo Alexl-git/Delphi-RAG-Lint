@@ -22,6 +22,17 @@ needs a re-parse.
   errors go to stderr; `cycles --plan` status counts interface `uses` (E14).
 - `doc-drift`: an `<exception cref>` raised up to three calls down is no longer drift (H2; was one hop).
 - `allow`: a finding on a `///` doc-comment line is reviewed on its declaration (H2).
+- `cycles --plan` (C3): `init-order` no longer fires when the initialization section only names the
+  routine in a `{ }` / `(* *)` / `//` comment, and `edge-still-used` no longer binds an inherited class
+  member (a bare name in a method body) to a same-named routine of the used unit.
+- `cycles --plan` / `--fix` (A2): `unit-leaves-program` is no longer a refusal -- when the routine's
+  declaring unit would drop out of the program after the R1 cut, the plan adds
+  `<Unit> in '<path>'` to the .dpr uses (and a DCCReference to the .dproj when absent).
+- `cycles --fix --apply` (A1): indexed files changed on disk no longer end in `stale-file` -- the run
+  re-indexes the project once, then plans, gates and applies from the current text (JSON
+  `reindex_before {status, files, seconds}`; text `re-indexed before planning`). A file still stale
+  afterwards, `--no-reindex` and the dry run keep the refusal. The worst-case `--apply` budget grows by
+  one re-index (10 min): raise the plugin's `CCycleFixTimeoutMs` with it.
 - `circular-uses` reports one anchor line in both scopes (`lint` and `lint-all`), and one `dl:ok`
   reviews the cycle everywhere (H2).
 - **MIGRATION NOTE (H2):** an old `circular-uses` `dl:ok` marker recorded on a header line (the `unit`
