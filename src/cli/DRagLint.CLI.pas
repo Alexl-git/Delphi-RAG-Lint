@@ -150,6 +150,7 @@ uses
   , DRagLint.Lint   .QueryRules { QueryRuleTimings -- the per-rule .scm breakdown }
   , DRagLint.Lint   .ProjectChecks
   , DRagLint.Lint   .IfdefUndefined // dl:unit DRagLint.Lint.IfdefUndefined accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
+  , DRagLint.Lint   .PlatformDivergent // dl:unit DRagLint.Lint.PlatformDivergent accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .DocRules
@@ -13843,6 +13844,18 @@ begin
         LoadLintConfig(AArgs).IfdefAllow, IfdefIncDirs);
     end;
   end;
+  { platform-divergent-define: same gate and include plumbing as the rule above. }
+  if ((NarrowRule = '') or SameText(NarrowRule, PLATFORM_DIVERGENT_RULE_ID)) and TFile.Exists(EffPath) then
+  begin
+    var DivProj: string:= IfdefProjectFile(AArgs, AArgs.DbPath);
+    if DivProj <> '' then
+    begin
+      var DivIncDirs: TArray<string>:= nil;
+      if StandInLogical <> '' then DivIncDirs:= [ExtractFilePath(ExpandFileName(StandInLogical))];
+      Findings:= Findings + TPlatformDivergentCheck.CheckFiles([EffPath], DivProj,
+        LoadLintConfig(AArgs).PlatformDivergentAllow, DivIncDirs);
+    end;
+  end;
   if EffPath <> '' then
   begin
     Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
@@ -20400,6 +20413,22 @@ begin
           IfdefFiles:= IfdefFiles + [ChangeFileExt(IfdefProj, IfdefSib)];
       Findings:= Findings + TIfdefUndefinedCheck.CheckFiles(IfdefFiles, IfdefProj,
         LoadLintConfig(AArgs).IfdefAllow);
+    end;
+  end;
+  { platform-divergent-define over the same files (units + program file): a
+    define one platform build has and the other lacks, where the code tests it. }
+  LintPhase(PLATFORM_DIVERGENT_RULE_ID);
+  if LintRuleWants(Nr, [PLATFORM_DIVERGENT_RULE_ID]) then
+  begin
+    var DivProj: string:= IfdefProjectFile(AArgs, ProjectDb);
+    if DivProj <> '' then
+    begin
+      var DivFiles: TArray<string>:= FilePaths;
+      for var DivSib: string in ['.dpr', '.dpk'] do
+        if TFile.Exists(ChangeFileExt(DivProj, DivSib)) then
+          DivFiles:= DivFiles + [ChangeFileExt(DivProj, DivSib)];
+      Findings:= Findings + TPlatformDivergentCheck.CheckFiles(DivFiles, DivProj,
+        LoadLintConfig(AArgs).PlatformDivergentAllow);
     end;
   end;
   { Used-unit resolvability (used-unit-not-resolvable) }

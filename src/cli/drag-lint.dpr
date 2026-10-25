@@ -103,6 +103,7 @@ uses
   DRagLint.Lint.ExceptionUnitWriter in '..\lint\DRagLint.Lint.ExceptionUnitWriter.pas',
   DRagLint.Lint.ProjectChecks in '..\lint\DRagLint.Lint.ProjectChecks.pas',
   DRagLint.Lint.IfdefUndefined in '..\lint\DRagLint.Lint.IfdefUndefined.pas',
+  DRagLint.Lint.PlatformDivergent in '..\lint\DRagLint.Lint.PlatformDivergent.pas',
   DRagLint.Lint.ProjectChecks.Parse in '..\lint\DRagLint.Lint.ProjectChecks.Parse.pas',
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',
   DRagLint.Lint.RuleCache in '..\lint\DRagLint.Lint.RuleCache.pas',

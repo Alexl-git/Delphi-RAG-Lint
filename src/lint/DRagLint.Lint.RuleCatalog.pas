@@ -592,6 +592,14 @@ begin
       BUILTIN_RULES_OFF_BY_DEFAULT above. }
     B('ifdef-undefined-symbol', 'project-wide', 'warning', 'IFDEF/IFNDEF/defined() tests a symbol no build of the project defines -- dead branch, usually a typo', False,
       [MkParam('ifdef_allow', 'stringlist', '')]);
+    { Needs a .dproj with Win32 AND Win64 enabled; compares the EFFECTIVE define
+      sets per config (DprojEffectiveDefines), and fires only where the code
+      tests the symbol. ON by default (owner 2026-10-25): 0 findings on ORM3 and
+      DataCopy; the corpus splits (FastMM4 FULLDEBUGMODE, DUNITXDEBUG) sit in
+      third-party trees the IFDEF clause or --lint-third-party keeps out.
+      platform_divergent_allow is the drag-lint-lint.json top-level key. }
+    B('platform-divergent-define', 'project-wide', 'warning', 'A conditional symbol tested by IFDEF/IFNDEF/defined() is defined for one platform (Win32/Win64) of a config and not the other -- the two builds compile different code', True,
+      [MkParam('platform_divergent_allow', 'stringlist', '')]);
     { info, not warning -- INTERIM. Measured wrong ~13% of the time in the
       direction of breaking the build or the product (type-helper calls, DFM-
       registered classes, initialization-only units are all invisible to it).

@@ -48,10 +48,33 @@ const
   IFDEF_UNDEFINED_RULE_ID = 'ifdef-undefined-symbol';
 
 type
+  /// <summary>One conditional test found in a unit: the symbol of an
+  /// {$IFDEF} / {$IFNDEF}, or of a defined() inside {$IF} / {$ELSEIF}.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.AddDirectiveTests (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ScanFileTests (DRagLint.Lint.IfdefUndefined.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Lint.IfdefUndefined, DRagLint.Lint.PlatformDivergent</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TConditionalTest = record
+    /// <summary>The tested symbol as spelled.</summary>
+    Symbol: string;
+    /// <summary>1-based line of the directive.</summary>
+    Line  : Integer;
+    /// <summary>1-based column of the directive.</summary>
+    Col   : Integer;
+  end;
+
   /// <summary>Finds conditional-compilation tests of symbols that no build of
   /// the owning project defines.</summary>
-  /// <remarks>Stateless; every method is a static class function and safe to
-  /// call from any thread. Reads files, never writes them.</remarks>
+  /// <remarks>
+  /// Stateless; every method is a static class function and safe to
+  /// call from any thread. Reads files, never writes them.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Lint.PlatformDivergent.TPlatformDivergentCheck.CheckFiles (DRagLint.Lint.PlatformDivergent.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.PlatformDivergent</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIfdefUndefinedCheck = class
   public
     /// <summary>The union of every DCC_Define in every PropertyGroup of a
@@ -61,6 +84,18 @@ type
     /// <param name="ADprojPath">The project file. Missing or unreadable yields
     /// an empty array; it never raises.</param>
     /// <returns>Lowercased symbol names, in first-seen order.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Lint.IfdefUndefined.CollectDprojDefines</para>
+    /// <para>Returns: Order.ToArray</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.CollectDprojDefines"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ProjectSearchDirs"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ScanFileTests"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function DprojDefineUnion(const ADprojPath: string): TArray<string>; static;
 
     /// <summary>True when ASymbol is a conditional the Delphi compiler (or the
@@ -71,6 +106,19 @@ type
     /// named platform/feature conditionals, and PlatformBuiltins of Win32 and
     /// Win64. DEBUG and RELEASE are NOT predefined -- the IDE templates put them
     /// in DCC_Define -- and return False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas)</para>
+    /// <para>Calls: DRagLint.Lint.IfdefUndefined.InList, DRagLint.Lint.IfdefUndefined.IsVersionSymbol, DRagLint.Preprocess.Profile.PlatformBuiltins, LowerCase, StartsStr</para>
+    /// <para>Returns: InList(Sym, PREDEFINED) or InList(Sym, PlatformBuiltins('Win32'))</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.InList"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.IsVersionSymbol"/>
+    /// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.DprojDefineUnion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function IsCompilerPredefined(const ASymbol: string): Boolean; static;
 
     /// <summary>Checks each file for conditional tests of symbols that are
@@ -88,9 +136,74 @@ type
     /// <returns>One warning per undefined symbol per directive, anchored at the
     /// directive's line; the message names the symbol and, when one is within
     /// edit distance 2, the nearest defined symbol.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Lint.IfdefUndefined.CollectDprojDefines, DRagLint.Lint.IfdefUndefined.DprojSearchDirs, DRagLint.Lint.IfdefUndefined.NearestSymbol, DRagLint.Lint.IfdefUndefined.ScanSource, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined, DRagLint.Lint.IfdefUndefined.TryReadSource, ExpandFileName, ExtractFileName, ExtractFilePath, Format, LowerCase, Trim</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 80 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.CollectDprojDefines"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.DprojSearchDirs"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.NearestSymbol"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.ScanSource"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckFiles(const AFiles: TArray<string>; const ADprojPath: string;
       const AAllow: TArray<string>;
       const AExtraIncludeDirs: TArray<string> = nil): TArray<TLintFinding>; static;
+
+    /// <summary>The directories searched for {$I} files of a project: the
+    /// .dproj's folder, then its literal (macro-free) DCC_IncludePath and
+    /// DCC_UnitSearchPath entries, relative ones resolved against that
+    /// folder.</summary>
+    /// <param name="ADprojPath">The project file; unreadable yields just its
+    /// folder.</param>
+    /// <returns>Absolute directories, in search order.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.PlatformDivergent.TPlatformDivergentCheck.CheckFiles (DRagLint.Lint.PlatformDivergent.pas)</para>
+    /// <para>Calls: DRagLint.Lint.IfdefUndefined.DprojSearchDirs</para>
+    /// <para>Returns: DprojSearchDirs(ADprojPath)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.DprojSearchDirs"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.DprojDefineUnion"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ScanFileTests"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function ProjectSearchDirs(const ADprojPath: string): TArray<string>; static;
+
+    /// <summary>Scans one source file the way CheckFiles does: its own
+    /// conditional tests, and every symbol it -- or a {$I} file it includes,
+    /// transitively -- $DEFINEs or $UNDEFs.</summary>
+    /// <param name="AFilePath">The source file.</param>
+    /// <param name="ASearchDirs">Include search directories after the file's
+    /// own folder (see ProjectSearchDirs).</param>
+    /// <param name="ATests">The file's own tests, in source order.</param>
+    /// <param name="ALocalSymbols">Lowercased symbols $DEFINEd or $UNDEFed in
+    /// the file or its includes.</param>
+    /// <returns>False when the file cannot be read or one of its includes
+    /// cannot be resolved -- the caller should then skip the file, because
+    /// the missing text might define anything.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.PlatformDivergent.TPlatformDivergentCheck.CheckFiles (DRagLint.Lint.PlatformDivergent.pas)</para>
+    /// <para>Calls: DRagLint.Lint.IfdefUndefined.ScanSource, DRagLint.Lint.IfdefUndefined.TryReadSource, ExpandFileName, ExtractFilePath</para>
+    /// <para>Mutates: ATests (out), ALocalSymbols (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.ScanSource"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TryReadSource"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.DprojDefineUnion"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function ScanFileTests(const AFilePath: string; const ASearchDirs: TArray<string>;
+      out ATests: TArray<TConditionalTest>; out ALocalSymbols: TArray<string>): Boolean; static;
   end;
 
 implementation
@@ -342,14 +455,6 @@ begin
         Exit(ExpandFileName(TPath.Combine(Dir, Cand)));
 end;
 
-// One conditional test found in the unit being checked.
-type
-  TSymbolTest = record
-    Symbol: string;
-    Line  : Integer; // 1-based
-    Col   : Integer; // 1-based
-  end;
-
 // A directive's 1-based column: bytes since the last LF before it. The source
 // is ASCII by house rule, so a byte offset is a character offset here.
 function DirectiveCol(const ABytes: TBytes; ASrcStart: Integer): Integer;
@@ -361,21 +466,65 @@ begin
   Result:= ASrcStart - P;
 end;
 
+// The symbol sets one scan fills. Defined and Visited must not be nil; Undefs
+// may be nil when the caller does not need the $UNDEFs.
+type
+  TScanSets = record
+    Defined: TSymbolSet;
+    Undefs : TSymbolSet;
+    Visited: TDictionary<string, Byte>;
+  end;
+
+// Adds the leading identifier of a DEFINE / UNDEF argument to ASet (nil: no-op).
+procedure AddDirectiveSymbol(const AArgs: string; ASet: TSymbolSet);
+var
+  Sym: string;
+begin
+  Sym:= LeadingIdent(AArgs);
+  if (ASet <> nil) and (Sym <> '') and not ASet.ContainsKey(LowerCase(Sym)) then
+    ASet.Add(LowerCase(Sym), Sym);
+end;
+
+// Adds the conditional tests of one directive chunk (IFDEF / IFNDEF symbol, or
+// every defined() of an IF / ELSEIF) to ATests.
+procedure AddDirectiveTests(const ACh: TPPChunk; const ABytes: TBytes;
+  ATests: TList<TConditionalTest>);
+var
+  Test: TConditionalTest;
+  M   : TMatch;
+begin
+  Test:= Default(TConditionalTest);
+  Test.Line:= ACh.Line + 1;
+  Test.Col := DirectiveCol(ABytes, ACh.SrcStart);
+  if (ACh.Dir = 'ifdef') or (ACh.Dir = 'ifndef') then
+  begin
+    Test.Symbol:= LeadingIdent(ACh.Args);
+    if Test.Symbol <> '' then ATests.Add(Test);
+  end
+  else if (ACh.Dir = 'if') or (ACh.Dir = 'elseif') then
+  begin
+    M:= TRegEx.Match(ACh.Args, '\bdefined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', [roIgnoreCase]);
+    while M.Success do
+    begin
+      Test.Symbol:= M.Groups[1].Value;
+      ATests.Add(Test);
+      M:= M.NextMatch;
+    end;
+  end;
+end;
+
 // Collects the $DEFINEs of AText (and, transitively, of its includes) into
-// ADefined, and -- when ATests is not nil -- the conditional tests of AText
-// itself. Returns False when an include cannot be resolved.
+// ASets.Defined, its $UNDEFs into ASets.Undefs when that is not nil, and --
+// when ATests is not nil -- the conditional tests of AText itself. Returns
+// False when an include cannot be resolved.
 function ScanSource(const AText, AOwnDir: string; const ASearchDirs: TArray<string>;
-  ADefined: TSymbolSet; ATests: TList<TSymbolTest>; AVisited: TDictionary<string, Byte>;
-  ADepth: Integer): Boolean;
+  const ASets: TScanSets; ATests: TList<TConditionalTest>; ADepth: Integer): Boolean;
 var
   Chunks : TArray<TPPChunk>;
   Ch     : TPPChunk;
-  Sym    : string;
   IncPath: string;
   IncText: string;
-  M      : TMatch;
   Bytes  : TBytes;
-  Test   : TSymbolTest;
 begin
   Result:= True;
   Chunks:= LexDirectives(AText);
@@ -384,46 +533,25 @@ begin
   begin
     if Ch.Kind <> ckDirective then Continue;
     if Ch.Dir = 'define' then
-    begin
-      Sym:= LeadingIdent(Ch.Args);
-      if (Sym <> '') and not ADefined.ContainsKey(LowerCase(Sym)) then
-        ADefined.Add(LowerCase(Sym), Sym);
-    end
+      AddDirectiveSymbol(Ch.Args, ASets.Defined)
+    else if Ch.Dir = 'undef' then
+      AddDirectiveSymbol(Ch.Args, ASets.Undefs)
     else if (Ch.Dir = 'i') or (Ch.Dir = 'include') then
     begin
       // {$I+} / {$I-} is the I/O-checking switch, not an include.
       if (Ch.Args = '') or CharInSet(Ch.Args[1], ['+', '-']) then Continue;
       IncPath:= ResolveInclude(Ch.Args, AOwnDir, ASearchDirs);
       if (IncPath = '') or (ADepth >= MAX_INCLUDE_DEPTH) then Exit(False);
-      if AVisited.ContainsKey(LowerCase(IncPath)) then Continue;
-      AVisited.Add(LowerCase(IncPath), 0);
+      if ASets.Visited.ContainsKey(LowerCase(IncPath)) then Continue;
+      ASets.Visited.Add(LowerCase(IncPath), 0);
       if not TryReadSource(IncPath, IncText) then Exit(False);
       // Tests inside an include are the include's own business: only its
-      // DEFINEs are collected here.
-      if not ScanSource(IncText, ExtractFilePath(IncPath), ASearchDirs, ADefined, nil,
-        AVisited, ADepth + 1) then Exit(False);
+      // DEFINEs (and UNDEFs) are collected here.
+      if not ScanSource(IncText, ExtractFilePath(IncPath), ASearchDirs, ASets, nil,
+        ADepth + 1) then Exit(False);
     end
     else if ATests <> nil then
-    begin
-      Test:= Default(TSymbolTest);
-      Test.Line:= Ch.Line + 1;
-      Test.Col := DirectiveCol(Bytes, Ch.SrcStart);
-      if (Ch.Dir = 'ifdef') or (Ch.Dir = 'ifndef') then
-      begin
-        Test.Symbol:= LeadingIdent(Ch.Args);
-        if Test.Symbol <> '' then ATests.Add(Test);
-      end
-      else if (Ch.Dir = 'if') or (Ch.Dir = 'elseif') then
-      begin
-        M:= TRegEx.Match(Ch.Args, '\bdefined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', [roIgnoreCase]);
-        while M.Success do
-        begin
-          Test.Symbol:= M.Groups[1].Value;
-          ATests.Add(Test);
-          M:= M.NextMatch;
-        end;
-      end;
-    end;
+      AddDirectiveTests(Ch, Bytes, ATests);
   end;
 end;
 
@@ -459,16 +587,17 @@ var
   ProjectDefs: TSymbolSet;
   UnitDefs   : TSymbolSet;
   Visited    : TDictionary<string, Byte>;
-  Tests      : TList<TSymbolTest>;
+  Tests      : TList<TConditionalTest>;
   Findings   : TList<TLintFinding>;
   SearchDirs : TArray<string>;
   FilePath   : string;
   Text       : string;
   Sym        : string;
-  Test       : TSymbolTest;
+  Test       : TConditionalTest;
   Finding    : TLintFinding;
   Hint       : string;
   ProjName   : string;
+  Sets       : TScanSets;
 begin
   Result:= nil;
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
@@ -477,7 +606,7 @@ begin
   ProjectDefs:= TSymbolSet.Create;
   UnitDefs   := TSymbolSet.Create;
   Visited    := TDictionary<string, Byte>.Create;
-  Tests      := TList<TSymbolTest>.Create;
+  Tests      := TList<TConditionalTest>.Create;
   Findings   := TList<TLintFinding>.Create;
   try
     // Read the dproj ONCE for every file of the run.
@@ -493,8 +622,11 @@ begin
       Visited.Clear;
       Tests.Clear;
       // An unresolvable include might define anything: skip the file.
+      Sets:= Default(TScanSets);
+      Sets.Defined:= UnitDefs;
+      Sets.Visited:= Visited;
       if not ScanSource(Text, ExtractFilePath(ExpandFileName(FilePath)), SearchDirs,
-        UnitDefs, Tests, Visited, 0) then Continue;
+        Sets, Tests, 0) then Continue;
       for Test in Tests do
       begin
         Sym:= LowerCase(Test.Symbol);
@@ -527,6 +659,48 @@ begin
     Visited.Free;
     UnitDefs.Free;
     ProjectDefs.Free;
+  end;
+end;
+
+class function TIfdefUndefinedCheck.ProjectSearchDirs(const ADprojPath: string): TArray<string>;
+begin
+  Result:= DprojSearchDirs(ADprojPath);
+end;
+
+class function TIfdefUndefinedCheck.ScanFileTests(const AFilePath: string;
+  const ASearchDirs: TArray<string>; out ATests: TArray<TConditionalTest>;
+  out ALocalSymbols: TArray<string>): Boolean;
+var
+  Text   : string;
+  Defs   : TSymbolSet;
+  Undefs : TSymbolSet;
+  Visited: TDictionary<string, Byte>;
+  Tests  : TList<TConditionalTest>;
+  Sym    : string;
+  Sets   : TScanSets;
+begin
+  ATests:= nil;
+  ALocalSymbols:= nil;
+  if not TryReadSource(AFilePath, Text) then Exit(False);
+  Defs   := TSymbolSet.Create;
+  Undefs := TSymbolSet.Create;
+  Visited:= TDictionary<string, Byte>.Create;
+  Tests  := TList<TConditionalTest>.Create;
+  try
+    Sets.Defined:= Defs;
+    Sets.Undefs := Undefs;
+    Sets.Visited:= Visited;
+    Result:= ScanSource(Text, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs,
+      Sets, Tests, 0);
+    if not Result then Exit;
+    ATests:= Tests.ToArray;
+    for Sym in Defs.Keys do ALocalSymbols:= ALocalSymbols + [Sym];
+    for Sym in Undefs.Keys do ALocalSymbols:= ALocalSymbols + [Sym];
+  finally
+    Tests.Free;
+    Visited.Free;
+    Undefs.Free;
+    Defs.Free;
   end;
 end;
 

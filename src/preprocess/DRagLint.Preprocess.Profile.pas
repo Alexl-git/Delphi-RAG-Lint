@@ -68,7 +68,7 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
-/// <para>Calls: DRagLint.Preprocess.Profile.DprojEffectiveDefines, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Preprocess.Profile.PlatformGroupSuffix</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.DprojEffectiveDefines, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Preprocess.Profile.PlatformGroupSuffix, LowerCase</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.DprojEffectiveDefines"/>
@@ -81,6 +81,12 @@ function ProfileFromDproj(const ADprojPath, APlatform, AConfig: string): TDefine
 type
   /// <summary>One symbol of an effective DCC_Define set and the PropertyGroup
   /// alias that last put it there.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Preprocess.Profile.pas), DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Lint.PlatformDivergent.NameSet (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.PlatformDivergent, DRagLint.Preprocess.Profile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDprojDefine = record
     /// <summary>The symbol as spelled in the .dproj (first spelling wins).</summary>
     Name : string;
@@ -105,7 +111,16 @@ type
 /// else -&gt; Cfg_2.</param>
 /// <returns>The effective symbols in first-seen order, deduplicated
 /// case-insensitively; other $(...) macro references are dropped.</returns>
-/// <remarks>Pure: reads only AContent. Never raises.</remarks>
+/// <remarks>
+/// Pure: reads only AContent. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.Preprocess.Profile.ConfigChain, DRagLint.Preprocess.Profile.TryDccDefineInGroup, LowerCase, StartsStr, Trim</para>
+/// <para>Returns: Order.ToArray</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.ConfigChain"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.TryDccDefineInGroup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DprojEffectiveDefines(const AContent, APlatform, AConfig: string): TArray<TDprojDefine>;
 
 /// <summary>The build-config names a .dproj declares, from its
@@ -113,6 +128,14 @@ function DprojEffectiveDefines(const AContent, APlatform, AConfig: string): TArr
 /// 'Base' is not included.</summary>
 /// <param name="AContent">The .dproj text.</param>
 /// <returns>Config names as spelled; empty when none is declared.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.PlatformDivergent.TPlatformDivergentCheck.CheckFiles (DRagLint.Lint.PlatformDivergent.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.ReadConfigSelectors</para>
+/// <para>Returns: Names.ToArray</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.ReadConfigSelectors"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DprojConfigNames(const AContent: string): TArray<string>;
 
 /// <summary>The platforms a .dproj enables:
@@ -120,6 +143,11 @@ function DprojConfigNames(const AContent: string): TArray<string>;
 /// order.</summary>
 /// <param name="AContent">The .dproj text.</param>
 /// <returns>Platform names as spelled ('Win32', 'Win64', ...).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.PlatformDivergent.ComparedPlatforms (DRagLint.Lint.PlatformDivergent.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DprojEnabledPlatforms(const AContent: string): TArray<string>;
 
 implementation
