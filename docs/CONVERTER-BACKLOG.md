@@ -49,7 +49,9 @@ before working on an item.**
   * **R1** (M) batch exit 6 marks every chunk unit "config error, nothing written" and drops its
     backups (ConvertRunner.pas:1625-1639) -- safe only on today's engine internals. ENGINE
     2026-10-25: correct today; ENGINE is making it CONTRACT (castlib parsed once before the unit
-    loop; top-level exit 6 = no unit touched, no backups; guard + sha to follow). Remaining
+    loop; top-level exit 6 = no unit touched, no backups) -- MERGED 675006b6 (guard
+    run_apply_batch_gaps CL6a-d, CONVERSION-RULES.md after line 879), ships with the NEXT engine
+    deploy, not 1.34.0-alpha. Remaining
     editor fix: refused entries in an exit-6 chunk are relabelled csConfigError.
   * **R2** (M) a failed/timed-out `info --json` reads as "no capabilities", cached for the session
     (ConvertTab.pas:669-683, Engine.pas:1659-1667) -- features switch off naming the wrong cause.
