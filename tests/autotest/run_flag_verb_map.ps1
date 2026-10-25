@@ -107,8 +107,11 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # (lint-all, schema, export, butterfly, sql, uses-report, graph, deps-report),
 # and export / forms-csv / convert-scaffold gained --output on their own lines
 # (3 cells). Six verbs had nothing else missing and left the table.
-$BaselineCells = 110
-$BaselineVerbs = 27
+# 103/24 on 2026-10-25 (W6-flagmap): main had drifted to 124 cells because the scanner counts
+# the silent --out alias on every verb that reads Output (15 cells) and 5 verbs read --json
+# unnamed; both are now named on those verbs' registry help lines (--output|--out, --json).
+$BaselineCells = 103
+$BaselineVerbs = 24
 
 $Repo = (Resolve-Path $Repo).Path
 . (Join-Path $Repo 'tests\autotest\lib\CliFlagVerbMap.ps1')

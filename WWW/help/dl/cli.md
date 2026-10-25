@@ -544,6 +544,7 @@ Described in [exceptions-sync](features/exceptions-sync.md).
 Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations.
 
 ```text
+drag-lint export enums --db <file.sqlite> [--format firebird-sql|csv|json|delphi-const] [--output|--out <file>]
 drag-lint export enums --db <file.sqlite> [--format firebird-sql|csv|json|delphi-const] [--output <file>]
 drag-lint export obsidian --db <file.sqlite> --output-dir <dir> [--open]
 ```

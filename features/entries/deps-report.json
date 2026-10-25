@@ -41,7 +41,7 @@
         }
       ],
       "helpOrder": 43,
-      "help": ["  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)"]
+      "help": ["  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output|--out <file>]   (third-party dependency rollup)"]
     },
     {
       "type": "ide-menu",

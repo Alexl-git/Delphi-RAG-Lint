@@ -105,7 +105,7 @@ begin
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open]');
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
-  Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
+  Writeln('  drag-lint compare            --show <report|csv|bundle> [--json] [--output|--out <f.html>] [--open]   any report as the HTML page');
   Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
   Writeln('                               Reruns the old report''s COMMAND in-process (no PowerShell) and diffs the normalised');
   Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
@@ -151,7 +151,7 @@ begin
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json] [--output|--out <file>]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --output <file> (alias --out): the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
@@ -212,10 +212,10 @@ begin
   Writeln('                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
-  Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
+  Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output|--out <file>]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
-  Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
+  Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output|--out <file>]');
   Writeln('  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])');
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
@@ -230,9 +230,9 @@ begin
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
-  Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
-  Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
-  Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
+  Writeln('  drag-lint uses-report --output|--out <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
+  Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output|--out <file>]   (third-party dependency rollup)');
+  Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output|--out <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
   Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)');
   Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
@@ -244,7 +244,7 @@ begin
   Writeln('                               ESCALATING when it does. Every honoured or refused request is audited on the engine''s stderr and in');
   Writeln('                               %LOCALAPPDATA%\drag-lint\control-channel-audit.log (who asked: pid + exe, when).');
   Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)');
-  Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
+  Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output|--out <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
@@ -305,7 +305,7 @@ begin
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
-  Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
+  Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output|--out <file>]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
@@ -319,7 +319,7 @@ begin
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header (''#convert TFoo -> '' or ''#convert TFoo'': ''#convert TFoo has no To type''; ''#useswap X -> '': ''#useswap X has no replacement unit''); and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives' +
     ' split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); without BOTH --from and --to the book is only PARSED -- no path is checked -- and a ''NOTE:'' line on stderr says so; a #warn path or {Prop} placeholder, or a #check-ref ToPath, naming no member is a line N error, and so is a malformed #warn / #check-ref (1.26.5); no J' +
     'SON mode)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output|--out <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
   Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- {"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); convert-apply / convert-validate reject --progress-interval as an unknown argument (exit 3) -- convert-apply takes --progress instead (1.33.0: one line per finished unit, see convert-apply); cancel = kill the process (the default write-back is kill-safe: each ' +
     'memoized type is its own SQLite statement)');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parse' +
@@ -341,8 +341,8 @@ begin
     'info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped; a with block, an unverified receiver, a scoped / template / uses-unit form or a member a #link already converts is never rewritten (items[] migrate-check); info capability migrate_members (C18 slice 1); --only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatche' +
     'd[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; 1.33.0: every apply/' +
     '1 (single or units[]) carries exit_code (that unit''s); a --unit no --db indexes is REFUSED, dry run and --apply alike (reason ''<unit> is not covered by any supplied --db ...''); --progress writes one STDERR line per finished unit, flushed, stdout unchanged, off by default -- {"progress":{"verb":"convert-apply","unit_done":i,"units":N,"unit":"<path>","ok":b,"refused":b,"exit_code":E}} (info capability batch_progress); json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
-  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
-  Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
+  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output|--out DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output|--out; --append merges into an existing --output|--out; --db only qualifies class_unit / declared count default / runtime_refs)');
+  Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output|--out F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
@@ -359,7 +359,7 @@ begin
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
-  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
+  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output|--out <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
   Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
@@ -383,8 +383,8 @@ begin
   Writeln('                               There is no per-verb help TEXT -- one banner answers them all.');
   Writeln('  Exit reason: an unknown verb (2), unknown flag (3) or stale index (3) also says WHY -- stderr line error[<reason>]:, or with --json a stderr object {"error":"<reason>"}.');
   Writeln('');
-  Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
-  Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
+  Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--json] [--output|--out <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
+  Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output|--out <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--format json|--json] (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose,' +
     ' plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -' +
     '> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule,reason}, uses_removed, uses_added; the To type''s unit goes to the INTERFACE uses when the retyped field is declared in the interface, and is MOVED there from an implementation-only use (1.23.0);EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each ' +
@@ -535,7 +535,7 @@ begin
     Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
     Writeln('                               [--format text|json|html] [--output <file>] [--open]');
     Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
-    Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
+    Writeln('  drag-lint compare            --show <report|csv|bundle> [--json] [--output|--out <f.html>] [--open]   any report as the HTML page');
     Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
     Writeln('                               Reruns the old report''s COMMAND in-process (no PowerShell) and diffs the normalised');
     Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
@@ -591,7 +591,7 @@ begin
   end;
   if pVerb = 'lint-project' then
   begin
-    Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
+    Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json] [--output|--out <file>]');
     Exit;
   end;
   if pVerb = 'lint-all' then
@@ -684,7 +684,7 @@ begin
   end;
   if pVerb = 'export' then
   begin
-    Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
+    Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output|--out <file>]');
     Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
     Exit;
   end;
@@ -695,7 +695,7 @@ begin
   end;
   if pVerb = 'graph' then
   begin
-    Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
+    Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output|--out <file>]');
     Exit;
   end;
   if pVerb = 'todos' then
@@ -757,17 +757,17 @@ begin
   end;
   if pVerb = 'uses-report' then
   begin
-    Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
+    Writeln('  drag-lint uses-report --output|--out <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
     Exit;
   end;
   if pVerb = 'deps-report' then
   begin
-    Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
+    Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output|--out <file>]   (third-party dependency rollup)');
     Exit;
   end;
   if pVerb = 'schema' then
   begin
-    Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
+    Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output|--out <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
     Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
     Exit;
   end;
@@ -791,7 +791,7 @@ begin
   end;
   if pVerb = 'sql' then
   begin
-    Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
+    Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output|--out <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
     Exit;
   end;
   if pVerb = 'wiki' then
@@ -956,7 +956,7 @@ begin
   end;
   if pVerb = 'check-ast' then
   begin
-    Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
+    Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output|--out <file>]');
     Exit;
   end;
   if pVerb = 'dump-refs' then
@@ -1014,7 +1014,7 @@ begin
   end;
   if pVerb = 'convert-scaffold' then
   begin
-    Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
+    Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output|--out <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
     Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- {"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); convert-apply / convert-validate reject --progress-interval as an unknown argument (exit 3) -- convert-apply takes --progress instead (1.33.0: one line per finished unit, see convert-apply); cancel = kill the process (the default write-back is kill-safe: each ' +
     'memoized type is its own SQLite statement)');
     Exit;
@@ -1044,12 +1044,12 @@ begin
   end;
   if pVerb = 'glyph-vacuum' then
   begin
-    Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
+    Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output|--out DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output|--out; --append merges into an existing --output|--out; --db only qualifies class_unit / declared count default / runtime_refs)');
     Exit;
   end;
   if pVerb = 'butterfly' then
   begin
-    Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
+    Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output|--out F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
     Exit;
   end;
   if pVerb = 'purge-locals' then
@@ -1090,7 +1090,7 @@ begin
   end;
   if pVerb = 'forms-csv' then
   begin
-    Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
+    Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output|--out <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
     Exit;
   end;
   if pVerb = 'register-project' then
@@ -1138,12 +1138,12 @@ begin
   end;
   if pVerb = 'menu-tree' then
   begin
-    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
+    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--json] [--output|--out <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
     Exit;
   end;
   if pVerb = 'menu-drift' then
   begin
-    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
+    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output|--out <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
     Exit;
   end;
   Result := False;

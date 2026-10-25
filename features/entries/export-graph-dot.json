@@ -36,7 +36,7 @@
         }
       ],
       "helpOrder": 29,
-      "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]"]
+      "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output|--out <file>]"]
     }
   ],
   "audience": "both",

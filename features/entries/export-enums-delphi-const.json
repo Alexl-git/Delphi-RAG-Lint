@@ -33,7 +33,7 @@
         }
       ],
       "helpOrder": 26,
-      "help": ["  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]"]
+      "help": ["  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output|--out <file>]"]
     }
   ],
   "audience": "both",

@@ -35,7 +35,7 @@
         }
       ],
       "helpOrder": 87,
-      "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
+      "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output|--out F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
     },
     {
       "type": "ide-menu",

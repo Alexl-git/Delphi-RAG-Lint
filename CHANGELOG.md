@@ -9,6 +9,7 @@ Patch release on top of v1.34.0-alpha (commit ed87f842). No extractor or resolve
 needs a re-parse.
 
 ### Changed
+- `--help` names `--out` (alias of `--output`) on every verb that reads it and `--json` on schema / butterfly / compare / menu-tree / menu-drift; the flag-verb map baseline drops 110 -> 103 cells (W6-flagmap).
 - `index` exits 1 when any file's store step fails (F1; the failure is counted and listed instead of
   being swallowed), and the `--jobs` worker pool handles `WAIT_FAILED` (F9). A library section with a
   real per-file exception can now fail `index --all`; check the next library reindex.

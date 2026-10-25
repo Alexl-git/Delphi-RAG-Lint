@@ -32,7 +32,7 @@
         }
       ],
       "helpOrder": 73,
-      "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
+      "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output|--out <file>]"]
     }
   ],
   "audience": "both",
