@@ -1748,9 +1748,10 @@ begin
     for J:= 0 to High(Sec.Include) do
     begin
       { FOLDER includes are skipped outright -- they are the fallback's business,
-        not this function's. Only a .dpr/.dproj entry can name a project. }
+        not this function's. Only a .dpr/.dproj/.dpk entry can name a project
+        (.dpk: X-11 -- SectionProjectFile already accepted it). }
       Ext:= ExtractFileExt(Sec.Include[J]);
-      if not (SameText(Ext, '.dproj') or SameText(Ext, '.dpr')) then Continue;
+      if not (SameText(Ext, '.dproj') or SameText(Ext, '.dpr') or SameText(Ext, '.dpk')) then Continue;
       if NormalizeProjectPath(Sec.Include[J], AManifest.RootDir) <> Target then Continue;
 
       SetLength(AClaimants, Length(AClaimants) + 1);
@@ -1797,7 +1798,8 @@ begin
       IncRaw:= Sec.Include[J];
       if IncRaw = '' then Continue;
       { An include may be a folder OR a project file -- use the project's folder. }
-      if SameText(ExtractFileExt(IncRaw), '.dproj') or SameText(ExtractFileExt(IncRaw), '.dpr') then
+      if SameText(ExtractFileExt(IncRaw), '.dproj') or SameText(ExtractFileExt(IncRaw), '.dpr')
+         or SameText(ExtractFileExt(IncRaw), '.dpk') then
         IncRaw:= ExtractFilePath(IncRaw);
       if IncRaw = '' then Continue;
       if TPath.IsRelativePath(IncRaw) and (AManifest.RootDir <> '') then

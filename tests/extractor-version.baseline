@@ -1022,4 +1022,9 @@
 #   routines of DRagLint.Storage.SQLite.pas are now hashed by routine -- see the guard), no extraction
 #   code changed.
 #   Superseded: 1.23.0-alpha|0ac06206fabf81746d6fd1c82884e04d5dd4766d0b0f746c5f33344cf6c07b02
-1.23.0-alpha|5348fc9c35ebcbaaf1e3a3609113ac5b46e7c116603a4b355537c6482f5e0375
+#   2026-10-25 (X-11, lane L-cfg): re-pinned WITHOUT a bump: Index.Closure now reads a .dpk's 'contains'
+#   clause and Index.Manifest lets a .dpk include name a project. Both decide WHICH files a .dpk
+#   project indexes and who owns them; no per-file parse, symbol, ref, uses row or call edge changes,
+#   and the closure is recomputed on every project run, so no stored parse is stale.
+#   Superseded: 1.23.0-alpha|5348fc9c35ebcbaaf1e3a3609113ac5b46e7c116603a4b355537c6482f5e0375
+1.23.0-alpha|63794a830db6b91b219c4ec669399a8c720f4735c5436ab5ce18a6d0f0a42bf7

@@ -536,8 +536,15 @@ begin
     closed. }
   var Scrubbed: string:= StripPasCommentsKeepLayout(AContent);
 
-  // Find `uses` keyword (word-boundary, case-insensitive)
-  var Re:= TRegEx.Create('\buses\b', [roIgnoreCase]);
+  { A PACKAGE LISTS ITS UNITS UNDER `contains`, NOT `uses` (X-11, 2026-10-25).
+    A .dpk has no uses clause at all, so `index --project P.dpk` resolved a
+    closure of the .dpk alone and every member unit was silently left out.
+    Its `requires` clause names PACKAGES, never units, and must not be read:
+    `contains` follows it, so anchoring on `contains` skips it by position.
+    The keyword is chosen by the file's own header, not its extension, so a
+    .dpr that happens to use an identifier named `contains` is unaffected. }
+  var Keyword: string:= if TRegEx.IsMatch(Scrubbed, '\A\s*package\b', [roIgnoreCase]) then 'contains' else 'uses';
+  var Re:= TRegEx.Create('\b' + Keyword + '\b', [roIgnoreCase]);
   var UsesMatch:= Re.Match(Scrubbed);
   if not UsesMatch.Success then Exit;
 
@@ -913,8 +920,9 @@ begin
     if Ext = '.dproj' then
     begin
       ParseDprojSearchPaths(Content, BaseDir, SearchPaths);
-      // Also try to find the sibling .dpr
+      // Also try to find the sibling .dpr -- or .dpk for a package project
       var DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpr');
+      if not TFile.Exists(DprPath) then DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpk');
       if TFile.Exists(DprPath) then
       begin
         var DprContent:= MaybePreprocess(TFile.ReadAllText(DprPath), DprPath);
