@@ -2,6 +2,11 @@
   run_allow_refuses_codeless_line.ps1 -- `allow --apply` must REFUSE a line that
   carries no code, and must still write on a line that does.
 
+  CONTRACT UPDATE (H2, 2026-10-25): a `///` line followed by a declaration is
+  no longer refused -- the marker goes onto that declaration (DocCommentMarkerLine)
+  and the doc comment stays byte-identical. Section 1 asserts exactly that; 1b
+  keeps the refusal for a `///` block with no declaration after it.
+
   THE DEFECT (DataCopy, 2026-09-01, reproduced here exactly)
   ---------------------------------------------------------
   `drag-lint allow uConfigurationService.pas --fix-line 1163 --fix-rule doc-drift
@@ -86,15 +91,38 @@ $codeLine = LineOf "S := 'C:\Temp\x.txt';"
 $blankLine = 2
 Check 'fixture lines located' (($docLine -gt 0) -and ($codeLine -gt 0)) "doc=$docLine code=$codeLine"
 
-# --- 1. THE DEFECT: a /// doc line must be REFUSED and left byte-identical ----
-$before = [System.IO.File]::ReadAllText($fixture)
+# --- 1. THE DEFECT: a /// doc line is NEVER written to -------------------------
+# Contract since H2 (c2d32c07, DocCommentMarkerLine): a finding anchored on a
+# `///` line is reviewed on the declaration that the `///` block documents, so
+# `allow` writes there and leaves the doc comment byte-identical. The defect this
+# file exists for -- dl:ok text inside a doc comment -- must still be impossible.
+$beforeLines = [System.IO.File]::ReadAllLines($fixture)
 $out = & $Exe allow $fixture --fix-line $docLine --fix-rule doc-drift --apply 2>&1
 $rc  = $LASTEXITCODE
 $after = [System.IO.File]::ReadAllText($fixture)
-Check '1 exit code is non-zero (refused)' ($rc -ne 0) "got $rc"
-Check '1 the file is byte-identical -- the doc comment was NOT touched' ($before -eq $after)
-Check '1 the refusal explains itself' (("$out" -match 'no code') -and ("$out" -match 'dl:ok'))
-Check '1 no dl:ok was written into the doc comment' (-not ($after -match '///.*dl:ok'))
+$afterLines = [System.IO.File]::ReadAllLines($fixture)
+Check '1 allow on the /// line exits 0 (redirected, not refused)' ($rc -eq 0) "got $rc / $out"
+Check '1 the doc comment line is byte-identical' ($afterLines[$docLine - 1] -ceq $beforeLines[$docLine - 1]) $afterLines[$docLine - 1]
+Check '1 no dl:ok was written into any doc comment' (-not ($after -match '///.*dl:ok'))
+Check '1 the marker is on the declaration the block documents' `
+  ($afterLines[$docLine] -match '^\s*function DoThing\(const AName: string\): Boolean;\s+// dl:ok doc-drift@[0-9a-f]{4}') $afterLines[$docLine]
+Check '1 the declaration hash is not the empty-string hash e3b0' (-not ($afterLines[$docLine] -match 'doc-drift@e3b0')) $afterLines[$docLine]
+Check '1 nothing else changed (line count)' ($afterLines.Count -eq $beforeLines.Count) "lines: $($afterLines.Count)"
+
+# --- 1b. a /// block with NO declaration after it is still REFUSED -----------
+# DocCommentMarkerLine returns the /// line itself when the block runs to the end
+# of the file; that line carries no code, so the original refusal must still fire.
+$trailing = Join-Path $WorkDir 'Trailing.pas'
+[System.IO.File]::WriteAllText($trailing, ($norm.TrimEnd() + "`r`n/// <summary>Dangling: documents nothing.</summary>"), [System.Text.Encoding]::ASCII)
+$tLine = [System.IO.File]::ReadAllLines($trailing).Count
+$before = [System.IO.File]::ReadAllText($trailing)
+$out = & $Exe allow $trailing --fix-line $tLine --fix-rule doc-drift --apply 2>&1
+$rc  = $LASTEXITCODE
+$after = [System.IO.File]::ReadAllText($trailing)
+Check '1b a trailing /// line is refused (non-zero exit)' ($rc -ne 0) "got $rc"
+Check '1b the file is byte-identical' ($before -ceq $after)
+Check '1b the refusal explains itself' (("$out" -match 'no code') -and ("$out" -match 'dl:ok')) "$out"
+Check '1b no dl:ok was written into the doc comment' (-not ($after -match '///.*dl:ok'))
 
 # --- 2. a blank line is the same class and must also be refused --------------
 $before = [System.IO.File]::ReadAllText($fixture)
