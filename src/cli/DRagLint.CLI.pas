@@ -96,6 +96,7 @@ implementation
 
 uses
   Winapi.Windows
+  , DRagLint.Core.CliError
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
@@ -1150,6 +1151,10 @@ begin
   Result:= (A = '--help') or (A = '-h') or (A = '-?');
 end;
 
+const
+  /// <summary>The message prefix ParseArgs raises for an argument no flag accepts; Run turns it into the unknown-flag reason.</summary>
+  UNKNOWN_ARG_PREFIX = 'Unknown argument: ';
+
 /// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
 /// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
 /// <param name="AMsg">The diagnostic line.</param>
@@ -1823,7 +1828,7 @@ begin
       Result.Path          := A;
       Result.PathFromConfig:= False;
     end
-    else raise Exception.CreateFmt('Unknown argument: %s', [A]);
+    else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while
   ApplyPositionalProjectPrecedence(Result);
@@ -29480,7 +29485,7 @@ begin
   except
     on E: EMenuTreeStale do
     begin
-      Writeln(ErrOutput, 'menu-tree: stale index: ', E.Message);
+      WriteCliError(CLI_ERR_STALE_INDEX, 'menu-tree: stale index: ' + E.Message, AArgs.AsJson, '', '');
       Exit(EXIT_STALE_INDEX);
     end;
     on E: EMenuTreeSetup do
@@ -29567,7 +29572,7 @@ begin
     except
       on E: EMenuTreeStale do
       begin
-        Writeln(ErrOutput, 'menu-drift: stale index: ', E.Message);
+        WriteCliError(CLI_ERR_STALE_INDEX, 'menu-drift: stale index: ' + E.Message, AArgs.AsJson, '', '');
         Exit(EXIT_STALE_INDEX);
       end;
       on E: EMenuTreeSetup do
@@ -33231,7 +33236,15 @@ begin
         Server.Free;
       end;
     end // if
-    else begin Writeln(ErrOutput, 'ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
+    else begin
+      WriteCliError(CLI_ERR_UNKNOWN_VERB, 'unknown command: ' + Args.Command, Args.AsJson, 'verb', Args.Command);
+      if not Args.AsJson then
+      begin
+        Writeln(ErrOutput, 'ERROR: unknown command: ', Args.Command);
+        PrintHelp;
+      end;
+      Result:= 2;
+    end;
   except
     on E: Exception do
     begin
@@ -33257,7 +33270,13 @@ begin
         Writeln reappears on either of these two paths -- the invariant lived
         only in a comment before, and was violated ~60 lines below the comment
         that stated it. }
-      Writeln(ErrOutput, 'FATAL: ', E.ClassName, ': ', E.Message);
+      { The reason first (owner ruling A14): exit 3 is also the stale-index code, so an unknown
+        flag says so in a stable token; --json gets the JSON object only, not the FATAL prose. }
+      var BadFlag:= '';
+      if E.Message.StartsWith(UNKNOWN_ARG_PREFIX) then BadFlag:= E.Message.Substring(Length(UNKNOWN_ARG_PREFIX));
+      if BadFlag <> '' then WriteCliError(CLI_ERR_UNKNOWN_FLAG, E.Message, CommandLineWantsJson, 'flag', BadFlag);
+      if (BadFlag = '') or not CommandLineWantsJson then
+        Writeln(ErrOutput, 'FATAL: ', E.ClassName, ': ', E.Message);
       { A breadcrumb that survives a broken transport. Without this, a TRANSIENT
         fatal is unfalsifiable after the fact: there is no --log-file, and
         stderr is only as durable as whoever happened to be capturing it.
