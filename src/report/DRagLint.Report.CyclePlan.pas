@@ -636,7 +636,9 @@ type
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
-    function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
+    function FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string): string;
+    function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string;
+      const pFields: TArray<string>): string;
     function TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
     function AddDependencies(const pItem: TMoveItem; out pWhy: string): Boolean;
     function AddCompanions(const pItem: TMoveItem; out pWhy: string): Boolean;
@@ -2134,12 +2136,20 @@ begin
 end;
 
 { E18 T7 F5: '' when every switched site of pItem is a const or value parameter
-  whose routine body only reads members of it or compares it with nil; otherwise
-  the first offending site, as "`<file>:<line>` <what>". }
+  whose routine body only reads members of it, compares it with nil or stores it
+  into a switchable field (`F[..] := p`), or is such a field (FieldSiteRefusal);
+  otherwise the first offending site, as "`<file>:<line>` <what>". }
 function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;
 var
-  Param: string;
+  Param : string;
+  Field : string;
+  Fields: TArray<string>;
 begin
+  { D1: the fields that switch, first -- a parameter stored into one may be
+    declared before it }
+  Fields:= nil;
+  for var S in pItem.Switches do
+    if (FieldSiteRefusal(pItem, S.Fid, S.Line, Field) = '') and (Field <> '') then Fields:= Fields + [Field];
   for var S in pItem.Switches do
   begin
     var F   := GetFile(S.Fid);
@@ -2148,8 +2158,15 @@ begin
     begin
       case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
         tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
-        tsOther : Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
-          'variable, cast or type argument)', [Site, pItem.Sym.Name]));
+        tsOther :
+          begin
+            var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field);
+            if Field = '' then
+              Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
+                'variable, cast or type argument)', [Site, pItem.Sym.Name]));
+            if Why <> '' then Exit(Why);
+            Continue;
+          end;
       end;
       var Group:= Trim(TRegEx.Replace(Param, '^\[\s*ref\s*\]', '', [roIgnoreCase]));
       var Modifier:= LowerCase(Copy(Group, 1, Pos(' ', Group + ' ') - 1));
@@ -2159,12 +2176,100 @@ begin
       if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
       for var Name in Group.Split([',']) do
       begin
-        var Why:= ParamBodyRefusal(S.Fid, S.Line, Trim(Name));
+        var Why:= ParamBodyRefusal(S.Fid, S.Line, Trim(Name), Fields);
         if Why <> '' then Exit(Format('%s: parameter `%s` -- %s', [Site, Trim(Name), Why]));
       end;
     end;
   end;
   Result:= '';
+end;
+
+{ D1 (owner ruling 2026-10-25, option a+): one use of the field pName at pIndex in
+  pCode that survives the switch of its element type to the base class:
+  `SetLength(F, ..)`, `Length(F)` / `High(F)` / `Low(F)`, a store `F[..] := x`, or
+  a read `F[..].M` of a member in pPulled (not followed by `:=`). The brackets
+  must close on the same line. }
+function IsSwitchableFieldUse(const pCode: string; pIndex, pLen: Integer; const pPulled: TArray<string>): Boolean;
+var
+  Depth: Integer;
+  Close: Integer;
+begin
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
+  if TRegEx.IsMatch(Before, '\bSetLength\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*,') then Exit(True);
+  if TRegEx.IsMatch(Before, '\b(Length|High|Low)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
+    Exit(True);
+  var Open:= TRegEx.Match(Rest, '^\s*\[');
+  if not Open.Success then Exit(False);
+  Depth:= 0;
+  Close:= 0;
+  for var I:= Open.Length to Length(Rest) do
+  begin
+    if Rest[I] = '[' then Inc(Depth)
+    else if Rest[I] = ']' then
+    begin
+      Dec(Depth);
+      if Depth = 0 then
+      begin
+        Close:= I;
+        Break;
+      end;
+    end;
+  end;
+  if Close = 0 then Exit(False);
+  var After:= Copy(Rest, Close + 1, MaxInt);
+  if TRegEx.IsMatch(After, '^\s*:=') then Exit(True);
+  var Member:= TRegEx.Match(After, '^\s*\.\s*([A-Za-z_]\w*)');
+  Result:= Member.Success and MatchText(Member.Groups[1].Value, pPulled) and
+    not TRegEx.IsMatch(Copy(After, Member.Length + 1, MaxInt), '^\s*:=');
+end;
+
+{ D1 (owner ruling 2026-10-25, option a+): whether the switched line pLine of
+  pFid declares a FIELD `F: TArray<TX>` / `F: array of TX` (TX = pItem's class)
+  that may become `TArray<TXBase>`. pField is '' when the line is not such a
+  field declaration (the caller keeps its general refusal), else the field's
+  name. Returns '' when the field switches: it is not published (nor in an
+  unlabelled section, which $M+ publishes), the index shows no reference to it
+  outside its unit, and every use of its name in its unit passes
+  IsSwitchableFieldUse; otherwise the first offending site, as
+  "`<file>:<line>`: <what>". }
+function TCyclePlanner.FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string): string;
+var
+  Fld   : TSymbol;
+  Pulled: TArray<string>;
+begin
+  pField:= '';
+  Result:= '';
+  var F:= GetFile(pFid);
+  var M:= TRegEx.Match(CodePart(LineAt(F.Lines, pLine)), '^\s*([A-Za-z_]\w*)\s*:\s*(TArray\s*<\s*' + pItem.Sym.Name +
+    '\s*>|array\s+of\s+' + pItem.Sym.Name + ')\s*;\s*$', [roIgnoreCase]);
+  if not M.Success then Exit;
+  Fld:= Default(TSymbol);
+  for var S in F.Syms do
+    if (S.Kind = skField) and (S.StartLine = pLine) and SameText(S.Name, M.Groups[1].Value) then Fld:= S;
+  if Fld.Id = 0 then Exit;
+  pField:= Fld.Name;
+  var Site:= Format('`%s:%d`', [ExtractFileName(F.Path), pLine]);
+  var Head:= Format('field `%s` (`%s`) can switch to the base class only when every use is SetLength, ' +
+    'Length, High, Low, a store `%s[..] := x` or a read `%s[..].M` of a member the base class gets',
+    [Fld.Name, Trim(M.Groups[2].Value), Fld.Name, Fld.Name]);
+  if ContainsText(Fld.Modifiers, 'published') or not Fld.VisExplicit then
+    Exit(Format('%s: %s; it is published (or in an unlabelled section, published under {$M+}), so RTTI ' +
+      'and streaming see its declared type', [Site, Head]));
+  for var R in FStore.FindReferencesTo(Fld.Id) do
+    if R.FileId <> pFid then
+      Exit(Format('`%s:%d`: %s; it is referred to here, outside its unit', [ExtractFileName(PathOf(R.FileId)),
+        R.StartLine, Head]));
+  Pulled:= nil;
+  for var B in pItem.BaseMembers do Pulled:= Pulled + [B.Sym.Name];
+  for var L:= 1 to Length(F.Lines) do
+  begin
+    if L = pLine then Continue;
+    var Code:= CodePart(LineAt(F.Lines, L));
+    for var U in TRegEx.Matches(Code, '\b' + Fld.Name + '\b', [roIgnoreCase]) do
+      if not IsSwitchableFieldUse(Code, U.Index, U.Length, Pulled) then
+        Exit(Format('`%s:%d`: %s', [ExtractFileName(F.Path), L, Head]));
+  end;
 end;
 
 { E18 T7 F5: '' when the routine pLine belongs to uses pParam only to read one
@@ -2176,8 +2281,11 @@ end;
   refusal: nothing shows the base class is enough for the overrides or callees.
   Every occurrence of the name in the body is classified by its own column:
   followed by `.` (a receiver: the member ref must be a read) or by `= nil` /
-  `<> nil` (or preceded by `nil =` / `nil <>`); anything else refuses. }
-function TCyclePlanner.ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
+  `<> nil` (or preceded by `nil =` / `nil <>`), or -- D1 -- as the whole right
+  side of a store `F[..] := p` into one of pFields (fields that switch to
+  the base class too); anything else refuses. }
+function TCyclePlanner.ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string;
+  const pFields: TArray<string>): string;
 var
   Routine: TSymbol;
   MA     : TCallEdge;
@@ -2205,6 +2313,11 @@ begin
     begin
       if (L = BodyAt) and (M.Index <= BodyCol) then Continue;
       if IsReceiverOrNilTest(Code, M.Index, M.Length) then Continue;
+      if (Length(pFields) > 0) and
+        TRegEx.IsMatch(Copy(Code, 1, M.Index - 1), '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pFields) +
+          ')\s*\[[^;]*\]\s*:=\s*$', [roIgnoreCase]) and
+        TRegEx.IsMatch(Copy(Code, M.Index + M.Length, MaxInt), '^\s*(;|$|end\b|else\b)', [roIgnoreCase]) then
+        Continue;
       Exit(Format('line %d (column %d) uses `%s` other than to read a member or compare it with nil',
         [L, M.Index, pParam]));
     end;
