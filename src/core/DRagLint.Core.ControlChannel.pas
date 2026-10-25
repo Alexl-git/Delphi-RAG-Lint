@@ -470,6 +470,31 @@ const
   CC_THREAD_TERMINATE              = $0001; { the access CancelSynchronousIo needs on the thread handle }
   AUDIT_DIR_NAME                   = 'drag-lint';
   AUDIT_FILE_NAME                  = 'control-channel-audit.log';
+  TEST_HANG_STORE_CLOSE_VAR        = 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';
+  TEST_STORE_CLOSE_GRACE_VAR       = 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';
+
+{ TEST SEAM, inert unless the environment variable names a positive number of
+  milliseconds: DRAGLINT_TEST_STORE_CLOSE_GRACE_MS replaces CC_STORE_CLOSE_GRACE_MS so
+  run_control_channel_guard.ps1 (section H) can reach the 'stand-down started but
+  not finished' reply in seconds instead of a minute. }
+function StoreCloseGraceMs: Cardinal;
+var
+  V: Integer;
+begin
+  V:= StrToIntDef(GetEnvironmentVariable(TEST_STORE_CLOSE_GRACE_VAR), 0);
+  Result:= if V > 0 then Cardinal(V) else CC_STORE_CLOSE_GRACE_MS;
+end;
+
+{ TEST SEAM, inert unless set: DRAGLINT_TEST_HANG_STORE_CLOSE_MS=N makes
+  StandDownComplete sleep N ms before signalling FDone -- a host whose store
+  close hangs (run_control_channel_guard.ps1 section H). }
+procedure HangStoreCloseForTests;
+var
+  V: Integer;
+begin
+  V:= StrToIntDef(GetEnvironmentVariable(TEST_HANG_STORE_CLOSE_VAR), 0);
+  if V > 0 then Sleep(V);
+end;
 
 { Not in Winapi.Windows (checked against the RTL source, not assumed). }
 function ConvertStringSecurityDescriptorToSecurityDescriptorW(StringSecurityDescriptor: LPCWSTR; StringSDRevision: DWORD;
@@ -845,6 +870,7 @@ begin
   { The host left its loop because the cancelled read returned nil, or because
     it took the request explicitly; either way the request is now TAKEN. }
   InterlockedCompareExchange(FState, ST_TAKEN, ST_REQUESTED);
+  HangStoreCloseForTests;
   FDone.SetEvent;
 end;
 
@@ -951,17 +977,22 @@ begin
     if (not Cancelled) and (InterlockedCompareExchange(FOwner.FInRead, 1, 1) = 1) then
       if CancelSynchronousIo(FOwner.FMainThread) then Cancelled:= True;
     if FOwner.FDone.WaitFor(CC_POLL_MS) = wrSignaled then Break;
-  until (GetTickCount64 - Started >= UInt64(AWaitMs)) and (not Cancelled);
+    { F5 (2026-10-25): leave as soon as the read is cancelled -- the host IS
+      leaving, and the store-close grace below bounds the rest. The old exit
+      `deadline and not Cancelled` could only end on FDone once Cancelled was
+      set, so a host hanging in its store close pinned this thread and the
+      'started but not finished' reply was unreachable. }
+  until Cancelled or (GetTickCount64 - Started >= UInt64(AWaitMs));
 
   if FOwner.FDone.WaitFor(CC_NO_WAIT_MS) <> wrSignaled then
   begin
     if Cancelled then
     begin
       { the read is gone, so the host IS leaving: wait for the stores to close }
-      if FOwner.FDone.WaitFor(CC_STORE_CLOSE_GRACE_MS) <> wrSignaled then
+      if FOwner.FDone.WaitFor(StoreCloseGraceMs) <> wrSignaled then
       begin
         Audit('shutdown asked by ' + Who + ' at ' + NowIso + ' -- read cancelled but the host has not closed its stores after '
-          + IntToStr(CC_STORE_CLOSE_GRACE_MS div MS_PER_SECOND) + ' s');
+          + IntToStr(StoreCloseGraceMs div MS_PER_SECOND) + ' s');
         Reply(APipe, CONTROL_REPLY_BUSY + #9 + Pid + #9 + 'stand-down started but not finished');
         Exit;
       end;
@@ -977,7 +1008,7 @@ begin
     end
     else
       { the host took it in the same instant: it is exiting, wait for the stores }
-      FOwner.FDone.WaitFor(CC_STORE_CLOSE_GRACE_MS);
+      FOwner.FDone.WaitFor(StoreCloseGraceMs);
   end;
 
   Line:= CONTROL_REPLY_EXITING + #9 + Pid;
