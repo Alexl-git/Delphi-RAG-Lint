@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.34.1-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
@@ -153,7 +153,7 @@ nothing. A `--shadow-out` dir is never deleted. In the JSON, `shadow_kept` says 
 still exists after the run.
 
 **Apply.** `--apply` runs the same plan, then:
-1. the baseline build must pass (else `dirty-baseline`, nothing written);
+1. the baseline build must pass (else `dirty-baseline`, nothing written) -- except a baseline whose ONLY error is an `F2047 Circular unit reference` on a unit of the Part A group being fixed (owner ruling 2026-10-25): the plan is made anyway, `baseline.status` is `f2047-in-group`, and the build after the edit is the only proof;
 2. every file it touches is backed up as `<file>.BCK<n>` (the lowest free n) plus a
    `recovery.txt`, unless `--no-backup`;
 3. the edits are written and the project is built in place; one bounded repair (R4: a cast
@@ -204,15 +204,21 @@ The engine never guesses; every kind it can give:
   project does not build after the edit; rolled back), `build-timeout` (the build did not
   finish; rolled back), `build-error` (the build itself failed to run; rolled back, exit 2),
   `write-failed` (a write failed part-way; rolled back, exit 2), `stale-file` (a file changed
-  after it was indexed: reindex and retry), `anchor-mismatch` (a line the plan edits is not
+  after it was indexed: a dry run or `--apply --no-reindex` refuses -- reindex and retry;
+  `--apply` re-indexes once, re-plans and reports `reindex_before`, and refuses only a file
+  still stale after that), `anchor-mismatch` (a line the plan edits is not
   what the planner saw), `non-ascii-text` (an inserted line holds a non-ASCII character and
   the file is ANSI), `outside-roots` (the plan would edit a file outside the project's own
   roots).
 * **Plan:** `base-class` (a class whose bodies use the cycle would need a base class
   extracted -- a manual step), `blocked-symbol` (a declaration the move needs cannot move: a
   routine, a class whose method bodies use the cycle, an unrecognised declaration block),
-  `directive` (a compiler directive inside an edited region), `unresolved-edge` (the index
-  could not resolve what one unit of the group uses from another), `edge-still-used` (after
+  `directive` (a conditional compiler directive inside an edited region; `{$REGION}`,
+  `{$ENDREGION}`, `{$WARN}`, `{$HINTS}` and `{$MESSAGE}` inside a uses clause are kept byte for
+  byte), `unresolved-edge` (the index could not resolve what one unit of the group uses from
+  another; an INTERFACE uses entry the interface uses for nothing is moved to the
+  implementation uses, or removed when nothing uses it, and the refusal stays only when a
+  lexical hit names an identifier and line), `edge-still-used` (after
   an R1 / R2 cut the consumer still uses the declaring unit for another name, so the uses
   entry -- and the edge -- would stay), `manual-edit` (the default for any edit the planner
   cannot make mechanically).
@@ -223,9 +229,15 @@ The engine never guesses; every kind it can give:
   consumer and the program's `.dpr` does not list it: after the cut the linker drops it, its
   initialization never assigns the pointer and the call is a nil call at run time -- add the
   unit to the `.dpr` uses; a `DCCReference` alone does not link it).
-* **R2 (member hand-over):** `member-write`, `construction`, `class-method`, `class-ref`,
+* **R2 (member hand-over):** `member-write` (a plain write `F := v` is carried by a read/write
+  property with a one-line setter; `Inc` / `Dec(F)`, `F` passed to a var / out parameter and a
+  write into a record-typed member are refused), `construction`, `class-method` (an instance
+  method the consumer calls inside `with ... as TX do` is carried as an interface method, its
+  signature copied verbatim and dispatch to an override unchanged; a class method or a method
+  taken as a pointer is refused), `overloaded-routine`, `signature-in-cycle`, `class-ref`,
   `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported`,
-  `duplicate-identifier`, `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`,
+  `duplicate-identifier`, `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`
+  (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
 
