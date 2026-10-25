@@ -268,6 +268,9 @@ type
       A --project on the command line clears it; a POSITIONAL .dpr/.dproj/.dpk
       then wins over the key too (X-11, ApplyPositionalProjectPrecedence). }
     ProjectFromConfig: Boolean      ;
+    { True while Path holds ONLY a "path" key from a .drag-lint.json. The first POSITIONAL path
+      or --dir replaces it (command line beats the config file, W5-C). }
+    PathFromConfig  : Boolean       ;
     { '<file>: <key path>: expected <type>, got <type>' when the .drag-lint.json
       defaults file could not be read (LoadConfigDefaults); '' otherwise. Readers
       carry on with what was read; Run makes the WRITE verbs refuse. }
@@ -1005,7 +1008,11 @@ begin
         AArgs.ProjectFromConfig:= True;
       end;
       V:= J.GetValue('path');
-      if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
+      if (V <> nil) and (V.Value <> '') then
+      begin
+        AArgs.Path          := V.Value;
+        AArgs.PathFromConfig:= True;
+      end;
       { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
         It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
         .drag-lint.json anywhere above the CWD turned every lint-all into a
@@ -1634,7 +1641,7 @@ begin
     else if (Result.Command = 'format'   ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'allow'    ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
-    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
+    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); Result.PathFromConfig:= False; end  // dl:ok multiple-statements-per-line -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; W5-C adds the config-flag reset to it
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
     { v1.7 Task 1: LSP merge proxy. --delphi-lsp names the child to spawn and
       exists chiefly so the guard can substitute a stub server; without it the
@@ -1811,7 +1818,11 @@ begin
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
-    else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
+    else if ((Result.Path = '') or Result.PathFromConfig) and (not A.StartsWith('--')) then
+    begin
+      Result.Path          := A;
+      Result.PathFromConfig:= False;
+    end
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
   end; // while
@@ -5323,9 +5334,13 @@ begin
     measured 2026-08-26, and it reads like a permissions problem rather than a
     missing directory. }
   var DbHome: string:= ExtractFilePath(ResolvedDb);
-  if (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
+  { --dry-run MUST NOT TOUCH THE DISK (W5-C): no _D-RAG home, no DB file, no Migrate or
+    fingerprint stamp on an existing one. The pipeline below needs a store to report what it
+    would do, so a dry run gets a throw-away in-memory one. The cost: a dry run does not
+    preview refusals that read the stored DB (project-tag conflict, engine older than DB). }
+  if (not AArgs.DryRun) and (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
 
-  Store:= TSQLiteSymbolStore.Create(ResolvedDb);
+  Store:= TSQLiteSymbolStore.Create(if AArgs.DryRun then ':memory:' else ResolvedDb);
   { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
     byte-identical. Exit 2, the code every other refusal in this verb uses. }
   if RefuseIfEngineOlderThanDb(Store, ResolvedDb) then Exit(2);
@@ -5589,7 +5604,7 @@ begin
   else Folders:= [AArgs.Path];
 
   { PROJECT-scoped: `--project` (the compile-closure scan above) or a bare
-    .dpr/.dproj path. The bare path does NOT reach the closure arm -- it walks
+    .dpr/.dproj/.dpk path. The bare path does NOT reach the closure arm -- it walks
     only that one file (Folders:= [AArgs.Path]) with the platform built-in
     defines -- but it is counted here, so it stamps the scope and the project
     tag as a --project run does. Everything else -- an explicit folder,
