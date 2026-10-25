@@ -65,6 +65,11 @@ OWNER APPROVED (10-25): commit, push, deploy, git/branch/worktree cleanup. PUSH 
 UPDATE ~21:30: item 1 DONE fb401d58 (657 changed lines all comments -> re-pinned, guards PASS); item 3 DONE 617a93af
 (4 verifies vs deployed exe). Item 2 RE-PARSE RUNNING via a background agent (it messages CONVERTER "re-parse done"
 and appends "REPARSE DONE" to the ledger) -- on resume: check the ledger line / `drag-lint.exe info --db` versions.
+RE-PARSE = detached process PID 50768 `third_party\dll-win64\drag-lint.exe index --all --jobs 1` (started 10-24 20:58,
+parent gone, survives /clear); log C:\TEMP\claude\c--Projects-Delphi-RAG-lint\de8b59d0-99e6-48f2-8c5b-874511c66219\scratchpad\agent-REPARSE\all.log
+(22:46: in RAD Studio library sources, 0 errors). ON RESUME: if PID 50768 is gone, read the log tail summary, spot-check
+`drag-lint.exe info --db` on 3 DBs (extractor 1.23.0-alpha), then SendMessage convrules-editor-2d "ENGINE: re-parse done
+..." and add "| REPARSE DONE |" to the ledger. If still running: wait. Also push 411c1ca7 (CONVERTER FG-O) with main.
 CONVERTER merged FG-M+FG-N 8234fe33 (featuregen 244/0, registry + docs-sync PASS, its verifies done) -- include in push.
 New engine finding (CONVERTER): per-file `lint` flags `dl:ok uses-global-census` as review-marker-unused although that
 rule only runs in lint-all (src\tools\featuregen\FeatureGen.Check.pas:28) -- per-file lint must not judge markers for
