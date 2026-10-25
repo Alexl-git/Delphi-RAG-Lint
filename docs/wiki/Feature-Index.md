@@ -406,6 +406,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [large-magic-number](rules#large-magic-number) -- bug-patterns, info
 * [layering-violation](rules#layering-violation) -- project-wide, warning
 * [length-zero-compare](rules#length-zero-compare) -- bug-patterns, info
+* [line-too-long](rules#line-too-long) -- structure, warning
 * [local-field-prefix](rules#local-field-prefix) -- naming, info, fixable
 * [local-var-casing](rules#local-var-casing) -- naming, info, fixable
 * [locale-sensitive-conversion](rules#locale-sensitive-conversion) -- platform, warning
@@ -439,6 +440,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [parser-error](rules#parser-error) -- bug-patterns, error
 * [path-traversal](rules#path-traversal) -- security, warning
 * [pchar-arithmetic](rules#pchar-arithmetic) -- platform, warning
+* [platform-divergent-define](rules#platform-divergent-define) -- project-wide, warning
 * [property-references-itself](rules#property-references-itself) -- bug-patterns, warning
 * [public-field](rules#public-field) -- structure, info
 * [public-writable-field](rules#public-writable-field) -- refactoring, info
