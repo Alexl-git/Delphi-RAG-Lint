@@ -110,7 +110,7 @@ $db = Join-Path $WorkDir 'lens.sqlite'
 & $Exe index $src --db $db 2>&1 | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
-function CountsFor([string]$path) {
+function CountsFor([string]$path, [string[]]$dbs = @($db)) {
   $uri = 'file:///' + ($path -replace '\\', '/')
   $m  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
   $m += Frame @{ jsonrpc='2.0'; method='initialized'; params=@{} }
@@ -119,7 +119,8 @@ function CountsFor([string]$path) {
   $inF  = Join-Path $WorkDir 'in.txt'
   $outF = Join-Path $WorkDir 'out.txt'
   [System.IO.File]::WriteAllText($inF, $m, (New-Object System.Text.ASCIIEncoding))
-  Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDir `
+  $dbArgs = @('lsp'); foreach ($d in $dbs) { $dbArgs += @('--db', $d) }
+  Start-Process $Exe -ArgumentList $dbArgs -WorkingDirectory $WorkDir `
     -RedirectStandardInput $inF -RedirectStandardOutput $outF `
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
@@ -186,6 +187,33 @@ $unknown = CountsFor (Join-Path $src 'uNotIndexed.pas')
 Check 'CONTROL: a file in no index answers an EMPTY list, not an error' `
   (($null -ne $unknown) -and ($unknown.Count -eq 0)) `
   $(if ($null -eq $unknown) { '<error or no result>' } else { "entries=$($unknown.Count)" })
+
+Write-Host ''
+Write-Host 'S1: a routine in TWO stores is counted once per distinct call site' -ForegroundColor Cyan
+# The same source tree indexed into a second store: every caller is seen by
+# both stores. The codeLens number must equal the rows showCallers answers
+# (3 for Thrice), not the per-store sum (6).
+$db2 = Join-Path $WorkDir 'lens2.sqlite'
+& $Exe index $src --db $db2 2>&1 | Out-Null
+$counts2 = CountsFor $file @($db, $db2)
+$thriceLine = -1
+for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*procedure Thrice;') { $thriceLine = $i; break } }
+$hit2 = @($counts2 | Where-Object { $_.line -eq $thriceLine })
+Check 'S1: Thrice across two stores holding the same callers is 3, not 6' `
+  (($hit2.Count -eq 1) -and ([int]$hit2[0].count -eq 3)) "got=$(($hit2 | ForEach-Object { $_.count }) -join ',')"
+
+Write-Host ''
+Write-Host 'S2: lenses come in SOURCE order' -ForegroundColor Cyan
+$many = Join-Path $src 'uMany.pas'
+$decl = (1..16 | ForEach-Object { "    procedure R$_;" }) -join "`n"
+$impl = (1..16 | ForEach-Object { "procedure TMany.R$_;`nbegin`nend;`n" }) -join "`n"
+WriteAnsi $many "unit uMany;`n`ninterface`n`ntype`n  TMany = class`n  public`n$decl`n  end;`n`nimplementation`n`n$impl`nend.`n"
+& $Exe index $src --db $db 2>&1 | Out-Null
+$cm = CountsFor $many
+$ln = @($cm | ForEach-Object { [int]$_.line })
+Check 'S2: 16 routines reported' ($ln.Count -eq 16) "got=$($ln.Count)"
+$sorted = @($ln | Sort-Object)
+Check 'S2: reply lines ascend (source order)' (($ln -join ',') -eq ($sorted -join ',')) "got=$($ln -join ',')"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

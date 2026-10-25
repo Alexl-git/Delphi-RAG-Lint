@@ -247,9 +247,12 @@ begin
 end;
 
 /// Code[I] (1-based, like ALine[I]) is True when character I is code: not
-/// inside a // comment, a { } or (* *) comment, or a '...' string literal. An
-/// unclosed block comment covers the rest of the line.
-function CodeMask(const ALine: string): TArray<Boolean>;
+/// inside a // comment, a { } or (* *) comment, or a '...' string literal.
+/// AOpen carries a block comment across lines (S5): #0 = none open, '{' or
+/// '*' = a { } or (* *) comment opened on an earlier line and still open on
+/// entry; on exit it names the comment still open at the end of this line.
+/// A // comment or a string literal ends with its line.
+function CodeMask(const ALine: string; var AOpen: Char): TArray<Boolean>;
 begin
   SetLength(Result, Length(ALine) + 1);
   var I: Integer:= 1;
@@ -257,23 +260,45 @@ begin
   begin
     var C: Char:= ALine[I];
     var Next: Char:= if I < Length(ALine) then ALine[I + 1] else #0;
-    if (C = '/') and (Next = '/') then Exit // the rest stays False
+    if AOpen = '{' then
+    begin
+      var E: Integer:= Pos('}', ALine, I);
+      if E = 0 then Break;
+      AOpen:= #0;
+      I:= E + 1;
+    end
+    else if AOpen = '*' then
+    begin
+      var E: Integer:= Pos('*)', ALine, I);
+      if E = 0 then Break;
+      AOpen:= #0;
+      I:= E + 2;
+    end
+    else if (C = '/') and (Next = '/') then Break // the rest stays False
     else if C = '{' then
     begin
       var E: Integer:= Pos('}', ALine, I + 1);
-      if E = 0 then Exit;
+      if E = 0 then
+      begin
+        AOpen:= '{';
+        Break;
+      end;
       I:= E + 1;
     end
     else if (C = '(') and (Next = '*') then
     begin
       var E: Integer:= Pos('*)', ALine, I + 2);
-      if E = 0 then Exit;
+      if E = 0 then
+      begin
+        AOpen:= '*';
+        Break;
+      end;
       I:= E + 2;
     end
     else if C = '''' then
     begin
       var E: Integer:= Pos('''', ALine, I + 1); // '' inside a literal re-opens at the next quote
-      if E = 0 then Exit;
+      if E = 0 then Break;
       I:= E + 1;
     end
     else
@@ -285,12 +310,12 @@ begin
 end;
 
 /// Zero-based UTF-16 column of the whole-word, case-insensitive AName on
-/// ALine at or after AFromCol0; -1 when it is not there (the buffer moved
-/// since the index was built, or the name is not on its start line).
-function NameColumn(const AName, ALine: string; AFromCol0: Integer): Integer;
+/// ALine at or after AFromCol0, counting only characters ACode marks as code;
+/// -1 when it is not there (the buffer moved since the index was built, or the
+/// name is not on its start line).
+function NameColumn(const AName, ALine: string; AFromCol0: Integer; const ACode: TArray<Boolean>): Integer;
 begin
   Result:= -1;
-  var Code: TArray<Boolean>:= CodeMask(ALine);
   var LName: string:= LowerCase(AName);
   var LLine: string:= LowerCase(ALine);
   var From: Integer:= if AFromCol0 < 0 then 1 else AFromCol0 + 1;
@@ -301,7 +326,7 @@ begin
     var After: Integer:= P + Length(AName);
     var BeforeOk: Boolean:= (P = 1) or not CharInSet(ALine[P - 1], ['A'..'Z', 'a'..'z', '0'..'9', '_']);
     var AfterOk : Boolean:= (After > Length(ALine)) or not CharInSet(ALine[After], ['A'..'Z', 'a'..'z', '0'..'9', '_']);
-    if BeforeOk and AfterOk and Code[P] then Exit(P - 1);
+    if BeforeOk and AfterOk and ACode[P] then Exit(P - 1);
     From:= P + 1;
   end;
 end;
@@ -314,11 +339,16 @@ begin
     Syms:= St.FindSymbolsByFile(APath);
     if Length(Syms) > 0 then Break;
   end;
+  // S5: one pass over the whole text, so a { } or (* *) comment carries across lines
+  var Masks: TArray<TArray<Boolean>>:= nil;
+  SetLength(Masks, Length(ALines));
+  var Open: Char:= #0;
+  for var L: Integer:= 0 to High(ALines) do Masks[L]:= CodeMask(ALines[L], Open);
   for var Sym: TSymbol in Syms do
   begin
     var TT: Integer:= DeclTokenType(Sym.Kind);
     if (TT = TT_NONE) or (Sym.Name = '') or (Sym.StartLine < 1) or (Sym.StartLine > Length(ALines)) then Continue;
-    var Col: Integer:= NameColumn(Sym.Name, ALines[Sym.StartLine - 1], Sym.StartCol - 1);
+    var Col: Integer:= NameColumn(Sym.Name, ALines[Sym.StartLine - 1], Sym.StartCol - 1, Masks[Sym.StartLine - 1]);
     if Col < 0 then Continue;
     var T: TSemTok;
     T.Line   := Sym.StartLine - 1;

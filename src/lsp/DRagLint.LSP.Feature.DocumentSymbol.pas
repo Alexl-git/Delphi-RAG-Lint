@@ -46,6 +46,7 @@ uses
   , System.IOUtils
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Core.LiveDocs
   ;
 
 const
@@ -200,7 +201,7 @@ begin
     var Roots: TSymList:= TSymList.Create;
     var Lines: TArray<string>;
     try
-      try Lines:= TFile.ReadAllLines(Path); except on Exception do Lines:= nil; end; // an unreadable file only costs the name column; the start column is the fallback
+      try Lines:= TLiveDocuments.ReadLines(Path); except on Exception do Lines:= nil; end; // an unreadable file only costs the name column; the start column is the fallback
       for var S: TSymbol in Syms do ById.AddOrSetValue(S.Id, S);
       // Only a symbol whose parent is a unit/absent, or a wanted non-routine
       // symbol, is shown: everything under a routine is a local.
