@@ -265,6 +265,10 @@ type
       put in DbPaths; the first command-line --db then REPLACES it rather than
       appending, because the command line beats the config file. }
     DbFromConfig    : Boolean       ;
+    { The .drag-lint.json whose "db" key DbPaths holds, while DbFromConfig is
+      True; '' otherwise. Named wherever that db decides a write or a refusal,
+      because the user typed no --db (INBOX 2026-09-29 items 4b/5). }
+    DbConfigFile    : string        ;
     { True while ProjectPath holds ONLY a "project" key from a .drag-lint.json.
       A --project on the command line clears it; a POSITIONAL .dpr/.dproj/.dpk
       then wins over the key too (X-11, ApplyPositionalProjectPrecedence). }
@@ -1001,6 +1005,7 @@ begin
         AArgs.DbPath      := V.Value;
         AArgs.DbPaths     := [V.Value];
         AArgs.DbFromConfig:= True;
+        AArgs.DbConfigFile:= Candidate;
       end;
       V:= J.GetValue('project');
       if (V <> nil) and (V.Value <> '') then
@@ -1335,6 +1340,7 @@ begin
         { the command line replaces a .drag-lint.json "db"; it does not add to it }
         Result.DbPaths     := nil;
         Result.DbFromConfig:= False;
+        Result.DbConfigFile:= '';
       end;
       if Length(Result.DbPaths) = 0 then Result.DbPath:= ParamStr(i);
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
@@ -4570,9 +4576,20 @@ begin
     if TFile.Exists(P) then Continue;
     Result:= False;
     if P = '' then Shown:= '(empty)' else Shown:= P;
-    Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d does not exist: %s',
-      [AVerb, I + 1, Length(AArgs.DbPaths), Shown]));
-    Writeln(ErrOutput, '       An explicit --db must be an existing index. Nothing was answered.');
+    if AArgs.DbFromConfig then
+    begin
+      { The user typed no --db: name the file that supplied it (INBOX 2026-09-29 item 5). }
+      Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d (the "db" key of %s) does not exist: %s',
+        [AVerb, I + 1, Length(AArgs.DbPaths), AArgs.DbConfigFile, Shown]));
+      Writeln(ErrOutput, '       A .drag-lint.json "db" counts as an explicit --db and must be an existing index. ' +
+        'Nothing was answered.');
+    end
+    else
+    begin
+      Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d does not exist: %s',
+        [AVerb, I + 1, Length(AArgs.DbPaths), Shown]));
+      Writeln(ErrOutput, '       An explicit --db must be an existing index. Nothing was answered.');
+    end;
     Writeln(ErrOutput, '       Find it:  drag-lint resolve-dbs --project <x.dproj>   (or --in <x.pas>)');
     Writeln(ErrOutput, Format('       Build it: drag-lint index --project <x.dproj> --db "%s"', [Shown]));
   end;
@@ -5330,6 +5347,12 @@ begin
     Exit(2);
   end;
   Writeln('Database: ', ResolvedDb);
+  { A "db" key found by walking up from the CWD decides this write although the
+    user typed no --db -- and it may belong to another project's tree (INBOX
+    2026-09-29 item 4b). Say where it came from, on its own line so a reader of
+    the Database: line is unaffected. }
+  if AArgs.DbFromConfig and SameText(ResolvedDb, AArgs.DbPath) then
+    Writeln('          (the "db" key of ', AArgs.DbConfigFile, '; pass --db to write elsewhere)');
 
   { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
     for a manifest item; this single-target path never did, because the old
@@ -32939,9 +32962,14 @@ begin
       LoadConfigDefaults has warned and kept only the keys before the bad one.
       A reader carries on with that; a verb that WRITES an index or a manifest
       refuses, because the half it read may be the very "db" it would write.
-      compile-check computes and skips its cache instead (ResolveCompileCheckDb). }
+      compile-check computes and skips its cache instead (ResolveCompileCheckDb).
+      The SOURCE writers refuse too (INBOX 2026-09-29 item 5): `document --apply`
+      and `lint --fix --apply` render from the docs keys, and would otherwise
+      write the default for the key that failed to parse. Their dry runs read. }
+    var WritesSource: Boolean:= (SameText(Args.Command, 'document') and Args.Apply) or
+                                (SameText(Args.Command, 'lint') and Args.Fix and Args.Apply);
     if (Args.ConfigError <> '') and
-       MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
+       (WritesSource or MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project'])) then
     begin
       ReportManifestRefusal(Args.Command, Args.ConfigError);
       Exit(2);
