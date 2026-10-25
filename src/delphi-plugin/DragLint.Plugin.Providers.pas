@@ -72,7 +72,6 @@ type { ---- Completion ---- }
   TDragLintDiagContext = record
     FilePath  : string; // the real (saved) path the diagnostics belong to
     BufferPath: string; // a temp snapshot of the unsaved buffer to analyze
-    DbArgs    : string;
     ExePath   : string;
     { T-05: the manifest's unique DB for the IDE's ACTIVE project, resolved on
       the main thread (OTAPI) before the background run; '' when none. }
