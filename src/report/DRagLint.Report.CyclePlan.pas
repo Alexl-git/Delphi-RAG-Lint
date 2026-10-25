@@ -4729,6 +4729,10 @@ begin
       [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
        string.Join(', ', FInversion.MemberSigs)]);
     EmitMemberWrites;
+    if Length(FInversion.MethodSigs) > 0 then
+      EmitFmt('- The interface also declares each method `%s` calls on it, the signature copied verbatim: %s. `%s` ' +
+        'needs no edit for them: its own methods implement them, and a virtual one still dispatches to the override.',
+        [Consumer, string.Join(', ', FInversion.MethodSigs), FInversion.ClassTypeName]);
     EmitFmt('- `%s` implements it: `%s` is appended to its heritage, and a getter per member is declared before ' +
       'the class''s `end;` and implemented in its implementation section.', [FInversion.ClassTypeName,
       FInversion.IfaceName]);
