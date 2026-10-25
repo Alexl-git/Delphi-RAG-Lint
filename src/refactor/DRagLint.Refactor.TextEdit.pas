@@ -2,8 +2,9 @@ unit DRagLint.Refactor.TextEdit;
 
 { Range insert/delete text edits for the non-rename refactors (find-unit,
   safe-delete). TRenameRefactoring.Apply is token-replace only; this applier
-  does whole-line insert/delete + single-line character insert, with the same
-  ANSI / CRLF / .bak discipline. Builders (TFindUnitRefactoring, TSafeDelete-
+  does whole-line insert/delete + single-line character insert, keeping each
+  file's encoding / BOM / line-break style (TTextFileFormat) and the .bak
+  discipline. Builders (TFindUnitRefactoring, TSafeDelete-
   Refactoring) are added in later tasks. }
 
 interface
@@ -56,6 +57,40 @@ type
     ExpectLine: Integer;      { 1-based ANCHOR line that must still hold ExpectText; 0 = unguarded }
   end;
 
+  /// <summary>How a text file was stored on disk -- its encoding, its BOM and
+  /// its line-break style -- so a tool that rewrites the file writes it back
+  /// the same way (deep review F8, 2026-10-25).</summary>
+  /// <remarks>
+  /// A UTF-8 or UTF-16 BOM selects that encoding and is kept; a file with no
+  /// BOM is ANSI (the system code page), exactly as before, so a plain ANSI
+  /// file round-trips byte-identical. LineBreak is LF only when the text holds
+  /// an LF and no CRLF; otherwise (CRLF, mixed, or no line break at all) it is
+  /// CRLF, the historical output. Encoding is an RTL standard singleton --
+  /// never owned, never freed. A UTF-8 file WITHOUT a BOM is still read as
+  /// ANSI: lossless on a CP1252 system for the bytes it holds, but text a tool
+  /// inserts is written in the code page.
+  /// </remarks>
+  TTextFileFormat = record
+    Encoding : TEncoding;  { ANSI, UTF8, Unicode or BigEndianUnicode singleton }
+    Preamble : TBytes;     { the BOM read from the file; empty when it had none }
+    LineBreak: string;     { #13#10 or #10 }
+    /// <summary>Decodes a file's bytes and records how they were stored.</summary>
+    /// <param name="ABytes">The file's raw bytes (may be empty).</param>
+    /// <param name="AText">Out: the text, without the BOM.</param>
+    /// <returns>The format to hand to Encode when the text is written back.</returns>
+    class function Decode(const ABytes: TBytes; out AText: string): TTextFileFormat; static;
+    /// <summary>The line break a rewrite of AText should use: #10 when AText
+    /// holds an LF and no CRLF, else #13#10.</summary>
+    /// <param name="AText">Text as read from a file.</param>
+    /// <returns>#10 or #13#10.</returns>
+    class function LineBreakOf(const AText: string): string; static;
+    /// <summary>The bytes to write for AText: the original BOM followed by
+    /// AText in the original encoding.</summary>
+    /// <param name="AText">The text to write; its line breaks are written as given.</param>
+    /// <returns>Preamble + Encoding.GetBytes(AText).</returns>
+    function Encode(const AText: string): TBytes;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas) (+12 more)</para>
@@ -70,7 +105,8 @@ type
   public
     /// <summary>The text Apply would write for one file, computed in memory
     /// (1.27.0, C9): the same sort, stale-anchor and overlap checks and the
-    /// same CRLF re-serialisation, without touching the disk.</summary>
+    /// same re-serialisation (in AContent's own line-break style, see
+    /// TTextFileFormat.LineBreakOf), without touching the disk.</summary>
     /// <param name="AFilePath">The file the edits target; only edits whose
     /// FilePath equals it (case-insensitively) are applied.</param>
     /// <param name="AContent">The file's current text.</param>
@@ -80,8 +116,9 @@ type
     /// <remarks>Pure. convert-apply re-indexes this text to reconcile the
     /// converted unit's uses clauses before anything is written.</remarks>
     class function ApplyToText(const AFilePath, AContent: string; const AEdits: TArray<TTextEdit>): string;
-    /// <summary>Applies edits per file, back-to-front by line, preserving ANSI
-    /// + CRLF + (optional) .bak backup. Returns files touched.</summary>
+    /// <summary>Applies edits per file, back-to-front by line, preserving the
+    /// file's encoding, BOM and line-break style (TTextFileFormat) + (optional)
+    /// .bak backup. Returns files touched.</summary>
     /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TTextEdit&gt;</param>
     /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: Apply(AEdits, AWriteBackups,
@@ -95,7 +132,7 @@ type
     /// ASkippedEdits to learn how many were dropped.
     /// A file whose every edit was rejected is NOT rewritten and gets NO .bak --
     /// it is not counted as touched either. This matters beyond tidiness: the
-    /// write path re-serializes through a TStringList (ANSI + CRLF normalization),
+    /// write path re-serializes through a TStringList (one line-break style for the whole file),
     /// so an unconditional rewrite would modify a file that no edit had changed.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)</para>
@@ -311,6 +348,29 @@ type
 procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
 
 implementation
+
+class function TTextFileFormat.Decode(const ABytes: TBytes; out AText: string): TTextFileFormat;
+var
+  Enc : TEncoding;
+  Skip: Integer;
+begin
+  Enc := nil; { nil = detect a UTF-8 / UTF-16 BOM, else fall back to ANSI }
+  Skip:= TEncoding.GetBufferEncoding(ABytes, Enc, TEncoding.ANSI);
+  Result.Encoding:= Enc;
+  Result.Preamble:= Copy(ABytes, 0, Skip);
+  AText:= if Length(ABytes) > Skip then Enc.GetString(ABytes, Skip, Length(ABytes) - Skip) else '';
+  Result.LineBreak:= LineBreakOf(AText);
+end;
+
+class function TTextFileFormat.LineBreakOf(const AText: string): string;
+begin
+  Result:= if (Pos(#10, AText) > 0) and (Pos(#13#10, AText) = 0) then #10 else #13#10;
+end;
+
+function TTextFileFormat.Encode(const AText: string): TBytes;
+begin
+  Result:= Preamble + Encoding.GetBytes(AText);
+end;
 
 { Sort key for back-to-front application within a file: larger line first; for
   deletes use EndLine as the key so a delete is processed before any edit above
@@ -648,15 +708,17 @@ begin
     end;
     AApplied:= AppliedInFile;
     if AppliedInFile = 0 then Exit;
-    { re-encode CRLF, preserve a trailing newline if the original had one }
+    { re-join in the file's own line-break style (F8: CRLF unless it was LF-only),
+      preserve a trailing newline if the original had one }
+    var LB: string:= TTextFileFormat.LineBreakOf(Content);
     var SB: TStringBuilder:= TStringBuilder.Create;
     try
       for var I: Integer:= 0 to Lines.Count - 1 do
       begin
         SB.Append(Lines[I]);
-        if I < Lines.Count - 1 then SB.Append(#13#10);
+        if I < Lines.Count - 1 then SB.Append(LB);
       end;
-      if (Content <> '') and (Content[Length(Content)] = #10) then SB.Append(#13#10);
+      if (Content <> '') and (Content[Length(Content)] = #10) then SB.Append(LB);
       Result:= SB.ToString;
     finally
       SB.Free;
@@ -691,6 +753,8 @@ var
   Group   : TList<TTextEdit>;
   Pair    : TPair<string, TList<TTextEdit>>;
   RawBytes: TBytes;
+  Fmt     : TTextFileFormat;
+  OldText : string;
   NewText : string;
   Touched : Integer;
   AppliedInFile: Integer;
@@ -718,15 +782,18 @@ begin
         so a file whose every edit the guard rejected still got a backup, was
         still rewritten, and still counted as touched. RawBytes holds the
         original, so the backup waits until something changed. }
-      NewText:= ApplyGroup(Pair.Key, TEncoding.ANSI.GetString(RawBytes), Pair.Value, False, ASkippedEdits, AppliedInFile);
+      { F8: decode by the file's BOM (none = ANSI, as before) and write back in
+        the same encoding, BOM included. }
+      Fmt:= TTextFileFormat.Decode(RawBytes, OldText);
+      NewText:= ApplyGroup(Pair.Key, OldText, Pair.Value, False, ASkippedEdits, AppliedInFile);
       { Nothing survived validation for this file: leave it exactly as found --
         no backup, no rewrite, not counted. The re-serialization is NOT
-        byte-preserving (TStringList + forced CRLF), so writing here would edit
-        a file on behalf of zero applied edits. }
+        byte-preserving (TStringList + one line-break style), so writing here
+        would edit a file on behalf of zero applied edits. }
       if AppliedInFile = 0 then Continue;
       if AWriteBackups then TFile.WriteAllBytes(Pair.Key + '.bak', RawBytes);
       FailWriteForTests(Touched + 1, Pair.Key);
-      TFile.WriteAllBytes(Pair.Key, TEncoding.ANSI.GetBytes(NewText));
+      TFile.WriteAllBytes(Pair.Key, Fmt.Encode(NewText));
       Inc(Touched);
     end;
   finally

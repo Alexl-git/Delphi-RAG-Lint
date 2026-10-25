@@ -23,8 +23,9 @@ unit DRagLint.Convert.Backup;
 
   All I/O here is plain ANSI + CRLF (matching the project-wide Delphi source
   convention and TTextEditApplier's own encoding discipline) -- BackupFiles
-  copies raw bytes (encoding-agnostic), recovery.txt and the prepended
-  comment are written explicitly as ANSI/CRLF text.
+  copies raw bytes (encoding-agnostic), recovery.txt is written as ANSI/CRLF
+  text, and the prepended comment keeps the .pas file's own encoding, BOM and
+  line-break style (TTextFileFormat, F8 2026-10-25).
 }
 
 interface
@@ -130,8 +131,9 @@ procedure AppendRecoveryBlock(const AFolder, AHeader: string; const AMappings: T
 /// drag-lint convert-apply &lt;timestamp&gt;
 /// backup: &lt;backupPas&gt; / &lt;backupDfm&gt; ; rules: &lt;rulesfile&gt;
 /// </code>
-/// Reads and rewrites APasPath as ANSI text with CRLF line endings, matching
-/// the rest of the codebase's strict-ASCII/CRLF source-file convention -- this
+/// Reads and rewrites APasPath in its OWN encoding and line-break style
+/// (TTextFileFormat, F8 2026-10-25): the header goes after any BOM and ends in
+/// the file's line break; a BOM-less CRLF file is ANSI/CRLF as before -- this
 /// must run AFTER the conversion write (it stamps the already-converted file).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
@@ -145,7 +147,8 @@ procedure PrependConvertComment(const APasPath, ATimestamp, ARulesFile: string;
 implementation
 
 uses
-  System.IOUtils;
+  System.IOUtils,
+  DRagLint.Refactor.TextEdit;
 
 function NextBackupName(const APath: string): string;
 var
@@ -214,7 +217,7 @@ end;
 procedure PrependConvertComment(const APasPath, ATimestamp, ARulesFile: string;
   const AMappings: TArray<string>);
 var
-  Existing: TBytes;
+  Fmt: TTextFileFormat;
   ExistingText, BackupPas, BackupDfm, M, Header: string;
   Parts: TArray<string>;
 begin
@@ -227,12 +230,11 @@ begin
     else if SameText(ExtractFileExt(Parts[0]), '.dfm') and (BackupDfm = '') then BackupDfm:= Parts[1];
   end;
 
-  Header:= Format('// drag-lint convert-apply %s', [ATimestamp]) + #13#10 +
-    Format('//   backup: %s / %s ; rules: %s', [BackupPas, BackupDfm, ARulesFile]) + #13#10;
-
-  Existing:= TFile.ReadAllBytes(APasPath);
-  ExistingText:= TEncoding.ANSI.GetString(Existing);
-  TFile.WriteAllBytes(APasPath, TEncoding.ANSI.GetBytes(Header + ExistingText));
+  { F8: the header goes AFTER any BOM, in the file's encoding and line-break style }
+  Fmt:= TTextFileFormat.Decode(TFile.ReadAllBytes(APasPath), ExistingText);
+  Header:= Format('// drag-lint convert-apply %s', [ATimestamp]) + Fmt.LineBreak +
+    Format('//   backup: %s / %s ; rules: %s', [BackupPas, BackupDfm, ARulesFile]) + Fmt.LineBreak;
+  TFile.WriteAllBytes(APasPath, Fmt.Encode(Header + ExistingText));
 end;
 
 end.

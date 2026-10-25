@@ -27286,13 +27286,23 @@ var
     if (JCtx.ComponentPart <> 'applied') and (Length(PlanRes.Edits) = 0) then Exit;
     // 1. Collect the distinct touched file paths from the edit set.
     TouchedFiles:= TList<string>.Create;
-    TouchedSet  := TDictionary<string, Boolean>.Create;
+    TouchedSet  := TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal); { F7: UnitPas and an edit's path may differ in case }
     try
       for Ed in PlanRes.Edits do
         if not TouchedSet.ContainsKey(Ed.FilePath) then
         begin TouchedSet.Add(Ed.FilePath, True); TouchedFiles.Add(Ed.FilePath); end;
 
       Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+
+      { F7 (2026-10-25): step 4 stamps the .pas even when no edit touches it (a
+        .dfm-only conversion), so it joins the set HERE -- pre-checked, backed
+        up, in recovery.txt and named in the stamp's "backup:" field. Under
+        --no-backup there is no stamp, so it is not written and not checked. }
+      if not AArgs.NoBackup and not TouchedSet.ContainsKey(UnitPas) then
+      begin
+        TouchedSet.Add(UnitPas, True);
+        TouchedFiles.Add(UnitPas);
+      end;
 
       // 1b. (1.23.0, C13) Every touched file must be writable BEFORE anything
       // is written: the applier writes file by file, so a read-only or locked
@@ -28839,7 +28849,10 @@ begin
     Exit(2);
   end;
 
-  Raw:= TFile.ReadAllText(AArgs.Target, TEncoding.ANSI);
+  { F8: decode by the file's BOM (none = ANSI, as before); written back below in
+    the same encoding, BOM included. A UTF-8 BOM read as ANSI made line 1 three
+    characters longer and "not 7-bit ASCII". }
+  var RawFmt: TTextFileFormat:= TTextFileFormat.Decode(TFile.ReadAllBytes(AArgs.Target), Raw);
 
   { Walk to the 1-based target line. }
   P := 1;
@@ -29017,7 +29030,7 @@ begin
   SpliceLineInto(Raw, SupLine, SupNew);
 
   Raw:= Copy(Raw, 1, LineStart - 1) + NewLine + Copy(Raw, LineEnd, MaxInt);
-  TFile.WriteAllText(AArgs.Target, Raw, TEncoding.ANSI);
+  TFile.WriteAllBytes(AArgs.Target, RawFmt.Encode(Raw));
   if SupLine > 0 then
     Writeln(Format('%s:%d allows "%s" (superseded the marker on line %d)',
       [AArgs.Target, AArgs.FixLine, AArgs.FixRule, SupLine]))
