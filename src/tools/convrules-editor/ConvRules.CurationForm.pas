@@ -342,6 +342,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SaveSet(AIndex: Integer): Boolean;
+      /// <summary>The encoding question (ASK_SAVE_FMT, Yes / Cancel) the writers ask when text does not fit a file's level.</summary>
+      /// <param name="APath">File about to be written.</param>
+      /// <param name="ALevel">Its current level.</param>
+      /// <param name="ARaiseTo">The level that holds the text.</param>
+      /// <param name="ALost">Characters that would be lost.</param>
+      /// <param name="ALostTotal">Total lost.</param>
+      /// <returns>True when the user chose Yes (raise and write).</returns>
+      function AskRaise(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): Boolean;
       /// <param name="ADefault"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Dlg.FileName.</returns>
       /// <remarks>
@@ -1014,9 +1022,6 @@ var
   Det     : TDetectedText ;
   Level   : TTextLevel    ;
   Idx     : Integer       ;
-  Lost    : TArray<TLostChar>;
-  LostTotal: Integer      ;
-  Raised  : TTextLevel    ;
 begin
   Result := False;
   ABackup:= '';
@@ -1032,19 +1037,12 @@ begin
     else
       Existing:= nil;
     NewText:= JoinBlocks(ConcatBlocks(Existing, ABlocks));
-    if not RoundTrips(NewText, Level) then
+    // the appended rules may hold characters the file's level cannot store: ask, never write lossy
+    if not WriteTextAskingRaise(APath, NewText, Level, AskRaise, Level, ABackup) then
     begin
-      // the appended rules hold characters the file's level cannot store: ask, never write lossy
-      Raised:= RaiseTarget(Level, NeededLevel(NewText));
-      Lost:= LostChars(NewText, Level, LOST_CHARS_SHOWN, LostTotal);
-      if MessageDlg(Format(ASK_SAVE_FMT, [LostTotal, ExtractFileName(APath), LevelName(Level), sLineBreak, LostCharsText(Lost), sLineBreak + sLineBreak, LevelName(Raised)]), mtConfirmation, [mbYes, mbCancel], 0) <> mrYes then
-      begin
-        ANote:= 'Curation cancelled -- nothing was written.';
-        Exit;
-      end;
-      Level:= Raised;
+      ANote:= CURATION_CANCELLED;
+      Exit;
     end;
-    WriteTextWithBackupAt(APath, NewText, Level, ABackup);
     Idx:= FSet.IndexOfPath(APath);
     if Idx >= 0 then
       FSet.SetLevel(Idx, Level);
@@ -1072,13 +1070,24 @@ begin
   end; // try
 end; // function
 
+function TCurationForm.AskRaise(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): Boolean;
+begin
+  Result:= MessageDlg(SaveAskMessage(APath, ALevel, ARaiseTo, ALost, ALostTotal), mtConfirmation, [mbYes, mbCancel], 0) = mrYes;
+end;
+
 function TCurationForm.SaveSet(AIndex: Integer): Boolean;
 var
-  Bak: string;
+  Bak  : string ;
+  Saved: Boolean;
 begin
   Result:= False;
   try
-    Bak:= FSet.SaveFile(AIndex);
+    Bak:= FSet.SaveFileAsking(AIndex, AskRaise, Saved);
+    if not Saved then
+    begin
+      FStatus.SimpleText:= CURATION_CANCELLED;
+      Exit;
+    end;
     FTouched.AddOrSetValue(TouchKey(FSet.Item(AIndex).Path), True);
     FStatus.SimpleText:= Format('Saved %s (backup %s)', [ExtractFileName(FSet.Item(AIndex).Path), ExtractFileName(Bak)]);
     Result:= True;
@@ -1261,6 +1270,9 @@ var
   Target: string         ;
   Bak   : string         ;
   Head  : TArray<string> ;
+  TgtDet  : TDetectedText;
+  TgtLevel: TTextLevel   ;
+  TgtIdx  : Integer      ;
   Chk   : TApplyIntegrity;
 begin
   if FSet.Count = 0 then
@@ -1330,7 +1342,23 @@ begin
     Exit;
   end;
   try
-    WriteTextWithBackup(Target, Text, Bak);
+    { A new target has no level to change: NeededLevel. An existing target keeps its detected level;
+      text that does not fit it is asked about (Cancel writes nothing). }
+    if TFile.Exists(Target) then
+    begin
+      ReadTextDetect(Target, TgtDet);
+      TgtLevel:= TgtDet.Level;
+    end
+    else
+      TgtLevel:= NeededLevel(Text);
+    if not WriteTextAskingRaise(Target, Text, TgtLevel, AskRaise, TgtLevel, Bak) then
+    begin
+      FStatus.SimpleText:= CURATION_CANCELLED;
+      Exit;
+    end;
+    TgtIdx:= FSet.IndexOfPath(Target);
+    if TgtIdx >= 0 then
+      FSet.SetLevel(TgtIdx, TgtLevel);
     FTouched.AddOrSetValue(TouchKey(Target), True);
     // The compose target may itself be a member of the set -- re-sync it from the
     // exact text written, or that entry keeps its pre-compose blocks and the next

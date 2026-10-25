@@ -28,7 +28,21 @@ uses
   , ConvRules.TextEncoding
   ;
 
+const
+  /// <summary>Status text when the user cancels the encoding question.</summary>
+  CURATION_CANCELLED = 'Curation cancelled -- nothing was written.';
+
 type
+  /// <summary>The encoding question seam: asked when the text to save does not fit the file's level.</summary>
+  /// <param name="APath">The file about to be written.</param>
+  /// <param name="ALevel">The file's current level (cannot hold the text).</param>
+  /// <param name="ARaiseTo">The level that would hold it.</param>
+  /// <param name="ALost">The first characters that would be lost at ALevel.</param>
+  /// <param name="ALostTotal">How many characters would be lost in all.</param>
+  /// <returns>True = raise to ARaiseTo and write; False = cancel, write nothing.</returns>
+  /// <remarks>The form shows ASK_SAVE_FMT (Yes / Cancel); tests pass a stub, so both branches are model-testable.</remarks>
+  TRaiseAsk = reference to function(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): Boolean;
+
   /// <summary>One loaded file: where it came from and its verbatim blocks.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -451,6 +465,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SaveFile(AIndex: Integer): string;
+      /// <summary>As SaveFile, but when the text does not fit the entry's level asks AAsk first.</summary>
+      /// <param name="AIndex">Entry index.</param>
+      /// <param name="AAsk">The encoding question; Yes raises the entry's level (SetLevel) and saves.</param>
+      /// <param name="ASaved">False when the user cancelled: nothing was written and the entry is untouched.</param>
+      /// <returns>The backup written, or ''.</returns>
+      /// <exception cref="EInOutError">Backup failure, as SaveFile.</exception>
+      function SaveFileAsking(AIndex: Integer; const AAsk: TRaiseAsk; out ASaved: Boolean): string;
       /// <summary>The encoding level of entry AIndex.</summary>
       /// <param name="AIndex">Entry index; out of range raises like Item.</param>
       /// <returns>TWorkingFile.Level of that entry.</returns>
@@ -526,6 +547,27 @@ procedure WriteTextWithBackup(const APath, AText: string; out ABackup: string);
 /// <remarks>The form asks the user before calling this; the raise is the last guard.</remarks>
 procedure WriteTextWithBackupAt(const APath, AText: string; ALevel: TTextLevel; out ABackup: string);
 
+/// <summary>Writes AText at ACurrent when it fits; otherwise asks AAsk whether to raise the level.</summary>
+/// <param name="APath">Target file.</param>
+/// <param name="AText">Text to write.</param>
+/// <param name="ACurrent">The level the target is at (NeededLevel for a file that does not exist yet).</param>
+/// <param name="AAsk">The encoding question; asked only when AText does not round-trip at ACurrent. nil counts as Cancel.</param>
+/// <param name="ANewLevel">The level written at (ACurrent, or the raised level after Yes).</param>
+/// <param name="ABackup">The backup written, or ''.</param>
+/// <returns>True = written; False = the user cancelled, nothing was touched.</returns>
+/// <exception cref="EInOutError">As WriteTextWithBackupAt.</exception>
+/// <remarks>Compose rule: a target that does NOT exist has no level to change, so callers pass NeededLevel(AText) and no question is asked; an EXISTING target is passed at its detected level and a text that does not fit it is asked about. SaveFile itself never raises a level silently.</remarks>
+function WriteTextAskingRaise(const APath, AText: string; ACurrent: TTextLevel; const AAsk: TRaiseAsk; out ANewLevel: TTextLevel; out ABackup: string): Boolean;
+
+/// <summary>The ASK_SAVE_FMT text for one encoding question.</summary>
+/// <param name="APath">File named in the question (its name only).</param>
+/// <param name="ALevel">Current level.</param>
+/// <param name="ARaiseTo">Offered level.</param>
+/// <param name="ALost">Lost characters shown.</param>
+/// <param name="ALostTotal">Total lost.</param>
+/// <returns>The dialog message.</returns>
+function SaveAskMessage(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): string;
+
 implementation
 
 function BackupPath(const APath: string): string;
@@ -578,6 +620,31 @@ begin
   end; // if
   WriteTextAtLevel(APath, AText, ALevel);
 end; // procedure
+
+function WriteTextAskingRaise(const APath, AText: string; ACurrent: TTextLevel; const AAsk: TRaiseAsk; out ANewLevel: TTextLevel; out ABackup: string): Boolean;
+var
+  Lost : TArray<TLostChar>;
+  Total: Integer          ;
+  Up   : TTextLevel       ;
+begin
+  ANewLevel:= ACurrent;
+  ABackup  := '';
+  Result   := True;
+  if not RoundTrips(AText, ACurrent) then
+  begin
+    Up  := RaiseTarget(ACurrent, NeededLevel(AText));
+    Lost:= LostChars(AText, ACurrent, LOST_CHARS_SHOWN, Total);
+    if (not Assigned(AAsk)) or (not AAsk(APath, ACurrent, Up, Lost, Total)) then
+      Exit(False);
+    ANewLevel:= Up;
+  end;
+  WriteTextWithBackupAt(APath, AText, ANewLevel, ABackup);
+end;
+
+function SaveAskMessage(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): string;
+begin
+  Result:= Format(ASK_SAVE_FMT, [ALostTotal, ExtractFileName(APath), LevelName(ALevel), sLineBreak, LostCharsText(ALost), sLineBreak + sLineBreak, LevelName(ARaiseTo)]);
+end;
 
 { TWorkingSet }
 
@@ -823,16 +890,18 @@ begin
 end; // function
 
 function TWorkingSet.SaveFile(AIndex: Integer): string;
-var
-  Text : string    ;
-  Level: TTextLevel;
 begin
-  Text := JoinBlocks(FFiles[AIndex].Blocks);
-  Level:= FFiles[AIndex].Level;
-  if not RoundTrips(Text, Level) then // the entry grew characters its level cannot hold: never lossy
-    Level:= RaiseTarget(Level, NeededLevel(Text));
-  WriteTextWithBackupAt(FFiles[AIndex].Path, Text, Level, Result);
-  SetLevel(AIndex, Level);
+  // never raises the level on its own (a silent encoding change): WriteTextWithBackupAt raises 'encoding:' when the text does not fit
+  WriteTextWithBackupAt(FFiles[AIndex].Path, JoinBlocks(FFiles[AIndex].Blocks), FFiles[AIndex].Level, Result);
+end;
+
+function TWorkingSet.SaveFileAsking(AIndex: Integer; const AAsk: TRaiseAsk; out ASaved: Boolean): string;
+var
+  NewLevel: TTextLevel;
+begin
+  ASaved:= WriteTextAskingRaise(FFiles[AIndex].Path, JoinBlocks(FFiles[AIndex].Blocks), FFiles[AIndex].Level, AAsk, NewLevel, Result);
+  if ASaved then
+    SetLevel(AIndex, NewLevel);
 end;
 
 function TWorkingSet.LevelOf(AIndex: Integer): TTextLevel;

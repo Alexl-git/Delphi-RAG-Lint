@@ -15,6 +15,108 @@ begin
   Result:= 'caf' + TEncoding.ANSI.GetString(TBytes.Create($E9));
 end;
 
+procedure TestEncodingAsk;
+var
+  Dir, P, B, Msg: string;
+  WS     : TWorkingSet;
+  Calls  : Integer;
+  Seen   : TTextLevel;
+  SeenTot: Integer;
+  Lv     : TTextLevel;
+  Ok     : Boolean;
+  Raised : Boolean;
+  Text   : string;
+  AskYes, AskNo: TRaiseAsk;
+begin
+  Calls:= 0;
+  AskYes:= function(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): Boolean
+    begin
+      Inc(Calls);
+      Seen:= ARaiseTo;
+      SeenTot:= ALostTotal;
+      Result:= True;
+    end;
+  AskNo:= function(const APath: string; ALevel, ARaiseTo: TTextLevel; const ALost: TArray<TLostChar>; ALostTotal: Integer): Boolean
+    begin
+      Inc(Calls);
+      Result:= False;
+    end;
+  Text:= ENC_BOOK_HDR + '// ' + ENC_CYR + #13#10;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'enc3ask-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    P:= TPath.Combine(Dir, 'a.rules');
+    // SaveFile never raises the level on its own
+    TFile.WriteAllBytes(P, TEncoding.ASCII.GetBytes('orig'));
+    WS:= TWorkingSet.Create;
+    try
+      WS.AddTextAt(P, Text, tlAscii7);
+      Raised:= False;
+      Msg:= '';
+      try
+        WS.SaveFile(0);
+      except
+        on E: EInOutError do
+        begin
+          Raised:= True;
+          Msg:= E.Message;
+        end;
+      end;
+      Check('savefile.nofit.raises.untouched', Raised and (Pos('encoding:', Msg) = 1) and (TEncoding.ASCII.GetString(TFile.ReadAllBytes(P)) = 'orig')
+        and (WS.LevelOf(0) = tlAscii7) and (not TFile.Exists(P + '.bak')), Msg);
+      // Cancel: nothing written, level kept
+      Calls:= 0;
+      WS.SaveFileAsking(0, AskNo, Ok);
+      Check('savefile.asking.cancel', (not Ok) and (Calls = 1) and (TEncoding.ASCII.GetString(TFile.ReadAllBytes(P)) = 'orig')
+        and (WS.LevelOf(0) = tlAscii7) and (not TFile.Exists(P + '.bak')));
+      // Yes: level raised, written, backup kept
+      Calls:= 0;
+      B:= WS.SaveFileAsking(0, AskYes, Ok);
+      Check('savefile.asking.yes', Ok and (Calls = 1) and (Seen = tlUtf8) and (SeenTot = 1) and (WS.LevelOf(0) = tlUtf8)
+        and (DecodeText(TFile.ReadAllBytes(P), tlUtf8) = Text) and (B <> '') and TFile.Exists(B));
+      // fits now: no question
+      Calls:= 0;
+      WS.SaveFileAsking(0, AskNo, Ok);
+      Check('savefile.asking.fits.no.question', Ok and (Calls = 0));
+      // SetLevel
+      WS.SetLevel(0, tlUtf16Bom);
+      Check('ws.setlevel', WS.LevelOf(0) = tlUtf16Bom);
+      WS.SetLevel(99, tlAscii7);
+      Check('ws.setlevel.out.of.range.noop', WS.LevelOf(0) = tlUtf16Bom);
+    finally
+      WS.Free;
+    end;
+
+    // the compose / WriteBlocksTo rule: a NEW target is written at NeededLevel without a question
+    P:= TPath.Combine(Dir, 'new.rules');
+    Calls:= 0;
+    Ok:= WriteTextAskingRaise(P, Text, NeededLevel(Text), AskNo, Lv, B);
+    Check('compose.new.target.no.question', Ok and (Calls = 0) and (Lv = NeededLevel(Text)) and (B = '') and (DecodeText(TFile.ReadAllBytes(P), Lv) = Text));
+    // an EXISTING target keeps its level: Cancel leaves it untouched ...
+    P:= TPath.Combine(Dir, 'old.rules');
+    TFile.WriteAllBytes(P, TEncoding.ASCII.GetBytes('orig'));
+    Calls:= 0;
+    Ok:= WriteTextAskingRaise(P, Text, tlAscii7, AskNo, Lv, B);
+    Check('compose.existing.cancel', (not Ok) and (Calls = 1) and (Lv = tlAscii7) and (B = '') and (TEncoding.ASCII.GetString(TFile.ReadAllBytes(P)) = 'orig')
+      and (not TFile.Exists(P + '.bak')));
+    // ... and a nil question counts as Cancel
+    Ok:= WriteTextAskingRaise(P, Text, tlAscii7, nil, Lv, B);
+    Check('compose.existing.nil.ask.is.cancel', (not Ok) and (TEncoding.ASCII.GetString(TFile.ReadAllBytes(P)) = 'orig'));
+    // ... Yes raises the level
+    Calls:= 0;
+    Ok:= WriteTextAskingRaise(P, Text, tlAscii7, AskYes, Lv, B);
+    Check('compose.existing.yes.raises', Ok and (Calls = 1) and (Lv = tlUtf8) and (B <> '') and (DecodeText(TFile.ReadAllBytes(P), tlUtf8) = Text));
+    // text that fits: no question
+    Calls:= 0;
+    Ok:= WriteTextAskingRaise(P, Text, tlUtf8, AskNo, Lv, B);
+    Check('compose.existing.fits.no.question', Ok and (Calls = 0) and (Lv = tlUtf8));
+    Msg:= SaveAskMessage('C:\x\book.rules', tlAscii7, tlUtf8, nil, 3);
+    Check('ask.message', (Pos('3 character(s) in book.rules', Msg) = 1) and (Pos(LevelName(tlUtf8), Msg) > 0));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 procedure TestEncodingReaders;
 var
   Dir, P, B, Msg: string;
@@ -161,4 +263,5 @@ begin
   finally
     TDirectory.Delete(Dir, True);
   end;
+  TestEncodingAsk;
 end;
