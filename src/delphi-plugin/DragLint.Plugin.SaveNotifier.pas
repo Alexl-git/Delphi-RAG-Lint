@@ -209,9 +209,10 @@ end; // procedure
   would do to the resident LSP. B0(c) measured the incremental form at 0.37 s
   for a no-op pass and 1.21 s for a one-file write, with two resident LSP
   children alive and no lock. }
-{ The one place a reindex job is queued from this unit. OnDone re-lints: a
-  save does not change the buffer hash, so without it the live runner never
-  looks again and the panel keeps findings computed against the old index. }
+{ The one place a reindex job is queued from this unit. No OnDone here: a save does
+  not change the buffer hash, but JobQueue calls GReindexDoneHook (-> RequestRelint)
+  after EVERY jkReindex job, so the re-lint is already guaranteed; an OnDone that
+  also called RequestRelint re-linted twice (guard: run_indexjob_tests.ps1). }
 { THE DB COMES FROM THE ACTIVE PROJECT, never from GLastProjectDb (2026-10-16).
   GLastProjectDb is "the last .dproj OPENED", so with two projects in a group
   every save ran `index --project <active> --db <the other one's DB>`: the
@@ -233,11 +234,6 @@ begin
   end;
   Job:= BuildProjectIndexJob(AExePath, ProjFile, DbPath, GetActivePlatformForLibrary);
   if ATitle <> '' then Job.Title:= ATitle;
-  Job.OnDone:=
-    procedure(AExit: Integer; AOutput: string)
-    begin
-      RequestRelint;
-    end;
   JobQueue.Enqueue(Job);
   Result:= True;
 end;
@@ -264,6 +260,7 @@ var
   ExePath  : string           ;
   Cfg      : TDragLintSettings;
   SavedFile: string           ;
+  Queued   : Boolean          ;
 begin
   { v0.40.3+: belt-and-suspenders try/except. The IDE's save flow (File >
     Save All) runs notifiers as part of a deep VCLFormDesigner / DocModul
@@ -288,26 +285,27 @@ begin
 
     SavedFile:= FileName;
 
-    { Post status message to IDE Messages pane from main thread }
-    TThread.Queue(
-      nil,
-      procedure var Svc: IOTAMessageServices; begin try if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then Svc.AddTitleMessage( Format('drag-lint: reindexing %s...',
-              [ExtractFileName(SavedFile)])); except { swallow } end; end
-    );
-
     { Tier 1. The per-file fallback (no active project, or no unique owner)
       targets the DB the manifest says covers the SAVED FILE -- never
       GLastProjectDb, which names whichever project was opened last and is
       exactly how a foreign DB got written. A single-file target cannot widen a
       scope; a file no section covers is skipped and logged rather than written
-      somewhere it does not belong. }
-    if not EnqueueProjectReindex(ExePath) then
-    begin
-      DbPath:= ManifestDbForFile(SavedFile);
-      if DbPath <> '' then QueueFileReindexJob(ExePath, SavedFile, DbPath)
-      else DLT('reindex', 'per-file fallback skipped: no manifest section covers ' + SavedFile);
+      somewhere it does not belong. The Messages pane is told only about a reindex
+      that was really started. }
+    Queued:= EnqueueProjectReindex(ExePath);
+    if Queued then DbPath:= ''
+    else DbPath:= ManifestDbForFile(SavedFile);
+    case ChooseSaveReindex(Queued, DbPath) of
+      sraFile   : QueueFileReindexJob(ExePath, SavedFile, DbPath);
+      sraNone   : DLT('reindex', 'per-file fallback skipped: no manifest section covers ' + SavedFile);
     end;
 
+    if ChooseSaveReindex(Queued, DbPath) <> sraNone then
+      TThread.Queue(
+        nil,
+        procedure var Svc: IOTAMessageServices; begin try if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then Svc.AddTitleMessage( Format('drag-lint: reindexing %s...',
+                [ExtractFileName(SavedFile)])); except { swallow } end; end
+      );
     { v0.42: republish diagnostics for the saved file (syntax errors + lint).
       The hook sends textDocument/didSave to the running LSP, which replies with
       publishDiagnostics -> markers. No-op if the LSP isn't running yet (the
