@@ -27,24 +27,25 @@ type
   /// signatureHelp, diagnostics.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas)</para>
-  /// <para>Used in units: DRagLint.LSP.Server</para>
+  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLspCompletion = class
     public
       /// <param name="AKind"><!-- drag-lint:auto type -->TSymbolKind</param>
-      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 7; 22; 8; 13; 20; 2.</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 7; 22; 8; 13; 20; 2; 4; 10;
+      /// 5; 9; 21; 6; 1.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)</para>
       /// <para>Complexity: 13 (cyclomatic, outer body), 17 lines (full implementation)</para>
-      /// <para>Pure</para>
+      /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapSymbolKindToLspKind(AKind: TSymbolKind): Integer;
@@ -56,14 +57,14 @@ type
       /// <!-- drag-lint:auto -->ASevText is the string severity stored in TLintFinding.Severity
       /// ('error', 'warning', 'info', 'hint').
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson (DRagLint.LSP.Completion.pas)</para>
       /// <para>Calls: SameText</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapLintSeverityToLspSeverity(const ASevText: string): Integer;
@@ -84,7 +85,7 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapCompilerSeverityToLspSeverity(const ASev: string)                                       : Integer    ;
@@ -97,7 +98,7 @@ type
       /// ACol).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Recursive</para>
@@ -107,7 +108,7 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ; overload;
@@ -147,14 +148,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: CharInSet, Copy, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.LSP.Completion.TLspCompletion.StripParamModifier, DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4, Pos, SplitString, Trim</para>
+      /// <para>Calls: CharInSet, Copy, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp, DRagLint.LSP.Completion.TLspCompletion.StripParamModifier, DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4, Pos, SplitString, Trim</para>
       /// <para>Complexity: 39 (cyclomatic, outer body), 197 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
       /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.StripParamModifier"/>
-      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildSignatureHelp(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)  : TJSONObject;
@@ -169,19 +170,28 @@ type
       /// <returns><!-- drag-lint:auto -->TJSONArray -- Observed: TJSONArray.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds, DRagLint.Lint.Linter.TLinter.LintFile (+6 more)</para>
-      /// <para>Complexity: 17 (cyclomatic, outer body), 211 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep (+15 more)</para>
+      /// <para>Complexity: 30 (cyclomatic, outer body), 273 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware"/>
-      /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
+      /// <summary>Maps the bare ARRAY that lint <file> --json prints to LSP diagnostics
+      /// (C1, lsp --full-rules). Same severity map as BuildDiagnostics, source is
+      /// 'drag-lint', code is the rule id.</summary>
+      /// <param name="AJson">The raw stdout of lint <file> --json: a JSON array of objects with
+      /// rule (or rule_id), severity, start_line, start_col, end_line, end_col, message (1-based).</param>
+      /// <returns>A new array (caller owns), empty for []; nil when AJson is not a JSON array,
+      /// so the caller can fall back to BuildDiagnostics.</returns>
+      /// <remarks>Pure. Findings without a rule id are skipped.</remarks>
+      class function DiagnosticsFromLintJson(const AJson: string): TJSONArray;
       /// <summary>Code actions for diagnostics on AFile in the given range. Returns
       /// a JSON array of CodeAction objects with edits to insert reviewed-markers.</summary>
       /// <param name="AFile">Path to the source file.</param>
@@ -195,16 +205,16 @@ type
       /// Pure function. Insertion must use TReviewMarkers.InsertInto().
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, SameText, StringReplace, StrToIntDef</para>
+      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash, SameText, StringReplace, StrToIntDef</para>
       /// <para>Returns: TJSONArray.Create</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 117 lines (full implementation)</para>
+      /// <para>Complexity: 21 (cyclomatic, outer body), 130 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
+      /// <seealso cref="DRagLint.Lint.RuleCatalog.IsRoutineMetricRule"/>
+      /// <seealso cref="DRagLint.Lint.RuleCatalog.MetricHash"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
@@ -232,13 +242,14 @@ type
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function EmptySigHelp                                                       : TJSONObject;
@@ -253,7 +264,7 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function StripParamModifier(const AName: string)                            : string     ;
@@ -902,6 +913,13 @@ var
   { FP3c: the default-disabled set this surface must honour, exactly as
     FinalizeAndOutput does for the CLI. }
   DefOff   : TArray<string>          ;
+  { C2: the file's lines for marker suppression, read once on first use. }
+  MarkLines: TArray<string>          ;
+  { I1: partner-site lines and verdict for a duplicate-code finding. }
+  RLines   : TArray<string>          ;
+  PartnerOk: Boolean                 ;
+  RM       : TReviewMarker           ;
+  DataObj  : TJSONObject             ;
 
   { True when ARuleId ships OFF by default, so ShouldKeep may only publish it
     when the project's drag-lint-lint.json opts back in via "enabled".
@@ -964,9 +982,34 @@ begin
         so the gutter cannot disagree with the CLI about a non-string target. }
       Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(AFile, AStore, AStore.FindFileIdByPath(AFile), Rebuilt);
     end;
+    { Exact duplicates are ONE finding, as in the CLI's FinalizeAndOutput (step
+      0a, same key). The rule loader walks <exe-dir>\rules recursively, so a
+      nested copy of the folder runs every .scm rule twice; lint printed each
+      finding once and the gutter showed it twice. First occurrence wins. }
+    var Seen: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      var Uniq: TArray<TLintFinding>:= nil;
+      for F in Findings do
+      begin
+        var Key: string:= LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + IntToStr(F.StartCol)
+                          + '|' + LowerCase(F.RuleId) + '|' + F.Message;
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+        Uniq:= Uniq + [F];
+      end;
+      Findings:= Uniq;
+    finally
+      Seen.Free;
+    end;
     for F in Findings do
     begin
       if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
+      { C2: a `dl:ok` / `drag-lint:ignore` marker suppresses here exactly as in
+        `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
+        dropped (or the "Mark as reviewed" action would change nothing). }
+      if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, F.EndLine,
+           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
       DiagObj:= TJSONObject.Create;
@@ -988,6 +1031,14 @@ begin
       DiagObj.AddPair('source', 'drag-lint');
       DiagObj.AddPair('code'   , F.RuleId );
       DiagObj.AddPair('message', F.Message);
+      { I2: a routine-metric marker is hashed against the MEASURED value, so the
+        codeAction needs it back -- publish it as data.metric. }
+      if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId) then
+      begin
+        DataObj:= TJSONObject.Create;
+        DataObj.AddPair('metric', TJSONNumber.Create(F.Metric));
+        DiagObj.AddPair('data', DataObj);
+      end;
 
       Result.AddElement(DiagObj);
     end; // for
@@ -1034,6 +1085,26 @@ begin
     for F in TCloneChecker.Check(AFile) do
     begin
       if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
+      { I1 (C2): the same marker predicate as the lint loop above and as the CLI --
+        a dl:ok duplicate-code on the anchor suppresses, and so does one on the
+        PARTNER site (RelatedLine), verified against the partner's own window. }
+      if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, F.EndLine,
+           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
+      if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
+      begin
+        if SameText(F.RelatedFile, AFile) then RLines:= MarkLines
+        else RLines:= TLiveDocuments.ReadLines(F.RelatedFile);
+        PartnerOk:= False;
+        if F.RelatedLine <= Length(RLines) then
+          for RM in TReviewMarkers.Parse(RLines[F.RelatedLine - 1]) do
+            if SameText(RM.RuleId, F.RuleId) then
+            begin
+              PartnerOk:= (RM.Hash = '') or SameText(RM.Hash, TReviewMarkers.HashWindow(RLines, F.RelatedLine - 1));
+              Break;
+            end;
+        if PartnerOk then Continue;
+      end;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
       DiagObj := TJSONObject.Create;
       StartObj:= TJSONObject.Create;
@@ -1097,6 +1168,71 @@ begin
   end; // if
 end; // function
 
+class function TLspCompletion.DiagnosticsFromLintJson(const AJson: string): TJSONArray;
+var
+  Root    : TJSONValue;
+  Item    : TJSONValue;
+  Obj     : TJSONObject;
+  Rule    : string;
+  Sev     : string;
+  DiagObj : TJSONObject;
+  RangeObj: TJSONObject;
+  StartObj: TJSONObject;
+  EndObj  : TJSONObject;
+  DataObj : TJSONObject;
+  MetricVal: Integer;
+
+  function IntField(const AName: string; ADefault: Integer): Integer;
+  begin
+    if not Obj.TryGetValue<Integer>(AName, Result) then Result:= ADefault;
+  end;
+
+begin
+  Result:= nil;
+  Root:= TJSONObject.ParseJSONValue(AJson);
+  if Root = nil then Exit;
+  try
+    if Root is not TJSONArray then Exit;
+    Result:= TJSONArray.Create;
+    for Item in TJSONArray(Root) do
+    begin
+      if Item is not TJSONObject then Continue;
+      Obj:= TJSONObject(Item);
+      if not Obj.TryGetValue<string>('rule', Rule) then
+        if not Obj.TryGetValue<string>('rule_id', Rule) then Continue;
+      if not Obj.TryGetValue<string>('severity', Sev) then Sev:= 'info';
+
+      StartObj:= TJSONObject.Create;
+      StartObj.AddPair('line'     , TJSONNumber.Create(IntField('start_line', 1) - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(IntField('start_col' , 1) - 1));
+      EndObj:= TJSONObject.Create;
+      EndObj.AddPair('line'     , TJSONNumber.Create(IntField('end_line', IntField('start_line', 1)) - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(IntField('end_col' , IntField('start_col' , 1)) - 1));
+      RangeObj:= TJSONObject.Create;
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end'  , EndObj  );
+
+      DiagObj:= TJSONObject.Create;
+      DiagObj.AddPair('range'   , RangeObj);
+      DiagObj.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(Sev)));
+      DiagObj.AddPair('source'  , 'drag-lint');
+      DiagObj.AddPair('code'    , Rule);
+      DiagObj.AddPair('message' , Obj.GetValue<string>('message', ''));
+      { I2: the full-rules path is where routine-metric findings reach the gutter;
+        carry the measured value as data.metric so "Mark as reviewed" can hash it. }
+      if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(Rule) and Obj.TryGetValue<Integer>('metric', MetricVal) then
+      begin
+        DataObj:= TJSONObject.Create;
+        DataObj.AddPair('metric', TJSONNumber.Create(MetricVal));
+        DiagObj.AddPair('data', DataObj);
+      end;
+      Result.AddElement(DiagObj);
+    end; // for
+  finally
+    Root.Free;
+  end;
+end; // function
+
 class function TLspCompletion.BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
   const ADiagnostics: TJSONArray): TJSONArray;
 var
@@ -1116,6 +1252,7 @@ var
   FileUri: string;
   EditsArray: TJSONArray;
   ChangesMap: TJSONObject;
+  MarkHash: string;
 begin
   Result:= TJSONArray.Create;
   if (ADiagnostics = nil) or not TFile.Exists(AFile) then Exit;
@@ -1171,7 +1308,19 @@ begin
 
       { Generate the new line with the marker inserted. The message is used as the
         auto-generated reason (comment explaining why this finding was accepted). }
-      NewLineText:= TReviewMarkers.InsertInto(LineText, DiagCode, DiagMsg);
+      { I2: hash exactly as verification does (CLI DoAllow): HashWindow over the
+        anchor line, bound to the published metric for a routine-metric rule. A
+        metric rule without its metric gets NO action -- the marker could never
+        verify (the same refusal as the allow verb). }
+      MarkHash:= TReviewMarkers.HashWindow(Lines.ToStringArray, DiagLine - 1);
+      if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(DiagCode) then
+      begin
+        var DData := Diag.GetValue('data') as TJSONObject;
+        var DMetric := if DData <> nil then DData.GetValue('metric') else nil;
+        if DMetric = nil then Continue;
+        MarkHash:= DRagLint.Lint.RuleCatalog.MetricHash(MarkHash, StrToIntDef(DMetric.Value, 0));
+      end;
+      NewLineText:= TReviewMarkers.InsertInto(LineText, DiagCode, DiagMsg, MarkHash);
       if NewLineText = LineText then Continue; { no change }
 
       { Build the code action with text edit. LSP WorkspaceEdit.changes is a map from

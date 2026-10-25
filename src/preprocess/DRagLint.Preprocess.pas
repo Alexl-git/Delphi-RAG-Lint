@@ -85,13 +85,14 @@ uses
 /// No shared mutable state -- each call builds its own defines
 /// dictionary and IF stack.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
-/// <para>Calls: DRagLint.Preprocess.Preprocess/2</para>
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Preprocess/2, DRagLint.Preprocess.Types.TPPOptionsDefault</para>
 /// <para>Returns: Preprocess(AUtf8, Opts)</para>
-/// <para>Overload 1 of 2</para>
+/// <para>Overload 1 of 3</para>
 /// <para>Recursive</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Preprocess.Types.TPPOptionsDefault"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;
@@ -112,15 +113,29 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// directive is always blanked, never spliced.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Preprocess.PreprocessInto, DRagLint.Preprocess.Tolerance.ApplyTolerances, LowerCase</para>
-/// <para>Overload 2 of 2</para>
+/// <para>Calls: DRagLint.Preprocess.PreprocessWithSites</para>
+/// <para>Returns: PreprocessWithSites(AUtf8, AOptions, nil)</para>
+/// <para>Overload 2 of 3</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
-/// <seealso cref="DRagLint.Preprocess.PreprocessInto"/>
-/// <seealso cref="DRagLint.Preprocess.Tolerance.ApplyTolerances"/>
+/// <seealso cref="DRagLint.Preprocess.PreprocessWithSites"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; overload;
+
+/// <summary>N-06: the TPPOptions overload that also reports every active,
+/// resolved include site it met. The returned bytes are byte-identical to
+/// Preprocess(AUtf8, AOptions).</summary>
+/// <param name="AUtf8">The source file as UTF-8 bytes. Not modified.</param>
+/// <param name="AOptions">As for the 2-arg TPPOptions overload. Sites are only
+/// produced in 'defines-only' mode (in 'off' no include is ever resolved).</param>
+/// <param name="ASites">Receives the sites in source order, nested ones
+/// included (TPPIncludeSite.Depth tells them apart); empty when none.</param>
+/// <returns>A new TBytes with Length = Length(AUtf8) exactly.</returns>
+/// <remarks>Each site's Resolved bytes are the child output the recursion
+/// already produced -- no second preprocess.</remarks>
+function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
+  out ASites: TArray<TPPIncludeSite>): TBytes; overload;
 
 implementation
 
@@ -138,6 +153,8 @@ const
   // v1.2.1 port change #2: how many parent levels the nearest-first {$I} search
   // climbs (preprocess.js options.searchLevels default 3).
   SEARCH_LEVELS = 3;
+  // N-06: the LF byte; the include site's host column counts back to the line start.
+  LF_BYTE = 10;
 
 var
   // v1.2.1 port change #2: process-lifetime cache of directory listings for the
@@ -286,6 +303,7 @@ procedure PreprocessInto(
   const AIncludeMode, ABaseDir: string;
   ANearSearch: Boolean;
   ADepth: Integer;
+  ASites: TList<TPPIncludeSite>;
   var AOut: TBytes;
   var AOutPos: Integer);
 var
@@ -347,25 +365,49 @@ var
   // 'defines-only' handling for an ACTIVE {$I name}: resolve, read, recurse the
   // SAME dictionaries so the child's defines mutate the parent, discard the
   // child's output. The {$I} directive itself is blanked by the caller.
-  procedure ApplyIncludeDefines(const AName: string);
+  procedure ApplyIncludeDefines(const AName: string; const AChunk: TPPChunk);
   var
     Resolved : string ;
     SubBytes : TBytes ;
     SubOut   : TBytes ;
     SubPos   : Integer;
+    Site     : TPPIncludeSite;
+    SiteIdx  : Integer;
+    K        : Integer;
   begin
     Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch);
     if Resolved = '' then Exit; // unresolved -> nothing to apply (blank only)
     SubBytes:= TFile.ReadAllBytes(Resolved);
     SetLength(SubOut, Length(SubBytes)); // throwaway (child text is discarded)
     SubPos:= 0;
+    // N-06: reserve the site BEFORE recursing so a nested site lands after its
+    // parent (source order); its Resolved bytes are filled in once SubOut is done.
+    SiteIdx:= -1;
+    if ASites <> nil then
+    begin
+      Site:= Default(TPPIncludeSite);
+      Site.HostLine:= AChunk.Line + 1;
+      K:= AChunk.SrcStart;
+      while (K > 0) and (Bytes[K - 1] <> LF_BYTE) do
+        Dec(K);
+      Site.HostCol:= AChunk.SrcStart - K + 1;
+      Site.Depth  := ADepth;
+      Site.Path   := Resolved;
+      SiteIdx:= ASites.Add(Site);
+    end;
     // Recurse with the SAME ADefines/ANumeric instances (NOT copies) so the
     // child's {$DEFINE}/{$UNDEF} are visible to the parent's later {$IFDEF}. The
     // child's BaseDir is the resolved include's own directory, and NearSearch is
     // threaded through so a nested {$I} resolves nearest-first from there too.
     PreprocessInto(
       SubBytes, ADefines, ANumeric, AIncludeMode,
-      TPath.GetDirectoryName(Resolved), ANearSearch, ADepth + 1, SubOut, SubPos);
+      TPath.GetDirectoryName(Resolved), ANearSearch, ADepth + 1, ASites, SubOut, SubPos);
+    if SiteIdx >= 0 then
+    begin
+      Site:= ASites[SiteIdx];
+      Site.Resolved:= SubOut;
+      ASites[SiteIdx]:= Site;
+    end;
   end;
 
 begin
@@ -483,7 +525,7 @@ begin
       if EffectivelyActive
         and (ADepth < MAX_INCLUDE_DEPTH)
         and (AIncludeMode = 'defines-only') then
-        ApplyIncludeDefines(StripQuotes(C.Args));
+        ApplyIncludeDefines(StripQuotes(C.Args), C);
       BlankifyDirective(C.SrcStart, C.SrcEnd);
       Continue;
     end;
@@ -494,7 +536,10 @@ begin
   end;
 end;
 
-function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; overload;
+// N-06: the shared body of both TPPOptions overloads; ASites may be nil (no
+// site collection -- the original behavior).
+function PreprocessWithSites(const AUtf8: TBytes; const AOptions: TPPOptions;
+  ASites: TList<TPPIncludeSite>): TBytes;
 var
   Defines: TDictionary<string, Boolean>;
   Numeric: TDictionary<string, Integer>;
@@ -523,7 +568,7 @@ begin
       is passed through as the very same array. }
     PreprocessInto(
       NeutralizeMultilineStrings(AUtf8), Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
-      AOptions.NearSearch, 0, Result, OutPos);
+      AOptions.NearSearch, 0, ASites, Result, OutPos);
   finally
     Numeric.Free;
     Defines.Free;
@@ -536,6 +581,25 @@ begin
   // offset-identity invariant survives by construction.
   if AOptions.Tolerances then
     ApplyTolerances(Result);
+end;
+
+function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; overload;
+begin
+  Result:= PreprocessWithSites(AUtf8, AOptions, nil);
+end;
+
+function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
+  out ASites: TArray<TPPIncludeSite>): TBytes; overload;
+var
+  Sites: TList<TPPIncludeSite>;
+begin
+  Sites:= TList<TPPIncludeSite>.Create;
+  try
+    Result:= PreprocessWithSites(AUtf8, AOptions, Sites);
+    ASites:= Sites.ToArray;
+  finally
+    Sites.Free;
+  end;
 end;
 
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;

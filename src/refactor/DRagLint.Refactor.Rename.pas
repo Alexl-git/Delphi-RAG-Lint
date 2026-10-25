@@ -18,8 +18,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+7 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename</para>
+  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameEdit = record
@@ -32,8 +32,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix</para>
+  /// <para>Used by: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameRefactoring = class
@@ -45,15 +45,15 @@ type
       /// List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.LastDotSegment, IntToStr, SameText, UpperCase</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 113 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.LastDotSegment, DRagLint.Refactor.Rename.SnapEditsToToken, IntToStr, UpperCase</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 124 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Refactor.Rename.CompareEdits"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.FindIdentFrom"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
@@ -66,11 +66,11 @@ type
       /// <para>Calls: Copy, SameText</para>
       /// <para>Complexity: 16 (cyclomatic, outer body), 111 lines (full implementation)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.RenderDryRun"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.IncludeUseReason"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean) : Integer            ; // returns files touched
@@ -82,10 +82,10 @@ type
       /// <para>Calls: Format</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderDryRun(const AEdits: TArray<TRenameEdit>)                  : string             ;
@@ -95,14 +95,14 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas)</para>
       /// <para>Calls: CompareStr, LowerCase</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.RenderDryRun"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function IsReservedWord(const AName: string): Boolean;
@@ -117,14 +117,14 @@ type
       /// same scope', [ANewName]).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.FreeCandidates (DRagLint.Refactor.NamingFix.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord, Format</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ConflictReason(const AStore: ISymbolStore; const AQName, ANewName: string): string;
@@ -142,8 +142,41 @@ type
       /// <remarks>A text scan, deliberately conservative: comments ({ }, (* *), //)
       /// and string literals are skipped, but any other same-named identifier in an
       /// include refuses the rename even if it binds to a different symbol. An .inc
-      /// that is listed but missing on disk is ignored.</remarks>
+      /// that is listed but missing on disk is ignored. N-06: an include that holds
+      /// a uses entry naming the short name (a unit_uses row with origin_path) is
+      /// named too, even when the index keeps no files row for that .inc.</remarks>
       class function IncludeUseReason(const AStore: ISymbolStore; const AQName: string): string;
+      /// <summary>Non-empty human reason when the unit declaring AQName has a
+      /// BINARY form file (sibling .dfm) that contains the symbol's short name as
+      /// an identifier; '' otherwise. A rename must then be refused: Build rewrites
+      /// event bindings (`OnClick = Button1Click`) only in TEXT .dfm files, which
+      /// the index parses; a binary .dfm is opaque to it, so the form would keep
+      /// the old handler name and fail to load.</summary>
+      /// <param name="AStore">Open index; resolves AQName to its declaring file.
+      /// Must not be nil.</param>
+      /// <param name="AQName">Qualified name of the symbol to rename; only its last
+      /// dot segment is matched (case-insensitive, whole identifier).</param>
+      /// <returns>'' when the symbol is unknown, its unit has no .dfm, the .dfm is
+      /// text, or the binary .dfm does not contain the name; else a message naming
+      /// the .dfm and saying it is binary.</returns>
+      /// <remarks>A byte scan, deliberately conservative: any same-named
+      /// identifier in the binary stream refuses (a component or property of that
+      /// name, too). Binary = the file starts with the resource header byte $FF or
+      /// with the 'TPF0' signature.</remarks>
+      class function BinaryDfmReason(const AStore: ISymbolStore; const AQName: string): string;
+      /// <summary>Non-empty human reason when any edit's recorded position no
+      /// longer holds its old name on disk; '' when every edit is still in place.
+      /// A rename must then be refused: the file changed after it was indexed, and
+      /// rewriting whatever now sits there would corrupt it.</summary>
+      /// <param name="AEdits">Edits as Build / BuildLocal return them (Col already
+      /// snapped from a declaration keyword onto the name).</param>
+      /// <returns>'' when, for every edit, the file exists and OldName sits at
+      /// (Line, Col) as a whole identifier (case-insensitive); else a message
+      /// "index out of date for File:Line ..." naming the first stale edit.</returns>
+      /// <remarks>Never scans for the name elsewhere: a reference that moved on
+      /// disk (other line, or other column on its line) is stale, not retargeted.
+      /// Reads each file once.</remarks>
+      class function StaleEditReason(const AEdits: TArray<TRenameEdit>): string;
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
@@ -163,7 +196,7 @@ type
       /// Final.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
       /// <para>Calls: AddEdit, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.Walk, HdrName, Integer (+9 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -177,6 +210,9 @@ type
   end;
 
 implementation
+
+uses
+  System.StrUtils;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -203,6 +239,107 @@ begin
   if Result <> 0 then Exit;
   // Same line: sort Col DESC
   Result:= B.Col - A.Col;
+end;
+
+function IsIdentChar(C: Char): Boolean;
+begin
+  Result:= CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
+// 1-based column of the first whole-identifier, case-insensitive occurrence of
+// AName in ALine at or after AFrom; 0 when there is none.
+function FindIdentFrom(const ALine, AName: string; AFrom: Integer): Integer;
+var
+  P: Integer;
+begin
+  Result:= 0;
+  if AFrom < 1 then AFrom:= 1;
+  for P:= AFrom to Length(ALine) - Length(AName) + 1 do
+    if SameText(Copy(ALine, P, Length(AName)), AName)
+       and ((P = 1) or not IsIdentChar(ALine[P - 1]))
+       and ((P + Length(AName) > Length(ALine)) or not IsIdentChar(ALine[P + Length(AName)])) then
+      Exit(P);
+end;
+
+// Moves each edit's Col onto the identifier it replaces. Index rows can carry a
+// column that is NOT the name token: a routine/property declaration's symbol
+// starts at its `procedure`/`function`/`property` keyword. Apply used to
+// recover from that by scanning forward, but the edit set itself (rename --json,
+// MCP rename_symbol, LSP) reported the keyword column. Only that shape moves:
+// the stored column must start a declaration keyword run (`class procedure`,
+// `function`, `property`, ...) that is followed, on the SAME line, by the name.
+// Anything else keeps its column -- a reference that moved on disk must stay
+// where the index says so StaleEditReason / the LSP refuse it, never be
+// silently retargeted to a later same-named token (11477a8c regression).
+function IsIdentAt(const ALine, AName: string; ACol: Integer): Boolean;
+var
+  InRange, OpenEdge, CloseEdge: Boolean;
+begin
+  InRange  := (ACol >= 1) and (ACol + Length(AName) - 1 <= Length(ALine));
+  if not InRange then Exit(False);
+  OpenEdge := (ACol = 1) or not IsIdentChar(ALine[ACol - 1]);
+  CloseEdge:= (ACol + Length(AName) > Length(ALine)) or not IsIdentChar(ALine[ACol + Length(AName)]);
+  Result   := OpenEdge and CloseEdge and SameText(Copy(ALine, ACol, Length(AName)), AName);
+end;
+
+// Column of AName after the declaration keyword run that starts at ACol; 0 when
+// ACol does not start such a run or the run is not followed by AName.
+function NameAfterDeclKeywords(const ALine, AName: string; ACol: Integer): Integer;
+const
+  DeclKeywords: array[0..6] of string = ('class', 'procedure', 'function',
+    'constructor', 'destructor', 'property', 'operator');
+var
+  P, Q    : Integer;
+  Tok     : string;
+  Keywords: Integer;
+begin
+  Result  := 0;
+  Keywords:= 0;
+  P       := ACol;
+  while (P >= 1) and (P <= Length(ALine)) do
+  begin
+    Q:= P;
+    while (Q <= Length(ALine)) and IsIdentChar(ALine[Q]) do Inc(Q);
+    Tok:= Copy(ALine, P, Q - P);
+    if (Keywords > 0) and IsIdentAt(ALine, AName, P) then Exit(P);
+    if not MatchText(Tok, DeclKeywords) then Exit;
+    Inc(Keywords);
+    P:= Q;
+    while (P <= Length(ALine)) and CharInSet(ALine[P], [' ', #9]) do Inc(P);
+  end;
+end;
+
+procedure SnapEditsToToken(AList: TList<TRenameEdit>);
+var
+  Cache: TObjectDictionary<string, TStringList>;
+  Lines: TStringList;
+  Edit : TRenameEdit;
+  I    : Integer;
+  Col  : Integer;
+begin
+  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  try
+    for I:= 0 to AList.Count - 1 do
+    begin
+      Edit:= AList[I];
+      if not Cache.TryGetValue(UpperCase(Edit.FilePath), Lines) then
+      begin
+        Lines:= TStringList.Create;
+        if TFile.Exists(Edit.FilePath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Edit.FilePath));
+        Cache.Add(UpperCase(Edit.FilePath), Lines);
+      end;
+      if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
+      if IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then Continue;
+      Col:= NameAfterDeclKeywords(Lines[Edit.Line - 1], Edit.OldName, Edit.Col);
+      if Col > 0 then
+      begin
+        Edit.Col:= Col;
+        AList[I]:= Edit;
+      end;
+    end;
+  finally
+    Cache.Free;
+  end;
 end;
 
 // ---------------------------------------------------------------------------
@@ -263,22 +400,29 @@ begin
           if Sym.ImplStartLine <= ILines.Count then
           begin
             var LnText := ILines[Sym.ImplStartLine - 1];
-            // find ShortName preceded by '.' (the dotted Type.Name member shape)
-            var ScanAt := 1;
-            while ScanAt + Length(ShortName) - 1 <= Length(LnText) do
+            // The name as a whole identifier: preceded by '.' for the dotted
+            // Type.Name member shape, else (a global routine's own impl header,
+            // `function Compute(...)`) the first occurrence on the line.
+            var HitCol  := 0;
+            var ScanAt  := FindIdentFrom(LnText, ShortName, 1);
+            while ScanAt > 0 do
             begin
-              if SameText(Copy(LnText, ScanAt, Length(ShortName)), ShortName)
-                 and (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
+              if HitCol = 0 then HitCol:= ScanAt;
+              if (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
               begin
-                Edit.FilePath := ImplPath;
-                Edit.Line     := Sym.ImplStartLine;
-                Edit.Col      := ScanAt;
-                Edit.OldName  := ShortName;
-                Edit.NewName  := ANewName;
-                List.Add(Edit);
+                HitCol:= ScanAt;
                 Break;
               end;
-              Inc(ScanAt);
+              ScanAt:= FindIdentFrom(LnText, ShortName, ScanAt + 1);
+            end;
+            if HitCol > 0 then
+            begin
+              Edit.FilePath := ImplPath;
+              Edit.Line     := Sym.ImplStartLine;
+              Edit.Col      := HitCol;
+              Edit.OldName  := ShortName;
+              Edit.NewName  := ANewName;
+              List.Add(Edit);
             end;
           end;
         finally
@@ -286,6 +430,10 @@ begin
         end;
       end;
     end;
+
+    // Every edit's Col onto its name token BEFORE the dedup below, so a keyword-
+    // column decl row and a name-column row for the same token collapse.
+    SnapEditsToToken(List);
 
     // Dedup by exact (FilePath, Line, Col). Multiple sources above can legitimately
     // point at the SAME source position: e.g. a bare paren-less method call like
@@ -820,6 +968,13 @@ begin
       if SameText(ExtractFileExt(Stamp.Path), '.inc') and FileExists(Stamp.Path)
         and IdentOccursIn(TFile.ReadAllText(Stamp.Path, TEncoding.ANSI), ShortName) then
         Hits.Add(Stamp.Path);
+    // N-06: a uses entry inside an include is a unit_uses row of its HOST with
+    // origin_path set -- authoritative even for an .inc the index keeps no files
+    // row for (one found by the near-search the closure resolver does not do).
+    // Renaming the unit would leave that entry stale.
+    for var U in AStore.FindUsersOfUnit(LowerCase(ShortName)) do
+      if U.FromInclude and (Hits.IndexOf(U.OriginPath) < 0) then
+        Hits.Add(U.OriginPath);
     if Hits.Count = 0 then Exit;
     Hits.Sort;
     Result:= Format('"%s" is used in include file(s) %s -- the index records no ' +
@@ -828,6 +983,58 @@ begin
       [ShortName, string.Join(', ', Hits.ToStringArray)]);
   finally
     Hits.Free;
+  end;
+end;
+
+class function TRenameRefactoring.BinaryDfmReason(const AStore: ISymbolStore;
+  const AQName: string): string;
+const
+  ResHeaderByte = $FF;
+var
+  Syms     : TArray<TSymbol>;
+  ShortName: string;
+  DfmPath  : string;
+  Bytes    : TBytes;
+begin
+  Result:= '';
+  ShortName:= LastDotSegment(AQName);
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if (ShortName = '') or (Length(Syms) = 0) then Exit;
+  DfmPath:= ChangeFileExt(AStore.GetFilePath(Syms[0].FileId), '.dfm');
+  if not FileExists(DfmPath) then Exit;
+  Bytes:= TFile.ReadAllBytes(DfmPath);
+  if Length(Bytes) = 0 then Exit;
+  if (Bytes[0] <> ResHeaderByte) and not TEncoding.ANSI.GetString(Bytes).StartsWith('TPF0') then Exit;
+  if FindIdentFrom(TEncoding.ANSI.GetString(Bytes), ShortName, 1) = 0 then Exit;
+  Result:= Format('%s is a binary .dfm that contains "%s" -- rename only rewrites ' +
+    'event bindings in text .dfm files, so the form would keep the old name. ' +
+    'Convert it to text (IDE: right-click the form > Text DFM, or convert.exe -t) and ' +
+    're-index first.', [DfmPath, ShortName]);
+end;
+
+class function TRenameRefactoring.StaleEditReason(const AEdits: TArray<TRenameEdit>): string;
+var
+  Cache: TObjectDictionary<string, TStringList>;
+  Lines: TStringList;
+  Edit : TRenameEdit;
+begin
+  Result:= '';
+  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  try
+    for Edit in AEdits do
+    begin
+      if not Cache.TryGetValue(UpperCase(Edit.FilePath), Lines) then
+      begin
+        Lines:= TStringList.Create;
+        Cache.Add(UpperCase(Edit.FilePath), Lines);
+        if TFile.Exists(Edit.FilePath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Edit.FilePath));
+      end;
+      if (Edit.Line < 1) or (Edit.Line > Lines.Count) or not IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then
+        Exit(Format('index out of date for %s:%d (no "%s" at column %d) -- save and reindex, then retry',
+          [Edit.FilePath, Edit.Line, Edit.OldName, Edit.Col]));
+    end;
+  finally
+    Cache.Free;
   end;
 end;
 

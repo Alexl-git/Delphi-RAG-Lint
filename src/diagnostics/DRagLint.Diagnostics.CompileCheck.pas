@@ -22,7 +22,7 @@ type
   /// for diagnostics and fallback parsing).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -59,6 +59,7 @@ type
       /// dedup, existence-filter) to avoid cmdline overflow, and injected via DCC_UnitSearchPath
       /// env var. Empty string means use the .dproj default (typically Win64).</param>
       /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
+      /// <exception cref="EStudioNotFound"><!-- drag-lint:auto exc -->via DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat</exception>
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture: CreatePipe failed; via DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture: CreateProcessW failed: %d</exception>
       /// <remarks>
       /// By default runs an INCREMENTAL compile (msbuild /t:Make; dcc64
@@ -69,7 +70,7 @@ type
       /// unit so findings are reported even for units DCC would otherwise skip as
       /// already up to date. Not thread-safe.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: Default, DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable</para>
       /// <para>Returns: Default(TCompileCheckResult)</para>
       /// <para>Complexity: 17 (cyclomatic, outer body), 106 lines (full implementation)</para>

@@ -11,13 +11,20 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "dump-pp-lex"
+      "verb": "dump-pp-lex",
+      "usage": "drag-lint dump-pp-lex --file PATH",
+      "flags": [
+        {
+          "name": "--file",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "agent",
   "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "b02944f9cf3a99666155c5d3b86d955740509e94a734f5a3d330c5dff215c34d"

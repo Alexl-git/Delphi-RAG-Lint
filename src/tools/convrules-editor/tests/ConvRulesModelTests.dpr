@@ -40,6 +40,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.WorkList in '..\ConvRules.WorkList.pas'  // dl:unit ConvRules.WorkList accepted -- the tests read the PAS_USE_* statuses and WORK_* texts to pin the unit's own contract, so the consts travel with the unit under test
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertBatch in '..\ConvRules.ConvertBatch.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.QualifyFix in '..\ConvRules.QualifyFix.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
@@ -47,6 +48,7 @@ uses
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
+  , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
   ;
 
 var
@@ -349,6 +351,42 @@ begin
   Check('proptree.noise.leafcount', Length(Tree.Leaves) = 1, IntToStr(Length(Tree.Leaves)));
   if Length(Tree.Leaves) = 1 then
     Check('proptree.noise.leafpath', Tree.Leaves[0].Path = 'Size', Tree.Leaves[0].Path);
+end;
+
+{ A reply with no JSON object raises EProptreeParse (not the root Exception), so a
+  caller can catch the malformed reply on its own. }
+procedure TestProptreeNotObject;
+var
+  LClass: string;
+begin
+  LClass:= '(nothing raised)';
+  try
+    ParseProptreeJson('engine died');
+  except
+    on E: Exception do
+      LClass:= E.ClassName;
+  end;
+  Check('proptree.not.object.raises.EProptreeParse', LClass = 'EProptreeParse', LClass);
+end;
+
+{ B4 review: the Convert tab asks JobRunsBatched on the job RunConversion receives; a
+  scoped job (IDE request) with several units stays per-unit, as the runner decides. }
+procedure TestJobRunsBatched;
+var
+  LJob: TConvertJob;
+begin
+  LJob:= Default(TConvertJob);
+  LJob.Units         := ['A.pas', 'B.pas']; // only the count is read
+  LJob.BatchSupported:= True;
+  Check('batch.job.whole.unit.on', JobRunsBatched(LJob));
+  LJob.Scope.Kind:= skSelected;
+  Check('batch.job.scoped.off', not JobRunsBatched(LJob));
+  LJob.Scope.Kind   := skWholeUnit;
+  LJob.BatchOverride:= 'Off';
+  Check('batch.job.env.off', not JobRunsBatched(LJob));
+  LJob.BatchOverride:= '';
+  LJob.Units        := ['A.pas'];
+  Check('batch.job.one.unit.off', not JobRunsBatched(LJob));
 end;
 
 { proptree/2 (engine schema v17): per-leaf is_writable / visibility / member_kind,
@@ -2240,7 +2278,7 @@ end;
 // C16 test helper: 'u<k>/<N>[ b<j>/<M>] <phase>;' for one runner step.
 function RunStepCode(const AStep: TRunStep): string;
 const
-  CODES: array[TRunPhase] of string = ('rb', 'bk', 'ap', 'ra', 'rs', 'fr');
+  CODES: array[TRunPhase] of string = ('rb', 'bk', 'ap', 'ra', 'rs', 'ab', 'fr');
 begin
   Result:= Format('u%d/%d', [AStep.UnitNo, AStep.UnitCount]);
   if AStep.BookNo > 0 then
@@ -2445,6 +2483,535 @@ begin
   S.Phase:= rpFinalReindex;
   S.TotalElapsedMs:= MS_1H2M3S;
   Check('steptext.final', RunStepText(S) = 'Final reindex (total 1:02:03)', RunStepText(S));
+end; // procedure
+
+{ B4: the batch step lines (plan 3.7). }
+procedure TestBatchStepText;
+const
+  MS_42S   = 42000;
+  MS_3M10S = 190000;
+  UNITS_20 = 20;
+  UNITS_5  = 5;
+  CHUNK_8  = 8;
+var
+  S: TRunStep;
+begin
+  S:= Default(TRunStep);
+  S.Phase:= rpApplyBatch;
+  S.UnitNo:= 1;
+  S.UnitCount:= UNITS_20;
+  S.BookNo:= 1;
+  S.BookCount:= 2;
+  S.Book:= 'C:\r\Fix.rules';  // dl:ok hardcoded-absolute-path@29cd -- REVIEWED 2026-10-23 text only: no file is touched
+  S.BatchUnits:= CHUNK_8;
+  S.UnitElapsedMs:= MS_42S;
+  S.TotalElapsedMs:= MS_3M10S;
+  Check('batch.step.text.apply', RunStepText(S) = 'Book 1 of 2 Fix: applying units 1-8 of 20 in one batch (0:42, total 3:10)', RunStepText(S));
+  S.Phase:= rpReindexAfter;
+  Check('batch.step.text.reindex', RunStepText(S) = 'Book 1 of 2 Fix: reindexing after batch apply, units 1-8 of 20 (0:42, total 3:10)', RunStepText(S));
+  S.Phase:= rpReindexBefore;
+  S.UnitNo:= 0;
+  S.BookNo:= 0;
+  S.Book:= '';
+  S.BatchUnits:= 0;
+  Check('batch.step.text.reindex.before', RunStepText(S) = 'All 20 unit(s): reindexing before apply (0:42, total 3:10)', RunStepText(S));
+  // A per-unit step (BatchUnits = 0) keeps today's text, also for rpReindexAfter.
+  S:= Default(TRunStep);
+  S.Phase:= rpReindexAfter;
+  S.UnitNo:= 2;
+  S.UnitCount:= UNITS_5;
+  S.UnitPas:= 'C:\x\SystemData2.pas';  // dl:ok hardcoded-absolute-path@8a0d -- REVIEWED 2026-10-23 text only: no file is touched
+  S.BookNo:= 1;
+  S.BookCount:= 2;
+  S.Book:= 'C:\r\BDE-to-FireDAC.rules';  // dl:ok hardcoded-absolute-path@5f39 -- REVIEWED 2026-10-23 text only: no file is touched
+  S.UnitElapsedMs:= MS_42S;
+  S.TotalElapsedMs:= MS_3M10S;
+  Check('steps.text.per.unit.unchanged', RunStepText(S) = 'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: reindexing after apply (0:42, total 3:10)', RunStepText(S));
+end; // procedure
+
+// B4 test helper: a path as the body of a JSON string.
+function BatchJ(const S: string): string;
+begin
+  Result:= StringReplace(S, '\', '\\', [rfReplaceAll]);
+end;
+
+// B4 test helper: one apply/1 object as the engine puts it in units[] (or alone, for one
+// --unit). AKind: 'o' ok; 'f' failed, nothing written; 'w' failed after the fake wrote the
+// file (the editor's restore must undo it); 'r' refused; 'e' the book's rule_errors.
+function BatchTestEntry(const AUnit: string; AKind: Char; const AText: string): string;
+begin
+  case AKind of
+    'o': Result:= '"ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]';
+    'r': Result:= Format('"ok":false,"refused":true,"error":"%s","reason":"%s","rule_errors":[],"edits_count":0', [AText, AText]);
+    'e': Result:= '"ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],"edits_count":0';
+    else Result:= Format('"ok":false,"refused":false,"error":"%s","rule_errors":[],"edits_count":0', [AText]);
+  end; // case
+  Result:= '{"schema":"apply/1","unit":"' + BatchJ(AUnit) + '",' + Result + '}';
+end;
+
+// B4 test helper: the apply-batch/1 document around AEntries (AKinds: one BatchTestEntry kind
+// per entry); AExit = the worst unit's code, as the engine computes it.
+function BatchTestDoc(const AEntries: TArray<string>; const AKinds: string; out AExit: Integer): string;
+var
+  LOk, LRef, LFail: Integer;
+begin
+  LOk  := 0;
+  LRef := 0;
+  LFail:= 0;
+  for var C: Char in AKinds do
+    case C of
+      'o': Inc(LOk);
+      'r': Inc(LRef);
+      else Inc(LFail);
+    end; // case
+  AExit:= 0;
+  if LRef > 0 then
+    AExit:= 1;
+  if LFail > 0 then
+    AExit:= 2;
+  Result:= Format('{"schema":"apply-batch/1","mode":"apply","units_count":%d,"ok":%s,"exit_code":%d,"ok_count":%d,"refused_count":%d,'
+    + '"failed_count":%d,"classes_built":2,"units":[%s]}', [Length(AEntries), if AExit = 0 then 'true' else 'false', AExit, LOk, LRef, LFail, string.Join(',', AEntries)]);
+end;
+
+// B4 test helper: True when every condition holds (all are evaluated -- keep them safe).
+function AllOf(const AConds: array of Boolean): Boolean;
+begin
+  Result:= True;
+  for var LCond: Boolean in AConds do
+    Result:= Result and LCond;
+end;
+
+// B4 test helper: the fake engine's decision -- AKind for a unit named AStem ('' = any) under
+// ABook, 'o' (converted) for everything else.
+function BatchKindFor(const AStem, ABook: string; AKind: Char): TFunc<string, string, Char>;
+begin
+  Result:= function(AUnit, ARulesFile: string): Char
+    begin
+      Result:= 'o';
+      if ((AStem = '') or (FileStem(AUnit) = AStem)) and (ARulesFile = ABook) then
+        Result:= AKind;
+    end;
+end;
+
+{ B4 Task 4: the book-major batch loop (RunConversionBatched) with the engine faked. The
+  fake writes '// <book>' into every unit it reports converted (and 'w' units), answers an
+  apply-batch/1 whose units[].unit echo the --unit list, and a bare apply/1 for one --unit,
+  as the engine does. }
+procedure TestBatchRunner;
+const
+  ORIG       = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  SUMMARY_2  = 'batch: 2 unit(s) -- 2 ok, 0 refused, 0 failed; 2 class(es) built; exit 0';
+  UNITS_3    = 3;
+  ROWS_4     = 4;
+  CHUNKS_4   = 4;
+  PREFIX     = 'batch apply not trusted: ';
+var
+  Root, Dir: string;
+  CaseNo   : Integer;
+  Log      : string;
+  Steps    : TArray<TRunStep>;
+  Calls    : TArray<string>;
+  Polls    : Integer;
+  Decide   : TFunc<string, string, Char>;  // (unit, book) -> a BatchTestEntry kind
+  Answer   : TFunc<string, string>;        // nil = the fake's own answer; else replaces it
+  ExitOver : Integer;                      // -1 = the answer's own exit code
+  IdxCalls : Integer;
+  IdxFailAt: Integer;                      // the AIndex call that fails; 0 = none
+  Index    : TIndexFn;
+  OnStep   : TRunStepFn;
+  OnRow    : TConvertProgress;
+  Fake     : TApplyBatchFn;
+  Counting : TFunc<Boolean>;
+  Rows     : TArray<TConvertRow>;
+  S1, S2, S3: string;
+
+  function Fresh(const AName: string): string;
+  begin
+    Result:= TPath.Combine(Dir, AName);
+    TFile.WriteAllText(Result, ORIG, TEncoding.ASCII);
+  end;
+
+  procedure Reset;
+  begin
+    Inc(CaseNo);
+    Dir:= TPath.Combine(Root, 'c' + IntToStr(CaseNo));
+    TDirectory.CreateDirectory(Dir);
+    Log      := '';
+    Steps    := nil;
+    Calls    := nil;
+    Polls    := 0;
+    Answer   := nil;
+    ExitOver := -1;
+    IdxCalls := 0;
+    IdxFailAt:= 0;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'o';
+      end;
+    S1:= Fresh('S1.pas');
+    S2:= Fresh('S2.pas');
+    S3:= Fresh('S3.pas');
+  end;
+
+  // The row of AUnit x ABook ('' = a unit-level row); Status csConfigError + Note '(none)' when absent.
+  function RowOf(const AUnit, ABook: string): TConvertRow;
+  begin
+    for var LRow: TConvertRow in Rows do
+      if SameText(LRow.UnitPas, AUnit) and SameText(LRow.Book, ABook) then
+        Exit(LRow);
+    Result:= Default(TConvertRow);
+    Result.Status:= csConfigError;
+    Result.Note  := '(none)';
+  end;
+
+  function Untouched(const APas: string): Boolean;
+  begin
+    Result:= TFile.ReadAllText(APas) = ORIG;
+  end;
+
+  function BackupsOf(const APas: string): Integer;
+  begin
+    Result:= Length(TDirectory.GetFiles(Dir, ExtractFileName(APas) + '.BCK*'));
+  end;
+
+  function Describe: string;
+  var
+    LParts: TArray<string>;
+  begin
+    LParts:= nil;
+    for var LRow: TConvertRow in Rows do
+      LParts:= LParts + [Format('[%s/%s %s: %s]', [FileStem(LRow.UnitPas), FileStem(LRow.Book), ConvertStatusText(LRow.Status), LRow.Note])];
+    Result:= string.Join('', LParts);
+  end;
+
+  // Rows[AIdx], or the absent row of RowOf when there is no such row.
+  function RowAt(AIdx: Integer): TConvertRow;
+  begin
+    Result:= RowOf('', '?');
+    if AIdx < Length(Rows) then
+      Result:= Rows[AIdx];
+  end;
+
+  procedure CheckOrderAndSummary;
+  var
+    LSumOk : Boolean;
+    LSizeOk: Boolean;
+  begin
+    Reset;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.steps.order.2x2', Log = 'u0/2 rb;u1/2 bk;u2/2 bk;u1/2 b1/2 ab;u1/2 b1/2 ra;u1/2 b2/2 ab;u1/2 b2/2 ra;'
+      + 'row:S1/A;row:S1/B;row:S2/A;row:S2/B;', Log);
+    Check('batch.calls.one.per.book', string.Join('|', Calls) = 'A:S1,S2|B:S1,S2', string.Join('|', Calls));
+    Check('batch.converted.with.backups', AllOf([Length(Rows) = ROWS_4, RowOf(S1, 'B.rules').Status = csConverted,
+      RowOf(S2, 'A.rules').Status = csConverted, TFile.Exists(S1 + '.BCK1'), TFile.Exists(S2 + '.BCK1'),
+      RowOf(S2, 'B.rules').Backup = S2 + '.BCK1', Pos('// B.rules', TFile.ReadAllText(S2)) > 0]), Describe);
+    LSumOk := True;
+    LSizeOk:= True;
+    for var LStep: TRunStep in Steps do
+    begin
+      LSumOk := LSumOk and ((LStep.Phase = rpReindexAfter) = (LStep.Summary = SUMMARY_2)) and ((LStep.Phase = rpReindexAfter) or (LStep.Summary = ''));
+      LSizeOk:= LSizeOk and ((LStep.Phase in [rpApplyBatch, rpReindexAfter]) = (LStep.BatchUnits = 2));
+    end;
+    Check('batch.summary.on.reindex.step', LSumOk and (Length(Steps) > 0), Log);
+    Check('batch.steps.batch.units', LSizeOk and (Length(Steps) > 0), Log);
+  end;
+
+  procedure CheckChunks;
+  begin
+    Reset;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow, Counting, OnStep, False, False, 2);
+    Check('batch.rows.final.per.unit', Log = 'u0/3 rb;u1/3 bk;u2/3 bk;u3/3 bk;u1/3 b1/2 ab;u1/3 b1/2 ra;u3/3 b1/2 ab;u3/3 b1/2 ra;'
+      + 'u1/3 b2/2 ab;u1/3 b2/2 ra;row:S1/A;row:S1/B;row:S2/A;row:S2/B;u3/3 b2/2 ab;u3/3 b2/2 ra;row:S3/A;row:S3/B;', Log);
+    Check('batch.chunks.two.calls', string.Join('|', Calls) = 'A:S1,S2|A:S3|B:S1,S2|B:S3', string.Join('|', Calls));
+    // The one-unit chunk got a BARE apply/1 (as the engine answers one --unit) and converted.
+    Check('batch.single.unit.chunk.converted', (RowOf(S3, 'A.rules').Status = csConverted) and (RowOf(S3, 'B.rules').Status = csConverted), Describe);
+    Check('batch.cancel.polled.per.chunk.no.cancel', Polls = CHUNKS_4, IntToStr(Polls));
+  end;
+
+  // S1 and S2 through books A and B, one chunk per book; Decide says what S2 meets in ABook.
+  procedure RunS2(const ABook: string; AKind: Char);
+  begin
+    Reset;
+    Decide:= BatchKindFor('S2', ABook, AKind);
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+  end;
+
+  procedure CheckFailures;
+  begin
+    // --- S2 fails on book A after the fake wrote it: restored, finished; book B runs on S1 alone ---
+    RunS2('A.rules', 'w');
+    Check('batch.unit.failed.restored', AllOf([RowOf(S2, 'A.rules').Status = csFailedRestored, RowOf(S2, 'A.rules').Note = 'boom S2',
+      Untouched(S2), RowOf(S2, 'B.rules').Note = '(none)', RowOf(S1, 'A.rules').Status = csConverted,
+      RowOf(S1, 'B.rules').Status = csConverted, string.Join('|', Calls) = 'A:S1,S2|B:S1', BackupsOf(S2) = 1]),
+      Describe + ' ' + string.Join('|', Calls));
+
+    // --- S2 refused on its first book: nothing restored, its backup dropped ---
+    RunS2('A.rules', 'r');
+    Check('batch.unit.refused.first.drops.backup', AllOf([RowOf(S2, 'A.rules').Status = csRefused, RowOf(S2, 'A.rules').Backup = '',
+      BackupsOf(S2) = 0, Untouched(S2), Pos('u2/2 b1/2 rs', Log) = 0, RowOf(S1, 'B.rules').Status = csConverted]), Describe + ' ' + Log);
+
+    // --- S2 refused on book B after A converted it: restored, A's row rolled back ---
+    RunS2('B.rules', 'r');
+    Check('batch.unit.refused.later.rolls.back', AllOf([RowOf(S2, 'A.rules').Status = csRolledBack, RowOf(S2, 'B.rules').Status = csRefused,
+      Untouched(S2), BackupsOf(S2) = 1, Pos('u2/2 b2/2 rs', Log) > 0, RowOf(S1, 'B.rules').Status = csConverted]), Describe + ' ' + Log);
+
+    // --- book A fails validation: ONE book-skipped row, every unit runs book B ---
+    Reset;
+    Decide:= BatchKindFor('', 'A.rules', 'e');
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, 2);
+    Check('batch.book.invalid.once', AllOf([Length(Rows) = ROWS_4, RowOf(S1, 'A.rules').Status = csBookSkipped,
+      RowOf(S2, 'A.rules').Note = '(none)', RowOf(S3, 'B.rules').Status = csConverted,
+      string.Join('|', Calls) = 'A:S1,S2|B:S1,S2|B:S3']), Describe + ' ' + string.Join('|', Calls));
+    Check('batch.book.invalid.notreached.none', Length(NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules'])) = 0,
+      string.Join(',', NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules'])));
+  end;
+
+  procedure CheckUntrusted;
+  var
+    LAll  : Boolean;
+    LShort: string;
+    LExit : Integer;
+  begin
+    // --- units[] short: 2 entries for 3 units -- the whole chunk is restored ---
+    Reset;
+    LShort:= BatchTestDoc([BatchTestEntry(S1, 'o', ''), BatchTestEntry(S2, 'o', '')], 'oo', LExit);
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LShort;
+      end;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    LAll:= Length(Rows) = UNITS_3;
+    for var LRow: TConvertRow in Rows do
+      LAll:= LAll and (LRow.Status = csFailedRestored) and LRow.Note.StartsWith(PREFIX);
+    Check('batch.untrusted.short.units.restores.chunk', LAll and Untouched(S1) and Untouched(S2) and Untouched(S3), Describe);
+
+    // --- the engine died: no apply-batch/1 at all ---
+    Reset;
+    ExitOver:= 1;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= 'engine died';
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.untrusted.unparseable', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
+      Pos(PREFIX, RowAt(0).Note) = 1, Pos('engine died', RowAt(0).Note) > 0, Untouched(S1), Untouched(S2)]), Describe);
+
+    // --- exit 0 with failed_count 1: the exit contract is broken ---
+    Reset;
+    ExitOver:= 0;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(StringReplace(AJson, '"failed_count":0', '"failed_count":1', []), '"ok_count":2', '"ok_count":1', []);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.contract.broken', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
+      Pos(PREFIX + 'exit_code 0', RowAt(0).Note) = 1, Untouched(S1), Untouched(S2)]), Describe);
+
+    // --- the reindex after book B's chunk fails (D4): both units restored, A's rows rolled back ---
+    Reset;
+    IdxFailAt:= UNITS_3; // 1 = before, 2 = after book A, 3 = after book B
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.reindex.after.fails.restores.chunk', AllOf([RowOf(S1, 'A.rules').Status = csRolledBack, RowOf(S2, 'A.rules').Status = csRolledBack,
+      RowOf(S1, 'B.rules').Status = csFailedRestored, RowOf(S2, 'B.rules').Note = 'reindex after batch apply failed: idx failed',
+      Untouched(S1), Untouched(S2)]), Describe);
+  end;
+
+  procedure CheckStops;
+  var
+    LLock   : TFileStream;
+    LNotSeen: TArray<string>;
+    LPolls  : Integer;
+  begin
+    // --- exit 6 on the first chunk: every unit of it csConfigError, the run stops ---
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'f';
+      end;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, 2);
+    LNotSeen:= NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules']);
+    Check('batch.config.error.stops', AllOf([Length(Rows) = 2, RowAt(0).Status = csConfigError, RowAt(0).StoppedRun,
+      RowAt(1).Status = csConfigError, not RowAt(1).StoppedRun, string.Join('|', Calls) = 'A:S1,S2',
+      string.Join(',', LNotSeen) = S3, BackupsOf(S1) = 0, Pos(' ra;', Log) = 0]), Describe + ' ' + Log);
+
+    // --- cancel before chunk 2 of book A: chunk 1 keeps book A, no book B call ---
+    Reset;
+    LPolls:= 0;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow,
+      function: Boolean
+      begin
+        Inc(LPolls);
+        Result:= LPolls >= 2;
+      end, OnStep, False, False, 2);
+    Polls:= LPolls;
+    LNotSeen:= NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules']);
+    // Plan 3.6: a unit short of a book is not reached by it -- chunk 1's units miss book B.
+    Check('batch.cancel.between.chunks', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConverted, RowOf(S2, 'A.rules').Status = csConverted,
+      string.Join('|', Calls) = 'A:S1,S2', string.Join(',', LNotSeen) = string.Join(',', [S1, S2, S3]),
+      Untouched(S3), BackupsOf(S3) = 0]), Describe + ' notreached=' + string.Join(',', LNotSeen));
+    Check('batch.cancel.polled.per.chunk', Polls = 2, IntToStr(Polls)); // 1 chunk attempted + the poll that cancelled
+
+    // --- S1's backup cannot be taken: csUnitSkipped, never in a --unit list ---
+    Reset;
+    LLock:= TFileStream.Create(S1, fmOpenRead or fmShareExclusive);
+    try
+      Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    finally
+      LLock.Free;
+    end; // try
+    Check('batch.backup.failure.skips.unit', AllOf([RowOf(S1, '').Status = csUnitSkipped, Pos('backup failed', RowOf(S1, '').Note) > 0,
+      string.Join('|', Calls) = 'A:S2', RowOf(S2, 'A.rules').Status = csConverted, BackupsOf(S1) = 0]), Describe + ' ' + string.Join('|', Calls));
+  end;
+
+  // Engine 25cd99de (merged, not on the pin): a never-indexed --unit is REFUSED in a batch,
+  // with per-unit and top-level exit_code. The loop restores nothing on it and keeps the rest.
+  procedure CheckUnindexedRefused;
+  var
+    LJson: string;
+    LDoc : TApplyBatch;
+  begin
+    Reset;
+    LJson:= '{"schema":"apply-batch/1","mode":"apply","units_count":2,"ok":false,"exit_code":1,"ok_count":1,"refused_count":1,"failed_count":0,'
+      + '"classes_built":1,"units":[{"schema":"apply/1","unit":"' + BatchJ(S1) + '","ok":true,"exit_code":0,"error":"","rule_errors":[],"edits_count":1},'
+      + '{"schema":"apply/1","unit":"' + BatchJ(S2) + '","ok":false,"exit_code":1,"refused":true,"error":"' + BatchJ(S2)
+      + ' is not covered by any supplied --db -- index it first","reason":"' + BatchJ(S2) + ' is not covered by any supplied --db -- index it first",'
+      + '"rule_errors":[],"edits_count":0}]}';
+    LDoc:= ParseApplyBatchJson(LJson, APPLY_FEATURES_ALL);
+    Check('batch.unindexed.refused.25cd99de.parse', AllOf([LDoc.Valid, LDoc.ExitCode = 1, LDoc.RefusedCount = 1, BatchUnitsMatch(LDoc, [S1, S2]),
+      not BatchContractBroken(LDoc)]) and LDoc.Units[1].Refused);
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if FileStem(AUnit) = 'S2' then 'r' else 'o';
+      end;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LJson;
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.unindexed.refused.25cd99de', AllOf([RowOf(S1, 'A.rules').Status = csConverted, RowOf(S2, 'A.rules').Status = csRefused,
+      Pos('not covered by any supplied --db', RowOf(S2, 'A.rules').Note) > 0, Untouched(S2), BackupsOf(S2) = 0, BackupsOf(S1) = 1]), Describe);
+  end;
+
+  procedure CheckNotReachedPure;
+  var
+    LRows: TArray<TConvertRow>;
+  begin
+    SetLength(LRows, UNITS_3);
+    LRows[0].UnitPas:= 'S1.pas';
+    LRows[0].Book   := 'A.rules';
+    LRows[0].Status := csConverted;
+    LRows[1].UnitPas:= 'S1.pas';
+    LRows[1].Book   := 'B.rules';
+    LRows[1].Status := csConverted;
+    LRows[2].UnitPas:= 'S2.pas';
+    LRows[2].Book   := 'A.rules';
+    LRows[2].Status := csConverted;
+    Check('batch.notreached.pure.short', string.Join(',', NotReachedUnits(LRows, ['S1.pas', 'S2.pas'], ['A.rules', 'B.rules'])) = 'S2.pas');
+    LRows[2].Status:= csFailedRestored;
+    Check('batch.notreached.pure.terminal', Length(NotReachedUnits(LRows, ['S1.pas', 'S2.pas'], ['A.rules', 'B.rules'])) = 0);
+    Check('batch.notreached.pure.no.rows', string.Join(',', NotReachedUnits(nil, ['S1.pas', 'S2.pas'], ['A.rules'])) = 'S1.pas,S2.pas');
+    LRows[0].Status:= csBookSkipped;
+    LRows[2].Book  := 'B.rules';
+    LRows[2].Status:= csConverted;
+    Check('batch.notreached.pure.book.skipped.counts', Length(NotReachedUnits(LRows, ['S1.pas', 'S2.pas'], ['A.rules', 'B.rules'])) = 0);
+  end;
+
+  // RunConversion dispatches on BatchModeFor: the per-unit loop polls cancel per unit, the
+  // batch loop per chunk (none here: both units are missing).
+  procedure CheckDispatch;
+  var
+    LJob: TConvertJob;
+    LEng: TEngineAdapter;
+    LDispatch: Boolean;
+  begin
+    LEng:= TEngineAdapter.Create('C:\nowhere\drag-lint.exe', []);  // dl:ok hardcoded-absolute-path@8495 -- REVIEWED 2026-10-23 deliberately non-existent exe: any engine call must fail loudly
+    try
+      LJob:= Default(TConvertJob);
+      LJob.Books:= ['Book.rules'];
+      LJob.Units:= ['C:\nowhere\A.pas', 'C:\nowhere\B.pas'];  // dl:ok hardcoded-absolute-path@d6c2 -- REVIEWED 2026-10-23 deliberately non-existent units (missing-unit rows)
+      Polls:= 0;
+      Rows:= RunConversion(LJob, LEng, nil, Counting, nil);
+      LDispatch:= (Length(Rows) = 2) and (Rows[0].Status = csUnitSkipped) and (Pos('not found', Rows[1].Note) > 0);
+      Check('batch.dispatch.per.unit.when.off', LDispatch and (Polls = 2), Format('%d row(s), %d poll(s)', [Length(Rows), Polls]));
+      LJob.BatchSupported:= True;
+      Polls:= 0;
+      Rows:= RunConversion(LJob, LEng, nil, Counting, nil);
+      LDispatch:= (Length(Rows) = 2) and (Rows[0].Status = csUnitSkipped) and (Pos('not found', Rows[1].Note) > 0);
+      Check('batch.dispatch.batch.when.on', LDispatch and (Polls = 0), Format('%d row(s), %d poll(s)', [Length(Rows), Polls]));
+      LJob.BatchOverride:= 'OFF';
+      Polls:= 0;
+      Rows:= RunConversion(LJob, LEng, nil, Counting, nil);
+      Check('batch.dispatch.env.off', (Length(Rows) = 2) and (Polls = 2), Format('%d row(s), %d poll(s)', [Length(Rows), Polls]));
+    finally
+      LEng.Free;
+    end; // try
+  end;
+
+begin
+  Root:= TPath.Combine(TPath.GetTempPath, 'convrunner-batch-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Root);
+  CaseNo:= 0;
+  try
+    Index:= function(out AOutput: string): Integer
+      begin
+        Inc(IdxCalls);
+        AOutput:= if IdxCalls = IdxFailAt then 'idx failed' else '';
+        Result := if IdxCalls = IdxFailAt then 1 else 0;
+      end;
+    OnStep:= procedure(const AStep: TRunStep)
+      begin
+        Steps:= Steps + [AStep];
+        Log  := Log + RunStepCode(AStep);
+      end;
+    OnRow:= procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+      begin
+        Log:= Log + 'row:' + FileStem(ARow.UnitPas) + '/' + FileStem(ARow.Book) + ';';
+      end;
+    Counting:= function: Boolean
+      begin
+        Inc(Polls);
+        Result:= False;
+      end;
+    Fake:= function(const AUnits: TArray<string>; const ARulesFile: string; out AJson: string): Integer
+      var
+        LEntries: TArray<string>;
+        LKinds  : TArray<string>;
+        LStems  : TArray<string>;
+        LKind   : Char;
+        LExit   : Integer;
+      begin
+        LEntries:= nil;
+        LKinds  := nil;
+        LStems  := nil;
+        for var LUnit: string in AUnits do
+        begin
+          LKind:= Decide(LUnit, ARulesFile);
+          if (LKind = 'o') or (LKind = 'w') then
+            TFile.AppendAllText(LUnit, '// ' + ARulesFile + sLineBreak, TEncoding.ASCII);
+          LEntries:= LEntries + [BatchTestEntry(LUnit, LKind, 'boom ' + FileStem(LUnit))];
+          LKinds  := LKinds + [string(LKind)];
+          LStems  := LStems + [FileStem(LUnit)];
+        end;
+        Calls:= Calls + [FileStem(ARulesFile) + ':' + string.Join(',', LStems)];
+        AJson:= BatchTestDoc(LEntries, string.Join('', LKinds), LExit);
+        if Length(AUnits) = 1 then
+          AJson:= LEntries[0]; // the engine answers ONE --unit with a bare apply/1
+        if Assigned(Answer) then
+          AJson:= Answer(AJson);
+        Result:= if ExitOver >= 0 then ExitOver else LExit;
+      end;
+    CheckOrderAndSummary;
+    CheckChunks;
+    CheckFailures;
+    CheckUntrusted;
+    CheckStops;
+    CheckUnindexedRefused;
+    CheckNotReachedPure;
+    CheckDispatch;
+  finally
+    TDirectory.Delete(Root, True);
+  end; // try
 end; // procedure
 
 { C17: Conversion > Reindex project -- the summary-line parser, the refusal and
@@ -9855,8 +10422,14 @@ begin
     Code.Line:= CODE_LINE;
     Check('inh.action.code.report.line', Pos('C1: TLabel line 7 -- code use -- ', InheritedReportNote(Code, True)) = 1, InheritedReportNote(Code, True));
     Code.AncestorState:= 'converted';
+    // N8: converted + code stays left unless its pas_uses[] entry is mapped (no entry = not mapped).
     Check('inh.action.code.converted.n1', InheritedLeftNote([Code], False) = '1 inherited code use(s) left: ancestor Base (ancestor converted; retype needs engine N2)', InheritedLeftNote([Code], False));
     Check('inh.action.code.converted.retype', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base converted', InheritedLeftNote([Code], True));
+    Code.PasUseStatus:= 'mapped';
+    Check('inh.action.code.converted.mapped.n1', InheritedLeftNote([Code], False) = '', InheritedLeftNote([Code], False));
+    Check('inh.action.code.converted.mapped.retype', InheritedLeftNote([Code], True) = '', InheritedLeftNote([Code], True));
+    Code.AncestorState:= 'unconverted';
+    Check('inh.action.code.unconverted.mapped.still.left', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base not converted', InheritedLeftNote([Code], True));
     Check('inh.action.unverified.report', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True)
       = 'V1: TLabel line 11 -- ancestor field use not verified against the index (field use could not be checked)', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True));
   end;
@@ -9867,6 +10440,54 @@ begin
     and (Pos('V1:', Joined) > Pos('C1:', Joined)) and (Pos('A1:', Joined) = 0), Joined);
 end;
 
+{ N8: a converted ancestor + code use is NOT left once pas_uses[] says mapped. REAL capture
+  (apply-desc-code-converted-1330.json: inherited Label1 code/converted, pas_uses Label1 mapped); the
+  other statuses and a missing entry are inline variants of the same JSON. }
+procedure TestInheritedCodeMapped;
+const
+  JSON_HEAD = '{"schema":"apply/1","ok":true,"edits_count":1,"component_part":"applied","inherited":[{"name":"Label1","type":"TLabel","line":13,"ancestor_unit":"Anc","ancestor_state":"converted","reason":"declared in Anc","action":"code"}]';
+  NOTE_BASE = '1 edit(s), 0 remaining for manual work';
+  NOTE_LEFT = NOTE_BASE + '; 1 inherited code use(s) left: ancestor Anc converted';
+var
+  Conv, Var1, Var2, Var3: TApplyRow;
+  Row                   : TConvertRow;
+  Lines                 : TArray<string>;
+begin
+  Conv:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), APPLY_FEATURES_ALL);
+  Check('inh.n8.real.linked', (Length(Conv.InheritedLeft) = 1) and (Conv.InheritedLeft[0].PasUseStatus = 'mapped'));
+  Check('inh.n8.real.mapped', (Length(Conv.InheritedLeft) = 1) and IsCodeUseMapped(Conv.InheritedLeft[0]));
+  Check('inh.n8.real.no.left.note', InheritedLeftNote(Conv.InheritedLeft, True) = '', InheritedLeftNote(Conv.InheritedLeft, True));
+  Check('inh.n8.real.row.note', Pos('left', ConvertedRowNote(Conv, True, True)) = 0, ConvertedRowNote(Conv, True, True));
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := Conv;
+  Check('inh.n8.real.no.report.line', Length(InheritedReportLines(Row, True, True)) = 0, string.Join(' | ', InheritedReportLines(Row, True, True)));
+  // Features without afPasUses: no entry is read, so the use is still left.
+  Var1:= ParseApplyJson(InheritedFixture('apply-desc-code-converted-1330.json'), []);
+  Check('inh.n8.gated.still.left', (Length(Var1.InheritedLeft) = 1) and not IsCodeUseMapped(Var1.InheritedLeft[0])
+    and (Pos('inherited code use(s) left', InheritedLeftNote(Var1.InheritedLeft, True)) > 0), InheritedLeftNote(Var1.InheritedLeft, True));
+
+  Var1:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"Label1","from_type":"TLabel","member":"Caption","status":"unmapped","lines":[13],"count":1}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.unmapped.left', InheritedLeftNote(Var1.InheritedLeft, True) = '1 inherited code use(s) left: ancestor Anc converted', InheritedLeftNote(Var1.InheritedLeft, True));
+  Check('inh.n8.unmapped.row.note', ConvertedRowNote(Var1, True, True) = NOTE_LEFT, ConvertedRowNote(Var1, True, True));
+  Row.Apply:= Var1;
+  Lines:= InheritedReportLines(Row, True, True);
+  Check('inh.n8.unmapped.report.line', (Length(Lines) = 1) and (Pos('Label1: TLabel line 13 -- code use -- ancestor Anc converted', Lines[0]) > 0), string.Join(' | ', Lines));
+
+  Var2:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"Other","from_type":"TLabel","member":"Caption","status":"mapped"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.no.matching.entry.left', ConvertedRowNote(Var2, True, True) = NOTE_LEFT, ConvertedRowNote(Var2, True, True));
+  Var2:= ParseApplyJson(JSON_HEAD + '}', APPLY_FEATURES_ALL);
+  Check('inh.n8.no.pas_uses.left', ConvertedRowNote(Var2, True, True) = NOTE_LEFT, ConvertedRowNote(Var2, True, True));
+
+  // Two entries for the instance: all must be mapped.
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"label1","status":"mapped"},{"instance":"Label1","status":"cast-refused"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.one.not.mapped.left', (Length(Var3.InheritedLeft) = 1) and (Var3.InheritedLeft[0].PasUseStatus = 'cast-refused') and (ConvertedRowNote(Var3, True, True) = NOTE_LEFT), ConvertedRowNote(Var3, True, True));
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":"label1","status":"mapped"},{"instance":"Label1","status":"mapped"}]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.all.mapped.quiet', ConvertedRowNote(Var3, True, True) = NOTE_BASE, ConvertedRowNote(Var3, True, True));
+  // Bad shapes never raise and never read as mapped.
+  Var3:= ParseApplyJson(JSON_HEAD + ',"pas_uses":[{"instance":7,"status":true},"x",null]}', APPLY_FEATURES_ALL);
+  Check('inh.n8.bad.shape.left', ConvertedRowNote(Var3, True, True) = NOTE_LEFT, ConvertedRowNote(Var3, True, True));
+end;
 { B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
   descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
   recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
@@ -11025,6 +11646,156 @@ end;
 function Apply1270Fixture(const AName: string): string;
 begin
   Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\' + AName)));
+end;
+
+const
+  // Fixture path prefixes: text only, compared with the engine answer's "unit" key; no file is touched.
+  FIX_DIR       = 'C:\fix\';       // dl:ok hardcoded-absolute-path@8af2 -- REVIEWED 2026-10-23 text only, never opened
+  FIX_DIR_MIXED = 'c:\FIX\';       // dl:ok hardcoded-absolute-path@3bb9 -- REVIEWED 2026-10-23 text only: case-insensitivity probe
+  ARGS_DIR      = 'C:\a\';         // dl:ok hardcoded-absolute-path@227e -- REVIEWED 2026-10-23 text only: argument-string probe
+  ARGS_RULES    = 'C:\r\Fix.rules'; // dl:ok hardcoded-absolute-path@be1d -- REVIEWED 2026-10-23 text only: argument-string probe
+  FIX_UNIT_A    = FIX_DIR + 'FixUnit.pas';
+  FIX_UNIT_B    = FIX_DIR + 'Second.pas';
+  FIX_UNIT_C    = FIX_DIR + 'Third.pas';
+  ARGS_UNIT_1   = ARGS_DIR + 'U1.pas';
+  ARGS_UNIT_2   = ARGS_DIR + 'U2.pas';
+  // Counts and timings the batch checks pin.
+  FIXTURE_UNITS_THREE = 3;       // the readonly / unindexed captures carry three units
+  CHUNK_SAMPLE_UNITS  = 4;       // LUnits length in the unlimited-chunk probe
+  NO_CHUNK_LIMIT      = 0;       // pMax <= 0 means one chunk
+  EXPECTED_BATCH_MAX  = 8;       // BATCH_MAX_UNITS default
+  TIMEOUT_BASE_MS     = 600000;  // one unit: the single-unit timeout
+  TIMEOUT_EXTRA_MS    = 120000;  // added per further unit
+  TIMEOUT_EXTRA_UNITS = EXPECTED_BATCH_MAX - 1;
+
+procedure TestBatchDecisions(var pBatch: TApplyBatch);
+var
+  LUnits   : TArray<string>;
+  LChunks  : TArray<TArray<string>>;
+  LUnitsOne: TArray<string>;
+begin
+  // --- BatchUnitsMatch ---
+  LUnits:= [FIX_UNIT_A, FIX_UNIT_B];
+  Check('batch.match.ok', BatchUnitsMatch(pBatch, LUnits));
+  Check('batch.match.ok.case.insensitive', BatchUnitsMatch(pBatch, [FIX_DIR_MIXED + 'fixunit.pas', FIX_UNIT_B]));
+  Check('batch.match.short', not BatchUnitsMatch(pBatch, [FIX_UNIT_A, FIX_UNIT_B, FIX_UNIT_C]));
+  Check('batch.match.reordered', not BatchUnitsMatch(pBatch, [FIX_UNIT_B, FIX_UNIT_A]));
+  pBatch.Units[0].UnitPath:= '';
+  pBatch.Units[1].UnitPath:= '';
+  Check('batch.match.no.unit.key.counts.only', BatchUnitsMatch(pBatch, ['x', 'y']) and not BatchUnitsMatch(pBatch, ['x']));
+  Check('batch.match.invalid.doc', not BatchUnitsMatch(ParseApplyBatchJson('engine died', APPLY_FEATURES_ALL), []));
+
+  // --- BatchModeFor ---
+  Check('batch.mode.on', BatchModeFor(True, True, 2, ''));
+  Check('batch.mode.cap.off', not BatchModeFor(False, True, 2, ''));
+  Check('batch.mode.scoped.off', not BatchModeFor(True, False, 2, ''));
+  Check('batch.mode.one.unit.off', not BatchModeFor(True, True, 1, '') and not BatchModeFor(True, True, 0, ''));
+  Check('batch.mode.env.off', not BatchModeFor(True, True, 2, 'off') and not BatchModeFor(True, True, 2, 'OFF'));
+  Check('batch.mode.env.other.on', BatchModeFor(True, True, 2, 'on') and BatchModeFor(True, True, 2, 'batch'));
+
+  // --- BatchChunks ---
+  LUnits:= ['a', 'b', 'c', 'd'];
+  LChunks:= BatchChunks(LUnits, 2);
+  Check('batch.chunks.exact', (Length(LChunks) = 2) and (Length(LChunks[0]) = 2) and (LChunks[0][0] = 'a')
+    and (LChunks[1][1] = 'd'), IntToStr(Length(LChunks)));
+  LChunks:= BatchChunks(['a', 'b', 'c'], 2);
+  Check('batch.chunks.rest', (Length(LChunks) = 2) and (Length(LChunks[0]) = 2) and (Length(LChunks[1]) = 1)
+    and (LChunks[1][0] = 'c'), IntToStr(Length(LChunks)));
+  LUnitsOne:= nil;
+  Check('batch.chunks.empty', Length(BatchChunks(LUnitsOne, EXPECTED_BATCH_MAX)) = 0);
+  LChunks:= BatchChunks(LUnits, NO_CHUNK_LIMIT);
+  Check('batch.chunks.max.zero', (Length(LChunks) = 1) and (Length(LChunks[0]) = CHUNK_SAMPLE_UNITS), IntToStr(Length(LChunks)));
+  Check('batch.chunks.default.is.eight', BATCH_MAX_UNITS = EXPECTED_BATCH_MAX);
+
+  // --- BatchTimeoutMs ---
+  Check('batch.timeout.one', (BatchTimeoutMs(TIMEOUT_BASE_MS, 1) = TIMEOUT_BASE_MS)
+    and (BatchTimeoutMs(TIMEOUT_BASE_MS, 0) = TIMEOUT_BASE_MS));
+  Check('batch.timeout.eight', BatchTimeoutMs(TIMEOUT_BASE_MS, EXPECTED_BATCH_MAX)
+    = TIMEOUT_BASE_MS + TIMEOUT_EXTRA_UNITS * TIMEOUT_EXTRA_MS, IntToStr(BatchTimeoutMs(TIMEOUT_BASE_MS, EXPECTED_BATCH_MAX)));
+end;
+
+procedure TestBatchEngineArgs;
+begin
+  // --- BatchApplyArgs (ConvRules.Engine) ---
+  Check('engine.batch.args.two.units', BatchApplyArgs([ARGS_UNIT_1, ARGS_UNIT_2], ARGS_RULES, ' --db "D1" --db "D2"', '')
+    = 'convert-apply --unit "' + ARGS_UNIT_1 + '" --unit "' + ARGS_UNIT_2 + '" --rules "' + ARGS_RULES
+      + '" --db "D1" --db "D2" --apply --no-backup --format json',
+    BatchApplyArgs([ARGS_UNIT_1, ARGS_UNIT_2], ARGS_RULES, ' --db "D1" --db "D2"', ''));
+  Check('engine.batch.args.castlib', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', ' --db "D"', ' --castlib "C.castlib"')
+    = 'convert-apply --unit "U1.pas" --unit "U2.pas" --rules "R.rules" --db "D" --castlib "C.castlib" --apply --no-backup --format json',
+    BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', ' --db "D"', ' --castlib "C.castlib"'));
+  Check('engine.batch.args.no.only', (Pos('--only', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', '', '')) = 0)
+    and (Pos('--apply --no-backup', BatchApplyArgs(['U1.pas', 'U2.pas'], 'R.rules', '', '')) > 0));
+  Check('engine.batch.capability.name', CAPABILITY_BATCH_UNITS = 'batch_units');
+
+  // --- BatchUntrustedNote ---
+  Check('batch.untrusted.note', BatchUntrustedNote('units[] short') = 'batch apply not trusted: units[] short',
+    BatchUntrustedNote('units[] short'));
+end;
+
+procedure TestBatchFixtureEntries;
+var
+  LBatch: TApplyBatch;
+begin
+  // --- per-entry classification the batch loop relies on (real captures) ---
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-readonly-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.readonly.failed.entry', (Length(LBatch.Units) = FIXTURE_UNITS_THREE) and not LBatch.Units[1].Ok and not LBatch.Units[1].Refused
+    and (Pos('cannot write', LBatch.Units[1].Error) > 0));
+  Check('f1330.readonly.batch.exit2.counts', (LBatch.ExitCode = 2) and (LBatch.FailedCount = 1) and (LBatch.OkCount = 2)
+    and not BatchContractBroken(LBatch));
+  Check('f1330.inherited.retyped.in.batch', (Length(LBatch.Units) = FIXTURE_UNITS_THREE) and (Length(LBatch.Units[2].InheritedLeft) > 0)
+    and IsRetypedInstance(LBatch.Units[2].InheritedLeft[0]));
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-gap-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.gap.both.refused', (Length(LBatch.Units) = 2) and LBatch.Units[0].Refused and LBatch.Units[1].Refused
+    and (LBatch.RefusedCount = 2) and not BatchContractBroken(LBatch));
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-only-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.only.second.failed', (Length(LBatch.Units) = 2) and not LBatch.Units[1].Ok and not LBatch.Units[1].Refused
+    and (Length(LBatch.Units[1].OnlyUnmatched) = 1) and (LBatch.Units[1].OnlyUnmatched[0] = 'Label1'));
+  // Engine gap G2 (plan 2026-10-23 section 5), pinned as MEASURED on the pre-25cd99de engine:
+  // a unit that is in no --db is NOT refused in a batch -- ok, zero edits, counted in ok_count.
+  // The editor's Preflight refuses an unindexed unit before the run, so no loop code depends on
+  // this; engine 25cd99de refuses it instead (TestBatchRunner batch.unindexed.refused.25cd99de).
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-unindexed-1330.json'), APPLY_FEATURES_ALL);
+  Check('f1330.unindexed.ok.no.edits', (Length(LBatch.Units) = FIXTURE_UNITS_THREE) and LBatch.Units[1].Ok and (LBatch.Units[1].EditsCount = 0)
+    and (LBatch.OkCount = FIXTURE_UNITS_THREE));
+end;
+
+{ B4 batch mode, pure decisions (ConvRules.ConvertBatch) and the per-unit "unit" key of
+  apply-batch/1. REAL captures from the 1.33.0 pin, fixtures\apply1270\batch-*-1330.json:
+  apply (FixUnit + Second written), readonly (Second.dfm read-only, DescUnit inherits
+  FixForm), only (--only Label1 over 2 units), gap (index-gap refusal), unindexed (Loose.pas
+  is in no --db). }
+procedure TestConvertBatch;
+var
+  LBatch: TApplyBatch;
+  LSkip : TApplyRow;
+begin
+  LBatch:= ParseApplyBatchJson(Apply1270Fixture('batch-apply-1330.json'), APPLY_FEATURES_ALL);
+  LSkip:= ParseApplyJson(Apply1270Fixture('apply-skip-1315.json'), APPLY_FEATURES_ALL);
+  Check('f1330.unit.path', (Length(LBatch.Units) = 2) and (LBatch.Units[0].UnitPath = FIX_UNIT_A)
+    and (LBatch.Units[1].UnitPath = FIX_UNIT_B));
+  // apply-skip-1315.json is a bare apply/1 that DOES carry the key; absence / a wrong type read ''.
+  Check('f1330.unit.path.single.apply', LSkip.UnitPath <> '', LSkip.UnitPath);
+  Check('f1330.unit.path.absent', (ParseApplyJson('{"schema":"apply/1","ok":true}', APPLY_FEATURES_ALL).UnitPath = '')
+    and (ParseApplyJson('{"schema":"apply/1","ok":true,"unit":5}', APPLY_FEATURES_ALL).UnitPath = ''));
+
+  TestBatchDecisions(LBatch);
+  TestBatchEngineArgs;
+  TestBatchFixtureEntries;
+
+  // --- BatchOfSingle: a one-unit chunk is answered with a bare apply/1 ---
+  LBatch:= BatchOfSingle('{"schema":"apply/1","unit":"C:\\fix\\A.pas","ok":true}', 0, APPLY_FEATURES_ALL);
+  Check('batch.single.wrap.ok', AllOf([LBatch.Valid, LBatch.Ok, LBatch.UnitsCount = 1, LBatch.OkCount = 1, LBatch.ExitCode = 0,
+    BatchUnitsMatch(LBatch, ['C:\fix\A.pas']), not BatchContractBroken(LBatch)]));  // dl:ok hardcoded-absolute-path@f3c1 -- REVIEWED 2026-10-23 text only: compared with the answer's unit key, no file is touched
+  LBatch:= BatchOfSingle('{"schema":"apply/1","unit":"C:\\fix\\A.pas","ok":true}', 2, APPLY_FEATURES_ALL);
+  Check('batch.single.wrap.exit.broken', LBatch.Valid and BatchContractBroken(LBatch));
+  LBatch:= BatchOfSingle('{"schema":"apply/1","unit":"C:\\fix\\A.pas","ok":false,"refused":true,"reason":"no"}', 1, APPLY_FEATURES_ALL);
+  Check('batch.single.wrap.refused', LBatch.Valid and (LBatch.RefusedCount = 1) and (LBatch.FailedCount = 0) and not BatchContractBroken(LBatch));
+  LBatch:= BatchOfSingle('{"schema":"apply/1","unit":"C:\\fix\\A.pas","ok":false,"error":"boom"}', 2, APPLY_FEATURES_ALL);
+  Check('batch.single.wrap.failed', LBatch.Valid and (LBatch.FailedCount = 1) and not BatchContractBroken(LBatch));
+  Check('batch.single.wrap.unparsed', not BatchOfSingle('engine died', 1, APPLY_FEATURES_ALL).Valid);
+  Check('batch.single.wrap.no.unit.key', not BatchOfSingle('{"schema":"apply/1","ok":true}', 0, APPLY_FEATURES_ALL).Valid);
+  Check('batch.single.passes.batch.doc', BatchOfSingle(Apply1270Fixture('batch-apply-1330.json'), 0, APPLY_FEATURES_ALL).UnitsCount = 2);
 end;
 
 { Engine 1.31.5 apply/1 keys the editor used to drop (B1, B3, B6, B7, B8). REAL captures,
@@ -14554,6 +15325,55 @@ begin
 end;
 
 { Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+{ ConvRules.InputGate (N7/N11) -- the one queue filter of the main window: while the
+  editor is busy (an engine wait, an hourglass section's nested pump) a click or a
+  command for the main form is refused and reported, never run inside the pump and
+  never queued; the progress window, dialogs and non-input messages always pass. }
+procedure TestInputGate;
+begin
+  Check('gate.win32.keys', (GATE_WM_KEYFIRST = WM_KEYFIRST) and (GATE_WM_KEYLAST = WM_KEYLAST)
+    and (GATE_WM_COMMAND = WM_COMMAND) and (GATE_BM_CLICK = BM_CLICK));
+  Check('gate.win32.mouse', (GATE_WM_MOUSEMOVE = WM_MOUSEMOVE) and (GATE_WM_LBUTTONDOWN = WM_LBUTTONDOWN)
+    and (GATE_WM_LBUTTONDBLCLK = WM_LBUTTONDBLCLK) and (GATE_WM_MOUSELAST = WM_MOUSELAST));
+  Check('gate.win32.nc', (GATE_WM_NCMOUSEMOVE = WM_NCMOUSEMOVE) and (GATE_WM_NCMOUSELAST = WM_NCXBUTTONDBLCLK));
+  Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
+  Check('gate.busy.hourglass', EditorBusy(0, True));
+  Check('gate.idle', not EditorBusy(0, False));
+  // N11: the second Add... (a posted BM_CLICK) and its WM_COMMAND form; N7: Convert.
+  Check('gate.bmclick.refused', GateVerdict(BM_CLICK, True, True) = gvRefuse);
+  Check('gate.command.refused', GateVerdict(WM_COMMAND, True, True) = gvRefuse, '(a button notification or a menu item)');
+  Check('gate.lbutton.refused', GateVerdict(WM_LBUTTONDOWN, True, True) = gvRefuse);
+  Check('gate.dblclk.refused', GateVerdict(WM_LBUTTONDBLCLK, True, True) = gvRefuse);
+  Check('gate.key.dropped', (GateVerdict(WM_KEYDOWN, True, True) = gvDrop) and (GateVerdict(WM_CHAR, True, True) = gvDrop)
+    and (GateVerdict(WM_SYSKEYDOWN, True, True) = gvDrop));
+  Check('gate.mouse.dropped', (GateVerdict(WM_LBUTTONUP, True, True) = gvDrop) and (GateVerdict(WM_RBUTTONDOWN, True, True) = gvDrop)
+    and (GateVerdict(WM_MOUSEWHEEL, True, True) = gvDrop) and (GateVerdict(WM_MOUSEHWHEEL, True, True) = gvDrop));
+  Check('gate.nc.dropped', (GateVerdict(WM_NCLBUTTONDOWN, True, True) = gvDrop) and (GateVerdict(WM_NCXBUTTONDBLCLK, True, True) = gvDrop),
+    '(a title-bar or menu-bar press is not a command to report)');
+  Check('gate.hover.passes', (GateVerdict(WM_MOUSEMOVE, True, True) = gvPass) and (GateVerdict(WM_NCMOUSEMOVE, True, True) = gvPass));
+  Check('gate.paint.passes', (GateVerdict(WM_PAINT, True, True) = gvPass) and (GateVerdict(WM_TIMER, True, True) = gvPass)
+    and (GateVerdict(WM_USER + 1, True, True) = gvPass));
+  Check('gate.other.window.passes', (GateVerdict(BM_CLICK, True, False) = gvPass) and (GateVerdict(WM_KEYDOWN, True, False) = gvPass),
+    '(Cancel and Esc on the progress window, a message box, the Open dialog)');
+  Check('gate.idle.passes', (GateVerdict(BM_CLICK, False, True) = gvPass) and (GateVerdict(WM_COMMAND, False, True) = gvPass)
+    and (GateVerdict(WM_KEYDOWN, False, True) = gvPass));
+  Check('gate.name.add', CommandName('&Add...') = 'Add', CommandName('&Add...'));
+  Check('gate.name.amp', CommandName('Save && close') = 'Save & close', CommandName('Save && close'));
+  Check('gate.name.plain', CommandName('Delete') = 'Delete', CommandName('Delete'));
+  Check('gate.name.empty', (CommandName('') = LOST_COMMAND_UNNAMED) and (LOST_COMMAND_UNNAMED = 'The click'), CommandName(''));
+  Check('gate.status', LostCommandStatus('2 source unit(s) listed.', 'Add', 'Checking 1 source unit(s) for inherited instances')
+    = '2 source unit(s) listed. | Add was NOT run: it was clicked while the editor was busy (Checking 1 source unit(s) for inherited instances). Click it again.',
+    LostCommandStatus('2 source unit(s) listed.', 'Add', 'Checking 1 source unit(s) for inherited instances'));
+  Check('gate.status.empty', LostCommandStatus('', 'Delete', 'Reading the classes of A.pas ...')
+    = 'Delete was NOT run: it was clicked while the editor was busy (Reading the classes of A.pas ...). Click it again.',
+    LostCommandStatus('', 'Delete', 'Reading the classes of A.pas ...'));
+  Check('gate.status.convert.n1', LostCommandStatus('x', 'Convert', 'Validating') = LostConvertClickStatus('x', 'Validating'),
+    '(one text for a lost Convert, however it was lost)');
+  Check('gate.title.wait', BusyTitleFor('Checking 1 source unit(s)', 'Adding ...') = 'Checking 1 source unit(s)', '(the progress window names the work first)');
+  Check('gate.title.status', BusyTitleFor('', ' Reading the classes of A.pas ... ') = 'Reading the classes of A.pas ...');
+  Check('gate.title.unknown', (BusyTitleFor('', '  ') = BUSY_TITLE_UNKNOWN) and (BUSY_TITLE_UNKNOWN = 'another operation'));
+end;
+
 procedure TestConverterMinorsStartup;
 const
   FORM_ERR = '--form "X.pas" does not exist.';
@@ -14638,6 +15458,7 @@ begin
     TestUnknownTypeInference;
     TestProptreeParse;
     TestProptreeNoise;
+    TestProptreeNotObject;
     TestProptree2Fields;
     TestSaveComplete;
     TestBookDepth;
@@ -14706,6 +15527,9 @@ begin
     TestConvertRunnerFaults;
     TestRunSteps;
     TestRunStepText;
+    TestBatchStepText;
+    TestBatchRunner;
+    TestJobRunsBatched;
     TestReindexProject;
     TestConvertRunnerLive;
     TestInheritanceScan;
@@ -14719,6 +15543,7 @@ begin
     TestInheritedApply;
     TestInheritedActions;
     TestInheritedCodeUnconverted;
+    TestInheritedCodeMapped;
     TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
@@ -14776,6 +15601,7 @@ begin
     TestRunnerLiveOnly;
     TestApply1270Items;
   TestApply1315Fields;
+  TestConvertBatch;
   TestApplyBadShapes;
   TestEngineJsonShapes;
   TestWarnCheckRefDirectives;
@@ -14805,6 +15631,7 @@ begin
     TestConverterMinorsD;
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
+    TestInputGate;
 
     FreeAndNil(GParseBook);
 

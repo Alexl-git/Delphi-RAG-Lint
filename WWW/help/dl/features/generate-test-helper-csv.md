@@ -65,14 +65,14 @@ An index IS required. The project's DB lives at
 `drag-lint resolve-dbs --project <X.dproj>` if unsure. The form `.dfm` files
 are also read directly (text `.dfm` only) to work out menu and tab paths.
 
-### Columns (algorithm v7)
+### Columns (algorithm v9)
 
 | Column | Meaning |
 |---|---|
 | `#` | Row number. |
 | `Form` | The form's design-time name, e.g. `frmAssignGroups`. |
 | `Unit` | The unit that holds it. |
-| `How to open` | Full path from the main form. Each hop after the first says which form it happens on: `Main menu: Setup > Groups > Assign Groups -> in frmGroups: Edit Group`. Locations read `Main menu: ...`, `Ribbon: <tab> > <group> > <item>`, `Toolbar '<bar>' > ...`, `File menu > ...` (ribbon backstage), `Right-click menu <name>: ...`, or `Tab '<sheet>' > <control>`. Menu accelerators (`&`) are stripped. |
+| `How to open` | Full path from the main form. Each hop after the first says which form it happens on: `Main menu: Setup > Groups > Assign Groups -> in frmGroups: Edit Group`. Locations read `Main menu: ...`, `Ribbon: <tab> > <group> > <item>`, `Toolbar '<bar>' > ...`, `File menu > ...` (ribbon backstage), `Right-click menu <name>: ...`, or `Tab '<sheet>' > <control>`. Menu accelerators (`&`) are stripped. Since v8 a menu item added IN CODE under a `.dfm` menu item (`X := TMenuItem.Create(Self); X.Caption := ..; mnuTools.Add(X)` in `FormCreate`, or through a helper such as `AddMenuItem(mnuTools, 'Export', Handler)`) is part of the menu path, read by the [Menu Tree](menu-tree.md) walker. Since v9 the same holds for DevExpress bars: a bar item linked IN CODE into a `.dfm` bar, popup or sub-item (`L := barLists.ItemLinks.Add; L.Item := Btn`, `with TdxBarItemLink(dxBarManager1.Bars[0].ItemLinks.Insert(0)) do Item := Sub`, or a helper given the popup) shows as `Ribbon: Lists > Lists Bar > Vendor List`, `Main menu: Presets > Reset Presets`, `Right-click menu popGrid > Export Grid`; `Bars[n]` is the n-th `TdxBar` in `.dfm` order, `MainMenuBar` the `IsMainMenu` bar. Control type `TdxBarButton` / `TdxBarSubItem`, Confidence `traced`. |
 | `Click` | Caption of the control on the last hop; `[name]` when it has no caption; a gesture in brackets when it is not a plain click, e.g. `[grid] (double-click)`. |
 | `Control type` | Its class, e.g. `TMenuItem`, `TdxBarLargeButton`, `TButton`. |
 | `Handler` | The event handler that control runs, `TfrmX.btnFooClick`. |
@@ -107,7 +107,7 @@ file or key is normal; a malformed file is ignored with one line on stderr, and 
 The engine carries no project's form names of its own.
 
 The last line is a provenance footer in the `Notes` column:
-`# forms-csv algorithm v7 | db: <path> | schema v<n> | <timestamp>`. The IDE
+`# forms-csv algorithm v9 | db: <path> | schema v<n> | <timestamp>`. The IDE
 plugin warns about a stale engine when this version differs from what it
 expects.
 

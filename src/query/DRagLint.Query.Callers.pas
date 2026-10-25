@@ -37,7 +37,7 @@ type
   /// caller ROUTINE's declaration line on resolved and callback rows (the
   /// CLI's `caller_line`) and the reference's own line on name-matched rows.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Query.Callers</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -190,9 +190,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses (+69 more)</para>
+    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses (+72 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
-    /// <para>Complexity: 18 (cyclomatic, outer body), 2564 lines (full implementation)</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 2680 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectAddrTaken"/>
@@ -206,6 +206,9 @@ type
   end;
 
 implementation
+
+uses
+  DRagLint.Analysis.Flow.Lattices;
 
 { True when ABareName (already lower-cased, unqualified) is the name of a
   published TForm/TFrame event handler.
@@ -268,6 +271,10 @@ var
     DIFFERENT types maps to '' (unknown). Pure AST, no symbol store; used only by
     default-encoding-io to tell a string-list receiver from a binary one. }
   DeclTypes      : TDictionary<string, string >;
+  { referenced-never-set only: lower-cased names of the parameters and locals of
+    the method being classified whose declared type IS that method's own class,
+    or nil outside ProcessDefProcs. Set and freed there, read by ClassifyRefs. }
+  SameClassVars  : TDictionary<string, Boolean>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -2431,6 +2438,18 @@ var
         begin
           var MemberName: string:= LhsMemberIdent(LhsNode);
           if (MemberName <> '') and AFields.ContainsKey(MemberName) then BaseName:= MemberName;
+        end
+        { `pChild.FParent := x` -- a parameter or local DECLARED AS THIS CLASS is
+          another instance of it, so this is a write to this class's field.
+          Same exactness as `self`: the receiver's declared type is checked, so
+          `pNode.FParent := x` with pNode of another class still credits
+          nothing. Only the direct `<var>.<field>` shape. }
+        else if Assigned(SameClassVars) and SameClassVars.ContainsKey(BaseName)
+                and (LhsNode.NodeType = 'exprDot')
+                and (LhsNode.ChildByField('lhs').NodeType = 'identifier') then
+        begin
+          var OtherMember: string:= LhsMemberIdent(LhsNode);
+          if (OtherMember <> '') and AFields.ContainsKey(OtherMember) then BaseName:= OtherMember;
         end;
         if (BaseName <> '') and AFields.ContainsKey(BaseName) then
         begin
@@ -2630,8 +2649,18 @@ var
             begin
               { Walk the entire defProc body to classify field refs. }
               var BodyN: TTSNode:= ARoot.ChildByField('body');
-              ClassifyRefs(BodyN, AFieldMaps[ClsIdx],
-                AReadMaps[ClsIdx], AWriteMaps[ClsIdx], False);
+              var Vars: TRoutineVarTable:= TRoutineVarTable.Build(ARoot, Src);
+              SameClassVars:= TDictionary<string, Boolean>.Create;
+              try
+                for var V:= 0 to Vars.Count - 1 do
+                  if SameText(Vars.Get(V).TypeText, ClsName) then
+                    SameClassVars.AddOrSetValue(Vars.Get(V).Name, True);
+                ClassifyRefs(BodyN, AFieldMaps[ClsIdx],
+                  AReadMaps[ClsIdx], AWriteMaps[ClsIdx], False);
+              finally
+                FreeAndNil(SameClassVars);
+                Vars.Free;
+              end;
             end;
           end;
         end;
@@ -2645,6 +2674,48 @@ var
     for I:= 0 to ARoot.NamedChildCount - 1 do
       ProcessDefProcs(ARoot.NamedChild(I), AClassMap, AClassList,
         AReadMaps, AWriteMaps, AFieldMaps);
+  end;
+
+  { A property whose write specifier IS a field (`write FX`) writes that field every
+    time the property is assigned -- from any unit, so it cannot be seen in the
+    defProcs. Credit one write to the field. A `write SetX` accessor is left to the
+    defProc scan of SetX; a read-only property credits nothing. AClsIdx = -1 until a
+    known class is entered. }
+  procedure CreditPropertyFieldWrites(const ANode: TTSNode;
+    AClassMap: TDictionary<string, Integer>;
+    AWriteMaps: TArray<TDictionary<string, Integer>>;
+    AFieldMaps: TArray<TDictionary<string, Boolean>>; AClsIdx: Integer);
+  var
+    I     : Integer;
+    Idx   : Integer;
+    SNode : TTSNode;
+    SName : string ;
+    Cnt   : Integer;
+  begin
+    if ANode.IsNull then Exit;
+    Idx:= AClsIdx;
+    if ANode.NodeType = 'declType' then
+    begin
+      if not AClassMap.TryGetValue(LowerCase(Trim(NodeStr(ANode.ChildByField('name')))), Idx) then
+        Idx:= -1;
+    end
+    else if (ANode.NodeType = 'declProp') and (Idx >= 0) then
+    begin
+      SNode:= ANode.ChildByField('setter');
+      if not SNode.IsNull then
+      begin
+        SName:= LowerCase(Trim(NodeStr(SNode)));
+        if AFieldMaps[Idx].ContainsKey(SName) then
+        begin
+          Cnt:= 0;
+          AWriteMaps[Idx].TryGetValue(SName, Cnt);
+          AWriteMaps[Idx].AddOrSetValue(SName, Cnt + 1);
+        end;
+      end;
+      Exit;
+    end;
+    for I:= 0 to ANode.NamedChildCount - 1 do
+      CreditPropertyFieldWrites(ANode.NamedChild(I), AClassMap, AWriteMaps, AFieldMaps, Idx);
   end;
 
   { Main referenced-never-set check. }
@@ -2686,6 +2757,7 @@ var
         { Walk all defProc nodes, classify refs for each class. }
         ProcessDefProcs(PF.Tree.RootNode, ClassMap, Classes,
           ReadMaps, WriteMaps, FieldMaps);
+        CreditPropertyFieldWrites(PF.Tree.RootNode, ClassMap, WriteMaps, FieldMaps, -1);
 
         { Emit findings for fields with >= 1 read and 0 writes. }
         for I:= 0 to Classes.Count - 1 do
@@ -2734,6 +2806,7 @@ begin
   LocalFunctions := TDictionary<string, Boolean>.Create;
   AddrTaken      := TDictionary<string, Boolean>.Create;
   DeclTypes      := TDictionary<string, string >.Create;
+  SameClassVars  := nil;
   try
     { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
       AMaxUnitLines source lines (root node's last row). }

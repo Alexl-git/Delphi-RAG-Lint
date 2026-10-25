@@ -1,0 +1,6 @@
+{
+  "id": "home",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Ribbon: Main > Home Page" }
+  ]
+}

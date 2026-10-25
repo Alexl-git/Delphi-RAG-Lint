@@ -11,13 +11,20 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "doc-facts-selftest"
+      "verb": "doc-facts-selftest",
+      "usage": "drag-lint doc-facts-selftest --db PATH",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "agent",
   "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-23",
     "by": "ENGINE",
     "build": "1.33.0-alpha",
     "surfaceHash": "f972cd161d5f8941eb68cd16d089453d4ca6a1b04cde9196635d0bab9b70cd3c"

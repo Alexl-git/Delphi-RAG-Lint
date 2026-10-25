@@ -101,7 +101,9 @@ function Check-Untouched([string]$Tag) {
   $p = Get-Stamp $realPas; $d = Get-Stamp $realDfm
   Check "$Tag D: real .pas byte- and FILETIME-exact" (($p.Sha -eq $s0Pas.Sha) -and ($p.Ft -eq $s0Pas.Ft)) ''
   Check "$Tag D: real .dfm byte- and FILETIME-exact" (($d.Sha -eq $s0Dfm.Sha) -and ($d.Ft -eq $s0Dfm.Ft)) ''
-  # The engine creates an EMPTY _D-RAG dir (observed 2026-10-23); the contract is that it holds no FILES (no journal/backup).
+  # The engine USED to create an EMPTY _D-RAG dir (docs\INBOX-ghost-check-leaves-empty-drag-dir.md); the shadow
+# default now creates nothing -- the folder is made only by --in-place, which writes journals there.
+Check "$Tag D0: no _D-RAG folder appeared beside the project" (-not (Test-Path -LiteralPath (Join-Path $WorkDir '_D-RAG'))) ''
   Check "$Tag D: no file appeared under _D-RAG (an empty dir is tolerated)" (@(Get-ChildItem -LiteralPath (Join-Path $WorkDir '_D-RAG') -Recurse -File -Force -ErrorAction SilentlyContinue).Count -eq 0) ''
 }
 

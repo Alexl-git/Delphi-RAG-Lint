@@ -179,9 +179,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+25 more)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+29 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 539 lines (full implementation)</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 553 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -243,7 +243,7 @@ implementation
 
 uses
   System.IOUtils, System.Generics.Collections,
-  DRagLint.Doc.Facts, DRagLint.Doc.Regions,
+  DRagLint.Doc.Facts, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
   DRagLint.Doc.SharedFacts;
 
@@ -887,6 +887,24 @@ begin
   Result:= ExistingDocForSymbol(AStore, ASym, AFound, AHasDoc);
 end;
 
+{ N-17: True when another type or routine declaration of the same file starts on
+  ASym's own line, so a /// block above that line cannot be attributed to one of
+  them. Params, fields and locals are not counted: a parameter always shares its
+  routine's line, and a field list documents as one. }
+function SharesDeclLine(const ASym: TSymbol; const AFileSyms: TArray<TSymbol>): Boolean;
+const
+  DOCUMENTABLE = [skClass, skInterface, skRecord, skProcedure, skFunction, skMethod, skConstructor, skDestructor,
+                  skProperty];
+var
+  Other: TSymbol;
+begin
+  Result:= False;
+  if not (ASym.Kind in DOCUMENTABLE) then Exit;
+  for Other in AFileSyms do
+    if (Other.Id <> ASym.Id) and (Other.StartLine = ASym.StartLine) and (Other.Kind in DOCUMENTABLE) then
+      Exit(True);
+end;
+
 class function TDocumenter.ExistingDocForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
   out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
 var
@@ -915,6 +933,11 @@ begin
   SetLength(SymStartLines, Length(FileSyms));
   for I:= 0 to High(FileSyms) do SymStartLines[I]:= FileSyms[I].StartLine;
   TArray.Sort<Integer>(SymStartLines);
+
+  // N-17: a block above a line holding two declarations belongs to neither --
+  // BuildForSymbol skips them, so the checker must not grade it either (else
+  // doc-drift reports a block no command can clear).
+  if SharesDeclLine(ASym, FileSyms) then Exit;
 
   // Same live-scan the Documenter uses: nearest doc-comment above the decl,
   // allow a 1-line gap, skip loose regions. Kind = TDocCommentKind(-1) = none.
@@ -953,6 +976,18 @@ begin
 
   Result:= BuildForSymbol(AStore, Syms[0], AHandles, AIncludeSeeAlso, AIncludeSince, ABaseDir,
     AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
+  // N-12: overloads share one qualified name and have no qname form of their
+  // own, so taking Syms[0] alone left every later overload unreachable from
+  // --qname. Their edits sit on different declaration lines of the same unit and
+  // are applied as one set, exactly as --unit applies a whole file's.
+  for var I:= 1 to High(Syms) do
+  begin
+    var More: TDocumentResult:= BuildForSymbol(AStore, Syms[I], AHandles, AIncludeSeeAlso, AIncludeSince,
+      ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
+    if Length(More.Edits) = 0 then Continue;
+    if Length(Result.Edits) = 0 then Result.Action:= More.Action;
+    Result.Edits:= Result.Edits + More.Edits;
+  end;
 end;
 
 { v(2026-09-23): the repair branch's no-change test with the legacy `Pure` line
@@ -1011,6 +1046,20 @@ begin
   SetLength(SymStartLines, Length(FileSyms));
   for I:= 0 to High(FileSyms) do SymStartLines[I]:= FileSyms[I].StartLine;
   TArray.Sort<Integer>(SymStartLines);
+
+  // N-17: two documentable declarations on ONE line (`TC = class class
+  // function Go; end;`) share every comment line above it, and DocInsight cannot
+  // say which one a block belongs to. Writing both stacked them into one run, and
+  // the next pass planned two overlapping deletes of that run (refused), while a
+  // drift fix rewrote it for one declaration and deleted the other's remarks.
+  // Skip both, loudly; the remedy is one declaration per line.
+  if SharesDeclLine(ASym, FileSyms) then
+  begin
+    Writeln(ErrOutput, Format('doc: skipped %s at %s:%d -- two declarations on one line share one doc block; ' +
+      'put each on its own line to document it', [ASym.QualifiedName, ExtractFileName(Path), ASym.StartLine]));
+    Result.Action:= daUnchanged;
+    Exit;
+  end;
 
   // Existing doc-comment above the declaration (allow a 1-line gap; skip loose).
   // FindDocRegionAbove signals "not found" with Kind = TDocCommentKind(-1).

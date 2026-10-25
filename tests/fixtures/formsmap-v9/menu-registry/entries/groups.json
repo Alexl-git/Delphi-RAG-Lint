@@ -1,0 +1,6 @@
+{
+  "id": "groups",
+  "surfaces": [
+    { "type": "app-menu", "form": "TfrmMain9", "path": "Main menu > Setup > Groups" }
+  ]
+}

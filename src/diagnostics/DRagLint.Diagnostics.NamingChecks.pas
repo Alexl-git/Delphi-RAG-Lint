@@ -78,9 +78,10 @@ type
     /// base name (case-insensitive); program/library roots are skipped.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ChangeFileExt, CharInSet, Copy, Default, Delete, DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt, EmitShortHungarian, EndsText (+31 more)</para>
+    /// <para>Calls: ChangeFileExt, CharInSet, ClassifyClassOrigin, Copy, Default, Delete, DRagLint.Diagnostics.NamingChecks.ConfusableFindings, DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt (+37 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
     /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.NamingChecks.ConfusableFindings"/>
     /// <seealso cref="DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
     /// <!-- drag-lint:auto END -->

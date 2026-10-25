@@ -1005,4 +1005,13 @@
 #   now emits a 'member-access' ref; it emitted none, so unused-unit-in-uses flagged
 #   System.Character. Guard: run_indexed_receiver_member_refs.ps1. One re-parse still covers it.
 #   Superseded: 1.22.0-alpha|1f3cc280c96b5a19307e585ab1641624a118be67b9d0f969d3cd5e76de44cd64
-1.22.0-alpha|b0ebd891bb62c90df07ef65544a8b84982ffebdd4870f23125d1200012bc51ca
+# 2026-10-23 (e3d/rc): bumped 1.22.0-alpha -> 1.23.0-alpha for e3d/extractor-batch, one re-parse:
+#   (1) a type alias's target emits type_use refs (run_alias_rhs_refs.ps1); (2) routine-local
+#   type/const sections emit symbols + refs, local enum values carry their owner routine
+#   (run_routine_local_decls.ps1); (3) Self.X members record receiver_text 'Self' at insert
+#   (run_self_member_receiver.ps1). The 1.13.0 resolver bump rides this re-parse.
+#   Superseded: 1.22.0-alpha|b0ebd891bb62c90df07ef65544a8b84982ffebdd4870f23125d1200012bc51ca
+#   2026-10-24 (e3d/rc2): re-pinned WITHOUT a bump (1.23.0-alpha never released): rc2 also carries
+#   e3d/n06 (N-06) + e3d/ext2 extraction changes; the same one re-parse covers them.
+#   Superseded: 1.23.0-alpha|112f33afd1fe85edfebfb8b8bd4b32015ba21f03981b917e8432f34c69fa19e0
+1.23.0-alpha|8d7945982f34bd88b42bbcf32fbd26f968f9032479f2e64ac4f2120b7aa1357a

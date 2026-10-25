@@ -342,7 +342,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json|text] (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--unit <stem>]] [--format json|text] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -351,6 +351,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
 | `--plan` |  |  |  |
+| `--f2047` |  |  |  |
 | `--format` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--fix` |  |  |  |
@@ -1046,8 +1047,19 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--proxy` |  |  |  |
 | `--delphi-lsp` | `<path>` |  |  |
 | `--trace` | `<file>` |  |  |
+| `--merge-diagnostics` |  |  |  |
+| `--merge-completion` |  |  |  |
+| `--merge-hover` |  |  |  |
+| `--merge-definition` |  |  |  |
+| `--merge-budget-ms` | `<n>` |  |  |
+| `--full-rules` |  |  |  |
+| `--delphi-lsp-bits` | `32\|64` |  |  |
 
-Described in [lsp](../../docs/wiki/lsp.md).
+Described in:
+
+* [lsp](../../docs/wiki/lsp.md)
+* [LSP full rule set on save](../../docs/wiki/lsp-proxy-merge.md)
+* [LSP proxy merge](../../docs/wiki/lsp-proxy-merge.md)
 
 ### mcp-config
 
@@ -1079,7 +1091,7 @@ Described in [Register the MCP server (Claude Code, VS Code)](../../docs/wiki/Re
 The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
 
 ```text
-drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)
+drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths and app-menu (form, path) surfaces, which imply --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1087,6 +1099,7 @@ drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features
 | `--project` | `<X.dproj>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--registry` | `<features dir>` |  |  |
+| `--with-dfm` |  |  |  |
 | `--format` | `text\|json` |  |  |
 | `--output` | `<f>` |  |  |
 
@@ -1097,7 +1110,7 @@ Described in [Code-built menu tree and registry drift](../../docs/wiki/Menu-Tree
 The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it.
 
 ```text
-drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; exit 0 ran, 2 usage/setup, 3 stale index)
+drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; --with-dfm adds the .dfm menus with code links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1105,6 +1118,7 @@ drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--f
 | `--project` | `<X.dproj>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--root` | `<QName>` |  |  |
+| `--with-dfm` |  |  |  |
 | `--format` | `text\|json\|paths` |  |  |
 | `--output` | `<f>` |  |  |
 
@@ -1162,7 +1176,7 @@ Described in [pp-profile](../../docs/wiki/pp-profile.md).
 Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set.
 
 ```text
-drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] (diagnostic: print {$IFDEF}-resolved source to stdout)
+drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1173,6 +1187,7 @@ drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--in
 | `--include-mode` |  |  |  |
 | `--no-near-search` |  |  |  |
 | `--tolerances` |  |  |  |
+| `--include-sites` |  |  |  |
 
 Described in [preprocess-file](../../docs/wiki/preprocess-file.md).
 

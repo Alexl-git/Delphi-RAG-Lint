@@ -69,8 +69,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Completion.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Completion.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Context, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLinter = class
@@ -123,9 +123,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run, ExtractFileExt (+7 more)</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 121 lines (full implementation)</para>
-      /// <para>Reads: FLanguage, FExcUnit, FQueryRules</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop (+9 more)</para>
+      /// <para>Complexity: 28 (cyclomatic, outer body), 138 lines (full implementation)</para>
+      /// <para>Reads: FOnlyRuleId, FExcUnit, FQueryRules, FLanguage</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
@@ -140,16 +140,16 @@ type
       /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas) (+1 more)</para>
-      /// <para>Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, ParamStr</para>
+      /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas) (+3 more)</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, DRagLint.Parser.Delphi13.tree_sitter_delphi13, ParamStr</para>
       /// <para>constructor</para>
       /// <para>Reads: FLanguage   Writes: FLanguage, FQueryRules</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.tree_sitter_delphi13"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
-      /// <seealso cref="DRagLint.Lint.Linter.TLinter.EnrichExceptionFindings"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ARulesDir: string = '');
@@ -344,8 +344,9 @@ type
 /// half could be recovered by sharing the cache -- and the split had never been
 /// measured. Not thread-safe; lint-all is single-threaded here.
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
 /// <para>Returns: GLintParseTicks</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function LinterParseTicks: Int64;
@@ -353,8 +354,9 @@ function LinterParseTicks: Int64;
 /// <returns>Call count, for the ms/file figure beside LinterParseTicks.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
 /// <para>Returns: GLintParseCount</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function LinterParseCount: Int64;

@@ -218,6 +218,7 @@ $UndocumentedOnPurpose = [ordered]@{
   'test-store-freshness'= 'store-freshness probe used by a test runner; requires --db and does nothing else.'
   'dump-pp-lex'         = 'diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.'
   'dump-pp-eval'        = 'diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.'
+  'dump-parse-uses'     = 'diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1.'
   'resolve-uses'        = 'diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.'
   'convert-reemit'      = 'internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\.'
 }
@@ -1256,11 +1257,28 @@ $proseDocs = [ordered]@{
   'README.md'        = (Join-Path $Repo 'README.md')
   'docs\AI-USAGE.md' = (Join-Path $Repo 'docs\AI-USAGE.md')
 }
+# Lines that START with a `drag-lint-switch ...` code span (README paragraph, AI-USAGE table
+# row) document the SEPARATE exe drag-lint-switch.exe, whose flags (--on, --off, --template ...)
+# are not drag-lint.exe flags and can never be in its --help. Only that code SPAN is dropped from
+# the F3 scan (anchored at line start); prose after the span, and other lines, are still checked.
+# Positive control: CONTROL F3s below.
+# Escaped \r\n, never a raw newline: git checks this file out CRLF on main and LF in worktrees.
+$SwitchLineRx = '(?m)^(?:\|\s*)?`drag-lint-switch[^`\r\n]*`'
+# Prose on a switch line may also name the drag-lint-switch.exe's OWN flags again outside the span
+# (AI-USAGE row: "`--off` backs the whole file up ... `--on` restores ... `--template <file>`").
+# Only these five names, only on a line that starts with the switch span, are dropped; any other
+# flag on that line is still an F3 candidate.
+$SwitchExeFlagRx = '--(?:vscode|status|on|off|template)(?![A-Za-z0-9-])'
+$SwitchStartRx   = '(?m)^(?:\|\s*)?`drag-lint-switch[^`\r\n]*`[^\r\n]*'
+function Get-ProseFlagSet([string]$Text) {
+  $t = [regex]::Replace($Text, $SwitchStartRx, { param($m) [regex]::Replace($m.Value, $SwitchExeFlagRx, '') })
+  return Get-FlagSet ([regex]::Replace($t, $SwitchLineRx, '')) $ProseRx
+}
 $proseSets = @{}
 foreach ($name in $proseDocs.Keys) {
   $p = $proseDocs[$name]
   if (-not (Test-Path -LiteralPath $p)) { Check "check 9: $name exists" $false $p; continue }
-  $set = Get-FlagSet (Get-Content -LiteralPath $p -Raw) $ProseRx
+  $set = Get-ProseFlagSet (Get-Content -LiteralPath $p -Raw)
   $proseSets[$name] = $set
   Check "check 9: $name flag list parsed" ($set.Count -gt 50) "($($set.Count) flag(s))"
   $bad = @($set | Where-Object {
@@ -1389,6 +1407,19 @@ if ($proseSets.ContainsKey('README.md')) {
     ($ctlF5Missing -contains $tok) `
     'F5 cannot detect a banner flag absent from the prose, so it can never fail'
 }
+
+# F3s: the flags INSIDE a leading drag-lint-switch code span are exempt; a drag-lint flag in the
+# rest of that line, or on any other line, is not.
+$ctlSw = Get-ProseFlagSet ("`n``drag-lint-switch --zz-sw-planted``  x`n| ``drag-lint-switch --zz-sw-row`` | y |`n``drag-lint --zz-real-planted`` z")
+Check 'CONTROL F3s a flag inside a drag-lint-switch span is exempt, other lines are not' `
+  ((-not $ctlSw.Contains('--zz-sw-planted')) -and (-not $ctlSw.Contains('--zz-sw-row')) -and $ctlSw.Contains('--zz-real-planted') -and -not $helpSet.Contains('--zz-real-planted')) `
+  'the switch-span exemption is too wide or too narrow, so F3 is either blind or noisy'
+# Negative control: prose AFTER the switch span on the same line naming an undocumented drag-lint
+# flag must still be seen (the old whole-line exemption hid it, AI-USAGE row ~689).
+$ctlTail = Get-ProseFlagSet ("`n| ``drag-lint-switch --on`` | see ``drag-lint --zz-real-tail`` and --zz-real-tail2 and ``--off`` |`n``drag-lint-switch --on`` then --zz-real-tail3")
+Check 'CONTROL F3s negative: a drag-lint flag after the switch span on the same line is still checked' `
+  ($ctlTail.Contains('--zz-real-tail') -and $ctlTail.Contains('--zz-real-tail2') -and $ctlTail.Contains('--zz-real-tail3') -and -not $ctlTail.Contains('--on') -and -not $ctlTail.Contains('--off') -and -not $helpSet.Contains('--zz-real-tail')) `
+  'the switch exemption swallows the rest of the line, so a real flag after the span is never checked'
 
 if ($proseSets.ContainsKey('README.md')) {
   $ctlProse = Get-FlagSet ((Get-Content -LiteralPath $proseDocs['README.md'] -Raw) + " ``$tok``") $ProseRx

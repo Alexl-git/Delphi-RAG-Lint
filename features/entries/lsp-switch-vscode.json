@@ -1,0 +1,35 @@
+{
+  "id": "lsp-switch-vscode",
+  "title": "Switch VS Code Delphi MCP entry",
+  "group": "editor-integration",
+  "owner": "LSP",
+  "status": "shipped",
+  "since": "1.33.0-alpha",
+  "summary": "Turns the VS Code Delphi MCP entry off and on with a backup",
+  "intro": "Read this when VS Code's own Delphi MCP server and drag-lint should not both run. drag-lint-switch removes the entry with a backup and restores it later.",
+  "wikiPage": "lsp-proxy-merge",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "drag-lint-switch.exe",
+      "menu": "drag-lint-switch --vscode --off"
+    }
+  ],
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-24",
+    "by": "LSP"
+  },
+  "lastVerified": {
+    "date": "2026-10-24",
+    "by": "LSP",
+    "build": "1.33.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-24",
+    "by": "LSP",
+    "build": "1.33.0-alpha",
+    "surfaceHash": "3066be030c3e7cdd35b2545403e6508f5b48c9f730c2ec8a926914f4d507e709"
+  }
+}

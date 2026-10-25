@@ -1,7 +1,7 @@
 {
-  "product": "1.33.0-alpha",
-  "extractor": "1.22.0-alpha",
-  "resolver": "1.12.1-alpha",
+  "product": "1.34.0-alpha",
+  "extractor": "1.23.0-alpha",
+  "resolver": "1.13.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -95,6 +95,12 @@
       "title": "Charts team",
       "order": 30,
       "summary": "Chart questions, charts\\src scripts, forms-csv, the Reports submenu."
+    },
+    {
+      "id": "LSP",
+      "title": "LSP team",
+      "order": 40,
+      "summary": "The drag-lint LSP server: proxy merge, protocol extensions, full rules, the VS Code switch."
     }
   ],
   "entries": [
@@ -834,7 +840,7 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work."],
+      "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.", "A WARNING: STALE INDEX line (stale-anchor chunk) means the unit changed since it was indexed: no body is shown. Reindex, then ask again."],
       "questions": [
         {
           "ask": "What do I need to read before editing this symbol?",
@@ -3633,11 +3639,15 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
+      "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.", "A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\\_D-RAG\\drag-lint-project.json`."],
       "questions": [
         {
           "ask": "How healthy is my whole project against every lint rule?",
           "command": "drag-lint lint-all --db <file.sqlite>"
+        },
+        {
+          "ask": "How do I stop lint-all reporting a vendored subfolder of my project?",
+          "command": "add \"excludeRoots\": [\"vendor\"] to <project>\\_D-RAG\\drag-lint-project.json"
         },
         {
           "ask": "How do I write the full lint report to a file?",
@@ -4968,7 +4978,7 @@
             }
           ],
           "helpOrder": 52,
-          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]", "      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)"]
+          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]", "      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2)"]
         }
       ],
       "audience": "both",
@@ -5277,6 +5287,10 @@
         {
           "ask": "Why is my conversion taking so long, and which unit is it on?",
           "command": "Watch the Convert tab progress line in ConvRulesEditor.exe"
+        },
+        {
+          "ask": "Why does the progress line say 'applying units 1-8 of 20 in one batch' and not move for a while?",
+          "command": "Batch mode: one convert-apply per book over up to 8 units, and the engine reports no progress inside the call; set CONVRULES_BATCH=off before starting ConvRulesEditor.exe for per-unit progress"
         }
       ],
       "access": "standalone-app",
@@ -5656,6 +5670,10 @@
         {
           "ask": "How do I see what a conversion would change before running it?",
           "command": "Open the Convert tab in ConvRulesEditor.exe (see the manual, section Composing the rules for one job)"
+        },
+        {
+          "ask": "Can the Convert tab convert many units faster, and how do I turn that off?",
+          "command": "Batch mode is automatic for 2+ units on an engine with batch_units (one convert-apply per book per 8 units); set CONVRULES_BATCH=off before starting ConvRulesEditor.exe to convert one unit at a time"
         }
       ],
       "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown",
@@ -6186,7 +6204,7 @@
         {
           "type": "cli",
           "verb": "cycles",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json|text] (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--unit <stem>]] [--format json|text] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)",
           "flags": [
             {
               "name": "--db",
@@ -6202,11 +6220,14 @@
               "name": "--plan"
             },
             {
+              "name": "--f2047"
+            },
+            {
               "name": "--format"
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -6219,13 +6240,17 @@
         {
           "ask": "How do I break a uses cycle step by step?",
           "command": "drag-lint cycles --db <db> --plan"
+        },
+        {
+          "ask": "dcc stops with F2047 Circular unit reference to 'X' -- which interface uses form that cycle?",
+          "command": "drag-lint cycles --db <db> --f2047 --unit X"
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
-        "surfaceHash": "4289e5ac451e1cf2cae70b75a29ba072610221f1475bf80c9e89343beff842c9"
+        "surfaceHash": "f452e31b19eed88f3c418e4567228d87abae0283466b0146a05d42b46acd2c35"
       }
     },
     {
@@ -6242,7 +6267,7 @@
         {
           "type": "cli",
           "verb": "menu-tree",
-          "usage": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; exit 0 ran, 2 usage/setup, 3 stale index)",
+          "usage": "drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>] (the menu tree a program builds in code, read statically; --with-dfm adds the .dfm menus with code links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)",
           "flags": [
             {
               "name": "--project",
@@ -6257,6 +6282,9 @@
               "arg": "<QName>"
             },
             {
+              "name": "--with-dfm"
+            },
+            {
               "name": "--format",
               "arg": "text|json|paths"
             },
@@ -6265,13 +6293,13 @@
               "arg": "<f>"
             }
           ],
-          "helpOrder": 96,
-          "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; exit 0 ran, 2 usage/setup, 3 stale index)"]
+          "helpOrder": 101,
+          "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)"]
         },
         {
           "type": "cli",
           "verb": "menu-drift",
-          "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
+          "usage": "drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>] (code-built menu tree vs the registry's ide-menu paths and app-menu (form, path) surfaces, which imply --with-dfm; --registry defaults to <project>\\_D-RAG\\menu-registry: missing / moved / unregistered / notes; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)",
           "flags": [
             {
               "name": "--project",
@@ -6286,6 +6314,9 @@
               "arg": "<features dir>"
             },
             {
+              "name": "--with-dfm"
+            },
+            {
               "name": "--format",
               "arg": "text|json"
             },
@@ -6294,8 +6325,8 @@
               "arg": "<f>"
             }
           ],
-          "helpOrder": 97,
-          "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--format text|json] [--output <f>]   (the code-built menu tree vs the registry's ide-menu PATHS: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
+          "helpOrder": 102,
+          "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry's ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\\_D-RAG\\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
         }
       ],
       "audience": "both",
@@ -8217,7 +8248,7 @@
         {
           "type": "cli",
           "verb": "preprocess-file",
-          "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] (diagnostic: print {$IFDEF}-resolved source to stdout)",
+          "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
           "flags": [
             {
               "name": "--file",
@@ -8239,10 +8270,13 @@
             },
             {
               "name": "--tolerances"
+            },
+            {
+              "name": "--include-sites"
             }
           ],
           "helpOrder": 89,
-          "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
+          "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
         }
       ],
       "audience": "both",
@@ -8254,6 +8288,10 @@
         {
           "ask": "What if I define a symbol?",
           "command": "drag-lint preprocess-file --file <PATH> --define <SYM>"
+        },
+        {
+          "ask": "Which include files did this file pull in, and what did each contribute?",
+          "command": "drag-lint preprocess-file --file <PATH> --include-mode defines-only --include-sites"
         }
       ],
       "access": "cli-only",
@@ -8795,6 +8833,127 @@
       "homeOrder": 20
     },
     {
+      "id": "lsp-full-rules",
+      "title": "LSP full rule set on save",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Runs the full lint rule set on save so the editor shows what the CLI shows",
+      "intro": "Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lsp",
+          "example": "drag-lint lsp --db <file.sqlite> --full-rules"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+      }
+    },
+    {
+      "id": "lsp-protocol-extensions",
+      "title": "LSP protocol extensions",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index",
+      "intro": "Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "lsp",
+          "method": "textDocument/documentSymbol"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/implementation"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/declaration"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/rename"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/codeLens"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/semanticTokens/full"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/inlayHint"
+        },
+        {
+          "type": "lsp",
+          "method": "workspace/executeCommand"
+        },
+        {
+          "type": "lsp",
+          "method": "draglint/ping"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "c1294941637d6b47f90f1ba5b5b942c37de2b7884c87acc1811fe5f106cab49d"
+      }
+    },
+    {
+      "id": "lsp-proxy-merge",
+      "title": "LSP proxy merge",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session",
+      "intro": "Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and the merge flags add drag-lint results.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lsp",
+          "example": "drag-lint lsp --proxy --delphi-lsp-bits 32 --merge-diagnostics --merge-budget-ms 300 --merge-completion --merge-hover --merge-definition"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+      }
+    },
+    {
       "id": "lsp",
       "title": "lsp",
       "group": "editor-integration",
@@ -8830,10 +8989,33 @@
             {
               "name": "--trace",
               "arg": "<file>"
+            },
+            {
+              "name": "--merge-diagnostics"
+            },
+            {
+              "name": "--merge-completion"
+            },
+            {
+              "name": "--merge-hover"
+            },
+            {
+              "name": "--merge-definition"
+            },
+            {
+              "name": "--merge-budget-ms",
+              "arg": "<n>"
+            },
+            {
+              "name": "--full-rules"
+            },
+            {
+              "name": "--delphi-lsp-bits",
+              "arg": "32|64"
             }
           ],
           "helpOrder": 25,
-          "help": ["  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]", "                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;", "                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.", "                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.", "                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio's DelphiLSP,", "                               so registering drag-lint as the Code Insight server keeps the compiler front end.", "                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.", "  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --", "                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)", "                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured", "                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under", "                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)", "  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form", "                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)", "  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;", "                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)"]
+          "help": ["  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]", "                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;", "                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.", "                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.", "                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,", "                               so registering drag-lint as the Code Insight server keeps the compiler front end.", "                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.", "                               --merge-diagnostics: append drag-lint's lint findings to DelphiLSP's publishDiagnostics (one notification, source-tagged); OFF by default.", "                               --merge-completion: union drag-lint's completion items into DelphiLSP's reply, keyed on (label, kind); DelphiLSP's items first; OFF by default.", "                               --merge-hover: append drag-lint's hover facts to DelphiLSP's hover after a --- rule, or answer with them alone when DelphiLSP has none; OFF by default.", "                               --merge-definition: drag-lint's definition when DelphiLSP's is null or empty; answer references and workspace/symbol in the proxy (DelphiLSP has neither); OFF by default.", "                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP's bytes untouched (default 300).", "                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\\DelphiLSP.exe, the default; 32 = bin\\DelphiLSP.exe); --delphi-lsp <path> wins over it.", "                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.", "  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --", "                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)", "                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured", "                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under", "                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)", "  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form", "                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)", "  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;", "                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)"]
         }
       ],
       "audience": "both",
@@ -8851,7 +9033,7 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "b78201a4bcfc17a2919a35dcbf61dc903a1dbf0bea1e801e56a04ba7a725bd56"
@@ -9126,6 +9308,36 @@
         "by": "CHARTS",
         "build": "1.33.0-alpha",
         "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
+    },
+    {
+      "id": "lsp-switch-vscode",
+      "title": "Switch VS Code Delphi MCP entry",
+      "group": "editor-integration",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Turns the VS Code Delphi MCP entry off and on with a backup",
+      "intro": "Read this when VS Code's own Delphi MCP server and drag-lint should not both run. drag-lint-switch removes the entry with a backup and restores it later.",
+      "wikiPage": "lsp-proxy-merge",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "drag-lint-switch.exe",
+          "menu": "drag-lint-switch --vscode --off"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-24",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-24",
+        "by": "LSP",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "3066be030c3e7cdd35b2545403e6508f5b48c9f730c2ec8a926914f4d507e709"
       }
     },
     {
@@ -9496,13 +9708,14 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "contrast-selftest"
+          "verb": "contrast-selftest",
+          "usage": "drag-lint contrast-selftest"
         }
       ],
       "audience": "agent",
       "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "c95fc84e6dffddd5ff019a313955dd75a2ef9e53c50fe130be028d85f1a8af4c"
@@ -9570,13 +9783,20 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "doc-facts-selftest"
+          "verb": "doc-facts-selftest",
+          "usage": "drag-lint doc-facts-selftest --db PATH",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "PATH"
+            }
+          ]
         }
       ],
       "audience": "agent",
       "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "f972cd161d5f8941eb68cd16d089453d4ca6a1b04cde9196635d0bab9b70cd3c"
@@ -9628,6 +9848,25 @@
       }
     },
     {
+      "id": "dump-parse-uses",
+      "title": "dump-parse-uses",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "1.33.0-alpha",
+      "summary": "Diagnostic dump of what the Delphi parser reports for one file's uses clauses and implementation line, without an index",
+      "intro": "Read this only when debugging uses-clause extraction: dump-parse-uses --file PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database.",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "dump-parse-uses"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1."
+    },
+    {
       "id": "dump-pp-eval",
       "title": "dump-pp-eval",
       "group": "maintenance",
@@ -9640,13 +9879,28 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "dump-pp-eval"
+          "verb": "dump-pp-eval",
+          "usage": "drag-lint dump-pp-eval --expr \"E\" [--define SYM]... [--numeric K=V]...",
+          "flags": [
+            {
+              "name": "--expr",
+              "arg": "\"E\""
+            },
+            {
+              "name": "--define",
+              "arg": "SYM"
+            },
+            {
+              "name": "--numeric",
+              "arg": "K=V"
+            }
+          ]
         }
       ],
       "audience": "agent",
       "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
@@ -9665,13 +9919,20 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "dump-pp-lex"
+          "verb": "dump-pp-lex",
+          "usage": "drag-lint dump-pp-lex --file PATH",
+          "flags": [
+            {
+              "name": "--file",
+              "arg": "PATH"
+            }
+          ]
         }
       ],
       "audience": "agent",
       "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "b02944f9cf3a99666155c5d3b86d955740509e94a734f5a3d330c5dff215c34d"
@@ -10015,7 +10276,29 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "resolve-uses"
+          "verb": "resolve-uses",
+          "usage": "drag-lint resolve-uses --name <Symbol> [--in <file.pas>] [--kind K] [--json] [--db <file.sqlite>]",
+          "flags": [
+            {
+              "name": "--name",
+              "arg": "<Symbol>"
+            },
+            {
+              "name": "--in",
+              "arg": "<file.pas>"
+            },
+            {
+              "name": "--kind",
+              "arg": "K"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            }
+          ]
         }
       ],
       "audience": "agent",
@@ -10027,7 +10310,7 @@
       ],
       "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "b7e71d41448879b30e1e12defd0282071cc232bacd941f17f0ea05a91972d486"
@@ -10046,13 +10329,14 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "selftest"
+          "verb": "selftest",
+          "usage": "drag-lint selftest <manifest-merge|glob|ignore|files|closure|dbselect|drift|coverage|recreate|unused-locals|harvest|section-db|manifest-save-atomic|own-roots|studio-root|fact-wrap>"
         }
       ],
       "audience": "agent",
       "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "227b9395644e4c8d105f6999b03d75b3b610b1512086232c88c13d62f4a2c1eb"
@@ -10208,7 +10492,14 @@
       "surfaces": [
         {
           "type": "cli",
-          "verb": "test-store-freshness"
+          "verb": "test-store-freshness",
+          "usage": "drag-lint test-store-freshness --db PATH",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "PATH"
+            }
+          ]
         }
       ],
       "audience": "agent",
@@ -10220,7 +10511,7 @@
       ],
       "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "233a758c69f464298b1cf5f57e96d6f6be4fbd8f197a6e4d8e041a8c7c7967c1"

@@ -1,0 +1,90 @@
+---
+id: lsp-proxy-merge
+title: LSP proxy merge
+summary: Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session
+product: DL
+group: editor-integration
+order: 110013
+since: 1.33.0-alpha
+status: shipped
+updated: 1.33.0-alpha
+---
+
+# LSP proxy merge
+
+Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session.
+
+Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and the merge flags add drag-lint results.
+
+## How to run it
+
+```text
+drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]
+```
+
+Example:
+
+```text
+drag-lint lsp --proxy --delphi-lsp-bits 32 --merge-diagnostics --merge-budget-ms 300 --merge-completion --merge-hover --merge-definition
+```
+
+Full flag list: [lsp in the CLI reference](../cli.md#lsp).
+
+## Details
+
+The LSP stream's feature page: the DelphiLSP proxy merge and the three other
+LSP-owned features (protocol extensions, full rule set on save, the VS Code
+switch). The full flag reference is [lsp](lsp.md); this page says what each
+feature is for and how it was verified.
+
+### Proxy merge
+
+`drag-lint lsp --proxy` relays every message between the editor and RAD Studio's
+DelphiLSP. Four opt-in flags add drag-lint answers to DelphiLSP's, so one
+session shows the compiler's errors and drag-lint's findings together:
+
+| flag | merged answer |
+|---|---|
+| `--merge-diagnostics` | drag-lint findings appended to `publishDiagnostics`, tagged `source: "drag-lint"` |
+| `--merge-completion` | drag-lint items unioned into the completion reply, keyed on label and kind |
+| `--merge-hover` | drag-lint hover facts appended after a `---` rule |
+| `--merge-definition` | drag-lint locations when DelphiLSP answers null or empty; also references and workspace symbols |
+| `--merge-budget-ms` | per-frame time budget, default 300 |
+| `--delphi-lsp-bits` | `32` forwards to the 32-bit DelphiLSP, `64` (default) to bin64 |
+
+With every merge flag off the proxy relays DelphiLSP's bytes unchanged. Merging
+fails open: a handler that overruns the budget, raises or finds no index makes
+the proxy forward DelphiLSP's original bytes.
+
+Guards: `tests\autotest\run_lsp_proxy_*_guard.ps1`.
+
+### Protocol extensions
+
+Without a proxy, `drag-lint lsp` answers from the index: `textDocument/documentSymbol`,
+`implementation`, `declaration`, `prepareRename` / `rename`, `codeLens` (caller
+counts), `semanticTokens/full`, `inlayHint`, `workspace/executeCommand`
+(`draglint.showCallers`) and the `draglint/ping` request. The per-method
+behaviour is in [lsp](lsp.md).
+
+### Full rule set on save
+
+`drag-lint lsp --full-rules` runs `drag-lint lint "file" --json` on save, so the
+editor shows the same findings as the CLI, including `dl:ok` review markers.
+Without the flag the server keeps its small built-in check set unchanged.
+
+### VS Code switch
+
+`drag-lint-switch.exe` switches VS Code's Delphi MCP entry off and on
+(`drag-lint-switch --vscode --off` / `--on`), keeping a whole-file backup of the `mcp.json` it edits. See the end of
+[lsp](lsp.md).
+
+### Verification
+
+The proxy merge and the extensions are covered by fixture guards that drive the
+built engine over stdio with a stub DelphiLSP; each names a positive control so
+that a silent run cannot pass with the feature off. Run the targeted set with
+`tests\autotest\run_lsp_*_guard.ps1`.
+
+---
+
+[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

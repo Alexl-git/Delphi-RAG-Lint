@@ -175,8 +175,8 @@ type
       /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
       /// <para>Calls: DRagLint.Lint.QueryRules.ExtractRequiredLiteral, Format, LowerCase, SameText, TreeSitter.Query.TTSQuery.Create, Trim, TSQueryError</para>
       /// <para>constructor</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 76 lines (full implementation)</para>
-      /// <para>Reads: FId, FExcludeAncestors, FExcludeArgOf, FRequireAncestors, FRequireFileText, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText, FRuleId (+5 more)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 81 lines (full implementation)</para>
+      /// <para>Reads: FId, FExcludeAncestors, FExcludeArgOf, FExcludePrecededBy, FRequireAncestors, FRequireFileText, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText, FRuleId (+6 more)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.ExtractRequiredLiteral"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.Create"/>
@@ -195,7 +195,7 @@ type
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Run"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -206,16 +206,16 @@ type
       /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch, TreeSitter.Query.TTSQueryMatchHelper.CapturesArray, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 85 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
+      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText, Integer, SameText (+7 more)</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 86 lines (full implementation)</para>
       /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FRuleId</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.NoteRuleTicks"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.RuleProfileArmed"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
@@ -277,9 +277,10 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: ChangeFileExt, DRagLint.Lint.QueryRules.TQueryRule.Create, Format, Writeln</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Lint.QueryRules.IsUnderNestedRulesDir, DRagLint.Lint.QueryRules.TQueryRule.Create, ExtractFileName, Format, FreeAndNil, LowerCase, Writeln</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.IsUnderNestedRulesDir"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -319,6 +320,7 @@ type
 /// Two QueryPerformanceCounter reads per rule per file, and only when armed.
 /// Not thread-safe; lint-all is single-threaded here.
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
 /// <para>Calls: CompareText</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -1214,6 +1216,18 @@ begin
   end; // try
 end; // function
 
+{ True when ScmPath sits below a sub-directory (relative to ARulesDir) named `rules`. }
+function IsUnderNestedRulesDir(const ARulesDir, AScmPath: string): Boolean;
+var
+  Rel : string;
+  Part: string;
+begin
+  Result:= False;
+  Rel:= ExtractFilePath(ExtractRelativePath(IncludeTrailingPathDelimiter(ARulesDir), AScmPath));
+  for Part in Rel.Split([PathDelim]) do
+    if SameText(Part, 'rules') then Exit(True);
+end; // function
+
 { TQueryRuleLoader }
 
 class function TQueryRuleLoader.LoadAll(const ALanguage: PTSLanguage; const ARulesDir: string): TArray<TQueryRule>;
@@ -1224,18 +1238,33 @@ var
   Source  : string           ;
   Rule    : TQueryRule       ;
   List    : TList<TQueryRule>;
+  Seen    : TDictionary<string, string>;
+  FirstAt : string           ;
 begin
   SetLength(Result, 0);
   if not TDirectory.Exists(ARulesDir) then Exit;
   Files:= TDirectory.GetFiles(ARulesDir, '*.scm', TSearchOption.soAllDirectories);
+  // Key = rule id + file name: one id may legitimately span several forms (hardcoded-credential
+  // const + assignment), but the same id in the same-named file twice is a stray copy.
+  TArray.Sort<string>(Files); // deterministic: first path wins a duplicate
   List:= TList<TQueryRule>.Create;
+  Seen:= TDictionary<string, string>.Create;
   try
     for ScmPath in Files do
     begin
+      // A nested directory named `rules` is an xcopy accident, never a rule folder.
+      if IsUnderNestedRulesDir(ARulesDir, ScmPath) then Continue;
       JsonPath:= ChangeFileExt(ScmPath, '.json');
       try
         Source:= TFile.ReadAllText(ScmPath, TEncoding.UTF8);
         Rule:= TQueryRule.Create(ALanguage, Source, ScmPath, JsonPath);
+        if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
+        begin
+          Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
+          FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
+          Continue;
+        end;
+        Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
         List.Add(Rule);
       except
         on E: Exception do Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, E.Message]));
@@ -1243,6 +1272,7 @@ begin
     end;
     Result:= List.ToArray;
   finally
+    Seen.Free;
     List.Free;
   end; // try
 end; // function

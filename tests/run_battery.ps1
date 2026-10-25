@@ -589,6 +589,13 @@ function SerialReason([string]$path) {
 # measured standalone time, not another multiplier.
 $effectiveTimeout = $(if ($Jobs -gt 1) { $TimeoutSec * 2 } else { $TimeoutSec })
 
+# Explicit longer budgets for runners whose measured time under load exceeds the
+# default. Keyed by runner file name; the value is a FLOOR in seconds (the budget
+# is max(default, value)), so -TimeoutSec can still only raise it. The runner's
+# checks are untouched. doctests_v021: passes alone, ~1060 s under load (the default
+# 600 s killed it as a TIMEOUT on a busy box).
+$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 1800 }
+
 # --- Run ------------------------------------------------------------------
 $results = New-Object System.Collections.Generic.List[object]
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -730,7 +737,7 @@ if ($Jobs -gt 1) {
     $res = & ([scriptblock]::Create($using:RunOneText)) `
              $_.FullName `
              ($_.FullName.Substring(($using:repoRoot).Length + 1).Replace('\', '/')) `
-             $using:LogDir $using:repoRoot $using:effectiveTimeout
+             $using:LogDir $using:repoRoot ([Math]::Max($using:effectiveTimeout, [int](($using:RunnerBudgetSec)[$_.Name])))
     ($using:bag).Add($res)
     $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
     Write-Host ("  {0,-7} {1} ({2:N1}s)" -f $res.State, $res.Runner, $res.Seconds) -ForegroundColor $colour
@@ -742,7 +749,7 @@ if ($Jobs -gt 1) {
     $j++
     $rel = RelPath $s.File.FullName
     Write-Host ("[serial {0,2}/{1}] {2} ... " -f $j, $serialSet.Count, $rel) -NoNewline
-    $res = & $RunOne $s.File.FullName $rel $LogDir $repoRoot $effectiveTimeout
+    $res = & $RunOne $s.File.FullName $rel $LogDir $repoRoot ([Math]::Max($effectiveTimeout, [int]$RunnerBudgetSec[$s.File.Name]))
     $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
     Write-Host ("{0} ({1:N1}s)" -f $res.State, $res.Seconds) -ForegroundColor $colour
     $results.Add($res)
@@ -819,7 +826,7 @@ foreach ($r in $kept) {
   # The deadline is computed ONCE and the remaining budget is re-derived from it
   # each pass, so the slices cannot accumulate drift into a longer effective
   # timeout the way `WaitForExit(1000)` in a counted loop would.
-  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
+  $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max($TimeoutSec, [int]$RunnerBudgetSec[$r.Name]))
   $exited   = $false
   while ($true) {
     $remainMs = [int][Math]::Round(([DateTime]::UtcNow - $deadline).TotalMilliseconds * -1)

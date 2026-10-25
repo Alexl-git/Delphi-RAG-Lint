@@ -35,6 +35,7 @@ Full flag list: [context in the CLI reference](../cli.md#context).
 ## Pitfalls
 
 * ~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.
+* A WARNING: STALE INDEX line (stale-anchor chunk) means the unit changed since it was indexed: no body is shown. Reindex, then ask again.
 
 ## Details
 

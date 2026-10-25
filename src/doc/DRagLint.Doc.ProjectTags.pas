@@ -76,7 +76,7 @@ type
   /// already carries tags -- the legacy lines no project claims. Tag names
   /// match case-insensitively, the same leniency the writer uses.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas), DRagLint.CLI.DocForgetOptions (DRagLint.CLI.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas), DRagLint.CLI.DocForgetOptions (DRagLint.CLI.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.ProjectTags</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -92,7 +92,7 @@ type
   /// <summary>Counts reported by one `doc-forget` pass over one text.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas), DRagLint.Doc.ProjectTags.ForgetTags (DRagLint.Doc.ProjectTags.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ForgetTags (DRagLint.Doc.ProjectTags.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.ProjectTags</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -301,7 +301,7 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , System.Generics.Defaults
-  , DRagLint.Doc.Regions
+  , DRagLint.Doc.Regions // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   ;
 
 const

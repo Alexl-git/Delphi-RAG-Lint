@@ -18,6 +18,23 @@ apply, restoring from backup (when a book failed), and the final reindex
 runs. Each unit's rows appear in the results grid as soon as that unit has
 finished.
 
+### Batch mode
+With two or more units, an unscoped run and an engine that reports
+`batch_units`, the tab converts book by book with ONE convert-apply per book over
+up to 8 units (the start status says `-- batch mode (8 per call)`). The line then
+names the chunk:
+
+```
+All 20 unit(s): reindexing before apply (0:03, total 0:03)
+Book 1 of 2 BDE-to-FireDAC: applying units 1-8 of 20 in one batch (0:42, total 3:10)
+Book 1 of 2 BDE-to-FireDAC: reindexing after batch apply, units 1-8 of 20 (0:51, total 3:19)
+```
+
+The grid fills per unit when its last book's chunk is done, and the report gets
+one `batch: N unit(s) -- a ok, r refused, f failed; ...` note per chunk. Set
+`CONVRULES_BATCH=off` in the editor's environment before starting it to convert
+one unit at a time (an IDE-scoped run and a single unit always do).
+
 ## What it needs
 A Convert run (Conversion > Convert..., then Convert). Nothing to configure.
 

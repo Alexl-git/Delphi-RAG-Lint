@@ -187,7 +187,7 @@ implementation
 
 uses
   System.IOUtils, System.StrUtils,
-  DRagLint.Doc.Regions, // AUTO_MARK / AUTO_BEGIN / AUTO_END / AUTO_PARAM (Task 1)
+  DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   // v(ADP3 T3j review round 1): DOC_ALLOW_GAP + the SHARED attribution
   // predicate (DocRegionFitsDecl / DocRegionInGapWindow) that the
   // `document --apply` write path reads too. Core.Model is types-and-pure-

@@ -71,8 +71,8 @@ type
   /// cache is kept -- a cached root would go stale across an install without
   /// any way to notice.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
+  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStudioEnv = class
@@ -91,6 +91,7 @@ type
     /// Never raises: a missing key is the normal state on a machine
     /// with no IDE, and the caller has a further source to try.
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot (DRagLint.Core.StudioEnv.pas)</para>
     /// <para>Calls: Trim</para>
     /// <para>Returns: ''; Trim(Reg.ReadString(REG_VALUE))</para>
     /// <para>Catches: Exception (swallowed)</para>
@@ -118,7 +119,7 @@ type
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> instead.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Core.StudioEnv.TStudioEnv.Root (DRagLint.Core.StudioEnv.pas), DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty (DRagLint.Core.StudioEnv.pas), DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas)</para>
-    /// <para>Calls: ExcludeTrailingPathDelimiter, GetEnvironmentVariable, Trim</para>
+    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot, ExcludeTrailingPathDelimiter, GetEnvironmentVariable, Trim</para>
     /// <para>Returns: True; False</para>
     /// <para>Mutates: ADiagnostic (out), ARoot (out)</para>
     /// <para>Touches: file system</para>
@@ -141,7 +142,7 @@ type
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> so the failure
     /// names Studio.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Returns: ''</para>
     /// <para>Pure</para>
@@ -165,7 +166,7 @@ type
     /// composed with TPath.Combine by the caller, never stored as its own
     /// literal.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat (DRagLint.Core.StudioEnv.pas), DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
@@ -185,12 +186,13 @@ type
     /// Composed, never stored. Its existence is NOT checked here --
     /// callers pass it to cmd.exe, whose own failure names the file.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
+    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.Root</para>
     /// <para>Returns: TPath.Combine(Root, 'bin\rsvars.bat')</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
@@ -204,6 +206,7 @@ type
     /// <param name="AFailure">On False, which assertion failed and with what
     /// values; '' on success.</param>
     /// <returns>True when every assertion holds.</returns>
+    /// <exception cref="EStudioNotFound"><!-- drag-lint:auto exc -->via DRagLint.Core.StudioEnv.TStudioEnv.Root</exception>
     /// <remarks>
     /// Lives here rather than in the CLI so that the only unit naming
     /// a Studio path is also the only unit naming one in its test --
@@ -215,15 +218,15 @@ type
     /// single-purpose CLI verb.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect, GetEnvironmentVariable, PChar, SetEnvironmentVariable</para>
+    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.Root, DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty, DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat, DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect, GetEnvironmentVariable, PChar, SetEnvironmentVariable</para>
     /// <para>Returns: True</para>
     /// <para>Mutates: AFailure (out)</para>
     /// <para>Directives: static</para>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function SelfTest(out AFailure: string): Boolean; static;

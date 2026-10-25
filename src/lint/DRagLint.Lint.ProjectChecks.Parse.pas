@@ -171,12 +171,14 @@ function IsStandardUnitAlias(const AUnitName: string): Boolean;
 /// classic bare RTL name (Forms, SysUtils, Classes, Windows, ...). Belt-and-
 /// suspenders so incomplete library-index coverage never false-flags core RTL.</summary>
 /// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: False;
+/// IsUnscopedRtlUnit(LowName).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit (DRagLint.Lint.ProjectChecks.Parse.pas)</para>
-/// <para>Calls: LowerCase, StartsText, Trim</para>
+/// <para>Calls: DRagLint.Lint.ProjectChecks.Parse.IsUnscopedRtlUnit, LowerCase, StartsText, Trim</para>
 /// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.IsUnscopedRtlUnit"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsRtlNamespaceUnit(const AUnitName: string): Boolean;

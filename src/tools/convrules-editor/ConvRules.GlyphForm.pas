@@ -57,7 +57,7 @@ uses
   Vcl.Controls
   , Vcl.Forms
   , Vcl.StdCtrls
-  , Vcl.Graphics  // dl:ok unused-unit-in-uses@825b -- REVIEWED 2026-10-06 false positive: clRed / clWindowText are used inside an if-expression (EditChange), whose then/else operands the 1.21.1 extractor emits no refs for; filed as a gap
+  , Vcl.Graphics
   , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_COUNT_EXPR travels with the count-link rules this dialog shows (CountLinkIssueFor)
   ;
 

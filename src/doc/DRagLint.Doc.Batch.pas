@@ -39,7 +39,7 @@ type
   /// doc-source tasks and are inert here.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -153,7 +153,7 @@ type
   /// DocCount is how many of them contributed at least one edit.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -279,7 +279,7 @@ uses
   { System.SysUtils is in the INTERFACE uses now -- TDocBatchOptions.IsExcluded
     needs TFunc there -- so repeating it here is E2004. }
   System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip,
+  DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Index.Closure, DRagLint.Project.Resolver,
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
     two commands cannot disagree about which files belong to the project. }

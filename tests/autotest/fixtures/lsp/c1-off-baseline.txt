@@ -1,0 +1,7 @@
+Content-Length: <N>
+
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":"<CAPS>","serverInfo":{"name":"drag-lint LSP","version":"<V>"}}}Content-Length: <N>
+
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///<W>/FxDirty.pas","diagnostics":[]}}Content-Length: <N>
+
+{"jsonrpc":"2.0","id":99,"result":null}

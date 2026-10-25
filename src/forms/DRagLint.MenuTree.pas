@@ -1,4 +1,4 @@
-unit DRagLint.MenuTree;
+unit DRagLint.MenuTree;  // dl:ok unit-too-large@d0c5 -- TWalkCore is one interpreter class (see its high-response review); the dxBar link shapes are its methods and cannot move to another unit without splitting the class
 
 /// <summary>Code-built menu reader (spec docs\superpowers\specs\2026-10-23-code-built-menu-reader-design.md):
 /// the menu tree a Delphi program BUILDS IN CODE, recovered statically. This
@@ -38,9 +38,13 @@ type
     FSource    : string;
     FConfidence: TMenuConfidence;
     FIdent     : string;
+    FIdentPath : string;
     FDisabled  : Boolean;
     FHasClick  : Boolean;
     FParented  : Boolean;
+    FForm      : string;
+    FLinkIndex : Integer;
+    FBarSubItem: Boolean;
     procedure AttachTo(pParent: TMenuNode);
   public
     /// <summary>The node's kind.</summary>
@@ -55,12 +59,25 @@ type
     property Confidence: TMenuConfidence read FConfidence write FConfidence;
     /// <summary>Foreign identifier of an external root; '' otherwise.</summary>
     property Ident: string read FIdent write FIdent;
+    /// <summary>File (index path) whose code names Ident -- for a DFM component,
+    /// the form's own .pas; '' when not an external root.</summary>
+    property IdentPath: string read FIdentPath write FIdentPath;
     /// <summary>Walker state: Enabled := False was seen.</summary>
     property Disabled: Boolean read FDisabled write FDisabled;
     /// <summary>Walker state: an OnClick was assigned.</summary>
     property HasClick: Boolean read FHasClick write FHasClick;
     /// <summary>Walker state: the node was placed under a parent or made a root.</summary>
     property Parented: Boolean read FParented write FParented;
+    /// <summary>Form class of a .dfm-declared root (menu-tree --with-dfm); '' otherwise.</summary>
+    property Form: string read FForm write FForm;
+    /// <summary>Walker state: the link index a code Insert(i, ..) / ItemLinks.Insert(i)
+    /// gave this node under an external root; -1 = appended. The --with-dfm graft
+    /// inserts the node at this index among the .dfm links.</summary>
+    property LinkIndex: Integer read FLinkIndex write FLinkIndex;
+    /// <summary>Walker state: the node was created as a TdxBarSubItem (TdxBarSubItem.Create /
+    /// AddSubItem). One that ends with no traced children settles as a header and the
+    /// walk adds a note naming it.</summary>
+    property BarSubItem: Boolean read FBarSubItem write FBarSubItem;
     /// <summary>Creates a node.</summary>
     /// <param name="pKind">Initial kind; the walker settles it in TMenuTree.Finish.</param>
     /// <param name="pCaption">Caption as written.</param>
@@ -68,18 +85,115 @@ type
     constructor Create(pKind: TMenuNodeKind; const pCaption, pSource: string);
     destructor Destroy; override;
     /// <summary>Appends pChild (takes ownership) and returns it.</summary>
+    /// <param name="pChild"><!-- drag-lint:auto type -->TMenuNode</param>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
+    /// <para>Reads: FChildren</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddChild(pChild: TMenuNode): TMenuNode;
     /// <summary>Inserts pChild at pIndex (clamped to 0..Count; takes ownership) and returns it.</summary>
+    /// <param name="pIndex"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pChild"><!-- drag-lint:auto type -->TMenuNode</param>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.SetLinkBeginGroup (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
+    /// <para>Reads: FChildren</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function InsertChild(pIndex: Integer; pChild: TMenuNode): TMenuNode;
     /// <summary>The children, in sibling order.</summary>
+    /// <returns><!-- drag-lint:auto -->TObjectList&lt;TMenuNode&gt; -- Observed:
+    /// FChildren.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.GraftCodeBar (DRagLint.FormsMap.pas), DRagLint.FormsMap.GraftCodeMenu (DRagLint.FormsMap.pas), DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas) (+8 more)</para>
+    /// <para>Reads: FChildren</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Children: TObjectList<TMenuNode>;
     /// <summary>The parent node, nil for a root or external root.</summary>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: FParent.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.SetLinkBeginGroup (DRagLint.MenuTree.pas)</para>
+    /// <para>Reads: FParent</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Parent: TMenuNode;
     /// <summary>Caption with '&amp;&amp;' shown as '&amp;' (what a user reads).</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Caption.Replace('&amp;&amp;',
+    /// '&amp;').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuTree.TMenuTree.CollectLeaves (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.Leaves (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DisplayCaption: string;
     /// <summary>MenuCaptionKey of the caption.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: MenuCaptionKey(Caption).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.MenuCaptionKey</para>
+    /// <seealso cref="DRagLint.MenuTree.MenuCaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CaptionKey: string;
     /// <summary>True for the kinds that end a path: item and dynamic.</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Kind in [mnkItem,
+    /// mnkDynamic].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.TMenuTree.CollectLeaves (DRagLint.MenuTree.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.AttachTo"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.CaptionKey"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Children"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsLeaf: Boolean;
   end;
 
@@ -96,6 +210,10 @@ type
     Confidence: TMenuConfidence;
     /// <summary>True when the leaf sits under an external root.</summary>
     External  : Boolean;
+    /// <summary>Form class of the .dfm root the leaf sits under; '' for code roots.</summary>
+    Form      : string;
+    /// <summary>Ident (Form.component) of the .dfm root the leaf sits under; '' otherwise.</summary>
+    RootIdent : string;
   end;
 
   /// <summary>The code-built menus of one run: roots, external roots and notes.
@@ -105,34 +223,111 @@ type
     FRoots   : TObjectList<TMenuNode>;
     FExternal: TObjectList<TMenuNode>;
     FNotes   : TList<string>;
-    procedure CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pAcc: TList<TMenuLeaf>);
+    procedure CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pRoot: TMenuNode; pAcc: TList<TMenuLeaf>);
   public
     constructor Create;
     destructor Destroy; override;
     /// <summary>Adds a new root node and returns it.</summary>
+    /// <param name="pCaption"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pSource"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: TMenuNode.Create(mnkRoot,
+    /// pCaption, pSource).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.Create, DRagLint.MenuTree.TMenuTree.AdoptRoot</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddRoot(const pCaption, pSource: string): TMenuNode;
     /// <summary>Adopts pNode (already created) as a root.</summary>
+    /// <param name="pNode">The node to adopt; the tree takes ownership.</param>
     procedure AdoptRoot(pNode: TMenuNode);
-    /// <summary>The external root for pIdent, created on first use.</summary>
-    function ExternalRoot(const pIdent, pSource: string): TMenuNode;
+    /// <summary>The external root for pIdent as named in pIdentPath, created on
+    /// first use.</summary>
+    /// <param name="pIdent">The foreign identifier, e.g. mnuTools. A DevExpress link
+    /// owner that is a FIELD of the class whose method links into it is keyed
+    /// TClass.field (two classes in one unit with a field popGridMenu each get two roots).</param>
+    /// <param name="pSource">file:line of the first Add under it.</param>
+    /// <param name="pIdentPath">File whose code names pIdent. Two forms that
+    /// each own an item called mnuTools get two external roots.</param>
+    /// <returns>The root; owned by the tree.</returns>
+    function ExternalRoot(const pIdent, pSource: string; const pIdentPath: string = ''): TMenuNode;
     /// <summary>Adds a note line (dynamic caption, unparented item, ...).</summary>
+    /// <param name="pNote">The note text, one line.</param>
     procedure AddNote(const pNote: string);
     function Roots: TObjectList<TMenuNode>;
     function External: TObjectList<TMenuNode>;
     function Notes: TList<string>;
     /// <summary>Every leaf (kind item or dynamic) in tree order, roots first,
     /// then external roots.</summary>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TMenuLeaf&gt; -- Observed: Acc.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuTree.TMenuTree.ToPaths (DRagLint.MenuTree.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuNode.DisplayCaption, DRagLint.MenuTree.TMenuTree.CollectLeaves</para>
+    /// <para>Reads: FRoots, FExternal</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuNode.DisplayCaption"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Leaves: TArray<TMenuLeaf>;
     /// <summary>paths format: one leaf per line,
-    /// path TAB handler TAB file:line TAB confidence; external roots follow,
+    /// path TAB handler TAB file:line TAB confidence; a .dfm root (--with-dfm)
+    /// follows a '## dfm &lt;Form.component&gt;' line; external roots follow,
     /// each after a '## external &lt;ident&gt;' line.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.MenuConfidenceName, DRagLint.MenuTree.TMenuTree.Leaves, SameText</para>
+    /// <seealso cref="DRagLint.MenuTree.MenuConfidenceName"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.Leaves"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToPaths: string;
     /// <summary>Indented tree: [kind] caption  -> handler  (file:line, confidence).</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TMenuTree.ToText.Emit, MenuConfidenceName, MenuKindName, StringOfChar</para>
+    /// <para>Reads: FRoots, FExternal, FNotes</para>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.ToText.Emit"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToText: string;
     /// <summary>menu-tree/1 JSON (spec 8).</summary>
     /// <param name="pEngine">Engine version string.</param>
     /// <param name="pProject">The --project path.</param>
     /// <param name="pDb">The project DB path.</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: O.Format(2).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DateToISO8601, DRagLint.MenuTree.NodeJson</para>
+    /// <para>Reads: FRoots, FExternal, FNotes</para>
+    /// <seealso cref="DRagLint.MenuTree.NodeJson"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddNote"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AddRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.AdoptRoot"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuTree.CollectLeaves"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToJson(const pEngine, pProject, pDb: string): string;
   end;
 
@@ -162,8 +357,20 @@ type
     /// <summary>Walks every builder routine (or only pRootQName and what it
     /// reaches) and returns the tree. The caller owns the result.</summary>
     /// <param name="pRootQName">Qualified name of one builder; '' = all.</param>
+    /// <returns><!-- drag-lint:auto -->TMenuTree -- Observed:
+    /// TWalkCore(FImpl).Walk(pRootQName).</returns>
     /// <exception cref="EMenuTreeStale">A file the walk parsed changed since it was indexed.</exception>
     /// <exception cref="EMenuTreeSetup">pRootQName names no routine with a body.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: DRagLint.MenuTree.TWalkCore.Walk, TWalkCore</para>
+    /// <para>Reads: FImpl</para>
+    /// <seealso cref="DRagLint.MenuTree.TWalkCore.Walk"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuWalker.Create"/>
+    /// <seealso cref="DRagLint.MenuTree.TMenuWalker.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Walk(const pRootQName: string = ''): TMenuTree;
   end;
 
@@ -178,12 +385,37 @@ function MenuCaptionKey(const pCaption: string): string;
 /// whitespace-'>'-whitespace, each MenuCaptionKey'd, empty ones dropped,
 /// joined with ' > '.</summary>
 /// <param name="pPath">A display path such as 'drag-lint > Reports > Who calls...'.</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: string.Join(PATH_SEP,
+/// Parts.ToArray).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuDrift.MenuFormPathKey (DRagLint.MenuDrift.pas)</para>
+/// <para>Calls: DRagLint.MenuTree.MenuCaptionKey</para>
+/// <seealso cref="DRagLint.MenuTree.MenuCaptionKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuPathKey(const pPath: string): string;
 
 /// <summary>The JSON / text name of a kind ('root', 'submenu', 'item', ...).</summary>
+/// <param name="pKind"><!-- drag-lint:auto type -->TMenuNodeKind</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: KIND_NAMES[pKind].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuKindName(pKind: TMenuNodeKind): string;
 
 /// <summary>The JSON / text name of a confidence ('certain', 'derived', 'unknown').</summary>
+/// <param name="pConfidence"><!-- drag-lint:auto type -->TMenuConfidence</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: CONFIDENCE_NAMES[pConfidence].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToPaths (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuConfidenceName(pConfidence: TMenuConfidence): string;
 
 implementation
@@ -257,6 +489,7 @@ begin
   Caption   := pCaption;
   Source    := pSource;
   Confidence:= mcCertain;
+  FLinkIndex:= -1;
 end;
 
 destructor TMenuNode.Destroy;
@@ -346,14 +579,15 @@ begin
   FRoots.Add(pNode);
 end;
 
-function TMenuTree.ExternalRoot(const pIdent, pSource: string): TMenuNode;
+function TMenuTree.ExternalRoot(const pIdent, pSource: string; const pIdentPath: string = ''): TMenuNode;
 var
   N: TMenuNode;
 begin
   for N in FExternal do
-    if SameText(N.Ident, pIdent) then Exit(N);
+    if SameText(N.Ident, pIdent) and SameText(N.IdentPath, pIdentPath) then Exit(N);
   Result:= TMenuNode.Create(mnkExternalRoot, pIdent, pSource);
-  Result.Ident   := pIdent;
+  Result.Ident    := pIdent;
+  Result.IdentPath:= pIdentPath;
   Result.Parented:= True;
   FExternal.Add(Result);
 end;
@@ -378,7 +612,7 @@ begin
   Result:= FNotes;
 end;
 
-procedure TMenuTree.CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pAcc: TList<TMenuLeaf>);
+procedure TMenuTree.CollectLeaves(pNode: TMenuNode; const pPrefix: string; pExternal: Boolean; pRoot: TMenuNode; pAcc: TList<TMenuLeaf>);
 var
   C   : TMenuNode;
   Path: string;
@@ -398,9 +632,11 @@ begin
       L.Kind      := C.Kind;
       L.Confidence:= C.Confidence;
       L.External  := pExternal;
+      L.Form      := pRoot.Form;
+      L.RootIdent := if pExternal then '' else pRoot.Ident;
       pAcc.Add(L);
     end;
-    if C.Children.Count > 0 then CollectLeaves(C, Path, pExternal, pAcc);
+    if C.Children.Count > 0 then CollectLeaves(C, Path, pExternal, pRoot, pAcc);
   end;
 end;
 
@@ -411,8 +647,8 @@ var
 begin
   Acc:= TList<TMenuLeaf>.Create;
   try
-    for N in FRoots do CollectLeaves(N, N.DisplayCaption, False, Acc);
-    for N in FExternal do CollectLeaves(N, N.Ident, True, Acc);
+    for N in FRoots do CollectLeaves(N, N.DisplayCaption, False, N, Acc);
+    for N in FExternal do CollectLeaves(N, N.Ident, True, N, Acc);
     Result:= Acc.ToArray;
   finally
     Acc.Free;
@@ -424,13 +660,17 @@ var
   SB     : TStringBuilder;
   L      : TMenuLeaf;
   LastExt: string;
+  LastDfm: string;
   Ext    : string;
 begin
   SB:= TStringBuilder.Create;
   try
     LastExt:= '';
+    LastDfm:= '';
     for L in Leaves do
     begin
+      if (L.RootIdent <> '') and (L.RootIdent <> LastDfm) then SB.Append('## dfm ').Append(L.RootIdent).Append(sLineBreak);
+      LastDfm:= L.RootIdent;
       if L.External then
       begin
         Ext:= L.Path.Split([PATH_SEP])[0];
@@ -483,11 +723,22 @@ var
 begin
   Result:= TJSONObject.Create;
   Result.AddPair('kind', MenuKindName(pNode.Kind));
-  if pNode.Kind = mnkExternalRoot then Result.AddPair('ident', pNode.Ident)
+  if pNode.Kind = mnkExternalRoot then
+  begin
+    Result.AddPair('ident', pNode.Ident);
+    Result.AddPair('identPath', pNode.IdentPath);
+  end
   else if pNode.Kind <> mnkSeparator then
   begin
     Result.AddPair('caption', pNode.Caption);
     Result.AddPair('captionKey', pNode.CaptionKey);
+    { a .dfm root (--with-dfm): Form.component, the .dfm path, the form class }
+    if pNode.Ident <> '' then
+    begin
+      Result.AddPair('ident', pNode.Ident);
+      Result.AddPair('identPath', pNode.IdentPath);
+      Result.AddPair('form', pNode.Form);
+    end;
   end;
   if pNode.Handler <> '' then Result.AddPair('handler', pNode.Handler);
   Result.AddPair('source', pNode.Source);
@@ -535,7 +786,7 @@ type
   TWalkEnv = class;
 
   /// <summary>What an expression evaluates to, as far as menus care.</summary>
-  TMVKind = (mvNone, mvNil, mvNode, mvCaptions, mvHandler, mvProc, mvWrapper, mvForeign);
+  TMVKind = (mvNone, mvNil, mvNode, mvCaptions, mvHandler, mvProc, mvWrapper, mvForeign, mvLink);
 
   TMValue = record
     Kind    : TMVKind;
@@ -553,6 +804,39 @@ type
     ProcPath   : string;
     ProcEnv    : TWalkEnv;
     ProcRoutine: string;
+    { mvLink: the TLinkState of a DevExpress item link (ItemLinks.Add / Insert(i)) }
+    Link       : TObject;
+    { qualified class of the method whose frame evaluated Text ('' outside a
+      method): a bare handler / routine name resolves in that class first }
+    Cls        : string;
+    { Text is a field of Cls: a link owner is keyed TClass.field }
+    IsField    : Boolean;
+  end;
+
+  { A DevExpress item link the walk is following: whose ItemLinks it is in, at
+    which index (-1 = appended), and the item / BeginGroup once assigned. Owned
+    by TWalkCore.FLinks; values only reference it. }
+  TLinkState = class
+  private
+    FOwner     : TMValue;
+    FIndex     : Integer;
+    FDerived   : Boolean;
+    FItem      : TMenuNode;
+    FBeginGroup: Boolean;
+    FSite      : string;
+  public
+    { Eval of P in P.ItemLinks }
+    property Owner: TMValue read FOwner write FOwner;
+    { Insert(i) index; -1 = appended }
+    property Index: Integer read FIndex write FIndex;
+    { a non-literal Insert index: appended, derived }
+    property Derived: Boolean read FDerived write FDerived;
+    { the linked item once known; nil before Item := X }
+    property Item: TMenuNode read FItem write FItem;
+    { BeginGroup := True was seen: a separator before the item }
+    property BeginGroup: Boolean read FBeginGroup write FBeginGroup;
+    { file:line reported for the link }
+    property Site: string read FSite write FSite;
   end;
 
   TWalkEnv = class
@@ -595,6 +879,10 @@ type
     Site   : string;
     Derived: Boolean;
     Depth  : Integer;
+    { first FWith entry this activation may use: a callee never sees its caller's with receivers }
+    WithBase: Integer;
+    { qualified class of the running method; '' for a plain routine }
+    Cls     : string;
   end;
 
   /// <summary>What a call runs: the parameter list and body (of a routine or
@@ -608,9 +896,10 @@ type
     Site    : string;
     Derived : Boolean;
     Depth   : Integer;
+    Cls     : string;
   end;
 
-  TWalkCore = class  // dl:ok high-response@2a94 -- the walker is one interpreter over one CST: eval, call binding, parenting and the index lookups share the env and file caches, and splitting would hand the same calls to a second class
+  TWalkCore = class  // dl:ok high-response@2a94, god-class@2a94 -- the walker is one interpreter over one CST: eval, call binding, parenting and the index lookups share the env and file caches, and splitting would hand the same calls to a second class
   private
     FStore     : TSQLiteSymbolStore;
     FProject   : string;
@@ -623,6 +912,19 @@ type
     FMenuTypes : TList<string>;
     FRoutines  : TDictionary<string, TRoutineInfo>;
     FStack     : TList<string>;
+    FLinks     : TObjectList<TLinkState>;
+    FWith      : TList<TMValue>;
+    { routine qualified name -> qualified class of the method ('' = not a method) }
+    FClassOf   : TDictionary<string, string>;
+    { lower 'class.field' -> the field is declared in that class }
+    FFieldOf   : TDictionary<string, Boolean>;
+    { lower 'TClass.field|path' -> the code node a method of TClass stored in the field }
+    FFieldNodes: TDictionary<string, TMenuNode>;
+    function ClassOfRoutine(const pQName: string): string;
+    function IsClassField(const pCls, pName: string): Boolean;
+    function FieldKey(const pCls, pName, pPath: string): string;
+    function OwnerKey(const pIdent, pCls: string; pIsField: Boolean): string;
+    procedure GraftFieldRoots;
     function Q(const pSql: string; const pParams: array of string): TFDQuery;
     procedure LoadMenuTypes;
     function IsMenuType(const pName: string): Boolean;
@@ -631,10 +933,10 @@ type
     function Text(const pFrame: TWalkFrame; const pNode: TTSNode): string;
     function Loc(const pFrame: TWalkFrame; const pNode: TTSNode): string;
     function NewEnv: TWalkEnv;
-    function ResolveRoutine(const pName, pFromPath: string): TRoutineInfo;
-    function QualifyHandler(const pText, pFromPath: string): string;
+    function ResolveRoutine(const pName, pFromPath: string; const pCls: string = ''): TRoutineInfo;
+    function QualifyHandler(const pText, pFromPath: string; const pCls: string = ''): string;
     function ConstDecl(const pName, pFromPath: string; out pFile: TWalkFile): TTSNode;
-    function IsMenuTypedForeign(const pIdent, pFromPath: string): Boolean;
+    function IsMenuTypedForeign(const pIdent, pFromPath: string; pUnknown: Boolean = True): Boolean;
     function CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;
     function LiteralFunctionCaptions(const pName, pFromPath: string; out pCaptions: TArray<string>): Boolean;
     function ConstArrayCaptions(const pArr, pField, pFromPath: string; out pCaptions: TArray<string>): Boolean;
@@ -645,6 +947,14 @@ type
     function CreateNode(const pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
     procedure Parenting(const pReceiver, pArgs: TTSNode; pInsert: Boolean; const pFrame: TWalkFrame);
     procedure SetProp(pTarget: TMenuNode; const pProp: string; const pRhs, pStmt: TTSNode; const pFrame: TWalkFrame);
+    function DxBarCall(const pCall, pEntity, pArgs: TTSNode; const pName: string; const pFrame: TWalkFrame; out pValue: TMValue): Boolean;
+    function LinkCall(const pOwnerExpr: TTSNode; const pName: string; const pArgs, pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
+    function LinkOwnerNode(pState: TLinkState; const pFrame: TWalkFrame): TMenuNode;
+    procedure PlaceLinkItem(pState: TLinkState; pItem: TMenuNode; const pFrame: TWalkFrame);
+    procedure SetLinkBeginGroup(pState: TLinkState);
+    function TopWith(const pFrame: TWalkFrame): TMValue;
+    procedure WalkWith(const pNode: TTSNode; const pFrame: TWalkFrame);
+    function WithAssign(const pName: string; const pRhs, pStmt: TTSNode; const pFrame: TWalkFrame): Boolean;
     function Invoke(const pCallee: TCallee; const pArgs: TArray<TMValue>): TMValue;
     function InvokeExpanded(const pCallee: TCallee; const pArgs: TArray<TMValue>): TMValue;
     function InvokeRoutine(const pInfo: TRoutineInfo; const pArgs: TArray<TMValue>; const pSite: string;
@@ -664,8 +974,20 @@ const
   ROUTINE_KINDS = '''procedure'',''function'',''method'',''constructor'',''destructor''';
   { Statement kinds whose named children are walked as statements (spec 4.2,
     "if .. then .. else": both branches; loops: the body once). }
-  COMPOUND_KINDS: array[0..12] of string = ('block', 'statements', 'if', 'ifElse', 'for', 'foreach', 'while',
-    'repeat', 'case', 'caseCase', 'try', 'exceptionHandler', 'with');
+  COMPOUND_KINDS: array[0..11] of string = ('block', 'statements', 'if', 'ifElse', 'for', 'foreach', 'while',
+    'repeat', 'case', 'caseCase', 'try', 'exceptionHandler');
+  { dxBar spec section 2: DevExpress bar item types (menu nodes when created)
+    and the types that own ItemLinks (a foreign link owner, a helper's parameter). }
+  DX_ITEM_TYPES: array[0..9] of string = ('TdxBarItem', 'TdxBarButton', 'TdxBarLargeButton', 'TdxBarSubItem',
+    'TdxBarContainerItem', 'TdxBarListItem', 'TdxBarMRUListItem', 'TdxBarStatic', 'TdxBarLabel', 'TdxBarDBNavButton');
+  { (TdxBarManager is not one: a manager parameter is context -- a constructor
+    Create(.., AManager: TdxBarManager) that builds a popup is a builder, not a helper) }
+  DX_OWNER_TYPES: array[0..5] of string = ('TdxBar', 'TdxBarPopupMenu', 'TdxRibbonPopupMenu', 'TdxBarApplicationMenu',
+    'TdxBarSubItem', 'TdxBarContainerItem');
+  { ItemLinks calls that create the item AND its link }
+  DX_LINK_CREATORS: array[0..3] of string = ('AddButton', 'AddSubItem', 'AddItem', 'AddLargeButton');
+  { an owner only position or lookup names (decision 7): mgr.Bars[n], mgr.MainMenuBar, mgr.BarByCaption('X') }
+  DX_BAR_EXPR = '(\bBars\s*\[|\bMainMenuBar$|\bBarBy(Caption|OldName)\s*\()';
 
 function NodeLine(const pNode: TTSNode): Integer;
 begin
@@ -687,6 +1009,12 @@ var
 begin
   I:= pText.LastIndexOf('.');
   Result:= if I >= 0 then pText.Substring(I + 1) else pText;
+end;
+
+{ dxBar: P.ItemLinks -- the collection whose Add / Insert / AddButton make links }
+function IsItemLinksExpr(const pNode: TTSNode; const pText: string): Boolean;
+begin
+  Result:= (pNode.NodeType = 'exprDot') and SameText(LastSegment(pText), 'ItemLinks');
 end;
 
 { Delphi string literal text -> value: 'a''b' -> a'b, #65 -> A, adjacent parts joined. }
@@ -793,6 +1121,11 @@ begin
   FMenuTypes := TList<string>.Create;
   FRoutines  := TDictionary<string, TRoutineInfo>.Create;
   FStack     := TList<string>.Create;
+  FLinks     := TObjectList<TLinkState>.Create(True);
+  FWith      := TList<TMValue>.Create;
+  FClassOf   := TDictionary<string, string>.Create;
+  FFieldOf   := TDictionary<string, Boolean>.Create;
+  FFieldNodes:= TDictionary<string, TMenuNode>.Create;
   { spec 5: exit 2 when the project is not in the DB -- at least one indexed
     file must lie under the project's folder. }
   Dir:= IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(pProject)));
@@ -809,6 +1142,11 @@ end;
 
 destructor TWalkCore.Destroy;
 begin
+  FFieldNodes.Free;
+  FFieldOf.Free;
+  FClassOf.Free;
+  FWith.Free;
+  FLinks.Free;
   FStack.Free;
   FRoutines.Free;
   FMenuTypes.Free;
@@ -820,7 +1158,7 @@ begin
   inherited Destroy;
 end;
 
-function TWalkCore.Q(const pSql: string; const pParams: array of string): TFDQuery;
+function TWalkCore.Q(const pSql: string; const pParams: array of string): TFDQuery;  // dl:ok duplicate-code@1940 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the 10-line open-a-parameterised-query helper TDfmRootBuilder.Q repeats; each class holds its own store, and sharing it would add public surface to MenuTree for one caller
 var
   I: Integer;
 begin
@@ -847,8 +1185,10 @@ var
   Pairs  : TList<TPair<string, string>>;
   Pair   : TPair<string, string>;
   NameFld, AncFld: TField;
+  S      : string;
 begin
   FMenuTypes.Add('TMenuItem');
+  for S in DX_ITEM_TYPES do FMenuTypes.Add(S);
   Pairs:= TList<TPair<string, string>>.Create;
   try
     QA:= Q('SELECT s.name AS n, a.ancestor_name AS a FROM type_ancestors a JOIN symbols s ON s.id = a.symbol_id', []);
@@ -961,17 +1301,77 @@ begin
   FEnvs.Add(Result);
 end;
 
-function TWalkCore.ResolveRoutine(const pName, pFromPath: string): TRoutineInfo;
+{ The class a method belongs to: the qualified name without its last segment,
+  when the index declares that as a class / record. }
+function TWalkCore.ClassOfRoutine(const pQName: string): string;
+var
+  QC   : TFDQuery;
+  Owner: string;
+  I    : Integer;
+begin
+  if FClassOf.TryGetValue(LowerCase(pQName), Result) then Exit;
+  Result:= '';
+  I:= pQName.LastIndexOf('.');
+  if I > 0 then
+  begin
+    Owner:= pQName.Substring(0, I);
+    QC:= Q('SELECT 1 AS n FROM symbols WHERE qualified_name = :q COLLATE NOCASE AND kind IN (''class'',''record'') LIMIT 1', [Owner]);
+    try
+      if not QC.Eof then Result:= Owner;
+    finally
+      QC.Free;
+    end;
+  end;
+  FClassOf.Add(LowerCase(pQName), Result);
+end;
+
+function TWalkCore.IsClassField(const pCls, pName: string): Boolean;
+var
+  QF : TFDQuery;
+  Key: string;
+begin
+  Result:= False;
+  if (pCls = '') or (pName = '') then Exit;
+  Key:= LowerCase(pCls + '.' + pName);
+  if FFieldOf.TryGetValue(Key, Result) then Exit;
+  QF:= Q('SELECT 1 AS n FROM symbols WHERE qualified_name = :q COLLATE NOCASE AND kind IN (''field'',''component'') LIMIT 1', [pCls + '.' + pName]);
+  try
+    Result:= not QF.Eof;
+  finally
+    QF.Free;
+  end;
+  FFieldOf.Add(Key, Result);
+end;
+
+{ The key a field's external root and its stored node share: TClass.field (the
+  class's short name, as the root's ident shows it) in the file that names it. }
+function TWalkCore.FieldKey(const pCls, pName, pPath: string): string;
+begin
+  Result:= LowerCase(LastSegment(pCls) + '.' + pName + '|' + pPath);
+end;
+
+{ The external-root ident of a menu owner: a FIELD of the method's own class is
+  keyed TClass.field (two classes in one unit with a same-named field get two
+  roots); anything else keeps the ident as written. Shared by the VCL Items.Add
+  and the DevExpress link-owner paths. }
+function TWalkCore.OwnerKey(const pIdent, pCls: string; pIsField: Boolean): string;
+begin
+  Result:= if pIsField and (pCls <> '') then LastSegment(pCls) + '.' + pIdent else pIdent;
+end;
+
+function TWalkCore.ResolveRoutine(const pName, pFromPath: string; const pCls: string = ''): TRoutineInfo;
 var
   QR : TFDQuery;
   Key: string;
 begin
-  Key:= LowerCase(pName + '|' + pFromPath);
+  Key:= LowerCase(pName + '|' + pFromPath + '|' + pCls);
   if FRoutines.TryGetValue(Key, Result) then Exit;
   Result:= Default(TRoutineInfo);
+  { the caller's own class first: two classes in one unit may both declare it }
   QR:= Q('SELECT s.qualified_name AS q, f.path AS p, s.impl_start_line AS l FROM symbols s JOIN files f ON f.id = s.file_id '
     + 'WHERE s.name = :n COLLATE NOCASE AND s.impl_start_line > 0 AND s.kind IN (' + ROUTINE_KINDS + ') '
-    + 'ORDER BY (lower(f.path) = :f) DESC, s.id LIMIT 1', [pName, LowerCase(pFromPath)]);
+    + 'ORDER BY (lower(s.qualified_name) = :c) DESC, (lower(f.path) = :f) DESC, s.id LIMIT 1',
+    [pName, LowerCase(pCls + '.' + pName), LowerCase(pFromPath)]);
   try
     if not QR.Eof then
     begin
@@ -986,7 +1386,7 @@ begin
   FRoutines.Add(Key, Result);
 end;
 
-function TWalkCore.QualifyHandler(const pText, pFromPath: string): string;
+function TWalkCore.QualifyHandler(const pText, pFromPath: string; const pCls: string = ''): string;
 var
   QH   : TFDQuery;
   Name : string;
@@ -998,6 +1398,8 @@ begin
   I:= pText.LastIndexOf('.');
   if I > 0 then Owner:= LastSegment(pText.Substring(0, I));
   if SameText(Owner, 'Self') then Owner:= '';
+  { a bare handler names a method of the class that assigns it }
+  if Owner = '' then Owner:= LastSegment(pCls);
   QH:= Q('SELECT s.qualified_name AS q FROM symbols s JOIN files f ON f.id = s.file_id '
     + 'WHERE s.name = :n COLLATE NOCASE AND s.kind IN (' + ROUTINE_KINDS + ') '
     + 'ORDER BY (lower(s.qualified_name) LIKE :o) DESC, (lower(f.path) = :f) DESC, s.id LIMIT 1',
@@ -1054,8 +1456,10 @@ end;
 
 { spec 4.6: a foreign parent must be a menu-typed component, field or
   variable -- a TObjectList<TMenuItem> that holds items for teardown is not.
-  An identifier the index does not know is accepted (an inline var). }
-function TWalkCore.IsMenuTypedForeign(const pIdent, pFromPath: string): Boolean;
+  An identifier the index does not know is accepted (an inline var) unless
+  pUnknown is False (the call-relevance test, which must not descend into
+  every routine that receives some unknown name). }
+function TWalkCore.IsMenuTypedForeign(const pIdent, pFromPath: string; pUnknown: Boolean = True): Boolean;
 var
   QI : TFDQuery;
   Sig: string;
@@ -1064,12 +1468,12 @@ begin
     + 'WHERE s.name = :n COLLATE NOCASE AND s.kind IN (''field'',''var'',''local_var'',''component'',''param'') '
     + 'ORDER BY (lower(f.path) = :f) DESC, s.id LIMIT 1', [LastSegment(pIdent), LowerCase(pFromPath)]);
   try
-    if QI.Eof then Exit(True);
+    if QI.Eof then Exit(pUnknown);
     Sig:= QI.FieldByName('g').AsString.Trim;
   finally
     QI.Free;
   end;
-  Result:= IsMenuType(Sig) or TRegEx.IsMatch(Sig, '^T\w*Menu$', [roIgnoreCase]);
+  Result:= IsMenuType(Sig) or MatchText(LastSegment(Sig), DX_OWNER_TYPES) or TRegEx.IsMatch(Sig, '^T\w*Menu$', [roIgnoreCase]);
 end;
 
 { spec 4.3 case/if row: F's body assigns only literals to Result (or Exit('lit')). }
@@ -1263,6 +1667,8 @@ begin
   Result.Kind:= mvForeign;
   Result.Text:= if C.Text <> '' then C.Text else Text(pFrame, pNode);
   Result.Path:= pFrame.F.Path;
+  Result.Cls := pFrame.Cls;
+  Result.IsField:= Result.IsField and SameText(Result.Text, Text(pFrame, pNode));
   Result.Conf:= mcUnknown;
 end;
 
@@ -1270,18 +1676,19 @@ function TWalkCore.HandlerOf(const pValue: TMValue): string;
 begin
   case pValue.Kind of
     mvHandler, mvWrapper: Result:= pValue.Handler;
-    mvForeign           : Result:= QualifyHandler(pValue.Text, pValue.Path);
+    mvForeign           : Result:= QualifyHandler(pValue.Text, pValue.Path, pValue.Cls);
     mvProc              : Result:= if pValue.ProcRoutine <> '' then pValue.ProcRoutine else '<anonymous method>';
   else
     Result:= '';
   end;
 end;
 
-function TWalkCore.Eval(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@7c98 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.Eval(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@baa6 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   K   : string;
   L   : TTSNode;
   LV  : TMValue;
+  R   : string;
 begin
   Result:= NoValue;
   if pNode.IsNull then Exit;
@@ -1299,6 +1706,7 @@ begin
     Result.ProcNode:= pNode;
     Result.ProcPath:= pFrame.F.Path;
     Result.ProcEnv := pFrame.Env;
+    Result.Cls     := pFrame.Cls;
     Exit;
   end;
   if K = 'identifier' then
@@ -1307,19 +1715,36 @@ begin
     Result.Kind:= mvForeign;
     Result.Text:= Text(pFrame, pNode);
     Result.Path:= pFrame.F.Path;
+    Result.Cls := pFrame.Cls;
+    Result.IsField:= IsClassField(pFrame.Cls, Result.Text);
     Exit;
   end;
   if K = 'exprCall' then Exit(EvalCall(pNode, pFrame));
   if K = 'exprDot' then
   begin
     L:= pNode.ChildByField('lhs');
+    R:= Text(pFrame, pNode.ChildByField('rhs'));
+    { dxBar: P.ItemLinks.Add / AddButton / AddSubItem written without parentheses }
+    if IsItemLinksExpr(L, Text(pFrame, L)) and (SameText(R, 'Add') or MatchText(R, DX_LINK_CREATORS)) then
+      Exit(LinkCall(L.ChildByField('lhs'), R, Default(TTSNode), pNode, pFrame));
+    { dxBar: mgr.AddButton / mgr.AddSubItem -- an item, unparented until linked }
+    if SameText(R, 'AddButton') or SameText(R, 'AddSubItem') then Exit(CreateNode(pNode, pFrame));
     { W.HandleClick where W wraps a handler: followed one level (spec 4.2) }
     if L.NodeType = 'exprCall' then LV:= Eval(L, pFrame)
     else if L.NodeType = 'identifier' then
     begin
       if not pFrame.Env.Vars.TryGetValue(LowerCase(Text(pFrame, L)), LV) then LV:= NoValue;
     end
+    else if SameText(R, 'Item') then LV:= Eval(L, pFrame)
     else LV:= NoValue;
+    { dxBar: Link.Item once the link's item is known }
+    if (LV.Kind = mvLink) and SameText(R, 'Item') and (TLinkState(LV.Link).Item <> nil) then
+    begin
+      Result:= NoValue;
+      Result.Kind:= mvNode;
+      Result.Node:= TLinkState(LV.Link).Item;
+      Exit;
+    end;
     if LV.Kind = mvWrapper then
     begin
       Result.Kind   := mvHandler;
@@ -1329,11 +1754,13 @@ begin
     Result.Kind:= mvForeign;
     Result.Text:= Text(pFrame, pNode);
     Result.Path:= pFrame.F.Path;
+    Result.Cls := pFrame.Cls;
     Exit;
   end;
   Result.Kind:= mvForeign;
   Result.Text:= Text(pFrame, pNode);
   Result.Path:= pFrame.F.Path;
+  Result.Cls := pFrame.Cls;
 end;
 
 function TWalkCore.CreateNode(const pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
@@ -1344,6 +1771,9 @@ begin
   Args:= pCall.ChildByField('args');
   N:= TMenuNode.Create(mnkItem, '', if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pCall));
   if pFrame.Derived then N.Confidence:= mcDerived;
+  { TdxBarSubItem.Create(O) (entity lhs) / X.AddSubItem (rhs) }
+  N.BarSubItem:= TRegEx.IsMatch(Text(pFrame, if Args.IsNull then pCall else pCall.ChildByField('entity')),
+    '(^|\.)(TdxBarSubItem\.Create|AddSubItem)$', [roIgnoreCase]);
   FCreated.Add(N);
   if not Args.IsNull and (Args.NamedChildCount > 0) and (Args.NamedChild(0).NodeType = 'kNil') then FCreatedNil.Add(N);
   Result:= NoValue;
@@ -1351,7 +1781,7 @@ begin
   Result.Node:= N;
 end;
 
-function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@d80b -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@ca8a -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   E, Args : TTSNode;
   Name    : string;
@@ -1366,11 +1796,21 @@ begin
   E   := pNode.ChildByField('entity');
   Args:= pNode.ChildByField('args');
   Name:= if E.NodeType = 'exprDot' then Text(pFrame, E.ChildByField('rhs')) else Text(pFrame, E);
+  if DxBarCall(pNode, E, Args, Name, pFrame, Result) then Exit;
   { X.Create(Owner): a menu node when X is TMenuItem or a descendant; else a
     one-level click wrapper when its first argument is a handler (spec 4.2) }
   if (E.NodeType = 'exprDot') and SameText(Name, 'Create') then
   begin
     if IsMenuType(Text(pFrame, E.ChildByField('lhs'))) then Exit(CreateNode(pNode, pFrame));
+    { dxBar: X := TdxBarPopupMenu.Create(O) -- a link owner, never a click wrapper;
+      the assignment names it after X, so its links land in an external root X }
+    if MatchText(LastSegment(Text(pFrame, E.ChildByField('lhs'))), DX_OWNER_TYPES) or EndsText('PopupMenu', Text(pFrame, E.ChildByField('lhs'))) then
+    begin
+      Result.Kind:= mvForeign;
+      Result.Text:= Text(pFrame, pNode);
+      Result.Path:= pFrame.F.Path;
+      Exit;
+    end;
     if not Args.IsNull and (Args.NamedChildCount > 0) then
     begin
       V:= EvalArg(Args.NamedChild(0), pFrame);
@@ -1411,6 +1851,7 @@ begin
       Callee.Site    := Loc(pFrame, pNode);
       Callee.Derived := True;
       Callee.Depth   := pFrame.Depth + 1;
+      Callee.Cls     := V.Cls;
       Exit(InvokeExpanded(Callee, Vals));
     end;
     Info:= ResolveRoutine(LastSegment(V.ProcRoutine), pFrame.F.Path);
@@ -1422,6 +1863,12 @@ begin
   Relevant:= False;
   for V in Vals do
     if V.Kind in [mvNode, mvProc] then Relevant:= True;
+  { spec 4.6 with the parent passed in: AddMenuItem(mnuTools, ..) where
+    mnuTools is a menu-typed component the index knows (Micronite helpers) }
+  if not Relevant then
+    for V in Vals do
+      if (V.Kind = mvForeign) and TRegEx.IsMatch(V.Text, '^[A-Za-z_][\w.]*$')
+        and IsMenuTypedForeign(V.Text, V.Path, False) then Relevant:= True;
   if not Relevant then
   begin
     Result.Kind:= mvForeign;
@@ -1429,7 +1876,8 @@ begin
     Result.Path:= pFrame.F.Path;
     Exit;
   end;
-  Info:= ResolveRoutine(Name, pFrame.F.Path);
+  { a bare call inside a method names a method of that class first }
+  Info:= ResolveRoutine(Name, pFrame.F.Path, if E.NodeType = 'identifier' then pFrame.Cls else '');
   if not Info.Found then Exit;
   Result:= InvokeRoutine(Info, Vals, if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pNode), pFrame.Derived, pFrame.Depth + 1);
 end;
@@ -1457,6 +1905,7 @@ begin
     Callee.Site    := pSite;
     Callee.Derived := pDerived;
     Callee.Depth   := pDepth;
+    Callee.Cls     := ClassOfRoutine(pInfo.QName);
     Result:= InvokeExpanded(Callee, pArgs);
   finally
     FStack.Delete(FStack.Count - 1);
@@ -1505,6 +1954,8 @@ begin
   Fr.Site   := pCallee.Site;
   Fr.Derived:= pCallee.Derived;
   Fr.Depth  := pCallee.Depth;
+  Fr.WithBase:= FWith.Count;
+  Fr.Cls    := pCallee.Cls;
   Names:= nil;
   if not pCallee.ArgsDecl.IsNull then
     for I:= 0 to pCallee.ArgsDecl.NamedChildCount - 1 do
@@ -1528,6 +1979,7 @@ var
   X, P       : TMValue;
   Index      : Integer;
   Ident      : string;
+  IdentPath  : string;
   Xs         : TArray<TMenuNode>;
   N          : TMenuNode;
   I          : Integer;
@@ -1565,7 +2017,8 @@ begin
       Base:= pReceiver.ChildByField('lhs');
       if N.Parented then Continue;
       if SameText(LastSegment(Text(pFrame, Base)), 'MainMenu') then FTree.AdoptRoot(N)
-      else FTree.ExternalRoot(Text(pFrame, Base), Loc(pFrame, pReceiver)).AddChild(N);
+      else FTree.ExternalRoot(OwnerKey(Text(pFrame, Base), pFrame.Cls, (Base.NodeType = 'identifier') and IsClassField(pFrame.Cls, Text(pFrame, Base))),
+        Loc(pFrame, pReceiver), pFrame.F.Path).AddChild(N);
       Continue;
     end;
     P:= Eval(pReceiver, pFrame);
@@ -1578,10 +2031,15 @@ begin
     { a foreign parent: a DFM item, a looked-up IDE menu. A node already placed
       is only being REMEMBERED (GMenuItems.Add(RootMenu)), not re-parented. }
     if N.Parented or (P.Kind <> mvForeign) then Continue;
-    Ident:= Text(pFrame, pReceiver);
-    if not IsMenuTypedForeign(Ident, pFrame.F.Path) then Continue;
-    if pInsert and (Index >= 0) then FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver)).InsertChild(Index, N)
-    else FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver)).AddChild(N);
+    { P carries the identifier as the CALLER wrote it: a helper's pParent bound
+      to mnuTools names mnuTools in the form's file, not pParent in the helper }
+    Ident:= if P.Text <> '' then P.Text else Text(pFrame, pReceiver);
+    IdentPath:= if P.Path <> '' then P.Path else pFrame.F.Path;
+    if not IsMenuTypedForeign(Ident, IdentPath) then Continue;
+    if pInsert then N.LinkIndex:= Index;
+    Ident:= OwnerKey(Ident, P.Cls, P.IsField);
+    if pInsert and (Index >= 0) then FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).InsertChild(Index, N)
+    else FTree.ExternalRoot(Ident, Loc(pFrame, pReceiver), IdentPath).AddChild(N);
   end;
 end;
 
@@ -1617,12 +2075,12 @@ begin
   else if SameText(pProp, 'Enabled') and (pRhs.NodeType = 'kFalse') then pTarget.Disabled:= True;
 end;
 
-procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@85f6 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@cbf0, cyclomatic-complexity@33cb -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   K       : string;
   I       : Integer;
   L, R, T : TTSNode;
-  V       : TMValue;
+  V, W    : TMValue;
   Name    : string;
 begin
   if pNode.IsNull then Exit;
@@ -1643,9 +2101,15 @@ begin
     Eval(pNode, pFrame);
     Exit;
   end;
+  if K = 'with' then
+  begin
+    WalkWith(pNode, pFrame);
+    Exit;
+  end;
   if K <> 'assignment' then Exit;
   L:= pNode.ChildByField('lhs');
   R:= pNode.ChildByField('rhs');
+  if (L.NodeType = 'identifier') and WithAssign(Text(pFrame, L), R, pNode, pFrame) then Exit;
   if (L.NodeType = 'identifier') or (L.NodeType = 'varAssignDef') then
   begin
     if L.NodeType = 'varAssignDef' then
@@ -1666,6 +2130,18 @@ begin
       V:= EvalArg(R, pFrame);
       if V.Kind = mvForeign then V.Text:= Name;
     end;
+    { a field of the method's class: a link owner stored there is keyed
+      TClass.field; a node stored there is remembered for the methods that
+      link into the field later (GraftFieldRoots) }
+    if (L.NodeType = 'identifier') and IsClassField(pFrame.Cls, Name) then
+    begin
+      if V.Kind = mvForeign then
+      begin
+        V.Cls    := pFrame.Cls;
+        V.IsField:= SameText(V.Text, Name);
+      end
+      else if V.Kind = mvNode then FFieldNodes.AddOrSetValue(FieldKey(pFrame.Cls, Name, pFrame.F.Path), V.Node);
+    end;
     if Name <> '' then pFrame.Env.Vars.AddOrSetValue(LowerCase(Name), V);
     Exit;
   end;
@@ -1673,11 +2149,211 @@ begin
   begin
     T:= L.ChildByField('lhs');
     V:= Eval(T, pFrame);   { also runs pAddItem(..) in pAddItem(..).Tag := I }
+    { dxBar: Link.Item := X / Link.BeginGroup := True }
+    if (V.Kind = mvLink) and SameText(Text(pFrame, L.ChildByField('rhs')), 'Item') then
+    begin
+      W:= Eval(R, pFrame);
+      if W.Kind = mvNode then PlaceLinkItem(TLinkState(V.Link), W.Node, pFrame);
+      Exit;
+    end;
+    if (V.Kind = mvLink) and SameText(Text(pFrame, L.ChildByField('rhs')), 'BeginGroup') then
+    begin
+      if R.NodeType = 'kTrue' then SetLinkBeginGroup(TLinkState(V.Link));
+      Exit;
+    end;
     if V.Kind = mvNode then SetProp(V.Node, Text(pFrame, L.ChildByField('rhs')), R, pNode, pFrame)
     else Eval(R, pFrame);
     Exit;
   end;
   Eval(R, pFrame);
+end;
+
+{ ---- dxBar item links (spec 2026-10-24-dxbar-menus.md section 2) ---- }
+
+{ P.ItemLinks.Add / Add(X) / Insert(i) / AddButton / AddSubItem / AddItem(C):
+  a link value owned by Eval(P); the creators also make the item, linked. }
+function TWalkCore.LinkCall(const pOwnerExpr: TTSNode; const pName: string; const pArgs, pCall: TTSNode; const pFrame: TWalkFrame): TMValue;
+var
+  S  : TLinkState;
+  X  : TMValue;
+  Idx: Integer;
+begin
+  S:= TLinkState.Create;
+  FLinks.Add(S);
+  S.Owner:= Eval(pOwnerExpr, pFrame);
+  S.Index:= -1;
+  S.Site := if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pCall);
+  if SameText(pName, 'Insert') and not pArgs.IsNull and (pArgs.NamedChildCount > 0) then
+  begin
+    { a non-literal index appends, and the item is only derived }
+    S.Derived:= not TryStrToInt(Text(pFrame, pArgs.NamedChild(0)), Idx);
+    S.Index  := if S.Derived then -1 else Idx;
+  end;
+  Result:= NoValue;
+  Result.Kind:= mvLink;
+  Result.Link:= S;
+  if SameText(pName, 'Add') and not pArgs.IsNull and (pArgs.NamedChildCount > 0) then
+  begin
+    X:= Eval(pArgs.NamedChild(0), pFrame);
+    if X.Kind = mvNode then PlaceLinkItem(S, X.Node, pFrame);
+  end
+  else if MatchText(pName, DX_LINK_CREATORS) then
+    PlaceLinkItem(S, CreateNode(pCall, pFrame).Node, pFrame);
+end;
+
+{ The dxBar call shapes of EvalCall: a TdxBarItemLink(E) cast is E;
+  P.ItemLinks.Add(X) / Insert(i) / AddItem(C) / AddButton() make a link;
+  mgr.AddButton() / AddSubItem() make an unparented item. }
+function TWalkCore.DxBarCall(const pCall, pEntity, pArgs: TTSNode; const pName: string; const pFrame: TWalkFrame; out pValue: TMValue): Boolean;
+var
+  Lhs: TTSNode;
+begin
+  pValue:= NoValue;
+  Result:= True;
+  Lhs:= if pEntity.NodeType = 'exprDot' then pEntity.ChildByField('lhs') else Default(TTSNode);
+  if (pEntity.NodeType = 'identifier') and SameText(pName, 'TdxBarItemLink') and not pArgs.IsNull and (pArgs.NamedChildCount = 1) then
+    pValue:= Eval(pArgs.NamedChild(0), pFrame)
+  else if not Lhs.IsNull and IsItemLinksExpr(Lhs, Text(pFrame, Lhs))
+    and (SameText(pName, 'Add') or SameText(pName, 'Insert') or MatchText(pName, DX_LINK_CREATORS)) then
+    pValue:= LinkCall(Lhs.ChildByField('lhs'), pName, pArgs, pCall, pFrame)
+  else if not Lhs.IsNull and (SameText(pName, 'AddButton') or SameText(pName, 'AddSubItem')) then
+    pValue:= CreateNode(pCall, pFrame)
+  else
+    Result:= False;
+end;
+
+{ The node a link's item goes under: a code node, or the external root named
+  after the owner as the CALLER wrote it (a bar / popup / sub-item component,
+  or mgr.Bars[n] / MainMenuBar / BarByCaption -- decision 7); nil otherwise. }
+function TWalkCore.LinkOwnerNode(pState: TLinkState; const pFrame: TWalkFrame): TMenuNode;
+var
+  Ident, IdentPath: string;
+begin
+  Result:= nil;
+  case pState.Owner.Kind of
+    mvNode: Result:= pState.Owner.Node;
+    mvForeign:
+      begin
+        Ident    := pState.Owner.Text;
+        IdentPath:= if pState.Owner.Path <> '' then pState.Owner.Path else pFrame.F.Path;
+        if (Ident <> '') and (TRegEx.IsMatch(Ident, DX_BAR_EXPR, [roIgnoreCase]) or IsMenuTypedForeign(Ident, IdentPath)) then
+        begin
+          { a field of the linking method's class: two classes in one unit that
+            each own a popGridMenu are two roots, TClassA.popGridMenu and TClassB.popGridMenu }
+          Ident:= OwnerKey(Ident, pState.Owner.Cls, pState.Owner.IsField);
+          Result:= FTree.ExternalRoot(Ident, pState.Site, IdentPath);
+        end;
+      end;
+  end;
+end;
+
+procedure TWalkCore.PlaceLinkItem(pState: TLinkState; pItem: TMenuNode; const pFrame: TWalkFrame);
+var
+  P  : TMenuNode;
+  Sep: TMenuNode;
+  I  : Integer;
+begin
+  pState.Item:= pItem;
+  if pItem.Parented then Exit;   { linked once already: the first link places it }
+  P:= LinkOwnerNode(pState, pFrame);
+  if (P = nil) or (P = pItem) then Exit;
+  if pState.Derived then pItem.Confidence:= MaxConf(pItem.Confidence, mcDerived);
+  I:= pState.Index;
+  if pState.BeginGroup then
+  begin
+    Sep:= TMenuNode.Create(mnkSeparator, '-', pState.Site);
+    if I >= 0 then
+    begin
+      P.InsertChild(I, Sep);
+      Sep.LinkIndex:= I;
+      Inc(I);
+    end
+    else P.AddChild(Sep);
+  end;
+  if I >= 0 then P.InsertChild(I, pItem) else P.AddChild(pItem);
+  if P.Kind = mnkExternalRoot then pItem.LinkIndex:= I;
+end;
+
+procedure TWalkCore.SetLinkBeginGroup(pState: TLinkState);
+var
+  P  : TMenuNode;
+  Sep: TMenuNode;
+begin
+  if pState.BeginGroup then Exit;
+  pState.BeginGroup:= True;
+  { BeginGroup after Item: the separator goes in front of the placed item }
+  if (pState.Item = nil) or (pState.Item.Parent = nil) then Exit;
+  P:= pState.Item.Parent;
+  Sep:= TMenuNode.Create(mnkSeparator, '-', pState.Site);
+  Sep.LinkIndex:= pState.Item.LinkIndex;
+  P.InsertChild(P.Children.IndexOf(pState.Item), Sep);
+end;
+
+function TWalkCore.TopWith(const pFrame: TWalkFrame): TMValue;
+begin
+  Result:= if FWith.Count > pFrame.WithBase then FWith[FWith.Count - 1] else NoValue;
+end;
+
+{ with E1, E2 do S: the receivers are evaluated once, S runs with the last one
+  on top; a bare Item / BeginGroup (or Caption / OnClick / Action / Enabled)
+  applies to it. }
+procedure TWalkCore.WalkWith(const pNode: TTSNode; const pFrame: TWalkFrame);
+var
+  I, Pushed: Integer;
+  C        : TTSNode;
+  InBody   : Boolean;
+begin
+  Pushed:= 0;
+  InBody:= False;
+  try
+    for I:= 0 to pNode.NamedChildCount - 1 do
+    begin
+      C:= pNode.NamedChild(I);
+      if C.NodeType = 'kWith' then Continue;
+      if C.NodeType = 'kDo' then InBody:= True
+      else if InBody then WalkStmt(C, pFrame)
+      else
+      begin
+        FWith.Add(Eval(C, pFrame));
+        Inc(Pushed);
+      end;
+    end;
+  finally
+    while Pushed > 0 do
+    begin
+      FWith.Delete(FWith.Count - 1);
+      Dec(Pushed);
+    end;
+  end;
+end;
+
+{ A bare `Name := R` inside a with: True when the with receiver took it. }
+function TWalkCore.WithAssign(const pName: string; const pRhs, pStmt: TTSNode; const pFrame: TWalkFrame): Boolean;
+var
+  W, V: TMValue;
+begin
+  Result:= False;
+  if pFrame.Env.Vars.ContainsKey(LowerCase(pName)) then Exit;
+  W:= TopWith(pFrame);
+  if W.Kind = mvLink then
+  begin
+    if SameText(pName, 'Item') then
+    begin
+      V:= Eval(pRhs, pFrame);
+      if V.Kind = mvNode then PlaceLinkItem(TLinkState(W.Link), V.Node, pFrame);
+      Result:= True;
+    end
+    else if SameText(pName, 'BeginGroup') then
+    begin
+      if pRhs.NodeType = 'kTrue' then SetLinkBeginGroup(TLinkState(W.Link));
+      Result:= True;
+    end;
+  end
+  else if (W.Kind = mvNode) and MatchText(pName, ['Caption', 'OnClick', 'Action', 'Enabled']) then
+  begin
+    SetProp(W.Node, pName, pRhs, pStmt, pFrame);
+    Result:= True;
+  end;
 end;
 
 { spec 4.2 row 3 + 4.1: the kind a node settles on once the walk is over. }
@@ -1697,6 +2373,36 @@ begin
   else if not pNode.HasClick then pNode.Kind:= mnkHeader
   else pNode.Kind:= mnkItem;
   if pNode.Kind <> mnkItem then pNode.Handler:= '';
+  if (pNode.Kind = mnkHeader) and pNode.BarSubItem then
+    FTree.AddNote(Format('sub-item without traced items at %s: %s -- its links are added where the walk cannot follow',
+      [pNode.Source, if pNode.Caption <> '' then QuotedStr(pNode.Caption) else '(no caption)']));
+end;
+
+{ Cross-routine sub-items: a method links items into a FIELD (external root
+  TClass.field) that another method of the class set to a code node; the
+  links move under that node. Runs after every builder, so the walk order of
+  the two methods does not matter. A field that holds no traced node, or a
+  node that sits under the root itself, keeps its external root. }
+procedure TWalkCore.GraftFieldRoots;
+var
+  Ext, Target, P: TMenuNode;
+  C             : TMenuNode;
+begin
+  for Ext in FTree.External.ToArray do
+  begin
+    if not FFieldNodes.TryGetValue(LowerCase(Ext.Ident + '|' + Ext.IdentPath), Target) then Continue;
+    if (Target = Ext) or not Target.Parented then Continue;
+    P:= Target;
+    while (P <> nil) and (P <> Ext) do P:= P.Parent;
+    if P = Ext then Continue;
+    while Ext.Children.Count > 0 do
+    begin
+      C:= Ext.Children.Extract(Ext.Children[0]);
+      C.LinkIndex:= -1;
+      Target.AddChild(C);
+    end;
+    FTree.External.Remove(Ext);
+  end;
 end;
 
 procedure TWalkCore.FreeOrphans(pNote: Boolean);
@@ -1732,6 +2438,7 @@ procedure TWalkCore.Finish;
 var
   N: TMenuNode;
 begin
+  GraftFieldRoots;
   FreeOrphans(True);
   for N in FTree.Roots do Settle(N);
   for N in FTree.External do Settle(N);
@@ -1782,7 +2489,7 @@ begin
           begin
             if SameText(Info.QName, pRootQName) then Infos.Add(Info);
           end
-          else if not TRegEx.IsMatch(Params, ':\s*(' + Names.Replace('''', '').Replace(',', '|') + ')\b', [roIgnoreCase]) then
+          else if not TRegEx.IsMatch(Params, ':\s*(' + Names.Replace('''', '').Replace(',', '|') + '|' + string.Join('|', DX_OWNER_TYPES) + ')\b', [roIgnoreCase]) then
             Infos.Add(Info);
           QB.Next;
         end;
@@ -1799,6 +2506,7 @@ begin
         Fr:= Default(TWalkFrame);
         Fr.F  := WF;
         Fr.Env:= NewEnv;
+        Fr.Cls:= ClassOfRoutine(Info.QName);
         FStack.Add(LowerCase(Info.QName));
         try
           WalkStmt(Proc.ChildByField('body'), Fr);

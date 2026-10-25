@@ -65,8 +65,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas)</para>
-  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocFactRef = record
@@ -92,7 +92,7 @@ type
   /// exists": callers must render the class alone in that case, exactly as
   /// they did before messages were mined at all.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail.OpenPendingRaiseAt (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail.SetPendingMessage (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail.OpenPendingRaiseAt (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail.SetPendingMessage (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -138,7 +138,7 @@ type
   /// spells them (`Application.MessageBox`), deduped case-insensitively in
   /// source order; that spelling is what the 'dialog:' witness prints.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CloseTopHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.OpenHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.RecordCall (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.RecordRaise (DRagLint.Doc.Facts.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.AdvanceOnClause (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CloseTopHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.OpenHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.PopFrame (DRagLint.Doc.Facts.pas) (+10 more)</para>
   /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -165,7 +165,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Regions.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+5 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -679,7 +679,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -729,9 +729,9 @@ type
     /// <returns><!-- drag-lint:auto -->TDocFacts -- Observed: Default(TDocFacts).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+40 more)</para>
-    /// <para>Complexity: 80 (cyclomatic, outer body), 1089 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+45 more)</para>
+    /// <para>Complexity: 82 (cyclomatic, outer body), 1121 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -927,6 +927,7 @@ type
 /// the doc-drift rule, and its cost is NOT where two successive guesses put it
 /// -- hence per-section accumulation rather than argument.
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
 /// <para>Calls: DRagLint.Doc.Facts.DocFactsBuildProfile.Per, DRagLint.Doc.Facts.DocFactsBuildProfile.S, Format</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Facts.DocFactsBuildProfile.Per"/>

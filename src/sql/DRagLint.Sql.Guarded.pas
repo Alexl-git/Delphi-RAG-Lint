@@ -226,7 +226,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Explain (DRagLint.Sql.Guarded.pas)</para>
 /// <para>Calls: Format</para>
-/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'</para>
+/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'; 'CREATE TRIGGER'; 'CREATE VIEW'; 'DELETE'; 'DROP INDEX'; 'DROP TABLE'; 'DROP TEMP INDEX'; 'DROP TEMP TABLE'; 'DROP TEMP TRIGGER'; 'DROP TEMP VIEW'; 'DROP TRIGGER'; 'DROP VIEW'; 'INSERT'; 'PRAGMA'; 'READ'</para>
 /// <para>Complexity: 34 (cyclomatic, outer body), 39 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

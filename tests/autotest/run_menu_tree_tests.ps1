@@ -17,7 +17,7 @@ param(
     [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-tree-tests-$PID",
-    [int]    $MinTests   = 65
+    [int]    $MinTests   = 182
 )
 try {
 $ErrorActionPreference = 'Stop'
@@ -41,6 +41,27 @@ if ($txt2 -eq $txt) { Write-Host 'FATAL: rename control changed nothing' -Foregr
 $dbRenamed = "$WorkDir\renamed.sqlite"
 & $Exe index --project "$renamed\MenuTreeFixture.dproj" --db $dbRenamed *> "$WorkDir\index-renamed.log"
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: renamed-copy index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+
+# --- dxBar (formsmap-v9): a scratch copy, and one with the bar helper renamed ---
+$v9 = "$WorkDir\v9"
+Copy-Item -LiteralPath (Resolve-Path "$PSScriptRoot\..\fixtures\formsmap-v9").Path -Destination $v9 -Recurse
+$dbV9 = "$WorkDir\v9.sqlite"
+& $Exe index --project "$v9\Demo9.dproj" --db $dbV9 *> "$WorkDir\index-v9.log"
+if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: v9 fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+$v9r = "$WorkDir\v9renamed"
+Copy-Item -LiteralPath $v9 -Destination $v9r -Recurse
+$renamedAny = $false
+foreach ($u in 'uBarUtils9.pas', 'uMain9.pas') {
+    $p = "$v9r\$u"
+    $a = [IO.File]::ReadAllText($p)
+    $b2 = [regex]::Replace($a, '\bAddBarButton\b', 'PutBarButton')
+    if ($b2 -ne $a) { $renamedAny = $true }
+    [IO.File]::WriteAllText($p, $b2, [Text.ASCIIEncoding]::new())
+}
+if (-not $renamedAny) { Write-Host 'FATAL: v9 rename control changed nothing' -ForegroundColor Red; exit 2 }
+$dbV9r = "$WorkDir\v9renamed.sqlite"
+& $Exe index --project "$v9r\Demo9.dproj" --db $dbV9r *> "$WorkDir\index-v9r.log"
+if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: v9 renamed index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # --- build the test exe ---
 $rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
@@ -70,7 +91,7 @@ if (($log -notmatch 'BUILD_EXITCODE=0') -or ($log -match 'Error:') -or -not (Tes
 Copy-TreeSitterDlls -Dest $outDir | Out-Null
 
 # --- run ---
-$out = @(& $testExe $db $fixture $dbRenamed 2>&1 | ForEach-Object { "$_" })
+$out = @(& $testExe $db $fixture $dbRenamed $dbV9 $v9 $dbV9r $v9r 2>&1 | ForEach-Object { "$_" })
 $code = $LASTEXITCODE
 $out | ForEach-Object { Write-Host $_ }
 $last = ($out | Where-Object { $_ -match '^menutree-tests:' } | Select-Object -Last 1)

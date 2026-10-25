@@ -28,8 +28,8 @@ type
   /// line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ReviewMarker.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ReviewMarker</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ReviewMarker.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReviewMarker = record
@@ -61,8 +61,8 @@ type
   /// <remarks>
   /// Thread-safe: no shared state.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus (DRagLint.Lint.ProjectRules.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ProjectRules, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus (DRagLint.Lint.ProjectRules.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ProjectRules, DRagLint.Lint.RuleCatalog, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReviewMarkers = class
@@ -76,13 +76,13 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.RemoveFrom (DRagLint.Lint.ReviewMarker.pas)</para>
     /// <para>Complexity: 20 (cyclomatic, outer body), 47 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Effect-free (proven)</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function LineCommentStart(const ALineText: string): Integer; static;
@@ -103,11 +103,11 @@ type
     /// <para>Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)</para>
     /// <para>Mutates: ARules (out), AReason (out)</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SplitReason(const AText: string; out ARules, AReason: string); static;
@@ -119,13 +119,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.RemoveFrom (DRagLint.Lint.ReviewMarker.pas)</para>
-    /// <para>Pure</para>
+    /// <para>Effect-free (proven)</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RuleToken(const ARuleId, AHash: string): string; static;
@@ -184,14 +184,14 @@ type
     /// why. Gating suppression too is a separate, measured change.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus (DRagLint.Lint.ProjectRules.pas)</para>
-    /// <para>Complexity: 20 (cyclomatic, outer body), 76 lines (full implementation)</para>
     /// <para>Pure</para>
+    /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.ScanCommentState</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.ScanCommentState"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MarkerBearingLines(const ALines: TArray<string>): TArray<Boolean>; static;
@@ -210,11 +210,11 @@ type
     /// <para>Complexity: 34 (cyclomatic, outer body), 115 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function NormalizeLine(const ALineText: string): string; static;
@@ -232,10 +232,10 @@ type
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HashLine(const ALineText: string): string; static;
@@ -266,7 +266,7 @@ type
     /// block state here would mean a second implementation of what
     /// MarkerBearingLines already does; do that only if the noise is observed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas) (+1 more)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.NormalizedIsLoneKeyword, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine, LowerCase</para>
     /// <para>Returns: HashLine(ALines[AStartIdx]); LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4))</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 60 lines (full implementation)</para>
@@ -275,8 +275,8 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.NormalizedIsLoneKeyword"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HashWindow(const ALines: TArray<string>; AStartIdx: Integer;
@@ -287,15 +287,15 @@ type
     /// string literal is NOT a marker.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.RemoveFrom (DRagLint.Lint.ReviewMarker.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas) (+5 more)</para>
     /// <para>Calls: Copy, Default, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.SplitReason, LowerCase, Pos, Trim</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.SplitReason"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Parse(const ALineText: string): TArray<TReviewMarker>; static;
@@ -382,9 +382,9 @@ type
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatMarker(const ARuleId, ALineText, AReason: string): string; static;
@@ -411,8 +411,8 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.EmbeddedMarkers"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RemoveFrom(const ALineText, ARuleId: string): string; static;
@@ -441,19 +441,52 @@ type
     /// insertion.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight</para>
+    /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.StripReviewStamp, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight</para>
     /// <para>Returns: TrimRight(Result); TrimRight(Prefix + Body)</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 77 lines (full implementation)</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 87 lines (full implementation)</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.StripReviewStamp"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string;
       const AHashOverride: string = ''): string; static;
+    /// <summary>True when the legacy `// drag-lint:ignore [&lt;rule-id&gt; ...]`
+    /// directive on the line covers ARuleId: bare, it covers every rule; with a
+    /// list, only the rules named (space, comma or tab separated).</summary>
+    /// <param name="ALineText">One source line, without its line terminator.</param>
+    /// <param name="ARuleId">The finding's rule id; compared case-insensitively.</param>
+    /// <returns>False when the line carries no directive after a `//`.</returns>
+    /// <remarks>Deliberately the original NAIVE scan (first `//`, then the tag
+    /// anywhere after it): tightening it would change what existing projects
+    /// suppress. Pure.</remarks>
+    class function IgnoreDirectiveCovers(const ALineText, ARuleId: string): Boolean; static;
+    /// <summary>The suppression predicate of the CLI's ApplyLineMarkers, as a
+    /// pure function: True when a finding of ARuleId spanning
+    /// AStartLine..AEndLine is dropped by a marker in its file.</summary>
+    /// <param name="ALines">The finding's file, one entry per line (the live
+    /// buffer for the LSP, the disk file for the CLI).</param>
+    /// <param name="ARuleId">The finding's rule id; compared case-insensitively.</param>
+    /// <param name="AStartLine">1-based anchor line of the finding.</param>
+    /// <param name="AEndLine">1-based last line; a value below AStartLine or past
+    /// the file is treated as AStartLine.</param>
+    /// <param name="AExpectedHash">The hash a marker must carry to verify --
+    /// DRagLint.Lint.RuleCatalog.MarkerExpectedHash (the window hash, with the
+    /// metric folded in for a routine-metric rule). Passed in, not computed here,
+    /// so this unit stays pure and mirror-safe.</param>
+    /// <returns>True when (1) IgnoreDirectiveCovers holds on AStartLine, or (2)
+    /// a `dl:ok` marker for ARuleId on any line of the span carries no hash or
+    /// carries AExpectedHash. Only the FIRST marker for the rule on each line is
+    /// consulted, exactly as ApplyLineMarkers does. A placeholder, malformed or
+    /// stale hash suppresses nothing. False when AStartLine is outside ALines.</returns>
+    /// <remarks>Excludes the duplicate-code PAIR rule: the partner-site check (a marker on RelatedLine) needs the finding, so callers apply it themselves after this. The REPORTER side of ApplyLineMarkers -- the unused, stale,
+    /// placeholder and reason hints -- stays CLI-only; this answers only "is
+    /// this finding suppressed". Pure; thread-safe.</remarks>
+    class function Suppresses(const ALines: TArray<string>; const ARuleId: string;
+      AStartLine, AEndLine: Integer; const AExpectedHash: string): Boolean; static;
   end;
 
 const
@@ -1234,6 +1267,50 @@ begin
     Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Kept[0].Reason);
 
   Result:= TrimRight(Prefix + Body);
+end;
+
+{ ---------------------------------------------------------------------------
+  Suppression -- the predicate ApplyLineMarkers (CLI) and BuildDiagnostics
+  (LSP) share, so the gutter and `lint` cannot disagree about a marked line.
+  --------------------------------------------------------------------------- }
+
+class function TReviewMarkers.IgnoreDirectiveCovers(const ALineText, ARuleId: string): Boolean;
+const
+  IGNORE_MARK = 'drag-lint:ignore';
+var
+  CPos, MPos: Integer;
+  Rest      : string ;
+  Tok       : string ;
+begin
+  CPos:= Pos('//', ALineText);
+  MPos:= Pos(IGNORE_MARK, LowerCase(ALineText));
+  if (CPos = 0) or (MPos <= CPos) then Exit(False);
+  Rest:= Trim(Copy(ALineText, MPos + Length(IGNORE_MARK), MaxInt));
+  if Rest = '' then Exit(True);
+  for Tok in Rest.Split([' ', ',', #9]) do
+    if SameText(Trim(Tok), ARuleId) then Exit(True);
+  Result:= False;
+end;
+
+class function TReviewMarkers.Suppresses(const ALines: TArray<string>; const ARuleId: string;
+  AStartLine, AEndLine: Integer; const AExpectedHash: string): Boolean;
+var
+  MarkHi: Integer      ;
+  ML    : Integer      ;
+  M     : TReviewMarker;
+begin
+  if (AStartLine < 1) or (AStartLine > Length(ALines)) then Exit(False);
+  if IgnoreDirectiveCovers(ALines[AStartLine - 1], ARuleId) then Exit(True);
+  MarkHi:= AStartLine;
+  if (AEndLine > MarkHi) and (AEndLine <= Length(ALines)) then MarkHi:= AEndLine;
+  for ML:= AStartLine to MarkHi do
+    for M in Parse(ALines[ML - 1]) do
+    begin
+      if not SameText(M.RuleId, ARuleId) then Continue;
+      if (M.Hash = '') or SameText(M.Hash, AExpectedHash) then Exit(True);
+      Break; { first marker for the rule on this line decides it, as in ApplyLineMarkers }
+    end;
+  Result:= False;
 end;
 
 end.

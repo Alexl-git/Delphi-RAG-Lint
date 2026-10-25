@@ -64,7 +64,7 @@ interface
 /// pairs are adjacent in the implementation section, which is where a stale
 /// span lands.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Hover.Returns.MineReturnExpressionsEx</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Returns.MineReturnExpressionsEx"/>

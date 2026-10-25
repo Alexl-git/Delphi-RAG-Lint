@@ -183,12 +183,16 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **IDE Menu Reference** -- What every item in the drag-lint menu does. Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing. [More](IDE-Menu-Reference)
 * **ide-release** -- Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request. Read this when an engine build fails to copy drag-lint.exe because the Delphi IDE is open. ide-release writes a hold (default 120 s) so the plugin stops respawning the engine; --resume clears it and --status reports it. It frees nothing by itself. [More](ide-release)
 * **Installation** -- Getting the CLI, the IDE plugin, or the LSP running. Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together. [More](Installation)
+* **LSP full rule set on save** -- Runs the full lint rule set on save so the editor shows what the CLI shows. Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag. [More](lsp-proxy-merge)
+* **LSP protocol extensions** -- Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index. Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. [More](lsp-proxy-merge)
+* **LSP proxy merge** -- Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session. Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and the merge flags add drag-lint results. [More](lsp-proxy-merge)
 * **lsp** -- Starts the LSP (Language Server Protocol) stdio server. Read this when you want hover, completion, go-to-definition and diagnostics in an editor other than RAD Studio. It starts the language server over stdio; the IDE plugin launches it by itself, and it is not the same as the MCP server (serve) used by AI clients. [More](lsp)
 * **MCP server** -- Exposes the index to MCP clients as 15 tools. The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools. [More](Register-MCP-Server)
 * **Register the MCP server (Claude Code, VS Code)** -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable. Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again. [More](Register-MCP-Server)
   aliases: Set-DragLintMcpConfig, claude mcp add, mcp setup, mcp.json
 * **serve** -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index. Read this when you want an AI assistant such as Claude or Cursor to query a drag-lint index: serve starts an MCP stdio server over the database you give it. The IDE does not use it; the IDE uses lsp. [More](serve)
 * **Setup installer** (experimental) -- One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF. `drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote. [More](Setup-Installer)
+* **Switch VS Code Delphi MCP entry** -- Turns the VS Code Delphi MCP entry off and on with a backup. Read this when VS Code's own Delphi MCP server and drag-lint should not both run. drag-lint-switch removes the entry with a backup and restores it later. [More](lsp-proxy-merge)
 * **workspace add** -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it. Read this when you add a new project to a multi-project workspace: it registers a project file in the .drag-lint-workspace.json config that workspace index and workspace status use. [More](workspace-add)
 * **workspace index** -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass. Read this when you want to (re)build the indexes of every project in a workspace in one pass instead of one project at a time. [More](workspace-index)
 * **workspace status** -- Reports the status of every project registered in a .drag-lint-workspace.json workspace config. Read this when you want to see at a glance which projects of a workspace are indexed, stale or missing. [More](workspace-status)
@@ -202,6 +206,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **diff** -- Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor. Read this when you want to know what changed between two index snapshots, for example before and after a refactor. diff compares two index databases and reports the symbol and reference level delta. [More](diff)
 * **doc-facts-selftest** (internal) -- Self-test for the doc-facts renderer, driven by test runners. Maintenance self-test for the doc-facts renderer, run by test runners. You will not need it for normal work. [More](Maintenance)
 * **dump-call-edges** -- Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows. Read this when callgraph, find-callees or call-path give a surprising answer and you want the raw material: it prints every resolved call edge in the index as ref_id|target_qname|confidence rows. Troubleshooting tool; needs a project index (--db). [More](dump-call-edges)
+* **dump-parse-uses** (internal) -- Diagnostic dump of what the Delphi parser reports for one file's uses clauses and implementation line, without an index. Read this only when debugging uses-clause extraction: dump-parse-uses --file PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database. [More](Maintenance)
 * **dump-pp-eval** (internal) -- Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex. Read this only when debugging why a conditional-compilation branch was taken or skipped: it dumps how the preprocessor evaluated its expressions, and pairs with dump-pp-lex. Diagnostic verb, not part of the documented preprocessor workflow. [More](Maintenance)
 * **dump-pp-lex** (internal) -- Diagnostic dump of the preprocessor lexer; the documented preprocessor verbs are preprocess-file and pp-profile. Read this only when debugging preprocessor handling of a source file: dump-pp-lex --file PATH dumps the preprocessor lexer output. It is a diagnostic; the documented preprocessor verbs are preprocess-file and pp-profile. [More](Maintenance)
 * **dump-refs** -- Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution. Read this when a reference-derived answer (callers, doc facts, unused-symbol findings) looks wrong: dump-refs prints every ref in one file with the symbol each was attributed to. Troubleshooting tool; needs a project index (--db). [More](dump-refs)
@@ -246,6 +251,15 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Go to Implementation: host 'Structure form' (the caption is verified, the host is declared)
 * IDE Menu Reference: procedure docs\wiki\IDE-Menu-Reference.md
 * Installation: procedure docs\wiki\Installation.md
+* LSP protocol extensions: lsp draglint/ping
+* LSP protocol extensions: lsp textDocument/codeLens
+* LSP protocol extensions: lsp textDocument/declaration
+* LSP protocol extensions: lsp textDocument/documentSymbol
+* LSP protocol extensions: lsp textDocument/implementation
+* LSP protocol extensions: lsp textDocument/inlayHint
+* LSP protocol extensions: lsp textDocument/rename
+* LSP protocol extensions: lsp textDocument/semanticTokens/full
+* LSP protocol extensions: lsp workspace/executeCommand
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Qualify #convert quick fix: menu 'Convert tab > Qualify #convert...' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify all...' inside ConvRulesEditor.exe
@@ -254,6 +268,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)
 * Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
+* Switch VS Code Delphi MCP entry: menu 'drag-lint-switch --vscode --off' inside drag-lint-switch.exe
 * Where the charts find Graphviz: procedure docs\wiki\Chart-Graphviz-Lookup.md
 * Work list: menu 'View > Work list' inside ConvRulesEditor.exe
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md
