@@ -21,7 +21,7 @@ param(
   [string]$BaselineExe = '',
   [string]$OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt",
   [switch]$CaptureOffBaseline,
-  [switch]$RequireChildExe,   # an engine that ignores DRAGLINT_FULLRULES_CHILD_EXE FAILs instead of SKIPping (lane S landed)
+  [switch]$AllowChildExeSkip, # only for an OLD engine (pre lane S): one that ignores DRAGLINT_FULLRULES_CHILD_EXE SKIPs instead of FAILing
   [string]$WorkDir     = "$env:TEMP\drag-lint-lsp-full-rules-$PID"
 )
 try {
@@ -181,8 +181,8 @@ if (-not $stubOk) {
   $env:STUB_JSON_FILE = $emitF
   $probe = RunStub 'emit' 'stub-emit'
   if (-not $probe.Marker) {
-    if ($RequireChildExe) { Check 'T1 engine honours DRAGLINT_FULLRULES_CHILD_EXE (-RequireChildExe)' $false 'the stub never ran' }
-    else { Skip 'T1 timeout / invalid-JSON cases' 'this engine ignores DRAGLINT_FULLRULES_CHILD_EXE (the stub never ran) -- needs lane S Server.pas' }
+    if ($AllowChildExeSkip) { Skip 'T1 timeout / invalid-JSON cases' 'this engine ignores DRAGLINT_FULLRULES_CHILD_EXE (the stub never ran) -- -AllowChildExeSkip given' }
+    else { Check 'T1 engine honours DRAGLINT_FULLRULES_CHILD_EXE' $false 'the stub never ran (pass -AllowChildExeSkip only for a pre lane S engine)' }
   } else {
     Check 'T1 CONTROL: substitute child is used (synthetic rule id published)' ($probe.Codes -contains 'zz-stub-rule') ''
     Check 'T1 CONTROL: the real rule id is not published when the stub answered' ($probe.Codes -notcontains 'missing-inherited-ctor') ''
