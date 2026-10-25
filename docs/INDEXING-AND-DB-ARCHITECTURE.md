@@ -108,8 +108,15 @@ absolute or relative to that folder), defaulting to just the project's own
 folder when the file is absent. A vendored or third-party root the project
 compiles against (DelphiAST, PDFlibPas, tzdb, ...) is reported as **skipped**,
 not silently dropped -- `lint-all`'s output names the skipped root and its file
-count. Pass `--lint-third-party` to include everything again (the old,
-unscoped behavior). Measured effect (verified 2026-08-11 against the live
+count. Since T-01 (2026-10-23) an optional `excludeRoots` array (same path
+rules as `ownRoots`) carves a vendored subfolder OUT of an owned root -- the
+case `ownRoots` alone cannot express, because a root owns every folder under
+it: `{ "ownRoots": ["."], "excludeRoots": ["vendor"] }`. With no `ownRoots`
+key it narrows the default root (the project folder). An excluded folder is
+named in the skip block like any third-party root. A non-array
+`excludeRoots`, or one that covers every own root, is a usage error (exit 2),
+like an empty `ownRoots`. Pass `--lint-third-party` to include everything
+again (the old, unscoped behavior). Measured effect (verified 2026-08-11 against the live
 YADF DB): YADF went from 1,072 findings (with `C:\Projects\DelphiAST` in
 scope) to 305 (`DelphiAST` skipped, 8 files); ORM3-Micronite2027 scans 565
 files instead of 641, keeping all 295 `COMMON\OBJECTS` units (declared as its
