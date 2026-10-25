@@ -40,7 +40,17 @@ before working on an item.**
     B4 test-dpr lint debt 328f8569 (44 -> 0 on B4 lines); **N10** in the run's scratch
     `gui-lock.ps1` (stale = over 60 min, or over 10 min with no ConvRulesEditor running;
     positive + negative control passed) -- the lock is scratch, not tracked.
-  * **FG-N** featuregen `"noFlags": true` marker -- done on the held FG-M branch (450b9267).
+  * DONE 2026-10-24: **FG-M + FG-N** merged 8234fe33 after ENGINE's 1.34.0-alpha deploy
+    (0b308ab9); featuregen 244/0, registry + docs-sync guards PASS; convert-apply /
+    convert-scaffold verified by CONVERTER on 1.34.0-alpha. Also helpOrder tiebreak 2c912ce4 and
+    the frozen-banner test 65550658.
+  * **FG-O** (medium) `Live.HarvestEveryKindNonEmpty` (FeatureGenTests.dpr ~1914) crashes with an
+    AV (EmptyLiveKinds(nil)) instead of failing cleanly when the harvest raises -- e.g. on a stale
+    plugin DB, where menu-tree exits 3. Make it report a FAIL.
+  * **FG-P** (low) run_feature_registry_guard.ps1 needs pwsh 7.3; under Windows PowerShell 5.1 it
+    errors. Say so in its header or make it 5.1-safe.
+  * **Re-pin** after ENGINE's "re-parse done" (engine 1.34.0-alpha, sha 7EF273E2...), full
+    baseline, then **A4** slice 1.
   * **FG-M** featuregen: Harvest via `menu-tree --format json`, path-based checks B/C, caption-key
     parity vector, drop 14 stale exemptions (in flight, branch feat/conv-fgm-menu-tree).
   * B4 left 44 findings (magic numbers, `C:\fix` fixture paths) on its lines in
