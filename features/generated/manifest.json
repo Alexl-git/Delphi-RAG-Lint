@@ -13199,6 +13199,26 @@
         "wikiAnchor": "pchar-arithmetic"
       },
       {
+        "id": "rule.platform-divergent-define",
+        "title": "platform-divergent-define",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A conditional symbol tested by IFDEF/IFNDEF/defined() is defined for one platform (Win32/Win64) of a config and not the other -- the... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule platform-divergent-define"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "platform-divergent-define"
+      },
+      {
         "id": "rule.property-references-itself",
         "title": "property-references-itself",
         "group": "linting",

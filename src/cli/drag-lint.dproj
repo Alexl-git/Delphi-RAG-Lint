@@ -145,6 +145,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ExceptionUnitWriter.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.IfdefUndefined.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.PlatformDivergent.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.Parse.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>

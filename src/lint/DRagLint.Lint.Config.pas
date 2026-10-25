@@ -145,14 +145,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas)</para>
-    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef</para>
-    /// <para>Complexity: 22 (cyclomatic, outer body), 85 lines (full implementation)</para>
-    /// <para>Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, IfdefAllow, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, IfdefAllow, FThreshValues, FThreshNames, ExceptionsUnit (+1 more)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject.ApplyList, DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 77 lines (full implementation)</para>
+    /// <para>Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, IfdefAllow, PlatformDivergentAllow, FThreshNames, FThreshValues   Writes: FThreshValues, FThreshNames, ExceptionsUnit, ExceptionsRoot</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyConfigObject.ApplyList"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetSeverityPair"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
-    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
@@ -182,6 +182,13 @@ type
     /// <remarks>Empty when the key is absent. A profile that names the key
     /// replaces the list; the top level appends.</remarks>
     IfdefAllow: TArray<string>;
+    /// <summary>Conditional symbols whose Win32 / Win64 split is deliberate, so
+    /// platform-divergent-define does not report them; from the top-level
+    /// "platform_divergent_allow" string array. Compared case-insensitively.</summary>
+    /// <remarks>Empty when the key is absent. A profile that names the key
+    /// replaces the list; the top level appends. Not written by
+    /// TLintConfigWriter, which preserves the key verbatim.</remarks>
+    PlatformDivergentAllow: TArray<string>;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields
@@ -659,36 +666,28 @@ begin
 end;
 
 procedure TLintConfig.ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
+
+  { One top-level string-array key into AList: a profile (AReplace) replaces
+    the list, the top level appends. An absent or non-array key leaves it. }
+  procedure ApplyList(const AKey: string; var AList: TArray<string>);
+  var
+    V: TJSONValue;
+  begin
+    if not (AObj.GetValue(AKey) is TJSONArray) then Exit;
+    if AReplace then AList:= nil;
+    for V in (AObj.GetValue(AKey) as TJSONArray) do AList:= AList + [V.Value];
+  end;
+
 var
   Pair: TJSONPair;
-  V   : TJSONValue;
 begin
   if AObj = nil then Exit;
-  if AObj.GetValue('disabled') is TJSONArray then
-  begin
-    if AReplace then FDisabled:= nil;
-    for V in (AObj.GetValue('disabled') as TJSONArray) do FDisabled:= FDisabled + [V.Value];
-  end;
-  if AObj.GetValue('enabled') is TJSONArray then
-  begin
-    if AReplace then FEnabled:= nil;
-    for V in (AObj.GetValue('enabled') as TJSONArray) do FEnabled:= FEnabled + [V.Value];
-  end;
-  if AObj.GetValue('autofix') is TJSONArray then
-  begin
-    if AReplace then FAutoFix:= nil;
-    for V in (AObj.GetValue('autofix') as TJSONArray) do FAutoFix:= FAutoFix + [V.Value];
-  end;
-  if AObj.GetValue('exclude_paths') is TJSONArray then
-  begin
-    if AReplace then FExcludePaths:= nil;
-    for V in (AObj.GetValue('exclude_paths') as TJSONArray) do FExcludePaths:= FExcludePaths + [V.Value];
-  end;
-  if AObj.GetValue('ifdef_allow') is TJSONArray then
-  begin
-    if AReplace then IfdefAllow:= nil;
-    for V in (AObj.GetValue('ifdef_allow') as TJSONArray) do IfdefAllow:= IfdefAllow + [V.Value];
-  end;
+  ApplyList('disabled', FDisabled);
+  ApplyList('enabled', FEnabled);
+  ApplyList('autofix', FAutoFix);
+  ApplyList('exclude_paths', FExcludePaths);
+  ApplyList('ifdef_allow', IfdefAllow);
+  ApplyList('platform_divergent_allow', PlatformDivergentAllow);
   if AObj.GetValue('severity') is TJSONObject then
   begin
     { profile semantics: update-or-add each severity key; base keys not
