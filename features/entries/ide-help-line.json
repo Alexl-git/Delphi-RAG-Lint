@@ -11,25 +11,34 @@
   "surfaces": [
     {
       "type": "tool-window",
-      "path": "View > Tool Windows > drag-lint"
+      "path": "View > Tool Windows > drag-lint",
+      "steps": ["Open View > Tool Windows > drag-lint and go to the DL page", "Type part of a feature name in the Help line box", "Pick a match; its menu path is shown with it", "The feature help page opens at the configured help root"]
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Help > Help on a feature..."
+      "path": "drag-lint > Help > Help on a feature...",
+      "steps": ["Choose drag-lint > Help > Help on a feature...", "Type part of a feature name and pick a match", "The feature help page opens at the configured help root"]
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Help > All features (web)"
+      "path": "drag-lint > Help > All features (web)",
+      "steps": ["Choose drag-lint > Help > All features (web)", "The full feature index opens at the configured help root"]
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I open the help page of a feature from the IDE?",
+      "command": "drag-lint > Help > Help on a feature..."
+    }
+  ],
   "lastVerified": {
     "date": "2026-10-23",
     "by": "alexanderl",
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-24",
+    "date": "2026-10-25",
     "by": "ENGINE",
     "build": "1.34.0-alpha",
     "surfaceHash": "3c9544e404c3bb3f843bbfc31f756c8739133c68512fc9ab3708a7d680ea0696"
