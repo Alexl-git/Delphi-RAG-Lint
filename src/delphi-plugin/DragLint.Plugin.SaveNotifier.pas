@@ -4,11 +4,14 @@ unit DragLint.Plugin.SaveNotifier;
 
   Registers a TDragLintSaveNotifier (IOTAModuleNotifier) on every module
   opened in the IDE.  When AfterSave fires for a .pas/.dpr/.dpk/.inc/.dfm
-  module and AutoReindexOnSave is enabled, spawns:
+  module and AutoReindexOnSave is enabled, queues on the plugin job queue:
 
-    drag-lint.exe index "<file>" --db "<projdb>"
+    drag-lint.exe index --project "<dproj>" --db "<projdb>"
 
-  asynchronously via CreateProcessW (detached, no window).
+  or, with no unique project owner, the per-file fallback
+    drag-lint.exe index "<file>" --db "<filedb>" --deep
+
+  Both wait out an ide-release hold and coalesce (DragLint.Plugin.IndexJob).
 
   The project DB is the manifest's unique owner of the ACTIVE project
   (ManifestDbForProject); with none, the per-file fallback writes the DB the
@@ -36,9 +39,8 @@ type
     private
       FModule       : IOTAModule;
       FNotifierIndex: Integer   ;
-      class procedure SpawnIndexerFile(const AExePath, AFilePath, ADbPath: string); static;
       { PLAN-lint-tree P4, tier 1. Returns False when no .dproj could be
-        resolved, which is the caller's cue to fall back to the per-file spawn
+        resolved, which is the caller's cue to fall back to the per-file job
         rather than silently leave the index stale. }
       class function  EnqueueProjectReindex(const AExePath: string): Boolean; static;
     public
@@ -113,7 +115,7 @@ implementation
 uses
   Winapi.Windows
   , DragLint.Plugin.ExeResolver
-  , { PLAN-lint-tree P4: tier 1 goes through the QUEUE, not CreateProcessW, so
+  , { PLAN-lint-tree P4: tier 1 goes through the QUEUE, not a direct process spawn, so
       it is coalesced across a Save All and deferred while ide-release holds
       the engine for a build. }
     DragLint.Plugin.JobQueue
@@ -170,29 +172,26 @@ begin
     end;
 end;
 
-{ ---- SpawnIndexerFile ---- }
+{ ---- per-file fallback (deep review F6) ---- }
 
-class procedure TDragLintSaveNotifier.SpawnIndexerFile( const AExePath, AFilePath, ADbPath: string);
+{ The fallback used to spawn a DETACHED process directly:
+  index <file> --db <db> --deep, outside the queue -- the exact shape the tier-1
+  comment below retired (no hold, no coalescing, no exit code), plus a
+  copy into a fixed 1024-char stack buffer. It is a queue job now. The
+  re-lint after it comes from GReindexDoneHook (fired for every jkReindex). }
+procedure QueueFileReindexJob(const AExePath, AFilePath, ADbPath: string);
 var
-  CmdLine   : string                    ;
-  SI        : TStartupInfoW             ;
-  PI        : TProcessInformation       ;
-  CmdLineBuf: array[0..1023] of WideChar;
+  Job: TDragLintJob;
 begin
-  FillChar(SI, SizeOf(SI), 0);
-  SI.cb:= SizeOf(SI);
-  FillChar(PI, SizeOf(PI), 0);
-  { v0.42: --deep so a saved file keeps its identifier usage refs (Find-Usages).
-    Without it, the per-save reindex would re-emit the file shallow and drop the
-    read/write refs the project DB was built deep with. }
-  CmdLine:= Format('"%s" index "%s" --db "%s" --deep', [AExePath, AFilePath, ADbPath]);
-  StrPCopy(CmdLineBuf, CmdLine);
-  if CreateProcessW(nil, CmdLineBuf, nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
-  begin
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-  end;
-end;
+  Job:= BuildFileIndexJob(AExePath, AFilePath, ADbPath);
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    begin
+      if AExit <> 0 then
+        DLT('reindex', Format('per-file fallback exit %d: %s', [AExit, AFilePath]));
+    end;
+  JobQueue.Enqueue(Job);
+end; // procedure
 
 { ---- tier 1: the queued project reindex ---- }
 
@@ -305,7 +304,7 @@ begin
     if not EnqueueProjectReindex(ExePath) then
     begin
       DbPath:= ManifestDbForFile(SavedFile);
-      if DbPath <> '' then SpawnIndexerFile(ExePath, SavedFile, DbPath)
+      if DbPath <> '' then QueueFileReindexJob(ExePath, SavedFile, DbPath)
       else DLT('reindex', 'per-file fallback skipped: no manifest section covers ' + SavedFile);
     end;
 

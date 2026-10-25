@@ -67,6 +67,31 @@ function ProjectIndexCoalesceKey(const ADbPath: string): string;
 function BuildProjectIndexJob(const AExePath, AProjectFile, ADbPath,
                               APlatform: string): TDragLintJob;
 
+/// <summary>The coalesce key for a per-FILE fallback reindex: one key per
+/// (database, file) pair.</summary>
+/// <param name="ADbPath">The index database the file belongs to.</param>
+/// <param name="AFilePath">The saved source file.</param>
+/// <returns>'index-file:' + lowercased DB + '|' + lowercased file.</returns>
+/// <remarks>Per FILE, not per DB: the fallback indexes only the file it names,
+/// so collapsing two different files would leave all but the last one stale.
+/// A re-save of the SAME file still collapses. The 'index-file:' prefix keeps it
+/// from ever superseding a pending project reindex of the same DB.</remarks>
+function FileIndexCoalesceKey(const ADbPath, AFilePath: string): string;
+
+/// <summary>A ready-to-enqueue per-file fallback reindex job:
+/// <c>index "file" --db "db" --deep</c>.</summary>
+/// <param name="AExePath">Full path to drag-lint.exe.</param>
+/// <param name="AFilePath">The saved source file.</param>
+/// <param name="ADbPath">The DB the manifest says covers AFilePath.</param>
+/// <returns>A jkReindex TDragLintJob the caller hands to the queue, which then
+/// owns it.</returns>
+/// <remarks>The save path's fallback when no active project has a unique owner
+/// DB (deep review F6). Going through the queue means it waits out an
+/// ide-release hold, coalesces per file, and reports its exit code -- which the
+/// detached CreateProcessW spawn it replaces did not. --deep keeps the identifier
+/// usage refs the project DB was built with.</remarks>
+function BuildFileIndexJob(const AExePath, AFilePath, ADbPath: string): TDragLintJob;
+
 /// <summary>The database a save-time reindex of AProjectFile may write: the
 /// manifest's UNIQUE owner of that project, and nothing else.</summary>
 /// <param name="AProjectFile">The ACTIVE project's .dproj; '' when none.</param>
@@ -117,6 +142,22 @@ begin
   Result.Title      := Format('Reindex %s', [ChangeFileExt(ExtractFileName(AProjectFile), '')]);
   Result.CoalesceKey:= ProjectIndexCoalesceKey(ADbPath);
   Result.CmdLine    := BuildProjectIndexCmdLine(AExePath, AProjectFile, ADbPath, APlatform);
+  Result.TimeoutMs  := INDEX_JOB_TIMEOUT_MS;
+  Result.Streaming  := False;
+end;
+
+function FileIndexCoalesceKey(const ADbPath, AFilePath: string): string;
+begin
+  Result:= 'index-file:' + LowerCase(ADbPath) + '|' + LowerCase(AFilePath);
+end;
+
+function BuildFileIndexJob(const AExePath, AFilePath, ADbPath: string): TDragLintJob;
+begin
+  Result:= TDragLintJob.Create;
+  Result.Kind       := jkReindex;
+  Result.Title      := Format('Reindex %s', [ExtractFileName(AFilePath)]);
+  Result.CoalesceKey:= FileIndexCoalesceKey(ADbPath, AFilePath);
+  Result.CmdLine    := Format('"%s" index "%s" --db "%s" --deep', [AExePath, AFilePath, ADbPath]);
   Result.TimeoutMs  := INDEX_JOB_TIMEOUT_MS;
   Result.Streaming  := False;
 end;

@@ -179,6 +179,62 @@ begin
   Check('6i a unique match with a blank DB is still a refusal', Got = '', Got);
 end;
 
+{ F6 (deep review 2026-10-25): with no active project / no unique owner the
+  save path fell back to a DETACHED `index <file> --db <db> --deep` spawned by
+  CreateProcessW -- no hold, no coalescing, no exit code, and a fixed 1024-char
+  command buffer. The fallback is now a queue job too; these pin its shape. }
+procedure TestFileFallbackJob;
+const
+  UNIT_FILE = 'C:\Projects\DB\ORM3\CLIENT\uMain.pas';
+  OTHER_FILE = 'C:\Projects\DB\ORM3\CLIENT\uOther.pas';
+var
+  Job : TDragLintJob;
+  Long: string;
+begin
+  Job:= BuildFileIndexJob(EXE, UNIT_FILE, DB);
+  try
+    Check('7a POSITIVE CONTROL: a save with no project DB still yields a job',
+          Job <> nil);
+    Check('7b it is a reindex job (GReindexDoneHook re-lints after it)',
+          Job.Kind = jkReindex, Format('Kind=%d', [Ord(Job.Kind)]));
+    Check('7c it indexes the SAVED FILE into the given DB, deep',
+          ContainsText(Job.CmdLine, ' index "' + UNIT_FILE + '"') and
+          ContainsText(Job.CmdLine, '--db "' + DB + '"') and
+          ContainsText(Job.CmdLine, '--deep'), Job.CmdLine);
+    Check('7d it is NOT a project or rebuild run',
+          not ContainsText(Job.CmdLine, '--project') and
+          not ContainsText(Job.CmdLine, '--rebuild'), Job.CmdLine);
+    Check('7e it coalesces (non-empty key)', Job.CoalesceKey <> '', 'coalescing is off');
+    Check('7f it has the bounded index timeout', Job.TimeoutMs = INDEX_JOB_TIMEOUT_MS,
+          Format('TimeoutMs=%d', [Job.TimeoutMs]));
+    Check('7g it names the file for the status bar', ContainsText(Job.Title, 'uMain'),
+          Job.Title);
+  finally
+    Job.Free;
+  end;
+
+  { Per (DB, FILE): a re-save of the same unit collapses; two DIFFERENT units
+    must not, or Save All would index only the last one and leave the rest stale. }
+  Check('7h a re-save of the same file collapses (case-insensitive)',
+        FileIndexCoalesceKey(DB, UNIT_FILE) = FileIndexCoalesceKey(UpperCase(DB), UpperCase(UNIT_FILE)));
+  Check('7i POSITIVE CONTROL: a different file does NOT collapse',
+        FileIndexCoalesceKey(DB, UNIT_FILE) <> FileIndexCoalesceKey(DB, OTHER_FILE));
+  Check('7j it never collides with the project key for the same DB',
+        FileIndexCoalesceKey(DB, UNIT_FILE) <> ProjectIndexCoalesceKey(DB));
+
+  { The old spawn copied into array[0..1023] of WideChar; a long command line
+    overflowed it. A queue job carries a plain string of any length. }
+  Long:= 'C:\' + StringOfChar('x', 1500) + '\uLong.pas';
+  Job:= BuildFileIndexJob(EXE, Long, DB);
+  try
+    Check('7k a >1024-char command line is carried whole',
+          (Length(Job.CmdLine) > 1024) and ContainsText(Job.CmdLine, Long),
+          Format('len=%d', [Length(Job.CmdLine)]));
+  finally
+    Job.Free;
+  end;
+end;
+
 begin  GPass:= 0;
   GFail:= 0;
   Writeln('IndexJobTests');
@@ -190,6 +246,7 @@ begin  GPass:= 0;
     TestCoalesceKey;
     TestJob;
     TestReindexTarget;
+    TestFileFallbackJob;
   except
     on E: Exception do
     begin
