@@ -1193,11 +1193,10 @@ begin
   Owner:= AStore.GetSymbolById(Syms[0].ParentId);
   if not (Owner.Kind in [skClass, skForm]) then Exit;
   ShortName:= LastDotSegment(AQName);
-  Seen := nil;
-  Notes:= nil;
+  Seen:= TDictionary<string, Boolean>.Create;
   try
-    Seen := TDictionary<string, Boolean>.Create;
-    Notes:= TList<string>.Create;
+  Notes:= TList<string>.Create;
+  try
     for var ClsName: string in [Owner.Name] + AStore.FindDescendantNames(Owner.Name) do
       for Cand in AStore.FindSymbolsByExactName(ClsName) do
       begin
@@ -1223,8 +1222,10 @@ begin
       end;
     Result:= Notes.ToArray;
   finally
-    Seen.Free;
     Notes.Free;
+  end;
+  finally
+    Seen.Free;
   end;
 end;
 

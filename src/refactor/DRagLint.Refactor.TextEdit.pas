@@ -358,10 +358,12 @@ procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
 implementation
 
 function HasHighByte(const ABytes: TBytes): Boolean;
+const
+  FirstNonAscii = $80;
 begin
   Result:= False;
   for var B: Byte in ABytes do
-    if B >= $80 then Exit(True);
+    if B >= FirstNonAscii then Exit(True);
 end;
 
 class function TTextFileFormat.Decode(const ABytes: TBytes; out AText: string): TTextFileFormat;
