@@ -221,6 +221,10 @@ type
     ConsumerUses: TArray<string>;
     /// <summary>R2: `Name: Type` of every member carried, in declaration order.</summary>
     MemberSigs: TArray<string>;
+    /// <summary>R2m (plan B2): `Name&lt;signature verbatim&gt;` of every instance method of the class
+    /// the consumer calls inside a `with ... as TX do` body, carried as interface methods, in call
+    /// order; empty when it calls none.</summary>
+    MethodSigs: TArray<string>;
     /// <summary>R2: the ancestor a receiver that does not implement IInterface is cast
     /// through; '' when no line needs a cast.</summary>
     CastAncestor: string;
@@ -1510,9 +1514,88 @@ begin
   if L <= Length(pLines) then Result:= L;
 end;
 
+const
+  { B2 (R2m): directives only a class method declaration takes; the class keeps them and the
+    interface declaration drops them (an interface method implemented by a virtual method
+    dispatches virtually: run_cyclefix_instmethod_dcc.ps1 pins it) }
+  CMethodOnlyDirectives = ' virtual override dynamic reintroduce abstract final ';
+
+{ B2 (R2m): the directive run after the method pName declared at line pLine of its class:
+  the calling convention in pConv, pOverload when `overload` is among them. False, with
+  pWhy, on a directive an interface method cannot carry (message, dispid, varargs, any word
+  this planner cannot classify), a compiler directive inside the declaration, or text it
+  cannot read. The scan mirrors DeclConvention (R1). }
+function MethodDirectives(const pLines: TArray<string>; pLine: Integer; const pName: string;
+  out pConv, pWhy: string; out pOverload: Boolean): Boolean;
+var
+  Depth: Integer;
+begin
+  pConv    := '';
+  pWhy     := '';
+  pOverload:= False;
+  var Text:= '';
+  for var L:= pLine to Min(pLine + CMaxDeclLines - 1, Length(pLines)) do Text:= Text + BareCode(LineOf(pLines, L)) + ' ';  // dl:ok duplicate-code@e7f0 -- mirrors the R1 DeclConvention scan with method directives; left separate so lanes editing R1 do not collide
+  if ContainsStr(Text, '{$') or ContainsStr(Text, '(*$') then
+  begin
+    pWhy:= 'a compiler directive inside its declaration';
+    Exit(False);
+  end;
+  Text:= TRegEx.Replace(TRegEx.Replace(Text, '\{[^}]*\}', ' '), '\(\*.*?\*\)', ' ');
+  var M:= TRegEx.Match(Text, '\b(function|procedure)\s+' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]);
+  if not M.Success then
+  begin
+    pWhy:= Format('its declaration at line %d could not be read', [pLine]);
+    Exit(False);
+  end;
+  var P:= M.Index + M.Length;
+  while (P <= Length(Text)) and (Text[P] = ' ') do Inc(P);
+  if (P <= Length(Text)) and (Text[P] = '(') then
+  begin
+    Depth:= 0;
+    repeat
+      if Text[P] = '(' then Inc(Depth) else if Text[P] = ')' then Dec(Depth);
+      Inc(P);
+    until (Depth = 0) or (P > Length(Text));
+  end;
+  if not SkipPastSemicolon(Text, P) then
+  begin
+    pWhy:= Format('its declaration at line %d could not be read', [pLine]);
+    Exit(False);
+  end;
+  while True do
+  begin
+    var W:= TRegEx.Match(Text.Substring(P - 1), '^\s*([A-Za-z_]\w*)');
+    if not W.Success then Break;
+    var Word:= LowerCase(W.Groups[1].Value);
+    if ContainsStr(CConventionWords, ' ' + Word + ' ') then pConv:= Word
+    else if Word = 'overload' then pOverload:= True
+    else if not ContainsStr(CMethodOnlyDirectives + CNeutralDirectives, ' ' + Word + ' ') then
+    begin
+      if StartsNextDeclaration(Text, P + W.Length, Word) then Break;
+      pWhy:= Format('the directive `%s` is not one an interface method can carry', [Word]);
+      Exit(False);
+    end;
+    Inc(P, W.Length);
+    if not SkipPastSemicolon(Text, P) then Break;
+  end;
+  Result:= True;
+end;
+
+{ B2 (R2m): whether the line pCode takes the method pName without calling it. A bare name is
+  a call when an argument list follows it, when it is a procedure statement, or when it is a
+  function in an expression; `@M`, or a procedure named anywhere else (`OnX := M`, `F(M)`),
+  is a method pointer -- an interface method cannot be one -- whatever refs.kind the index
+  gave the name. }
+function MethodTakenAt(const pCode, pName: string; pIsFunc: Boolean): Boolean;
+begin
+  var N:= TRegEx.Escape(pName);
+  Result:= TRegEx.IsMatch(pCode, '@\s*' + N + '\b', [roIgnoreCase]) or (not pIsFunc and
+    not TRegEx.IsMatch(pCode, '(^|;|\b(do|then|else|begin|try|finally|except)\b)\s*' + N + '\s*(;|$|\b(end|else)\b)|\b' +
+    N + '\s*\(', [roIgnoreCase]));
+end;
+
 type
-  { One PlanMemberInterface run: the edge, the class, and the steps being built. }
-  TMemberPlan = class  // dl:ok high-response@c843, god-class@c843 -- implementation-private one-shot planner of one edge; the response set is its check steps plus the store and RTL calls they make
+  { One PlanMemberInterface run: the edge, the class, and the steps being built. }  TMemberPlan = class  // dl:ok high-response@c843, god-class@c843 -- implementation-private one-shot planner of one edge; the response set is its check steps plus the store and RTL calls they make
   private
     FSource  : IEdgeSurfaceSource;
     FStore   : ISymbolStore;
@@ -1535,6 +1618,12 @@ type
     FCastUsed: Boolean;
     FCastAnc : string;
     FRefusal : TRecipeRefusal;
+    FMethods : TList<TSymbol>;  // B2: instance methods carried as interface methods
+    FMethodDecls: TList<string>;  // B2: their interface declarations
+    function CarriedMethodOf(const pR: TEdgeRef; const pS: TSymbol): TSymbol;
+    function CheckMethod(const pR: TEdgeRef; const pM: TSymbol): Boolean;
+    function CheckMethods: Boolean;
+    function CheckMethodMentions: Boolean;
     function Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
     function Stored(const pSym: TSymbol): TStoredType;
     function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
@@ -1586,10 +1675,14 @@ begin
   FUses       := TList<string>.Create;
   FLeafUses   := TList<string>.Create;
   FWithLines  := TList<Integer>.Create;
+  FMethods    := TList<TSymbol>.Create;
+  FMethodDecls:= TList<string>.Create;
 end;
 
 destructor TMemberPlan.Destroy;
 begin
+  FMethodDecls.Free;
+  FMethods.Free;
   FWithLines.Free;
   FLeafUses.Free;
   FUses.Free;
@@ -1618,6 +1711,7 @@ begin
   pKind:= '';
   pWhat:= '';
   var S:= if pR.SymbolId > 0 then FStore.GetSymbolById(pR.SymbolId) else Default(TSymbol);
+  if CarriedMethodOf(pR, S).Id > 0 then Exit(False);  { B2: CheckMethods decides }
   case pR.Kind of
     erTypeIs, erTypeAs, erMemberRead: Exit(False);
     erMemberWrite:
@@ -1771,6 +1865,103 @@ begin
       if RM.Success then Read:= RM.Groups[1].Value;
     end;
     FReads.Add(Read);
+  end;
+  Result:= True;
+end;
+
+{ B2 (R2m): the instance method of the class itself that a bare call (`Reset(3)`) or a bare
+  function read (`GetNamePath`) of the edge binds to -- inside a `with ... as TX do` body;
+  Id 0 for any other ref. The surface records such a ref against the class (its top-level
+  owner), so the method is found again by name; a call through the class name
+  (erClassReceiver) or through another receiver (bound to the method itself) is never one. }
+function TMemberPlan.CarriedMethodOf(const pR: TEdgeRef; const pS: TSymbol): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  if not (pR.Kind in [erCall, erOther]) or (FCls.Id = 0) or (pS.Id <> FCls.Id) or SameText(pR.Name, pS.Name) then
+    Exit;
+  var M:= FStore.FindChildSymbolByName(pS.Id, pR.Name);
+  if M.Kind in [skMethod, skFunction, skProcedure] then Result:= M;
+end;
+
+{ B2 (R2m): one call of the instance method pM. Refused: a class method, a method taken
+  without a call (a method pointer), an overload, a directive an interface cannot carry, a function with no
+  stored result type, a signature type of the cycle or one no index resolves. Else pM is
+  carried once: `procedure|function <Name><signature verbatim>;[ <conv>;]`. }
+function TMemberPlan.CheckMethod(const pR: TEdgeRef; const pM: TSymbol): Boolean;  // dl:ok too-many-exit-points@2e39 -- one guard clause per refusal kind, the TMemberPlan check style
+var
+  Conv, Why: string;
+  IsOverload: Boolean;
+begin
+  var KW:= TRegEx.Match(BareCode(LineOf(FClsLines, pM.StartLine)), '^\s*(class\s+)?(procedure|function)\s+' +
+    TRegEx.Escape(pM.Name) + '\b', [roIgnoreCase]);
+  if not KW.Success then
+    Exit(Refuse('manual-edit', pM.Name, FClsFid, pM.StartLine, Format('the declaration of `%s.%s` does not start ' +
+      'its line %d with `procedure` or `function`', [FCls.Name, pM.Name, pM.StartLine])));
+  if KW.Groups[1].Length > 0 then
+    Exit(Refuse('class-method', pM.Name, FFromFid, pR.Line, Format('line %d calls `%s`, a class method of `%s` ' +
+      '(`%s`); an interface carries instance methods only', [pR.Line, pM.Name, FCls.Name, pR.LineText])));
+  var IsFunc:= SameText(KW.Groups[2].Value, 'function');
+  if MethodTakenAt(BareCode(LineOf(FLines, pR.Line)), pM.Name, IsFunc) then
+    Exit(Refuse('class-method', pM.Name, FFromFid, pR.Line, Format('line %d names the method `%s` without calling ' +
+      'it (`%s`); the interface carries calls, not method pointers', [pR.Line, pM.Name, pR.LineText])));
+  for var X in FMethods do
+    if X.Id = pM.Id then Exit(True);
+  if not MethodDirectives(FClsLines, pM.StartLine, pM.Name, Conv, Why, IsOverload) then
+    Exit(Refuse('unsupported-directive', pM.Name, FClsFid, pM.StartLine, Format('`%s.%s`: %s', [FCls.Name, pM.Name,
+      Why])));
+  var Count:= 0;
+  for var S in FStore.FindSymbolsByExactName(pM.Name) do
+    if (S.ParentId = FCls.Id) and (S.Kind in [skMethod, skFunction, skProcedure]) then Inc(Count);
+  if IsOverload or (Count > 1) then
+    Exit(Refuse('overloaded-routine', pM.Name, FClsFid, pM.StartLine, Format('`%s.%s` is overloaded; the index ' +
+      'cannot tell which declaration each call binds to, and the interface would carry one', [FCls.Name, pM.Name])));
+  var Sig:= Trim(pM.Signature);
+  if IsFunc and not ContainsStr(Sig.Substring(Sig.LastIndexOf(')') + 1), ':') then
+    Exit(Refuse('signature-unknown', pM.Name, FClsFid, pM.StartLine, Format('the index holds no result type for ' +
+      'the function `%s.%s`', [FCls.Name, pM.Name])));
+  for var T in SignatureTypes(FSource, FClsFid, pM.StartLine, Sig) do
+  begin
+    if T.InScc then
+      Exit(Refuse('signature-in-cycle', T.Name, FClsFid, pM.StartLine, Format('the signature of `%s.%s` names ' +
+        '`%s`, declared in `%s`, a unit of this cycle -- an interface outside the cycle cannot name it',
+        [FCls.Name, pM.Name, T.Name, T.DeclStem])));
+    if not AddLeafUse(pM, T.Name, T.Name) then Exit(False);
+  end;
+  FMethods.Add(pM);
+  FMethodDecls.Add(Format('    %s %s%s;%s', [LowerCase(KW.Groups[2].Value), pM.Name, Sig,
+    (if Conv <> '' then ' ' + Conv + ';' else '')]));
+  Result:= True;
+end;
+
+{ B2 (R2m): every mention of a carried method inside a `with ... as TX do` body -- the index
+  leaves some unbound (`FOnX := M` gets no symbol), so the edge surface never shows them --
+  is a call (MethodTakenAt), never a method pointer. }
+function TMemberPlan.CheckMethodMentions: Boolean;
+begin
+  Result:= True;
+  if FMethods.Count = 0 then Exit;
+  var Refs:= FStore.GetReferencesFromFile(FFromFid);
+  for var W in FWithLines do
+  begin
+    var Last:= WithBodyEnd(FLines, W);
+    for var R in Refs do
+      if (R.StartLine >= W) and (R.StartLine <= Last) and (R.ReceiverText = '') then
+        for var I:= 0 to FMethods.Count - 1 do
+          if SameText(R.NameText, FMethods[I].Name) and MethodTakenAt(BareCode(LineOf(FLines, R.StartLine)),
+            FMethods[I].Name, StartsText('    function', FMethodDecls[I])) then
+            Exit(Refuse('class-method', R.NameText, FFromFid, R.StartLine, Format('line %d names the method `%s` ' +
+              'without calling it (`%s`); the interface carries calls, not method pointers', [R.StartLine, R.NameText,
+              Trim(LineOf(FLines, R.StartLine))])));
+  end;
+end;
+
+{ B2 (R2m): every ref CarriedMethodOf names passes CheckMethod, in ref order. }function TMemberPlan.CheckMethods: Boolean;
+begin
+  for var R in FSurface.Refs do
+  begin
+    var S:= if R.SymbolId > 0 then FStore.GetSymbolById(R.SymbolId) else Default(TSymbol);
+    var M:= CarriedMethodOf(R, S);
+    if (M.Id > 0) and not CheckMethod(R, M) then Exit(False);
   end;
   Result:= True;
 end;
@@ -1972,7 +2163,9 @@ begin
     Names.AddStrings(CIInterfaceMethods);
     for var M in FMembers do
       if Names.IndexOf(M.Name) >= 0 then Names.Delete(Names.IndexOf(M.Name));
-    var Refs:= FStore.GetReferencesFromFile(FFromFid);
+    for var M in FMethods do
+      if Names.IndexOf(M.Name) >= 0 then Names.Delete(Names.IndexOf(M.Name));
+    var Refs:=FStore.GetReferencesFromFile(FFromFid);
     for var W in FWithLines do
     begin
       var DoAt:= TRegEx.Match(LineOf(FLines, W), '\bdo\b', [roIgnoreCase]);
@@ -2189,8 +2382,11 @@ begin
       Bodies.Add(Format('  Result := %s;', [FReads[I]]));
       Bodies.Add('end;');
     end;
-    AddEdit(FClsFid, FCls.EndLine - 1, False, Decls.ToArray);
-    AddEdit(FClsFid, BodyAnchor(FClsLines), False, Bodies.ToArray);
+    if Decls.Count > 0 then  { B2: an edge that only calls methods needs no getter }
+    begin
+      AddEdit(FClsFid, FCls.EndLine - 1, False, Decls.ToArray);
+      AddEdit(FClsFid, BodyAnchor(FClsLines), False, Bodies.ToArray);
+    end;
   finally
     Bodies.Free;
     Decls.Free;
@@ -2209,6 +2405,7 @@ begin
     L.Add(Format('    [''%s'']', [SurfaceGuid(pLeafUnit + '.' + FIface)]));
     for var I:= 0 to FMembers.Count - 1 do
       L.Add(Format('    function %s: %s;', [FGetters[I], Trim(FMembers[I].Signature)]));
+    L.AddRange(FMethodDecls);
     for var I:= 0 to FMembers.Count - 1 do
       L.Add(Format('    property %s: %s read %s;', [FMembers[I].Name, Trim(FMembers[I].Signature), FGetters[I]]));
     L.Add('  end;');
@@ -2227,8 +2424,8 @@ begin
   begin
     FIface:= 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckClass and RewriteConsumer;
-    Ok:= Ok and CheckCastExceptions and CheckWithBodies and CollectLeafUses;
+    Ok:= CheckMembers and CheckMethods and CheckClass and RewriteConsumer;
+    Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
   if not Ok then
@@ -2250,6 +2447,7 @@ begin
   Result.CastAncestor := FCastAnc;
   Result.Edits        := FEdits.ToArray;
   for var M in FMembers do Result.MemberSigs:= Result.MemberSigs + [M.Name + ': ' + Trim(M.Signature)];
+  for var M in FMethods do Result.MethodSigs:= Result.MethodSigs + [M.Name + Trim(M.Signature)];
 end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
