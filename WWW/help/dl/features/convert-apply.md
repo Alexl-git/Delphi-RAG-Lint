@@ -7,7 +7,7 @@ group: component-conversion
 order: 60001
 since: 1.2.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.34.1-alpha
 ---
 
 # convert-apply
@@ -31,6 +31,7 @@ Full flag list: [convert-apply in the CLI reference](../cli.md#convert-apply).
 | `--castlib` | `<file>` |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--raise-encoding` | `<path>=utf8-bom` |  |  |
 | `--no-warn-unlinked` |  |  |  |
 | `--no-reconcile-uses` |  |  |  |
 | `--no-reindex` |  |  |  |
@@ -127,6 +128,21 @@ old member), `same-name` (the new type has the same name, so it carries over),
 Text mode prints a one-line count and the unmapped and not-rewritten members
 with their lines.
 
+### Encoding guard (1.34.1)
+A value `--apply` would write into a `.pas` that the file's current encoding
+cannot hold (an ANSI unit receiving U+0413, say) refuses the unit: nothing is
+written, exit `1`, and apply/1 carries `refusal_kind: "encoding_refused"` plus
+`encoding_refused {file, file_encoding (ansi|utf8|utf8-bom|utf16-bom),
+raise_to: "utf8-bom", chars_total, chars[] {code, text, line}}` (distinct code
+points, at most 8, first line each). The dry run reports the same refusal.
+`--raise-encoding "<path>=utf8-bom"` (repeatable; the path must be a `--unit`
+of the call or its `.dfm`, the only level is `utf8-bom`, anything else is exit
+`2`) stores that file as UTF-8 with a BOM in the same write transaction as the
+edits, also when every value would have fitted; the `.BCK<n>` backup applies as
+usual. A text `.dfm` never refuses: a value its encoding cannot hold is written
+as Delphi `#codes` (`'Gr'#246'sse'`). A binary (TPF0) `.dfm` has no text
+encoding and is never compared or rewritten. `info --json`
+`capabilities.convert_encoding_guard` is `true` when this ships.
 ### Exit codes
 `0` converted (or nothing to do); `1` the unit was REFUSED (a deliberate
 refusal: nothing written, the reason printed); `2` a write failed or was

@@ -3,6 +3,15 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Added
+- `convert-apply` encoding guard (CONV-ENC E1'/E2/E3): a value `--apply` would write into a `.pas` that
+  its current encoding cannot hold refuses the unit (exit 1, nothing written, apply/1
+  `refusal_kind: "encoding_refused"` + `encoding_refused{}`), `--raise-encoding "<path>=utf8-bom"`
+  stores a named unit/`.dfm` as UTF-8 with BOM in the same transaction, a text `.dfm` gets `#codes`
+  instead of refusing, a binary `.dfm` is never compared. `info --json`
+  `capabilities.convert_encoding_guard`. Guard: `tests\autotest\run_convert_apply_encoding.ps1`.
 ## v1.34.1-alpha -- 2026-10-25
 
 Patch release on top of v1.34.0-alpha (commit ed87f842). No extractor or resolver bump: nothing here

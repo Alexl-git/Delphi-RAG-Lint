@@ -335,12 +335,15 @@ type
                                form slice 1 does not realise, a member another
                                rule already converts. A warning; RuleLine and
                                Path (Old) set, Line / Instance when per site. }
-    aikDeliberateBreak);     { C18 slice 1: '#migrate Old -> DL_NONE' wrapped a
+    aikDeliberateBreak,      { C18 slice 1: '#migrate Old -> DL_NONE' wrapped a
                                site's member access, inst.Old ->
                                DL_NONE(inst.Old), so the unit does not compile
                                there until converted by hand (owner Q2: the old
                                text is kept). Field todos; Value 'DL_NONE',
                                OldValue the wrapped text. }
+    aikEncodingNotChecked);  { 1.34.1 (CONV-ENC E3): a binary (TPF0) .dfm has no
+                               text encoding, so the encoding guard never
+                               compared it. A warning; FilePath set. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -1419,7 +1422,7 @@ const
     'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
     'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
     'value-cast-applied', 'value-cast-check', 'convert-class-inferred',
-    'migrate-applied', 'migrate-check', 'deliberate-break');
+    'migrate-applied', 'migrate-check', 'deliberate-break', 'encoding-not-checked');
 begin
   Result:= NAMES[AKind];
 end;
