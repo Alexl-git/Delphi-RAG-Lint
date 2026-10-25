@@ -5473,10 +5473,10 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-24",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "a889e04c9f32186b93f6d04de0bacf87466fe4ccea36e7e619e7e0e5c55f9584"
+        "build": "1.34.0-alpha",
+        "surfaceHash": "7e5ccd83ad2021d1fd5082ca618d766d81ffb36fdfb0b2878caf8f188a58992e"
       }
     },
     {
@@ -5567,10 +5567,10 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-24",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "1c57e4601e73c9deae43772d89177447fa6ffaba198d6f4af3cc41e3ba5ee0c7"
+        "build": "1.34.0-alpha",
+        "surfaceHash": "3963e11d95daca2243f41d0d4ef6674f76772d307448179669765cdc7bb85b1d"
       }
     },
     {
@@ -8178,6 +8178,7 @@
         }
       ],
       "access": "cli-only",
+      "noFlags": true,
       "accessReviewed": {
         "date": "2026-10-21",
         "by": "ENGINE"
@@ -9714,6 +9715,7 @@
       ],
       "audience": "agent",
       "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
+      "noFlags": true,
       "verified": {
         "date": "2026-10-23",
         "by": "ENGINE",
@@ -10076,7 +10078,7 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-23",
         "by": "CONVERTER",
         "build": "1.33.0-alpha",
         "surfaceHash": "db2fce9107b6535be56483366d29b2beab83f616381bc02aedbb954b7b41d2fb"
@@ -10335,6 +10337,7 @@
       ],
       "audience": "agent",
       "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
+      "noFlags": true,
       "verified": {
         "date": "2026-10-23",
         "by": "ENGINE",
