@@ -18,7 +18,9 @@ before working on an item.**
   RED/GREEN), item F (registry review, 20ffb523). Item F's URL form is
   `/help/dl/features/<id>/`, not `/help/<id>/` (www-40, 2026-10-23).
 * A4 #migrate: spec + plan written 2026-10-23 (`docs\superpowers\specs|plans\2026-10-23-converter-migrate-slice1*`,
-  gitignored); waits for OWNER decisions D0-D9 (spec section 12, recommendations given).
+  gitignored). OWNER DECIDED 2026-10-24: all recommendations, with D0 = B (build after ENGINE's
+  final deploy + re-parse + re-pin, dropping the G4/G7/G8/G9 workarounds); D5 and D6-B as
+  follow-ups. Spec section 12a records it. NEXT after the re-pin.
   Engine gaps G8/G9/G10 filed `docs\INBOX-2026-10-23-converter-to-engine-migrate-gaps.md`
   (ENGINE lane e3d/migrate-gaps).
 * DONE later the same day: N1 (9941b39e), D2 (ecc90bfd), B10 (45c149e1), Qualify-all driver
