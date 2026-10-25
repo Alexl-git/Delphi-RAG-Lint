@@ -10,7 +10,13 @@ unit dispatchtest;
 //
 //   Beta_direct         B.TransferFile('x')   receiver 'B'   -> anchored
 //   Alpha_via_interface M.TransferFile('x')   receiver 'M'   -> anchored
-//   Alpha_with          with A do TransferFile receiver ''   -> NOT anchored
+//   Alpha_with          with A do TransferFile receiver ''   -> anchored by the resolver (X2)
+//   Unknown_with        with X do TransferFile receiver ''   -> NOT anchored
+//
+// X2 (resolver 1.14.0-alpha): a `with` over a TYPED target now binds -- A is a
+// TAlpha, so Alpha_with is TAlpha.TransferFile and nothing else. Unknown_with
+// keeps the unprovable shape: X is of a type the index does not hold, so the
+// resolver declines and only the name bucket sees the call.
 //
 // The `with` form is the one that matters. It is ordinary Delphi, it is the
 // only legal way to call a method with no receiver text at the call site, and
@@ -30,6 +36,7 @@ type
     procedure Beta_direct;
     procedure Helper_bare;
     procedure Alpha_with;
+    procedure Unknown_with;
   end;
 
 implementation
@@ -67,6 +74,14 @@ begin
   A:= TAlpha.Create;
   with A do
     Chk(TransferFile('x'), 'with');
+end;
+
+procedure TDispatchTests.Unknown_with;
+var
+  X: TForeignCopier; // declared in a unit this index does not hold
+begin
+  with X do
+    Chk(TransferFile('x'), 'unknown');
 end;
 
 end.
