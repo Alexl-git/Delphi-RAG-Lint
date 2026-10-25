@@ -224,6 +224,10 @@ type
     /// <summary>R2: the ancestor a receiver that does not implement IInterface is cast
     /// through; '' when no line needs a cast.</summary>
     CastAncestor: string;
+    /// <summary>R1 (A2): True when the declaring unit would leave the program after the cut (only the
+    /// consumer used it and the .dpr does not list it); the plan then adds it to the .dpr uses
+    /// (and a DCCReference to the .dproj when absent) instead of refusing unit-leaves-program.</summary>
+    RegisterDecl: Boolean;
   end;
 
 const

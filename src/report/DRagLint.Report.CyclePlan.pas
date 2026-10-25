@@ -726,6 +726,7 @@ type
     procedure RenderMemberHandOver(pStep: Integer);
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
     function LeavesProgramReason(const pSteps: TRecipeSteps): string;
+    procedure RegisterDeclUnit;
     procedure MaterializeInversion;
     function IsInversionStem(const pStem: string): Boolean;
     function InversionDeclLines(const pStem: string): TArray<string>;
@@ -4238,11 +4239,8 @@ begin
             Break;
           end;
     end;
-    if Refusal.Kind = '' then
-    begin
-      Refusal.Reason:= LeavesProgramReason(Steps);
-      if Refusal.Reason <> '' then Refusal.Kind:= 'unit-leaves-program';
-    end;
+    { A2: the old refusal unit-leaves-program named its own fix -- the declaring unit joins the program's uses }
+    if Refusal.Kind = '' then Steps.RegisterDecl:= LeavesProgramReason(Steps) <> '';
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
@@ -4321,7 +4319,8 @@ begin
       (S.EndLine > Result.InsertAfterLine) then Result.InsertAfterLine:= S.EndLine;
 end;
 
-{ Refusal unit-leaves-program (E18 final review F2): R1 assigns the pointer in the
+{ Unit-leaves-program (E18 final review F2; since A2 the plan registers the unit instead of
+  refusing, see RegisterDeclUnit): R1 assigns the pointer in the
   declaring unit's initialization section, so that unit must stay in the program
   once the consumer stops naming it. It stays when the program file (.dpr) lists it
   or any unit other than the consumer uses it -- both are unit_uses rows (FUsersOf).
@@ -4343,6 +4342,30 @@ begin
     'its initialization never assigns `%s` and the call is a nil call at run time -- add it to the program''s uses',
     [UnitNameOfStem(pSteps.DeclStem), ExtractFileName(PathOf(pSteps.ConsumerFid)), ExtractFileName(PathOf(FProjectFid)),
      pSteps.PtrVar]);
+end;
+
+{ A2: the declaring unit joins the program's uses (`Name in 'path'`, the path relative to the .dpr) and,
+  when the .dproj has no DCCReference for it, gains one after the last DCCReference. }
+procedure TCyclePlanner.RegisterDeclUnit;
+var
+  E: TFileEdit;
+begin
+  if (FProjectFid = 0) or not FInversion.RegisterDecl then Exit;
+  var Rel:= ExtractRelativePath(PathOf(FProjectFid), PathOf(FidOfStem(FInversion.DeclStem)));
+  AddUses(FProjectFid, scProg, Format('%s in ''%s''', [UnitNameOfStem(FInversion.DeclStem), Rel]));
+  if not (SameText(ExtractFileExt(FProjectFile), '.dproj') and TFile.Exists(FProjectFile)) then Exit;
+  var Dproj:= ReadSourceLines(FProjectFile);
+  var Last := -1;
+  for var I:= 0 to High(Dproj) do
+    if ContainsText(Dproj[I], 'Include="' + Rel + '"') then Exit
+    else if ContainsText(Dproj[I], '<DCCReference') then Last:= I;
+  if Last < 0 then Exit;
+  E:= Default(TFileEdit);
+  E.Kind    := ekInsertAfter;
+  E.First   := Last + 1;
+  E.Last    := Last + 1;
+  E.NewLines:= [StringReplace(Dproj[Last], TRegEx.Match(Dproj[Last], 'Include="([^"]*)"').Groups[1].Value, Rel, [rfIgnoreCase])];
+  FDprojEdits.Add(E);
 end;
 
 function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;
@@ -4385,6 +4408,7 @@ begin
     for var U in FInversion.ConsumerUses do AddUses(Consumer.Fid, scImpl, U);
   end
   else AddUses(Decl.Fid, scImpl, UsesEntryFor(Decl, Stem));
+  RegisterDeclUnit;
   Materialize;
 end;
 
@@ -4462,6 +4486,10 @@ begin
       'initialization section of another unit that reaches them through a call chain.',
       [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.RoutineName,
        string.Join(', ', Calls.ToArray)]);
+    if FInversion.RegisterDecl then
+      EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`: ' +
+        'after the cut only `%s` used it, and the program did not list it.', [Decl, ExtractFileName(PathOf(FProjectFid)),
+        FInversion.PtrVar, ExtractFileName(PathOf(FInversion.ConsumerFid))]);
   finally
     Calls.Free;
   end;

@@ -25,6 +25,9 @@ needs a re-parse.
 - `cycles --plan` (C3): `init-order` no longer fires when the initialization section only names the
   routine in a `{ }` / `(* *)` / `//` comment, and `edge-still-used` no longer binds an inherited class
   member (a bare name in a method body) to a same-named routine of the used unit.
+- `cycles --plan` / `--fix` (A2): `unit-leaves-program` is no longer a refusal -- when the routine's
+  declaring unit would drop out of the program after the R1 cut, the plan adds
+  `<Unit> in '<path>'` to the .dpr uses (and a DCCReference to the .dproj when absent).
 - `circular-uses` reports one anchor line in both scopes (`lint` and `lint-all`), and one `dl:ok`
   reviews the cycle everywhere (H2).
 - **MIGRATION NOTE (H2):** an old `circular-uses` `dl:ok` marker recorded on a header line (the `unit`
