@@ -73,6 +73,50 @@ $files += @(Get-ChildItem (Join-Path $repo 'src\core') -File -Filter 'DRagLint.C
 # nothing billed for that. Joined 2026-09-21.
 $files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Doc.SymbolFacts.pas')
 
+# F3 (deep review 2026-10-25): the storage WRITE side decides what a stored row
+# CONTAINS (receiver_text, member_accesses.mode, ...), so it is part of the
+# extraction surface -- but hashing all of Storage.SQLite.pas would trip this
+# guard (and demand a ~5 h re-parse) on every READER change. So it is sliced by
+# routine, as run_resolver_version_guard.ps1 does: only the emit routines below.
+# Resolve writers (Resolve*, UpsertCallEdge) are the RESOLVER guard's surface
+# (tests\resolver-surface.txt) and are deliberately not repeated here.
+# DRIFT: a new top-level Upsert*/Put*/Insert*/Write* routine in the file that is
+# in neither list fails the guard, so a new writer cannot silently stay outside.
+$storagePas   = 'src\storage\DRagLint.Storage.SQLite.pas'
+$emitRoutines = @('UpsertSymbol','UpsertReference','UpsertDiBinding','UpsertStringLiteral',
+                  'UpsertChunk','UpsertSymbolDoc','PutSymbolFacts','PutEffectFacts',
+                  'InsertCompilerFinding','UpsertUnitUse','WriteMemberAccess')
+$notEmit      = @('UpsertCallEdge')   # resolver surface (resolver-surface.txt)
+$HdrRx  = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
+$ImplRx = [regex]'^(?i)implementation\s*$'
+function Get-TopLevelRoutines([string]$Path) {
+  $lines = [System.IO.File]::ReadAllLines($Path)
+  $out = New-Object System.Collections.Generic.List[object]
+  $inImpl = $false
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if (-not $inImpl) { if ($ImplRx.IsMatch($lines[$i])) { $inImpl = $true }; continue }
+    $mm = $HdrRx.Match($lines[$i])
+    if ($mm.Success) { $out.Add([pscustomobject]@{ Line = $i; Name = $mm.Groups[3].Value }) }
+  }
+  for ($k = 0; $k -lt $out.Count; $k++) {
+    $end = if ($k + 1 -lt $out.Count) { $out[$k+1].Line - 1 } else { $lines.Count - 1 }
+    $out[$k] | Add-Member -NotePropertyName Text -NotePropertyValue ($lines[$out[$k].Line..$end] -join "`n")
+  }
+  ,$out
+}
+$storageRoutines = Get-TopLevelRoutines (Join-Path $repo $storagePas)
+$emitSlices = @(); $emitMissing = @()
+foreach ($n in ($emitRoutines | Sort-Object)) {
+  $hit = @($storageRoutines | Where-Object { $_.Name -ieq $n })
+  if ($hit.Count -eq 0) { $emitMissing += $n; continue }
+  foreach ($h in $hit) { $emitSlices += "$storagePas::$n`n" + $h.Text }
+}
+Check 'every storage emit routine resolves to real source' ($emitMissing.Count -eq 0) `
+  $(if ($emitMissing.Count) { $emitMissing -join ', ' } else { "$($emitRoutines.Count) found" })
+$unlisted = @($storageRoutines | Where-Object { $_.Name -match '^(?i)(Upsert|Put|Insert|Write)' -and
+  $emitRoutines -notcontains $_.Name -and $notEmit -notcontains $_.Name } | ForEach-Object { $_.Name })
+Check 'no storage writer is outside the emit list' ($unlisted.Count -eq 0) `
+  $(if ($unlisted.Count) { ($unlisted -join ', ') + '  -- add to $emitRoutines, or $notEmit with a reason' } else { 'emit list covers Upsert*/Put*/Insert*/Write*' })
 $rel = @($files | ForEach-Object { $_.FullName.Substring($repo.Length + 1) } | Sort-Object)
 Check 'the extraction surface is non-empty' ($rel.Count -gt 5) "$($rel.Count) file(s)"
 
@@ -83,6 +127,10 @@ foreach ($r in $rel) {
   $nameB = [System.Text.Encoding]::ASCII.GetBytes($r)   # path is part of the identity
   $acc.Write($nameB, 0, $nameB.Length)
   $acc.Write($bytes, 0, $bytes.Length)
+}
+foreach ($s in $emitSlices) {
+  $sb = [System.Text.Encoding]::ASCII.GetBytes($s)
+  $acc.Write($sb, 0, $sb.Length)
 }
 $acc.Position = 0
 $hash = ([System.BitConverter]::ToString($sha.ComputeHash($acc)) -replace '-','').ToLower()
@@ -222,8 +270,16 @@ $fpBlock = [regex]::Match($cli, "function IndexerFingerprint.*?end;", 'Singlelin
 Check 'the fingerprint uses the EXTRACTOR version' `
       ($fpBlock -match 'DRAGLINT_EXTRACTOR_VERSION') `
       'if this regresses to VERSION, every release re-parses everything again'
+# F4 (deep review 2026-10-25): this used to be `-notmatch ... -or -match
+# DRAGLINT_EXTRACTOR_VERSION`, i.e. implied by the check above, and its own
+# pattern (\bVERSION\b) cannot match DRAGLINT_VERSION (underscore is a word
+# char). A fingerprint embedding BOTH versions passed. It now asserts the
+# absence of the product version on its own, and that the block was found.
+# Comments are stripped first: the block's own explanatory { } comment names DRAGLINT_VERSION.
+$fpCode = [regex]::Replace($fpBlock, '(?s)\{.*?\}|//[^\n]*', '')
+Check 'the fingerprint block was found' ($fpBlock.Length -gt 0) 'IndexerFingerprint not located in DRagLint.CLI.pas'
 Check 'the fingerprint does NOT use the product version' `
-      ($fpBlock -notmatch '\bVERSION\b(?!_)' -or $fpBlock -match 'DRAGLINT_EXTRACTOR_VERSION') `
-      ''
+      ($fpBlock.Length -gt 0 -and $fpCode -notmatch '\bDRAGLINT_VERSION\b') `
+      'a fingerprint carrying DRAGLINT_VERSION re-parses every index on every release'
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
