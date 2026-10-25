@@ -164,9 +164,10 @@ function LineOf([string]$pattern) {
   return -1
 }
 
-function Session([string]$uri) {
+function Session([string]$uri, [string]$openText = $null) {
   $m  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
   $m += Frame @{ jsonrpc='2.0'; method='initialized'; params=@{} }
+  if ($openText -ne '') { $m += Frame @{ jsonrpc='2.0'; method='textDocument/didOpen'; params=@{ textDocument=@{ uri=$uri; languageId='pascal'; version=1; text=$openText } } } }
   $m += Frame @{ jsonrpc='2.0'; id=2; method='textDocument/documentSymbol'; params=@{ textDocument=@{ uri=$uri } } }
   $m += Frame @{ jsonrpc='2.0'; id=3; method='shutdown'; params=@{} }
   $inF  = Join-Path $WorkDir 'in.txt'
@@ -281,6 +282,18 @@ if ($null -ne $re.sym) {
   $wl = ELineOf '^procedure$'
   Check 'multi-line declaration: selectionRange stays on the declaration line (keyword-column fallback)' ($w.selectionRange.start.line -eq $w.range.start.line -and $w.range.start.line -eq $wl) "want=$wl got=$($w.range.start.line)/$($w.selectionRange.start.line)"
 }
+
+# S6: the OPEN BUFFER wins over the file on disk. The buffer indents the
+# Thrice declaration by 6 more columns than the disk copy, so the name token
+# sits 6 columns further right; reading the disk would answer the old column.
+$bufText = (($lines | ForEach-Object { if ($_ -match '^\s*procedure Thrice;') { '      ' + $_ } else { $_ } }) -join "`r`n") + "`r`n"
+$rb = Session $uri $bufText
+if ($null -ne $rb.sym) {
+  $bThing = Find @($rb.sym[0]) 'TThing'
+  $bThr = Find @($bThing.children) 'Thrice'
+  $wantCol = $colThr + 6
+  Check 'S6: selectionRange follows the OPEN BUFFER, not the disk file' ($bThr.selectionRange.start.character -eq $wantCol) "want=$wantCol got=$($bThr.selectionRange.start.character)"
+} else { Check 'S6: documentSymbol answered with an open buffer' $false }
 
 # Unknown file -> [].
 $r2 = Session 'file:///c%3A/no/such/dir/Nope.pas'

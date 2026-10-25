@@ -130,6 +130,8 @@ begin
           S:= Trim(Copy(S, Length(M) + 1, MaxInt));
           Break;
         end;
+      // S4: `const [ref] pA` -- the attribute can FOLLOW the modifier
+      if S.StartsWith('[') and (Pos(']', S) > 0) then S:= Trim(Copy(S, Pos(']', S) + 1, MaxInt));
       for var N: string in S.Split([',']) do
         if Trim(N) <> '' then Result:= Result + [Trim(N)];
     end;
@@ -156,6 +158,7 @@ type
     function Column16(const ANode: TTSNode): Integer;
     function Lookup(const AName: string): TCallee;
     function InRange(ALine, ACol: Integer): Boolean;
+    function OutsideRange(const ANode: TTSNode): Boolean;
     procedure VisitCall(const ANode: TTSNode);
   public
     constructor Create(const ASource: TBytes; const AStores: TArray<ISymbolStore>; AResult: TJSONArray);
@@ -209,6 +212,17 @@ begin
   var AfterStart: Boolean:= (ALine > Integer(FFrom.row)) or ((ALine = Integer(FFrom.row)) and (ACol >= Integer(FFrom.column)));
   var BeforeEnd : Boolean:= (ALine < Integer(FTo.row)) or ((ALine = Integer(FTo.row)) and (ACol <= Integer(FTo.column)));
   Result:= AfterStart and BeforeEnd;
+end;
+
+function THintWalker.OutsideRange(const ANode: TTSNode): Boolean;
+begin
+  { Rows decide the far side: a tree-sitter column is a BYTE column and FTo a
+    UTF-16 one, so a column test there could skip a node that is in range.
+    On the near side the byte end column is >= the UTF-16 one, so
+    EndByteCol < FFrom.column is safe. }
+  var S: TTSPoint:= ANode.StartPoint;
+  var E: TTSPoint:= ANode.EndPoint;
+  Result:= (S.row > FTo.row) or (E.row < FFrom.row) or ((E.row = FFrom.row) and (E.column < FFrom.column));
 end;
 
 function THintWalker.Lookup(const AName: string): TCallee;
@@ -283,8 +297,14 @@ begin
     while True do
     begin
       var N: TTSNode:= Cur.CurrentNode;
-      if N.NodeType = NT_CALL then VisitCall(N);
-      if Cur.GotoFirstChild then Continue;
+      // S3: a subtree wholly outside the viewport can hold no in-range hint
+      // (every hint sits at an argument start inside its call's span), so it
+      // is neither visited nor descended into.
+      if not OutsideRange(N) then
+      begin
+        if N.NodeType = NT_CALL then VisitCall(N);
+        if Cur.GotoFirstChild then Continue;
+      end;
       var Moved: Boolean:= False;
       while not Moved do
       begin

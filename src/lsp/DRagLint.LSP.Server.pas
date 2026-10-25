@@ -1206,6 +1206,8 @@ const
   LSP_FULL_RULES_TIMEOUT_MS = 8000;
   { Bounded wait for the killed child to be reaped after TerminateProcess. }
   LSP_FULL_RULES_REAP_MS = 2000;
+  { S8: JSON-RPC internal error, answered when a registered feature raises. }
+  LSP_ERR_INTERNAL = -32603;
 
 type
   { S0: the ILspServerContext a feature is handed. A thin forwarder: every
@@ -2905,10 +2907,8 @@ var
   Path  : string     ;
   Syms  : TArray<TSymbol>;
   St    : ISymbolStore;
-  Seen  : TDictionary<Integer, Integer>;
-  Sites : TDictionary<string, Byte>;   { distinct (file:line) call sites }
-  Pair  : TPair<Integer, Integer>;
-  Total : Integer    ;
+  Sites : TObjectDictionary<Integer, TDictionary<string, Byte>>;   { decl line -> distinct (file:line) call sites }
+  Lines : TDictionary<string, Byte>;
 begin
   Arr:= TJSONArray.Create;
   try
@@ -2919,8 +2919,7 @@ begin
       client retry something that will never succeed. }
     if Path <> '' then
     begin
-      Seen := TDictionary<Integer, Integer>.Create;
-      Sites:= TDictionary<string, Byte>.Create;
+      Sites:= TObjectDictionary<Integer, TDictionary<string, Byte>>.Create([doOwnsValues]);
       try
         for St in FStores do
         begin
@@ -2941,30 +2940,40 @@ begin
 
               Counted across EVERY open store, because a caller in another
               project still calls this routine. }
-            Sites.Clear;
+            { S1: the distinct sites are kept PER DECLARATION LINE across every
+              store and symbol, so the count equals the number of rows
+              workspace/executeCommand draglint.showCallers answers (which
+              dedups the same way). Summing per-store counts double-counted a
+              site seen in two stores. }
+            if not Sites.TryGetValue(Sym.StartLine, Lines) then
+            begin
+              Lines:= TDictionary<string, Byte>.Create;
+              Sites.Add(Sym.StartLine, Lines);
+            end;
             for var R: TReference in St.FindCallersByName(Sym.Name) do
-              Sites.AddOrSetValue(LowerCase(St.GetFilePath(R.FileId)) + ':' + IntToStr(R.StartLine), 1);
-            Total:= Sites.Count;
-            if Seen.ContainsKey(Sym.StartLine) then
-              Seen[Sym.StartLine]:= Seen[Sym.StartLine] + Total
-            else
-              Seen.Add(Sym.StartLine, Total);
+              Lines.AddOrSetValue(LowerCase(St.GetFilePath(R.FileId)) + ':' + IntToStr(R.StartLine), 1);
           end;
         end;
 
-        for Pair in Seen do
-        begin
-          var Item: TJSONObject:= TJSONObject.Create;
-          { 0-BASED, matching LSP convention. The store is 1-based and the
-            plugin's cache is 0-based; converting HERE means exactly one place
-            knows about the offset. }
-          Item.AddPair('line' , TJSONNumber.Create(Pair.Key - 1));
-          Item.AddPair('count', TJSONNumber.Create(Pair.Value));
-          Arr.AddElement(Item);
+        { S2: SOURCE order, not dictionary enumeration order. }
+        var Keys: TList<Integer>:= TList<Integer>.Create(Sites.Keys);
+        try
+          Keys.Sort;
+          for var Key: Integer in Keys do
+          begin
+            var Item: TJSONObject:= TJSONObject.Create;
+            { 0-BASED, matching LSP convention. The store is 1-based and the
+              plugin's cache is 0-based; converting HERE means exactly one place
+              knows about the offset. }
+            Item.AddPair('line' , TJSONNumber.Create(Key - 1));
+            Item.AddPair('count', TJSONNumber.Create(Sites[Key].Count));
+            Arr.AddElement(Item);
+          end;
+        finally
+          Keys.Free;
         end;
       finally
         Sites.Free;
-        Seen.Free;
       end;
     end;
   except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
@@ -3620,6 +3629,7 @@ var
   Si      : TStartupInfo;
   Pi      : TProcessInformation;
   Cmd     : string;
+  ChildExe: string;
   ExitCode: DWORD;
 begin
   Result:= False;
@@ -3642,11 +3652,15 @@ begin
     Si.hStdError  := HNul;
     { I1: hand the child the server's OWN index list so it resolves the same stores
       (used-unit-not-resolvable and friends need them). }
-    Cmd:= '"' + ParamStr(0) + '" lint "' + AFile + '" --json';
+    { TEST-ONLY override: run_lsp_full_rules_guard substitutes a stub child
+      (timeout, bad JSON) through this variable; it is never set in production. }
+    ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
+    if ChildExe = '' then ChildExe:= ParamStr(0);
+    Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json';
     for var DbP in FStorePaths do
       if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
     UniqueString(Cmd);
-    if not CreateProcess(PChar(ParamStr(0)), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
+    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
       if WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_TIMEOUT_MS) <> WAIT_OBJECT_0 then
       begin
@@ -3809,7 +3823,17 @@ begin
       else if Method = 'textDocument/didClose' then HandleDidClose(Params)
       { S0: registered features, tried after every built-in and before the
         catch-all, so an unknown method still answers -32601. }
-      else if FFeatureByMethod.TryGetValue(Method, Feature) then Feature.Handle(FContext, Method, Id, Params)
+      else if FFeatureByMethod.TryGetValue(Method, Feature) then
+      begin
+        { S8: exception isolation. One feature raising answers THIS request with
+          -32603 (internal error) and leaves the server alive for the next. }
+        try
+          Feature.Handle(FContext, Method, Id, Params);
+        except
+          on E: Exception do
+            if Id <> nil then SendError(Id, LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
+        end;
+      end
       else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
     finally
       if FControl <> nil then FControl.EndWork;

@@ -71,6 +71,12 @@ implementation
 
 { two-line
   comment }
+{ lead-in
+  Gizmo was here } function Gizmo: Integer;
+begin
+  Result:= 1;
+end;
+
 function TThing.Thrice(AValue: Integer): Integer;
 begin
   Result:= AValue * 3 + 42;
@@ -156,6 +162,9 @@ Check 'method token at Thrice in the class declaration' (Has { $_.line -eq $lMth
 
 $lTwo = LineOf '^\{ two-line'
 Check 'multi-line comment split per line (2 tokens, full line widths)' ((Has { $_.line -eq $lTwo -and $_.col -eq 0 -and $_.len -eq $lines[$lTwo].Length -and $_.type -eq $TComment }) -and (Has { $_.line -eq ($lTwo + 1) -and $_.col -eq 0 -and $_.len -eq $lines[$lTwo + 1].Length -and $_.type -eq $TComment })) "line=$lTwo"
+$lGiz = LineOf '^\s+Gizmo was here \} function Gizmo'
+$gizCol = $lines[$lGiz].IndexOf('Gizmo: Integer')
+Check 'S5: the declared name AFTER a multi-line comment continuation gets its declaration token (not the word in the comment)' (Has { $_.line -eq $lGiz -and $_.col -eq $gizCol -and $_.len -eq 5 -and $_.type -eq 5 -and ($_.mods -band 1) -eq 1 }) "line=$lGiz col=$gizCol"
 $gone = $res[12]
 Check 'unknown file answers {data: []} (not an error)' ($res.ContainsKey(12) -and -not $err.ContainsKey(12) -and $null -ne $gone -and @($gone.data).Count -eq 0 -and ($gone.PSObject.Properties.Name -contains 'data'))
 

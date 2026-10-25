@@ -251,6 +251,28 @@ WriteAnsi $file ($staleLines -join "`r`n")
 $rs = Session @(@{ method='textDocument/rename'; line=$lDecl; col=$cDecl; newName='Calc' })
 Check 'rename after a ref moved on disk: refused -32803 "out of date"' ($rs.err.ContainsKey(11) -and $rs.err[11].code -eq -32803 -and $rs.err[11].message -match 'out of date') $(if ($rs.err.ContainsKey(11)) { $rs.err[11].message } else { 'no error' })
 
+# S7: a NON-ASCII character earlier on the line must not make rename refuse.
+# The ANSI (cp1252) fixture has `{ caf<E9> } Foo(1);` -- the e-acute is ONE UTF-16
+# column but TWO UTF-8 bytes, and IdentifierAtPosition counts BYTES. RED before
+# S7: every edit on that line was refused "out of date".
+$src2 = Join-Path $WorkDir 'src2'; New-Item -ItemType Directory $src2 | Out-Null
+$file2 = Join-Path $src2 'uNon.pas'
+$nonText = "unit uNon;`r`n`r`ninterface`r`n`r`nprocedure Foo(AValue: Integer);`r`n`r`nimplementation`r`n`r`nprocedure Foo(AValue: Integer);`r`nbegin`r`nend;`r`n`r`nprocedure Driver;`r`nbegin`r`n  { caf" + [char]0xE9 + " } Foo(1);`r`nend;`r`n`r`nend.`r`n"
+[System.IO.File]::WriteAllBytes($file2, [System.Text.Encoding]::GetEncoding(1252).GetBytes($nonText))
+$db = Join-Path $WorkDir 'non.sqlite'
+& $Exe index $src2 --db $db 2>&1 | Out-Null
+$uri = 'file:///' + ($file2 -replace '\\', '/')
+$lines = [System.Text.Encoding]::GetEncoding(1252).GetString([System.IO.File]::ReadAllBytes($file2)) -split "`r`n"
+$lNonCall = LineOf '\} Foo\(1\);'
+$cNonCall = ColOf $lNonCall 'Foo'
+$rn = Session @(@{ method='textDocument/rename'; line=$lNonCall; col=($cNonCall + 1); newName='Bar' })
+$okN = $rn.res.ContainsKey(11) -and -not $rn.err.ContainsKey(11)
+Check 'S7: rename succeeds when a non-ASCII char precedes the name on a call line' $okN $(if ($rn.err.ContainsKey(11)) { $rn.err[11].message } else { '' })
+if ($okN) {
+  $callEdit = @($rn.res[11][0].changes.PSObject.Properties | ForEach-Object { $_.Value } | ForEach-Object { $_ } | Where-Object { $_.range.start.line -eq $lNonCall })
+  Check 'S7: the call-line edit is at the UTF-16 column of Foo' ($callEdit.Count -eq 1 -and $callEdit[0].range.start.character -eq $cNonCall) "want=$cNonCall got=$(($callEdit | ForEach-Object { $_.range.start.character }) -join ',')"
+}
+
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0

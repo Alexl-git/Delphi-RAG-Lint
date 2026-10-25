@@ -8,11 +8,15 @@ unit DRagLint.LSP.Feature.Ping;
 interface
 
 uses
-  System.JSON
+  System.SysUtils
+  , System.JSON
   , DRagLint.LSP.Context
   ;
 
 type
+  /// <summary>Raised by the test-only `draglint/testRaise` feature.</summary>
+  ETestRaise = class(Exception);
+
   /// <summary>Answers `draglint/ping` with {pong: true, version, stores} and
   /// advertises capabilities.draglint.ping = true.</summary>
   /// <remarks>Stateless; registered from this unit's initialization.</remarks>
@@ -35,6 +39,28 @@ type
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 
+  /// <summary>TEST-ONLY feature: `draglint/testRaise` always raises, so the
+  /// guard can prove the server's feature dispatch isolates an exception (S8).</summary>
+  /// <remarks>Registered from this unit's initialization ONLY when the
+  /// environment variable DRAGLINT_LSP_TEST_RAISE is non-empty; in production
+  /// the method does not exist and answers -32601. Advertises nothing.</remarks>
+  TLspTestRaiseFeature = class(TLspFeature)
+  public
+    /// <summary>The one method: `draglint/testRaise`.</summary>
+    /// <returns>['draglint/testRaise'].</returns>
+    class function Methods: TArray<string>; override;
+    /// <summary>Adds nothing: a test hook is never advertised.</summary>
+    /// <param name="ACaps">initialize.result.capabilities under construction; untouched.</param>
+    class procedure AddCapabilities(ACaps: TJSONObject); override;
+    /// <summary>Raises ETestRaise('draglint/testRaise: deliberate test failure').</summary>
+    /// <param name="ACtx">The server surface; unused.</param>
+    /// <param name="AMethod">Always `draglint/testRaise`.</param>
+    /// <param name="AId">The request id; unused.</param>
+    /// <param name="AParams">Ignored.</param>
+    /// <exception cref="ETestRaise">Always.</exception>
+    procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
+  end;
+
 implementation
 
 uses
@@ -44,6 +70,8 @@ uses
 const
   PING_METHOD = 'draglint/ping';
   VENDOR_CAPS = 'draglint';
+  TESTRAISE_METHOD = 'draglint/testRaise';
+  TESTRAISE_ENV    = 'DRAGLINT_LSP_TEST_RAISE';
 
 class function TPingFeature.Methods: TArray<string>;
 begin
@@ -73,7 +101,23 @@ begin
   ACtx.Reply(AId, Res);
 end;
 
+class function TLspTestRaiseFeature.Methods: TArray<string>;
+begin
+  Result:= [TESTRAISE_METHOD];
+end;
+
+class procedure TLspTestRaiseFeature.AddCapabilities(ACaps: TJSONObject);
+begin
+  // a test hook is never advertised
+end;
+
+procedure TLspTestRaiseFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);
+begin
+  raise ETestRaise.Create('draglint/testRaise: deliberate test failure');
+end;
+
 initialization
   RegisterLspFeature(TPingFeature);
+  if GetEnvironmentVariable(TESTRAISE_ENV) <> '' then RegisterLspFeature(TLspTestRaiseFeature);
 
 end.

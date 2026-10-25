@@ -58,6 +58,7 @@ unit uHints;
 interface
 
 procedure Add(const pA, pB: Integer);
+procedure Ref(const [ref] pR: Integer; pS: Integer);
 procedure Dup(pX: Integer); overload;
 procedure Dup(pX, pY: Integer); overload;
 procedure Driver;
@@ -65,6 +66,10 @@ procedure Driver;
 implementation
 
 procedure Add(const pA, pB: Integer);
+begin
+end;
+
+procedure Ref(const [ref] pR: Integer; pS: Integer);
 begin
 end;
 
@@ -81,6 +86,7 @@ begin
   Add(1, 2);
   Dup(7);
   Add(3);
+  Ref(5, 6);
 end;
 
 end.
@@ -131,7 +137,7 @@ $dupLn = LineOf '^\s*Dup\(7\);'
 $badLn = LineOf '^\s*Add\(3\);'
 $c1 = $lines[$addLn].IndexOf('1')
 $c2 = $lines[$addLn].IndexOf('2')
-Check 'exactly two hints in the whole file' ($hints.Count -eq 2) "got=$($hints.Count) $($hints | ConvertTo-Json -Compress -Depth 5)"
+Check 'exactly four hints in the whole file' ($hints.Count -eq 4) "got=$($hints.Count) $($hints | ConvertTo-Json -Compress -Depth 5)"
 $h1 = @($hints | Where-Object { $_.position.line -eq $addLn -and $_.position.character -eq $c1 }) | Select-Object -First 1
 $h2 = @($hints | Where-Object { $_.position.line -eq $addLn -and $_.position.character -eq $c2 }) | Select-Object -First 1
 Check "hint 'pA:' at the first argument ($addLn,$c1)" ($null -ne $h1 -and $h1.label -eq 'pA:') "got=$($h1 | ConvertTo-Json -Compress)"
@@ -139,6 +145,16 @@ Check "hint 'pB:' at the second argument ($addLn,$c2)" ($null -ne $h2 -and $h2.l
 Check 'hints are kind 2 (Parameter) with paddingRight true' ($null -ne $h1 -and $null -ne $h2 -and $h1.kind -eq 2 -and $h2.kind -eq 2 -and $h1.paddingRight -eq $true -and $h2.paddingRight -eq $true)
 Check 'overloaded Dup gives no hint' (-not (@($hints | Where-Object { $_.position.line -eq $dupLn }).Count))
 Check 'wrong argument count gives no hint' (-not (@($hints | Where-Object { $_.position.line -eq $badLn }).Count))
+$refLn = LineOf '^\s*Ref\(5, 6\);'
+$rr = @($hints | Where-Object { $_.position.line -eq $refLn } | Sort-Object { $_.position.character })
+Check "S4: 'const [ref] pR' is stripped to pR and pS (labels pR:, pS:)" ($rr.Count -eq 2 -and $rr[0].label -eq 'pR:' -and $rr[1].label -eq 'pS:') "got=$($rr | ConvertTo-Json -Compress -Depth 5)"
+
+# S3: a viewport request must answer exactly the hints inside its range
+# (the walk skips subtrees outside it; this pins that the skip loses nothing).
+$rs = Session $uri $addLn ($addLn + 1)
+Check 'S3: a one-line range answers only that line (the two Add hints)' ($null -ne $rs.hints -and @($rs.hints[0]).Count -eq 2 -and -not @($rs.hints[0] | Where-Object { $_.position.line -ne $addLn }).Count) "got=$(@($rs.hints[0]).Count)"
+$rs2 = Session $uri $refLn ($refLn + 1)
+Check 'S3: a range on the LAST call line still answers its hints' ($null -ne $rs2.hints -and @($rs2.hints[0]).Count -eq 2) "got=$(@($rs2.hints[0]).Count)"
 
 $implLn = LineOf '^implementation'
 $r2 = Session $uri 0 ($implLn - 1)
