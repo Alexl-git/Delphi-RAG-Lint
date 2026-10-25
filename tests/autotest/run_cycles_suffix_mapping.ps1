@@ -1,14 +1,22 @@
 <#
-  run_cycles_suffix_mapping.ps1 -- N-08: `cycles` and the `circular-uses` lint rule agree on a
-  bare uses name that is a dotted unit's last segment.
+  run_cycles_suffix_mapping.ps1 -- N-08 + A3-b: `cycles` and the `circular-uses` lint rule agree on
+  a bare uses name, and both bind it the way dcc does: an exact unit name wins, otherwise the
+  FIRST unit scope of the project (.dproj DCC_Namespace, Delphi defaults when none) that makes a
+  project unit of it; a name that matches neither is an external unit (no project edge).
 
   Fixture tests\fixtures\cyclefix\suffix: Proj.Storage.SQLite (interface uses Proj.App) and
-  Proj.App (implementation uses SQLite -- the bare last segment).
+  Proj.App (implementation uses SQLite -- the bare last segment). This runner writes a
+  Suffix.dproj per case with the DCC_Namespace under test.
 
-  (a) unique last segment: lint-all reports circular-uses (positive control, shipped behaviour)
-      AND `cycles --format json` reports the 2-unit group proj.app + proj.storage.sqlite.
-  (b) ambiguous last segment (a second unit Other.Lib.SQLite is added): NEITHER surface reports a
-      cycle -- before N-08 lint picked whichever unit it saw last.
+  (a) scope `Proj.Storage` in DCC_Namespace: lint-all reports circular-uses AND `cycles --format
+      json` reports the 2-unit group proj.app + proj.storage.sqlite (positive control).
+  (n) DCC_Namespace without `Proj.Storage` (A3-b, the plugin's `uses DockForm`): dcc never reads
+      `SQLite` as Proj.Storage.SQLite, so NEITHER surface reports a cycle. Before A3-b the
+      unique-last-segment rule bound it anyway.
+  (b) a second unit Other.Lib.SQLite, DCC_Namespace `Other.Lib;Proj.Storage`: the first scope
+      wins -> Other.Lib.SQLite -> no cycle on either surface.
+  (o) same files, DCC_Namespace `Proj.Storage;Other.Lib`: the first scope wins ->
+      Proj.Storage.SQLite -> the cycle on both surfaces (before A3-b: "ambiguous" -> nothing).
   (c) control: in (b) the extra unit really is indexed (so (b) is not vacuous).
 #>
 [CmdletBinding()]
@@ -56,20 +64,45 @@ try {
   Get-ChildItem (Join-Path $Repo 'tests\fixtures\cyclefix\suffix') -File |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) -Force }
 
-  Write-Host '== (a) unique last segment' -ForegroundColor Cyan
+  function Set-Scopes([string]$Ns) {
+    $pg = if ($Ns) { "<DCC_Namespace>$Ns</DCC_Namespace>" } else { '' }
+    [IO.File]::WriteAllText((Join-Path $root 'Suffix.dproj'),
+      "<Project xmlns=`"http://schemas.microsoft.com/developer/msbuild/2003`">`r`n" +
+      "  <PropertyGroup><MainSource>Suffix.dpr</MainSource>$pg</PropertyGroup>`r`n" +
+      "  <ItemGroup>`r`n    <DelphiCompile Include=`"Suffix.dpr`"><MainSource>MainSource</MainSource></DelphiCompile>`r`n" +
+      "    <DCCReference Include=`"Proj.App.pas`"/>`r`n    <DCCReference Include=`"Proj.Storage.SQLite.pas`"/>`r`n" +
+      "  </ItemGroup>`r`n</Project>`r`n")
+  }
+  function Test-Cycle($M) {
+    return @($M.Groups | Where-Object { $u = @($_.units | ForEach-Object { "$_".ToLower() }); ($u -contains 'proj.app') -and ($u -contains 'proj.storage.sqlite') }).Count -eq 1
+  }
+
+  Write-Host '== (a) scope Proj.Storage in DCC_Namespace' -ForegroundColor Cyan
+  Set-Scopes 'Proj.Storage;System;Vcl'
   $a = Measure-Both $root 'a'
   Check 'a1 control: lint-all reports circular-uses' ($a.Lint -ge 1) $a.LintMsg
-  $hit = @($a.Groups | Where-Object { $u = @($_.units | ForEach-Object { "$_".ToLower() }); ($u -contains 'proj.app') -and ($u -contains 'proj.storage.sqlite') })
-  Check 'a2 cycles reports the group proj.app + proj.storage.sqlite' ($hit.Count -eq 1) ("groups=" + ($a.Groups | ConvertTo-Json -Compress -Depth 4))
+  Check 'a2 cycles reports the group proj.app + proj.storage.sqlite' (Test-Cycle $a) ("groups=" + ($a.Groups | ConvertTo-Json -Compress -Depth 4))
 
-  Write-Host '== (b) ambiguous last segment' -ForegroundColor Cyan
+  Write-Host '== (n) DCC_Namespace without Proj.Storage' -ForegroundColor Cyan
+  Set-Scopes 'System;Xml;Data;Datasnap;Web;Soap;Winapi;System.Win;$(DCC_Namespace)'
+  $n = Measure-Both $root 'n'
+  Check 'n1 lint-all reports no circular-uses' ($n.Lint -eq 0) $n.LintMsg
+  Check 'n2 cycles reports no group' ($n.Groups.Count -eq 0) ("groups=" + ($n.Groups | ConvertTo-Json -Compress -Depth 4))
+
+  Write-Host '== (b) Other.Lib.SQLite, DCC_Namespace Other.Lib first' -ForegroundColor Cyan
   [IO.File]::WriteAllText((Join-Path $root 'Other.Lib.SQLite.pas'),
     "unit Other.Lib.SQLite;`r`n`r`ninterface`r`n`r`nfunction OtherName: string;`r`n`r`nimplementation`r`n`r`nfunction OtherName: string;`r`nbegin`r`n  Result := 'other';`r`nend;`r`n`r`nend.`r`n")
+  Set-Scopes 'Other.Lib;Proj.Storage;System'
   $b = Measure-Both $root 'b'
   Check 'c1 control: Other.Lib.SQLite is indexed' ($b.Query -match 'Other\.Lib\.SQLite') ''
   Check 'b1 lint-all reports no circular-uses' ($b.Lint -eq 0) $b.LintMsg
   Check 'b2 cycles reports no group' ($b.Groups.Count -eq 0) ("groups=" + ($b.Groups | ConvertTo-Json -Compress -Depth 4))
-} finally {
+
+  Write-Host '== (o) same files, DCC_Namespace Proj.Storage first' -ForegroundColor Cyan
+  Set-Scopes 'Proj.Storage;Other.Lib;System'
+  $o = Measure-Both $root 'o'
+  Check 'o1 lint-all reports circular-uses' ($o.Lint -ge 1) $o.LintMsg
+  Check 'o2 cycles reports the group proj.app + proj.storage.sqlite' (Test-Cycle $o) ("groups=" + ($o.Groups | ConvertTo-Json -Compress -Depth 4))} finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
 

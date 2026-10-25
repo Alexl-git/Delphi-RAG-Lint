@@ -202,6 +202,15 @@ uses
 
 end.
 '@
+# A3-b (2026-10-25): a bare name binds through a unit scope of the PROJECT, as dcc binds it, so
+# both stem fixtures get a program whose .dproj lists `Proj.Storage` (and `Vendor.Phys`) in
+# DCC_Namespace. Without it `SQLite` is an external unit and the CONTROL below has no edge.
+foreach ($sd in @(@($stemDotted, 'uE'), @($stemBare, 'uF'))) {
+  Write-Ascii (Join-Path $sd[0] 'Stem.dpr') ("program Stem;`r`n`r`nuses`r`n  $($sd[1]) in '$($sd[1]).pas',`r`n" +
+    "  Proj.Storage.SQLite in 'Proj.Storage.SQLite.pas';`r`n`r`nbegin`r`nend.`r`n")
+  Write-Ascii (Join-Path $sd[0] 'Stem.dproj') ("<Project xmlns=`"http://schemas.microsoft.com/developer/msbuild/2003`">`r`n" +
+    "  <PropertyGroup><MainSource>Stem.dpr</MainSource><DCC_Namespace>Proj.Storage;Vendor.Phys;System</DCC_Namespace></PropertyGroup>`r`n</Project>`r`n")
+}
 
 function CycleMessage([string]$Dir, [string]$DbName) {
   $db = Join-Path $WorkDir $DbName

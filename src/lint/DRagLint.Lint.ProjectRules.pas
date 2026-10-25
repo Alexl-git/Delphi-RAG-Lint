@@ -220,6 +220,10 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 
 implementation
 
+uses
+  DRagLint.Report.CycleEdge; { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
+                               uses name exactly as the cycles graph does (A3-b) }
+
 { Side-effect / operator / helper units that are legitimately used without any
   named symbol reference. Stored lowercase for fast SameText comparison. }
 const
@@ -707,6 +711,26 @@ var
     end;
   end;
 
+  { A3-b: FileOfStem maps each dotted unit's last segment to the unit a bare uses name of that
+    spelling binds to under the project's unit scopes (BareUsesBinding); no entry = external. }
+  procedure MapBareNames;
+  begin
+    var Units:= FileOfUnit;
+    var IsUnit: TProjectUnitTest:=
+      function(const pUnitLower: string): Boolean
+      begin
+        Result:= Units.ContainsKey(pUnitLower);
+      end;
+    var Scopes:= ProjectUnitScopes(AStore);
+    for var Nm in FileOfUnit.Keys do
+    begin
+      var Last:= Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt);
+      var Tgt: Int64;
+      if (Last = Nm) or FileOfStem.ContainsKey(Last) then Continue;
+      if FileOfUnit.TryGetValue(BareUsesBinding(Last, Scopes, IsUnit), Tgt) then FileOfStem.Add(Last, Tgt);
+    end;
+  end;
+
 var
   Fid : Int64          ;
   Sym : TSymbol        ;
@@ -742,16 +766,12 @@ begin
           UnitName.AddOrSetValue(Fid, Nm);
           UnitLine.AddOrSetValue(Fid, Sym.StartLine);
           FileOfUnit.AddOrSetValue(LowerCase(Nm), Fid);
-          var Stem: string:= LowerCase(Nm);
-          var Dp: Integer:= LastDelimiter('.', Stem);
-          if Dp > 0 then Stem:= Copy(Stem, Dp + 1, MaxInt);
-          { N-08: a stem two units share maps to nothing (-1), as in the cycles graph }
-          var Seen: Int64;
-          if FileOfStem.TryGetValue(Stem, Seen) and (Seen <> Fid) then FileOfStem[Stem]:= -1
-          else FileOfStem.AddOrSetValue(Stem, Fid);
           Break;
         end;
     end;
+    { A3-b: a bare name binds as dcc binds it, as in the cycles graph (BareUsesBinding):
+      `uses DockForm` reaches DragLint.Plugin.DockForm only through a unit scope. }
+    MapBareNames;
     { 2) build the directed uses-graph among indexed units only. }
     for Fid in UnitName.Keys do
     begin

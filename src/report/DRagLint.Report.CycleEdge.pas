@@ -414,11 +414,36 @@ function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: 
 /// scope-rooted prefix that names no unit; the two cannot drift.</remarks>
 function EffectiveUnitScopes(const pDprojText: string): TArray<string>;
 
+type
+  /// <summary>Whether a lower-case unit name is a unit of the project index.</summary>
+  TProjectUnitTest = reference to function(const pUnitLower: string): Boolean;
+
+/// <summary>The project unit a bare (undotted) uses name binds to, the way dcc binds it
+/// (A3-b): the name itself when it is a project unit, else `&lt;scope&gt;.&lt;name&gt;` for the
+/// FIRST unit scope that makes a project unit of it, else none.</summary>
+/// <param name="pBare">The uses name as written; a dotted name binds to nothing here.</param>
+/// <param name="pScopes">The project's unit scopes in DCC_Namespace order (ProjectUnitScopes).</param>
+/// <param name="pIsProjectUnit">Tells whether a lower-case unit name is a project unit; must not be nil.</param>
+/// <returns>The lower-case project unit name; '' when the name is an external unit (a DCU-only or
+/// library unit such as the IDE's `DockForm`): no project edge.</returns>
+/// <remarks>The one rule behind the `cycles` graph (BuildCycleGraph) and the `circular-uses` lint
+/// rule, so the two cannot disagree. A unit that merely shares the last segment
+/// (`DragLint.Plugin.DockForm`) is NOT bound unless `DragLint.Plugin` is a unit scope.</remarks>
+function BareUsesBinding(const pBare: string; const pScopes: TArray<string>;
+  const pIsProjectUnit: TProjectUnitTest): string;
+
+/// <summary>The unit scopes of the project an index was built from: EffectiveUnitScopes of the
+/// .dproj beside the index's first program (.dpr) or package (.dpk) file.</summary>
+/// <param name="pStore">Open index; read only. nil = no project.</param>
+/// <returns>The scope names in DCC_Namespace order; the Delphi defaults when the index holds no
+/// program or package, or no .dproj sits beside it.</returns>
+function ProjectUnitScopes(const pStore: ISymbolStore): TArray<string>;
+
 implementation
 
 uses
   System.SysUtils, System.StrUtils, System.Classes, System.RegularExpressions, System.Math,
-  System.Generics.Collections, System.Generics.Defaults, System.Hash;
+  System.Generics.Collections, System.Generics.Defaults, System.Hash, System.IOUtils;
 
 const
   { The Delphi default unit-scope names (.dproj DCC_Namespace when it sets none); a type written
@@ -2370,4 +2395,29 @@ begin
   end;
 end;
 
+function BareUsesBinding(const pBare: string; const pScopes: TArray<string>;
+  const pIsProjectUnit: TProjectUnitTest): string;
+begin
+  Result:= '';
+  if (pBare = '') or ContainsStr(pBare, '.') then Exit;
+  if pIsProjectUnit(LowerCase(pBare)) then Exit(LowerCase(pBare));
+  for var S in pScopes do
+    if pIsProjectUnit(LowerCase(S + '.' + pBare)) then Exit(LowerCase(S + '.' + pBare));
+end;
+
+function ProjectUnitScopes(const pStore: ISymbolStore): TArray<string>;
+var
+  Text: string;
+begin
+  Text:= '';
+  if pStore <> nil then
+    for var Fid in pStore.GetAllFileIds do
+    begin
+      var Path:= StringReplace(pStore.GetFilePath(Fid), '/', '\', [rfReplaceAll]);
+      if not MatchText(ExtractFileExt(Path), ['.dpr', '.dpk']) then Continue;
+      if TFile.Exists(ChangeFileExt(Path, '.dproj')) then Text:= TFile.ReadAllText(ChangeFileExt(Path, '.dproj'));
+      Break;
+    end;
+  Result:= EffectiveUnitScopes(Text);
+end;
 end.
