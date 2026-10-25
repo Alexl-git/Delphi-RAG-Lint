@@ -1554,6 +1554,9 @@ begin
   Result:= pType <> '';
 end;
 
+{ C3: whether pName is a member (not a parameter or local) of the class or record that
+  encloses symbol pEnclosingId, or of one of its ancestors in the project or the library --
+  a bare name the consumer resolves to its own (inherited) member, not to a cycle unit. }
 function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId: Int64;
   const pName: string): Boolean;
 var
@@ -1566,12 +1569,10 @@ begin
   var S:= pProject.GetSymbolById(pEnclosingId);
   for var Up:= 1 to CMaxAncestorHops do
   begin
-    if S.Id <= 0 then Exit;
-    if S.Kind in [skClass, skRecord] then Break;
-    if (S.Kind in [skUnit, skProgram, skPackage]) or (S.ParentId <= 0) then Exit;
+    if (S.Id <= 0) or (S.Kind in [skClass, skRecord, skUnit, skProgram, skPackage]) or (S.ParentId <= 0) then Break;
     S:= pProject.GetSymbolById(S.ParentId);
   end;
-  if not (S.Kind in [skClass, skRecord]) then Exit;
+  if (S.Id <= 0) or not (S.Kind in [skClass, skRecord]) then Exit;
   Idx.Project:= pProject;
   Idx.Lib    := pLibrary;
   Cur.Sym    := S;

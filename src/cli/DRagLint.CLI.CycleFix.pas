@@ -2776,7 +2776,7 @@ begin
     on Exception do Code:= -1;
   end;
   if TimedOut or (Code <> 0) then Exit; // the stale-file refusal then says what is wrong, as before
-  var Secs:= Watch.ElapsedMilliseconds / 1000;
+  var Secs:= Watch.ElapsedMilliseconds / MSecsPerSec;
   Winapi.Windows.SetEnvironmentVariable(PChar(CReindexedEnv), '1');
   try
     var OutFile:= Dir + 'rerun.out';
