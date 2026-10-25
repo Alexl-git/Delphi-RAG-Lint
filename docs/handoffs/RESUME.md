@@ -10,7 +10,7 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Standing task lists (not handoffs)
 
-- 2026-10-24 | lsp | group-4 cleanup (deferred review minors) planned as 3 parallel lanes P/S/T; not started | open | [HANDOFF-2026-10-24-lsp-group4-cleanup.md](HANDOFF-2026-10-24-lsp-group4-cleanup.md)
+- 2026-10-24 | lsp | group-4 cleanup DONE (lsp-12): lanes S/P/T merged to LOCAL main 8b7121c5/72594acf/85f47592, all LSP guards green on a main build; circular-uses anchor gap filed to ENGINE (docs\INBOX-lint-circular-uses-single-file.md) | closed | [HANDOFF-2026-10-24-lsp-group4-cleanup.md](HANDOFF-2026-10-24-lsp-group4-cleanup.md)
 - 2026-10-24 | lsp | CLOSE-OUT (lsp-6f): LSP stream COMPLETE on local main; battery all-LSP-green; owner-owed list inside | closed | [HANDOFF-2026-10-24-lsp-stream-closeout.md](HANDOFF-2026-10-24-lsp-stream-closeout.md)
 - 2026-10-23 | lsp | AUTONOMOUS run wave 2 (lsp-6f) | closed | [HANDOFF-2026-10-23-lsp-autonomous-wave2.md](HANDOFF-2026-10-23-lsp-autonomous-wave2.md)
 - 2026-10-23 | lsp | AUTONOMOUS run wave 1 (lsp-6f) | closed | [HANDOFF-2026-10-23-lsp-autonomous-wave1.md](HANDOFF-2026-10-23-lsp-autonomous-wave1.md)
