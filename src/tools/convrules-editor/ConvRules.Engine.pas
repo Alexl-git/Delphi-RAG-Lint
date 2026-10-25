@@ -57,8 +57,9 @@ const
   /// TEngineAdapter.CapabilityNames), in milliseconds.</summary>
   /// <remarks>The probe runs in TConvRulesForm.Create on the UI thread, so this
   /// bound is how long a hung engine can freeze start-up. `info` reads no index;
-  /// 15 s is generous. On expiry the probe reports NO capabilities, which is the
-  /// behaviour of an engine older than 1.20.6.</remarks>
+  /// 15 s is generous. On expiry CapabilityNames reports NO capabilities, which is the
+  /// behaviour of an engine older than 1.20.6. The Convert tab's probe (R2) does not give
+  /// up there: it ASKS at this mark whether to keep waiting (ConvRules.CapabilityProbe).</remarks>
   INFO_TIMEOUT_MS = 15000;
   /// <summary>info --json capability: the #depth book directive plus --depth on
   /// proptree / convert-scaffold (engine 1.20.6).</summary>
@@ -1223,6 +1224,24 @@ type
       /// editor probes once in TConvRulesForm.Create, on the UI thread. A timeout reads
       /// as no capabilities -- the behaviour of an engine older than 1.20.6.</remarks>
       function CapabilityNames: TArray<string>;
+      /// <summary>One `drag-lint --version` call (R2): the cheapest question the engine
+      /// answers; ConvRules.CapabilityProbe.EngineVersionText reads its output.</summary>
+      /// <param name="ACancel">Polled while it runs; set = the engine is terminated. May be nil.</param>
+      /// <param name="AOutput">stdout, then stderr's lines.</param>
+      /// <returns>The exit code, or ENGINE_OUTCOME_CANCELLED / ENGINE_OUTCOME_TIMEOUT
+      /// (after InfoTimeoutMs) / -1 when the engine did not start.</returns>
+      /// <remarks>Opens no index. Runs on whichever thread calls it; the caller keeps the
+      /// adapter to one thread at a time (TConvertTab's FEngineProbe rule).</remarks>
+      function VersionOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
+      /// <summary>One `info --json` call that is NOT abandoned at InfoTimeoutMs (R2): the
+      /// Convert tab's probe waits as long as the user lets it.</summary>
+      /// <param name="ACancel">Polled while it runs; set = the engine is terminated (the
+      /// user chose not to wait). May be nil.</param>
+      /// <param name="AOutput">stdout, then stderr's lines; TryParseInfoCapabilities reads it.</param>
+      /// <returns>The exit code, or ENGINE_OUTCOME_CANCELLED / ENGINE_OUTCOME_TIMEOUT
+      /// (after the ENGINE_TIMEOUT_MS backstop) / -1 when the engine did not start.</returns>
+      /// <remarks>Same threading rule as VersionOutput.</remarks>
+      function InfoOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
       /// <summary>Runs `exe AArgs` with stdout and stderr on SEPARATE pipes, both drained
       /// while it runs. Progress lines on stderr go to AOnProgress; everything else on
       /// stderr is appended to AOutput after stdout.</summary>
@@ -1368,6 +1387,7 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , ConvRules.CapabilityProbe  // TryParseInfoCapabilities: the one info --json reader
         {$IFDEF MSWINDOWS}
   , Winapi.Windows {$ENDIF}
   ;
@@ -1630,25 +1650,9 @@ begin
 end;
 
 function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
-var
-  Root: TJSONValue ;
-  Caps: TJSONObject;
 begin
-  Result:= nil;
-  // The "(loaded defaults from ...)" stderr line shares the pipe, before or after.
-  var LFirst: Integer:= Pos('{', AInfoOutput);
-  var LLast : Integer:= LastDelimiter('}', AInfoOutput);
-  if (LFirst = 0) or (LLast < LFirst) then
-    Exit;
-  Root:= TJSONObject.ParseJSONValue(Copy(AInfoOutput, LFirst, LLast - LFirst + 1));
-  try
-    if (Root is TJSONObject) and TJSONObject(Root).TryGetValue<TJSONObject>('capabilities', Caps) then
-      for var LPair: TJSONPair in Caps do
-        if LPair.JsonValue is TJSONTrue then
-          Result:= Result + [LPair.JsonString.Value];
-  finally
-    Root.Free;
-  end; // try
+  // One reader for both probes; this one has no use for "was it an answer at all".
+  TryParseInfoCapabilities(AInfoOutput, Result);
 end; // function
 
 function TEngineAdapter.HasCapability(const AName: string): Boolean;
@@ -1666,6 +1670,16 @@ begin
     Result:= ParseCapabilityNames(Output);
 end;
 
+function TEngineAdapter.VersionOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
+begin
+  Result:= RunCaptureStreaming('--version', FInfoTimeoutMs, nil, ACancel, AOutput);
+end;
+
+function TEngineAdapter.InfoOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
+begin
+  // The backstop only: the wait window asks the user long before it (R2).
+  Result:= RunCaptureStreaming('info --json', ENGINE_TIMEOUT_MS, nil, ACancel, AOutput);
+end;
 const
   MS_PER_SECOND = 1000;
 
