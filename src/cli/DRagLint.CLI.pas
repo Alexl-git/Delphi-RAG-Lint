@@ -114,6 +114,7 @@ uses
   , System.Diagnostics       { TStopwatch -- DRAGLINT_PROFILE per-phase lint-all timing }
   , System.SyncObjs          { TEvent -- the resolve-stage heartbeat's interruptible wait }
   , System.Math
+  , System.Character         { TCharacter.ConvertFromUtf32 -- the convert-apply encoding guard }
   , Data.DB
   , FireDAC.Comp.Client
   , FireDAC.Phys.SQLite
@@ -686,6 +687,7 @@ type
     NoReconcileUses: Boolean; // --no-reconcile-uses (convert-apply, C9: the 1.26.6 unit rules exactly)
     NoReindex     : Boolean; // --no-reindex (convert-apply, C9: do not refresh the unit's project DB after --apply)
     UnitProgress  : Boolean; // --progress (convert-apply, 1.33.0 G1: one stderr JSON line per finished unit)
+    RaiseEncoding : TArray<string>; // --raise-encoding "<path>=utf8-bom" (convert-apply, 1.34.1 E2; repeatable)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -1553,6 +1555,11 @@ begin
     else if A = '--no-reconcile-uses' then Result.NoReconcileUses:= True // convert-apply (C9): no uses reconciliation
     else if A = '--no-reindex' then Result.NoReindex:= True // convert-apply (C9): skip the post-apply project-DB refresh
     else if (A = '--progress') and (Result.Command = 'convert-apply') then Result.UnitProgress:= True // 1.33.0 G1: per-unit stderr lines
+    else if (A = '--raise-encoding') and (i < ParamCount) and (Result.Command = 'convert-apply') then // 1.34.1 E2: repeatable "<path>=utf8-bom"
+    begin
+      Inc(i);
+      Result.RaiseEncoding:= Result.RaiseEncoding + [ParamStr(i)];
+    end
     else if A = '--no-warn-unlinked' then Result.NoWarnUnlinked:= True // convert-apply: silence the per-(type,property) unlinked warnings; the json count stays
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
@@ -17296,6 +17303,11 @@ begin
     class (project framework, .dfm properties) or refuses it with apply/1
     qualify_fixes[] -- ready-to-paste qualified lines }
   JCap.AddPair('convert_qualify_fix', TJSONBool.Create(True));
+  { 1.34.1 (CONV-ENC E1'/E2/E3, shipped together): convert-apply refuses a unit whose
+    value does not fit the target .pas/.dfm encoding (apply/1 refusal_kind
+    encoding_refused + encoding_refused{}), --raise-encoding "<path>=utf8-bom",
+    and writes #codes in a text .dfm. }
+  JCap.AddPair('convert_encoding_guard', TJSONBool.Create(True));
       { 1.27.0 (C15), same contract: the castlib `value strip-db` VALUE cast
         (#link X <- X : StripDB) rewrites a trailing .db off string literals in
         the .dfm and in .pas literal assignments -- items[] value-cast-applied
@@ -26536,6 +26548,15 @@ type
       genuine failure alike. Reason is '' unless Refused. }
     Refused: Boolean;
     Reason : string;
+    { 1.34.1 (CONV-ENC E1'): set with Refused when a value does not fit the target
+      .pas/.dfm encoding -- apply/1 refusal_kind 'encoding_refused' + the
+      encoding_refused object (file, file_encoding, raise_to, chars_total, chars[]).
+      RefusalKind is '' for every other outcome (the keys are then omitted). }
+    RefusalKind: string;
+    EncFile    : string;
+    EncName    : string;
+    EncTotal   : Integer;
+    EncChars   : TArray<TEncodingMisfit>;
     { 1.22.0 (C8 N1): the inherited / inline .dfm objects of a From type the
       run SKIPPED, each with its declaring ancestor -- apply/1 inherited[]. Their
       'line N: warning:' text is ALSO in Report.Warnings / Report.Items. }
@@ -26566,6 +26587,11 @@ type
       apply/1 qualify_fixes[] (capability convert_qualify_fix) }
     QualifyFixes : TArray<TQualifyFix>;
   end;
+
+const
+  /// <summary>The only encoding level convert-apply --raise-encoding accepts, and the apply/1
+  /// encoding_refused.raise_to value (1.34.1).</summary>
+  ENC_RAISE_LEVEL = 'utf8-bom';
 
 /// <summary>apply/1 pas_uses[] (1.27.0): one object per TApplyPasUse.</summary>
 /// <param name="AUses">The report's PasUses.</param>
@@ -26678,6 +26704,26 @@ begin
       refused == true. reason is '' unless refused. }
     JRoot.AddPair('refused', TJSONBool.Create(ACtx.Refused));
     JRoot.AddPair('reason', ACtx.Reason);
+    if ACtx.RefusalKind <> '' then
+    begin
+      JRoot.AddPair('refusal_kind', ACtx.RefusalKind);
+      var JEnc: TJSONObject:= TJSONObject.Create;
+      JEnc.AddPair('file'         , ACtx.EncFile);
+      JEnc.AddPair('file_encoding', ACtx.EncName);
+      JEnc.AddPair('raise_to'     , ENC_RAISE_LEVEL);
+      JEnc.AddPair('chars_total'  , TJSONNumber.Create(ACtx.EncTotal));
+      var JChars: TJSONArray:= TJSONArray.Create;
+      for var Mf: TEncodingMisfit in ACtx.EncChars do
+      begin
+        var JC: TJSONObject:= TJSONObject.Create;
+        JC.AddPair('code', TJSONNumber.Create(Mf.Code));
+        JC.AddPair('text', Mf.Text);
+        JC.AddPair('line', TJSONNumber.Create(Mf.Line));
+        JChars.AddElement(JC);
+      end;
+      JEnc.AddPair('chars', JChars);
+      JRoot.AddPair('encoding_refused', JEnc);
+    end;
 
     JRuleErrors:= TJSONArray.Create;
     for RE in ACtx.RuleErrors do
@@ -27209,6 +27255,118 @@ begin
   end;
 end;
 
+{ 1.34.1 (CONV-ENC E2): the path half of one --raise-encoding "<path>=<level>" entry. }
+function RaiseEntryPath(const AEntry: string): string;
+begin
+  var Eq: Integer:= LastDelimiter('=', AEntry);
+  Result:= if Eq > 0 then Copy(AEntry, 1, Eq - 1) else AEntry;
+end;
+
+{ 1.34.1: the level half of one --raise-encoding entry ('' when it has no '='). }
+function RaiseEntryLevel(const AEntry: string): string;
+begin
+  var Eq: Integer:= LastDelimiter('=', AEntry);
+  Result:= if Eq > 0 then Copy(AEntry, Eq + 1, MaxInt) else '';
+end;
+
+{ 1.34.1: True when two paths name the same file (case-insensitive, expanded). }
+function SameFilePath(const A, B: string): Boolean;
+begin
+  Result:= SameText(ExpandFileName(A), ExpandFileName(B));
+end;
+
+{ 1.34.1 (CONV-ENC E2): the exit-2 message for a bad --raise-encoding entry of this
+  run, or '' when every entry is well formed: the level must be utf8-bom, and the path
+  must be one of AUnits or the sibling .dfm of one. }
+function RaiseEncodingError(const AEntries, AUnits: TArray<string>): string;
+begin
+  Result:= '';
+  for var E: string in AEntries do
+  begin
+    if not SameText(RaiseEntryLevel(E), ENC_RAISE_LEVEL) then
+      Exit(Format('raise-encoding: "%s" is not a supported level for %s (only %s)', [RaiseEntryLevel(E), RaiseEntryPath(E), ENC_RAISE_LEVEL]));
+    var Known: Boolean:= False;
+    for var U: string in AUnits do
+      if SameFilePath(RaiseEntryPath(E), U) or SameFilePath(RaiseEntryPath(E), TPath.ChangeExtension(U, '.dfm')) then Known:= True;
+    if not Known then Exit(Format('raise-encoding: %s is not a file of this run', [RaiseEntryPath(E)]));
+  end;
+end;
+
+{ 1.34.1: True when --raise-encoding names APath. }
+function IsRaisedFile(const AEntries: TArray<string>; const APath: string): Boolean;
+begin
+  for var E: string in AEntries do
+    if SameFilePath(RaiseEntryPath(E), APath) then Exit(True);
+  Result:= False;
+end;
+
+{ 1.34.1 (CONV-ENC E1'/E3): the encoding guard for one unit's plan, run on the dry run and
+  --apply alike, nothing written. The .pas is checked before the .dfm. A file named by
+  --raise-encoding is skipped (UTF-8 holds every character). A TEXT .dfm never refuses:
+  its edits' string literals get Delphi #codes for what its encoding cannot hold (AEdits is
+  rewritten). A binary .dfm is never compared (one line appended to AWarnings). For a .pas
+  whose encoding cannot hold a value, ACtx gets the refusal (RefusalKind and Enc*) and the
+  reason text is returned; '' means the unit may proceed. }
+function EncodingGuardReason(const AArgs: TArgs; const AUnitPas, ADfm: string;
+  var AEdits: TArray<TTextEdit>; var AReport: TApplyReport; var ACtx: TApplyJsonCtx): string;
+const
+  MAX_CHARS = 8;
+var
+  OldText: string;
+begin
+  Result:= '';
+  for var Path: string in [AUnitPas, ADfm] do
+  begin
+    if (Path = '') or not TFile.Exists(Path) then Continue;
+    var Values: TArray<string>:= nil;
+    for var E: TTextEdit in AEdits do
+      if SameText(E.FilePath, Path) and (E.Text <> '') then Values:= Values + [E.Text];
+    if Length(Values) = 0 then Continue;
+    var IsDfm: Boolean:= SameText(ExtractFileExt(Path), '.dfm');
+    var Bytes: TBytes:= TFile.ReadAllBytes(Path);
+    if IsDfm and IsBinaryDfmFile(Bytes) then
+    begin
+      var It: TApplyItem:= Default(TApplyItem);
+      It.Kind    := aikEncodingNotChecked;
+      It.Field   := afWarnings;
+      It.FilePath:= Path;
+      It.Text    := Format('%s is a binary .dfm: its encoding was not checked', [Path]);
+      AReport.Warnings:= AReport.Warnings + [It.Text];
+      AReport.Items   := AReport.Items + [It];
+      Continue;
+    end;
+    if IsRaisedFile(AArgs.RaiseEncoding, Path) then Continue;
+    var Fmt: TTextFileFormat:= TTextFileFormat.Decode(Bytes, OldText);
+    if Fmt.Encoding <> TEncoding.ANSI then Continue;
+    if IsDfm then
+    begin
+      for var I: Integer:= 0 to High(AEdits) do
+        if SameText(AEdits[I].FilePath, Path) then AEdits[I].Text:= EscapeUnfitForDfm(AEdits[I].Text, Fmt.Encoding);
+      Continue;
+    end;
+    var Codes: TArray<Integer>:= UnfitCodePoints(Fmt, Values);
+    if Length(Codes) = 0 then Continue;
+    var Edited: string:= TTextEditApplier.ApplyToText(Path, OldText, AEdits);
+    ACtx.EncChars:= nil;
+    var Parts: TArray<string>:= nil;
+    for var K: Integer:= 0 to Min(High(Codes), MAX_CHARS - 1) do
+    begin
+      var Mf: TEncodingMisfit;
+      Mf.Code:= Codes[K];
+      Mf.Text:= TCharacter.ConvertFromUtf32(Codes[K]);
+      Mf.Line:= FirstLineOfCodePoint(Edited, Codes[K]);
+      ACtx.EncChars:= ACtx.EncChars + [Mf];
+      Parts:= Parts + [Format('U+%.4X line %d', [Mf.Code, Mf.Line])];
+    end;
+    ACtx.RefusalKind:= 'encoding_refused';
+    ACtx.EncFile    := Path;
+    ACtx.EncName    := TextFileEncodingName(Fmt);
+    ACtx.EncTotal   := Length(Codes);
+    Exit(Format('encoding: %d character(s) do not fit %s (%s): %s -- raise the file to UTF-8 with BOM, or skip the unit',
+      [Length(Codes), Path, ACtx.EncName, String.Join(', ', Parts)]));
+  end;
+end;
+
 procedure RefuseUnapplicablePlan(var APlan: TApplyResult);
 var
   Refusal: string;
@@ -27500,6 +27658,16 @@ var
         if not TouchedSet.ContainsKey(Ed.FilePath) then
         begin TouchedSet.Add(Ed.FilePath, True); TouchedFiles.Add(Ed.FilePath); end;
 
+      { 1.34.1 (CONV-ENC E2): a file named by --raise-encoding joins the set even when no
+        edit touches it, so it is pre-checked, backed up and rolled back with the rest }
+      for var RE: string in AArgs.RaiseEncoding do
+      begin
+        var RPath: string:= RaiseEntryPath(RE);
+        if (SameFilePath(RPath, UnitPas) or SameFilePath(RPath, JCtx.DfmPath)) and TFile.Exists(RPath)
+          and not TouchedSet.ContainsKey(RPath) then
+        begin TouchedSet.Add(RPath, True); TouchedFiles.Add(RPath); end;
+      end;
+
       Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
 
       { F7 (2026-10-25): step 4 stamps the .pas even when no edit touches it (a
@@ -27545,6 +27713,12 @@ var
       Originals:= nil;
       for var F: string in TouchedFiles do Originals:= Originals + [TFile.ReadAllBytes(F)];
       try
+        { 1.34.1 (E2): re-store each raised file as UTF-8 with a BOM first; the applier and
+          the stamp below then keep that format. A binary .dfm is never rewritten. }
+        for var RE: string in AArgs.RaiseEncoding do
+          for var F: string in TouchedFiles do
+            if SameFilePath(RaiseEntryPath(RE), F) and not IsBinaryDfmFile(TFile.ReadAllBytes(F)) then
+              TFile.WriteAllBytes(F, RaiseBytesToUtf8Bom(TFile.ReadAllBytes(F)));
         // 3. Perform the conversion write. AWriteBackups=False: our backup layer
         // (step 2) already backed up every touched file -- letting the applier
         // ALSO write its own .bak would double-backup.
@@ -27956,6 +28130,11 @@ var
       Exit(1);
     end;
 
+    { 1.34.1 (CONV-ENC E1'/E3): a value the target .pas cannot hold refuses the unit, dry
+      run and --apply alike, nothing written; a text .dfm gets #codes instead }
+    var EncReason: string:= EncodingGuardReason(AArgs, UnitPas, JCtx.DfmPath, PlanRes.Edits, PlanRes.Report, JCtx);
+    if EncReason <> '' then Exit(RefuseUnit(EncReason));
+
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
     MergeInferred(PlanRes.Report);    { likewise }
@@ -28084,6 +28263,13 @@ begin
   if not TFile.Exists(AArgs.RulesFile) then
   begin
     Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+    Exit(2);
+  end;
+  { 1.34.1 (CONV-ENC E2): a bad --raise-encoding entry is a usage error }
+  var RaiseErr: string:= RaiseEncodingError(AArgs.RaiseEncoding, Units);
+  if RaiseErr <> '' then
+  begin
+    Writeln('ERROR: ' + RaiseErr);
     Exit(2);
   end;
 

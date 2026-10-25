@@ -346,6 +346,52 @@ type
       out ARefuseReason: string): TArray<TTextEdit>;
   end;
 
+type
+  /// <summary>One character a write would lose in an ANSI file (convert-apply encoding guard).</summary>
+  /// <remarks>Code is the Unicode code point, Text its string form, Line the 1-based line of its
+  /// first occurrence in the text as it would be written.</remarks>
+  TEncodingMisfit = record
+    Code: Integer;
+    Text: string;
+    Line: Integer;
+  end;
+
+/// <summary>The engine's name for how a text file is stored: ansi, utf8, utf8-bom or utf16-bom.</summary>
+/// <param name="AFmt">A format from TTextFileFormat.Decode.</param>
+/// <returns>One of ansi | utf8 | utf8-bom | utf16-bom.</returns>
+function TextFileEncodingName(const AFmt: TTextFileFormat): string;
+
+/// <summary>The distinct code points in AValues that an ANSI file cannot hold.</summary>
+/// <param name="AFmt">The target file's format; only ansi can lose characters.</param>
+/// <param name="AValues">The strings a write would put into the file.</param>
+/// <returns>Code points in first-seen order; empty unless AFmt is ansi. "Fits" is a lossless
+/// round trip through TEncoding.ANSI (the active code page).</returns>
+function UnfitCodePoints(const AFmt: TTextFileFormat; const AValues: TArray<string>): TArray<Integer>;
+
+/// <summary>The 1-based line of the first occurrence of a code point in a text.</summary>
+/// <param name="AText">The text as it would be written.</param>
+/// <param name="ACode">The code point to find.</param>
+/// <returns>The line, or 0 when the text does not hold it.</returns>
+function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
+
+/// <summary>Rewrites the string literals of AText so characters AEnc cannot hold become
+/// Delphi numeric codes, as the IDE writes a .dfm ('Gr'#246'sse').</summary>
+/// <param name="AText">DFM text (a block or a fragment).</param>
+/// <param name="AEnc">The target file's encoding; a character that round-trips is left alone.</param>
+/// <returns>AText with unfit characters inside quoted literals replaced by #codes (one per UTF-16
+/// unit); AText unchanged when nothing needs it. Characters outside literals are never touched.</returns>
+function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
+
+/// <summary>True when bytes are a compiled (binary, TPF0 or resource-header) .dfm.</summary>
+/// <param name="ABytes">The file's raw bytes.</param>
+/// <returns>True for a binary form file; such a file has no text encoding.</returns>
+function IsBinaryDfmFile(const ABytes: TBytes): Boolean;
+
+/// <summary>The bytes of a text file re-stored as UTF-8 with a BOM.</summary>
+/// <param name="ABytes">The file's raw bytes, decoded as TTextFileFormat.Decode does.</param>
+/// <returns>BOM + the decoded text as UTF-8; the line breaks are kept as read.</returns>
+function RaiseBytesToUtf8Bom(const ABytes: TBytes): TBytes;
+
 /// <summary>TEST SEAM for an atomic multi-file write: raises before the AWriteNo-th write of one
 /// write transaction when DRAGLINT_TEST_FAIL_WRITE_AT names that number; inert otherwise.</summary>
 /// <param name="AWriteNo">1-based number of the write about to happen in this transaction.</param>
@@ -356,6 +402,165 @@ type
 procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
 
 implementation
+
+uses
+  System.Character;
+
+{ The code point starting at S[I] and how many UTF-16 units it spans (2 for a valid surrogate pair). }
+function CodePointAt(const S: string; I: Integer; out ALen: Integer): Integer;
+const
+  HighSurrogateLo = $D800;
+  HighSurrogateHi = $DBFF;
+  LowSurrogateLo  = $DC00;
+  LowSurrogateHi  = $DFFF;
+  SurrogateBase   = $10000;
+  SurrogateBits   = $400;
+begin
+  ALen:= 1;
+  Result:= Ord(S[I]);
+  if (Result >= HighSurrogateLo) and (Result <= HighSurrogateHi) and (I < Length(S))
+    and (Ord(S[I + 1]) >= LowSurrogateLo) and (Ord(S[I + 1]) <= LowSurrogateHi) then
+  begin
+    Result:= SurrogateBase + (Result - HighSurrogateLo) * SurrogateBits + (Ord(S[I + 1]) - LowSurrogateLo);
+    ALen:= 2;
+  end;
+end;
+
+function TextFileEncodingName(const AFmt: TTextFileFormat): string;
+begin
+  if AFmt.Encoding = TEncoding.ANSI then Result:= 'ansi'
+  else if AFmt.Encoding = TEncoding.UTF8 then Result:= if Length(AFmt.Preamble) > 0 then 'utf8-bom' else 'utf8'
+  else Result:= 'utf16-bom';
+end;
+
+{ True when AEnc stores AUnit (one code point as UTF-16 units) and reads it back unchanged. }
+function EncodingHolds(AEnc: TEncoding; const AUnit: string): Boolean;
+begin
+  Result:= AEnc.GetString(AEnc.GetBytes(AUnit)) = AUnit;
+end;
+
+function UnfitCodePoints(const AFmt: TTextFileFormat; const AValues: TArray<string>): TArray<Integer>;
+const
+  AsciiLimit = $80;
+var
+  Len, Cp: Integer;
+  Seen   : TList<Integer>;
+begin
+  Result:= nil;
+  if AFmt.Encoding <> TEncoding.ANSI then Exit;
+  Seen:= TList<Integer>.Create;
+  try
+    for var V: string in AValues do
+    begin
+      var I: Integer:= 1;
+      while I <= Length(V) do
+      begin
+        Cp:= CodePointAt(V, I, Len);
+        if (Cp >= AsciiLimit) and not Seen.Contains(Cp) and not EncodingHolds(AFmt.Encoding, Copy(V, I, Len)) then
+          Seen.Add(Cp);
+        Inc(I, Len);
+      end;
+    end;
+    Result:= Seen.ToArray;
+  finally
+    Seen.Free;
+  end;
+end;
+
+function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
+var
+  At: Integer;
+begin
+  Result:= 0;
+  At:= Pos(TCharacter.ConvertFromUtf32(ACode), AText);
+  if At = 0 then Exit;
+  Result:= 1;
+  for var I: Integer:= 1 to At - 1 do
+    if AText[I] = #10 then Inc(Result);
+end;
+
+function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
+var
+  SB      : TStringBuilder;
+  SrcIn   : Boolean; { the source is inside a quoted literal }
+  OutIn   : Boolean; { the output has an open quote }
+  LitAny  : Boolean; { the current literal produced output }
+  I, Len  : Integer;
+  C       : Char;
+
+  procedure CloseOut;
+  begin
+    if OutIn then begin SB.Append(''''); OutIn:= False; end;
+  end;
+
+  procedure OpenOut;
+  begin
+    if not OutIn then begin SB.Append(''''); OutIn:= True; end;
+    LitAny:= True;
+  end;
+
+begin
+  SB:= TStringBuilder.Create;
+  try
+    SrcIn:= False; OutIn:= False; LitAny:= False;
+    I:= 1;
+    while I <= Length(AText) do
+    begin
+      C:= AText[I];
+      if not SrcIn then
+      begin
+        SB.Append(C);
+        if C = '''' then begin SrcIn:= True; SB.Length:= SB.Length - 1; OutIn:= False; LitAny:= False; end;
+        Inc(I);
+        Continue;
+      end;
+      if C = '''' then
+      begin
+        if (I < Length(AText)) and (AText[I + 1] = '''') then
+        begin
+          OpenOut; SB.Append(''''''); Inc(I, 2); Continue;
+        end;
+        if not LitAny then SB.Append('''''') else CloseOut;
+        SrcIn:= False;
+        Inc(I);
+        Continue;
+      end;
+      CodePointAt(AText, I, Len);
+      if (Ord(C) >= $80) and not EncodingHolds(AEnc, Copy(AText, I, Len)) then
+      begin
+        CloseOut;
+        LitAny:= True;
+        for var K: Integer:= 0 to Len - 1 do SB.Append('#').Append(Ord(AText[I + K]));
+      end
+      else
+      begin
+        OpenOut; SB.Append(Copy(AText, I, Len));
+      end;
+      Inc(I, Len);
+    end;
+    if SrcIn then CloseOut; { an unterminated literal: leave the output as balanced as the input was }
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+function IsBinaryDfmFile(const ABytes: TBytes): Boolean;
+const
+  ResHeaderFirstByte = $FF;
+  Signature          = 'TPF0';
+begin
+  Result:= ((Length(ABytes) > 0) and (ABytes[0] = ResHeaderFirstByte)) or
+           ((Length(ABytes) >= Length(Signature)) and (TEncoding.ANSI.GetString(ABytes, 0, Length(Signature)) = Signature));
+end;
+
+function RaiseBytesToUtf8Bom(const ABytes: TBytes): TBytes;
+var
+  Text: string;
+begin
+  TTextFileFormat.Decode(ABytes, Text);
+  Result:= TEncoding.UTF8.GetPreamble + TEncoding.UTF8.GetBytes(Text);
+end;
 
 function HasHighByte(const ABytes: TBytes): Boolean;
 const
