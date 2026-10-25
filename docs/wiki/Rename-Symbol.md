@@ -26,6 +26,17 @@ the preview and `--apply` REFUSE with exit 2 and name the `.inc` file(s),
 instead of renaming the declaration and leaving those uses stale. Rename the
 include's uses by hand together with the declaration.
 
+## Same-named handlers and .dfm bindings
+A handler name shared by several forms (for example `Button1Click`) is renamed
+only on the form that owns the symbol being renamed, and on forms that inherit
+from it. A same-named handler declared on any other form is left untouched, and
+so is its `.dfm` binding. The `.dfm` event bindings (`OnClick = Button1Click`)
+that point at the renamed handler are rewritten with the declaration, again only
+for the owner form and the forms inheriting from it. `--apply` keeps each file's
+encoding, BOM and line breaks. Known limits: references the index cannot bind
+are still matched by name, and an unindexed or binary `.dfm` is skipped
+silently.
+
 ## What it needs
 An index IS required. The project's DB lives at
 `<project folder>\_D-RAG\<project file>.sqlite`; run
