@@ -276,6 +276,7 @@ uses
   DRagLint.Doc.Regions
   , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
+  , System.Math                { Max: the H2 doc-comment marker span }
   ;
 
 { TLspCompletion }
@@ -1008,7 +1009,8 @@ begin
         `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
         dropped (or the "Mark as reviewed" action would change nothing). }
       if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
-      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, F.EndLine,
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine,
+           Max(F.EndLine, DocCommentMarkerLine(MarkLines, F.StartLine)), { H2: /// -> its declaration }
            MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
@@ -1089,7 +1091,8 @@ begin
         a dl:ok duplicate-code on the anchor suppresses, and so does one on the
         PARTNER site (RelatedLine), verified against the partner's own window. }
       if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
-      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, F.EndLine,
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine,
+           Max(F.EndLine, DocCommentMarkerLine(MarkLines, F.StartLine)), { H2: /// -> its declaration }
            MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
       if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
       begin
@@ -1297,6 +1300,10 @@ begin
 
       { Get the line text and create the marker. }
       if (DiagLine - 1) >= Lines.Count then Continue;
+      { H2: a finding on a `///` line is marked on the declaration the block documents
+        (the line `allow` writes and the suppression span reaches); writing ON the
+        `///` line would turn the marker into doc text. }
+      DiagLine:= DocCommentMarkerLine(Lines.ToStringArray, DiagLine);
       LineText:= Lines[DiagLine - 1];
 
       { Skip if the rule already has a marker on this line (idempotency check). }

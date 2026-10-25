@@ -10181,6 +10181,9 @@ begin
         begin
           var MarkHi: Integer:= F.StartLine;
           if (F.EndLine > MarkHi) and (F.EndLine <= Length(Lines)) then MarkHi:= F.EndLine;
+          { H2: a finding anchored on a `///` line is reviewed on the declaration the
+            block documents -- the only line `allow` can write its marker on. }
+          MarkHi:= Max(MarkHi, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine(Lines, F.StartLine));
           for var ML: Integer:= F.StartLine to MarkHi do
           begin
             if Suppressed then Break;
@@ -13300,11 +13303,16 @@ end;
 /// <param name="ADb">The index path named in the hint.</param>
 /// <returns>AFindings with this file's whole-graph circular-uses finding (present only on the
 /// cycle's first unit) replaced by ONE finding at the first intra-cycle uses entry of the file
-/// (implementation section preferred), same message, FixHint set. AFindings unchanged when the
-/// unit is in no cycle, or when the cycle has no whole-graph finding to take the message from.</returns>
-/// <remarks>The cycle is ComputeSccs' (the `cycles` pass); lint-all is not touched -- it still
-/// reports one finding per cycle at `:1:1`. Costs one read of every file's uses rows, and only
-/// when the index has a cycle at all.</remarks>
+/// (implementation section preferred), same message, FixHint set. On the cycle's anchor unit
+/// that line IS the whole-graph finding's line. On any other unit of the cycle the finding is
+/// dropped when the anchor carries a verifying `dl:ok circular-uses` (or a covering
+/// drag-lint:ignore). AFindings unchanged when the unit is in no cycle, or when the cycle has
+/// no whole-graph finding to take the message from.</returns>
+/// <remarks>The cycle is ComputeSccs' (the `cycles` pass). lint-all reports one finding per
+/// cycle, on its first unit's intra-cycle uses entry (H2, 2026-10-25; it was `:1:1`), so ONE
+/// review at that line holds in lint and lint-all alike. Costs one read of every file's uses
+/// rows, and only when the index has a cycle at all; plus one read of the anchor file on a
+/// non-anchor unit.</remarks>
 function CircularUsesForFile(const AFindings: TArray<TLintFinding>; const AStore: ISymbolStore;
   AFileId: Int64; const AFilePath: string; const AWholeGraph: TArray<TLintFinding>;
   const AProject, ADb: string): TArray<TLintFinding>;
@@ -13315,6 +13323,21 @@ const
   function StemOf(const APath: string): string;
   begin
     Result:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
+  end;
+
+  { True when AAnchor (a whole-graph finding) carries a review that VERIFIES: the same
+    test ApplyLineMarkers applies -- a drag-lint:ignore covering the rule, or a dl:ok for
+    it on the anchor span whose hash is empty or equals MarkerExpectedHash. }
+  function CycleReviewedAt(const AAnchor: TLintFinding): Boolean;
+  begin
+    Result:= False;
+    if (AAnchor.FilePath = '') or not TFile.Exists(AAnchor.FilePath) then Exit;
+    var Lines: TArray<string>:= TFile.ReadAllLines(AAnchor.FilePath);
+    if (AAnchor.StartLine < 1) or (AAnchor.StartLine > Length(Lines)) then Exit;
+    if TReviewMarkers.IgnoreDirectiveCovers(Lines[AAnchor.StartLine - 1], CRule) then Exit(True);
+    var Want: string:= DRagLint.Lint.RuleCatalog.MarkerExpectedHash(Lines, CRule, AAnchor.StartLine, 0);
+    for var M in TReviewMarkers.Parse(Lines[AAnchor.StartLine - 1]) do
+      if SameText(M.RuleId, CRule) and ((M.Hash = '') or SameText(M.Hash, Want)) then Exit(True);
   end;
 
 var
@@ -13353,13 +13376,29 @@ begin
 
   { the message of THIS cycle: the whole-graph finding anchored at one of its units }
   Msg:= '';
+  var Anchor: TLintFinding:= Default(TLintFinding);
   for F in AWholeGraph do
     if SameText(F.RuleId, CRule) and MatchText(StemOf(F.FilePath), Mine) then
     begin
       Msg:= F.Message;
+      Anchor:= F;
       Break;
     end;
   if Msg = '' then Exit;
+
+  { H2 (2026-10-25): ONE review per cycle, honoured in both scopes. lint-all reports the
+    cycle once, at Anchor (its first unit's intra-cycle uses entry); a dl:ok there must
+    also silence this per-unit finding on every OTHER unit of the cycle, or the review
+    holds in one scope and not the other. Only a marker that VERIFIES counts -- a stale
+    one leaves the finding, and lint-all reports the staleness at the anchor. }
+  var IsAnchor: Boolean:= SameText(StemOf(Anchor.FilePath), MyStem);
+  if (not IsAnchor) and CycleReviewedAt(Anchor) then
+  begin
+    Result:= nil;
+    for F in AFindings do
+      if not (SameText(F.RuleId, CRule) and SameText(F.FilePath, AFilePath)) then Result:= Result + [F];
+    Exit;
+  end;
 
   ImplLine:= 0;
   IntfLine:= 0;
@@ -13390,6 +13429,9 @@ begin
   if ImplLine <= 0 then ImplLine:= AnyImpl;
   if ImplLine <= 0 then ImplLine:= AnyIntf;
   if ImplLine <= 0 then ImplLine:= 1;
+  { H2: the anchor unit reports exactly where lint-all does -- by construction, not by a
+    second computation that could drift (ProjectRules.CycleUsesLine owns the line). }
+  if IsAnchor and (Anchor.StartLine > 0) then ImplLine:= Anchor.StartLine;
 
   Result:= nil;
   for F in AFindings do
@@ -28798,19 +28840,30 @@ begin
 
   Raw:= TFile.ReadAllText(AArgs.Target, TEncoding.ANSI);
 
-  { Walk to the 1-based target line. }
+  { H2: a finding anchored on a `///` doc-comment line is reviewed on the declaration
+    the block documents (DocCommentMarkerLine) -- the line ApplyLineMarkers and the
+    LSP reach and MarkerExpectedHash hashes. Writing ON the `///` line would turn the
+    marker into documentation text (the DataCopy case below), so the doc-comment is
+    never touched. Every other line maps to itself. }
+  var MarkLine: Integer:= DRagLint.Lint.RuleCatalog.DocCommentMarkerLine(
+    Raw.Replace(#13#10, #10).Split([#10]), AArgs.FixLine);
+
+  { Walk to the 1-based line the marker is written on. }
   P := 1;
   LN:= 1;
-  while (LN < AArgs.FixLine) and (P <= Length(Raw)) do
+  while (LN < MarkLine) and (P <= Length(Raw)) do
   begin
     if Raw[P] = #10 then Inc(LN);
     Inc(P);
   end;
-  if LN <> AArgs.FixLine then
+  if LN <> MarkLine then
   begin
     Writeln(Format('Line %d is past the end of %s', [AArgs.FixLine, AArgs.Target]));
     Exit(2);
   end;
+  if MarkLine <> AArgs.FixLine then
+    Writeln(Format('note: %s:%d is a /// doc comment; the marker goes on the declaration it documents, line %d.',
+      [AArgs.Target, AArgs.FixLine, MarkLine]));
 
   LineStart:= P;
   LineEnd  := P;
@@ -28838,10 +28891,11 @@ begin
     STRING, so it could never have matched anything and would have reported
     stale forever. Two failures, one cause: there is no code on the line.
 
-    Refusing rather than relocating is deliberate. Moving the marker to the
-    declaration the doc belongs to is a GUESS about which line the finding meant,
-    and this command's whole failure mode is writing a marker somewhere it does
-    not belong. The message names the problem and leaves the choice to a human. }
+    A /// line no longer reaches this check: H2 (2026-10-25) moved the write to the
+    declaration the block documents (DocCommentMarkerLine, above) -- not a guess,
+    DocInsight attaches the block to that declaration -- and the suppression span and
+    expected hash moved with it. What is left here is a blank line, a // or brace
+    comment, or a /// block with no declaration after it: still refused. }
   if Trim(TReviewMarkers.NormalizeLine(OldLine)) = '' then
   begin
     Writeln(Format('Refusing to write: %s:%d carries no code -- it is a comment, ' +
@@ -28861,7 +28915,7 @@ begin
     keeps element i aligned to line i+1, which is what FixLine indexes.
     See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
   var WinLines: TArray<string>:= Raw.Replace(#13#10, #10).Split([#10]);
-  var WinHash : string        := TReviewMarkers.HashWindow(WinLines, AArgs.FixLine - 1);
+  var WinHash : string        := TReviewMarkers.HashWindow(WinLines, MarkLine - 1);
 
   { A WHOLE-ROUTINE METRIC REVIEW RECORDS THE NUMBER IT ACCEPTED (T3).
 
@@ -28902,7 +28956,7 @@ begin
     second one. See FindSupersededMarker for the defect and the span rule. }
   var SupLine: Integer:= 0;
   var SupNew : string := '';
-  FindSupersededMarker(WinLines, AArgs.FixLine, AArgs.FixRule, OldLine, SupLine, SupNew);
+  FindSupersededMarker(WinLines, MarkLine, AArgs.FixRule, OldLine, SupLine, SupNew);
 
   NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
   if (NewLine = OldLine) and (SupLine = 0) then
@@ -28959,7 +29013,7 @@ begin
 
   if not AArgs.Apply then
   begin
-    PrintAllowPreview(AArgs.Target, AArgs.FixLine, OldLine, NewLine, WinLines, SupLine, SupNew);
+    PrintAllowPreview(AArgs.Target, MarkLine, OldLine, NewLine, WinLines, SupLine, SupNew);
     Exit(0);
   end;
 
