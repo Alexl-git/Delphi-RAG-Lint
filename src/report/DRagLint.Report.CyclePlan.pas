@@ -729,6 +729,7 @@ type
     procedure PlanInversion(pEvals: TList<TEdgeEval>);
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
     procedure RenderMemberHandOver(pStep: Integer);
+    procedure EmitMemberWrites;
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
     function LeavesProgramReason(const pSteps: TRecipeSteps): string;
     procedure RegisterDeclUnit;
@@ -4699,6 +4700,16 @@ begin
   Emit('');
 end;
 
+{ B1: the members the consumer of an R2 cut WRITES -- read/write properties with a one-line
+  setter each; nothing when it only reads. }
+procedure TCyclePlanner.EmitMemberWrites;
+begin
+  if Length(FInversion.Setters) = 0 then Exit;
+  EmitFmt('- The members `%s` writes are read/write properties instead, each with a one-line setter that ' +
+    'assigns the member itself (%s); a property with its own setter still runs it.',
+    [ExtractFileName(PathOf(FInversion.ConsumerFid)), string.Join(', ', FInversion.Setters)]);
+end;
+
 procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
 var
   IsLines, AsLines: TList<string>;
@@ -4717,6 +4728,7 @@ begin
     EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
       [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
        string.Join(', ', FInversion.MemberSigs)]);
+    EmitMemberWrites;
     EmitFmt('- `%s` implements it: `%s` is appended to its heritage, and a getter per member is declared before ' +
       'the class''s `end;` and implemented in its implementation section.', [FInversion.ClassTypeName,
       FInversion.IfaceName]);
