@@ -204,7 +204,10 @@ begin
 end;
 
 { Runs a silent tree through RunCaptureStreaming on a worker; returns once the
-  run ended or CRunWaitMs passed. AGrand receives the held grandchild. }
+  run ended or CRunWaitMs passed. AGrand receives the held grandchild.
+  AElapsed runs from the start, or -- when a cancel is set -- from the SetEvent:
+  under load, finding the grandchild alone can take longer than
+  ASetCancelAfterMs, and a bound on the cancel latency must not charge that. }
 procedure RunStreamTree(ATimeoutMs: Integer; ACancel: THandle; ASetCancelAfterMs: Integer;
   out ARc: Integer; out ALast: string; out AElapsed: Int64; out AGrand: THandle; out ADone: Boolean);
 var
@@ -213,8 +216,10 @@ var
   Rc    : Integer;
   Last  : string ;
   Done  : Boolean;
+  From  : Int64  ;
 begin
   Rc:= 0; Last:= ''; Done:= False;
+  From:= 0;
   SW:= TStopwatch.StartNew;
   Worker:= TThread.CreateAnonymousThread(
     procedure
@@ -230,10 +235,11 @@ begin
     if ASetCancelAfterMs >= 0 then
     begin
       while SW.ElapsedMilliseconds < ASetCancelAfterMs do Sleep(10);
+      From:= SW.ElapsedMilliseconds;
       SetEvent(ACancel);
     end;
     while (not Done) and (SW.ElapsedMilliseconds < CRunWaitMs) do Sleep(20);
-    AElapsed:= SW.ElapsedMilliseconds;
+    AElapsed:= SW.ElapsedMilliseconds - From;
   finally
     Worker.WaitFor;
     Worker.Free;
@@ -273,7 +279,7 @@ begin
   Ev:= CreateEvent(nil, True, False, nil);
   try
     RunStreamTree(0 { no deadline }, Ev, CCancelAfter, Rc, Last, Elapsed, Grand, Done);
-    Check('5a cancelled run returns within the bound', Done and (Elapsed <= CCancelAfter + CSlackMs), Format('elapsed=%d ms', [Elapsed]));
+    Check('5a cancelled run returns within the bound', Done and (Elapsed <= CSlackMs), Format('elapsed=%d ms', [Elapsed]));
     Check('5b cancel reported distinctly', Rc = CCancelled, Format('rc=%d', [Rc]));
     Check('5c cancelled tree is gone', IsGone(Grand));
     if Grand <> 0 then CloseHandle(Grand);

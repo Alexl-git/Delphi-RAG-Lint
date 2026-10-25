@@ -164,7 +164,14 @@ uses
 
 const
   { One chunk of the stdout pipe. }
-  PROCRUN_PIPE_CHUNK = 4096;
+  PROCRUN_PIPE_CHUNK = 64 * 1024;
+
+  { Requested size of the stdout pipe's buffer. The read loop parks
+    PROCRUN_POLL_MS whenever the pipe is empty, so a child writing faster than
+    that drains is held to about one buffer per slice: the default (~4 KB)
+    capped a burst near 160-500 KB/s, and a large engine report could run into
+    its own deadline. 1 MB lifts the ceiling to ~40 MB/s. }
+  PROCRUN_PIPE_BUFFER = 1024 * 1024;
 
   { Idle slice of RunCore's bounded read loop: how long it parks on the child's
     handle while the pipe is empty before it looks at the pipe, the clock and
@@ -418,7 +425,7 @@ begin
   SA.nLength:= SizeOf(SA);
   SA.bInheritHandle:= True;
   SA.lpSecurityDescriptor:= nil;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
+  if not CreatePipe(ReadPipe, WritePipe, @SA, PROCRUN_PIPE_BUFFER) then Exit;
   Registered:= False;
   FillChar(PI, SizeOf(PI), 0);
   { The job is what makes a timeout, a cancel or a KillProcess kill the TREE: a
