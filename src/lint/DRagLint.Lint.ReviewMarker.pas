@@ -507,7 +507,7 @@ const
 implementation
 
 uses
-  System.RegularExpressions;
+  System.RegularExpressions, System.StrUtils;
 
 { ---------------------------------------------------------------------------
   Normalisation
@@ -1199,14 +1199,14 @@ begin
   { Merge into the existing marker: rebuild its body from the entries already
     there plus the new one, so there is exactly one dl:ok comment on the line. An
     existing reason wins -- it was written by a human about this same code. }
-  Reason:= Existing[0].Reason;
   { A line written as two `// dl:ok` comments carries one reason per comment;
     the merge keeps every distinct one so no human-written reason is dropped. }
-  for var R: Integer:= 1 to High(Existing) do
-    if (Trim(Existing[R].Reason) <> '') and (Pos(Trim(Existing[R].Reason), Reason) = 0) then
-      Reason:= if Trim(Reason) = '' then Trim(Existing[R].Reason)
-               else Trim(Reason) + '; ' + Trim(Existing[R].Reason);
-  if Trim(Reason) = '' then Reason:= Trim(AReason);
+  var Reasons: TArray<string>:= nil;
+  for M in Existing do
+    if (Trim(M.Reason) <> '') and (IndexStr(Trim(M.Reason), Reasons) < 0) then
+      Reasons:= Reasons + [Trim(M.Reason)];
+  Reason:= string.Join('; ', Reasons);
+  if Reason = '' then Reason:= Trim(AReason);
 
   Refreshed:= False;
   Body     := REVIEW_MARK + ' ';
