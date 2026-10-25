@@ -1,0 +1,3 @@
+procedure TestEncodingReaders;
+begin
+end;

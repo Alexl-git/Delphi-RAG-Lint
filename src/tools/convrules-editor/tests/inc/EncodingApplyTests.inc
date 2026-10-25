@@ -1,0 +1,3 @@
+procedure TestEncodingApply;
+begin
+end;
