@@ -39,6 +39,7 @@ needs a re-parse.
 - `ask` / `compare`: a stale index now also prints `error[stale-index]:` after the existing message (`compare --format json`: the error object on stderr, the `compare/1` envelope still on stdout); the `ask-report:` prefix is unchanged (W6-misc, A14 follow-up).
 - Docs: `excludeRoots` is described in `docs\INDEXING-AND-DB-ARCHITECTURE.md`; guard `run_allow_refuses_codeless_line` follows the H2 `///` -> declaration contract (W6-misc).
 - Tests: `run_pas_uses_with_members.ps1` pins `pas_uses` with-members and RTL-ancestor classification (X3, T-16).
+- `cycles --fix` A4 (owner ruling 2026-10-25, "plan anyway"): a baseline that fails ONLY with `F2047 Circular unit reference` on a unit of the Part A group being fixed no longer refuses `dirty-baseline`; the plan is made and the build after the edit is the proof (`baseline.status` = `f2047-in-group`; a failed after-build says the baseline already failed). Any other dirty baseline, or an F2047 in another group, still refuses; guard `run_cyclefix_f2047_baseline.ps1` (W6).
 
 ### Fixed
 - Write helpers and ename: a BOM-less UTF-8 file stays UTF-8 on write; ename columns are CHARACTER columns as the shared reader decodes the file (UTF-8 with or without BOM, ANSI), Apply writes through the shared encoding-preserving writer, and ename reports the binary / unindexed .dfm files it leaves alone (W5-D). Guards: `run_rename_encoding.ps1`, `run_rename_dfm_skipped.ps1`, `run_textedit_encoding.ps1`.

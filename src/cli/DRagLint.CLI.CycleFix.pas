@@ -749,7 +749,8 @@ type
   // What the gate measured, for the JSON and the timing line.
   TGateReport = record
     Baseline      : TBuildOutcome;
-    BaselineStatus: string;  // ok | error | unavailable | skipped
+    BaselineStatus: string;  // ok | error | unavailable | skipped | f2047-in-group
+    F2047Unit     : string;  // the unit of the baseline's single `F2047: Circular unit reference`; '' otherwise (A4)
     After         : TCompileAfterResult;
     AfterStatus   : string;  // ok | error | skipped
     AfterFiles    : Integer;
@@ -768,6 +769,7 @@ type
 
 const
   CStatusSkipped = 'skipped';
+  CStatusF2047   = 'f2047-in-group';
   CKindBuildTimeout = 'build-timeout';
   CSectionStop   = '^\s*(type|const|var|threadvar|resourcestring|procedure|function|constructor|destructor|' +
                    'class|begin|initialization|finalization|exports|end\.)\b';
@@ -1672,7 +1674,7 @@ end;
 function TimingLine(const pGate: TGateReport): string;
 begin
   Result:= '';
-  if (pGate.BaselineStatus = 'ok') or (pGate.BaselineStatus = 'error') then
+  if (pGate.BaselineStatus = 'ok') or (pGate.BaselineStatus = 'error') or (pGate.BaselineStatus = CStatusF2047) then
     Result:= Format('baseline %.1f s', [pGate.Baseline.Seconds], TFormatSettings.Invariant);
   if pGate.AfterStatus <> CStatusSkipped then
     Result:= Result + IfThen(Result <> '', ', ') + Format('after %.1f s', [pGate.After.Seconds], TFormatSettings.Invariant);
@@ -1981,6 +1983,44 @@ begin
     Writeln(ErrOutput, Format('cycles --fix: TEST BUILD TIMEOUT active (DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS=%d; the project lies under TEMP)', [BuildTimeoutMs(pOpts.Project)]));
 end;
 
+// A4 (owner ruling 2026-10-25, "plan anyway"): the unit every dcc error line of the baseline names as
+// `F2047: Circular unit reference to 'X'` (dcc stops at that fatal error, so there is one unit, and
+// msbuild may echo the line twice); '' for any other baseline (a different code, or a second unit).
+function F2047OnlyUnit(const pErrors: TArray<string>): string;
+begin
+  Result:= '';
+  for var Line in pErrors do
+  begin
+    var M:= TRegEx.Match(Line, '\bF2047:? Circular unit reference to ''([^'']+)''');
+    if not M.Success then Exit('');
+    if (Result <> '') and not SameText(Result, M.Groups[1].Value) then Exit('');
+    Result:= M.Groups[1].Value;
+  end;
+end;
+
+// A4: the baseline failed ONLY with F2047 (PassBaselineGate let the run through). The group being planned
+// may go on when it is an interface-coupled Part A group that holds the F2047 unit: its after-build is then
+// the proof. Any other group keeps today's `dirty-baseline` refusal. Sets the status the JSON and the
+// text show for THIS group.
+function BaselineGroupRefusals(var pGate: TGateReport; const pView: TCyclePlanView; const pProject: string): TArray<TRefusal>;
+begin
+  Result:= nil;
+  if pGate.F2047Unit = '' then Exit;
+  var Holds:= False;
+  for var U in pView.Units do
+    if SameText(U, pGate.F2047Unit) then Holds:= True;
+  if pView.HasIntf and (pView.Part = 'A') and Holds then
+  begin
+    pGate.BaselineStatus:= CStatusF2047;
+    Exit;
+  end;
+  pGate.BaselineStatus:= 'error';
+  Result:= [MakeRefusal('dirty-baseline', '', pProject,
+    Format('the project does not build before any edit (%d dcc error line(s), first: %s); the only error is an F2047 that ' +
+      'lies outside this group, so the build after the edit could not prove it; fix it, then retry',
+      [Length(pGate.Baseline.Errors), pGate.Baseline.Errors[0]]), 0)];
+end;
+
 // The baseline gate: the UNTOUCHED project must build before anything is planned or staged. False =
 // refused (no-compiler / dirty-baseline), already reported. pGate is filled either way.
 function PassBaselineGate(const pOpts: TCycleFixOptions; pAnyGroup: Boolean; out pGate: TGateReport): Boolean;
@@ -2001,6 +2041,8 @@ begin
   pGate.Baseline:= BaselineCompile(pOpts, BuildScratchDir);
   pGate.BaselineStatus:= if pGate.Baseline.Ok then 'ok' else 'error';
   Result:= pGate.Baseline.Ok;
+  if not (Result or pGate.Baseline.TimedOut) then pGate.F2047Unit:= F2047OnlyUnit(pGate.Baseline.Errors);
+  if pGate.F2047Unit <> '' then Exit(True); // A4: each group decides (BaselineGroupRefusals)
   if pGate.Baseline.TimedOut then
     ReportGateRefusal(pOpts, pGate, MakeRefusal(CKindBuildTimeout, '', pOpts.Project,
       'the baseline build ' + pGate.Baseline.Errors[0], 0))
@@ -2081,6 +2123,7 @@ begin
     var First:= if Length(pGate.After.Errors) > 0 then pGate.After.Errors[0] else '';
     Result.Refusals:= [MakeRefusal(Kind, '', pOpts.Project,
       Format('the project does not build after the edit (%d dcc line(s), first: %s); ', [Length(pGate.After.Errors), First]) +
+      (if pGate.BaselineStatus = CStatusF2047 then 'the baseline already failed (F2047); a masked error may surface now -- fix it, then retry; ' else '') +
       (if Result.RolledBack then 'rolled back, project not changed' else 'the rollback FAILED: ' + Failure), 0)];
     Result.ExitCode:= if Result.RolledBack then CExitRefused else CExitError;
     if not Result.RolledBack then Result.Error:= 'compile error and the rollback FAILED: ' + Failure;
@@ -2581,6 +2624,7 @@ begin
           end;
           { a plan the gate passes is staged in the shadow tree; an anchor mismatch refuses the group }
           { DRAGLINT_CYCLEFIX_BREAK (test seam, project under TEMP only) spoils the plan before staging }
+          All.AddRange(BaselineGroupRefusals(Gate, pView, pOpts.Project));
           var Staged:= pView;
           if Brk <> 0 then Staged:= ApplyTestBreak(pView, Brk);
           if All.Count = 0 then All.AddRange(StageFor(pOpts, Staged, ProjectDir, ShadowDir));
@@ -2639,6 +2683,8 @@ begin
       WriteNotPlanned(Only, pSccs.Count, Planned);
       var Timing:= TimingLine(Gate);
       if Timing <> '' then Writeln(Timing);
+      if Gate.BaselineStatus = CStatusF2047 then
+        Writeln('compile: baseline F2047 in this group -- the build after the edit is the only proof');
     end;
   finally
     Planned.Free;
