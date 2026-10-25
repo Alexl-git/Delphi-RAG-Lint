@@ -38,6 +38,15 @@ type
   /// </remarks>
   TRenameRefactoring = class
     public
+      /// <summary>Edits that rename the symbol AQName to ANewName: its
+      /// declaration, its implementation header, and every reference that is
+      /// THIS symbol's. References are looked up by name, then filtered: a ref
+      /// the resolver bound to another symbol is skipped, and a .dfm event
+      /// binding (`OnClick = Name`) is kept only when the form's root class is
+      /// the method's owner class, or descends from it with no class on the
+      /// way down declaring a member of the same name (rename spec 2.2, X-25).
+      /// A same-named handler of another form, its call sites and its .dfm
+      /// binding are never edited.</summary>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
@@ -57,6 +66,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
+      /// <summary>Writes AEdits to disk, one rewrite per file. Each file keeps
+      /// the encoding, BOM and line-break style it was stored with
+      /// (TTextFileFormat, F8): a UTF-8 BOM file stays UTF-8 with its BOM, an
+      /// LF file stays LF, a file with no BOM is ANSI as before.</summary>
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FilesTouched.</returns>
@@ -212,7 +225,9 @@ type
 implementation
 
 uses
-  System.StrUtils;
+  System.StrUtils
+  , DRagLint.Refactor.TextEdit
+  ;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -342,6 +357,83 @@ begin
   end;
 end;
 
+// Root class name of a text .dfm: the identifier after ':' on its first
+// `object` / `inherited` / `inline` line. '' when the file is missing, binary,
+// or does not start with such a line.
+function DfmRootClassName(const ADfmPath: string): string;
+var
+  Lines: TStringList;
+  S    : string;
+  I, P : Integer;
+begin
+  Result:= '';
+  if not TFile.Exists(ADfmPath) then Exit;
+  Lines:= TStringList.Create;
+  try
+    Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+    for I:= 0 to Lines.Count - 1 do
+    begin
+      S:= Trim(Lines[I]);
+      if S = '' then Continue;
+      P:= Pos(' ', S);
+      if (P = 0) or not MatchText(Copy(S, 1, P - 1), ['object', 'inherited', 'inline']) then Exit;
+      P:= Pos(':', S);
+      if P = 0 then Exit;
+      S:= Trim(Copy(S, P + 1, MaxInt));
+      P:= 1;
+      while (P <= Length(S)) and IsIdentChar(S[P]) do Inc(P);
+      Exit(Copy(S, 1, P - 1));
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+// True when AClassId's ancestor closure contains AOwnerId.
+function ClassDescendsFrom(const AStore: ISymbolStore; AClassId, AOwnerId: Int64): Boolean;
+var
+  Anc: TTypeAncestor;
+begin
+  Result:= False;
+  for Anc in AStore.GetTransitiveAncestors(AClassId) do
+    if Anc.SymbolId = AOwnerId then Exit(True);
+end;
+
+// True when an event binding in ADfmPath binds the method AName of class
+// AOwner (X-25): the form's root class (declared in the sibling .pas) IS
+// AOwner, or descends from it with no class from the root down to AOwner
+// (exclusive) declaring a member AName -- such a class's own method is what
+// the binding names. False when the root class cannot be found in the index:
+// a binding is only rewritten when it provably belongs to the renamed method.
+function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;
+  const AOwner: TSymbol; const AName: string): Boolean;
+var
+  RootName: string;
+  Root    : TSymbol;
+  Cand    : TSymbol;
+  Anc     : TTypeAncestor;
+begin
+  Result:= False;
+  RootName:= '';
+  if AOwner.Kind in [skClass, skForm] then RootName:= DfmRootClassName(ADfmPath);
+  if RootName = '' then Exit;
+  Root:= Default(TSymbol);
+  for Cand in AStore.FindSymbolsByFile(ChangeFileExt(ADfmPath, '.pas')) do
+    if (Cand.Kind in [skClass, skForm]) and SameText(Cand.Name, RootName) then
+    begin
+      Root:= Cand;
+      Break;
+    end;
+  if Root.Id = AOwner.Id then Exit(True);
+  if (Root.Id = 0) or (AStore.FindChildSymbolByName(Root.Id, AName).Id <> 0)
+     or not ClassDescendsFrom(AStore, Root.Id, AOwner.Id) then Exit;
+  Result:= True;
+  for Anc in AStore.GetTransitiveAncestors(Root.Id) do
+    if (Anc.SymbolId <> 0) and (Anc.SymbolId <> AOwner.Id)
+       and (AStore.FindChildSymbolByName(Anc.SymbolId, AName).Id <> 0)
+       and ClassDescendsFrom(AStore, Anc.SymbolId, AOwner.Id) then Exit(False);
+end;
+
 // ---------------------------------------------------------------------------
 // TRenameRefactoring
 // ---------------------------------------------------------------------------
@@ -356,6 +448,12 @@ var
   Edit     : TRenameEdit           ;
   List     : TList<TRenameEdit>    ;
   Comparer : IComparer<TRenameEdit>;
+  TargetSym: TSymbol               ;
+  Owner    : TSymbol               ;
+  TargetIds: TDictionary<Int64, Boolean> ;
+  DfmOwned : TDictionary<string, Boolean>;
+  DfmPath  : string                ;
+  Owned    : Boolean               ;
 begin
   Result:= nil;
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
@@ -364,8 +462,12 @@ begin
 
   ShortName:= LastDotSegment(AQName);
 
+  TargetIds:= nil;
+  DfmOwned := nil;
   List:= TList<TRenameEdit>.Create;
   try
+    TargetIds:= TDictionary<Int64, Boolean>.Create; // dl:ok create-inside-try@8aae -- nil-initialised before the try, so the finally's Free is safe if a constructor raises
+    DfmOwned:= TDictionary<string, Boolean>.Create;
     // Declaration site
     Edit.FilePath:= AStore.GetFilePath(Sym.FileId);
     Edit.Line:= Sym.StartLine;
@@ -374,10 +476,26 @@ begin
     Edit.NewName:= ANewName;
     List.Add(Edit);
 
-    // All reference sites
+    // All reference sites -- found by NAME, so filtered to the ones that are
+    // this symbol's (X-25): a ref the resolver bound to another symbol is
+    // skipped, and a .dfm event binding only counts when its form is the owner
+    // class or inherits the method from it (DfmBindingBelongsTo).
+    for TargetSym in Syms do TargetIds.AddOrSetValue(TargetSym.Id, True);
+    Owner:= AStore.GetSymbolById(Sym.ParentId);
     Refs:= AStore.FindCallersByName(ShortName);
     for Ref in Refs do
     begin
+      if (Ref.SymbolId <> 0) and not TargetIds.ContainsKey(Ref.SymbolId) then Continue;
+      if SameText(Ref.Kind, 'event-binding') then
+      begin
+        DfmPath:= AStore.GetFilePath(Ref.FileId);
+        if not DfmOwned.TryGetValue(UpperCase(DfmPath), Owned) then
+        begin
+          Owned:= DfmBindingBelongsTo(AStore, DfmPath, Owner, ShortName);
+          DfmOwned.Add(UpperCase(DfmPath), Owned);
+        end;
+        if not Owned then Continue;
+      end;
       Edit.FilePath:= AStore.GetFilePath(Ref.FileId);
       Edit.Line:= Ref.StartLine;
       Edit.Col := Ref.StartCol;
@@ -468,6 +586,8 @@ begin
 
     Result:= List.ToArray;
   finally
+    DfmOwned.Free;
+    TargetIds.Free;
     List.Free;
   end; // try
 end; // function
@@ -480,6 +600,7 @@ var
   Group       : TList<TRenameEdit>                     ;
   Pair        : TPair<string, TList<TRenameEdit>>      ;
   RawBytes    : TBytes                                 ;
+  Fmt         : TTextFileFormat                        ;
   Content     : string                                 ;
   Lines       : TStringList                            ;
   LineStr     : string                                 ;
@@ -508,9 +629,10 @@ begin
       Group   := Pair.Value;
       if not TFile.Exists(FilePath) then Continue;
 
-      // Read as raw bytes, decode as ANSI.
+      // Read as raw bytes; decode by BOM (none = ANSI) and remember the
+      // encoding, BOM and line-break style so the write keeps them (F8).
       RawBytes:= TFile.ReadAllBytes(FilePath);
-      Content:= TEncoding.ANSI.GetString(RawBytes);
+      Fmt:= TTextFileFormat.Decode(RawBytes, Content);
 
       // Backup before modifying if requested.
       if AWriteBackups then TFile.WriteAllBytes(FilePath + '.bak', RawBytes);
@@ -557,19 +679,18 @@ begin
           Lines[Edit.Line - 1]:= Copy(LineStr, 1, ColIdx) + Edit.NewName + Copy(LineStr, ColIdx + OldLen + 1, MaxInt);
         end; // for
 
-        // Re-encode as ANSI bytes preserving CRLF.
-        // TStringList.Text uses system line ending; force CRLF explicitly.
+        // Re-encode in the file's own encoding, BOM and line-break style.
         var SB:= TStringBuilder.Create;
         try
           var I: Integer;
           for I:= 0 to Lines.Count - 1 do
           begin
             SB.Append(Lines[I]);
-            if I < Lines.Count - 1 then SB.Append(#13#10);
+            if I < Lines.Count - 1 then SB.Append(Fmt.LineBreak);
           end;
           // Preserve trailing newline if original had one.
-          if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
-          TFile.WriteAllBytes(FilePath, TEncoding.ANSI.GetBytes(SB.ToString));
+          if Content.EndsWith(#10) then SB.Append(Fmt.LineBreak);
+          TFile.WriteAllBytes(FilePath, Fmt.Encode(SB.ToString));
         finally
           SB.Free;
         end; // try
