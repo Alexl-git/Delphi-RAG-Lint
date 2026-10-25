@@ -56,6 +56,22 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
+## STATE 2026-10-25 ~08:30 -- RESUME HERE (owner back, asked for handoff + /clear)
+main 47cc679f = RELEASE-READY: every lane merged incl. e3d/rc2 (extractor 1.23.0-alpha + resolver 1.13.0-alpha
+= ONE re-parse), CHANGELOG [Unreleased] b3300444, B-41 doc regen 47cc679f. Fresh main build: 47 guard scripts PASS.
+Peers: LSP stream COMPLETE (lsp-6f closed); CONVERTER waits for "deployed <sha>" then "re-parse done".
+RUNNING at handoff: lint sweep (branch e3d/lint-sweep, harness worktree under .claude\worktrees\) -- its report
+is lost on /clear: inspect `git log main..e3d/lint-sweep`, rerun its step 4 guards, merge if green.
+NEXT (in order): 1 merge e3d/lint-sweep; 2 set DRAGLINT_VERSION 1.34.0-alpha + CHANGELOG heading; 3 deploy:
+check `Get-Process drag-lint` (any under third_party\dll-win64 = lock -> ask owner), then build\build_draglint_win64.bat
+in the main tree + plugin BPLs Win32/Win64 (IDE closed; forms-csv algo 9 needs the BPL); 4 message CONVERTER
+"deployed <sha>"; 5 library + project re-parse (`index --project ... --rebuild` per DB, library-Win32/Win64) then
+"re-parse done"; 6 deferred verifies (lsp, menu-tree, ide-help-line, cycles f2047 entry); 7 www-40: new cycles refusal
+line (ledger W3-6 row) + publish menu article; 8 owner list docs\superpowers\plans\2026-10-25-owner-decisions.md.
+Candidate extra lanes (independent): drag-lint-open.exe staging for fresh-worktree battery (protocol_verb,
+uri_handler); 7 missing <param>/<returns> texts + 7 exception crefs from B-41's 18; `lint-all --json --output`
+writes nothing; battery TIMEOUT line shows base budget; unused DbArgs field (plugin diagnostics context).
+
 ## STATE 2026-10-25 ~03:00 (day 3) -- ledger is authoritative
 Merged since day-2 note: menu-t11 63918fb8, FP3 11b10aed, dxbar c3140d22, dxbar2 4237e02c, guard-repair
 1c646b52, rename-fix 86444e3c + rename-fix2 70d0851b, fn-uba 8751050c, small-1 5e197d2f, t05 2360e382,
