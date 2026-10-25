@@ -1,0 +1,42 @@
+{
+  "id": "convrules-encoding",
+  "title": "Rule book and source encoding",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "planned",
+  "summary": "ConvRulesEditor keeps each rule book's encoding (ASCII-7 to UTF-16 BOM), asks before a lossy save, and raises a refused source to UTF-8 with BOM on a yes",
+  "intro": "Work with non-ASCII captions and names without the editor turning them into question marks.",
+  "wikiPage": "convrules-editor-encoding",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "File > Encoding"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "File > Save"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Convert tab > Convert"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "My rule book has umlauts / Cyrillic -- will Save keep them?",
+      "command": "ConvRulesEditor.exe > File > Save"
+    },
+    {
+      "ask": "Why does the Convert tab ask to raise a .pas to UTF-8 with BOM?",
+      "command": "ConvRulesEditor.exe > Convert tab > Convert"
+    },
+    {
+      "ask": "Why was my UTF-16 book saved with a BOM?",
+      "command": "ConvRulesEditor.exe > File > Encoding"
+    }
+  ]
+}

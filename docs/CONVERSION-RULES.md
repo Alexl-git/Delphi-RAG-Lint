@@ -787,6 +787,31 @@ inferred: an ambiguous one exits 1 with
 `ERROR: --from <Type> is ambiguous -- declared by <Unit>, <Unit> (no unit to scope it; the book does not qualify it). Qualify it, or qualify the book's #convert line. Nothing was validated against a guess`
 and one `  use: --from <Unit>.<Type>` line per candidate.
 
+### Text encoding of rule books and sources
+
+The editor reads and writes rule books on an encoding ladder: ASCII-7, ASCII-8
+(ANSI), UTF-8, UTF-8 with BOM, UTF-16 with BOM. A book's level is detected from
+its bytes on open; a new book is ASCII-7 (the default). Save checks the text
+against that level and, when a character would be lost, asks before raising it
+(UTF-8 for an ASCII book); it never writes `?` silently. UTF-16 is always saved
+with a BOM. File > Encoding sets the level Save and Save As write.
+
+ENGINE contract (**engine side pending** -- CONV-ENC is built on the ENGINE branch,
+not merged):
+
+* apply/1 refusal keys: `refusal_kind: "encoding_refused"` and
+  `encoding_refused {file, file_encoding (ansi|utf8|utf8-bom|utf16-bom),
+  raise_to "utf8-bom", chars_total, chars[{code, text, line}]}`.
+* `--raise-encoding "<path>=utf8-bom"` re-runs the unit with that file raised.
+* Characters outside ASCII in a text `.dfm` are written as `#`-codes.
+* Capability `convert_encoding_guard` (in `info --json`): without it the Convert
+  tab does not offer the raise question.
+
+On a yes to the raise question the editor re-runs the refused unit with
+`--raise-encoding` and applies ALL its books again: a refused unit is restored
+unchanged, so earlier books were rolled back. User view: wiki page
+`convrules-editor-encoding`.
+
 ## End-to-end workflow
 
 1. **Inspect** both trees to see what you are working with:
