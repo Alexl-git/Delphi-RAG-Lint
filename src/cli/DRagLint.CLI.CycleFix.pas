@@ -391,7 +391,7 @@ const
     re-index and the child `cycles` of VerifyAfterCore. A caller that kills an --apply must wait
     longer than this, or the kill lands before the rollback (E18 final review F1). The plugin's
     CYCLE_FIX_TIMEOUT_MS is pinned above it by tests\autotest\run_cyclefix_timeouts.ps1. }
-  CApplyWorstMs     = (1 + CSecondBuild) * CBuildTimeoutMs + 2 * CReindexTimeoutMs;
+  CApplyWorstMs     = (1 + CSecondBuild) * CBuildTimeoutMs + 3 * CReindexTimeoutMs; // 3: the A1 pre-plan re-index too
   CKillMarginMs     = 10 * 60 * 1000; // slack above CApplyWorstMs for start-up, writes and backups
   CAllIterationMs   = CApplyWorstMs + CKillMarginMs; // one --part all child is one whole --apply
   CChildKillWaitMs = 5000;  // how long to wait for a killed child to exit
@@ -441,7 +441,9 @@ begin
     for var P in pView.TouchedPaths do
       if MatchText(ExtractFileExt(P), ['.pas', '.dpr']) and not FileStampIsCurrent(pStore, P) then
         L.Add(MakeRefusal('stale-file', '', P,
-          'the file changed after it was indexed; reindex the project (drag-lint index --project ...) and retry', 0));
+          if GetEnvironmentVariable('DRAGLINT_CYCLEFIX_REINDEXED') <> '' then
+            'the file is still stale after a re-index: another process writes it' else
+            'the file changed after it was indexed; reindex the project (drag-lint index --project ...) and retry', 0));
     Result:= L.ToArray;
   finally
     L.Free;
@@ -2693,10 +2695,85 @@ begin
     end;
 end;
 
+const
+  CReindexedEnv = 'DRAGLINT_CYCLEFIX_REINDEXED'; // set for the one re-run after the pre-plan re-index (A1)
+
+// A1: the number of indexed .pas / .dpr files whose bytes changed since they were indexed.
+function CountStaleFiles(const pStore: ISymbolStore): Integer;
+begin
+  Result:= 0;
+  for var FS in pStore.GetAllFileStamps do
+    if MatchText(ExtractFileExt(FS.Path), ['.pas', '.dpr']) and not FileStampIsCurrent(pStore, FS.Path) then Inc(Result);
+end;
+
+// A1 (stale-file / anchor-mismatch recipe): an --apply run that finds indexed files changed on disk
+// re-indexes the project incrementally ONCE and runs itself again, so the plan, the unit set and the gate all
+// start from the current text. The re-run carries CReindexedEnv: a file stale after that is another process
+// writing it and keeps the stale-file refusal. Returns False when nothing was done (the run goes on as before).
+function RerunAfterReindex(const pOpts: TCycleFixOptions; const pStore: ISymbolStore; out pExit: Integer): Boolean;
+var
+  Proj    : string;
+  TimedOut: Boolean;
+begin
+  Result:= False;
+  pExit := CExitError;
+  if not pOpts.Apply or pOpts.NoReindex or SameText(pOpts.Part, CPartAll) or (GetEnvironmentVariable(CReindexedEnv) <> '') then Exit;
+  var Stale:= CountStaleFiles(pStore);
+  if Stale = 0 then Exit;
+  if ReindexTargetProblem(Default(TCyclePlanView), pOpts, pStore, Proj) <> '' then Exit;
+  var Dir:= BuildScratchDir;
+  var Watch:= TStopwatch.StartNew;
+  var Code:= -1;
+  try
+    Code:= RunBounded(Format('"%s" index --project "%s" --db "%s"', [ParamStr(0), Proj, pOpts.Db]),
+      Dir + 'reindex-before.log', CReindexTimeoutMs, TimedOut);
+  except
+    on Exception do Code:= -1;
+  end;
+  if TimedOut or (Code <> 0) then Exit; // the stale-file refusal then says what is wrong, as before
+  var Secs:= Watch.ElapsedMilliseconds / 1000;
+  Winapi.Windows.SetEnvironmentVariable(PChar(CReindexedEnv), '1');
+  try
+    var OutFile:= Dir + 'rerun.out';
+    pExit:= RunBounded(string(CmdLine), OutFile, CApplyWorstMs + CKillMarginMs, TimedOut);
+    var Text:= if TFile.Exists(OutFile) then TFile.ReadAllText(OutFile, TEncoding.ANSI) else '';
+    { the child's stderr notes share its capture file: they go back to stderr, the document stays on stdout }
+    var Brace:= Pos('{"schema"', Text);
+    if pOpts.Json and (Brace > 1) then
+    begin
+      Write(ErrOutput, Copy(Text, 1, Brace - 1));
+      Text:= Copy(Text, Brace, MaxInt);
+    end;
+    var Doc:= if pOpts.Json then TJSONObject.ParseJSONValue(Text) else nil;
+    try
+      if Doc is TJSONObject then
+      begin
+        var Info:= TJSONObject.Create;
+        Info.AddPair('status', 'ok');
+        Info.AddPair('files', TJSONNumber.Create(Stale));
+        Info.AddPair('seconds', TJSONNumber.Create(RoundTo(Secs, CJsonDecimals)));
+        TJSONObject(Doc).AddPair('reindex_before', Info);
+        Writeln(Doc.ToJSON);
+      end
+      else
+      begin
+        if not pOpts.Json then Writeln(Format('re-indexed before planning (%d files, %.1f s)', [Stale, Secs]));
+        Write(Text);
+      end;
+    finally
+      Doc.Free;
+    end;
+  finally
+    Winapi.Windows.SetEnvironmentVariable(PChar(CReindexedEnv), nil);
+  end;
+  Result:= True;
+end;
+
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
   Result:= CExitError; { the exit code the kept-scratch note prints when an exception leaves this code }
+  if RerunAfterReindex(pOpts, pStore, Result) then Exit;
   try
     if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
     else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
