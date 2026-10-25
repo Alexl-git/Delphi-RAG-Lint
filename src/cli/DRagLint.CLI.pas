@@ -3858,9 +3858,9 @@ begin
       wrong by more than 2x against a measured 6 h 04 m, and nobody could tell,
       because no run ever reported a rate.
 
-      IIndexer exposes no error count, so this line does NOT claim one -- an
-      `errors=0` that merely meant "not measured" would be worse than its
-      absence. }
+      Per-file store failures (IIndexer.FailedFiles, F1 2026-10-25) are NOT a
+      field here: the trailer's shape is pinned by guards, and a failure must be
+      LOUD, so it gets its own stderr line below and fails the section. }
     { The rate's numerator is ATTEMPTED, not the row count. Store.CountFiles is
       a stock, so using it here divided the WHOLE CORPUS by this run's wall
       clock: an incremental run that re-parsed three files claimed hundreds of
@@ -3876,6 +3876,18 @@ begin
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
        Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
        Indexer.SkippedUpToDate, Elapsed, RateStr]));
+    { F1: a section with a file that failed to store is a FAILED section -- the
+      failed file keeps its old rows. Read the count before the warm below
+      releases the indexer. The rule cache is still warmed: the rows that did
+      commit are real. }
+    var SectionFailedFiles: Integer:= Indexer.FailedFiles;
+    if SectionFailedFiles > 0 then
+    begin
+      Flush(Output);
+      Writeln(ErrOutput, Format('ERROR building section %s%s: %d file(s) FAILED to index (see the ERROR indexing lines above)',
+        [AItem.Name, PlatSuffix, SectionFailedFiles]));
+      Flush(ErrOutput);
+    end;
     { Warm the `lint <file>` rule cache for a PROJECT section, after releasing this
       section's write connection (see the same block in DoIndex). A library
       section has no project rules to cache. }
@@ -3885,7 +3897,7 @@ begin
       Store:= nil;
       WarmRuleCache(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
     end;
-    Result:= True;
+    Result:= SectionFailedFiles = 0;
   except
     on E: Exception do
     begin
@@ -3896,6 +3908,48 @@ begin
     end;
   end; // try
 end; // function
+
+/// <summary>Waits for ANY child in the --jobs pool to finish and reaps it: reads
+/// its exit code, closes its handle and compacts the pool.</summary>
+/// <param name="AHandles">The pool of child process handles; only the first ACount are live.</param>
+/// <param name="AItemIdx">The plan item of each pooled handle, kept parallel to AHandles.</param>
+/// <param name="ACount">Live entries, 1..MAXIMUM_WAIT_OBJECTS; decremented on success.</param>
+/// <param name="AItem">The plan item index of the reaped child (success only).</param>
+/// <param name="AExitCode">The reaped child's exit code (success only).</param>
+/// <returns>False when the wait itself failed (WAIT_FAILED, or any result outside
+/// the signalled range); the pool is then left untouched.</returns>
+/// <remarks>F9 (deep review 2026-10-25): both pool loops used to map a failed wait
+/// to slot 0, read a STILL-RUNNING child's exit code (259, counted as a failure)
+/// and close its handle. On False this has written the wait result and
+/// GetLastError to stderr; the caller decides what the unknown outcomes mean.</remarks>
+function ReapOneChild(var AHandles: TArray<THandle>; var AItemIdx: TArray<Integer>; var ACount: Integer;
+  out AItem: Integer; out AExitCode: DWORD): Boolean;
+begin
+  AItem    := -1;
+  AExitCode:= 0;
+  var WaitRes: DWORD:= WaitForMultipleObjects(DWORD(ACount), @AHandles[0], False { bWaitAll }, INFINITE);
+  { WAIT_OBJECT_0 is 0, so the lower bound of the signalled range is implicit
+    for a DWORD (an explicit `>=` is W1022, always true). }
+  if WaitRes >= WAIT_OBJECT_0 + DWORD(ACount) then
+  begin
+    var Err: DWORD:= GetLastError;
+    Writeln(ErrOutput, Format('ERROR: index --all --jobs: WaitForMultipleObjects returned %d (GetLastError=%d: %s); '
+      + 'the outcome of the %d running section(s) is unknown', [WaitRes, Err, SysErrorMessage(Err), ACount]));
+    Exit(False);
+  end;
+  var Slot: Integer:= Integer(WaitRes - WAIT_OBJECT_0);
+  GetExitCodeProcess(AHandles[Slot], AExitCode);
+  CloseHandle(AHandles[Slot]);
+  { Read the plan item BEFORE the compaction swap below overwrites this slot. }
+  AItem:= AItemIdx[Slot];
+  if Slot < ACount - 1 then
+  begin
+    AHandles[Slot]:= AHandles[ACount - 1];
+    AItemIdx[Slot]:= AItemIdx[ACount - 1];
+  end;
+  Dec(ACount);
+  Result:= True;
+end;
 
 { ONE PLACE THAT DECIDES WHAT A FAILED RUN LOOKS LIKE, so the two driver loops
   below cannot drift apart in what they report. They already have separate
@@ -4288,11 +4342,11 @@ begin
   //                             --config "<cfg>" --jobs 1
   var SelfExe: string               ;
   var TotalSections: Integer;
-  var ProcHandles: array of THandle;
-  var ProcItemIdx: array of Integer;
+  var ProcHandles: TArray<THandle>;
+  var ProcItemIdx: TArray<Integer>;
   var PoolCount : Integer;
-  var WaitResult: DWORD;
-  var SlotDW    : DWORD;
+  var WaitBroken: Boolean; { F9: a WaitForMultipleObjects failed -- see ReapOneChild }
+  var DoneItem  : Integer;
   var ExitCode  : DWORD;
   var SpawnSI   : TStartupInfoW;
   var SpawnPI   : TProcessInformation;
@@ -4305,6 +4359,7 @@ begin
   SetLength(ProcHandles, TotalSections);
   SetLength(ProcItemIdx, TotalSections);
   PoolCount:= 0;
+  WaitBroken:= False;
 
   // Inner helpers inline because Delphi nested procs cannot follow inline var decls.
   // Use local labels and gotos instead -- actually just inline all pool operations below.
@@ -4315,21 +4370,22 @@ begin
       // Drain one slot from pool if it is full.
       while PoolCount >= EffJobs do
       begin
-        WaitResult:= WaitForMultipleObjects(PoolCount, @ProcHandles[0], False { bWaitAll }, INFINITE);
-        if (WaitResult >= WAIT_OBJECT_0) and (WaitResult < WAIT_OBJECT_0 + DWORD(PoolCount)) then SlotDW:= WaitResult - WAIT_OBJECT_0
-        else SlotDW:= 0;
-        ExitCode:= 0;
-        GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
-        CloseHandle(ProcHandles[SlotDW]);
-        { NAMED, not merely counted. ProcItemIdx has always tracked which plan
-          item each handle belongs to and was never once read; reading it here
-          is the whole cost of naming the failure. Read BEFORE the compaction
-          swap below, which overwrites this slot. }
-        if ExitCode <> 0 then FailedNames:= FailedNames + [SectionLabel(Plan.Items[ProcItemIdx[SlotDW]])];
-        // Compact pool: swap finished slot with last entry.
-        if SlotDW < DWORD(PoolCount) - 1 then begin ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1]; ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1]; end;
-        Dec(PoolCount);
+        { F9: a failed wait names no slot. Every running section's outcome is
+          unknown and nothing more can be scheduled, so all of them -- running
+          and not yet started -- are reported failed, and the handles are left
+          to the finally below (closing one does not stop its child). }
+        WaitBroken:= not ReapOneChild(ProcHandles, ProcItemIdx, PoolCount, DoneItem, ExitCode);
+        if WaitBroken then Break;
+        { NAMED, not merely counted: ReapOneChild hands back the plan item the
+          reaped handle belonged to. }
+        if ExitCode <> 0 then FailedNames:= FailedNames + [SectionLabel(Plan.Items[DoneItem])];
       end; // while
+      if WaitBroken then
+      begin
+        for var k:= 0 to PoolCount - 1 do FailedNames:= FailedNames + [SectionLabel(Plan.Items[ProcItemIdx[k]])];
+        for var k:= i to TotalSections - 1 do FailedNames:= FailedNames + [SectionLabel(Plan.Items[k])];
+        Break;
+      end;
 
       // Build child command line.
       ChildCmdLine:= '"' + SelfExe + '" index --all --only "' + Plan.Items[i].Name + '"';
@@ -4404,18 +4460,16 @@ begin
       Inc(PoolCount);
     end; // for
 
-    // Drain remaining pool.
-    while PoolCount > 0 do
+    // Drain remaining pool. After a failed wait above (WaitBroken) every
+    // pooled section is already named failed; do not wait on them again.
+    while (PoolCount > 0) and not WaitBroken do
     begin
-      WaitResult:= WaitForMultipleObjects(PoolCount, @ProcHandles[0], False { bWaitAll }, INFINITE);
-      if (WaitResult >= WAIT_OBJECT_0) and (WaitResult < WAIT_OBJECT_0 + DWORD(PoolCount)) then SlotDW:= WaitResult - WAIT_OBJECT_0
-      else SlotDW:= 0;
-      ExitCode:= 0;
-      GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
-      CloseHandle(ProcHandles[SlotDW]);
-      if ExitCode <> 0 then FailedNames:= FailedNames + [SectionLabel(Plan.Items[ProcItemIdx[SlotDW]])];
-      if SlotDW < DWORD(PoolCount) - 1 then begin ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1]; ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1]; end;
-      Dec(PoolCount);
+      WaitBroken:= not ReapOneChild(ProcHandles, ProcItemIdx, PoolCount, DoneItem, ExitCode);
+      if WaitBroken then
+        { F9: see the spawn loop -- report every still-pooled section, touch no slot. }
+        for var k:= 0 to PoolCount - 1 do FailedNames:= FailedNames + [SectionLabel(Plan.Items[ProcItemIdx[k]])]
+      else if ExitCode <> 0 then
+        FailedNames:= FailedNames + [SectionLabel(Plan.Items[DoneItem])];
     end; // while
 
   finally
@@ -5671,6 +5725,7 @@ begin
 
   var Interval:= AArgs.Interval;
   if AArgs.Watch and (Interval <= 0) then Interval:= 5;
+  var AnyFileFailed: Boolean:= False;
 
   while True do
   begin
@@ -5680,6 +5735,7 @@ begin
       files and ran the whole-database calls pass (run_watch_scope_reset W4). }
     var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
     var SkippedBeforeTick: Integer:= Indexer.SkippedUpToDate;  // cumulative like ParsedFiles; the Done line reports this tick's delta
+    var FailedBeforeTick: Integer:= Indexer.FailedFiles;       // F1: same delta rule as SkippedBeforeTick
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -6021,9 +6077,17 @@ begin
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
     Elapsed:= (Now - StartTime) * 86400;
+    { F1 (deep review 2026-10-25): a file whose store phase raised was rolled
+      back and keeps its OLD rows. It used to be one stdout line among the
+      progress and an exit 0; now the Done line counts it and the run exits 1
+      (the --all "something failed, the run carried on" code; 2 stays "refused,
+      nothing done"). Guarded by tests\autotest\run_index_file_failure_exit.ps1. }
+    var TickFailed: Integer:= Indexer.FailedFiles - FailedBeforeTick;
+    var FailedNote: string:= if TickFailed > 0 then Format(', %d file(s) FAILED to index', [TickFailed]) else '';
     if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
-        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, Elapsed]))
-    else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
+        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, FailedNote, Elapsed]))
+    else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
+    AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
     Sleep(Interval * 1000);
   end; // while
@@ -6041,7 +6105,7 @@ begin
     Store:= nil;
     WarmRuleCache(ResolvedDb, RuleCacheLibraryDb(AArgs));
   end;
-  Result:= 0;
+  Result:= if AnyFileFailed then 1 else 0;
 end; // function
 
 // v0.42: build ONE dictionary database in-process from a set of folders/files,

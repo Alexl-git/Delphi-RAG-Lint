@@ -456,6 +456,10 @@ begin
     Res:= Res + ': cancelled'
   else if ExitCode = 2 then
     Res:= Res + ': failed'
+  { F1 (2026-10-25): `index` exits 1 when a file failed to index (the run carried
+    on; that file keeps its old rows) and 3 on a fatal -- neither is "done". }
+  else if (AJob.Kind = jkReindex) and (ExitCode <> 0) then
+    Res:= Res + Format(': failed (exit %d)', [ExitCode])
   else
     Res:= Res + ': done';
   SetLastResult(Res);
