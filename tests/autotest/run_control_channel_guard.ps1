@@ -43,6 +43,12 @@
         ESCALATING line, exit 0
     F2  --force with a refusing (busy) engine escalates LOUDLY and only then
         kills; without --force the same busy engine is left running
+    H   (F5, 2026-10-25) a host whose read WAS cancelled but which never finishes
+        closing its stores gets the documented busy reply `stand-down started but
+        not finished` once the store-close grace runs out -- before this fix the
+        listener waited for FDone forever and the reply was unreachable. Test seams
+        DRAGLINT_TEST_HANG_STORE_CLOSE_MS / DRAGLINT_TEST_STORE_CLOSE_GRACE_MS make it
+        fast; POSITIVE CONTROL H-P: same seams, hang shorter than grace -> exiting
 
   RED FIRST against 1.12.0-alpha: the verb is unknown (exit 2) and no engine
   creates a pipe, so L, N*, U, D, S, B, F* fail; K and the positive controls
@@ -92,7 +98,7 @@ function Sidecars([string]$Db) {
 }
 
 # ---- engine fixture: a real child with a LIVE stdin (a file stdin is EOF) ----
-function Start-Engine([string[]]$ArgList, [string]$Tag) {
+function Start-Engine([string[]]$ArgList, [string]$Tag, [hashtable]$EnvVars = @{}) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $script:Exe
   $psi.Arguments = (($ArgList | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ')
@@ -100,6 +106,7 @@ function Start-Engine([string[]]$ArgList, [string]$Tag) {
   $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
   $psi.WorkingDirectory = $script:WorkDir
   $psi.CreateNoWindow = $true
+  foreach ($k in $EnvVars.Keys) { $psi.EnvironmentVariables[$k] = [string]$EnvVars[$k] }
   $p = [System.Diagnostics.Process]::Start($psi)
   $e = @{ Tag = $Tag; P = $p
           Out = (New-Object System.IO.MemoryStream); Err = (New-Object System.IO.MemoryStream)
@@ -247,8 +254,8 @@ function HoverAnswers($e, [int]$Id) {
   Send-Lsp $e @{ jsonrpc = '2.0'; id = $Id; method = 'textDocument/hover'; params = @{ textDocument = @{ uri = $uri }; position = @{ line = $declLine; character = $declCol } } }
   return (WaitUntil { (OutText $e) -match ('"id":' + $Id + '[,}]') -and (OutText $e) -match 'ProjectOwnMethod' } 8000)
 }
-function Start-Lsp([string]$Db, [string]$Tag) {
-  $e = Start-Engine @('lsp', '--db', $Db) $Tag
+function Start-Lsp([string]$Db, [string]$Tag, [hashtable]$EnvVars = @{}) {
+  $e = Start-Engine @('lsp', '--db', $Db) $Tag $EnvVars
   Send-Lsp $e @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ processId = $null; rootUri = $null; capabilities = @{} } }
   Send-Lsp $e @{ jsonrpc = '2.0'; method = 'initialized'; params = @{} }
   Send-Lsp $e @{ jsonrpc = '2.0'; method = 'textDocument/didOpen'; params = @{ textDocument = @{ uri = $uri; languageId = 'pascal'; version = 1; text = $projText } } }
@@ -427,10 +434,43 @@ Check 'F2-3 with --force: says ESCALATING (loudly, naming the refusal)' ($f2b.Ou
 Check 'F2-4 with --force: engine F is gone' (WaitUntil { $Fz.P.HasExited } 10000) ''
 Check 'F2-5 the escalation was AFTER a graceful attempt (BUSY reported first in the same output)' (($f2b.Out -match 'BUSY') -and ($f2b.Out.IndexOf('BUSY') -lt $f2b.Out.IndexOf('ESCALAT'))) ''
 
+# ---- H: read cancelled, stores never close -> busy after the grace (F5) -------
+Write-Host ''
+Write-Host 'H: a host that hangs closing its stores gets busy "stand-down started but not finished" within the grace' -ForegroundColor Cyan
+$hangEnv = @{ DRAGLINT_TEST_HANG_STORE_CLOSE_MS = '9000'; DRAGLINT_TEST_STORE_CLOSE_GRACE_MS = '1500' }
+$c6 = Join-Path $WorkDir 'c6.sqlite'; Copy-Item $pristine $c6
+$Hz = Start-Lsp $c6 'H' $hangEnv
+Check 'H0 engine H answered initialize' $Hz.Init ''
+$leafHz = PipeLeafOf $Hz 5000
+$null = WaitUntil { (OutText $Hz) -match 'publishDiagnostics' } 15000
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$rh = ''
+if ($leafHz -ne '') { try { $rh = Send-Ctl $leafHz "shutdown`t5000" 10000 } catch { $rh = "ERROR: $($_.Exception.Message)" } }
+$hangMs = $sw.ElapsedMilliseconds
+Check 'H1 reply is busy<TAB>pid<TAB>stand-down started but not finished' ($rh -eq "busy`t$($Hz.P.Id)`tstand-down started but not finished") "got [$rh] after $hangMs ms"
+Check 'H2 the reply came after the grace and before the hang ended (1500 <= ms < 7000)' (($hangMs -ge 1500) -and ($hangMs -lt 7000)) "$hangMs ms"
+Check 'H3 stderr audits the unfinished stand-down' ((ErrText $Hz) -match 'control channel:.*read cancelled but the host has not closed its stores') ''
+Check 'H4 engine H still exits once its store close returns' (WaitUntil { $Hz.P.HasExited } 30000) ''
+
+Write-Host ''
+Write-Host 'H-P: POSITIVE CONTROL -- same seams, hang shorter than the grace -> exiting (the FDone path)' -ForegroundColor Cyan
+$okEnv = @{ DRAGLINT_TEST_HANG_STORE_CLOSE_MS = '1000'; DRAGLINT_TEST_STORE_CLOSE_GRACE_MS = '6000' }
+$c7 = Join-Path $WorkDir 'c7.sqlite'; Copy-Item $pristine $c7
+$Hp = Start-Lsp $c7 'HP' $okEnv
+Check 'H-P0 engine HP answered initialize' $Hp.Init ''
+$leafHp = PipeLeafOf $Hp 5000
+$null = WaitUntil { (OutText $Hp) -match 'publishDiagnostics' } 15000
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$rp = ''
+if ($leafHp -ne '') { try { $rp = Send-Ctl $leafHp "shutdown`t5000" 10000 } catch { $rp = "ERROR: $($_.Exception.Message)" } }
+$hpMs = $sw.ElapsedMilliseconds
+Check 'H-P1 reply is exiting<TAB>pid...' ($rp -match ('^exiting\t' + $Hp.P.Id + '\b')) "got [$rp] after $hpMs ms"
+Check 'H-P2 the hang seam is live: the reply waited for it (>= 1000 ms)' ($hpMs -ge 1000) "$hpMs ms"
+Check 'H-P3 engine HP exited 0' ((WaitUntil { $Hp.P.HasExited } 15000) -and ($Hp.P.ExitCode -eq 0)) ''
+
 } finally {
   Stop-Engines
 }
-
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
