@@ -44,7 +44,8 @@ before working on an item.**
     (0b308ab9); featuregen 244/0, registry + docs-sync guards PASS; convert-apply /
     convert-scaffold verified by CONVERTER on 1.34.0-alpha. Also helpOrder tiebreak 2c912ce4 and
     the frozen-banner test 65550658.
-  * **FG-O** (medium) `Live.HarvestEveryKindNonEmpty` (FeatureGenTests.dpr ~1914) crashes with an
+  * DONE 411c1ca7: FG-O + FG-P (featuregen 245/0).
+  * ~~**FG-O**~~ (medium) `Live.HarvestEveryKindNonEmpty` (FeatureGenTests.dpr ~1914) crashes with an
     AV (EmptyLiveKinds(nil)) instead of failing cleanly when the harvest raises -- e.g. on a stale
     plugin DB, where menu-tree exits 3. Make it report a FAIL.
   * **FG-P** (low) run_feature_registry_guard.ps1 needs pwsh 7.3; under Windows PowerShell 5.1 it
