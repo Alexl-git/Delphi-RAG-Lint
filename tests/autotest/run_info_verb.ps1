@@ -100,13 +100,35 @@ try {
     Check ($t -notmatch '(?m)^\s+remedy:') 'text prints no remedy line when no verdict owes one'
     Check ((TextOut @()) -notmatch '(?m)^index: ') 'CONTROL: without --db the text form prints no index line'
 
-    # A verdict that OWES a remedy: plant an OLDER resolver stamp (needs sqlite3).
-    if (Get-Command python -ErrorAction SilentlyContinue) {
+    # A verdict that OWES a remedy: plant an OLDER resolver stamp. Written through
+    # the engine's OWN sqlite3.dll (P/Invoke), not python: the assertions below used
+    # to be SKIPPED on any machine without python on PATH (INBOX 2026-09-29 item 5).
+    $sqliteDll = Join-Path (Split-Path (Resolve-Path $exe).Path -Parent) 'sqlite3.dll'
+    Check (Test-Path -LiteralPath $sqliteDll) "FIXTURE: sqlite3.dll beside the engine ($sqliteDll)"
+    if (Test-Path -LiteralPath $sqliteDll) {
+      if (-not ('DlInfoVerbSqlite' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class DlInfoVerbSqlite {
+  [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr LoadLibraryW(string p);
+  [DllImport("sqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_open(byte[] f, out IntPtr db);
+  [DllImport("sqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_exec(IntPtr db, byte[] sql, IntPtr cb, IntPtr arg, IntPtr err);
+  [DllImport("sqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_close(IntPtr db);
+  static byte[] Z(string s) { return Encoding.UTF8.GetBytes(s + "\0"); }
+  public static int Exec(string dll, string file, string sql) {
+    if (LoadLibraryW(dll) == IntPtr.Zero) return -1;
+    IntPtr db; int rc = sqlite3_open(Z(file), out db);
+    if (rc != 0) { sqlite3_close(db); return rc; }
+    rc = sqlite3_exec(db, Z(sql), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+    sqlite3_close(db); return rc;
+  }
+}
+'@
+      }
       $rfp = [string]$jr[0].resolver_fingerprint
-      $py = Join-Path $wd 'exec.py'
-      [IO.File]::WriteAllText($py, "import sqlite3,sys`nc=sqlite3.connect(sys.argv[1])`nc.execute(sys.argv[2])`nc.commit();c.close()`n", [Text.Encoding]::ASCII)
       $old = $rfp -replace '^r=[^;]+;', 'r=0.0.1-alpha;'
-      & python $py $db "UPDATE schema_meta SET value='$old' WHERE key='resolver_fingerprint'" | Out-Null
+      $rc = [DlInfoVerbSqlite]::Exec($sqliteDll, $db, "UPDATE schema_meta SET value='$old' WHERE key='resolver_fingerprint'")
+      Check ($rc -eq 0) "FIXTURE: older resolver stamp planted (sqlite rc=$rc)"
       $jo = JsonIdx @($db)
       $to = TextOut @($db)
       Check (($jo.Count -eq 1) -and ($jo[0].verdict -eq 'resolve-owed') -and $jo[0].remedy) `
@@ -115,8 +137,6 @@ try {
         'text carries the resolve-owed verdict'
       Check ($to -match ('(?m)^\s+remedy: ' + [regex]::Escape([string]$jo[0].remedy) + '\s*$')) `
         'text prints the SAME remedy the JSON form reports'
-    } else {
-      Write-Host 'SKIP: python not on PATH -- the remedy-line assertions need sqlite3'
     }
   } finally { Pop-Location }
 } finally {

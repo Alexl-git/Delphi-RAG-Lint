@@ -33,52 +33,9 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 # --dry-run throughout except the positive control, so this runner never rebuilds
 # a real index as a side effect of asserting an error path.
 
-# --- 1. a selector matching nothing -----------------------------------------
-$o = & $Exe index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
-$e = $LASTEXITCODE
-Check 'a non-matching --only exits non-zero' ($e -ne 0) "exit=$e"
-Check 'it names the selector that matched nothing' ($o -match 'NoSuchSectionXYZ')
-Check 'it lists what IS selectable' ($o -match 'selectable( for this platform)? \(\d+\)')
-
-# A name listed twice read as two sections. ResolvePlan emits one item per
-# platform for a library section, so with no --platform the list said
-# "Library, Library". The count must be the number of DISTINCT names.
-function Get-Selectable([string]$Text) {
-    $m = [regex]::Match($Text, 'selectable( for this platform)? \((\d+)\): ([^\r\n]*)')
-    if (-not $m.Success) { return $null }
-    # Split on commas OUTSIDE parentheses: "Library (Win32, Win64)" is ONE entry.
-    $items = @([regex]::Split($m.Groups[3].Value, ',\s*(?![^()]*\))') | Where-Object { $_.Trim() -ne '' })
-    $names = @($items | ForEach-Object { ($_ -replace '\s*\(.*\)$', '').Trim() })
-    return @{ ForPlatform = $m.Groups[1].Success; Count = [int]$m.Groups[2].Value
-              Items = $items; Names = $names }
-}
-$sel = Get-Selectable $o
-$dups = if ($sel) { @($sel.Names | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object Name) } else { @('<no list>') }
-Check 'no section name appears twice in the selectable list' ($dups.Count -eq 0) ("dups=" + ($dups -join ','))
-Check 'the selectable count is the number of distinct names' `
-      ($sel -and ($sel.Count -eq @($sel.Names | Select-Object -Unique).Count)) ("count=" + $(if ($sel) { $sel.Count }) + " names=" + $(if ($sel) { $sel.Names.Count }))
-Check 'it states that nothing was indexed' ($o -match 'nothing was indexed')
-
-# --- 2. one valid selector + one typo ---------------------------------------
-# The case a bare "did anything match?" check cannot catch: the valid name
-# satisfies it while the typo is silently dropped. This is the arm that forces
-# per-selector reporting.
-$o2 = & $Exe index --all --only 'DragLint-Cli,NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
-$e2 = $LASTEXITCODE
-Check 'a partially-matching --only still exits non-zero' ($e2 -ne 0) "exit=$e2"
-Check 'it names the typo' ($o2 -match 'NoSuchSectionXYZ')
-Check 'it does NOT accuse the valid selector' (-not ($o2 -match 'section:[^\r\n]*DragLint-Cli'))
-
-# --- 3. POSITIVE CONTROL ----------------------------------------------------
-# Without this, "always exit non-zero on --only" would pass every arm above.
-$o3 = & $Exe index --all --only 'DragLint-Cli' --dry-run 2>&1 | Out-String
-$e3 = $LASTEXITCODE
-Check 'a VALID --only still exits 0' ($e3 -eq 0) "exit=$e3"
-Check 'a valid --only reports no error' (-not ($o3 -match 'matched no configured section'))
 
 # --- 4. the selectable list on a CONTROLLED manifest ------------------------
-# Arm 1 reads whatever the engine's own manifest holds, which may or may not
-# expand a library for two platforms. This arm guarantees it does: an ENGINE
+# An ENGINE
 # COPY in %TEMP% with its own drag-lint.json (Library for Win32 AND Win64), run
 # from a CWD under %TEMP%, --dry-run only.
 $root4 = Join-Path $env:TEMP "draglint_narrowing_$PID"
@@ -104,6 +61,53 @@ try {
 
     Push-Location $root4
     try {
+        # Arms 1-3 run on this ISOLATED engine copy (INBOX 2026-09-29 item 5): they
+        # used to read the deployed engine's own manifest, so arm 3 depended on a
+        # section named DragLint-Cli being registered on the machine running it.
+
+        # --- 1. a selector matching nothing -----------------------------------------
+        $o = & $exe4 index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
+        $e = $LASTEXITCODE
+        Check 'a non-matching --only exits non-zero' ($e -ne 0) "exit=$e"
+        Check 'it names the selector that matched nothing' ($o -match 'NoSuchSectionXYZ')
+        Check 'it lists what IS selectable' ($o -match 'selectable( for this platform)? \(\d+\)')
+
+        # A name listed twice read as two sections. ResolvePlan emits one item per
+        # platform for a library section, so with no --platform the list said
+        # "Library, Library". The count must be the number of DISTINCT names.
+        function Get-Selectable([string]$Text) {
+            $m = [regex]::Match($Text, 'selectable( for this platform)? \((\d+)\): ([^\r\n]*)')
+            if (-not $m.Success) { return $null }
+            # Split on commas OUTSIDE parentheses: "Library (Win32, Win64)" is ONE entry.
+            $items = @([regex]::Split($m.Groups[3].Value, ',\s*(?![^()]*\))') | Where-Object { $_.Trim() -ne '' })
+            $names = @($items | ForEach-Object { ($_ -replace '\s*\(.*\)$', '').Trim() })
+            return @{ ForPlatform = $m.Groups[1].Success; Count = [int]$m.Groups[2].Value
+                      Items = $items; Names = $names }
+        }
+        $sel = Get-Selectable $o
+        $dups = if ($sel) { @($sel.Names | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object Name) } else { @('<no list>') }
+        Check 'no section name appears twice in the selectable list' ($dups.Count -eq 0) ("dups=" + ($dups -join ','))
+        Check 'the selectable count is the number of distinct names' `
+              ($sel -and ($sel.Count -eq @($sel.Names | Select-Object -Unique).Count)) ("count=" + $(if ($sel) { $sel.Count }) + " names=" + $(if ($sel) { $sel.Names.Count }))
+        Check 'it states that nothing was indexed' ($o -match 'nothing was indexed')
+
+        # --- 2. one valid selector + one typo ---------------------------------------
+        # The case a bare "did anything match?" check cannot catch: the valid name
+        # satisfies it while the typo is silently dropped. This is the arm that forces
+        # per-selector reporting.
+        $o2 = & $exe4 index --all --only 'P-Foo,NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
+        $e2 = $LASTEXITCODE
+        Check 'a partially-matching --only still exits non-zero' ($e2 -ne 0) "exit=$e2"
+        Check 'it names the typo' ($o2 -match 'NoSuchSectionXYZ')
+        Check 'it does NOT accuse the valid selector' (-not ($o2 -match 'section:[^\r\n]*P-Foo'))
+
+        # --- 3. POSITIVE CONTROL ----------------------------------------------------
+        # Without this, "always exit non-zero on --only" would pass every arm above.
+        $o3 = & $exe4 index --all --only 'P-Foo' --dry-run 2>&1 | Out-String
+        $e3 = $LASTEXITCODE
+        Check 'a VALID --only still exits 0' ($e3 -eq 0) "exit=$e3"
+        Check 'a valid --only reports no error' (-not ($o3 -match 'matched no configured section'))
+
         $o4 = & $exe4 index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
         $e4 = $LASTEXITCODE
         $s4 = Get-Selectable $o4
