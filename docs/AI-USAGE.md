@@ -368,7 +368,7 @@ by the code: a stale index names the reindex command, a fatal starts `FATAL:`. L
 by default) pin the unknown-flag `3`. A verb's own line in `--help` can
 define further codes.
 
-**Machine-readable reason (A14, 2026-10-25).** The three ambiguous exits also say WHY, exit codes unchanged: with `--json` one object on stderr `{"error":"<reason>",...}` (stdout stays empty), otherwise a stderr line that starts `error[<reason>]:`. Reasons: `unknown-verb` (exit 2), `unknown-flag` (3), `stale-index` (3; `menu-tree` / `menu-drift` only -- `ask` and `compare` stale are still prose). Parse the reason, not the code.
+**Machine-readable reason (A14, 2026-10-25).** The three ambiguous exits also say WHY, exit codes unchanged: with `--json` one object on stderr `{"error":"<reason>",...}` (stdout stays empty), otherwise a stderr line that starts `error[<reason>]:`. Reasons: `unknown-verb` (exit 2), `unknown-flag` (3), `stale-index` (3; `menu-tree` / `menu-drift`; `ask` and `compare` keep their own stale prose and add the `error[stale-index]:` line after it -- `compare --format json` writes the JSON object on stderr and still prints its `compare/1` envelope on stdout). Parse the reason, not the code.
 
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
