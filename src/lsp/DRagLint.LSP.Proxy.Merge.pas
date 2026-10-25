@@ -173,6 +173,7 @@ type
     FAnswersIdle     : TEvent;
     FAnsweredIds     : TDictionary<string, Boolean>;   { C>S pump only: ids Answer took }
     FTestAnswerInline: Boolean;
+    FTestFastPath    : Boolean;
     function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
     procedure WorkerLoop;
     procedure WarmUp;
@@ -196,7 +197,10 @@ type
     /// <remarks>Test seam: with the environment variable
     /// DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT=1 Intercept answers True with an
     /// EMPTY replacement for every frame, so a guard can prove the relay
-    /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f).</remarks>
+    /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f). With
+    /// DRAGLINT_MERGE_TEST_FASTPATH=1 every didChange taken by the bounded head
+    /// scan (no JSON parse) writes one stderr line, so a guard can prove that
+    /// path runs (run_lsp_proxy_merge_diagnostics_guard.ps1 case g2).</remarks>
     /// <param name="AOptions">The proxy options; Merge*, MergeBudgetMs and
     /// DbPaths are the fields this class reads.</param>
     constructor Create(const AOptions: TLspProxyOptions);
@@ -436,6 +440,12 @@ const
   ANSWERED_IDS_MAX = 1024;
   { How far into a body HeadStringValue looks (group-4 P3). }
   HEAD_SCAN_BYTES = 4096;
+  { Depths HeadStringValue matches at: the top-level object, and
+    params.textDocument (depth 3). }
+  JSON_DEPTH_TOP           = 1;
+  JSON_DEPTH_TEXT_DOCUMENT = 3;
+  { JSON white space: tab, LF, CR, space. }
+  JSON_WS: set of Byte = [9, 10, 13, 32];
   MERGE_DEFINITION_PREFIX = 'drag-lint lsp --proxy: merge-definition ';
   CAP_REFERENCES       = 'referencesProvider';
   CAP_WORKSPACE_SYMBOL = 'workspaceSymbolProvider';
@@ -692,74 +702,106 @@ begin
   Result:= False;
 end;
 
-{ Group-4 P3: the string value of key AKey ("method", "uri") found within the
-  first HEAD_SCAN_BYTES of the frame's body, by a byte scan -- no decode, no
-  parse. A key whose opening quote follows a backslash is text inside another
-  string, not a key, and is skipped. False when the key is not in the head,
-  its value is not a plain string, or the value holds an escape: the caller
-  then parses the whole body, so the answer is never a guess. }
-function HeadStringValue(const AFrame: TBytes; ALen: Integer; const AKey: string; out AValue: string): Boolean;
-const
-  WS: set of Byte = [9, 10, 13, 32];
+{ Group-4 P3: index of the first body byte of the frame, or -1 when no header
+  terminator lies within ALen. }
+function BodyStart(const AFrame: TBytes; ALen: Integer): Integer;
 var
-  Pat  : TBytes;
+  I, K: Integer;
+begin
+  Result:= -1;
+  if ALen > Length(AFrame) then ALen:= Length(AFrame);
+  for I:= 0 to ALen - Length(HEADER_END) do
+  begin
+    K:= 0;
+    while (K < Length(HEADER_END)) and (AFrame[I + K] = HEADER_END[K]) do Inc(K);
+    if K = Length(HEADER_END) then Exit(I + Length(HEADER_END));
+  end;
+end;
+
+{ Group-4 P3: reads the JSON string that starts at AAt (after optional white
+  space) and ends before AStop. False when there is none, it runs past AStop,
+  or it holds an escape (the caller then parses the whole body). }
+function ReadPlainString(const AFrame: TBytes; AAt, AStop: Integer; out AValue: string): Boolean;
+var
+  J, Start: Integer;
+begin
+  Result:= False;
+  AValue:= '';
+  J:= AAt;
+  while (J < AStop) and (AFrame[J] in JSON_WS) do Inc(J);
+  if (J >= AStop) or (AFrame[J] <> Ord('"')) then Exit;
+  Inc(J);
+  Start:= J;
+  while (J < AStop) and (AFrame[J] <> Ord('"')) and (AFrame[J] <> Ord('\')) do Inc(J);
+  if (J >= AStop) or (AFrame[J] <> Ord('"')) then Exit;
+  AValue:= TEncoding.UTF8.GetString(AFrame, Start, J - Start);
+  Result:= True;
+end;
+
+{ Group-4 P3: the string value of key AKey at nesting depth ADepth (1 = the
+  top-level object; braces and brackets both count), found within the first
+  HEAD_SCAN_BYTES of the frame's body by a byte-level tokenizer -- no decode,
+  no parse. Strings are skipped whole (escapes honoured), so a key-like text
+  inside a string never matches, and a key at another depth is ignored (fix
+  round: a nested "method" must not pass for the frame's own). False when the
+  key is not in the head, a string runs past the head, or the value is not a
+  plain unescaped string: the caller then parses the whole body, so the
+  answer is never a guess. }
+function HeadStringValue(const AFrame: TBytes; ALen: Integer; const AKey: string; ADepth: Integer;
+  out AValue: string): Boolean;
+var
+  Key  : TBytes;
   Body : Integer;
   Stop : Integer;
   I    : Integer;
   J    : Integer;
   K    : Integer;
-  Start: Integer;
+  Depth: Integer;
+  Esc  : Boolean;
 begin
   Result:= False;
   AValue:= '';
-  if ALen > Length(AFrame) then ALen:= Length(AFrame);
-  Body:= -1;
-  for I:= 0 to ALen - Length(HEADER_END) do
-  begin
-    K:= 0;
-    while (K < Length(HEADER_END)) and (AFrame[I + K] = HEADER_END[K]) do Inc(K);
-    if K = Length(HEADER_END) then
-    begin
-      Body:= I + Length(HEADER_END);
-      Break;
-    end;
-  end;
+  Body  := BodyStart(AFrame, ALen);
   if Body < 0 then Exit;
-  Stop:= if ALen < Body + HEAD_SCAN_BYTES then ALen else Body + HEAD_SCAN_BYTES;
-  Pat := TEncoding.ASCII.GetBytes('"' + AKey + '"');
-  I   := Body;
-  while I + Length(Pat) <= Stop do
+  if ALen > Length(AFrame) then ALen:= Length(AFrame);
+  Stop := if ALen < Body + HEAD_SCAN_BYTES then ALen else Body + HEAD_SCAN_BYTES;
+  Key  := TEncoding.ASCII.GetBytes(AKey);
+  Depth:= 0;
+  I    := Body;
+  while I < Stop do
   begin
-    K:= 0;
-    while (K < Length(Pat)) and (AFrame[I + K] = Pat[K]) do Inc(K);
-    if (K < Length(Pat)) or ((I > Body) and (AFrame[I - 1] = Ord('\'))) then
-    begin
-      Inc(I);
-      Continue;
+    case AFrame[I] of
+      Ord('{'), Ord('['): Inc(Depth);
+      Ord('}'), Ord(']'): Dec(Depth);
+      Ord('"'):
+        begin
+          J  := I + 1;
+          Esc:= False;
+          while (J < Stop) and (AFrame[J] <> Ord('"')) do
+          begin
+            if AFrame[J] = Ord('\') then
+            begin
+              Esc:= True;
+              Inc(J);
+            end;
+            Inc(J);
+          end;
+          if J >= Stop then Exit;   { the string runs past the head }
+          K:= 0;
+          if (Depth = ADepth) and not Esc and (J - I - 1 = Length(Key)) then
+            while (K < Length(Key)) and (AFrame[I + 1 + K] = Key[K]) do Inc(K);
+          if (K = Length(Key)) and (K > 0) then
+          begin
+            K:= J + 1;
+            while (K < Stop) and (AFrame[K] in JSON_WS) do Inc(K);
+            if (K < Stop) and (AFrame[K] = Ord(':')) then Exit(ReadPlainString(AFrame, K + 1, Stop, AValue));
+          end;
+          I:= J;   { the closing quote; stepped over below }
+        end;
     end;
-    J:= I + Length(Pat);
-    while (J < Stop) and (AFrame[J] in WS) do Inc(J);
-    if (J >= Stop) or (AFrame[J] <> Ord(':')) then
-    begin
-      Inc(I);
-      Continue;
-    end;
-    Inc(J);
-    while (J < Stop) and (AFrame[J] in WS) do Inc(J);
-    if (J >= Stop) or (AFrame[J] <> Ord('"')) then Exit;
-    Inc(J);
-    Start:= J;
-    while (J < Stop) and (AFrame[J] <> Ord('"')) do
-    begin
-      if AFrame[J] = Ord('\') then Exit;
-      Inc(J);
-    end;
-    if J >= Stop then Exit;
-    AValue:= TEncoding.UTF8.GetString(AFrame, Start, J - Start);
-    Exit(True);
+    Inc(I);
   end;
 end;
-
 { The dirty-set key of a file path: case-folded, so the client's and the
   server's spellings of one file agree. }
 function DocKey(const APath: string): string;
@@ -808,6 +850,7 @@ begin
   FWorker    := TMergeWorker.Create(Self);
   FTestEmptyReplacement:= GetEnvironmentVariable('DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT') = '1';
   FTestAnswerInline    := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_ANSWER_INLINE') = '1';
+  FTestFastPath        := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_FASTPATH') = '1';
   FAnsweredIds         := TDictionary<string, Boolean>.Create;
   FDirty    := TDictionary<string, Boolean>.Create;
   FDirtyLock:= TCriticalSection.Create;
@@ -1056,9 +1099,10 @@ begin
     whole-file) text is never parsed. Anything the scan cannot read for
     certain falls through to the full parse below. }
   DirtyOnly:= FOptions.MergeDiagnostics and not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition);
-  if DirtyOnly and HeadStringValue(AFrame, ALen, 'method', Method) and (Method = METHOD_DID_CHANGE)
-     and HeadStringValue(AFrame, ALen, 'uri', Uri) then
+  if DirtyOnly and HeadStringValue(AFrame, ALen, 'method', JSON_DEPTH_TOP, Method) and (Method = METHOD_DID_CHANGE)
+     and HeadStringValue(AFrame, ALen, 'uri', JSON_DEPTH_TEXT_DOCUMENT, Uri) then
   begin
+    if FTestFastPath then MergeErrLine(MERGE_ERR_PREFIX + 'test: didChange read from the head (no parse).');
     FDirtyLock.Enter;
     try
       FDirty.AddOrSetValue(DocKey(TLSPServer.FileFromUri(Uri)), True);
@@ -1417,9 +1461,11 @@ begin
     end;
   end;
   { From here the request is ours: exactly one reply, [] at worst. }
+  if Assigned(AOnTake) then AOnTake;   { P2: the relay traces C>P before any reply exists }
+  { After the callback: a raising AOnTake forwards the frame, and an id left
+    behind would then swallow DelphiLSP's legitimate cancel for it. }
   if FAnsweredIds.Count >= ANSWERED_IDS_MAX then FAnsweredIds.Clear;
   FAnsweredIds.AddOrSetValue(Job.Id, True);
-  if Assigned(AOnTake) then AOnTake;   { P2: the relay traces C>P before any reply exists }
   FStateLock.Enter;
   try
     Inc(FAnswersOut);
