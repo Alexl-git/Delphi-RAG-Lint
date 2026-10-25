@@ -5,7 +5,7 @@ breaking changes** until v1.0.
 
 ## v1.34.0-alpha -- 2026-10-25
 
-**Requires a re-parse.** This section includes the unmerged release branch `e3d/rc2`: extractor
+**Requires a re-parse.** This section includes the release branch `e3d/rc2` (merged to main): extractor
 1.23.0-alpha + resolver 1.13.0-alpha. The first run after the upgrade re-parses every DB once
 (hours on large projects). Items marked [rc2] need that bump; the rest do not.
 
