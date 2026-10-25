@@ -236,6 +236,30 @@ Check 'Unit1.dfm binding rewritten' ($d1 -cmatch 'OnClick = OkClick\r\n')
 Check 'Unit3.dfm binding rewritten' ($d3 -cmatch 'OnClick = OkClick\r\n')
 Check 'Unit3.pas byte-identical'    ((FileHash $a 'Unit3.pas') -ceq $before['Unit3.pas'])
 
+Write-Host 'Fixture U: --apply keeps a UTF-8 BOM .pas and an LF .dfm as they were stored (F8)' -ForegroundColor Cyan
+# Apply used to decode every file as ANSI and write ANSI + CRLF: the BOM bytes
+# turned into three code-page chars, a non-ASCII comment was re-encoded, and an
+# LF file came back CRLF. Positive control: the pre-F8 Apply fails all four.
+$u = New-Fixture 'U'
+$e9 = [string][char]0xE9
+$utf8Bom = New-Object System.Text.UTF8Encoding($true)
+$u1Text = ((Get-Content -Raw (Join-Path $u.Src 'Unit1.pas')) -replace 'implementation\r\n', ("implementation`r`n// caf$e9`r`n"))
+[IO.File]::WriteAllText((Join-Path $u.Src 'Unit1.pas'), $u1Text, $utf8Bom)
+$lfDfm = (Get-Content -Raw (Join-Path $u.Src 'Unit1.dfm')) -replace "`r`n", "`n"
+[IO.File]::WriteAllText((Join-Path $u.Src 'Unit1.dfm'), $lfDfm, [Text.Encoding]::ASCII)
+Push-Location $u.Dir
+try { & $Exe index $u.Src --db $u.Db 2>&1 | Out-Null } finally { Pop-Location }
+$r = Run-Rename $u ($RenArgs + @('--apply', '--no-backup'))
+Check 'U apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"
+$ub = [IO.File]::ReadAllBytes((Join-Path $u.Src 'Unit1.pas'))
+Check 'U Unit1.pas keeps its UTF-8 BOM' ($ub.Length -ge 3 -and $ub[0] -eq 0xEF -and $ub[1] -eq 0xBB -and $ub[2] -eq 0xBF -and -not ($ub.Length -ge 6 -and $ub[3] -eq 0xEF))
+$ut = [IO.File]::ReadAllText((Join-Path $u.Src 'Unit1.pas'), [Text.Encoding]::UTF8)
+Check 'U Unit1.pas non-ASCII comment intact' ($ut.Contains("// caf$e9`r`n"))
+Check 'U Unit1.pas renamed'                  ($ut -cmatch 'procedure TForm1\.OkClick\(Sender: TObject\);')
+$ud = [IO.File]::ReadAllText((Join-Path $u.Src 'Unit1.dfm'))
+Check 'U Unit1.dfm binding rewritten'        ($ud -cmatch 'OnClick = OkClick\n')
+Check 'U Unit1.dfm still LF-only'            (-not $ud.Contains("`r"))
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

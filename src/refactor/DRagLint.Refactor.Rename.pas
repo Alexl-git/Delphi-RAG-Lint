@@ -66,6 +66,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
+      /// <summary>Writes AEdits to disk, one rewrite per file. Each file keeps
+      /// the encoding, BOM and line-break style it was stored with
+      /// (TTextFileFormat, F8): a UTF-8 BOM file stays UTF-8 with its BOM, an
+      /// LF file stays LF, a file with no BOM is ANSI as before.</summary>
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FilesTouched.</returns>
@@ -221,7 +225,9 @@ type
 implementation
 
 uses
-  System.StrUtils;
+  System.StrUtils
+  , DRagLint.Refactor.TextEdit
+  ;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -594,6 +600,7 @@ var
   Group       : TList<TRenameEdit>                     ;
   Pair        : TPair<string, TList<TRenameEdit>>      ;
   RawBytes    : TBytes                                 ;
+  Fmt         : TTextFileFormat                        ;
   Content     : string                                 ;
   Lines       : TStringList                            ;
   LineStr     : string                                 ;
@@ -622,9 +629,10 @@ begin
       Group   := Pair.Value;
       if not TFile.Exists(FilePath) then Continue;
 
-      // Read as raw bytes, decode as ANSI.
+      // Read as raw bytes; decode by BOM (none = ANSI) and remember the
+      // encoding, BOM and line-break style so the write keeps them (F8).
       RawBytes:= TFile.ReadAllBytes(FilePath);
-      Content:= TEncoding.ANSI.GetString(RawBytes);
+      Fmt:= TTextFileFormat.Decode(RawBytes, Content);
 
       // Backup before modifying if requested.
       if AWriteBackups then TFile.WriteAllBytes(FilePath + '.bak', RawBytes);
@@ -671,19 +679,18 @@ begin
           Lines[Edit.Line - 1]:= Copy(LineStr, 1, ColIdx) + Edit.NewName + Copy(LineStr, ColIdx + OldLen + 1, MaxInt);
         end; // for
 
-        // Re-encode as ANSI bytes preserving CRLF.
-        // TStringList.Text uses system line ending; force CRLF explicitly.
+        // Re-encode in the file's own encoding, BOM and line-break style.
         var SB:= TStringBuilder.Create;
         try
           var I: Integer;
           for I:= 0 to Lines.Count - 1 do
           begin
             SB.Append(Lines[I]);
-            if I < Lines.Count - 1 then SB.Append(#13#10);
+            if I < Lines.Count - 1 then SB.Append(Fmt.LineBreak);
           end;
           // Preserve trailing newline if original had one.
-          if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
-          TFile.WriteAllBytes(FilePath, TEncoding.ANSI.GetBytes(SB.ToString));
+          if Content.EndsWith(#10) then SB.Append(Fmt.LineBreak);
+          TFile.WriteAllBytes(FilePath, Fmt.Encode(SB.ToString));
         finally
           SB.Free;
         end; // try
