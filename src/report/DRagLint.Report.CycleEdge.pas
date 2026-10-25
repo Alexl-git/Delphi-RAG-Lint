@@ -1546,6 +1546,7 @@ type
     function RewriteLine(pLine: Integer; pEnclosing: Int64; out pText: string): Boolean;
     function RewriteConsumer: Boolean;
     function CheckCastUnit: Boolean;
+    procedure SkipCycleAncestors;
     function CheckWithBodies: Boolean;
     function LibUnitOf(const pIdent: string): string;
     function IsScopeRoot(const pSegment: string): Boolean;
@@ -1790,6 +1791,7 @@ begin
   if not AncestorImplementingIInterface(FStore, FIdx.Lib, FCls, FCastAnc) then
     Exit(Refuse('no-iinterface', FCls.Name, FClsFid, FCls.StartLine, Format('no ancestor of `%s` implements ' +
       'IInterface (or the ancestry leaves the indexes given): it cannot implement an interface', [FCls.Name])));
+  SkipCycleAncestors;
   var Why:= RefCountWhy(FIdx, Stored(FCls));
   if Why <> '' then Exit(Refuse('ref-counted', FCls.Name, FClsFid, FCls.StartLine, Why));
   Result:= True;
@@ -1908,6 +1910,27 @@ begin
         'is declared in `%s`, a unit of this cycle', [FCastAnc, DeclUnit])));
   end;
   if not ConsumerSees(DeclUnit) then FUses.Add(DeclUnit);
+end;
+
+{ W6 C1: the first IInterface ancestor may be declared in a unit of the cycle (it cannot be named in the
+  consumer): walk on to the next ancestor that implements IInterface -- any of them serves `TAnc(X) as I`.
+  Runs before the lines are rewritten, so every cast names the final ancestor. A walk that ends on a class
+  of the cycle keeps FCastAnc: CheckCastUnit then refuses cast-unseen. }
+procedure TMemberPlan.SkipCycleAncestors;
+var
+  T: TStoredType;
+begin
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    if not FIdx.Find(FCastAnc, False, T) or FIdx.IsLib(T) then Exit;
+    var DeclUnit:= UnitOfFile(T.Store.GetFilePath(T.Sym.FileId));
+    var Stem:= LowerCase(DeclUnit);
+    if Stem = FSurface.FromStem then Exit;
+    if not ((Stem = FSurface.ToStem) or (FSource.IsSccStem(Stem) and not ConsumerSees(DeclUnit))) then Exit;
+    var Next: string;
+    if not WalkToIInterface(FIdx, T, Next) or SameText(Next, FCastAnc) then Exit;
+    FCastAnc:= Next;
+  end;
 end;
 
 { Fix round 1: `as I` raises EIntfCastError where `as TClass` raised EInvalidCast. When the
