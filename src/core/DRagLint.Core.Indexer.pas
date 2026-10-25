@@ -1053,6 +1053,55 @@ begin
   end;
 end; // function
 
+const
+  /// Cell value of BuildContainingLineMap: two symbols tie for the line, ask SQL.
+  CContainingAmbiguous = -1;
+
+{ X-23 PERF -- the per-literal FindContainingSymbol round-trip.
+
+  The literals pass asked SQLite once per literal for "SELECT * FROM symbols
+  WHERE file_id = :fid AND start_line <= :line AND end_line >= :line ORDER BY
+  start_line DESC LIMIT 1" -- about 0.4 ms each through FireDAC, the largest
+  single cost of a loose-file LSP open (14 s of a 35 s 40k-line index). The rows
+  it reads are exactly the symbols this file just inserted (OpenFileTx cleared
+  the old ones; UpsertSymbol writes StartLine/EndLine verbatim), so this paints
+  the same answer per line from ASymbols: the containing symbol with the
+  greatest StartLine.
+
+  Exactness: when two symbols share that greatest StartLine the SQL tie-break is
+  SQLite's scan order, which this map does not model -- such a line holds
+  CContainingAmbiguous and the caller asks SQL as before. 0 = no symbol contains
+  the line (SQL returns no row). A symbol missing from AIdxToId also marks its
+  lines ambiguous. Cost: O(lines + sum of symbol spans). }
+function BuildContainingLineMap(const ASymbols: TArray<TSymbol>;  // dl:ok duplicate-code@040c -- REVIEWED 2026-10-25: same map-painting shape as BuildEnclosingLineMap, different key (Start/EndLine, every kind, tie = ambiguous)
+  const AIdxToId: TDictionary<Integer, Int64>; ALineCount: Integer): TArray<Int64>;
+var
+  BestStart: TArray<Integer>;
+  I, L, Hi : Integer       ;
+  DbId     : Int64         ;
+begin
+  if ALineCount < 1 then ALineCount:= 1;
+  SetLength(Result   , ALineCount + 1); { zero-filled: 0 = "in no symbol" }
+  SetLength(BestStart, ALineCount + 1);
+  Hi:= High(Result);
+  for L:= 0 to Hi do BestStart[L]:= Low(Integer);
+  for I:= 0 to High(ASymbols) do
+  begin
+    if not AIdxToId.TryGetValue(I, DbId) then DbId:= CContainingAmbiguous;
+    L:= if ASymbols[I].StartLine < 0 then 0 else ASymbols[I].StartLine;
+    while (L <= ASymbols[I].EndLine) and (L <= Hi) do
+    begin
+      if ASymbols[I].StartLine > BestStart[L] then
+      begin
+        BestStart[L]:= ASymbols[I].StartLine;
+        Result   [L]:= DbId;
+      end
+      else if ASymbols[I].StartLine = BestStart[L] then Result[L]:= CContainingAmbiguous;
+      Inc(L);
+    end;
+  end;
+end; // function
+
 function TIndexer.SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
 var
   Lo, Hi, J: Integer;
@@ -1099,7 +1148,8 @@ var
   DocRegion     : TDocCommentRegion          ;
   ParsedDoc     : TParsedDoc                 ;
   Lit           : TStringLiteral             ;
-  Encl          : TSymbol                    ;
+  EnclId        : Int64                      ; { X-23: containing symbol id of one literal (0 = none) }
+  ContainingByLine: TArray<Int64>            ; { X-23: line -> containing symbol id, built once per file (see BuildContainingLineMap) }
   SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
@@ -1349,12 +1399,18 @@ begin
         Inc(GProfUses, ProfNow - TProf);
         TProf:= ProfNow;
         FStore.DeleteStringLiteralsForFile(Token.FileId);
+        { X-23: answer the containing symbol from a line map; SQL only for a tie
+          or a line outside the map (see BuildContainingLineMap). }
+        ContainingByLine:= if Length(ParseRes.Literals) > 0 then BuildContainingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2) else nil;
         for I:= 0 to High(ParseRes.Literals) do
         begin
           Lit:= ParseRes.Literals[I];
           Lit.FileId:= Token.FileId;
-          Encl:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine);
-          if Encl.Id > 0 then Lit.SymbolId:= Encl.Id;
+          if (Lit.StartLine >= 0) and (Lit.StartLine <= High(ContainingByLine)) and (ContainingByLine[Lit.StartLine] <> CContainingAmbiguous) then
+            EnclId:= ContainingByLine[Lit.StartLine]
+          else
+            EnclId:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine).Id;
+          if EnclId > 0 then Lit.SymbolId:= EnclId;
           FStore.UpsertStringLiteral(Token, Lit);
         end;
         // v(ADP2 T2): index-time analysis facts -- one symbol_facts row per

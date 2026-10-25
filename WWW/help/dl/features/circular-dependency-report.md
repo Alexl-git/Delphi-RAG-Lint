@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70004
 since: 0.0.0
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.34.1-alpha
 ---
 
 # Circular Dependency Report (worked example)
@@ -121,7 +121,7 @@ edit -- so this is an excerpt of the real output:
 ```text
 ## Cycle 1: demologger <-> democonfig <-> demoaudit <-> demosession
 
-Status: **interface coupling** -- units of this cycle use each other in their INTERFACE uses clauses.
+Status: **interface coupling** -- 3 of 4 uses between the units of this cycle are in INTERFACE uses clauses.
 
 ### Why it cycles
 - `demologger` interface uses `TDemoSession` (class) at `DemoLogger.pas:40`; declared in `DemoSession.pas:20`.

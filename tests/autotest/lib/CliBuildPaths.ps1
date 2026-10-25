@@ -89,6 +89,16 @@ function Copy-TreeSitterDlls {
   $dlls = @(Get-ChildItem -LiteralPath $SourceDir -Filter 'tree-sitter*.dll' -File -ErrorAction SilentlyContinue)
   if ($dlls.Count -eq 0) { throw "CliBuildPaths: no tree-sitter*.dll in $SourceDir" }
   if (-not (Test-Path -LiteralPath $Dest)) { New-Item -ItemType Directory -Force $Dest | Out-Null }
-  foreach ($d in $dlls) { Copy-Item -LiteralPath $d.FullName -Destination $Dest -Force }
+  # A DLL already in place with the SAME bytes is skipped: under the battery's
+  # -Jobs 4 a sibling suite's exe may have it loaded, and overwriting a loaded
+  # image throws although nothing needed copying. A DIFFERENT one still copies,
+  # and still throws when locked -- a stale DLL is never kept silently.
+  # Guard: tests\autotest\run_copy_treesitter_dlls_locked.ps1.
+  foreach ($d in $dlls) {
+    $target = Join-Path $Dest $d.Name
+    if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Length -eq $d.Length) -and
+        ([Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes($target), [IO.File]::ReadAllBytes($d.FullName)))) { continue }
+    Copy-Item -LiteralPath $d.FullName -Destination $Dest -Force
+  }
   return @($dlls | ForEach-Object Name)
 }

@@ -100,9 +100,9 @@ normalise, or `run_encoding_guard.ps1` fails.
   hunks, and sweeps stale markers:
   ```
   drag-lint lint-all --db <db> --enable multiple-statements-per-line,magic-literal,commented-out-code
-  one drag-lint lint <unit> --db <db> --enable ... per changed unit   (review-marker-stale included; lint takes ONE path)
+  one drag-lint lint <unit> --db <db> --enable ... per changed unit   (review-marker-stale AND review-marker-unused included; lint takes ONE path)
   ```
-  Run `review-marker-stale` WITH the rules the branch's `dl:ok` markers suppress (an OFF rule
+  Run `review-marker-stale` and `review-marker-unused` (a marker that suppresses nothing) WITH the rules the branch's `dl:ok` markers suppress (an OFF rule
   makes every marker for it read stale). Re-check every `dl:ok` the branch adds; remove one
   whose finding no longer fires.
 

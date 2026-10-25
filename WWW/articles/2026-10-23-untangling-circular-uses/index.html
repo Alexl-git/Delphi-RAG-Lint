@@ -13,7 +13,7 @@ summary: drag-lint finds circular uses groups, shows them in the RAD Studio IDE,
   <p class="standfirst">drag-lint finds circular uses groups, shows them in the RAD Studio IDE, and can cut one edge for you behind a compile gate that rolls back on failure. This article walks through what you click and what you see first, then what the engine does underneath &mdash; and, just as important, what it refuses to do.</p>
   <div class="byline">
     <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
-    <span>Real output from the shipped engine (1.33.0-alpha)</span>
+    <span>Real output from drag-lint 1.33.0-alpha and 1.34.1-alpha</span>
   </div>
 </header>
 
@@ -129,16 +129,39 @@ uses
 
   <h3>Step 1: the dry run</h3>
   <p>A dry run plans the group, checks the plan against the files on disk, stages the result in a shadow tree and prints a verdict. <strong>No source file of your project is written.</strong> It does build your project once (the baseline build, see below), and that build writes what any build writes: DCUs and the exe.</p>
-  <p>The verdict is one of two things. For the demo pair it is a refusal, and the refusal says why:</p>
-  <pre><code>Cycle 1: customers &lt;-&gt; orders
-  - base-class: TOrder  Orders.pas:6 -- refused: base-class -- `Customers.pas:13`:
-    `TOrder` is used here as something other than a parameter type (a field,
-    variable, cast or type argument)
-Verdict: refused
-compile: baseline 2.2 s</code></pre>
-  <p class="cap">Real dry run on the demo pair, exit code 1. <code>Customers</code> holds a <em>field</em> of <code>TOrder</code>, and <code>TOrder</code>&rsquo;s own method bodies use <code>TCustomer</code>, so neither can simply move. drag-lint does not guess; the group stays yours, and <code>--plan</code> still prints the playbook and the standard remedy.</p>
+  <p>The verdict is either <em>mechanical</em> or <em>refused</em>, with one line per reason. For the demo pair it is mechanical. The plan first says why the group cycles, then lists every move and every edit:</p>
+  <pre><code>## Cycle 1: customers &lt;-&gt; orders
+...
+### Why it cycles
+- `customers` interface uses `TOrder` (class) at `Customers.pas:13`; declared in `Orders.pas:10`.
 
-  <p>For a group the engine can cut, the verdict is mechanical. This is the three-unit group from the repository&rsquo;s larger <code>circular-demo</code> project:</p>
+### Step 1: what moves where
+1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; ...
+   - Recipe: **extract a base class** and keep `TOrder` where it is. Why: its method
+     bodies use `TCustomer`, which live in units of this cycle; ...
+   - New class `TOrderBase` in `Orders.Untangle` carries exactly what the units below
+     use: nothing (an empty base).
+   - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; ...
+   - Units that switch to `TOrderBase` (the name is replaced on these lines):
+     `Customers.pas` lines 13, 16, 30.
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+- `Customers.pas` / `Orders`: nothing from it is used there any more -&gt; **remove** it
+  from the interface uses.
+...
+### Part B (optional): remove the implementation-only cycle too
+Nothing to do: after Part A no cycle remains among these units.
+
+Fix it (mechanical, compile-gated):
+  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
+Verdict: mechanical (dry run; add --apply to write)
+Shadow tree: ...\draglint_cyclefix_163780\ (deleted at exit; --shadow-out keeps it)
+compile: baseline 5.7 s</code></pre>
+  <p class="cap">Real dry run on a copy of the demo pair with a small project file added, drag-lint 1.34.1-alpha, exit code 0, trimmed where the <code>...</code> are. <code>Customers</code> only keeps orders in a <code>TArray</code> field and takes one as a <code>const</code> parameter; it reads none of <code>TOrder</code>&rsquo;s members. So the plan extracts an empty <code>TOrderBase</code> into a new leaf unit <code>Orders.Untangle</code>, makes <code>TOrder</code> descend from it, and switches <code>FOrders</code> to <code>TArray&lt;TOrderBase&gt;</code>. After that <code>Customers</code> needs nothing from <code>Orders</code>.</p>
+
+  <p>Part B cuts one edge of a group that is already implementation-only. This is the three-unit group from the repository&rsquo;s larger <code>circular-demo</code> project, on 1.33.0-alpha:</p>
   <pre><code>Fix it (mechanical, compile-gated):
   cuts    : demoblueprint -&gt; demoblueprint.viewmodel (routine-call inversion) (chosen)
   requires: the project builds with 0 errors before the fix (the dry run checks this)
@@ -164,6 +187,7 @@ Re-index: done
 Verified: the re-indexed `cycles` output matches the prediction
 compile: baseline 1.4 s, after 1.5 s</code></pre>
   <p class="cap">Exit code 0. The three-unit group is gone from the re-indexed <code>cycles</code> output; the other two groups of that project were left alone, as the plan predicted.</p>
+  <p>The apply on a copy of the demo pair (1.34.1-alpha) reported <code>Applied: 5 file(s) written, 1 new; compile ok</code> and <code>Verified</code>: the new unit is <code>Orders.Untangle.pas</code>, the other four are the two units, the <code>.dpr</code> and the <code>.dproj</code>. The re-indexed <code>cycles</code> then printed <code>No circular unit dependencies found.</code></p>
 </section>
 
 <section>
@@ -200,7 +224,7 @@ compile: baseline 1.4 s, after 1.5 s</code></pre>
   </div>
 
   <h3>Part A: move declarations into a leaf</h3>
-  <p>Enums, records, constants and variables that tie the cycle together move, unchanged, into a new leaf unit named <code>&lt;Declaring&gt;.Untangle</code> (or an existing unit that is still a leaf). Each consuming unit then gets a <strong>uses decision</strong>: keep the old partner, <strong>move it from the interface uses to the implementation uses</strong> when only the implementation still needs it, or remove it when nothing else from it is used. A class whose method bodies use the cycle is not moved. Where every use of it is a <code>const</code> or value parameter that only reads members, a base class carrying just those members is extracted instead; anywhere else the plan refuses with <code>base-class</code>, as the demo pair did above.</p>
+  <p>Enums, records, constants and variables that tie the cycle together move, unchanged, into a new leaf unit named <code>&lt;Declaring&gt;.Untangle</code> (or an existing unit that is still a leaf). Each consuming unit then gets a <strong>uses decision</strong>: keep the old partner, <strong>move it from the interface uses to the implementation uses</strong> when only the implementation still needs it, or remove it when nothing else from it is used. A class whose method bodies use the cycle is not moved. A base class carrying just the members the other units read is extracted into the leaf instead, and those units switch to it &mdash; but only at sites where nothing more than a member read or a <code>nil</code> test happens: a <code>const</code> or value parameter, or an array field (<code>TArray&lt;T&gt;</code> or <code>array of T</code>) that is only sized, stored into and read from. When nothing is read the base is empty, as for the demo pair. Any other use (a cast, a variable, a plain field of the class, a type argument) refuses with <code>base-class</code>.</p>
 
   <h3>Part B, recipe R1: routine-call inversion</h3>
   <p>When an edge is exactly one routine call and every type in the routine&rsquo;s signature is declared outside the cycle, the consumer calls it through a procedural variable declared in a leaf. The declaring unit assigns the variable in its initialization section. This is the real before and after for <code>DemoBlueprint</code>:</p>
@@ -331,13 +355,13 @@ initialization
   <ul>
     <li><strong>It builds your project.</strong> A dry run costs one full build; an apply costs up to three (baseline, after, one repair). On a 625-file Micronite client project that meant a dry run of about two minutes. <code>--no-compile</code> skips the build in a dry run only.</li>
     <li><strong>One group per run.</strong> With no <code>--cycle</code> or <code>--unit</code>, the first mechanical group is planned and the rest are named, not touched.</li>
-    <li><strong>Part A does not always remove the cycle.</strong> It makes an interface-coupled group legal. On the demo pair, moving a uses entry to the implementation section would not break the cycle, as the lint message itself says; extracting the shared code does.</li>
+    <li><strong>Part A does not always remove the cycle.</strong> It removes the interface coupling; what can remain is a legal implementation-only group for Part B. On the demo pair nothing remains, and the plan says so before it writes anything. Moving a uses entry to the implementation section alone would not have broken that cycle, as the lint message says.</li>
     <li><strong>Some shapes have no recipe</strong> (inheriting classes, unresolved <code>set</code>-type edges, class-reference arguments). They are printed with their reason and the standard remedy, and the engine says it cannot help.</li>
   </ul>
 </section>
 
 <footer>
-  All command output above is real output of drag-lint 1.33.0-alpha, run on scratch copies of <code>docs\examples\circular-uses-demo</code> and <code>circular-demo</code> from the drag-lint repository, with file paths shortened. Behaviour descriptions follow the drag-lint wiki page &ldquo;Circular Uses Report (cycles + fix plan)&rdquo; and the cycle-fix implementation plan.
+  All command output above is real output, with file paths shortened, run on scratch copies of <code>docs\examples\circular-uses-demo</code> and <code>circular-demo</code> from the drag-lint repository: the fix of the demo pair with drag-lint 1.34.1-alpha, everything else with 1.33.0-alpha. Behaviour descriptions follow the drag-lint wiki page &ldquo;Circular Uses Report (cycles + fix plan)&rdquo; and the cycle-fix implementation plan.
 </footer>
 
 </div>

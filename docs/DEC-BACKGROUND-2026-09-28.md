@@ -1,6 +1,28 @@
 <!-- Owner-decision background for BACKLOG-TRIAGE-2026-09-28 section 2 (DEC-1..DEC-19), researched 2026-09-28 by three read-only agents against engine 1.20.0-alpha. Rulings are recorded in the triage doc, not here. -->
 # Owner decisions DEC-1 .. DEC-19 -- detailed background
 
+## TRIAGE 2026-10-25 (walkthrough D11 c, staleness pass; docs only)
+
+Closed by events (marker under each heading): DEC-2, DEC-5, DEC-6, DEC-7, DEC-8, DEC-12, DEC-13, DEC-19.
+
+DEC-4 (document --apply deletes fact lines the DB cannot see) -- NOT closed, state verified with git log: ENG-4
+shipped (277cf798 "project tags on shared doc facts + doc-forget") and 7ffcbaa2 "writers keep what they cannot
+see -- B-05/B-06/B-07" landed on top. The write-up's own gate -- re-run the DataCopy reproduction on the current
+engine -- has NOT been done (it needs a write to a real DataCopy file). Left for the owner / an ENGINE slot.
+
+LEFT FOR THE OWNER (write-up recommendation in brackets):
+* DEC-1 LSP programme trigger "A1 lands" -- which A1? [schedule the LSP programme]. Also the trigger for the parked DEC-2 note.
+* DEC-3 untagged legacy fact line deletion (ENG-4 deviation) [follow the settled design].
+* DEC-4 re-run the DataCopy repro, then (a) hard invariant or (b) lighter follow-up [verify first].
+* DEC-9 meaning of Covered by:.
+* DEC-10 LSP full built-in suite for non-IDE clients.
+* DEC-11 {$SCOPEDENUMS} extractor fact for enum-bare-read-scoped.
+* DEC-14 force a mid-session VS Code engine refresh [retire].
+* DEC-15 committed= counter on the section summary line [park/close].
+* DEC-16 lint the legacy "// note // dl:shared A" marker [won't-fix].
+* DEC-17 flip ShowInfoInline [leave off].
+* DEC-18 DCU-only library indexing [keep parked].
+Not independently re-verified here: the DEC-7 and DEC-8 closures rest on the walkthrough's wording, not on a fresh git check.
 # Owner decisions DEC-1 .. DEC-6 -- detailed background
 Prepared 2026-09-28. Source: docs/BACKLOG-TRIAGE-2026-09-28.md section 2, the
 INBOX notes it names, docs/superpowers/plans/2026-09-24-followups-d20-d30.md,
@@ -169,6 +191,8 @@ cannot mean two things a second time.
 ---
 
 ## DEC-2 -- Is the raise/handle index fact still wanted?
+
+> **CLOSED 2026-10-25 -- same question as T-09 / walkthrough D14: owner ruled D14 b, STAY PARKED; trigger re-anchored to DEC-1 / a second consumer (INBOX-no-raise-handle-fact-blocks-exception-paths.md).**
 
 ### 1. The question in one sentence
 Should the extractor be taught to write refs.kind = 'raise' /
@@ -553,6 +577,8 @@ already-correct merge is lower value.
 
 ## DEC-5 -- Attach the platform library as an extra store at INDEX time?
 
+> **CLOSED 2026-10-25 -- same question as T-10 / walkthrough D5: owner ruled b+c, NO attach by default; opt-in index --library-db stays; note retired to INBOX-Done.**
+
 ### 1. The question in one sentence
 Should indexing a project ALSO attach its platform library (RTL/VCL/
 third-party) index as an extra store and resolve cross-store references at
@@ -669,6 +695,8 @@ its absence.
 ---
 
 ## DEC-6 -- Merge feat/graphviz-export (Delphi-RAG-Lint-Graph, c74eaba)
+
+> **CLOSED 2026-10-25 -- merged: Delphi-RAG-Lint-Graph main f44281c "merge: feat/graphviz-export -- DEC-6 (owner-approved 2026-10-06)"; c74eaba is contained in main (git branch --contains).**
 
 ### 1. The question in one sentence
 Should the feat/graphviz-export branch in the SEPARATE Delphi-RAG-Lint-Graph
@@ -787,6 +815,8 @@ Engine measured live in this session: third_party\dll-win64\drag-lint.exe, 189 r
 
 ## DEC-7 -- Turn `discarded-effect-free-result` ON by default?
 
+> **CLOSED 2026-10-25 -- discarded-effect-free-result was turned ON (walkthrough D4 background: "DEC-7 turned discarded-effect-free-result ON").**
+
 ### 1. The question in one sentence
 Should the lint rule that flags "you called a side-effect-free function and threw away its
 return value" ship ON by default (it exists today, OFF), given that on ORM3 it fires exactly
@@ -892,6 +922,8 @@ base-typed polymorphic receiver is recognized as the known limit rather than rep
 ---
 
 ## DEC-8 -- Schedule the use-edges programme (property/field USE edges)?
+
+> **CLOSED 2026-10-25 -- later ruled (walkthrough D11: "DEC-8 later ruled").**
 
 ### 1. The question in one sentence
 Should the fully-designed "USE edges" feature -- binding a property/field READ or WRITE to its
@@ -1243,6 +1275,8 @@ pays for several fixes at once) rather than spending a bump on this alone.
 
 ## DEC-12 -- Widen the docs-sync guard to police `--flag` parity in README / AI-USAGE?
 
+> **CLOSED 2026-10-25 -- the write-up itself says "already decided and shipped" (owner ruled 2026-09-16, F5); see its own recommendation.**
+
 ### 1. The question in one sentence
 Should the docs-sync guard also enforce that every CLI flag README.md and AI-USAGE.md is in
 sync with --help (as it already does for verbs), given the backlog's stated baseline of
@@ -1350,6 +1384,8 @@ session's re-parse; treat the exact patch digit as not load-bearing for these ru
 ---
 
 ## DEC-13 -- Widen the maintenance control channel beyond the `lsp` verb?
+
+> **CLOSED 2026-10-25 -- the need (a clean stand-down of running engines) is served by drag-lint shutdown --all and ide-release (CLAUDE.md "Building"; docs\wiki\ide-release.md).**
 
 ### 1. The question in one sentence
 Should the just-shipped "ask a running engine to stand down cleanly" control channel be turned on for every
@@ -1723,6 +1759,8 @@ spending the same day of effort earlier than needed, against an undocumented, ve
 ---
 
 ## DEC-19 -- Bind bare reads of the enclosing class's own FIELDS? (RB-2, charts in-class-field-reads)
+
+> **CLOSED 2026-10-25 -- shipped: 3bf1f06c "merge: feat/e5-resolver -- E5/DEC-19" (resolver 1.12.0-alpha, 1.24.0-alpha).**
 
 ### 1. The question in one sentence
 Should the resolver be changed to bind a bare read of one of the enclosing class's own FIELDS (e.g. "if FConnected

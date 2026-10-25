@@ -3,7 +3,8 @@
 
   On a copy of docs\examples\circular-uses-demo (plus a minimal Demo.dpr / Demo.dproj this
   runner writes, since --fix needs --project), `cycles --fix --no-compile` refuses TOrder
-  (kind base-class). The refusal line used to say `Orders.pas:6` -- the first line of TOrder's
+  (kind base-class). Since owner ruling D1 (2026-10-25) the shipped demo's field switches to the
+  base class, so the copy passes FOrders to Copy() -- a use that keeps the refusal. The refusal line used to say `Orders.pas:6` -- the first line of TOrder's
   /// doc-comment (the MOVE range start) -- while `cycles --plan`, outline and query all say
   line 10, the `TOrder = class` header.
 
@@ -43,6 +44,10 @@ try {
   New-Item -ItemType Directory -Force $root | Out-Null
   Get-ChildItem (Join-Path $Repo 'docs\examples\circular-uses-demo') -Filter *.pas |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) -Force }
+  $cu = Join-Path $root 'Customers.pas'
+  $cuText = [IO.File]::ReadAllText($cu)
+  Check 'ctl0 the copy can be edited to keep the refusal' ($cuText.Contains('Result := Length(FOrders);'))
+  [IO.File]::WriteAllText($cu, $cuText.Replace('Result := Length(FOrders);', 'Result := Length(Copy(FOrders));'))
   [IO.File]::WriteAllText((Join-Path $root 'Demo.dpr'),
     "program Demo;`r`n`r`nuses`r`n  Customers in 'Customers.pas',`r`n  Orders in 'Orders.pas';`r`n`r`nbegin`r`nend.`r`n")
   [IO.File]::WriteAllText((Join-Path $root 'Demo.dproj'),

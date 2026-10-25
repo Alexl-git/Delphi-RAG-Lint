@@ -245,6 +245,58 @@ begin
     if ABareName = E then Exit(True);
 end;
 
+const
+  { line-too-long: the longest line dcc64 37.0 compiles at EVERY file offset.
+    Measured 2026-09-30 (docs\INBOX-2026-09-30-line-too-long-rule-and-lint-note.md):
+    1021-4095 compile or fail with F2069 depending on where the line lands, so
+    an edit ABOVE a long line can break the build without touching it. A
+    compiler limit, not a style preference -- hence a constant, not a param. }
+  MAX_SAFE_LINE_LEN = 1020;
+  BYTE_LF = 10;
+  BYTE_CR = 13;
+
+{ line-too-long (owner ruling D3, 2026-10-25): one finding per line of pSrc (the
+  file's raw bytes) longer than MAX_SAFE_LINE_LEN -- ANY line, code or comment. The
+  terminator (CRLF, LF or a lone CR) is not counted. Anchored on the long line
+  itself, columns MAX_SAFE_LINE_LEN+1 .. end, so the squiggle starts where the
+  line stops being safe. dcc reports the F2069 on the line BEFORE; the rule
+  names the line to shorten. Guard: tests\autotest\run_lint_line_too_long.ps1. }
+procedure AddLongLineFindings(const pSrc: TArray<Byte>; const pFile: string; pFindings: TList<TLintFinding>);
+var
+  LineNo, LineStart, I, Len: Integer;
+  F: TLintFinding;
+begin
+  LineNo:= 1;
+  LineStart:= 0;
+  I:= 0;
+  while I <= Length(pSrc) do
+  begin
+    if (I = Length(pSrc)) or (pSrc[I] in [BYTE_LF, BYTE_CR]) then
+    begin
+      Len:= I - LineStart;
+      if Len > MAX_SAFE_LINE_LEN then
+      begin
+        F:= Default(TLintFinding);
+        F.RuleId  := 'line-too-long';
+        F.Severity:= 'warning';
+        F.Message := Format('Line is %d characters (limit %d) -- dcc64 compiles a longer line only at '
+          + 'some file offsets, so an edit above it can break the build (F2069)', [Len, MAX_SAFE_LINE_LEN]);
+        F.FilePath := pFile;
+        F.StartLine:= LineNo;
+        F.StartCol := MAX_SAFE_LINE_LEN + 1;
+        F.EndLine  := LineNo;
+        F.EndCol   := Len + 1;
+        pFindings.Add(F);
+      end;
+      if (I + 1 < Length(pSrc)) and (pSrc[I] = BYTE_CR) and (pSrc[I + 1] = BYTE_LF) then
+        Inc(I);
+      Inc(LineNo);
+      LineStart:= I + 1;
+    end;
+    Inc(I);
+  end;
+end;
+
 class function TDeadCodeChecker.Check(const AFile: string; AMinCaseBranches: Integer;
   AMaxBoolOps: Integer; AMaxUnitLines: Integer; AMaxChainHops: Integer): TArray<TLintFinding>;
 var
@@ -2824,6 +2876,7 @@ begin
         Findings.Add(UF);
       end;
     end;
+    AddLongLineFindings(Src, AFile, Findings);
     { v(2026-08-14): doc-orphan-block -- a managed facts block attached to NO
       declaration.
 

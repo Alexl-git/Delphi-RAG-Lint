@@ -191,6 +191,48 @@ begin
     Check('10e rule id', M[0].RuleId = 'bare-except');
     Check('10e dash stays in the reason', M[0].Reason = 'rethrown -- by the caller');
   end;
+
+  { 10f (W5-B, INBOX-yadf-fp-layout-complexity-docs item 3): a SECOND `// dl:ok`
+    comment on the same line is a second marker, not prose inside the first
+    one's reason. Before: one entry, reason 'one  // dl:ok deep-nesting -- two'. }
+  M:= TReviewMarkers.Parse('x; // dl:ok bare-except@7f3a -- one  // dl:ok deep-nesting -- two');
+  Check('10f two // dl:ok comments yield two markers', Length(M) = 2);
+  if Length(M) = 2 then
+  begin
+    Check('10f first rule id', M[0].RuleId = 'bare-except');
+    Check('10f first hash', M[0].Hash = '7f3a');
+    Check('10f first reason ends at the second tag', M[0].Reason = 'one');
+    Check('10f second rule id', M[1].RuleId = 'deep-nesting');
+    Check('10f second reason', M[1].Reason = 'two');
+  end;
+
+  { 10g: the second tag with no reason on the first one. }
+  M:= TReviewMarkers.Parse('x; // dl:ok bare-except@7f3a  // dl:ok deep-nesting@aa01, sleep-in-vcl -- why');
+  Check('10g three entries across two comments', Length(M) = 3);
+  if Length(M) = 3 then
+  begin
+    Check('10g first reason empty', M[0].Reason = '');
+    Check('10g third rule id', M[2].RuleId = 'sleep-in-vcl');
+    Check('10g third reason', M[2].Reason = 'why');
+  end;
+
+  { 10h NEGATIVE CONTROL: `dl:ok` in a reason WITHOUT its own `//` is prose. }
+  M:= TReviewMarkers.Parse('x; // dl:ok bare-except -- the dl:ok grammar says so');
+  Check('10h prose dl:ok is not a second marker', Length(M) = 1);
+  if Length(M) = 1 then
+    Check('10h prose reason kept whole', M[0].Reason = 'the dl:ok grammar says so');
+
+  { 10i: allow on a two-comment line merges into ONE marker and keeps both reasons. }
+  var Merged: string:= TReviewMarkers.InsertInto(
+    'x; // dl:ok bare-except@7f3a -- one  // dl:ok deep-nesting -- two', 'deep-nesting', '', 'bb02');
+  Check('10i merged line has one dl:ok tag', OccurrenceCount(Merged, 'dl:ok') = 1);
+  M:= TReviewMarkers.Parse(Merged);
+  Check('10i merged entries', Length(M) = 2);
+  if Length(M) = 2 then
+  begin
+    Check('10i refreshed hash', M[1].Hash = 'bb02');
+    Check('10i both reasons kept', M[0].Reason = 'one; two');
+  end;
 end;
 
 { ---- insertion ------------------------------------------------------------- }
