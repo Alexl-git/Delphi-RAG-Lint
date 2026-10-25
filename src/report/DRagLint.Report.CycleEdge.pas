@@ -2808,9 +2808,7 @@ begin
   begin
     FIface:= 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckWrites and CheckClass and RewriteConsumer;
-    Ok:= Ok and CheckCastExceptions and CheckWithBodies and CollectLeafUses;
-    Ok:= CheckMembers and CheckMethods and CheckClass and RewriteConsumer;
+    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass and RewriteConsumer;
     Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
