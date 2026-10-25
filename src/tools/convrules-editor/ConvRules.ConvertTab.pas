@@ -31,6 +31,7 @@ uses
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
   , ConvRules.WorkList  // TWorkRun: TConvertHost.WorkListReady's parameter
   , ConvRules.QualifyFix  // TQualifyPick: TConvertHost.QualifyBook's parameter
+  , ConvRules.TextEncoding  // TTextLevel: TConvertHost.LowerBook's parameter
   ;
 
 type
@@ -103,6 +104,13 @@ type
     /// open one (the unsaved-changes guard applies), edits its model and leaves it unsaved. May
     /// be nil = the Qualify button stays hidden.</summary>
     QualifyBook   : TFunc<string, TArray<TQualifyPick>, string>;
+    /// <summary>Lowers a book's encoding before a run, after the user's Yes to ASK_LOWER_FMT:
+    /// (book path, level) -> '' = lowered and saved; else the status text of the abort
+    /// (LOWER_ABORTED_FMT ...). May be nil = no book is offered for lowering.</summary>
+    /// <remarks>Ruling I5: a book that is not the open one is re-encoded byte for byte
+    /// (LowerBookFile), never loaded into the editor; the open book takes the level and a
+    /// normal Save.</remarks>
+    LowerBook     : TFunc<string, TTextLevel, string>;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -134,7 +142,9 @@ type
       FRunning        : Boolean;
       FCancelRequested: Boolean;            // written on the UI thread, polled by the worker
       FNotes          : TArray<string>;     // the current run's pre-flight notes (for the report)
-      FRunRows        : TArray<TConvertRow>;// the current run's rows as they arrived
+      FRunRows        : TArray<TConvertRow>;// the current run's rows as they arrived (a re-run appends to them)
+      FRunRowsFrom    : Integer;            // StartRun: the first FRunRows index of the run in progress (0, or a re-run's)
+      FLowerAsked     : TArray<string>;     // books already asked about lowering this session (ASK_LOWER_FMT, asked once)
       FRunRulesFolder : string;             // the rules folder when Convert was pressed: the report goes THERE
       FRunCastLib     : string;             // the castlib the run passed ('' = none): ExistingCastLib, captured when Convert was pressed
       FIndexed        : TArray<string>;     // file paths in the project index (valid while FIndexKnown)
@@ -215,6 +225,18 @@ type
       /// RefreshBooks or Convert asks again (ConvRules.CapabilityProbe.ProbeIsCached).</remarks>
       procedure ProbeCapabilities;
       procedure ConvertClick(Sender: TObject);
+      /// <summary>Asks, once per book and session, to lower each of ABooks LowerCandidates offers
+      /// (ASK_LOWER_FMT, Yes / No); a Yes goes to FHost.LowerBook.</summary>
+      /// <returns>The outcome texts (LOWERED_FMT or the abort status), one per Yes.</returns>
+      function OfferLowering(const ABooks: TArray<string>): TArray<string>;
+      /// <summary>Starts a built job on the worker thread: numbers it (Inc(FRunId), ruling I2),
+      /// captures the run's settings and appends its rows to FRunRows.</summary>
+      /// <param name="AJob">The job; RunId is overwritten.</param>
+      /// <param name="ALead">Text put before the "Converting ..." status; '' = none.</param>
+      procedure StartRun(const AJob: TConvertJob; const ALead: string);
+      /// <summary>After a run: the raise question per encoding-refused unit (ShouldAskRaise
+      /// gates it) and, on any Yes, the re-run of those units.</summary>
+      procedure AskRaiseAndRerun(const AJob: TConvertJob);
       procedure CancelClick(Sender: TObject);
       /// <summary>The index into FRunRows of the selected results row.</summary>
       /// <returns>The index; -1 for a note row or no selection.</returns>
@@ -399,6 +421,14 @@ uses
   , ConvRules.QualifyForm
   , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- PROBE_SHOW_AFTER_MS is the probe's own window delay; it travels with the probe decisions the tab asks (ProbeCaseFor, ProbeStatusText)
   ;
+
+// A rule book's text at its detected encoding (UTF-16 / ANSI / UTF-8, BOM or none).
+function ReadBookText(const APath: string): string;
+var
+  LDet: TDetectedText;
+begin
+  Result:= ReadTextDetect(APath, LDet);
+end;
 
 type
   // R2: what the probe's worker learned, for the wait question on the UI thread. Version
@@ -754,7 +784,7 @@ var
   function Classify(var AEntry: TBookEntry): Boolean;
   begin
     try
-      AEntry:= ClassifiedEntry(AEntry, TFile.ReadAllText(AEntry.Path));
+      AEntry:= ClassifiedEntry(AEntry, ReadBookText(AEntry.Path));
       Result:= True;
     except
       on E: Exception do
@@ -1002,7 +1032,7 @@ begin
   for var LEntry: TBookEntry in FEntries do
     if LEntry.Checked then
       try
-        Result:= Result + TypePairsOfText(TFile.ReadAllText(LEntry.Path));
+        Result:= Result + TypePairsOfText(ReadBookText(LEntry.Path));
       except
         on E: Exception do
           AError:= AError + ExtractFileName(LEntry.Path) + ': ' + E.Message + ' ';
@@ -1311,7 +1341,7 @@ begin
   for var I: Integer:= 0 to High(FEntries) do
   begin
     try
-      LText:= TFile.ReadAllText(FEntries[I].Path);
+      LText:= ReadBookText(FEntries[I].Path);
     except
       on Exception do
         LText:= ''; // an unreadable book converts nothing; RefreshBooks already reported it
@@ -1589,7 +1619,6 @@ var
   Job  : TConvertJob;
   Idx  : TArray<string>;
   Err  : string;
-  LExe : string;
 begin
   // The open book on disk is what runs: make the user decide about unsaved edits first.
   var LOpen: string:= FHost.GetOpenBook();
@@ -1610,7 +1639,7 @@ begin
   for var I: Integer:= 0 to High(FEntries) do
     if FEntries[I].Checked then
       try
-        FEntries[I]:= ClassifiedEntry(FEntries[I], TFile.ReadAllText(FEntries[I].Path));
+        FEntries[I]:= ClassifiedEntry(FEntries[I], ReadBookText(FEntries[I].Path));
       except
         on E: Exception do
         begin
@@ -1681,9 +1710,43 @@ begin
   Job.BatchOverride     := GetEnvironmentVariable('CONVRULES_BATCH');
   Job.ApplyFeatures     := FApplyFeatures;
   Job.Scope             := FScope; // copied: Clear scope mid-run does not reach the worker
+  // Task 6: a UTF-16 book whose characters all fit a lower level is offered for lowering,
+  // once per book and session; whatever came of it is a note of this run, and the run starts.
+  var LLowered: TArray<string>:= OfferLowering(Job.Books);
+  for var LNote: string in LLowered do
+  begin
+    FNotes:= FNotes + [LNote];
+    AddResultRow(['', '', 'note', '', '', '', '', LNote]);
+  end;
+  StartRun(Job, string.Join(' ', LLowered));
+end;
+
+function TConvertTab.OfferLowering(const ABooks: TArray<string>): TArray<string>;
+begin
+  Result:= nil;
+  if not Assigned(FHost.LowerBook) then
+    Exit;
+  for var LCand: TLowerCandidate in LowerCandidates(ABooks, FLowerAsked) do
+  begin
+    FLowerAsked:= FLowerAsked + [LCand.Path]; // asked once, whatever the answer
+    var LName: string:= ExtractFileName(LCand.Path);
+    if MessageDlg(Format(ASK_LOWER_FMT, [LName, LevelName(LCand.Current), LevelName(LCand.Offer)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+      Continue;
+    var LAbort: string:= FHost.LowerBook(LCand.Path, LCand.Offer);
+    Result:= Result + [if LAbort = '' then Format(LOWERED_FMT, [LName, LevelName(LCand.Offer)]) else LAbort];
+  end;
+end;
+
+procedure TConvertTab.StartRun(const AJob: TConvertJob; const ALead: string);
+var
+  LExe  : string;
+  LStart: string;
+begin
+  var Job: TConvertJob:= AJob; // a local: the worker's closure captures it
   FRunBatch := JobRunsBatched(Job); // after Scope: a scoped run is per-unit in the runner too
-  Inc(FRunId);
+  Inc(FRunId); // ruling I2: every run, a re-run too, is numbered here
   Job.RunId             := FRunId; // keys this run's Work list rows (WorkRunOf)
+  FRunRowsFrom:= Length(FRunRows); // a re-run appends its rows: its own tally starts here
   LExe:= FHost.ExePath;
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
@@ -1691,7 +1754,7 @@ begin
   FRunInheritedOk:= FInheritedOk;
   FRunRetypeOk   := FRetypeOk;
   FRunCodeUncOk  := FCodeUncOk;
-  FRunScope      := FScope;
+  FRunScope      := Job.Scope;
   // The worker builds its own adapter: the castlib is read HERE, on the UI thread,
   // and only an existing file is passed and named in the report.
   FRunCastLib:= ExistingCastLib(FHost.GetCastLib());
@@ -1701,9 +1764,10 @@ begin
   FProgress.Max     := Length(Job.Books) * Length(Job.Units);
   FProgress.Position:= 0;
   if FRunBatch then
-    FHost.SetStatus(Format('Converting %d unit(s) with %d book(s) -- batch mode (%d per call)...', [Length(Job.Units), Length(Job.Books), BATCH_MAX_UNITS]), False)
+    LStart:= Format('Converting %d unit(s) with %d book(s) -- batch mode (%d per call)...', [Length(Job.Units), Length(Job.Books), BATCH_MAX_UNITS])
   else
-    FHost.SetStatus(Format('Converting %d unit(s) with %d book(s)...', [Length(Job.Units), Length(Job.Books)]), False);
+    LStart:= Format('Converting %d unit(s) with %d book(s)...', [Length(Job.Units), Length(Job.Books)]);
+  FHost.SetStatus(Trim(ALead + ' ' + LStart), False);
   TThread.CreateAnonymousThread(
     procedure
     var
@@ -1849,20 +1913,23 @@ var
 begin
   SetRunning(False);
   FProgress.Position:= FProgress.Max;
+  // This run's own rows: a re-run (Task 6) appends to the first run's, which the grid and the
+  // report keep, but its tally, stops and not-reached units are its own.
+  var LRows: TArray<TConvertRow>:= Copy(FRunRows, FRunRowsFrom, Length(FRunRows) - FRunRowsFrom);
   NotReached := nil;
   if FRunBatch then
-    NotReached:= NotReachedUnits(FRunRows, AJob.Units, AJob.Books) // cancel polls count chunks there, not units
+    NotReached:= NotReachedUnits(LRows, AJob.Units, AJob.Books) // cancel polls count chunks there, not units
   else if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
     NotReached:= Copy(AJob.Units, AStopAt, Length(AJob.Units) - AStopAt);
   // Engine 1.28.0 exit 6: the run stopped on an unusable cast library -- a RUN-level
   // error that leads the status line; the units after the stop never ran.
-  var LStop: string:= CastLibStopText(FRunRows, FRunCastLib);
+  var LStop: string:= CastLibStopText(LRows, FRunCastLib);
   if (LStop <> '') and not FRunBatch then
-    NotReached:= NotReachedAfterStop(FRunRows, AJob.Units);
+    NotReached:= NotReachedAfterStop(LRows, AJob.Units);
   for var LUnit: string in NotReached do
     AddResultRow(['', ExtractFileName(LUnit), if LStop <> '' then STATUS_NOT_REACHED_STOPPED else STATUS_NOT_REACHED, '', '', '', '', '']);
   // C12: out-of-scope pairs are counted apart and leave the "of M" denominator.
-  Tally:= TallyRows(FRunRows);
+  Tally:= TallyRows(LRows);
   Msg:= ConvertedSummaryText(Tally, PairsReached(Length(AJob.Books), Length(AJob.Units), Length(NotReached)));
   if Tally.Refused > 0 then
     Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Tally.Refused]);
@@ -1879,9 +1946,13 @@ begin
   // The most severe outcome leads: a unit that may be half-converted; glyph to-dos
   // (spec E14, counted per UNIT -- R5) come next: converted, but each such unit's
   // implementation section starts with a to-do line the user must act on.
-  var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
+  var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(LRows));
   // RESTORE FAILED leads, then the castlib stop, then the glyph to-dos.
   Msg:= RunStatusLead(Tally.NotRestored, LGlyphSummary, Msg, LStop);
+  // Task 6: a re-run says first what it raised.
+  var LRerun: string:= RerunStatusText(AJob);
+  if LRerun <> '' then
+    Msg:= LRerun + '. ' + Msg;
   if AProblem <> '' then
     Msg:= Msg + ' Also: ' + AProblem + '.';
   if WriteReport(NotReached, AFinalIndex, Report, RepErr) then
@@ -1911,6 +1982,36 @@ begin
   var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Tally.ConfigErrors + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
   var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');
   FHost.SetStatus(Msg, LRunProblem or LReadProblem or (LGlyphSummary <> ''));
+  // Task 6: the raise question per encoding-refused unit; a re-run never asks (ShouldAskRaise).
+  AskRaiseAndRerun(AJob);
+end;
+
+procedure TConvertTab.AskRaiseAndRerun(const AJob: TConvertJob);
+var
+  LUnits: TArray<string>;
+  LFiles: TArray<string>;
+begin
+  if not ShouldAskRaise(AJob, FCancelRequested) then
+    Exit;
+  LUnits:= nil;
+  LFiles:= nil;
+  for var LRow: TConvertRow in EncodingRefusedRows(Copy(FRunRows, FRunRowsFrom, Length(FRunRows) - FRunRowsFrom)) do
+  begin
+    var LAnswer: Integer:= MessageDlg(EncodingRaiseQuestion(LRow.UnitPas, LRow.Apply.EncodingRefusal), mtConfirmation, [mbYes, mbNo, mbCancel], 0);
+    if LAnswer = mrCancel then
+      Break;
+    if LAnswer <> mrYes then
+      Continue;
+    // Only a file of the unit itself (its .pas or .dfm) can be raised by its own call.
+    var LOwn: TArray<string>:= RaiseFilesOf([LRow.Apply.EncodingRefusal.FileName], LRow.UnitPas);
+    if Length(LOwn) = 0 then
+      Continue;
+    LUnits:= LUnits + [LRow.UnitPas];
+    LFiles:= LFiles + LOwn;
+  end;
+  if Length(LUnits) = 0 then
+    Exit;
+  StartRun(RerunJob(AJob, LUnits, LFiles), '');
 end;
 
 end.

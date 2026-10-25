@@ -524,6 +524,19 @@ type
       /// <returns>True when the caller may proceed: nothing unsaved, the user saved
       /// successfully, or chose not to save; False on Cancel or a failed save.</returns>
       function ConfirmDiscard: Boolean;
+      /// <summary>The Convert tab's TConvertHost.LowerBook: lowers a book's encoding before a
+      /// run, after the user's Yes to ASK_LOWER_FMT.</summary>
+      /// <param name="APath">The book file.</param>
+      /// <param name="ALevel">The level offered (LowerCandidates' Offer).</param>
+      /// <returns>'' = lowered and on disk; else the abort text (LOWER_ABORTED_FMT ...), the
+      /// book unchanged.</returns>
+      /// <remarks>Ruling I5. A book that is NOT the open one is re-encoded byte for byte
+      /// (LowerBookFile: its own text, a .bak first) -- never LoadFile + SaveBook, which would
+      /// replace the user's open book and drop incomplete #convert blocks. The open book with
+      /// no unsaved edits takes the level (SetBookLevel) and a normal SaveBook. The open book
+      /// WITH unsaved edits (the user chose to run the disk version) is re-encoded on disk too
+      /// and takes the level, so its edits are neither written nor lost.</remarks>
+      function LowerBookForConvert(APath: string; ALevel: TTextLevel): string;
       /// <summary>OnCloseQuery: the window closes only when ConfirmDiscard allows it.</summary>
       /// <param name="Sender">The form; unused.</param>
       /// <param name="CanClose">Set to ConfirmDiscard's answer.</param>
@@ -3694,6 +3707,8 @@ begin
   // FTreeLoads holds depth commits back while it runs (see FEngine.LongCallRunner).
   LHost.RunLongCall:= RunLongCallTracked;
   LHost.RunProbeCall:= RunProbeCallTracked; // R2: the capability probe asks instead of giving up at 15 s
+  // Task 6: the lower-the-book offer before a run (ruling I5: never through LoadFile).
+  LHost.LowerBook:= LowerBookForConvert;
   // Task 3: each finished run REPLACES the Work list (rows keyed by run id).
   LHost.WorkListReady:= procedure(ARun: TWorkRun)
     begin
@@ -7530,6 +7545,11 @@ var
   Work: TStreamingWork   ;
 begin
   R:= Default(TScopedValidation);
+  // The level the book is (or is about to be) saved at; an unsaved text that does not fit it
+  // (Validate before a raising Save) is checked at the lowest level that holds it, never lossy.
+  var LLevel: TTextLevel:= SaveLevelFor(FBookLevel);
+  if not RoundTrips(AText, LLevel) then
+    LLevel:= NeededLevel(AText);
   // Every pass runs on the progress window's worker: the window appears after
   // SHOW_DELAY_MS and its Cancel stops the running engine call and every pass
   // after it. The runner (set in Create) counts FTreeLoads, so a pending depth
@@ -7539,8 +7559,8 @@ begin
       R:= RunScopedValidation(AText, AJobs,
         function(const AValidated, AFrom, ATo: string): string
         begin
-          // Task 4: ValidateTextAt -- switch to it with FBookLevel once lane E lands, so the temp file gets the real bytes (G5)
-          Result:= FEngine.ValidateText(AValidated, AFrom, ATo, ACancel).Output;
+          // G5: the temp file gets the book's real bytes (LLevel, chosen on the UI thread below).
+          Result:= FEngine.ValidateTextAt(AValidated, LLevel, AFrom, ATo, ACancel).Output;
         end,
         function: Boolean
         begin
@@ -7731,6 +7751,26 @@ begin
     Exit;
   end;
   CanClose:= ConfirmDiscard;
+end;
+
+function TConvRulesForm.LowerBookForConvert(APath: string; ALevel: TTextLevel): string;
+var
+  LBackup: string;
+begin
+  var LOpen: Boolean:= (FFilePath <> '') and SameText(ExpandFileName(APath), ExpandFileName(FFilePath));
+  CommitPendingDepth; // the dirty check must see a pick still waiting on its timer
+  if LOpen and (FBook.Snapshot = FSnapshot) then
+  begin
+    var LOldLevel: TTextLevel:= FBookLevel;
+    SetBookLevel(ALevel);
+    if SaveBook(False) then
+      Exit('');
+    SetBookLevel(LOldLevel);
+    Exit(Format(LOWER_ABORTED_FMT, [ExtractFileName(APath)]));
+  end;
+  Result:= LowerBookFile(APath, ALevel, LBackup);
+  if (Result = '') and LOpen then
+    SetBookLevel(ALevel); // the editor's next Save writes what the disk now holds
 end;
 
 function TConvRulesForm.SaveBook(APromptPath: Boolean): Boolean;
