@@ -12016,6 +12016,23 @@ begin
   ARename.Refusal:= string.Join('; ', Reasons);
 end;
 
+/// <summary>Emits a machine-readable findings document (--json / --format sarif):
+/// to the file named by --output when given, else to stdout.</summary>
+/// <param name="AArgs">Parsed arguments; only Output is read.</param>
+/// <param name="ADoc">The complete JSON or SARIF document.</param>
+/// <remarks>The file is UTF-8 without a BOM (same as the lint-all text report). A
+/// short note goes to STDERR so stdout stays empty and the destination is visible.
+/// Raises EInOutError / EFileStreamError if the file cannot be written.</remarks>
+procedure EmitFindingsDoc(const AArgs: TArgs; const ADoc: string);
+begin
+  if AArgs.Output = '' then Writeln(ADoc)
+  else
+  begin
+    TFile.WriteAllBytes(AArgs.Output, TEncoding.UTF8.GetBytes(ADoc + sLineBreak));
+    Writeln(ErrOutput, 'drag-lint: findings written to ' + AArgs.Output);
+  end;
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
@@ -12568,7 +12585,7 @@ begin
   end; // if
 
   { 3: output. }
-  if SameText(AArgs.Format, 'sarif') then Writeln(DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
+  if SameText(AArgs.Format, 'sarif') then EmitFindingsDoc(AArgs, DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
   else if AArgs.AsJson or SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;
@@ -12591,7 +12608,7 @@ begin
         if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);
         JArr.AddElement(JObj);
       end;
-      Writeln(JArr.Format(2));
+      EmitFindingsDoc(AArgs, JArr.Format(2));
     finally
       JArr.Free;
     end; // try

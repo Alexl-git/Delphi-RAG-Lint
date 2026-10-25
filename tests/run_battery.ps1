@@ -633,7 +633,7 @@ function Write-BatteryBanner([string]$Title, [string]$Colour, [string[]]$Lines) 
 # '[ n/N ] rel ... ' prefix it wrote with -NoNewline. Without that re-draw the
 # eventual 'PASS (12.3s)' would land at the end of the heartbeat block instead
 # of after its own runner's name.
-function Test-BatteryHeartbeat([int]$Done, [int]$Total, [string]$CurrentRel, [double]$CurrentSec) {
+function Test-BatteryHeartbeat([int]$Done, [int]$Total, [string]$CurrentRel, [double]$CurrentSec, [int]$Budget) {
   if ($script:HeartbeatEvery -le [TimeSpan]::Zero) { return $false }
   $now = [DateTime]::UtcNow
   if (($now - $script:LastBeat) -lt $script:HeartbeatEvery) { return $false }
@@ -654,7 +654,7 @@ function Test-BatteryHeartbeat([int]$Done, [int]$Total, [string]$CurrentRel, [do
   Write-BatteryBanner ("BATTERY STILL RUNNING -- heartbeat #{0}" -f $script:BeatCount) 'Yellow' @(
     ('elapsed   : {0:N1} min' -f $elapsed.TotalMinutes),
     ('progress  : {0} of {1} runners done, {2} remaining' -f $Done, $Total, ($Total - $Done)),
-    ('running   : {0}  ({1:N0}s so far, budget {2}s)' -f $CurrentRel, $CurrentSec, $TimeoutSec),
+    ('running   : {0}  ({1:N0}s so far, budget {2}s)' -f $CurrentRel, $CurrentSec, $Budget),
     ('eta       : {0}' -f $eta),
     'This run is NOT finished. Do not type the next command yet.'
   )
@@ -694,7 +694,7 @@ $RunOneText = @'
   $rsw.Stop()
   [pscustomobject]@{
     Runner = $Rel; State = $state; ExitCode = $code
-    Seconds = [math]::Round($rsw.Elapsed.TotalSeconds, 1); Log = $logFile
+    Seconds = [math]::Round($rsw.Elapsed.TotalSeconds, 1); Log = $logFile; Budget = $TimeoutSec
   }
 '@
 $RunOne = [scriptblock]::Create($RunOneText)
@@ -836,7 +836,7 @@ foreach ($r in $kept) {
     # that run_battery_heartbeat_guard can observe one in seconds rather than
     # needing a runner that outlives a whole slice.
     if ($proc.WaitForExit([Math]::Min($remainMs, 500))) { $exited = $true; break }
-    if (Test-BatteryHeartbeat ($i - 1) $kept.Count $rel $rsw.Elapsed.TotalSeconds) {
+    if (Test-BatteryHeartbeat ($i - 1) $kept.Count $rel $rsw.Elapsed.TotalSeconds ([Math]::Max($TimeoutSec, [int]$RunnerBudgetSec[$r.Name]))) {
       # Re-draw the in-progress prefix the heartbeat interrupted, so this
       # runner's own PASS/FAIL still lands after its own name.
       Write-Host ("[{0,3}/{1}] {2} ... " -f $i, $kept.Count, $rel) -NoNewline
@@ -860,6 +860,7 @@ foreach ($r in $kept) {
   $results.Add([pscustomobject]@{
     Runner = $rel; State = $state; ExitCode = $code
     Seconds = [math]::Round($rsw.Elapsed.TotalSeconds, 1); Log = $logFile
+    Budget = [Math]::Max($TimeoutSec, [int]$RunnerBudgetSec[$r.Name])
   })
 }
 
@@ -900,8 +901,9 @@ if ($fail.Count -gt 0) {
 }
 if ($timeout.Count -gt 0) {
   Write-Host ''
-  Write-Host ("  TIMEOUT (> {0}s):" -f $TimeoutSec) -ForegroundColor Magenta
-  foreach ($t in $timeout) { Write-Host ("    {0}" -f $t.Runner) -ForegroundColor Magenta }
+  # Per-runner EFFECTIVE budget (scaled by -Jobs, floored by RunnerBudgetSec), not the base -TimeoutSec.
+  Write-Host '  TIMEOUT:' -ForegroundColor Magenta
+  foreach ($t in $timeout) { Write-Host ("    {0}  (budget {1}s)" -f $t.Runner, $t.Budget) -ForegroundColor Magenta }
 }
 
 $csv = Join-Path $LogDir 'results.csv'
