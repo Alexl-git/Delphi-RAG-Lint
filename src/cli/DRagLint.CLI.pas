@@ -12865,14 +12865,15 @@ const
     'type-name-prefix', 'field-name-prefix', 'param-name-prefix', 'method-pascalcase', 'const-casing',
     'local-var-casing', 'unit-name-matches-file', 'reserved-word-casing', 'hungarian-or-short-identifier',
     'local-field-prefix', 'confusable-identifier');
-  LINT_GATE_DEAD_CODE: array[0..24] of string = (
+  LINT_GATE_DEAD_CODE: array[0..25] of string = (
     'unused-parameter', 'identical-then-else', 'referenced-never-set', 'redundant-parentheses',
     'commented-out-code', 'function-result-ignored', 'destructor-without-override',
     'case-with-too-few-branches', 'boolean-expression-complexity', 'exception-constructed-but-not-raised',
     'duplicate-exception-handler', 'repeated-else-if-condition', 'property-references-itself',
     'unit-too-large', 'weak-random-for-security', 'create-inside-try', 'insecure-temp-file',
     'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'message-chain',
-    'public-writable-field', 'loop-control-flag', 'default-encoding-io', 'doc-orphan-block');
+    'public-writable-field', 'loop-control-flag', 'default-encoding-io', 'doc-orphan-block',
+    'line-too-long');
   { RunDocDrift splits one analysis over three ids (DocRules.IsDocDriftFamily). }
   LINT_GATE_DOC_DRIFT: array[0..2] of string = ('doc-drift', 'doc-param-no-description', 'doc-param-not-in-signature');
 
