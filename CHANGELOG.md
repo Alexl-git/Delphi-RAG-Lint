@@ -59,7 +59,7 @@ needs a re-parse.
 - `cycles --fix` C7 (partial): `export`, `local`, `near`, `far` are neutral routine directives for R1 (`export; stdcall;` is mechanical and stdcall is carried; an unknown directive still refuses); guard `run_cyclefix_r1.ps1` n1-n3 (W6).
 
 ### Fixed
-- Write helpers and ename: a BOM-less UTF-8 file stays UTF-8 on write; ename columns are CHARACTER columns as the shared reader decodes the file (UTF-8 with or without BOM, ANSI), Apply writes through the shared encoding-preserving writer, and ename reports the binary / unindexed .dfm files it leaves alone (W5-D). Guards: `run_rename_encoding.ps1`, `run_rename_dfm_skipped.ps1`, `run_textedit_encoding.ps1`.
+- Write helpers and `rename`: a BOM-less UTF-8 file stays UTF-8 on write; `rename` columns are CHARACTER columns as the shared reader decodes the file (UTF-8 with or without BOM, ANSI), Apply writes through the shared encoding-preserving writer, and `rename` reports the binary / unindexed .dfm files it leaves alone (W5-D). Guards: `run_rename_encoding.ps1`, `run_rename_dfm_skipped.ps1`, `run_textedit_encoding.ps1`.
 - Storage: `Migrate` re-raises a real DDL failure and tolerates only a duplicate-column error (F2);
   the FTS5 trigram tokenizer is probed separately and `string_fts_tri` is skipped when absent, so
   Migrate no longer raises on SQLite < 3.34 (B2).
