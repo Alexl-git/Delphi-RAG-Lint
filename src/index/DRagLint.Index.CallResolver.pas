@@ -408,6 +408,16 @@ type
     // B-31: file id -> its type symbols and its root (unit/program) symbol.
     FFileTypes: TDictionary<Int64, TArray<TSymbol>>;
 
+    /// <summary>The type a bare type name at ARef names, by Delphi's scope order;
+    /// the shared lookup behind ResolveTypeUse and ResolveEnumCast.</summary>
+    /// <param name="ARef">The ref naming the type; FileId, NameText, StartLine, StartCol and
+    /// EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when found; otherwise 'unreadable' | 'qualified' |
+    /// 'generic' | 'unlisted' | 'ambiguous' | 'not-found'.</param>
+    /// <returns>The class / interface / record / type / enum id, or 0.</returns>
+    /// <remarks>Counts nothing: each public caller keeps its own counters.</remarks>
+    function LookupTypeName(const ARef: TReference; out AReason: string): Int64;
+
     /// <summary>The names ARoutineId's implementation text declares in a const
     /// or type section, or as an inline const / var -- declarations the extractor
     /// does not emit as symbols -- as '|name|...|', lowercased and cached.</summary>
@@ -1732,6 +1742,23 @@ type
     /// only. Counted into TypeUseStats.
     /// </remarks>
     function ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>X6 / gap G1 (2026-10-25): the ENUM type a hard cast `TEnum(x)`
+    /// names -- certain or nothing.</summary>
+    /// <param name="ARef">The `call` ref the cast was extracted as (name_text =
+    /// the type name). FileId, NameText, StartLine, StartCol and
+    /// EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; 'not-enum' when the name
+    /// resolves to a type that is not an enum; otherwise ResolveTypeUse's decline
+    /// reasons ('qualified', 'ambiguous', 'not-found', ...).</param>
+    /// <returns>The enum type's symbol id, or 0.</returns>
+    /// <remarks>
+    /// Same scope order as ResolveTypeUse (it shares the lookup) but does NOT
+    /// count into TypeUseStats. Only an enum binds: a class / record cast stays
+    /// unbound, so find-callers and the call graph never see a type as a callee.
+    /// Identity only -- the caller writes refs.symbol_id and no call_edges row.
+    /// </remarks>
+    function ResolveEnumCast(const ARef: TReference; out AReason: string): Int64;
 
     /// <summary>Per-run counters of the type_use pass.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
@@ -6243,6 +6270,28 @@ begin
 end;
 
 function TCallResolver.ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
+begin
+  Result:= LookupTypeName(ARef, AReason);
+  if AReason = '' then Inc(FTypeUseStats.Bound)
+  else if AReason = 'generic' then Inc(FTypeUseStats.Generic)
+  else if AReason = 'qualified' then Inc(FTypeUseStats.Qualified)
+  else if AReason = 'unlisted' then Inc(FTypeUseStats.Unlisted)
+  else if AReason = 'ambiguous' then Inc(FTypeUseStats.Ambiguous)
+  else if AReason = 'not-found' then Inc(FTypeUseStats.NotFound)
+  else Inc(FTypeUseStats.Unreadable);
+end;
+
+function TCallResolver.ResolveEnumCast(const ARef: TReference; out AReason: string): Int64;
+begin
+  Result:= LookupTypeName(ARef, AReason);
+  if (Result > 0) and (SymbolById(Result).Kind <> skEnum) then
+  begin
+    Result := 0;
+    AReason:= 'not-enum';
+  end;
+end;
+
+function TCallResolver.LookupTypeName(const ARef: TReference; out AReason: string): Int64;
 const
   TYPE_LIKE: TSymbolKindSet = [skClass, skInterface, skRecord, skTypeAlias, skEnum];
 
@@ -6321,13 +6370,6 @@ begin
       AReason:= 'ambiguous';
     end;
   end;
-  if AReason = '' then Inc(FTypeUseStats.Bound)
-  else if AReason = 'generic' then Inc(FTypeUseStats.Generic)
-  else if AReason = 'qualified' then Inc(FTypeUseStats.Qualified)
-  else if AReason = 'unlisted' then Inc(FTypeUseStats.Unlisted)
-  else if AReason = 'ambiguous' then Inc(FTypeUseStats.Ambiguous)
-  else if AReason = 'not-found' then Inc(FTypeUseStats.NotFound)
-  else Inc(FTypeUseStats.Unreadable);
 end;
 
 function TCallResolver.ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;

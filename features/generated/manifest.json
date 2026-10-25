@@ -3214,7 +3214,7 @@
         {
           "type": "cli",
           "verb": "lint-project",
-          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]",
+          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]",
           "flags": [
             {
               "name": "--db",
@@ -3232,7 +3232,7 @@
             }
           ],
           "helpOrder": 18,
-          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]"]
+          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]"]
         },
         {
           "type": "ide-menu",
@@ -3253,10 +3253,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-25",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "dddbf924e5ab48b57aee206aaf17d53b383e3daaf07bcc55147029b09233d20d"
+        "build": "1.34.1-alpha",
+        "surfaceHash": "7eb351cba8ceb4330465f1f643478ba2bab6cd120335ef23a16f1ba69248921a"
       }
     },
     {
@@ -11717,6 +11717,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "enum-helper-separate-units"
+      },
+      {
+        "id": "rule.enum-ordinal-persisted",
+        "title": "enum-ordinal-persisted",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An enum whose ordinal crosses a stream / pipe / dataset / registry boundary (an ordinal cast TEnum(x) or Ord(v) in a routine that als... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule enum-ordinal-persisted"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "enum-ordinal-persisted"
       },
       {
         "id": "rule.enum-read-inside-with",

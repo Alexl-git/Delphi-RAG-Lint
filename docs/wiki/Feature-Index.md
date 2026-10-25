@@ -367,6 +367,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [empty-procedure-body](rules#empty-procedure-body) -- bug-patterns, info
 * [enum-bare-read-scoped](rules#enum-bare-read-scoped) -- bug-patterns, warning
 * [enum-helper-separate-units](rules#enum-helper-separate-units) -- project-wide, warning
+* [enum-ordinal-persisted](rules#enum-ordinal-persisted) -- project-wide, warning
 * [enum-read-inside-with](rules#enum-read-inside-with) -- bug-patterns, warning
 * [exception-constructed-but-not-raised](rules#exception-constructed-but-not-raised) -- bug-patterns, warning
 * [exhaustive-enum-case](rules#exhaustive-enum-case) -- bug-patterns, warning
