@@ -142,6 +142,33 @@ type
     Alternative: string;
   end;
 
+  /// <summary>One encoding_refused chars[] entry: a character a rule would write that the
+  /// file's encoding cannot hold.</summary>
+  TRefusedChar = record
+    /// <summary>code -- the code point; 0 when absent.</summary>
+    Code: Integer;
+    /// <summary>text -- the character as the engine sent it.</summary>
+    Text: string;
+    /// <summary>line -- 1-based line in the file as it would be written; 0 when absent.</summary>
+    Line: Integer;
+  end;
+
+  /// <summary>An apply/1 encoding_refused object (ENGINE E1'): the unit was refused because
+  /// text the rules write does not fit a source file's encoding. Empty (FileName = '') when
+  /// the key is absent or malformed.</summary>
+  TEncodingRefusal = record
+    /// <summary>file -- the .pas or .dfm that cannot hold the text; '' = no encoding refusal.</summary>
+    FileName    : string;
+    /// <summary>file_encoding -- ansi | utf8 | utf8-bom | utf16-bom, as the engine sent it.</summary>
+    FileEncoding: string;
+    /// <summary>raise_to -- the level the engine offers ('utf8-bom').</summary>
+    RaiseTo     : string;
+    /// <summary>chars[] -- distinct refused code points, first line each (at most 8).</summary>
+    Chars       : TArray<TRefusedChar>;
+    /// <summary>chars_total -- the full count.</summary>
+    CharsTotal  : Integer;
+  end;
+
   /// <summary>An engine 1.27.0 apply/1 feature, one per info --json capability.</summary>
   /// <remarks>afCastSiteRefusal: cast_site_refusal (items[] cast-not-applied, one per
   /// .pas site); afValueStripDb: value_cast_strip_db (value-cast-applied /
@@ -150,9 +177,9 @@ type
   /// pas_uses_resolution (engine 1.28.2: each pas_uses[] row's resolution and
   /// candidates[]; without it both are cleared); afQualifyFix: convert_qualify_fix
   /// (engine 1.28.3: qualify_fixes[]); afDescendants: descendant_warnings (engine 1.25.0:
-  /// descendants[]). only_matched[], only_unmatched[], only_included[] and unlinked[] have
+  /// descendants[]); afEncodingGuard: convert_encoding_guard (ENGINE E1'/E2: encoding_refused and\n  /// --raise-encoding; ParseApplyJson reads encoding_refused whatever the features, the set only\n  /// tells the tab whether to OFFER the raise). only_matched[], only_unmatched[], only_included[] and unlinked[] have
   /// no capability of their own and are read whatever the engine.</remarks>
-  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix, afDescendants);
+  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix, afDescendants, afEncodingGuard);
   /// <summary>The apply/1 features the run's engine reported.</summary>
   TApplyFeatures = set of TApplyFeature;
 
@@ -284,6 +311,9 @@ type
     /// type; [] without the feature. The engine's matching warnings[] / items[] line is
     /// left out of Remainder when this holds it.</summary>
     Descendants  : TArray<TDescendantLeft>;
+    /// <summary>encoding_refused (ENGINE E1') -- read whenever the key is an object, whatever
+    /// the features; FileName = '' when absent or malformed.</summary>
+    EncodingRefusal: TEncodingRefusal;
   end;
 
   /// <summary>An apply-batch/1 document (convert-apply with several --unit): one apply/1
@@ -445,6 +475,27 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
 /// (ConvRules.Engine CAPABILITY_*).</returns>
 function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
 
+const
+  /// <summary>info --json capability: encoding_refused in apply/1 and --raise-encoding.</summary>
+  CAPABILITY_ENCODING_GUARD = 'convert_encoding_guard';
+  /// <summary>The raise question ({0} unit, count, file, encoding, line break, chars, line break, file).</summary>
+  ASK_RAISE_FMT = '%s: %d character(s) the rules would write do not fit %s (%s):%s%s%sYes = raise %s to UTF-8 with BOM and convert this unit now. No = skip this unit. Cancel = skip all remaining.';
+
+/// <summary>PURE: True when the unit was refused for an encoding reason.</summary>
+/// <param name="ARow">A parsed apply/1 row.</param>
+/// <returns>ARow.Refused and ARow.EncodingRefusal.FileName &lt;&gt; ''.</returns>
+function HasEncodingRefusal(const ARow: TApplyRow): Boolean;
+
+/// <summary>PURE: the refused characters as text.</summary>
+/// <param name="ARef">The refusal.</param>
+/// <returns>'U+0413 line 57, U+0414 line 60', plus ', +N more' when CharsTotal exceeds the chars listed.</returns>
+function EncodingRefusalText(const ARef: TEncodingRefusal): string;
+
+/// <summary>PURE: the Yes / No / Cancel question offered for an encoding refusal (ASK_RAISE_FMT).</summary>
+/// <param name="AUnitPas">The refused unit.</param>
+/// <param name="ARef">Its refusal.</param>
+/// <returns>The question text.</returns>
+function EncodingRaiseQuestion(const AUnitPas: string; const ARef: TEncodingRefusal): string;
 /// <summary>Reads convert-apply's apply-batch/1 document (several --unit, engine 1.23.0).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; framed as for ParseApplyJson.</param>
 /// <param name="AFeatures">As for ParseApplyJson; applied to every unit.</param>
@@ -1181,8 +1232,29 @@ begin
     Include(Result, afQualifyFix);
   if MatchText(CAPABILITY_DESCENDANT_WARNINGS, ACapNames) then
     Include(Result, afDescendants);
+  if MatchText(CAPABILITY_ENCODING_GUARD, ACapNames) then
+    Include(Result, afEncodingGuard);
 end;
 
+function HasEncodingRefusal(const ARow: TApplyRow): Boolean;
+begin
+  Result:= ARow.Refused and (ARow.EncodingRefusal.FileName <> '');
+end;
+
+function EncodingRefusalText(const ARef: TEncodingRefusal): string;
+begin
+  Result:= '';
+  for var LChar: TRefusedChar in ARef.Chars do
+    Result:= Result + (if Result = '' then '' else ', ') + Format('U+%.4X line %d', [LChar.Code, LChar.Line]);
+  if ARef.CharsTotal > Length(ARef.Chars) then
+    Result:= Result + Format(', +%d more', [ARef.CharsTotal - Length(ARef.Chars)]);
+end;
+
+function EncodingRaiseQuestion(const AUnitPas: string; const ARef: TEncodingRefusal): string;
+begin
+  Result:= Format(ASK_RAISE_FMT, [ExtractFileName(AUnitPas), ARef.CharsTotal, ExtractFileName(ARef.FileName), ARef.FileEncoding, sLineBreak,
+    EncodingRefusalText(ARef), sLineBreak, ExtractFileName(ARef.FileName)]);
+end;
 function ValueCastNote(const ARow: TApplyRow): string;
 begin
   if Length(ARow.ValueCasts) + Length(ARow.ValueChecks) = 0 then
@@ -1281,6 +1353,31 @@ begin
   LVal:= AObj.Values[AKey];
   if not ((LVal is TJSONNumber) and TryStrToInt(LVal.Value, Result)) then
     Result:= 0;
+end;
+
+// The encoding_refused object; empty for an absent or malformed key (never raises).
+function EncodingRefusalOf(AObj: TJSONObject): TEncodingRefusal;
+var
+  LRef : TJSONObject;
+  LChar: TRefusedChar;
+begin
+  Result:= Default(TEncodingRefusal);
+  if not (AObj.Values['encoding_refused'] is TJSONObject) then
+    Exit;
+  LRef:= TJSONObject(AObj.Values['encoding_refused']);
+  Result.FileName    := JsonStr(LRef, 'file');
+  Result.FileEncoding:= JsonStr(LRef, 'file_encoding');
+  Result.RaiseTo     := JsonStr(LRef, 'raise_to');
+  Result.CharsTotal  := JsonInt(LRef, 'chars_total');
+  if LRef.Values['chars'] is TJSONArray then
+    for var LVal: TJSONValue in TJSONArray(LRef.Values['chars']) do
+      if LVal is TJSONObject then
+      begin
+        LChar.Code:= JsonInt(TJSONObject(LVal), 'code');
+        LChar.Text:= JsonStr(TJSONObject(LVal), 'text');
+        LChar.Line:= JsonInt(TJSONObject(LVal), 'line');
+        Result.Chars:= Result.Chars + [LChar];
+      end;
 end;
 
 // The items[] entries of one kind.
@@ -1735,6 +1832,7 @@ begin
       Errs:= TJSONArray(Obj.Values['rule_errors']);
       Result.RuleErrorCount:= Errs.Count;
     end;
+    Result.EncodingRefusal:= EncodingRefusalOf(Obj);
     Result.Refused:= (not Result.Ok) and JsonTrue(Obj, 'refused');
     if Result.Refused then
     begin

@@ -158,6 +158,10 @@ type
     /// <summary>CONVRULES_BATCH as the tab read it; 'off' (any case) forces the per-unit
     /// path (decision D6), anything else is ignored.</summary>
     BatchOverride: string;
+    /// <summary>Files to pass as --raise-encoding (the user's Yes to the raise question); []
+    /// = an ordinary run. A raise run is per unit (never batched): the engine binds each file
+    /// to the --unit of its own call.</summary>
+    RaiseFiles: TArray<string>;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -558,6 +562,18 @@ function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks:
 /// batched, whatever its unit count.</returns>
 function JobRunsBatched(const AJob: TConvertJob): Boolean;
 
+/// <summary>PURE: the files of a raise run that belong to one unit.</summary>
+/// <param name="AAll">TConvertJob.RaiseFiles.</param>
+/// <param name="AUnitPas">The unit about to be converted.</param>
+/// <returns>The entries of AAll that are AUnitPas or its sibling .dfm (same path, extension .dfm),
+/// case-insensitive; [] when none.</returns>
+function RaiseFilesOf(const AAll: TArray<string>; const AUnitPas: string): TArray<string>;
+
+/// <summary>PURE: the units a run left refused for an encoding reason.</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <returns>The csRefused rows with HasEncodingRefusal, one per unit (the first row wins).</returns>
+function EncodingRefusedRows(const ARows: TArray<TConvertRow>): TArray<TConvertRow>;
+
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
@@ -809,7 +825,33 @@ end;
 
 function JobRunsBatched(const AJob: TConvertJob): Boolean;
 begin
-  Result:= BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit, Length(AJob.Units), AJob.BatchOverride);
+  Result:= (Length(AJob.RaiseFiles) = 0)
+    and BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit, Length(AJob.Units), AJob.BatchOverride);
+end;
+
+function RaiseFilesOf(const AAll: TArray<string>; const AUnitPas: string): TArray<string>;
+var
+  LDfm: string;
+begin
+  Result:= nil;
+  LDfm:= ChangeFileExt(AUnitPas, '.dfm');
+  for var LFile: string in AAll do
+    if SameText(LFile, AUnitPas) or SameText(LFile, LDfm) then
+      Result:= Result + [LFile];
+end;
+
+function EncodingRefusedRows(const ARows: TArray<TConvertRow>): TArray<TConvertRow>;
+var
+  LSeen: TArray<string>;
+begin
+  Result:= nil;
+  LSeen := nil;
+  for var LRow: TConvertRow in ARows do
+    if (LRow.Status = csRefused) and HasEncodingRefusal(LRow.Apply) and not MatchText(LRow.UnitPas, LSeen) then
+    begin
+      LSeen := LSeen + [LRow.UnitPas];
+      Result:= Result + [LRow];
+    end;
 end;
 
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
@@ -988,7 +1030,7 @@ var
 begin
   LJob   := AJob;
   LEngine:= AEngine;
-  if BatchModeFor(LJob.BatchSupported, LJob.Scope.Kind = skWholeUnit, Length(AUnits), LJob.BatchOverride) then
+  if (Length(LJob.RaiseFiles) = 0) and BatchModeFor(LJob.BatchSupported, LJob.Scope.Kind = skWholeUnit, Length(AUnits), LJob.BatchOverride) then
     Exit(RunBatchLoop(AUnits, ABooks,
       function(const AChunk: TArray<string>; const ARulesFile: string; out AJson: string): Integer
       begin
@@ -1007,7 +1049,11 @@ begin
   Result:= RunUnitLoop(AUnits, ABooks,
     function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
     begin
-      Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
+      var LRaise: TArray<string>:= RaiseFilesOf(LJob.RaiseFiles, AUnitPas);
+      if Length(LRaise) > 0 then
+        Result:= LEngine.ApplyConversionRaising(AUnitPas, ARulesFile, LJob.Dbs, AOnly, LRaise, AJson)
+      else
+        Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
     end,
     function(out AOutput: string): Integer
     begin

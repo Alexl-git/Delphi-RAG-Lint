@@ -24,6 +24,9 @@ keep the version of the engine that first produced the shape.
 - `apply-batch-1315.json`, `apply-skip-1315.json`, `apply-desc-1315.json`, `apply-gap-1315.json` -- the
   FixUnit/DescUnit fixture of `tests\gui\drive-convert-tab.ps1` family.
 - `apply-missing-fields-sample.json` -- hand-written malformed shapes.
+- `apply-encoding-refused-contract.json`, `batch-encoding-refused-contract.json` -- hand-written to the ENGINE
+  contract of `docs\superpowers\plans\2026-10-25-converter-text-encoding.md` (E1', `encoding_refused`); recapture
+  when ENGINE ships `convert_encoding_guard`.
 
 ## Shape drift vs the 2026-10-11 captures
 
