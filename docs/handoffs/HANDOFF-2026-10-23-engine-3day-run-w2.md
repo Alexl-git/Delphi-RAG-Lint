@@ -56,6 +56,9 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
+## STATE 2026-10-25 ~02:10 -- RESUME HERE
+PUSHED by owner: origin/main = 6511fe41. castlib-once merged (exit 6 = no unit touched; tell convrules-editor-31 the sha; deploy with next engine build). RE-PARSE PID 50768 still running (index --all --jobs 1, sections one after another, log ...\scratchpad\agent-REPARSE\all.log); on resume: if gone, check every section's '=== <name> -> ... files=' summary line incl. library-Win32/Win64, spot-check info --db, then SendMessage convrules-editor-31 'ENGINE: re-parse done'. Deep review findings: docs\INBOX-2026-10-25-converter-to-engine-deep-review-dl.md (5 M + 4 L). Owner requests: decision walkthrough in detail, full backlog with effort, parallel plan till 09:00.
+
 ## STATE 2026-10-25 ~21:00 -- RESUME HERE (owner present; asked: handoff, /clear, then the items below)
 DEPLOYED 1.34.0-alpha: release ed87f842, BPLs 0b308ab9 (Win32+Win64, committed as 1.33 did); dll-win64 exe
 sha256 7EF273E27E3721F6B35A70E2C47A48001FDFD125844ED7FEB8CCA824070327DF; extractor 1.23.0-alpha, resolver 1.13.0-alpha.
