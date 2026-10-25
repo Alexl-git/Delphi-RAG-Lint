@@ -257,6 +257,7 @@ Write-Host 'S8: a raising feature answers -32603 and the server stays alive' -Fo
 function RaiseSession([bool]$withHook) {
   $mr  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
   $mr += Frame @{ jsonrpc='2.0'; method='initialized'; params=@{} }
+  $mr += Frame @{ jsonrpc='2.0'; method='draglint/testRaise'; params=@{} }
   $mr += Frame @{ jsonrpc='2.0'; id=2; method='draglint/testRaise'; params=@{} }
   $mr += Frame @{ jsonrpc='2.0'; id=3; method='draglint/ping'; params=@{} }
   $mr += Frame @{ jsonrpc='2.0'; id=4; method='shutdown'; params=@{} }
@@ -281,6 +282,8 @@ $rh = RaiseSession $true
 Check 'S8: the raising feature answers error -32603' ($rh.ContainsKey(2) -and $null -ne $rh[2].error -and $rh[2].error.code -eq -32603) $(if ($rh.ContainsKey(2)) { ($rh[2] | ConvertTo-Json -Compress -Depth 4) } else { '<no reply>' })
 Check 'S8: the server is still alive -- the next request (ping) is answered' ($rh.ContainsKey(3) -and $rh[3].result.pong -eq $true) $(if ($rh.ContainsKey(3)) { '' } else { '<no reply: server died>' })
 Check 'S8: shutdown still answered after the failure' ($rh.ContainsKey(4))
+$errTxt = [System.IO.File]::ReadAllText((Join-Path $WorkDir 'err-raise.txt'))
+Check 'S8: a raising NOTIFICATION is logged to stderr (not swallowed silently)' ($errTxt -match 'draglint/testRaise raised ETestRaise') ($errTxt.Trim())
 $rn = RaiseSession $false
 Check 'S8 CONTROL: without the test env var the hook does not exist (-32601)' ($rn.ContainsKey(2) -and $null -ne $rn[2].error -and $rn[2].error.code -eq -32601) $(if ($rn.ContainsKey(2)) { ($rn[2] | ConvertTo-Json -Compress -Depth 4) } else { '<no reply>' })
 

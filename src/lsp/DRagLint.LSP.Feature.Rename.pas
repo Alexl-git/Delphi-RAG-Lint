@@ -72,6 +72,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.Rename
+  , DRagLint.Core.LiveDocs
   ;
 
 const
@@ -137,7 +138,8 @@ type
   TRenameTarget = record
     Path : string;
     Line0: Integer;
-    Col0 : Integer;
+    Col0 : Integer;      // the client's UTF-16 column (RangeJson, text scans)
+    ByteCol0: Integer;   // the same column as a UTF-8 byte column (ResolveSymbolAt, IdentifierAtPosition)
     Sym  : TSymbol;
     Store: ISymbolStore; // the document's own store: StoresForFile(Path)[0]
   end;
@@ -164,8 +166,13 @@ begin
   if not ParamsShapeOk(AParams, Doc, PosObj) then Exit;
   ATarget.Path:= ACtx.FileFromUri(Doc.GetValue('uri').Value);
   if (ATarget.Path = '') or not IntField(PosObj, 'line', ATarget.Line0) or not IntField(PosObj, 'character', ATarget.Col0) then Exit;
+  // S7: the client's column is UTF-16; the resolver wants a UTF-8 byte column. Converted ONCE, from the open buffer (or disk).
+  ATarget.ByteCol0:= ATarget.Col0;
+  var BufLines: TArray<string>:= TLiveDocuments.ReadLines(ATarget.Path);
+  if (ATarget.Line0 >= 0) and (ATarget.Line0 < Length(BufLines)) and (ATarget.Col0 > 0) then
+    ATarget.ByteCol0:= Length(TEncoding.UTF8.GetBytes(Copy(BufLines[ATarget.Line0], 1, ATarget.Col0)));
   var HitStore: ISymbolStore;
-  if not ACtx.ResolveSymbolAt(ATarget.Path, ATarget.Line0, ATarget.Col0, ATarget.Sym, HitStore) then Exit;
+  if not ACtx.ResolveSymbolAt(ATarget.Path, ATarget.Line0, ATarget.ByteCol0, ATarget.Sym, HitStore) then Exit;
   var Own: TArray<ISymbolStore>:= ACtx.StoresForFile(ATarget.Path); // a copy; the server's list is untouched
   if Length(Own) = 0 then Exit;
   ATarget.Store:= Own[0];
@@ -180,7 +187,7 @@ begin
     ACtx.Reply(AId, nil);
     Exit;
   end;
-  var Ident: string:= ACtx.IdentifierAtPosition(T.Path, T.Line0, T.Col0);
+  var Ident: string:= ACtx.IdentifierAtPosition(T.Path, T.Line0, T.ByteCol0);
   var Start0: Integer:= T.Col0;
   var Cache: TLineCache:= TLineCache.Create([doOwnsValues]);
   try

@@ -3831,7 +3831,11 @@ begin
           Feature.Handle(FContext, Method, Id, Params);
         except
           on E: Exception do
+          begin
+            { stderr only -- stdout is the protocol channel. A notification (Id = nil) has no reply, so this is its only trace. }
+            Writeln(ErrOutput, 'drag-lint LSP: feature ', Method, ' raised ', E.ClassName, ': ', E.Message);
             if Id <> nil then SendError(Id, LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
+          end;
         end;
       end
       else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
