@@ -12719,6 +12719,16 @@ const
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
     'unused-unit-in-uses', 'god-class');
+  { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
+    uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
+    index it never evaluates them unless --rule names one: a dl:ok for one of them
+    cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
+    OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
+    tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
+  PROJECT_RULES_OPTIN_GATED: array[0..7] of string = (
+    'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
+    'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
+    'query-name-with-effect', 'assert-with-side-effect');
   LINT_GATE_CLASS_METRICS: array[0..9] of string = (
     'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
     'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
@@ -13079,7 +13089,9 @@ end;
 /// answer is to not JUDGE what was not evaluated. Built from the same gate lists
 /// DoLint runs its passes on, so the two cannot name different rules. A marker
 /// that IS accounted by a finding this run produced (a within-file pair) is
-/// unaffected; lint-all still reports an unused marker for every rule here.</remarks>
+/// unaffected; lint-all still reports an unused marker for every rule here.
+/// The OptedIn-gated project rules (PROJECT_RULES_OPTIN_GATED, e.g. uses-global-census) are listed
+/// in every run, index or not: Run is handed no opt-in list, so none is evaluated (--rule<id> excepted).</remarks>
 function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArray<string>;
 
   procedure AddAll(const AIds: array of string);
@@ -13095,6 +13107,10 @@ begin
     AddAll(LINT_GATE_DOC_DRIFT);
     AddAll(['missing-doc']);
   end;
+  { OptedIn-gated project rules: not evaluated by any `lint <file>` run, index or not
+    (Run gets no opt-in list), except the one --rule names. }
+  for var Gated: string in PROJECT_RULES_OPTIN_GATED do
+    if not SameText(Gated, AArgs.Rule) then AddAll([Gated]);
   if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr']);
   if not AStoreSeen then
   begin
