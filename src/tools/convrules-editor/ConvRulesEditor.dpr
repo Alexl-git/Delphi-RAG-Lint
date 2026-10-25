@@ -50,6 +50,7 @@ uses
   , ConvRules.Inheritance in 'ConvRules.Inheritance.pas'
   , ConvRules.InheritanceEngine in 'ConvRules.InheritanceEngine.pas'
   , ConvRules.InputGate in 'ConvRules.InputGate.pas'
+  , ConvRules.CapabilityProbe in 'ConvRules.CapabilityProbe.pas'
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
   , ConvRules.WorkListTab in 'ConvRules.WorkListTab.pas'

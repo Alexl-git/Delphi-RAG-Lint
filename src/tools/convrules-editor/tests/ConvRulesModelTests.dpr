@@ -49,6 +49,7 @@ uses
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
   , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
+  , ConvRules.CapabilityProbe in '..\ConvRules.CapabilityProbe.pas'  // dl:unit ConvRules.CapabilityProbe accepted -- the tests read REQUIRED_ENGINE_VERSION / REDUCED_FEATURES_TEXT to pin the probe's own contract, so the consts travel with the unit under test
   ;
 
 var
@@ -15385,6 +15386,88 @@ begin
   Check('startup.error.none.leaves.status', StartupErrorStatus('', REQ_REFUSED, False) = '');
 end;
 
+{ R2 (owner design 2026-10-25): the capability probe's pure decisions -- version first,
+  which case the wait question names, how info --json is read, what the status says,
+  and that only a real answer is cached for the session. The adapter half runs against
+  an engine path that does not exist (no engine is started, no DB is read). }
+procedure TestCapabilityProbe;
+const
+  VERSION_OUT = '(loaded defaults from C:\Projects\.drag-lint.json)' + sLineBreak + 'drag-lint 1.33.0-alpha' + sLineBreak;  // dl:ok hardcoded-absolute-path@r2c1 -- REVIEWED 2026-10-25 text only: the engine's stderr line as captured, no file is touched
+  INFO_OUT = '(loaded defaults)' + sLineBreak + '{"schema":"info/1","version":"1.33.0-alpha","capabilities":{"pas_uses":true,"cli_verbs":61,"batch_units":true,"glyph_stitch":false}}';
+  NO_ENGINE = 'C:\no-such-dir-r2\drag-lint.exe';  // dl:ok hardcoded-absolute-path@r2c2 -- REVIEWED 2026-10-25 a path that must NOT exist: the adapter cannot start it
+  EXIT_OK = 0;
+  EXIT_FAIL = 2;
+var
+  V, W : TEngineVersion;
+  Caps : TArray<string>;
+  LOut : string;
+  LText: string;
+begin
+  // --- version first: the token after "drag-lint " on its own line ---
+  Check('probe.version.text', EngineVersionText(VERSION_OUT) = '1.33.0-alpha', EngineVersionText(VERSION_OUT));
+  Check('probe.version.text.none', (EngineVersionText('') = '') and (EngineVersionText('(loaded defaults from x)') = ''));
+  Check('probe.version.parse', TryParseEngineVersion('1.33.0-alpha', V) and (V.Major = 1) and (V.Minor = 33) and (V.Patch = 0));
+  Check('probe.version.parse.bad', not TryParseEngineVersion('', V) and not TryParseEngineVersion('1.28', V)
+    and not TryParseEngineVersion('alpha', V) and not TryParseEngineVersion('1..3', V));
+  // Numeric, never lexical: 1.28.10 is newer than 1.28.3, 1.3.0 older than 1.28.3.
+  Check('probe.version.compare', TryParseEngineVersion('1.28.10', V) and TryParseEngineVersion('1.28.3', W)
+    and (CompareEngineVersions(V, W) > 0) and (CompareEngineVersions(W, V) < 0) and (CompareEngineVersions(W, W) = 0));
+  Check('probe.version.compare.minor', TryParseEngineVersion('1.3.0', V) and TryParseEngineVersion('1.28.3', W)
+    and (CompareEngineVersions(V, W) < 0));
+  Check('probe.version.compare.major', TryParseEngineVersion('2.0.0', V) and TryParseEngineVersion('1.99.99', W)
+    and (CompareEngineVersions(V, W) > 0));
+  // --- which case: against REQUIRED_ENGINE_VERSION (1.28.3, convert_qualify_fix) ---
+  Check('probe.required.is.qualify.fix', REQUIRED_ENGINE_VERSION = '1.28.3');
+  Check('probe.case.ok', (ProbeCaseFor('1.33.0-alpha') = pcVersionOk) and (ProbeCaseFor(REQUIRED_ENGINE_VERSION) = pcVersionOk)
+    and (ProbeCaseFor('1.28.3-alpha') = pcVersionOk));
+  Check('probe.case.too.old', (ProbeCaseFor('1.28.2-alpha') = pcVersionTooOld) and (ProbeCaseFor('1.20.6') = pcVersionTooOld));
+  Check('probe.case.unknown', (ProbeCaseFor('') = pcVersionUnknown) and (ProbeCaseFor('garbage') = pcVersionUnknown));
+  // --- info --json: an answer (even with no capabilities) vs no answer ---
+  Check('probe.info.answer', TryParseInfoCapabilities(INFO_OUT, Caps) and (Length(Caps) = 2)
+    and MatchText('pas_uses', Caps) and MatchText('batch_units', Caps) and not MatchText('glyph_stitch', Caps));
+  Check('probe.info.old.engine.is.answer', TryParseInfoCapabilities('{"schema":"info/1"}', Caps) and (Length(Caps) = 0));
+  Check('probe.info.no.answer', not TryParseInfoCapabilities('', Caps) and not TryParseInfoCapabilities('error: busy', Caps)
+    and not TryParseInfoCapabilities('{not json', Caps) and (Length(Caps) = 0));
+  Check('probe.info.engine.reader.agrees', Length(ParseCapabilityNames(INFO_OUT)) = 2);
+  // --- outcome: a real answer wins; else gave-up vs failed ---
+  Check('probe.outcome.answered', (ProbeOutcomeFor(EXIT_OK, True, False) = poAnswered) and (ProbeOutcomeFor(EXIT_OK, True, True) = poAnswered));
+  Check('probe.outcome.not.waited', ProbeOutcomeFor(ENGINE_OUTCOME_CANCELLED, False, True) = poNotWaited);
+  Check('probe.outcome.failed', (ProbeOutcomeFor(EXIT_FAIL, True, False) = poFailed) and (ProbeOutcomeFor(EXIT_OK, False, False) = poFailed)
+    and (ProbeOutcomeFor(ENGINE_OUTCOME_TIMEOUT, False, False) = poFailed));
+  // --- cached only when answered: the old code cached EVERY outcome (FProbed:= True) ---
+  Check('probe.cached.answered.only', ProbeIsCached(poAnswered) and not ProbeIsCached(poFailed) and not ProbeIsCached(poNotWaited));
+  // --- the question names the case ---
+  LText:= WaitQuestionText(pcVersionOk, '1.33.0-alpha');
+  Check('probe.question.ok', ContainsText(LText, '1.33.0-alpha') and ContainsText(LText, 'still') and ContainsText(LText, 'Keep waiting?')
+    and ContainsText(LText, REDUCED_FEATURES_TEXT) and not ContainsText(LText, 'older'), LText);
+  LText:= WaitQuestionText(pcVersionTooOld, '1.27.0');
+  Check('probe.question.too.old', ContainsText(LText, '1.27.0') and ContainsText(LText, 'older than') and ContainsText(LText, REQUIRED_ENGINE_VERSION)
+    and ContainsText(LText, 'Keep waiting?'), LText);
+  LText:= WaitQuestionText(pcVersionUnknown, '');
+  Check('probe.question.unknown', ContainsText(LText, 'did not report its version') and ContainsText(LText, 'Keep waiting?'), LText);
+  // --- status: reduced mode says so plainly, and that it comes back ---
+  LText:= ProbeStatusText(poNotWaited, pcVersionOk, '1.33.0-alpha');
+  Check('probe.status.not.waited', ContainsText(LText, 'capability check did not finish') and ContainsText(LText, REDUCED_FEATURES_TEXT)
+    and ContainsText(LText, 'come back on the next check'), LText);
+  LText:= ProbeStatusText(poFailed, pcVersionUnknown, '');
+  Check('probe.status.failed', ContainsText(LText, 'capability check failed') and ContainsText(LText, REDUCED_FEATURES_TEXT)
+    and ContainsText(LText, 'come back on the next check') and not ContainsText(LText, 'engine support pending'), LText);
+  LText:= ProbeStatusText(poAnswered, pcVersionTooOld, '1.27.0');
+  Check('probe.status.answered.too.old', ContainsText(LText, '1.27.0') and ContainsText(LText, 'older than') and ContainsText(LText, REQUIRED_ENGINE_VERSION), LText);
+  Check('probe.status.answered.ok.silent', (ProbeStatusText(poAnswered, pcVersionOk, '1.33.0') = '') and (ProbeStatusText(poAnswered, pcVersionUnknown, '') = ''));
+  // --- the adapter half: an engine that cannot start is a FAILED probe, not "no capabilities" ---
+  var LEngine: TEngineAdapter:= TEngineAdapter.Create(NO_ENGINE, nil);
+  try
+    var LVerCode: Integer:= LEngine.VersionOutput(nil, LOut);
+    Check('probe.adapter.version.no.engine', (LVerCode <> EXIT_OK) and (ProbeCaseFor(EngineVersionText(LOut)) = pcVersionUnknown), IntToStr(LVerCode));
+    var LInfoCode: Integer:= LEngine.InfoOutput(nil, LOut);
+    var LOutcome: TProbeOutcome:= ProbeOutcomeFor(LInfoCode, TryParseInfoCapabilities(LOut, Caps), False);
+    Check('probe.adapter.info.no.engine.failed', (LInfoCode <> EXIT_OK) and (LOutcome = poFailed) and not ProbeIsCached(LOutcome), IntToStr(LInfoCode));
+  finally
+    LEngine.Free;
+  end; // try
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -15632,6 +15715,7 @@ begin
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
     TestInputGate;
+    TestCapabilityProbe;
 
     FreeAndNil(GParseBook);
 
