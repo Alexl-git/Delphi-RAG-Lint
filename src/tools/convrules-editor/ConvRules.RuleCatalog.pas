@@ -25,6 +25,7 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , System.Generics.Defaults
+  , ConvRules.TextEncoding
   , { TRuleBook, for HeaderIndexFor. ConvRules.Model uses only the RTL, so naming it
     here cannot create a cycle. }
         ConvRules.Model
@@ -1133,6 +1134,7 @@ end; // function
 
 function ScanRulesFolder(const AFolder: string; out AErrors: TArray<string>): TRuleCatalog;
 var
+  Det   : TDetectedText       ;
   Files : TArray<string>      ;
   Errs  : TList<string>       ;
   Parts : TArray<TRuleCatalog>;
@@ -1153,7 +1155,7 @@ begin
     Parts:= nil;
     for F in Files do
     try
-      Parts:= Parts + [CatalogFromText(TFile.ReadAllText(F), F)];
+      Parts:= Parts + [CatalogFromText(ReadTextDetect(F, Det), F)];
     except
       on E: Exception do
         Errs.Add(Format('%s: %s', [ExtractFileName(F), E.Message]));

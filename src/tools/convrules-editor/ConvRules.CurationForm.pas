@@ -35,6 +35,7 @@ uses
       ConvRules.BlockOps
   , ConvRules.WorkingSet
   , ConvRules.RuleCatalog
+  , ConvRules.TextEncoding
   ; // CheckApplyIntegrity, the compose gate
 
 type
@@ -1010,18 +1011,43 @@ var
   NewText : string        ;
   Dups    : TArray<string>;
   Existed : Boolean       ;
+  Det     : TDetectedText ;
+  Level   : TTextLevel    ;
+  Idx     : Integer       ;
+  Lost    : TArray<TLostChar>;
+  LostTotal: Integer      ;
+  Raised  : TTextLevel    ;
 begin
   Result := False;
   ABackup:= '';
   ANote  := '';
   try
     Existed:= TFile.Exists(APath);
+    Level:= tlAscii7;
     if Existed then
-      Existing:= SplitBlocksFor(APath, TFile.ReadAllText(APath, TEncoding.ASCII))
+    begin
+      Existing:= SplitBlocksFor(APath, ReadTextDetect(APath, Det));
+      Level:= Det.Level;
+    end
     else
       Existing:= nil;
     NewText:= JoinBlocks(ConcatBlocks(Existing, ABlocks));
-    WriteTextWithBackup(APath, NewText, ABackup);
+    if not RoundTrips(NewText, Level) then
+    begin
+      // the appended rules hold characters the file's level cannot store: ask, never write lossy
+      Raised:= RaiseTarget(Level, NeededLevel(NewText));
+      Lost:= LostChars(NewText, Level, LOST_CHARS_SHOWN, LostTotal);
+      if MessageDlg(Format(ASK_SAVE_FMT, [LostTotal, ExtractFileName(APath), LevelName(Level), sLineBreak, LostCharsText(Lost), sLineBreak + sLineBreak, LevelName(Raised)]), mtConfirmation, [mbYes, mbCancel], 0) <> mrYes then
+      begin
+        ANote:= 'Curation cancelled -- nothing was written.';
+        Exit;
+      end;
+      Level:= Raised;
+    end;
+    WriteTextWithBackupAt(APath, NewText, Level, ABackup);
+    Idx:= FSet.IndexOfPath(APath);
+    if Idx >= 0 then
+      FSet.SetLevel(Idx, Level);
     FTouched.AddOrSetValue(TouchKey(APath), True);
 
     if FSet.SyncFromText(APath, NewText) >= 0 then
@@ -1151,6 +1177,7 @@ var
   Plan  : TMergePlan              ;
   Res   : TArray<TMergeResolution>;
   InPath: string                  ;
+  InDet : TDetectedText           ;
   Orig  : TRuleBlocks             ;
   ErrMsg: string                  ;
 begin
@@ -1199,7 +1226,7 @@ begin
     Exit;
   end;
 
-  Plan:= PlanMerge(FSet.Item(fi).Blocks, SplitBlocksFor(InPath, TFile.ReadAllText(InPath, TEncoding.ASCII)));
+  Plan:= PlanMerge(FSet.Item(fi).Blocks, SplitBlocksFor(InPath, ReadTextDetect(InPath, InDet)));
 
   Res:= nil;
   if Plan.ConflictCount > 0 then

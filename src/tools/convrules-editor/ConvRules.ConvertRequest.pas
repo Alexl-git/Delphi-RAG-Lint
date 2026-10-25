@@ -414,6 +414,7 @@ uses
   , System.JSON
   , System.StrUtils
   , ConvRules.ConvertRun
+  , ConvRules.TextEncoding
   ;
 
 const
@@ -822,13 +823,14 @@ end;
 function ScopedNamesForBookFile(const AScope: TConvertScope; const AUnitPas, ABookPath: string; out ANames: TArray<string>): Boolean;
 var
   LText: string;
+  LDet : TDetectedText;
 begin
   // Unit check first: a unit outside the scope is converted whole and its book is not read.
   Result:= ScopedNamesForUnit(AScope, AUnitPas, '', ANames);
   if not Result then
     Exit;
   try
-    LText:= TFile.ReadAllText(ABookPath);
+    LText:= ReadTextDetect(ABookPath, LDet);
   except // an unreadable book scopes to no name: an out-of-scope row, never a whole-unit apply
     on Exception do
       LText:= '';

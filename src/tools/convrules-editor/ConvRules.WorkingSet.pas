@@ -25,6 +25,7 @@ uses
         ConvRules.BlockFile
   , // dl:unit ConvRules.BlockFile accepted
         ConvRules.BlockOps
+  , ConvRules.TextEncoding
   ;
 
 type
@@ -43,6 +44,9 @@ type
     /// <remarks>POSITIONAL, so it is reset by every operation that changes
     /// Blocks -- a stale index would silently name a different rule.</remarks>
     Selected: TArray<Integer>;
+    /// <summary>The encoding level the file was read at (detected by AddFile; NeededLevel of the
+    /// text for AddText). The curation writer saves back at this level.</summary>
+    Level: TTextLevel;
   end;
 
   /// <summary>Ordered list of loaded files. Position = composition precedence.</summary>
@@ -118,6 +122,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddFile(const APath: string);
+      /// <summary>As AddText, but records ALevel as the entry's encoding level.</summary>
+      /// <param name="APath">Path (its extension picks the grammar).</param>
+      /// <param name="AText">Already-decoded text.</param>
+      /// <param name="ALevel">Level the file was read at.</param>
+      procedure AddTextAt(const APath, AText: string; ALevel: TTextLevel);
       /// <summary>Drop the entry at AIndex from the set. Out-of-range is a no-op;
       /// this never touches disk.</summary>
       /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
@@ -442,6 +451,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SaveFile(AIndex: Integer): string;
+      /// <summary>The encoding level of entry AIndex.</summary>
+      /// <param name="AIndex">Entry index; out of range raises like Item.</param>
+      /// <returns>TWorkingFile.Level of that entry.</returns>
+      function LevelOf(AIndex: Integer): TTextLevel;
+      /// <summary>Records that entry AIndex is now saved at ALevel (after the form raised the level).</summary>
+      /// <param name="AIndex">Entry index; out of range is a no-op.</param>
+      /// <param name="ALevel">The new level.</param>
+      procedure SetLevel(AIndex: Integer; ALevel: TTextLevel);
   end;
 
   /// <summary>PURE: the next unused backup name for APath -- '<file>.bak', then
@@ -500,6 +517,15 @@ function NormalizedPath(const APath: string): string;
 /// </remarks>
 procedure WriteTextWithBackup(const APath, AText: string; out ABackup: string);
 
+/// <summary>Back APath up as WriteTextWithBackup does, then write AText at ALevel.</summary>
+/// <param name="APath">Target file.</param>
+/// <param name="AText">Text to write; line terminators untouched.</param>
+/// <param name="ALevel">Encoding level to write at.</param>
+/// <param name="ABackup">The backup written, or '' when APath did not exist.</param>
+/// <exception cref="EInOutError">Message starts 'encoding:' when AText does not round-trip at ALevel (nothing is touched: the check runs before the backup); 'backup of ...' when the backup copy fails.</exception>
+/// <remarks>The form asks the user before calling this; the raise is the last guard.</remarks>
+procedure WriteTextWithBackupAt(const APath, AText: string; ALevel: TTextLevel; out ABackup: string);
+
 implementation
 
 function BackupPath(const APath: string): string;
@@ -529,7 +555,14 @@ end;
 
 procedure WriteTextWithBackup(const APath, AText: string; out ABackup: string);
 begin
+  WriteTextWithBackupAt(APath, AText, NeededLevel(AText), ABackup);
+end;
+
+procedure WriteTextWithBackupAt(const APath, AText: string; ALevel: TTextLevel; out ABackup: string);
+begin
   ABackup:= '';
+  if not RoundTrips(AText, ALevel) then
+    raise EInOutError.CreateFmt('encoding: the text does not fit %s -- nothing was written to %s', [LevelName(ALevel), APath]);
   if TFile.Exists(APath) then
   begin
     ABackup:= BackupPath(APath);
@@ -543,7 +576,7 @@ begin
       end;
     end;
   end; // if
-  TFile.WriteAllText(APath, AText, TEncoding.ASCII);
+  WriteTextAtLevel(APath, AText, ALevel);
 end; // procedure
 
 { TWorkingSet }
@@ -561,17 +594,28 @@ begin
 end;
 
 procedure TWorkingSet.AddText(const APath, AText: string);
+begin
+  AddTextAt(APath, AText, NeededLevel(AText));
+end;
+
+procedure TWorkingSet.AddTextAt(const APath, AText: string; ALevel: TTextLevel);
 var
   F: TWorkingFile;
 begin
+  F:= Default(TWorkingFile);
   F.Path:= APath;
   F.Blocks:= SplitBlocksFor(APath, AText);
+  F.Level:= ALevel;
   FFiles.Add(F);
 end;
 
 procedure TWorkingSet.AddFile(const APath: string);
+var
+  Det : TDetectedText;
+  Text: string       ;
 begin
-  AddText(APath, TFile.ReadAllText(APath, TEncoding.ASCII));
+  Text:= ReadTextDetect(APath, Det);
+  AddTextAt(APath, Text, Det.Level);
 end;
 
 procedure TWorkingSet.Remove(AIndex: Integer);
@@ -779,8 +823,32 @@ begin
 end; // function
 
 function TWorkingSet.SaveFile(AIndex: Integer): string;
+var
+  Text : string    ;
+  Level: TTextLevel;
 begin
-  WriteTextWithBackup(FFiles[AIndex].Path, JoinBlocks(FFiles[AIndex].Blocks), Result);
+  Text := JoinBlocks(FFiles[AIndex].Blocks);
+  Level:= FFiles[AIndex].Level;
+  if not RoundTrips(Text, Level) then // the entry grew characters its level cannot hold: never lossy
+    Level:= RaiseTarget(Level, NeededLevel(Text));
+  WriteTextWithBackupAt(FFiles[AIndex].Path, Text, Level, Result);
+  SetLevel(AIndex, Level);
+end;
+
+function TWorkingSet.LevelOf(AIndex: Integer): TTextLevel;
+begin
+  Result:= FFiles[AIndex].Level;
+end;
+
+procedure TWorkingSet.SetLevel(AIndex: Integer; ALevel: TTextLevel);
+var
+  F: TWorkingFile;
+begin
+  if (AIndex < 0) or (AIndex >= FFiles.Count) then
+    Exit;
+  F:= FFiles[AIndex];
+  F.Level:= ALevel;
+  FFiles[AIndex]:= F;
 end;
 
 end.
