@@ -1018,4 +1018,10 @@
 #   every changed surface line is a // comment, a /// doc-comment or a trailing dl:ok marker -- no
 #   code token changed, so no stored parse is stale.
 #   Superseded: 1.23.0-alpha|8d7945982f34bd88b42bbcf32fbd26f968f9032479f2e64ac4f2120b7aa1357a
-1.23.0-alpha|0ac06206fabf81746d6fd1c82884e04d5dd4766d0b0f746c5f33344cf6c07b02
+#   2026-10-25 (wave 4 lane A, deep-review F1): re-pinned WITHOUT a bump. Core.Indexer.IndexFile now
+#   COUNTS a per-file store failure (new IIndexer.FailedFiles), writes its ERROR line to stderr instead of
+#   stdout, and carries a test seam (env DRAGLINT_INDEX_TEST_FAIL_FILE, off when unset) that raises before
+#   the commit. Error REPORTING only: no parser, preprocess or emit path changed, so no stored parse is
+#   stale. Guard: run_index_file_failure_exit.ps1.
+#   Superseded: 1.23.0-alpha|0ac06206fabf81746d6fd1c82884e04d5dd4766d0b0f746c5f33344cf6c07b02
+1.23.0-alpha|e23b44062d9e7ad7efbdf68c8fad3d46c99cad2b2b4a3e7114e5b975c7c28747

@@ -103,6 +103,14 @@ type
       FProgressTotal  : Integer                            ;
       FProgressDone   : Integer                            ;
       FProgressWatch  : TStopwatch                         ;
+      { F1 (deep review 2026-10-25): files whose store phase RAISED and was
+        rolled back. Backs IIndexer.FailedFiles -- see there. }
+      FFailedFiles    : Integer                            ;
+      { TEST SEAM, read once in Create from DRAGLINT_INDEX_TEST_FAIL_FILE: a bare
+        file NAME whose store phase is made to raise just before its commit, so
+        a guard can drive the per-file failure path without a corrupt DB. ''
+        (the normal case) = off. It changes nothing that is extracted. }
+      FTestFailFileName: string                            ;
       /// <summary>PP-Task-9: log a per-file preprocess fallback the FIRST time it
       /// happens in this run, then stay silent so a bad batch does not flood the
       /// output with one line per file. The file is still indexed from its RAW
@@ -407,6 +415,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParsedFiles: Integer;
+      /// <summary>How many files this indexer failed to store -- see
+      /// IIndexer.FailedFiles.</summary>
+      /// <returns>The cumulative per-file failure count; 0 on a clean run.</returns>
+      function FailedFiles: Integer;
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
       /// FVisited.ToArray.</returns>
       /// <remarks>
@@ -568,6 +580,7 @@ begin
   FPreprocessFellBack:= False;
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
   FWalkFilter:= TWalkFilter.Create;
+  FTestFailFileName:= GetEnvironmentVariable('DRAGLINT_INDEX_TEST_FAIL_FILE');
   for P in AParsers do FParsers.Add(P);
 end;
 
@@ -740,6 +753,11 @@ end;
 function TIndexer.ParsedFiles: Integer;
 begin
   Result:= FParsedFiles;
+end;
+
+function TIndexer.FailedFiles: Integer;
+begin
+  Result:= FFailedFiles;
 end;
 
 function TIndexer.VisitedFiles: TArray<string>;
@@ -1408,6 +1426,8 @@ begin
         end;
         Inc(GProfFacts, ProfNow - TProf);
         TProf:= ProfNow;
+        if (FTestFailFileName <> '') and SameText(ExtractFileName(AFilePath), FTestFailFileName) then
+          raise EInOutError.Create('DRAGLINT_INDEX_TEST_FAIL_FILE: injected store failure');
         FStore.CommitFileTx(Token);
         Inc(GProfCommit, ProfNow - TProf);
         ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
@@ -1417,7 +1437,14 @@ begin
         on E: Exception do
         begin
           FStore.RollbackFileTx(Token);
-          Writeln(Format('  ERROR indexing %s: %s', [AFilePath, E.Message]));
+          { F1: COUNTED, and on STDERR. The file keeps its previous rows (or
+            none), so the caller must be able to fail the run -- see
+            IIndexer.FailedFiles. Flush stdout first so the line lands after
+            the progress lines it follows when both streams share a pipe. }
+          Inc(FFailedFiles);
+          Flush(Output);
+          Writeln(ErrOutput, Format('  ERROR indexing %s: %s: %s', [AFilePath, E.ClassName, E.Message]));
+          Flush(ErrOutput);
         end;
       end; // try
     finally

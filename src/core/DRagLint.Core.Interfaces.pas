@@ -2653,6 +2653,21 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ParsedFiles: Integer;
+    /// <summary>How many files this indexer FAILED to store: the per-file
+    /// emit raised, the file's transaction was rolled back and the error was
+    /// written to stderr as <c>ERROR indexing &lt;path&gt;: &lt;class&gt;: &lt;message&gt;</c>.</summary>
+    /// <returns>The failure count; 0 on a clean run. CUMULATIVE over the
+    /// indexer's lifetime, matching ParsedFiles.</returns>
+    /// <remarks>
+    /// A failed file keeps whatever rows it had BEFORE the run (or none), so a
+    /// query over it answers from an old parse with no stale note. The walk
+    /// carries on past it; the CALLER must fail the run: <c>index</c> prints
+    /// the count in its <c>Done.</c> line and exits 1, and an <c>index --all</c>
+    /// section with a failure is reported in the FAILED sections roll-up.
+    /// A parse that raises is NOT counted here -- it propagates out of IndexFile.
+    /// Guarded by tests\autotest\run_index_file_failure_exit.ps1.
+    /// </remarks>
+    function FailedFiles: Integer;
     /// <summary>Every file this indexer ADMITTED since it was created -- the
     /// walk's in-scope set, in the spelling the walk produced.</summary>
     /// <returns>The admitted paths, in visit order, with duplicates collapsed.</returns>
