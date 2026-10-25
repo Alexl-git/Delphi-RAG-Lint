@@ -34,6 +34,8 @@ needs a re-parse.
 - CLI: an unknown verb (2), unknown flag (3) or stale index on `menu-tree` / `menu-drift` (3) also says why: a stderr line `error[<reason>]:`, or with `--json` a stderr object `{"error":"<reason>"}`; exit codes unchanged (W5-A14). `ask` / `compare` stale are still prose.
 - CLI: the missing-db refusal and `index`'s `Database:` line name the `.drag-lint.json` whose `db` key decided them; a defaults file that failed to parse now also stops `document --apply` and `lint --fix --apply` (W5-F1).
 - `index --dry-run` touches no disk (no DB file is created), and a positional path beats the config `path` key (W5-C).
+- `index`: the doc-comment merge is linear (was quadratic on long runs of trailing comments) and a literal's containing symbol comes from an in-memory line map instead of one SQL call per literal; a 40k-line file indexes in ~14 s instead of ~34 s (loose-file LSP open ~2x faster). Extraction output unchanged; guard `run_index_scaling_guard` (L-perf, X-23).
+- Tests: `run_pas_uses_with_members.ps1` pins `pas_uses` with-members and RTL-ancestor classification (X3, T-16).
 
 ### Fixed
 - Storage: `Migrate` re-raises a real DDL failure and tolerates only a duplicate-column error (F2);
