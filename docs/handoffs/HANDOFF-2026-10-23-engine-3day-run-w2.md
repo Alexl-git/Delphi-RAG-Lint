@@ -56,7 +56,34 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
-## STATE 2026-10-25 ~08:30 -- RESUME HERE (owner back, asked for handoff + /clear)
+## STATE 2026-10-25 ~21:00 -- RESUME HERE (owner present; asked: handoff, /clear, then the items below)
+DEPLOYED 1.34.0-alpha: release ed87f842, BPLs 0b308ab9 (Win32+Win64, committed as 1.33 did); dll-win64 exe
+sha256 7EF273E27E3721F6B35A70E2C47A48001FDFD125844ED7FEB8CCA824070327DF; extractor 1.23.0-alpha, resolver 1.13.0-alpha.
+Lint sweep merged 1245af2d (19 -> 3). CONVERTER told "deployed 0b308ab9" (it merges FG-M/FG-N + verifies next).
+OWNER APPROVED (10-25): commit, push, deploy, git/branch/worktree cleanup. PUSH WAS BLOCKED by the autonomy guard
+(mode.json still armed by the converter run) -> owner runs `git push origin main`, or disarm then push.
+OPEN, in order:
+ 1 version guards RED: surface changed after rc2's re-pin (03c6078c) by lint sweep + B-41 (sampled: doc comments;
+   Core.Indexer.pas 26 lines + Core.Model.pas changed -- check all 26 surface files). If no extraction/resolve change:
+   re-pin baselines (no bump, versions unreleased until now). Then run_extractor_version_guard + run_resolver_version_guard.
+ 2 RE-PARSE (not started): every project DB + library-Win32/Win64 with the deployed exe (`index --project <dproj> --db
+   <db> --rebuild`; resolve-dbs to list); then message CONVERTER "re-parse done" (it re-pins + baseline + A4).
+ 3 deferred verifies with the deployed exe: featuregen verify --id lsp / menu-tree / ide-help-line /
+   circular-uses-report-cycles-fix-plan --by ENGINE; commit stamps.
+ 4 www-40: new cycles refusal line (ledger W3-6 row) for the circular-uses article; menu-drift article publish (owner word).
+ 5 cleanup: branch -D merged e3d/* + worktree remove (C:\Projects\Delphi-RAG-lint-wt\e3d-*, .claude\worktrees\agent-*),
+   only ones merged into main (`git branch --merged main`); CONVERTER cleans its own.
+ 6 CHANGELOG.md:8 still calls e3d/rc2 "unmerged release branch" -- fix wording.
+ 7 OWNER REQUESTS after resume: (a) walk the decisions in docs\superpowers\plans\2026-10-25-owner-decisions.md in GREAT
+   detail (background, options, trade-offs, code refs, recommendation); (b) full backlog + todo list with effort;
+   (c) a new highly parallel autonomous subagent plan to use tokens until 09:00 (token reset).
+Extra lane candidates: drag-lint-open.exe staging for fresh-worktree battery; 7 missing param/returns + 7 exception
+crefs (B-41 residue); `lint-all --json --output` writes nothing; battery TIMEOUT line; unused DbArgs; 2 engine defects
+from the sweep (per-unit circular-uses at uses lines vs lint-all once; doc-drift counts callee raises as never-raised,
+`allow` refuses /// lines); HelpText.pas:13 generated marker hash (CONVERTER, featuregen\FeatureGen.HelpText.pas:220);
+LSP findings for lsp-6f (closed stream; owner decides).
+
+## STATE 2026-10-25 ~08:30 (superseded)
 main 47cc679f = RELEASE-READY: every lane merged incl. e3d/rc2 (extractor 1.23.0-alpha + resolver 1.13.0-alpha
 = ONE re-parse), CHANGELOG [Unreleased] b3300444, B-41 doc regen 47cc679f. Fresh main build: 47 guard scripts PASS.
 Peers: LSP stream COMPLETE (lsp-6f closed); CONVERTER waits for "deployed <sha>" then "re-parse done".
