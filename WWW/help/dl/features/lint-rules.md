@@ -7,7 +7,7 @@ group: linting
 order: 30014
 since: 0.2.0-alpha
 status: shipped
-updated: 1.34.1-alpha
+updated: 1.35.0-alpha
 ---
 
 # Lint rules
@@ -34,8 +34,8 @@ Lists the full lint rule catalog: every rule drag-lint can check, with its
 category, and its default enabled/fixable status. Reach for it to see what a
 lint run can find, or to filter by category.
 
-The catalog currently holds 191 rules -- 161 enabled by default, 23 marked
-fixable -- across 16 categories. Of the 190, 138 are built-in and 53 are
+The catalog currently holds 194 rules -- 164 enabled by default, 23 marked
+fixable -- across 16 categories. Of the 194, 141 are built-in and 53 are
 external `.scm` rule files.
 
 ### Running it from the CLI

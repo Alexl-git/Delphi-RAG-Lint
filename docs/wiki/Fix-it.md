@@ -32,7 +32,7 @@ either (a stale owning index is reported `index=stale`, not reindexed). With
 [Multi-Project-Rename](Multi-Project-Rename)).
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
-reports a `fixable` field per rule; 23 of the 191 rules are fixable.
+reports a `fixable` field per rule; 23 of the 194 rules are fixable.
 
 ## Unused units (`unused-unit-in-uses`)
 

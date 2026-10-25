@@ -14,7 +14,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.34.1-alpha';
+  DRAGLINT_VERSION = '1.35.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -115,7 +115,19 @@ const
     Guard: tests\autotest\run_routine_local_decls.ps1.
     (3) the member of Self.X records receiver_text 'Self' at insert (read and
     write). Guard: tests\autotest\run_self_member_receiver.ps1. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.23.0-alpha';
+  { 1.23.0 -> 1.24.0 (2026-10-25, X batch, ONE re-parse for five lanes):
+    (X1) the parser takes a postfix ^ before a member access (P^.K) and a
+    member chain off an array element (A[0].K, R.Arr[1].K) records its
+    receiver. Guard: tests\callresolve\run_local_read_chain_bind.ps1.
+    (X4) an enum type declared under the SCOPEDENUMS ON directive carries the fact
+    symbols.directives = 'scopedenums'. Guard:
+    tests\autotest\run_enum_bare_read_scoped.ps1.
+    (X5) the .dproj define reader REPLACES per config group and maps a
+    custom config through its own groups, so which IFDEF branches parse
+    can change. Guard: tests\preprocess\run_profile.ps1.
+    (X6) a hard cast TEnum(x), extracted as a call ref, binds the enum type
+    (resolver side; rides this re-parse). X2 is resolver-only. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.24.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -295,7 +307,16 @@ const
   /// routine-local enum value binds only on its owning routine's chain. A
   /// MINOR: new classes of derived row. The reservation for C2.3 + the IsStub
   /// unification MOVES from 1.13.0 to 1.14.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.13.0-alpha';
+  /// <para>1.13.0-alpha -&gt; 1.14.0-alpha (2026-10-25, the X batch, rides the 1.24.0
+  /// extractor re-parse): X1 binds member chains off array elements and pointer
+  /// dereferences (A[0].K, R.Arr[1].K, P^.K, implicit deref); X2 -- owner ruling
+  /// 2026-09-16 -- an interface-dispatched call binds the INTERFACE method only, a class
+  /// receiver's implemented interfaces answer only when the class chain declares nothing,
+  /// and TypeReceiver kind 11 types a function-result receiver; X6 (gap G1) binds a hard
+  /// cast TEnum(x) to the enum type (ResolveEnumCastRefs, no call edge). A MINOR: new
+  /// classes of derived row. The reservation for C2.3 + the IsStub unification MOVES from
+  /// 1.14.0 to 1.15.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.14.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

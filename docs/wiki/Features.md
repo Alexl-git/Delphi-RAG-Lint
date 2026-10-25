@@ -125,11 +125,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**191 rules. 23 have an auto-fix. 161 are on by default.** 138 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**194 rules. 23 have an auto-fix. 164 are on by default.** 141 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 54 | 6 |
+| bug-patterns | 55 | 6 |
 | complexity | 11 | - |
 | data-flow | 9 | - |
 | dead-code | 12 | 6 |
@@ -139,13 +139,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | naming | 11 | 8 |
 | other | 6 | - |
 | platform | 10 | - |
-| project-wide | 20 | - |
+| project-wide | 22 | - |
 | refactoring | 11 | - |
 | resource-lifetime | 8 | 1 |
 | review-markers | 5 | - |
 | security | 10 | - |
 | structure | 8 | - |
-| **Total** | **191** | **23** |
+| **Total** | **194** | **23** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -161,7 +161,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 191 rules, 23 fixable; `rules` |  |
+| [Lint rules](rules) | 194 rules, 23 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |

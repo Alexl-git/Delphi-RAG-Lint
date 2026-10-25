@@ -150,6 +150,11 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveValueReadRefs
 # TYPE USES (2026-10-23, B-31). A SEVENTH stream (ResolveTypeUseRefs ->
 # TCallResolver.ResolveTypeUse) writes refs.symbol_id for type_use refs.
 src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeUseRefs
+# ENUM CASTS (2026-10-25, X6 / gap G1). An EIGHTH stream (ResolveEnumCastRefs ->
+# TCallResolver.ResolveEnumCast) writes refs.symbol_id for a TEnum(x) `call` ref; it and the
+# type_use stream share the query-and-bind loop BindRefStream.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveEnumCastRefs
+src/storage/DRagLint.Storage.SQLite.pas::BindRefStream
 # The with scope PARSES THE SOURCE inside the resolver, with the byte transform
 # the indexer applies, so a with body's line/column lands in the coordinates
 # refs are stored in. These two decide those coordinates, and so which ref a

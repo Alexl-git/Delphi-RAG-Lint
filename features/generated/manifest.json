@@ -1,7 +1,7 @@
 {
-  "product": "1.34.1-alpha",
-  "extractor": "1.23.0-alpha",
-  "resolver": "1.13.0-alpha",
+  "product": "1.35.0-alpha",
+  "extractor": "1.24.0-alpha",
+  "resolver": "1.14.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -3196,7 +3196,7 @@
       "verified": {
         "date": "2026-10-25",
         "by": "ENGINE",
-        "build": "1.34.1-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "24f0fa153a4d6847545dfaabc80f851eaed458dfa6bb009d8b811fc6f9ba7289"
       }
     },
@@ -3255,7 +3255,7 @@
       "verified": {
         "date": "2026-10-25",
         "by": "ENGINE",
-        "build": "1.34.1-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "7eb351cba8ceb4330465f1f643478ba2bab6cd120335ef23a16f1ba69248921a"
       }
     },

@@ -3,15 +3,51 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.35.0-alpha -- 2026-10-25
+
+The X batch on top of v1.34.1-alpha: five lanes (X1, X2, X4, X5, X6) on ONE extractor bump
+(1.23.0 -> 1.24.0-alpha) and ONE resolver bump (1.13.0 -> 1.14.0-alpha). **Every DB re-parses** on
+the first index after the upgrade (library Win32 + Win64 and every project). Three new built-in
+rules: 194 rules (141 built-in + 53 `.scm`), 164 on by default, 23 fixable.
 
 ### Added
+- Rule `enum-bare-read-scoped` (X4; bug-patterns, warning, ON): a bare name the index bound to a
+  value of an enum declared under `$SCOPEDENUMS ON` -- the compiler admits only `TEnum.Value`
+  there. The extractor now records `symbols.directives = 'scopedenums'` on such enum types.
+  Guard: `tests\autotest\run_enum_bare_read_scoped.ps1`.
+- Rule `platform-divergent-define` (X5; project-wide, warning, ON): a conditional symbol tested by
+  IFDEF/IFNDEF/defined() is defined for one platform (Win32/Win64) of a config and not the other.
+  Allow list: config key `platform_divergent_allow`. Guard:
+  `tests\autotest\run_platform_divergent_define.ps1`.
+- Rule `enum-ordinal-persisted` (X6; project-wide, warning, ON): an enum whose ordinal crosses a
+  stream / pipe / dataset / registry boundary (a cast `TEnum(x)` or `Ord(v)` in a routine that also
+  calls a sink from `rules\enum-persist-sinks.txt`) has values with implicit ordinals; pin each
+  value (`= N`). The sink list ships beside the exe. Guard:
+  `tests\lint-project\enum-ordinal-persisted\run_enum_ordinal_persisted.ps1`.
 - `convert-apply` encoding guard (CONV-ENC E1'/E2/E3): a value `--apply` would write into a `.pas` that
   its current encoding cannot hold refuses the unit (exit 1, nothing written, apply/1
   `refusal_kind: "encoding_refused"` + `encoding_refused{}`), `--raise-encoding "<path>=utf8-bom"`
   stores a named unit/`.dfm` as UTF-8 with BOM in the same transaction, a text `.dfm` gets `#codes`
   instead of refusing, a binary `.dfm` is never compared. `info --json`
   `capabilities.convert_encoding_guard`. Guard: `tests\autotest\run_convert_apply_encoding.ps1`.
+
+### Changed (needs the re-parse)
+- X1: member chains off an array element or a pointer dereference bind (`A[0].K`, `R.Arr[1].K`,
+  `P^.K`, implicit deref); the parser takes a postfix `^` before a member access. On this repo's
+  own DB: bound member-access reads +994, call edges +40. Guard:
+  `tests\callresolve\run_local_read_chain_bind.ps1`.
+- X2 (owner ruling 2026-09-16): an interface-dispatched call binds the INTERFACE method only; a
+  class or record receiver's implemented interfaces answer only when the class chain declares
+  nothing, so `C.M` binds C's method `certain` instead of `ambiguous`, and a `with` over a typed
+  class binds. A function-result receiver (`GetX.M`, `MakeX().M`) is typed from the declared return
+  type. Guard: `tests\callresolve\run_interface_dispatch_bind.ps1`.
+- X5: the `.dproj` define reader follows MSBuild REPLACE semantics per ordered property group and
+  maps a custom config through its own groups (and `CfgParent`); `Project.Facts` uses the same
+  reader. The default profile of 4 of 27 corpus projects changes, so which IFDEF branches parse can
+  change. Guard: `tests\preprocess\run_profile.ps1`.
+- X6 (index gap G1): a hard cast `TEnum(x)`, extracted as a `call` ref, binds `refs.symbol_id` to
+  the enum type (no call edge). Guard: `tests\callresolve\run_enum_cast_bind.ps1`.
+
 ## v1.34.1-alpha -- 2026-10-25
 
 Patch release on top of v1.34.0-alpha (commit ed87f842). No extractor or resolver bump: nothing here
