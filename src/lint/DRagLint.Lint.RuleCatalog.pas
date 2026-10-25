@@ -534,6 +534,7 @@ begin
 
     { --- structure --- }
     B('inline-comment-in-multiline-args', 'structure', 'warning', 'Inline comment inside a multi-line argument list');
+    B('line-too-long',                    'structure', 'warning', 'Line longer than 1020 characters -- dcc64 compiles it only at some file offsets (F2069)'); { ON by default: owner ruling D3 2026-10-25 }
     B('multiple-statements-per-line',     'structure', 'hint',    'Two or more statements share one source line', False); { OFF by default -- pure style; opt in via "enabled" }
 
     { --- refactoring (Fowler catalog; v0.79) --- }
