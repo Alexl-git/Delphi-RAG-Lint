@@ -262,6 +262,9 @@ $d = @(Locs2 14)
 $f = @(Locs2 17)
 Check 'T4 forward-declared CLASS: declaration from the full definition = the forward line (ForwardLine branch)' ($f.Count -eq 1 -and $f[0].range.start.line -eq $lFwdClsFwd) "got=$($f.Count)/$($f[0].range.start.line) want=$lFwdClsFwd"
 Check 'T4 forward-declared routine: declaration = the forward line, not the body header' ($d.Count -eq 1 -and $d[0].range.start.line -eq $lFwd) "got=$($d.Count)/$($d[0].range.start.line) want=$lFwd"
+# The two forward-ROUTINE checks (declaration at the body header, implementation at the forward line) pin
+# current behaviour; they do not exercise ForwardLine (they pass with that branch removed). Only the
+# forward-CLASS check above does.
 $e = @(Locs2 15)
 Check 'T4 forward-declared routine: implementation = the real body, not the forward line' ($e.Count -eq 1 -and $e[0].range.start.line -eq $bFwd) "got=$($e.Count)/$($e[0].range.start.line) want=$bFwd"
 
