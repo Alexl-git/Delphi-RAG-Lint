@@ -47,8 +47,10 @@ before working on an item.**
   * DONE 411c1ca7: FG-O + FG-P (featuregen 245/0).
 * **Deep review 2026-10-25** (Fable, read-only; full text `docs\INBOX-2026-10-25-converter-deep-review-editor.md`):
   * **R1** (M) batch exit 6 marks every chunk unit "config error, nothing written" and drops its
-    backups (ConvertRunner.pas:1625-1639) -- safe only on today's engine internals; asked ENGINE
-    whether it is contract. Refused entries are relabelled too.
+    backups (ConvertRunner.pas:1625-1639) -- safe only on today's engine internals. ENGINE
+    2026-10-25: correct today; ENGINE is making it CONTRACT (castlib parsed once before the unit
+    loop; top-level exit 6 = no unit touched, no backups; guard + sha to follow). Remaining
+    editor fix: refused entries in an exit-6 chunk are relabelled csConfigError.
   * **R2** (M) a failed/timed-out `info --json` reads as "no capabilities", cached for the session
     (ConvertTab.pas:669-683, Engine.pas:1659-1667) -- features switch off naming the wrong cause.
   * **R3** (M) Save writes TEncoding.ASCII: non-ASCII in a rule book silently becomes '?'
@@ -56,7 +58,9 @@ before working on an item.**
   * **R4** (M) batch cancel between chunks leaves units with book A but not B, reported "not
     reached" (ConvertRunner.pas:1737-1742) -- breaks the per-unit "never some books" invariant.
   * **R5** (L) the batch per-entry path never reads the 1.33 per-entry `exit_code`
-    (ConvertRunner.pas:1667-1687) -- asked ENGINE for its meaning.
+    (ConvertRunner.pas:1667-1687). ENGINE 2026-10-25: per entry = THAT unit's code (0 ok, 1 refused
+    incl. unindexed, 2 write failure/rollback, 6 config/castlib); root `exit_code` = the worst
+    unit's = the process exit code (CLI.pas:27758, 27783-27790). Read it per entry.
   * **R6** (L) InputGate reports a swallowed SELECTION click as a red error (InputGate.pas:132/136).
   * **R7** (L) engine output decoded ANSI per 4 KB chunk (Engine.pas:1752) then written as UTF-8.
   * Test-kit gaps: exit-6 mixed case, BatchDistrust partial rule_errors, non-ASCII Save round
