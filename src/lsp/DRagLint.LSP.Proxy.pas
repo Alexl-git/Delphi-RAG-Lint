@@ -458,23 +458,36 @@ end;
 function ForwardIntercepted(ADst: THandle; const ABuf: TBytes; ATotal: Integer;
   const ADir: string): Boolean;
 var
-  Dir : TMergeDirection;
-  Repl: TBytes;
-  Use : Boolean;
+  Dir   : TMergeDirection;
+  Repl  : TBytes;
+  Use   : Boolean;
+  Traced: Boolean;
+  LBuf  : TBytes;
 begin
   Dir:= if ADir = 'C>S' then mdClientToServer else mdServerToClient;
   { A5: a C>S request the merge engine answers itself is consumed here; the
-    engine has committed to exactly one reply. Any exception: forwarded. }
+    engine has committed to exactly one reply. Any exception: forwarded.
+    Group-4 P2: the C>P frame is traced from the answerer's commit callback,
+    i.e. before the reply can be written (inline, or by the worker) and traced
+    as P>C; the trace after the call only covers an answerer that never
+    called back. }
   if (Dir = mdClientToServer) and Assigned(GAnswerer) then
   begin
+    Traced:= False;
+    LBuf  := ABuf;
     try
-      Use:= GAnswerer(ABuf, ATotal);
+      Use:= GAnswerer(ABuf, ATotal,
+        procedure
+        begin
+          TraceFrame('C>P', LBuf, ATotal);
+          Traced:= True;
+        end);
     except  // dl:ok bare-except@67c3 -- fail-open by design: any merge exception forwards the original frame
       Use:= False;
     end;
     if Use then
     begin
-      TraceFrame('C>P', ABuf, ATotal);
+      if not Traced then TraceFrame('C>P', ABuf, ATotal);
       Exit(True);
     end;
   end;
@@ -769,9 +782,9 @@ begin
     begin
       MergeEngine.ClientWriter:= WriteToClient;
       GAnswerer:=
-        function(const AFrame: TBytes; ALen: Integer): Boolean
+        function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean
         begin
-          Result:= MergeEngine.Answer(AFrame, ALen);
+          Result:= MergeEngine.Answer(AFrame, ALen, AOnTake);
         end;
     end;
   end;

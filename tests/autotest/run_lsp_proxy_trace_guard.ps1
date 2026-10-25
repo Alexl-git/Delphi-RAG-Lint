@@ -114,6 +114,27 @@ Check 'tracing OFF and ON relay identical bytes' `
   ("off=$(Hex $plain.Out) on=$(Hex $traced.Out)")
 
 Write-Host ''
+Write-Host 'A PROXY-ANSWERED REQUEST: C>P IS TRACED BEFORE ITS P>C REPLY (group-4 P2)' -ForegroundColor Cyan
+# --merge-definition answers textDocument/references itself (no initialize ->
+# DelphiLSP never advertised the provider). The test seam makes the reply go
+# out INLINE on the C>S pump (the queue-full path), the case where the reply
+# used to be written -- and traced as P>C -- before the request's C>P frame.
+$refBody  = '{"jsonrpc":"2.0","id":9,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///C:/none/X.pas"},"position":{"line":0,"character":0}}}'
+$refBytes = [System.Text.Encoding]::ASCII.GetBytes("Content-Length: $($refBody.Length)`r`n`r`n$refBody")
+$trace2   = Join-Path $WorkDir 'answered.trc'
+$noDb     = Join-Path $WorkDir 'no-such.sqlite'
+$env:DRAGLINT_MERGE_TEST_ANSWER_INLINE = '1'
+try {
+  $ans = Invoke-Raw $Exe @('lsp','--proxy','--merge-definition','--db',$noDb,'--delphi-lsp',$stub,'--trace',$trace2) $refBytes
+} finally { $env:DRAGLINT_MERGE_TEST_ANSWER_INLINE = $null }
+$txt2 = if (Test-Path $trace2) { Get-Content $trace2 -Raw } else { '' }
+$iCP  = $txt2.IndexOf('===== C>P ')
+$iPC  = $txt2.IndexOf('===== P>C ')
+Check 'the answered request is traced as C>P' ($iCP -ge 0) ''
+Check 'its reply is traced as P>C' ($iPC -ge 0) ("out=$([Text.Encoding]::ASCII.GetString($ans.Out))")
+Check 'C>P comes BEFORE P>C in the trace' (($iCP -ge 0) -and ($iPC -gt $iCP)) "C>P at $iCP, P>C at $iPC"
+
+Write-Host ''
 Write-Host 'OFF BY DEFAULT' -ForegroundColor Cyan
 $stray = Get-ChildItem $WorkDir -Filter '*.trace' -File | Where-Object { $_.FullName -ne $trace }
 Check 'no trace file appears without --trace' ($stray.Count -eq 0) `
