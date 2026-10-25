@@ -24,9 +24,13 @@
     A1 allow --apply line 1 of a UTF-8+BOM unit: exit 0, BOM kept, the
        non-ASCII line intact, only line 1 changed
     A2 CONTROL allow --apply on ANSI+CRLF: only the target line changed
+    T4 edit, UTF-8 WITHOUT BOM: stays UTF-8, no BOM, inserted U+00EF as C3 AF (W5-D)
+    T5 CONTROL edit, pure ASCII: stays ANSI (U+00EF -> one byte EF)
+    T6 CONTROL edit, high bytes that are NOT valid UTF-8: stays ANSI
+    S4 stamp, UTF-8 WITHOUT BOM: header + original bytes, no BOM
 
   RED-CHECK (2026-10-25, against 6511fe41): T1, T2, S1, S2, A1 FAIL; T3, S3,
-  A2 PASS.
+  A2 PASS. W5-D RED-CHECK (2026-10-25, against 63c4c567): T4 FAIL; T5, T6, S4 PASS.
 #>
 [CmdletBinding()]
 param(
@@ -88,6 +92,18 @@ Check 'T2 edit on an LF-only file stays LF' (Same $got $exp) (Show $got)
 $got = Run 'edit' 't3.pas' ($latin1.GetBytes("unit u;`r`n// caf$e9`r`nend.`r`n"))
 $exp = $latin1.GetBytes("{x}unit u;`r`n// caf$e9`r`n// na${ef}ve`r`nend.`r`n")
 Check 'T3 CONTROL edit on ANSI+CRLF is byte-identical to the historical output' (Same $got $exp) (Show $got)
+# W5-D: UTF-8 WITHOUT a BOM (valid UTF-8 high bytes) stays UTF-8, gains no BOM.
+# U+00C1 is C3 81: 0x81 is undefined in cp1252, the byte an ANSI round trip can lose.
+$utf8 = [Text.UTF8Encoding]::new($false); $aa = [char]0x00C1
+$got = Run 'edit' 't4.pas' ($utf8.GetBytes("unit u;`r`n// caf$e9 $aa $zh`r`nend.`r`n"))
+$exp = $utf8.GetBytes("{x}unit u;`r`n// caf$e9 $aa $zh`r`n// na${ef}ve`r`nend.`r`n")
+Check 'T4 edit on UTF-8 without BOM: no BOM added, U+00EF written as UTF-8, rest intact' (Same $got $exp) (Show $got)
+$got = Run 'edit' 't5.pas' ($latin1.GetBytes("unit u;`r`nx;`r`nend.`r`n"))
+$exp = $latin1.GetBytes("{x}unit u;`r`nx;`r`n// na${ef}ve`r`nend.`r`n")
+Check 'T5 CONTROL edit on pure ASCII stays ANSI (U+00EF written as one cp1252 byte)' (Same $got $exp) (Show $got)
+$got = Run 'edit' 't6.pas' ($latin1.GetBytes("unit u;`r`n// $e9$e9 caf$e9`r`nend.`r`n"))
+$exp = $latin1.GetBytes("{x}unit u;`r`n// $e9$e9 caf$e9`r`n// na${ef}ve`r`nend.`r`n")
+Check 'T6 CONTROL high bytes that are not valid UTF-8 stay ANSI' (Same $got $exp) (Show $got)
 
 # --- PrependConvertComment ---
 $hdr = '// drag-lint convert-apply TS', '//   backup: a.pas.BCK1 /  ; rules: r.rules'
@@ -100,6 +116,9 @@ Check 'S2 stamp on LF-only: header lines end in LF' (Same $got $exp) (Show $got)
 $got = Run 'stamp' 's3.pas' ($latin1.GetBytes("unit u;`r`n// caf$e9`r`n"))
 $exp = $latin1.GetBytes("$($hdr[0])`r`n$($hdr[1])`r`nunit u;`r`n// caf$e9`r`n")
 Check 'S3 CONTROL stamp on ANSI+CRLF: header + original bytes' (Same $got $exp) (Show $got)
+$got = Run 'stamp' 's4.pas' ($utf8.GetBytes("unit u;`r`n// caf$e9 $aa $zh`r`n"))
+$exp = $utf8.GetBytes("$($hdr[0])`r`n$($hdr[1])`r`nunit u;`r`n// caf$e9 $aa $zh`r`n")
+Check 'S4 stamp on UTF-8 without BOM: header + original bytes, no BOM' (Same $got $exp) (Show $got)
 
 # --- allow --apply ---
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }

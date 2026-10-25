@@ -43,6 +43,15 @@ uses
 /// </remarks>
 function EnsureUtf8Bytes(const ABytes: TBytes): TBytes;
 
+/// <summary>True when every byte of ABytes belongs to a well-formed UTF-8
+/// sequence (RFC 3629: no overlong forms, no surrogates, max U+10FFFF).</summary>
+/// <param name="ABytes">Raw bytes, without a BOM. Empty and pure ASCII are valid.</param>
+/// <returns>True for valid UTF-8; False at the first malformed sequence.</returns>
+/// <remarks>Pure; thread-safe. Exposed (W5-D, 2026-10-25) so the text-edit
+/// writer (TTextFileFormat.Decode) tells a BOM-less UTF-8 file from an ANSI
+/// one by the SAME rule the indexer uses in EnsureUtf8Bytes.</remarks>
+function IsValidUtf8(const ABytes: TBytes): Boolean;
+
 implementation
 
 { Strict UTF-8 validation: an explicit continuation-byte walk with the RFC 3629
