@@ -38,5 +38,11 @@
       "ask": "Why was my UTF-16 book saved with a BOM?",
       "command": "ConvRulesEditor.exe > File > Encoding"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-10-25",
+    "by": "CONVERTER",
+    "build": "1.34.1-alpha",
+    "surfaceHash": "e307c21a37217ea3f4dc7b8b4dc62d13e21d90e4075f967e1b734f58770de358"
+  }
 }
