@@ -140,8 +140,12 @@ $verbs = @(
   @{ name = 'cycles';           env = $false; args = @('cycles', '--format', 'json') },
   @{ name = 'wiring';           env = $false; args = @('wiring', '--coverage', '--format', 'json') },
   @{ name = 'lint';             env = $false; args = @('lint', $u1, '--json') },
-  @{ name = 'lint-all';         env = $false; args = @('lint-all', '--json', '--output', (Join-Path $WorkDir 'rep.txt')) }
+  @{ name = 'lint-all';         env = $false; args = @('lint-all', '--json') }
 )
+# 2026-10-25: lint-all no longer passes --output. Since e1e01437 (W4-H1) --json
+# honours --output and writes the document THERE, leaving stdout empty -- which
+# made this STDOUT guard fail "non-empty" on a deliberate fix. The --output path
+# is guarded by run_lint_all_output_json_guard.ps1.
 
 function RunAll([string]$Label, [bool]$ExpectStale) {
   Write-Host ''

@@ -94,7 +94,12 @@ if (-not (Test-Path $stray)) { Write-Host 'FATAL: could not plant a stray'; exit
 $before = Get-Item $stray
 
 # --- 1. the stray must NOT be adopted ---------------------------------------
-$q = Run-In $WorkDir @('query', '--name', 'DecoyMethod')
+# 2026-10-25: --exact. Without it the no---db query fuzzy-matched DECL_METHOD
+# (DRagLint.LSP.Feature.ImplDecl, LSP stream) in a manifest-resolved DB and
+# exited 0, so this check depended on what OTHER databases contain. The stray
+# holds DecoyMethod EXACTLY, so adopting it would still answer (exit 0) and fail
+# both this check and the "does NOT answer from the stray" one below.
+$q = Run-In $WorkDir @('query', '--name', 'DecoyMethod', '--exact')
 Check 'a verb with no resolvable --db exits non-zero' ($q.Code -ne 0) "exit=$($q.Code)"
 # NOT asserted: that this prints a resolve-dbs hint. A consumer with no --db
 # legitimately AUTO-SELECTS from the manifest (resolve-dbs from this very cwd

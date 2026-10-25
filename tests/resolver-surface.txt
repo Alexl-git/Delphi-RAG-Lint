@@ -244,6 +244,12 @@ EXCLUDE finddiunresolved
 # BRIDGE in FlowChecks can continue the climb in the library index. It consumes
 # type_ancestors; it never writes it, and it runs from lint, never from a walk.
 EXCLUDE unresolvedancestornames
+# 2026-10-25: added by b3937edd (D2 a-narrow). Lists a symbol's CALL refs that
+# have NO call_edges row, for the doc raise miner's KNOWN_OS_RAISERS table. Its
+# only caller is TDocFactsBuilder.MineCalleeRaises (Doc.Facts / Doc.Drift --
+# autodoc and doc-drift); nothing in the index walk or CallResolver reads it.
+# It consumes call_edges, it never writes them.
+EXCLUDE getunresolvedcallsfromsymbol
 
 # Asks whether call_edges must be rebuilt; it reads state and answers, and the
 # answer is acted on by ResolveCallTargets, which IS in the surface.

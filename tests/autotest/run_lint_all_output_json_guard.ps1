@@ -42,8 +42,12 @@ try {
   $r1 = Run @('--json', '--output', $f1)
   Check '--json --output creates the file' (Test-Path -LiteralPath $f1) "exit=$($r1.Exit)"
   $arr = $null
-  if (Test-Path -LiteralPath $f1) { try { $arr = Get-Content -LiteralPath $f1 -Raw | ConvertFrom-Json } catch { } }
-  Check 'the file holds a parseable JSON document' ($null -ne $arr -or ((Test-Path $f1) -and (Get-Content -LiteralPath $f1 -Raw).Trim() -eq '[]')) ''
+  # 2026-10-25: -NoEnumerate. The empty case is written "[`r`n]" (JArr.Format(2)),
+  # which the old "-eq '[]'" fallback never matched and plain ConvertFrom-Json
+  # enumerates to $null, so this check went RED the day the engine DB stopped
+  # having unit-not-in-dpr findings. Now it asserts a JSON ARRAY, empty or not.
+  if (Test-Path -LiteralPath $f1) { try { $arr = Get-Content -LiteralPath $f1 -Raw | ConvertFrom-Json -NoEnumerate } catch { } }
+  Check 'the file holds a parseable JSON document' ($arr -is [array]) ''
   Check 'stdout is empty when --output is given' ([string]::IsNullOrWhiteSpace($r1.Out)) "stdout chars=$($r1.Out.Length)"
 
   $f2 = Join-Path $tmp 'report.txt'

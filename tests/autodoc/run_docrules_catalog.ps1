@@ -159,6 +159,11 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 #             sat RED on main for a day before anyone read it -- and the message
 #             below had said "133" while asserting 136 since 2026-09-28, so the
 #             text is now derived from the same number the assertion checks.
+# 2026-10-25: 137 -> 138, from `line-too-long` (structure, warning, ON: a line
+#             over 1020 chars, owner ruling D3), added by 126d8da4 (W5-F2).
+#             Verified the delta is exactly that one id (RuleCatalog B() entries
+#             137 at ce007d31 -> 138 now; nothing removed; rules --json builtin
+#             ids equal the B() list) and documentation stays 5.
 # 2026-09-23: 132 -> 133, from `ifdef-undefined-symbol` (project-wide, warning,
 #             OFF by default: 175 findings on ORM3 CLIENT, all deliberate trace switches).
 # 2026-09-23: 131 -> 132. assert-with-side-effect (INBOX 2026-09-23 rule 4):
@@ -215,8 +220,8 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-$ExpectedBuiltins = 137
-Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
+$ExpectedBuiltins = 138
+Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)
