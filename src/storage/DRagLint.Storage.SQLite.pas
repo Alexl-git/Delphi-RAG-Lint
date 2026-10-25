@@ -98,6 +98,32 @@ var
   /// path is exactly the old behaviour, statement for statement.</para></remarks>
   CaseSensitiveLookups: Boolean = False;
 
+/// <summary>True when <paramref name="pError"/> is SQLite's "duplicate column
+/// name" failure -- the one expected outcome of re-running an additive
+/// <c>ALTER TABLE ... ADD COLUMN</c> against a table that already has it.</summary>
+/// <param name="pError">The exception raised by the DDL; nil answers False.</param>
+/// <returns>True only for a FireDAC database-engine exception whose message
+/// carries SQLite's "duplicate column name" text (matched case-insensitively,
+/// so FireDAC's "[FireDAC][Phys][SQLite] ERROR:" prefix does not matter).</returns>
+/// <remarks>SQLite reports this under the generic SQLITE_ERROR code (1), the
+/// same code as a syntax error or a missing table, so the message is the only
+/// discriminator. Deep-review F2 (2026-10-25).</remarks>
+function IsDuplicateColumnError(const pError: Exception): Boolean;
+
+/// <summary>Runs one idempotent schema-migration statement, tolerating ONLY the
+/// "duplicate column name" failure of an additive ALTER that already ran.</summary>
+/// <param name="pConn">An open, writable connection; must not be nil.</param>
+/// <param name="pSql">The DDL statement (ALTER TABLE ADD COLUMN, CREATE ...
+/// IF NOT EXISTS, CREATE INDEX IF NOT EXISTS).</param>
+/// <exception cref="EFDDBEngineException">Re-raised for every other failure:
+/// disk full, I/O error, "database is locked", a syntax error, a missing
+/// table. Until 2026-10-25 every failure was swallowed, so a failed CREATE TABLE
+/// member_accesses was indistinguishable from the idempotent no-op and readers
+/// degraded silently (deep-review F2).</exception>
+/// <remarks>Migrate stamps schema_version only AFTER every such statement, so a
+/// raise here leaves the OLD version in place and the next open retries.</remarks>
+procedure ExecAdditiveDDL(const pConn: TFDConnection; const pSql: string);
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -3389,6 +3415,7 @@ uses
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
   , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
+  , FireDAC.Stan.Error          { F2: EFDDBEngineException -- ExecAdditiveDDL's one tolerated failure }
   ;
 
 const
@@ -3922,15 +3949,30 @@ begin
   FConn.ExecSQL('PRAGMA temp_store = MEMORY'   );
 end;
 
+function IsDuplicateColumnError(const pError: Exception): Boolean;
+begin
+  Result:= (pError is EFDDBEngineException)
+       and ContainsText(pError.Message, 'duplicate column name');
+end;
+
+procedure ExecAdditiveDDL(const pConn: TFDConnection; const pSql: string);
+begin
+  try
+    pConn.ExecSQL(pSql);
+  except on E: Exception do
+    if not IsDuplicateColumnError(E) then raise;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.Migrate;
 var
   I: Integer;
 
   procedure TryExec(const ASql: string);
   begin
-    { Idempotent ALTER: swallow the only expected failure ('duplicate column'
-      on a fresh DB whose CREATE TABLE already added the column). }
-    try FConn.ExecSQL(ASql); except end;
+    { F2: tolerates ONLY "duplicate column name"; every other failure raises
+      and Migrate stops before the schema_version stamp. }
+    ExecAdditiveDDL(FConn, ASql);
   end;
 
   procedure DropTriggerVerbose(const AName: string);
@@ -4305,8 +4347,10 @@ begin
     open. `PRAGMA optimize` after a large reindex is the natural place to refresh
     them, which is a separate change.
 
-    TryExec throughout, so a READ-ONLY open simply fails these harmlessly rather
-    than turning a query into an error. }
+    BEST-EFFORT, deliberately the one place Migrate swallows ANY failure (F2,
+    2026-10-25): statistics are a pure planner hint, no reader depends on
+    sqlite_stat1 existing, and a busy/locked ANALYZE must not fail the open.
+    Every other statement here goes through ExecAdditiveDDL, which re-raises. }
   begin
     var StatQ: TFDQuery:= TFDQuery.Create(nil);
     var HaveStats: Boolean:= False;
@@ -4324,14 +4368,18 @@ begin
     end;
     if not HaveStats then
     begin
-      TryExec('PRAGMA analysis_limit=400');
-      TryExec('ANALYZE');
+      try
+        FConn.ExecSQL('PRAGMA analysis_limit=400');
+        FConn.ExecSQL('ANALYZE');
+      except  // dl:ok try-except-swallowed@e230, empty-except@e230 -- REVIEWED 2026-10-25 (F2): ANALYZE is a planner hint only; a busy/locked run must not fail the open
+      end;
     end;
   end;
 
   { STAMP THE VERSION LAST -- this is the real commit point of the migration.
     Everything above is idempotent (CREATE ... IF NOT EXISTS, plus TryExec'd
-    ALTERs that swallow "duplicate column") and Migrate runs on EVERY open, so
+    ALTERs that swallow ONLY "duplicate column name" and re-raise anything else,
+    so a failed step never reaches this stamp -- F2) and Migrate runs on EVERY open, so
     re-running a partially-applied upgrade is not merely safe, it is the
     designed recovery path. The one thing that must not happen early is the
     CLAIM that the upgrade finished -- and writing schema_version inside the
