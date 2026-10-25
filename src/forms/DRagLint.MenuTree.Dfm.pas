@@ -43,7 +43,7 @@ uses
   , System.Generics.Collections
   , Data.DB
   , FireDAC.Comp.Client
-  , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- TFDQuery.Params[I].AsString needs TFDParam, declared there
+  , FireDAC.Stan.Param  { TFDQuery.Params[I].AsString needs TFDParam, declared there }
   , DRagLint.Storage.SQLite
   , DRagLint.FormsMap.Dfm
   ;
@@ -86,7 +86,7 @@ type
 
 { Caption as menu-tree stores it ('&&' = a literal '&'): accelerators dropped,
   as forms-csv shows them. }
-function DfmCaption(const pRaw: string): string;
+function DfmCaption(const pRaw: string): string;  // dl:ok duplicate-code@c546 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): same loop shape as FormsMap.Dfm.StripAccel but the opposite contract ('&&' is KEPT as menu-tree stores it; StripAccel collapses it to '&')
 var
   SB: TStringBuilder;
   I : Integer;

@@ -129,6 +129,7 @@ type
     /// </remarks>
     function HasDrift: Boolean;
     /// <summary>'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
+    /// <returns>The one-line drift summary.</returns>
     function SummaryLine: string;
     /// <summary>MISSING / MOVED / UNREGISTERED / NOTE lines, then the summary line.</summary>
     /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>

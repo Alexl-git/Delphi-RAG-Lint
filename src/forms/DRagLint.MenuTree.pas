@@ -245,6 +245,7 @@ type
     /// </remarks>
     function AddRoot(const pCaption, pSource: string): TMenuNode;
     /// <summary>Adopts pNode (already created) as a root.</summary>
+    /// <param name="pNode">The node to adopt; the tree takes ownership.</param>
     procedure AdoptRoot(pNode: TMenuNode);
     /// <summary>The external root for pIdent as named in pIdentPath, created on
     /// first use.</summary>
@@ -257,6 +258,7 @@ type
     /// <returns>The root; owned by the tree.</returns>
     function ExternalRoot(const pIdent, pSource: string; const pIdentPath: string = ''): TMenuNode;
     /// <summary>Adds a note line (dynamic caption, unparented item, ...).</summary>
+    /// <param name="pNote">The note text, one line.</param>
     procedure AddNote(const pNote: string);
     function Roots: TObjectList<TMenuNode>;
     function External: TObjectList<TMenuNode>;
@@ -897,7 +899,7 @@ type
     Cls     : string;
   end;
 
-  TWalkCore = class  // dl:ok high-response@2a94 -- the walker is one interpreter over one CST: eval, call binding, parenting and the index lookups share the env and file caches, and splitting would hand the same calls to a second class
+  TWalkCore = class  // dl:ok high-response@2a94, god-class@2a94 -- the walker is one interpreter over one CST: eval, call binding, parenting and the index lookups share the env and file caches, and splitting would hand the same calls to a second class
   private
     FStore     : TSQLiteSymbolStore;
     FProject   : string;
@@ -1156,7 +1158,7 @@ begin
   inherited Destroy;
 end;
 
-function TWalkCore.Q(const pSql: string; const pParams: array of string): TFDQuery;
+function TWalkCore.Q(const pSql: string; const pParams: array of string): TFDQuery;  // dl:ok duplicate-code@1940 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the 10-line open-a-parameterised-query helper TDfmRootBuilder.Q repeats; each class holds its own store, and sharing it would add public surface to MenuTree for one caller
 var
   I: Integer;
 begin
@@ -2073,7 +2075,7 @@ begin
   else if SameText(pProp, 'Enabled') and (pRhs.NodeType = 'kFalse') then pTarget.Disabled:= True;
 end;
 
-procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@cbf0 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@cbf0, cyclomatic-complexity@33cb -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
 var
   K       : string;
   I       : Integer;
