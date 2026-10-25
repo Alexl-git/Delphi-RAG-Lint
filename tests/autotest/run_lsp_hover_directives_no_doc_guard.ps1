@@ -56,6 +56,8 @@ type
     procedure Plain;
     /// <summary>A documented virtual routine.</summary>
     procedure Documented; virtual;
+    procedure Ovl(A: Integer); overload; virtual; stdcall;
+    procedure Ovl(const S: string); overload; virtual; stdcall;
   end;
 
 implementation
@@ -69,6 +71,14 @@ begin
 end;
 
 procedure TKit.Documented;
+begin
+end;
+
+procedure TKit.Ovl(A: Integer);
+begin
+end;
+
+procedure TKit.Ovl(const S: string);
 begin
 end;
 
@@ -125,6 +135,19 @@ Check 'NEGATIVE: hover on Plain has NO Directives:' (($hp -match 'TKit\.Plain') 
 $p = Col0 '*procedure Documented; virtual;*' 'Documented'
 $hd = Invoke-Hover $p[0] $p[1]
 Check 'POSITIVE: documented symbol still shows Directives: virtual' ($hd -match 'Directives: virtual') "got: [$hd]"
+
+# ---- T5 (group-4 lane T): C3 facts block only when exactly ONE symbol matches ----
+# Both Ovl overloads carry `virtual; stdcall`, so a hover that built the facts from the first
+# match would print `Directives:`. The merged multi-overload hover must not (the facts of one
+# overload would be presented as the facts of the name). Control: the same directives on the
+# single-symbol VirtStd DO print (checked above), and the hover is a real one (names Ovl).
+$p = Col0 '*procedure Ovl(A: Integer);*' 'Ovl'
+$ho = Invoke-Hover $p[0] $p[1]
+Check 'T5 CONTROL: hover on the overloaded name is a real hover (names TKit.Ovl)' ($ho -match 'TKit\.Ovl') "got: [$ho]"
+Check 'T5 multi-overload hover has NO Directives: block (facts only for exactly one symbol)' ($ho -notmatch 'Directives:') "got: [$ho]"
+$p = Col0 '*procedure Ovl(const S: string);*' 'Ovl'
+$ho2 = Invoke-Hover $p[0] $p[1]
+Check 'T5 hover on the second overload also has NO Directives: block' (($ho2 -match 'TKit\.Ovl') -and ($ho2 -notmatch 'Directives:')) "got: [$ho2]"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green

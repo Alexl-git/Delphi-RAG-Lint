@@ -123,6 +123,74 @@ Check 'CONTROL: lint --json WITH --db reports used-unit-not-resolvable' ($cliDb 
 $dbOn = RunLsp $Exe $UsesF @('--db', $dbFile, '--full-rules') 'dbon'
 Check 'flag ON with --db: the DB-dependent finding used-unit-not-resolvable IS published' ($dbOn.Codes -contains 'used-unit-not-resolvable') ''
 
+# ---- T1 (group-4 lane T): timeout + invalid-JSON fallback via a substitute child ----
+# DRAGLINT_FULLRULES_CHILD_EXE (test-only, read by RunFullRulesLint) replaces the child exe.
+# An engine that ignores it (lane S not merged yet) runs the REAL lint instead, so the stub
+# never runs: the probe below detects that with a marker file and the cases are SKIPped
+# LOUDLY -- never a silent pass. The marker also is the positive control that the stub ran.
+Write-Host 'LSP --full-rules fallback: child timeout / invalid JSON (DRAGLINT_FULLRULES_CHILD_EXE)' -ForegroundColor Cyan
+$script:Skipped = 0
+function Skip($n, $why) { $script:Skipped++; Write-Host ("  [SKIP] {0} -- {1}" -f $n, $why) -ForegroundColor Yellow }
+$csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$stubDir = Join-Path $WorkDir 'stub'
+New-Item -ItemType Directory -Force $stubDir | Out-Null
+$stubExe = Join-Path $stubDir 'FullRulesChildStub.exe'
+$stubOk = $false
+if (Test-Path $csc) {
+  $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1
+  $stubOk = Test-Path $stubExe
+}
+function RunStub([string]$Mode, [string]$Tag) {
+  $marker = Join-Path $stubDir "$Tag.marker"
+  $env:DRAGLINT_FULLRULES_CHILD_EXE = $stubExe
+  $env:STUB_MODE = $Mode
+  $env:STUB_MARKER = $marker
+  try {
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $r = RunLsp $Exe $DirtyF @('--full-rules') $Tag
+    $sw.Stop()
+  } finally {
+    Remove-Item Env:DRAGLINT_FULLRULES_CHILD_EXE, Env:STUB_MODE, Env:STUB_MARKER, Env:STUB_JSON_FILE -ErrorAction SilentlyContinue
+  }
+  $r.Marker  = Test-Path $marker
+  $r.Seconds = $sw.Elapsed.TotalSeconds
+  return $r
+}
+if (-not $stubOk) {
+  Skip 'T1 timeout / invalid-JSON cases' 'csc.exe not found or the stub did not compile'
+} else {
+  # emit mode: the stub returns a lint array whose rule id is synthetic, so a published
+  # zz-stub-rule can only come from the substituted child.
+  $emitF = Join-Path $stubDir 'emit.json'
+  # $cli merges stderr (a loaded-defaults note), so cut the array out of it.
+  $arr = $cli.Substring($cli.IndexOf([char]91), $cli.LastIndexOf([char]93) - $cli.IndexOf([char]91) + 1)
+  [IO.File]::WriteAllText($emitF, ($arr -replace 'missing-inherited-ctor', 'zz-stub-rule'), [Text.Encoding]::ASCII)
+  $env:STUB_JSON_FILE = $emitF
+  $probe = RunStub 'emit' 'stub-emit'
+  if (-not $probe.Marker) {
+    Skip 'T1 timeout / invalid-JSON cases' 'this engine ignores DRAGLINT_FULLRULES_CHILD_EXE (the stub never ran) -- needs lane S Server.pas'
+  } else {
+    Check 'T1 CONTROL: substitute child is used (synthetic rule id published)' ($probe.Codes -contains 'zz-stub-rule') ''
+    Check 'T1 CONTROL: the real rule id is not published when the stub answered' ($probe.Codes -notcontains 'missing-inherited-ctor') ''
+
+    $to = RunStub 'sleep' 'stub-sleep'
+    Check 'T1 timeout: the child ran' $to.Marker ''
+    Check 'T1 timeout: server waited out the budget (>= 7 s), then gave up well before the 60 s stub sleep' ($to.Seconds -ge 7 -and $to.Seconds -lt 40) ("{0:N1} s" -f $to.Seconds)
+    Check 'T1 timeout: stderr reports the fallback to the subset' ($to.Err -match 'full-rules fallback to the subset') ''
+    Check 'T1 timeout: a publishDiagnostics frame is still sent (subset)' ($to.Out -match '"diagnostics":\[') ''
+    Check 'T1 timeout: no full-rules-only rule id is published' (($to.Codes -notcontains 'missing-inherited-ctor') -and ($to.Codes -notcontains 'zz-stub-rule')) ''
+    Check 'T1 timeout: the timed-out child was terminated (no orphan stub)' (-not (Get-Process -Name FullRulesChildStub -ErrorAction SilentlyContinue)) ''
+
+    $bj = RunStub 'badjson' 'stub-badjson'
+    Check 'T1 invalid JSON: the child ran' $bj.Marker ''
+    Check 'T1 invalid JSON: stderr reports the fallback to the subset' ($bj.Err -match 'full-rules fallback to the subset') ''
+    Check 'T1 invalid JSON: a publishDiagnostics frame is still sent' ($bj.Out -match '"diagnostics":\[') ''
+    Check 'T1 invalid JSON: nothing from the bad child is published' ($bj.Codes -notcontains 'missing-inherited-ctor') ''
+    Check 'T1 CONTROL: emit-mode run did NOT fall back (the fallback line is not unconditional)' ($probe.Err -notmatch 'full-rules fallback to the subset') ''
+  }
+}
+if ($script:Skipped -gt 0) { Write-Host ("  {0} case group(s) SKIPPED -- see [SKIP] lines above" -f $script:Skipped) -ForegroundColor Yellow }
+
 # ---- I2 (fix round 1): OFF-path byte identity is NEVER silently skipped ------
 function NormOff([string]$s) {
   $w = $WorkDir -replace '\\', '/'
@@ -149,7 +217,7 @@ if ($CaptureOffBaseline) {
   Write-Host "  captured OFF-path baseline -> $OffBaseline" -ForegroundColor Yellow
 } elseif ($BaselineExe -and (Test-Path $BaselineExe)) {
   $base = RunLsp ((Resolve-Path $BaselineExe).Path) $DirtyF @() 'base'
-  Check 'flag OFF: publish stdout is byte-identical to the pre-change engine (-BaselineExe)' ($base.Out -ceq $off.Out) ("len " + $base.Out.Length + " vs " + $off.Out.Length)
+  Check 'flag OFF: publish stdout is byte-identical to the pre-change engine (-BaselineExe)' ((NormOff $base.Out) -ceq $offNorm) ("len " + (NormOff $base.Out).Length + " vs " + $offNorm.Length)
 } elseif (Test-Path $OffBaseline) {
   $rec = [IO.File]::ReadAllText($OffBaseline)
   Check 'flag OFF: publish stdout is byte-identical to the recorded baseline fixture' ($offNorm -ceq $rec) ("len " + $rec.Length + " vs " + $offNorm.Length)

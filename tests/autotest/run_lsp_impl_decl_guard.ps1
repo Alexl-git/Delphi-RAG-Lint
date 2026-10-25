@@ -21,9 +21,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-impldecl-$PID"
 )
+# $PSScriptRoot is empty inside a param() default under Windows PowerShell 5 (the battery runs pwsh,
+# a developer may not): resolve the default exe after the param block, which works under both.
+if (-not $Exe) { $Exe = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) '..\..\src\cli\Win64\Debug\drag-lint.exe' }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -86,8 +89,71 @@ end;
 end.
 '@
 
+$file2 = Join-Path $src 'uImpl2.pas'
+WriteAnsi $file2 @'
+unit uImpl2;
+
+interface
+
+type
+  TFwdCls = class;
+
+  IShape = interface
+    procedure Draw;
+  end;
+
+  TShapeBase = class(TObject, IShape)
+  public
+    procedure Draw; virtual; abstract;
+  end;
+
+  TCircle = class(TShapeBase)
+  public
+    procedure Draw; override;
+  end;
+
+  TAbs = class
+  public
+    procedure Foo; virtual; abstract;
+  end;
+
+  TAbsDer = class(TAbs)
+  public
+    procedure Foo; override; abstract;
+  end;
+
+  TFwdCls = class
+  public
+    procedure Zed;
+  end;
+
+procedure Other;
+
+implementation
+
+procedure Fwd; forward;
+
+procedure TCircle.Draw;
+begin
+end;
+
+procedure Other;
+begin
+  Fwd;
+end;
+
+procedure Fwd;
+begin
+end;
+
+end.
+'@
+
 $db = Join-Path $WorkDir 'impl.sqlite'
+# PS5 turns native stderr under 2>&1 into a terminating error when ErrorActionPreference is Stop.
+$ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
 & $Exe index $src --db $db 2>&1 | Out-Null
+$ErrorActionPreference = $ea
 Check 'fixture indexed' (Test-Path $db)
 
 $lines = [System.IO.File]::ReadAllLines($file)
@@ -162,6 +228,42 @@ Check 'declaration from TDerived.Foo body header: 1 Location at the class-declar
 
 Check 'implementation on whitespace answers [] (not an error)' ($r.res.ContainsKey(14) -and @($r.res[14][0]).Count -eq 0 -and -not $r.err.ContainsKey(14))
 Check 'declaration on whitespace answers [] (not an error)' ($r.res.ContainsKey(15) -and @($r.res[15][0]).Count -eq 0 -and -not $r.err.ContainsKey(15))
+
+# ---- T4 (group-4 lane T): interface descendant, bodiless (abstract) descendant, forward declaration ----
+$lines = [System.IO.File]::ReadAllLines($file2)
+$uri = 'file:///' + ($file2.Replace([string][char]92, '/'))
+$lIShapeDraw = LineOf '^\s*procedure Draw;$'
+$lBaseDraw   = LineOf '^\s*procedure Draw; virtual; abstract;'
+$lAbsFoo     = LineOf '^\s*procedure Foo; virtual; abstract;'
+$lAbsDerFoo  = LineOf '^\s*procedure Foo; override; abstract;'
+$lFwdClsFwd  = LineOf '^\s*TFwdCls = class;'
+$lFwdClsDef  = LineOf '^\s*TFwdCls = class$'
+$bCircle     = LineOf '^procedure TCircle\.Draw;'
+$lFwd        = LineOf '^procedure Fwd; forward;'
+$bFwd        = LineOf '^procedure Fwd;$' ($lFwd + 1)
+$r2 = Session @(
+  @{ method='textDocument/implementation'; line=$lBaseDraw;  col=(ColOf $lBaseDraw 'Draw') },   # 11
+  @{ method='textDocument/implementation'; line=$lAbsFoo;    col=(ColOf $lAbsFoo 'Foo') },      # 12
+  @{ method='textDocument/implementation'; line=$lIShapeDraw; col=(ColOf $lIShapeDraw 'Draw') }, # 13
+  @{ method='textDocument/declaration';    line=$bFwd;       col=(ColOf $bFwd 'Fwd') },         # 14
+  @{ method='textDocument/implementation'; line=$lFwd;       col=(ColOf $lFwd 'Fwd') },         # 15
+  @{ method='textDocument/declaration';    line=$bCircle;    col=(ColOf $bCircle 'Draw') },     # 16
+  @{ method='textDocument/declaration';    line=$lFwdClsDef; col=(ColOf $lFwdClsDef 'TFwdCls') } # 17
+)
+function Locs2([int]$id) { if ($r2.res.ContainsKey($id)) { return @($r2.res[$id][0]) } else { return @() } }
+Write-Host ("  T4 lines: BaseDraw={0} AbsFoo={1} AbsDerFoo={2} Circle={3} Fwd={4} FwdBody={5} IShapeDraw={6}" -f $lBaseDraw,$lAbsFoo,$lAbsDerFoo,$bCircle,$lFwd,$bFwd,$lIShapeDraw) -ForegroundColor DarkGray
+$a = @(Locs2 11)
+Check 'T4 abstract method with a bodied descendant: implementation = the descendant body (1 Location)' ($a.Count -eq 1 -and $a[0].range.start.line -eq $bCircle) "got=$($a.Count)/$($a[0].range.start.line) want=$bCircle"
+$b = @(Locs2 12)
+Check 'T4 bodiless (abstract) descendant: implementation = the descendant DECLARATION line (1 Location)' ($b.Count -eq 1 -and $b[0].range.start.line -eq $lAbsDerFoo) "got=$($b.Count)/$($b[0].range.start.line) want=$lAbsDerFoo"
+$c = @(Locs2 13)
+Check 'T4 interface method: implementation includes the implementing class method (TShapeBase.Draw declaration)' (@($c | Where-Object { $_.range.start.line -eq $lBaseDraw }).Count -eq 1) "got=$(($c | ForEach-Object { $_.range.start.line }) -join ',') want-includes=$lBaseDraw"
+$d = @(Locs2 14)
+$f = @(Locs2 17)
+Check 'T4 forward-declared CLASS: declaration from the full definition = the forward line (ForwardLine branch)' ($f.Count -eq 1 -and $f[0].range.start.line -eq $lFwdClsFwd) "got=$($f.Count)/$($f[0].range.start.line) want=$lFwdClsFwd"
+Check 'T4 forward-declared routine: declaration = the forward line, not the body header' ($d.Count -eq 1 -and $d[0].range.start.line -eq $lFwd) "got=$($d.Count)/$($d[0].range.start.line) want=$lFwd"
+$e = @(Locs2 15)
+Check 'T4 forward-declared routine: implementation = the real body, not the forward line' ($e.Count -eq 1 -and $e[0].range.start.line -eq $bFwd) "got=$($e.Count)/$($e[0].range.start.line) want=$bFwd"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
