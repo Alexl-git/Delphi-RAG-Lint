@@ -25,7 +25,7 @@ type
   TRenameEdit = record
     FilePath: string ;
     Line    : Integer; // 1-based
-    Col     : Integer; // 1-based
+    Col     : Integer; // 1-based CHARACTER column of the decoded file (TTextFileFormat), not the index byte column
     OldName : string ;
     NewName : string ;
   end;
@@ -46,7 +46,11 @@ type
       /// the method's owner class, or descends from it with no class on the
       /// way down declaring a member of the same name (rename spec 2.2, X-25).
       /// A same-named handler of another form, its call sites and its .dfm
-      /// binding are never edited.</summary>
+      /// binding are never edited. Every edit's Col is a 1-based CHARACTER
+      /// (UTF-16 code unit) column of the file as TTextFileFormat decodes it;
+      /// the index's UTF-8 byte columns are converted (W5-D), so a line with
+      /// non-ASCII text before the name gets the right column in every
+      /// encoding (ANSI, UTF-8 with or without a BOM).</summary>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
@@ -66,10 +70,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
-      /// <summary>Writes AEdits to disk, one rewrite per file. Each file keeps
-      /// the encoding, BOM and line-break style it was stored with
-      /// (TTextFileFormat, F8): a UTF-8 BOM file stays UTF-8 with its BOM, an
-      /// LF file stays LF, a file with no BOM is ANSI as before.</summary>
+      /// <summary>Writes AEdits to disk through TTextEditApplier, the shared
+      /// in-place writer (W5-D): one rewrite per file, keeping the encoding,
+      /// BOM and line-break style it was stored with (TTextFileFormat) -- a
+      /// UTF-8 file with or without a BOM stays so, an LF file stays LF, any
+      /// other BOM-less file is ANSI. Each edit replaces OldName at (Line, Col),
+      /// a character column; when the token is not there, the first occurrence
+      /// of OldName to the right on that line. A file none of whose edits
+      /// applies is not rewritten, gets no .bak and is not counted.</summary>
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FilesTouched.</returns>
@@ -324,36 +332,72 @@ begin
   end;
 end;
 
-procedure SnapEditsToToken(AList: TList<TRenameEdit>);
+// The lines of APath as the shared reader decodes it (TTextFileFormat: BOM,
+// BOM-less UTF-8, else ANSI), cached per path in ACache (which owns them), so
+// every column rename computes or checks counts the characters Apply writes.
+function DecodedLines(ACache: TObjectDictionary<string, TStringList>; const APath: string): TStringList;
 var
-  Cache: TObjectDictionary<string, TStringList>;
+  Text: string;
+begin
+  if ACache.TryGetValue(UpperCase(APath), Result) then Exit;
+  Result:= TStringList.Create;
+  ACache.Add(UpperCase(APath), Result);
+  TTextFileFormat.ReadFile(APath, Text);
+  Result.Text:= Text;
+end;
+
+// An index column (1-based, in UTF-8 BYTES: the indexer parses the file
+// transcoded to UTF-8) as a 1-based CHARACTER column of ALine, the decoded
+// line. Identity on a pure-ASCII prefix; a column past the line's bytes keeps
+// its distance past the end.
+function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
+var
+  Bytes: TBytes;
+begin
+  Result:= AByteCol;
+  if AByteCol <= 1 then Exit;
+  Bytes:= TEncoding.UTF8.GetBytes(ALine);
+  if Length(Bytes) = Length(ALine) then Exit; { pure ASCII: bytes = chars }
+  if AByteCol - 1 >= Length(Bytes) then Exit(Length(ALine) + AByteCol - Length(Bytes));
+  Result:= Length(TEncoding.UTF8.GetString(Bytes, 0, AByteCol - 1)) + 1;
+end;
+
+// Every edit of AList carries an index (byte) column: rewrite
+// it as a character column of its decoded line (W5-D).
+procedure IndexColsToCharCols(AList: TList<TRenameEdit>; ACache: TObjectDictionary<string, TStringList>);
+var
+  Lines: TStringList;
+  Edit : TRenameEdit;
+begin
+  for var I: Integer:= 0 to AList.Count - 1 do
+  begin
+    Edit:= AList[I];
+    Lines:= DecodedLines(ACache, Edit.FilePath);
+    if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
+    Edit.Col:= ByteColToCharCol(Lines[Edit.Line - 1], Edit.Col);
+    AList[I]:= Edit;
+  end;
+end;
+
+procedure SnapEditsToToken(AList: TList<TRenameEdit>; ACache: TObjectDictionary<string, TStringList>);
+var
   Lines: TStringList;
   Edit : TRenameEdit;
   I    : Integer;
   Col  : Integer;
 begin
-  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
-  try
-    for I:= 0 to AList.Count - 1 do
+  for I:= 0 to AList.Count - 1 do
+  begin
+    Edit:= AList[I];
+    Lines:= DecodedLines(ACache, Edit.FilePath);
+    if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
+    if IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then Continue;
+    Col:= NameAfterDeclKeywords(Lines[Edit.Line - 1], Edit.OldName, Edit.Col);
+    if Col > 0 then
     begin
-      Edit:= AList[I];
-      if not Cache.TryGetValue(UpperCase(Edit.FilePath), Lines) then
-      begin
-        Lines:= TStringList.Create;
-        if TFile.Exists(Edit.FilePath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Edit.FilePath));
-        Cache.Add(UpperCase(Edit.FilePath), Lines);
-      end;
-      if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
-      if IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then Continue;
-      Col:= NameAfterDeclKeywords(Lines[Edit.Line - 1], Edit.OldName, Edit.Col);
-      if Col > 0 then
-      begin
-        Edit.Col:= Col;
-        AList[I]:= Edit;
-      end;
+      Edit.Col:= Col;
+      AList[I]:= Edit;
     end;
-  finally
-    Cache.Free;
   end;
 end;
 
@@ -370,7 +414,9 @@ begin
   if not TFile.Exists(ADfmPath) then Exit;
   Lines:= TStringList.Create;
   try
-    Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+    var Text: string;
+    TTextFileFormat.ReadFile(ADfmPath, Text);
+    Lines.Text:= Text;
     for I:= 0 to Lines.Count - 1 do
     begin
       S:= Trim(Lines[I]);
@@ -454,6 +500,7 @@ var
   DfmOwned : TDictionary<string, Boolean>;
   DfmPath  : string                ;
   Owned    : Boolean               ;
+  Cache    : TObjectDictionary<string, TStringList>;
 begin
   Result:= nil;
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
@@ -464,10 +511,12 @@ begin
 
   TargetIds:= nil;
   DfmOwned := nil;
+  Cache    := nil;
   List:= TList<TRenameEdit>.Create;
   try
     TargetIds:= TDictionary<Int64, Boolean>.Create; // dl:ok create-inside-try@8aae -- nil-initialised before the try, so the finally's Free is safe if a constructor raises
     DfmOwned:= TDictionary<string, Boolean>.Create;
+    Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
     // Declaration site
     Edit.FilePath:= AStore.GetFilePath(Sym.FileId);
     Edit.Line:= Sym.StartLine;
@@ -503,6 +552,10 @@ begin
       Edit.NewName:= ANewName;
       List.Add(Edit);
     end;
+    // Index columns are UTF-8 byte columns; every edit leaves Build with a
+    // CHARACTER column of the decoded file (W5-D). The impl-header edit below
+    // is computed on the decoded text, so it is added after this pass.
+    IndexColsToCharCols(List, Cache);
 
     // Implementation-section header (procedure TFoo.Bar;) -- NOT a decl symbol nor
     // a refs row, so neither branch above catches it. Emit it explicitly when the
@@ -512,46 +565,41 @@ begin
       var ImplPath: string := AStore.GetFilePath(Sym.FileId);
       if TFile.Exists(ImplPath) then
       begin
-        var ILines := TStringList.Create;
-        try
-          ILines.Text := TEncoding.ANSI.GetString(TFile.ReadAllBytes(ImplPath));
-          if Sym.ImplStartLine <= ILines.Count then
+        var ILines: TStringList:= DecodedLines(Cache, ImplPath); { owned by Cache }
+        if Sym.ImplStartLine <= ILines.Count then
+        begin
+          var LnText := ILines[Sym.ImplStartLine - 1];
+          // The name as a whole identifier: preceded by '.' for the dotted
+          // Type.Name member shape, else (a global routine's own impl header,
+          // `function Compute(...)`) the first occurrence on the line.
+          var HitCol  := 0;
+          var ScanAt  := FindIdentFrom(LnText, ShortName, 1);
+          while ScanAt > 0 do
           begin
-            var LnText := ILines[Sym.ImplStartLine - 1];
-            // The name as a whole identifier: preceded by '.' for the dotted
-            // Type.Name member shape, else (a global routine's own impl header,
-            // `function Compute(...)`) the first occurrence on the line.
-            var HitCol  := 0;
-            var ScanAt  := FindIdentFrom(LnText, ShortName, 1);
-            while ScanAt > 0 do
+            if HitCol = 0 then HitCol:= ScanAt;
+            if (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
             begin
-              if HitCol = 0 then HitCol:= ScanAt;
-              if (ScanAt >= 2) and (LnText[ScanAt - 1] = '.') then
-              begin
-                HitCol:= ScanAt;
-                Break;
-              end;
-              ScanAt:= FindIdentFrom(LnText, ShortName, ScanAt + 1);
+              HitCol:= ScanAt;
+              Break;
             end;
-            if HitCol > 0 then
-            begin
-              Edit.FilePath := ImplPath;
-              Edit.Line     := Sym.ImplStartLine;
-              Edit.Col      := HitCol;
-              Edit.OldName  := ShortName;
-              Edit.NewName  := ANewName;
-              List.Add(Edit);
-            end;
+            ScanAt:= FindIdentFrom(LnText, ShortName, ScanAt + 1);
           end;
-        finally
-          ILines.Free;
+          if HitCol > 0 then
+          begin
+            Edit.FilePath := ImplPath;
+            Edit.Line     := Sym.ImplStartLine;
+            Edit.Col      := HitCol;
+            Edit.OldName  := ShortName;
+            Edit.NewName  := ANewName;
+            List.Add(Edit);
+          end;
         end;
       end;
     end;
 
     // Every edit's Col onto its name token BEFORE the dedup below, so a keyword-
     // column decl row and a name-column row for the same token collapse.
-    SnapEditsToToken(List);
+    SnapEditsToToken(List, Cache);
 
     // Dedup by exact (FilePath, Line, Col). Multiple sources above can legitimately
     // point at the SAME source position: e.g. a bare paren-less method call like
@@ -586,6 +634,7 @@ begin
 
     Result:= List.ToArray;
   finally
+    Cache.Free;
     DfmOwned.Free;
     TargetIds.Free;
     List.Free;
@@ -594,117 +643,64 @@ end; // function
 
 class function TRenameRefactoring.Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean): Integer;
 var
-  FileMap     : TDictionary<string, TList<TRenameEdit>>;
-  Edit        : TRenameEdit                            ;
-  FilePath    : string                                 ;
-  Group       : TList<TRenameEdit>                     ;
-  Pair        : TPair<string, TList<TRenameEdit>>      ;
-  RawBytes    : TBytes                                 ;
-  Fmt         : TTextFileFormat                        ;
-  Content     : string                                 ;
-  Lines       : TStringList                            ;
-  LineStr     : string                                 ;
-  ColIdx      : Integer                                ; // 0-based index into line string
-  OldLen      : Integer                                ;
-  FilesTouched: Integer                                ;
+  Cache  : TObjectDictionary<string, TStringList>;
+  Lines  : TStringList;
+  Edit   : TRenameEdit;
+  LineStr: string;
+  ColIdx : Integer; // 0-based index into the line
+  OldLen : Integer;
+  TE     : TTextEdit;
+  TEs    : TList<TTextEdit>;
 begin
-  FilesTouched:= 0;
-  FileMap:= TDictionary<string, TList<TRenameEdit>>.Create;
+  { W5-D: no I/O of its own. Each edit is resolved to a character span of the
+    file as the shared reader decodes it, then written by TTextEditApplier --
+    the encoding / BOM / line-break preserving writer (TTextFileFormat) every
+    in-place editor shares. }
+  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  TEs  := TList<TTextEdit>.Create;
   try
-    // Group edits by FilePath (edits are already sorted FilePath ASC,
-    // Line DESC, Col DESC, so same-file edits are consecutive).
     for Edit in AEdits do
     begin
-      if not FileMap.TryGetValue(Edit.FilePath, Group) then
+      if not TFile.Exists(Edit.FilePath) then Continue;
+      Lines:= DecodedLines(Cache, Edit.FilePath);
+      if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
+      LineStr:= Lines[Edit.Line - 1];
+      ColIdx := if Edit.Col < 1 then 0 else Edit.Col - 1;
+      OldLen := Length(Edit.OldName);
+      // The token should sit at Col (case-insensitive). If not, the parser may
+      // have stored the keyword position (e.g. "function" before "Compute"):
+      // scan forward on the same line for the first occurrence of OldName.
+      if (ColIdx + OldLen > Length(LineStr)) or not SameText(Copy(LineStr, ColIdx + 1, OldLen), Edit.OldName) then
       begin
-        Group:= TList<TRenameEdit>.Create;
-        FileMap.Add(Edit.FilePath, Group);
-      end;
-      Group.Add(Edit);
-    end;
-
-    for Pair in FileMap do
-    begin
-      FilePath:= Pair.Key;
-      Group   := Pair.Value;
-      if not TFile.Exists(FilePath) then Continue;
-
-      // Read as raw bytes; decode by BOM (none = ANSI) and remember the
-      // encoding, BOM and line-break style so the write keeps them (F8).
-      RawBytes:= TFile.ReadAllBytes(FilePath);
-      Fmt:= TTextFileFormat.Decode(RawBytes, Content);
-
-      // Backup before modifying if requested.
-      if AWriteBackups then TFile.WriteAllBytes(FilePath + '.bak', RawBytes);
-
-      // Split into lines. We preserve original line endings by splitting
-      // on #10 after stripping #13, then re-joining with CRLF.
-      Lines:= TStringList.Create;
-      try
-        Lines.Text:= Content;
-        // Lines.Text splits on CR/LF/CRLF automatically.
-
-        // Apply each edit in this file. They are sorted Line DESC / Col DESC
-        // so later positions in the file come first, avoiding offset drift.
-        for Edit in Group do
+        var ScanPos: Integer:= ColIdx;
+        ColIdx:= -1;
+        while ScanPos + OldLen <= Length(LineStr) do
         begin
-          // Convert 1-based Line to 0-based Lines index.
-          if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
-          LineStr:= Lines[Edit.Line - 1];
-          // Convert 1-based Col to 0-based string index.
-          ColIdx:= Edit.Col - 1;
-          OldLen:= Length(Edit.OldName);
-          if ColIdx < 0 then ColIdx:= 0;
-          // Verify the token at the expected position matches (case-insensitive).
-          // If it doesn't, the parser may have stored the keyword position
-          // (e.g. "function" before "Compute"). In that case, scan forward
-          // on the same line for the first occurrence of OldName as a token.
-          if (ColIdx + OldLen > Length(LineStr)) or (not SameText(Copy(LineStr, ColIdx + 1, OldLen), Edit.OldName)) then
+          if SameText(Copy(LineStr, ScanPos + 1, OldLen), Edit.OldName) then
           begin
-            // Linear scan from ColIdx forward.
-            var ScanPos:= ColIdx;
-            var Found  := False;
-            while ScanPos + OldLen <= Length(LineStr) do
-            begin
-              if SameText(Copy(LineStr, ScanPos + 1, OldLen), Edit.OldName) then
-              begin
-                ColIdx:= ScanPos;
-                Found := True;
-                Break;
-              end;
-              Inc(ScanPos);
-            end;
-            if not Found then Continue;
-          end; // if
-          Lines[Edit.Line - 1]:= Copy(LineStr, 1, ColIdx) + Edit.NewName + Copy(LineStr, ColIdx + OldLen + 1, MaxInt);
-        end; // for
-
-        // Re-encode in the file's own encoding, BOM and line-break style.
-        var SB:= TStringBuilder.Create;
-        try
-          var I: Integer;
-          for I:= 0 to Lines.Count - 1 do
-          begin
-            SB.Append(Lines[I]);
-            if I < Lines.Count - 1 then SB.Append(Fmt.LineBreak);
+            ColIdx:= ScanPos;
+            Break;
           end;
-          // Preserve trailing newline if original had one.
-          if Content.EndsWith(#10) then SB.Append(Fmt.LineBreak);
-          TFile.WriteAllBytes(FilePath, Fmt.Encode(SB.ToString));
-        finally
-          SB.Free;
-        end; // try
-        Inc(FilesTouched);
-      finally
-        Lines.Free;
-      end; // try
-    end; // for
+          Inc(ScanPos);
+        end;
+        if ColIdx < 0 then Continue;
+      end;
+      TE:= Default(TTextEdit);
+      TE.FilePath  := Edit.FilePath;
+      TE.Kind      := tekReplaceInLine;
+      TE.Line      := Edit.Line;
+      TE.Col       := ColIdx + 1;
+      TE.EndCol    := ColIdx + 1 + OldLen;
+      TE.Text      := Edit.NewName;
+      TE.ExpectText:= Copy(LineStr, ColIdx + 1, OldLen);
+      TEs.Add(TE);
+    end;
+    Result:= TTextEditApplier.Apply(TEs.ToArray, AWriteBackups);
   finally
-    for Pair in FileMap do Pair.Value.Free;
-    FileMap.Free;
-  end; // try
-  Result:= FilesTouched;
-end; // function
+    TEs.Free;
+    Cache.Free;
+  end;
+end;
 
 class function TRenameRefactoring.RenderDryRun( const AEdits: TArray<TRenameEdit>): string;
 var
@@ -1144,12 +1140,7 @@ begin
   try
     for Edit in AEdits do
     begin
-      if not Cache.TryGetValue(UpperCase(Edit.FilePath), Lines) then
-      begin
-        Lines:= TStringList.Create;
-        Cache.Add(UpperCase(Edit.FilePath), Lines);
-        if TFile.Exists(Edit.FilePath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Edit.FilePath));
-      end;
+      Lines:= DecodedLines(Cache, Edit.FilePath);
       if (Edit.Line < 1) or (Edit.Line > Lines.Count) or not IsIdentAt(Lines[Edit.Line - 1], Edit.OldName, Edit.Col) then
         Exit(Format('index out of date for %s:%d (no "%s" at column %d) -- save and reindex, then retry',
           [Edit.FilePath, Edit.Line, Edit.OldName, Edit.Col]));
