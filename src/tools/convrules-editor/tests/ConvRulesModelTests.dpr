@@ -15390,23 +15390,17 @@ end;
   which case the wait question names, how info --json is read, what the status says,
   and that only a real answer is cached for the session. The adapter half runs against
   an engine path that does not exist (no engine is started, no DB is read). }
-procedure TestCapabilityProbe;
+procedure TestCapabilityProbeVersions;
 const
-  VERSION_OUT = '(loaded defaults from C:\Projects\.drag-lint.json)' + sLineBreak + 'drag-lint 1.33.0-alpha' + sLineBreak;  // dl:ok hardcoded-absolute-path@r2c1 -- REVIEWED 2026-10-25 text only: the engine's stderr line as captured, no file is touched
-  INFO_OUT = '(loaded defaults)' + sLineBreak + '{"schema":"info/1","version":"1.33.0-alpha","capabilities":{"pas_uses":true,"cli_verbs":61,"batch_units":true,"glyph_stitch":false}}';
-  NO_ENGINE = 'C:\no-such-dir-r2\drag-lint.exe';  // dl:ok hardcoded-absolute-path@r2c2 -- REVIEWED 2026-10-25 a path that must NOT exist: the adapter cannot start it
-  EXIT_OK = 0;
-  EXIT_FAIL = 2;
+  VERSION_OUT = '(loaded defaults from C:\Projects\.drag-lint.json)' + sLineBreak + 'drag-lint 1.33.0-alpha' + sLineBreak;
+  V1330: TEngineVersion = (Major: 1; Minor: 33; Patch: 0);
 var
   V, W : TEngineVersion;
-  Caps : TArray<string>;
-  LOut : string;
-  LText: string;
 begin
   // --- version first: the token after "drag-lint " on its own line ---
   Check('probe.version.text', EngineVersionText(VERSION_OUT) = '1.33.0-alpha', EngineVersionText(VERSION_OUT));
   Check('probe.version.text.none', (EngineVersionText('') = '') and (EngineVersionText('(loaded defaults from x)') = ''));
-  Check('probe.version.parse', TryParseEngineVersion('1.33.0-alpha', V) and (V.Major = 1) and (V.Minor = 33) and (V.Patch = 0));
+  Check('probe.version.parse', TryParseEngineVersion('1.33.0-alpha', V) and (V.Major = V1330.Major) and (V.Minor = V1330.Minor) and (V.Patch = V1330.Patch));
   Check('probe.version.parse.bad', not TryParseEngineVersion('', V) and not TryParseEngineVersion('1.28', V)
     and not TryParseEngineVersion('alpha', V) and not TryParseEngineVersion('1..3', V));
   // Numeric, never lexical: 1.28.10 is newer than 1.28.3, 1.3.0 older than 1.28.3.
@@ -15422,13 +15416,26 @@ begin
     and (ProbeCaseFor('1.28.3-alpha') = pcVersionOk));
   Check('probe.case.too.old', (ProbeCaseFor('1.28.2-alpha') = pcVersionTooOld) and (ProbeCaseFor('1.20.6') = pcVersionTooOld));
   Check('probe.case.unknown', (ProbeCaseFor('') = pcVersionUnknown) and (ProbeCaseFor('garbage') = pcVersionUnknown));
+end;
+
+procedure TestCapabilityProbeAnswers;
+const
+  INFO_OUT = '(loaded defaults)' + sLineBreak + '{"schema":"info/1","version":"1.33.0-alpha","capabilities":{"pas_uses":true,"cli_verbs":61,"batch_units":true,"glyph_stitch":false}}';
+  NO_ENGINE_DIR = 'no-such-dir-r2'; // under %TEMP%: a folder that must NOT exist, so the adapter cannot start it
+  EXIT_OK = 0;
+  EXIT_FAIL = 2;
+  CAPS_IN_INFO_OUT = 2;
+var
+  Caps: TArray<string>;
+  LOut: string;
+begin
   // --- info --json: an answer (even with no capabilities) vs no answer ---
-  Check('probe.info.answer', TryParseInfoCapabilities(INFO_OUT, Caps) and (Length(Caps) = 2)
+  Check('probe.info.answer', TryParseInfoCapabilities(INFO_OUT, Caps) and (Length(Caps) = CAPS_IN_INFO_OUT)
     and MatchText('pas_uses', Caps) and MatchText('batch_units', Caps) and not MatchText('glyph_stitch', Caps));
   Check('probe.info.old.engine.is.answer', TryParseInfoCapabilities('{"schema":"info/1"}', Caps) and (Length(Caps) = 0));
   Check('probe.info.no.answer', not TryParseInfoCapabilities('', Caps) and not TryParseInfoCapabilities('error: busy', Caps)
     and not TryParseInfoCapabilities('{not json', Caps) and (Length(Caps) = 0));
-  Check('probe.info.engine.reader.agrees', Length(ParseCapabilityNames(INFO_OUT)) = 2);
+  Check('probe.info.engine.reader.agrees', Length(ParseCapabilityNames(INFO_OUT)) = CAPS_IN_INFO_OUT);
   // --- outcome: a real answer wins; else gave-up vs failed ---
   Check('probe.outcome.answered', (ProbeOutcomeFor(EXIT_OK, True, False) = poAnswered) and (ProbeOutcomeFor(EXIT_OK, True, True) = poAnswered));
   Check('probe.outcome.not.waited', ProbeOutcomeFor(ENGINE_OUTCOME_CANCELLED, False, True) = poNotWaited);
@@ -15436,6 +15443,23 @@ begin
     and (ProbeOutcomeFor(ENGINE_OUTCOME_TIMEOUT, False, False) = poFailed));
   // --- cached only when answered: the old code cached EVERY outcome (FProbed:= True) ---
   Check('probe.cached.answered.only', ProbeIsCached(poAnswered) and not ProbeIsCached(poFailed) and not ProbeIsCached(poNotWaited));
+  // --- the adapter half: an engine that cannot start is a FAILED probe, not "no capabilities" ---
+  var LEngine: TEngineAdapter:= TEngineAdapter.Create(TPath.Combine(TPath.Combine(TPath.GetTempPath, NO_ENGINE_DIR), 'drag-lint.exe'), nil);
+  try
+    var LVerCode: Integer:= LEngine.VersionOutput(nil, LOut);
+    Check('probe.adapter.version.no.engine', (LVerCode <> EXIT_OK) and (ProbeCaseFor(EngineVersionText(LOut)) = pcVersionUnknown), IntToStr(LVerCode));
+    var LInfoCode: Integer:= LEngine.InfoOutput(nil, LOut);
+    var LOutcome: TProbeOutcome:= ProbeOutcomeFor(LInfoCode, TryParseInfoCapabilities(LOut, Caps), False);
+    Check('probe.adapter.info.no.engine.failed', (LInfoCode <> EXIT_OK) and (LOutcome = poFailed) and not ProbeIsCached(LOutcome), IntToStr(LInfoCode));
+  finally
+    LEngine.Free;
+  end; // try
+end;
+
+procedure TestCapabilityProbeTexts;
+var
+  LText: string;
+begin
   // --- the question names the case ---
   LText:= WaitQuestionText(pcVersionOk, '1.33.0-alpha');
   Check('probe.question.ok', ContainsText(LText, '1.33.0-alpha') and ContainsText(LText, 'still') and ContainsText(LText, 'Keep waiting?')
@@ -15455,17 +15479,13 @@ begin
   LText:= ProbeStatusText(poAnswered, pcVersionTooOld, '1.27.0');
   Check('probe.status.answered.too.old', ContainsText(LText, '1.27.0') and ContainsText(LText, 'older than') and ContainsText(LText, REQUIRED_ENGINE_VERSION), LText);
   Check('probe.status.answered.ok.silent', (ProbeStatusText(poAnswered, pcVersionOk, '1.33.0') = '') and (ProbeStatusText(poAnswered, pcVersionUnknown, '') = ''));
-  // --- the adapter half: an engine that cannot start is a FAILED probe, not "no capabilities" ---
-  var LEngine: TEngineAdapter:= TEngineAdapter.Create(NO_ENGINE, nil);
-  try
-    var LVerCode: Integer:= LEngine.VersionOutput(nil, LOut);
-    Check('probe.adapter.version.no.engine', (LVerCode <> EXIT_OK) and (ProbeCaseFor(EngineVersionText(LOut)) = pcVersionUnknown), IntToStr(LVerCode));
-    var LInfoCode: Integer:= LEngine.InfoOutput(nil, LOut);
-    var LOutcome: TProbeOutcome:= ProbeOutcomeFor(LInfoCode, TryParseInfoCapabilities(LOut, Caps), False);
-    Check('probe.adapter.info.no.engine.failed', (LInfoCode <> EXIT_OK) and (LOutcome = poFailed) and not ProbeIsCached(LOutcome), IntToStr(LInfoCode));
-  finally
-    LEngine.Free;
-  end; // try
+end;
+
+procedure TestCapabilityProbe;
+begin
+  TestCapabilityProbeVersions;
+  TestCapabilityProbeAnswers;
+  TestCapabilityProbeTexts;
 end;
 
 begin

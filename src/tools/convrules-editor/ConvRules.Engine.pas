@@ -57,8 +57,9 @@ const
   /// TEngineAdapter.CapabilityNames), in milliseconds.</summary>
   /// <remarks>The probe runs in TConvRulesForm.Create on the UI thread, so this
   /// bound is how long a hung engine can freeze start-up. `info` reads no index;
-  /// 15 s is generous. On expiry the probe reports NO capabilities, which is the
-  /// behaviour of an engine older than 1.20.6.</remarks>
+  /// 15 s is generous. On expiry CapabilityNames reports NO capabilities, which is the
+  /// behaviour of an engine older than 1.20.6. The Convert tab's probe (R2) does not give
+  /// up there: it ASKS at this mark whether to keep waiting (ConvRules.CapabilityProbe).</remarks>
   INFO_TIMEOUT_MS = 15000;
   /// <summary>info --json capability: the #depth book directive plus --depth on
   /// proptree / convert-scaffold (engine 1.20.6).</summary>

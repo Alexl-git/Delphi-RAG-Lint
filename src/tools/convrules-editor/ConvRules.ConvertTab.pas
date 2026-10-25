@@ -34,6 +34,13 @@ uses
   ;
 
 type
+  /// <summary>R2: runs the capability probe behind a wait window that asks, once the probe
+  /// has run AAskAfterMs, whether to keep waiting (the main form's wrapper around
+  /// ConvRules.EngineWait.RunWithWaitQuestion).</summary>
+  /// <remarks>Same contract as RunWithWaitQuestion: modal, returns AWork's result,
+  /// AGaveUp = the user chose not to wait.</remarks>
+  TProbeCallRunner = reference to function(const ATitle: string; AShowAfterMs, AAskAfterMs: Cardinal; const AQuestion: TFunc<string>; const AWork: TStreamingWork; out AGaveUp: Boolean): Integer;
+
   /// <summary>What the Convert tab needs from the window that hosts it.</summary>
   /// <remarks>Every callback is invoked on the UI thread only; the worker
   /// thread sees nothing of the host but ExePath and the values copied into
@@ -70,6 +77,10 @@ type
     /// (the main form's wrapper around RunWithProgressDialog); may be nil = the call
     /// runs inline on the UI thread, with no window and no cancel.</summary>
     RunLongCall   : TLongCallRunner;
+    /// <summary>R2: runs the capability probe behind the asking wait window; may be nil =
+    /// the probe runs inline on the UI thread, with no window and no question.</summary>
+    /// <remarks>The host must count it as busy (InputGate) as it does RunLongCall.</remarks>
+    RunProbeCall  : TProbeCallRunner;
     /// <summary>Called on the UI thread after the tab's own analysis reindexed the
     /// project (the stale retry, through FEngineProbe); may be nil. The host drops what
     /// it cached from the old index -- the main adapter's class resolutions -- as it
@@ -119,7 +130,7 @@ type
       FEntries        : TArray<TBookEntry>; // the book checklist, application order
       FUnitRulesOk    : Boolean;            // engine reports apply_unit_rules
       FGlyphOk        : Boolean;            // engine reports glyph_stitch
-      FProbed         : Boolean;            // FUnitRulesOk / FGlyphOk have been asked this session
+      FProbed         : Boolean;            // the gates hold a real answer (R2: only an answered probe is kept)
       FRunning        : Boolean;
       FCancelRequested: Boolean;            // written on the UI thread, polled by the worker
       FNotes          : TArray<string>;     // the current run's pre-flight notes (for the report)
@@ -137,6 +148,7 @@ type
   FCodeUncOk      : Boolean;            // engine reports inherited_code_unconverted (1.26.7): it lists unconverted-ancestor code uses itself
   FRunCodeUncOk   : Boolean;            // FCodeUncOk when Convert was pressed
       FApplyFeatures  : TApplyFeatures;     // engine 1.27.0 apply/1 features (ApplyFeaturesOf the same probe); [] = an older engine
+      FProbeNote      : string;             // R2: ProbeStatusText of the last probe (' = nothing to say); a Convert's first note
       FRunId          : Integer;            // the session's run counter: TConvertJob.RunId, the Work list's key
       FScope          : TConvertScope;      // C12: the IDE request's scope; Default = whole unit
       FRunScope       : TConvertScope;      // FScope when Convert was pressed: the report's Scope line (Clear scope may run mid-run)
@@ -196,6 +208,12 @@ type
       /// <param name="AUnits">The units the run would convert, run order.</param>
       /// <returns>False = stop; the status line already says why.</returns>
       function InheritanceChecksPass(const AUnits: TArray<string>): Boolean;
+      /// <summary>R2: asks the engine its version, then its capabilities, behind the asking
+      /// wait window, and sets every capability gate from the answer.</summary>
+      /// <remarks>A probe that did not answer (failed, or the user chose not to wait) sets
+      /// the gates off, says so in the status line and leaves FProbed False, so the next
+      /// RefreshBooks or Convert asks again (ConvRules.CapabilityProbe.ProbeIsCached).</remarks>
+      procedure ProbeCapabilities;
       procedure ConvertClick(Sender: TObject);
       procedure CancelClick(Sender: TObject);
       /// <summary>The index into FRunRows of the selected results row.</summary>
@@ -336,8 +354,9 @@ type
       /// checklist, keeping the user's order and checks for books still there
       /// (new books are appended unchecked). Does nothing while a run is in
       /// progress.</summary>
-      /// <remarks>The engine capability probe (~0.5 s) runs on the first call
-      /// only; the Refresh button re-probes.</remarks>
+      /// <remarks>The engine capability probe (ProbeCapabilities, ~0.6 s) runs until it
+      /// ANSWERS once: a probe that failed or that the user did not wait for is asked
+      /// again on the next call (R2); the Refresh button always re-probes.</remarks>
       procedure RefreshBooks;
       /// <summary>Adds the .pas files APaths stand for (see ExpandSources) to the
       /// source list, once each, and feeds them to the Unit Rules harvest.
@@ -378,7 +397,41 @@ uses
   , ConvRules.Glyph
   , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- BATCH_MAX_UNITS is the chunk size the start status quotes; the batch decisions live there, the tab asks them through JobRunsBatched
   , ConvRules.QualifyForm
+  , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- PROBE_SHOW_AFTER_MS is the probe's own window delay; it travels with the probe decisions the tab asks (ProbeCaseFor, ProbeStatusText)
   ;
+
+type
+  // R2: what the probe's worker learned, for the wait question on the UI thread. Version
+  // is read while the worker runs (under the lock); Info only after it has finished.
+  TProbeBox = class
+    private
+      FVersion: string;
+      FInfo   : string;
+    public
+      procedure PutVersion(const AText: string);
+      function Version: string;
+      property Info: string read FInfo write FInfo;
+  end;
+
+procedure TProbeBox.PutVersion(const AText: string);
+begin
+  System.TMonitor.Enter(Self);
+  try
+    FVersion:= AText;
+  finally
+    System.TMonitor.Exit(Self);
+  end; // try
+end;
+
+function TProbeBox.Version: string;
+begin
+  System.TMonitor.Enter(Self);
+  try
+    Result:= FVersion;
+  finally
+    System.TMonitor.Exit(Self);
+  end; // try
+end;
 
 const
   // 45/40 (the plan's split) left the source list 0 px high in a 720 px window.
@@ -632,6 +685,63 @@ begin
   FBottomPanel.Height:= ClientHeight * BOTTOM_PERCENT div PERCENT;
 end;
 
+procedure TConvertTab.ProbeCapabilities;
+const
+  PROBE_TITLE = 'Asking the engine what it supports (capability check)';
+var
+  LCaps  : TArray<string>;
+  LCode  : Integer;
+  LGaveUp: Boolean;
+begin
+  var LBox: TProbeBox:= TProbeBox.Create;
+  try
+    var LProbe: TEngineAdapter:= FEngineProbe; // used by the worker only while the window holds the UI
+    var LWork: TStreamingWork:=
+      function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
+      var
+        LOut: string;
+      begin
+        // Version first: it tells "right engine, just slow" from "engine too old".
+        if LProbe.VersionOutput(ACancel, LOut) = 0 then
+          LBox.PutVersion(EngineVersionText(LOut));
+        if Assigned(ACancel) and ACancel.IsCancelled then
+          Exit(ENGINE_OUTCOME_CANCELLED);
+        Result:= LProbe.InfoOutput(ACancel, LOut);
+        LBox.Info:= LOut;
+      end;
+    LGaveUp:= False;
+    if Assigned(FHost.RunProbeCall) then
+      LCode:= FHost.RunProbeCall(PROBE_TITLE, PROBE_SHOW_AFTER_MS, INFO_TIMEOUT_MS,
+        function: string
+        begin
+          var LVer: string:= LBox.Version;
+          Result:= WaitQuestionText(ProbeCaseFor(LVer), LVer);
+        end, LWork, LGaveUp)
+    else
+      LCode:= LWork(nil, nil);
+    var LParsed: Boolean:= TryParseInfoCapabilities(LBox.Info, LCaps);
+    var LOutcome: TProbeOutcome:= ProbeOutcomeFor(LCode, LParsed, LGaveUp);
+    if LOutcome <> poAnswered then
+      LCaps:= nil; // reduced mode: every gate off until the next check
+    FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
+    FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
+    FBatchOk    := MatchText(CAPABILITY_BATCH_UNITS, LCaps);
+    FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
+    FCodeUncOk  := MatchText(CAPABILITY_INHERITED_CODE_UNCONVERTED, LCaps);
+    FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
+    FApplyFeatures:= ApplyFeaturesOf(LCaps);
+    FBtnQualify.Visible:= (afQualifyFix in FApplyFeatures) and Assigned(FHost.QualifyBook);
+    FBtnQualifyAll.Visible:= FBtnQualify.Visible;
+    FProbed     := ProbeIsCached(LOutcome); // a failed or abandoned probe is asked again
+    var LVersion: string:= LBox.Version;
+    FProbeNote  := ProbeStatusText(LOutcome, ProbeCaseFor(LVersion), LVersion);
+    if FProbeNote <> '' then
+      FHost.SetStatus(FProbeNote, LOutcome <> poAnswered);
+  finally
+    LBox.Free;
+  end; // try
+end;
+
 procedure TConvertTab.RefreshBooks;
 var
   Folder: string;
@@ -667,20 +777,7 @@ begin
   if FRunning then
     Exit; // the run holds its own copy of the books; keep the list it started from
   if not FProbed then
-  begin
-    // ONE info call for every key (each HasCapability is its own info call).
-    var LCaps: TArray<string>:= FEngineProbe.CapabilityNames;
-    FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
-    FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
-    FBatchOk    := MatchText(CAPABILITY_BATCH_UNITS, LCaps);
-    FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
-    FCodeUncOk  := MatchText(CAPABILITY_INHERITED_CODE_UNCONVERTED, LCaps);
-    FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
-    FApplyFeatures:= ApplyFeaturesOf(LCaps);
-    FBtnQualify.Visible:= (afQualifyFix in FApplyFeatures) and Assigned(FHost.QualifyBook);
-    FBtnQualifyAll.Visible:= FBtnQualify.Visible;
-    FProbed     := True;
-  end;
+    ProbeCapabilities;
   Folder:= FHost.GetRulesFolder();
   Files := nil;
   if (Folder <> '') and TDirectory.Exists(Folder) then
@@ -1503,6 +1600,9 @@ begin
         Exit;
       Break;
     end;
+  // R2: a probe that did not answer is asked again before the run reads its gates.
+  if not FProbed then
+    ProbeCapabilities;
   // The save may have changed what a checked book IS (a G-link just added): classify
   // the checked books afresh from disk, so ShowBooks greys one the engine cannot run
   // yet instead of handing it to the run. A checked book that cannot be read stops the
@@ -1541,6 +1641,8 @@ begin
   FRunRows:= nil;
   UpdateQualifyButton;
   FNotes  := Pre.Notes;
+  if FProbeNote <> '' then
+    FNotes:= [FProbeNote] + FNotes; // R2: the real cause, before any "engine support pending" note
   for var LNote: string in FNotes do
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
   if FScope.Kind <> skWholeUnit then

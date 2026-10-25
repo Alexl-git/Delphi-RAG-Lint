@@ -2278,6 +2278,19 @@ type
       /// <returns>AWork's result, or ENGINE_OUTCOME_CANCELLED.</returns>
       /// <exception cref="Exception">Re-raised from the worker (RunWithProgressDialog).</exception>
       function RunLongCallTracked(const ATitle: string; const AWork: TStreamingWork): Integer;
+      /// <summary>R2: runs the Convert tab's capability probe behind the wait window that ASKS
+      /// whether to keep waiting (RunWithWaitQuestion); the Convert tab's RunProbeCall. Counts
+      /// FTreeLoads and holds ATitle in FBusyTitle exactly as RunLongCallTracked does, so the
+      /// N7/N11 InputGate refuses main-form commands while the question is open.</summary>
+      /// <param name="ATitle">The window's title; also names the busy work in a lost-click notice.</param>
+      /// <param name="AShowAfterMs">How long the call may run before the window appears.</param>
+      /// <param name="AAskAfterMs">How long it may run before the window asks.</param>
+      /// <param name="AQuestion">The question text, asked on the UI thread each time it is shown.</param>
+      /// <param name="AWork">The engine call.</param>
+      /// <param name="AGaveUp">True when the user chose not to wait.</param>
+      /// <returns>AWork's result, or ENGINE_OUTCOME_CANCELLED.</returns>
+      /// <exception cref="Exception">Re-raised from the worker (RunWithWaitQuestion).</exception>
+      function RunProbeCallTracked(const ATitle: string; AShowAfterMs, AAskAfterMs: Cardinal; const AQuestion: TFunc<string>; const AWork: TStreamingWork; out AGaveUp: Boolean): Integer;
       /// <summary>N1: a left press on the Convert button while a long call holds the editor
       /// disabled never reaches the button (Windows drops it; this message, hit test HTERROR,
       /// is its only trace). ConvertClickLost decides; a lost click arms FLostClickTimer.</summary>
@@ -3615,6 +3628,7 @@ begin
   // C8: the inherited-instance check behind the same cancellable window as proptree;
   // FTreeLoads holds depth commits back while it runs (see FEngine.LongCallRunner).
   LHost.RunLongCall:= RunLongCallTracked;
+  LHost.RunProbeCall:= RunProbeCallTracked; // R2: the capability probe asks instead of giving up at 15 s
   // Task 3: each finished run REPLACES the Work list (rows keyed by run id).
   LHost.WorkListReady:= procedure(ARun: TWorkRun)
     begin
@@ -6511,6 +6525,19 @@ begin
   Inc(FTreeLoads);
   try
     Result:= RunWithProgressDialog(ATitle, AWork);
+  finally
+    Dec(FTreeLoads);
+    FBusyTitle:= LOuter;
+  end; // try
+end;
+
+function TConvRulesForm.RunProbeCallTracked(const ATitle: string; AShowAfterMs, AAskAfterMs: Cardinal; const AQuestion: TFunc<string>; const AWork: TStreamingWork; out AGaveUp: Boolean): Integer;
+begin
+  var LOuter: string:= FBusyTitle; // as RunLongCallTracked: busy for the InputGate while it runs
+  FBusyTitle:= ATitle;
+  Inc(FTreeLoads);
+  try
+    Result:= RunWithWaitQuestion(ATitle, AShowAfterMs, AAskAfterMs, AQuestion, AWork, AGaveUp);
   finally
     Dec(FTreeLoads);
     FBusyTitle:= LOuter;

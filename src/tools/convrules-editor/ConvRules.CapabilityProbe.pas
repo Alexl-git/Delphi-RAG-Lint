@@ -68,8 +68,8 @@ type
 function EngineVersionText(const AOutput: string): string;
 
 /// <summary>Reads the numeric part of a version text.</summary>
-/// <param name="AText">E.g. "1.33.0-alpha" or "1.28.3"; a suffix after the patch number
-/// (from the first character that is not a digit) is ignored.</param>
+/// <param name="AText">E.g. "1.33.0-alpha" or "1.28.3"; everything from the first character
+/// that is neither a digit nor a dot is ignored, and so are numbers past the third.</param>
 /// <param name="AVersion">The three numbers; Default(TEngineVersion) on failure.</param>
 /// <returns>True when AText starts with three dot-separated decimal numbers.</returns>
 function TryParseEngineVersion(const AText: string; out AVersion: TEngineVersion): Boolean;
@@ -154,29 +154,19 @@ begin
 end;
 
 function TryParseEngineVersion(const AText: string; out AVersion: TEngineVersion): Boolean;
-var
-  LNums: array[0..VERSION_PARTS - 1] of Integer;
 begin
   AVersion:= Default(TEngineVersion);
-  var LPos: Integer:= 1;
-  for var I: Integer:= 0 to VERSION_PARTS - 1 do
-  begin
-    if I > 0 then
-    begin
-      if (LPos > Length(AText)) or (AText[LPos] <> '.') then
-        Exit(False);
-      Inc(LPos);
-    end;
-    var LStart: Integer:= LPos;
-    while (LPos <= Length(AText)) and CharInSet(AText[LPos], ['0'..'9']) do
-      Inc(LPos);
-    if not TryStrToInt(Copy(AText, LStart, LPos - LStart), LNums[I]) then
-      Exit(False);
-  end;
-  AVersion.Major:= LNums[0];
-  AVersion.Minor:= LNums[1];
-  AVersion.Patch:= LNums[2];
-  Result:= True;
+  // The numeric head ("1.33.0" of "1.33.0-alpha"), then exactly its first three parts.
+  var LEnd: Integer:= 1;
+  while (LEnd <= Length(AText)) and CharInSet(AText[LEnd], ['0'..'9', '.']) do
+    Inc(LEnd);
+  var LParts: TArray<string>:= Copy(AText, 1, LEnd - 1).Split(['.']);
+  Result:= (Length(LParts) >= VERSION_PARTS)
+    and TryStrToInt(LParts[0], AVersion.Major)
+    and TryStrToInt(LParts[1], AVersion.Minor)
+    and TryStrToInt(LParts[2], AVersion.Patch);
+  if not Result then
+    AVersion:= Default(TEngineVersion);
 end;
 
 function CompareEngineVersions(const A, B: TEngineVersion): Integer;
