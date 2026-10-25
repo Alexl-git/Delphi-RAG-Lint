@@ -75,7 +75,7 @@ const
 /// DoOutline (Args); DoCompare (Args).</returns>
 /// <exception cref="EConvertApplyWrite"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoConvertApply: cannot write %s: %s -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: cannot write %s: the file is read-only -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s (+1 more)</exception>
 /// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
-/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: --delphi-lsp-bits must be 32 or 64, got: %s; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
+/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: --delphi-lsp-bits must be 32 or 64, got: %s; via DRagLint.CLI.ParseArgs: --merge-budget-ms must be a non-negative whole number of milliseconds, got: %s; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
@@ -1625,7 +1625,9 @@ begin
     begin
       Inc(i);
       Result.LspMergeBudgetMs := StrToIntDef(ParamStr(i), -1);
-      Result.LspMergeBudgetSet:= Result.LspMergeBudgetMs >= 0;   { unreadable or negative: the default }
+      if Result.LspMergeBudgetMs < 0 then
+        raise Exception.CreateFmt('--merge-budget-ms must be a non-negative whole number of milliseconds, got: %s', [ParamStr(i)]);  // dl:ok raise-bare-exception@aeb0 -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. --delphi-lsp-bits)
+      Result.LspMergeBudgetSet:= True;
     end
     else if A = '--resolve-only' then Result.ResolveOnly:= True
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.

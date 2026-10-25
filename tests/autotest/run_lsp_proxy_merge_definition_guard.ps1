@@ -23,6 +23,8 @@
                                  result and NOT forwarded (absent from the
                                  stub log; positive control: a hover sent
                                  right after it IS in the log);
+    $/cancelRequest for an    -> dropped (absent from the stub log); a
+      answered id                cancel for a forwarded id IS forwarded;
     references when DelphiLSP -> forwarded (in the stub log), sequenced: the
       advertised it              initialize reply is relayed first;
     provider false / null     -> NOT advertised (A5 fix M3): set to true and
@@ -255,6 +257,21 @@ Check 'workspace/symbol ABSENT from the stub log' (-not (LogHas $env5.DRAGLINT_S
 Check 'positive control: the hover sent after them IS in the stub log' (LogHas $env5.DRAGLINT_STUB_LOG 'textDocument/hover') ''
 $p5 = Invoke-Raw $Exe $plainArgs $c5 (Script @(@('initialize', 0, $initNone), @('textDocument/hover', 300, 'null')))
 Check 'positive control: the plain relay DOES forward references' (LogHas "$WorkDir\stub$($script:ScriptN).log" 'textDocument/references') ''
+
+# --- 5c $/cancelRequest for a proxy-answered id is dropped (group-4 P1) ------------
+Write-Host ''
+Write-Host '(5c) $/cancelRequest for an id the proxy answered: NOT forwarded; one for a forwarded id IS' -ForegroundColor Cyan
+$cancel9  = Frame '{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":9}}'
+$cancel10 = Frame '{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":10}}'
+$c5c = [byte[]]($initReq + $didOpen + $refReq + $cancel9 + $hoverReq + $cancel10)
+$env5c = Script @(@('initialize', 0, $initNone), @('textDocument/hover', 300, 'null'))
+$r5c = Invoke-Raw $Exe $onArgs $c5c $env5c
+$cancels5c = if (Test-Path $env5c.DRAGLINT_STUB_LOG) { @(Get-Content $env5c.DRAGLINT_STUB_LOG | Where-Object { $_.Split("`t")[0] -eq '$/cancelRequest' }).Count } else { -1 }
+Check 'exactly ONE $/cancelRequest reached DelphiLSP (the one for hover id 10)' ($cancels5c -eq 1) ("cancels in stub log=$cancels5c")
+Check 'references id 9 still answered exactly once' ((CountReplies $r5c.Out 9) -eq 1) ''
+$p5c = Invoke-Raw $Exe $plainArgs $c5c (Script @(@('initialize', 0, $initNone), @('textDocument/hover', 300, 'null')))
+$pc5c = @(Get-Content "$WorkDir\stub$($script:ScriptN).log" | Where-Object { $_.Split("`t")[0] -eq '$/cancelRequest' }).Count
+Check 'positive control: the plain relay forwards BOTH cancels' ($pc5c -eq 2) ("cancels=$pc5c")
 
 # --- 6 references when DelphiLSP advertised it: forwarded ---------------------------
 Write-Host ''

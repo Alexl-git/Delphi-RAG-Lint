@@ -107,6 +107,14 @@ $bad = Play $Exe @('lsp','--proxy','--delphi-lsp-bits','16') $payload
 Check '--delphi-lsp-bits 16 exits 3' ($bad.Code -eq 3) "exit $($bad.Code)"
 Check 'the message says the flag takes 32 or 64' ($bad.Err -match 'delphi-lsp-bits must be 32 or 64') ("stderr: " + $bad.Err.Trim())
 
+Write-Host ''
+Write-Host 'CASE A2: a bad --merge-budget-ms is rejected, not silently defaulted (group-4 P4)' -ForegroundColor Cyan
+foreach ($v in @('abc', '-5')) {
+  $bb = Play $Exe @('lsp','--proxy','--merge-budget-ms',$v) $payload
+  Check "--merge-budget-ms $v exits 3" ($bb.Code -eq 3) "exit $($bb.Code)"
+  Check "the message names --merge-budget-ms ($v)" ($bb.Err -match 'merge-budget-ms must be') ("stderr: " + $bb.Err.Trim())
+}
+
 $srv32 = Join-Path $Studio 'bin\DelphiLSP.exe'
 if (-not (Test-Path $srv32)) {
   Write-Host "SKIP: 32-bit DelphiLSP not installed at $srv32 (case A only)" -ForegroundColor Yellow

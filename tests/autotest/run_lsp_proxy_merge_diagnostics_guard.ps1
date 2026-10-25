@@ -247,6 +247,40 @@ $g2 = @($gPub | Where-Object { $_.Frame.Body.Contains('stub-after-save-2222') })
 Check 'after didChange: the publish is the original bytes' ($g1.Count -eq 1 -and $g1[0].Frame.Body -ceq $pub1) ("count=$($g1.Count) sources=$($g1[0].Sources -join ',')")
 Check 'after didSave: the publish is merged (drag-lint present)' ($g2.Count -eq 1 -and ($g2[0].Sources -contains 'drag-lint')) ("count=$($g2.Count) sources=$($g2[0].Sources -join ',')")
 
+# --- (g2) didChange shapes the head scan must not misread (group-4 P3) -------
+# Each shape: (body, expect dirty?, expected path: 'fast' | 'full' | 'any').
+# The path is read from the test seam DRAGLINT_MERGE_TEST_FASTPATH=1, which
+# makes the bounded head scan write one stderr line per didChange it takes:
+# the plain layout proves the fast path RUNS; the others prove it declines.
+Write-Host ''
+Write-Host '(g2) DIRTY via didChange shapes the bounded head scan cannot (or must not) take literally' -ForegroundColor Cyan
+$bigText = ('x' * 6000) | ConvertTo-Json
+$escUri  = $dirtyUri.Replace('/', '\/')
+$fastTag = 'test: didChange read from the head'
+$shapes = [ordered]@{
+  'plain layout (positive control: fast path taken)' = @(('{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"' + $dirtyUri + '","version":2},"contentChanges":[{"text":' + $bigText + '}]}}'), $true, 'fast')
+  'contentChanges first, uri beyond the 4 KB head'  = @(('{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"contentChanges":[{"text":' + $bigText + '}],"textDocument":{"uri":"' + $dirtyUri + '","version":2}}}'), $true, 'full')
+  'uri written with escaped slashes'                = @(('{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"' + $escUri + '","version":2},"contentChanges":[{"text":"x"}]}}'), $true, 'full')
+  'an escaped \"uri\" inside the text comes first'  = @(('{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"contentChanges":[{"text":"a \"uri\":\"file:///C:/elsewhere/Other.pas\" b"}],"textDocument":{"uri":"' + $dirtyUri + '","version":2}}}'), $true, 'any')
+  'a NESTED "method":"didChange" in a non-didChange frame' = @(('{"jsonrpc":"2.0","params":{"textDocument":{"uri":"' + $dirtyUri + '"},"note":{"method":"textDocument/didChange"}},"method":"textDocument/didFrob"}'), $false, 'full')
+}
+$gN = 0
+foreach ($k in $shapes.Keys) {
+  $gN++
+  $sh   = $shapes[$k]
+  $pubG = PublishBody $dirtyUri "stub-g2-shape-$gN"
+  $rG   = Invoke-Raw $Exe $onArgs ([byte[]]((Frame $sh[0]) + (Frame $pubG))) @{ DRAGLINT_MERGE_TEST_FASTPATH = '1' }
+  $pG   = @(Publishes $rG.Out | Where-Object { $_.Frame.Body.Contains("stub-g2-shape-$gN") })
+  $srcs = if ($pG.Count) { $pG[0].Sources -join ',' } else { '' }
+  if ($sh[1]) {
+    Check "$($k): the publish after it is the original bytes (URI dirty)" ($pG.Count -eq 1 -and $pG[0].Frame.Body -ceq $pubG) ("count=$($pG.Count) sources=$srcs")
+  } else {
+    Check "$($k): the publish after it is MERGED (URI not dirty)" ($pG.Count -eq 1 -and ($pG[0].Sources -contains 'drag-lint')) ("count=$($pG.Count) sources=$srcs")
+  }
+  $fast = (Utf8 $rG.Err).Contains($fastTag)
+  if ($sh[2] -eq 'fast') { Check "$($k): the head scan took it (seam line on stderr)" $fast '' }
+  elseif ($sh[2] -eq 'full') { Check "$($k): the head scan declined it (no seam line)" (-not $fast) '' }
+}
 # --- (h) UTF-8 byte count ---------------------------------------------------
 # --- (i) DEFAULT budget: the first publish after didOpen is merged (I1) ------
 Write-Host ''

@@ -75,10 +75,15 @@ type
   /// interceptor (merge plan A5).</summary>
   /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
   /// <param name="ALen">Byte length of the frame in AFrame.</param>
-  /// <returns>True when the proxy answers this request itself: the frame is
-  /// NOT forwarded and exactly one reply reaches the client. False (or any
-  /// exception): the frame goes on as usual.</returns>
-  TFrameAnswerer = reference to function(const AFrame: TBytes; ALen: Integer): Boolean;
+  /// <param name="AOnTake">Called at most once, at the moment the answerer
+  /// commits to the frame and BEFORE any reply to it can reach the client, so
+  /// the relay can trace the request ahead of its reply (group-4 P2). May be
+  /// nil.</param>
+  /// <returns>True when the proxy consumes this frame: a request it answers
+  /// itself (exactly one reply reaches the client) or a $/cancelRequest for
+  /// such a request (nothing is written). The frame is NOT forwarded. False
+  /// (or any exception): the frame goes on as usual.</returns>
+  TFrameAnswerer = reference to function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
 
   /// <summary>Writes one complete frame to the client, serialised with the
   /// relay's own S&gt;C writes.</summary>
@@ -166,6 +171,10 @@ type
     FClientWriter    : TClientWriter;
     FAnswersOut      : Integer;
     FAnswersIdle     : TEvent;
+    FAnsweredIds     : TDictionary<string, Boolean>;   { C>S pump only: ids Answer took }
+    FTestAnswerInline: Boolean;
+    FTestFastPath    : Boolean;
+    function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
     procedure WorkerLoop;
     procedure WarmUp;
     function  Enqueue(const AWork: TProc): Boolean;
@@ -188,7 +197,10 @@ type
     /// <remarks>Test seam: with the environment variable
     /// DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT=1 Intercept answers True with an
     /// EMPTY replacement for every frame, so a guard can prove the relay
-    /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f).</remarks>
+    /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f). With
+    /// DRAGLINT_MERGE_TEST_FASTPATH=1 every didChange taken by the bounded head
+    /// scan (no JSON parse) writes one stderr line, so a guard can prove that
+    /// path runs (run_lsp_proxy_merge_diagnostics_guard.ps1 case g2).</remarks>
     /// <param name="AOptions">The proxy options; Merge*, MergeBudgetMs and
     /// DbPaths are the fields this class reads.</param>
     constructor Create(const AOptions: TLspProxyOptions);
@@ -270,16 +282,25 @@ type
     /// <summary>The relay's C&gt;S answerer (TFrameAnswerer) for this engine.</summary>
     /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
     /// <param name="ALen">Byte length of the frame.</param>
+    /// <param name="AOnTake">Called once, at the commit point, before the reply
+    /// can be written (see TFrameAnswerer); may be nil.</param>
     /// <returns>True for a textDocument/references or workspace/symbol request
     /// (one with an id) when MergeDefinition is on, ClientWriter is set and
     /// DelphiLSP's initialize reply did not advertise that provider: drag-lint
     /// answers it (TLSPServer.ComputeReferences / ComputeWorkspaceSymbols, on
-    /// the merge worker) and the relay must NOT forward it. False otherwise,
-    /// and for a frame that does not parse.</returns>
-    /// <remarks>Once True, exactly one reply is written through ClientWriter:
-    /// [] when no index opens, the computation raises (one stderr line) or the
-    /// worker queue is full. The C&gt;S pump never waits for the worker.</remarks>
-    function Answer(const AFrame: TBytes; ALen: Integer): Boolean;
+    /// the merge worker) and the relay must NOT forward it. True also for a
+    /// $/cancelRequest whose params.id is a request Answer took and has not
+    /// seen cancelled yet: it is consumed and nothing is written (DelphiLSP
+    /// never saw that id; group-4 P1). False otherwise, and for a frame that
+    /// does not parse.</returns>
+    /// <remarks>Once True for a request, exactly one reply is written through
+    /// ClientWriter: [] when no index opens, the computation raises (one stderr
+    /// line) or the worker queue is full. The C&gt;S pump never waits for the
+    /// worker. The taken ids are remembered on the C&gt;S pump thread only (no
+    /// lock), at most ANSWERED_IDS_MAX of them; past that the set restarts.
+    /// Test seam: DRAGLINT_MERGE_TEST_ANSWER_INLINE=1 replies [] inline on the
+    /// C&gt;S pump, as the queue-full path does (run_lsp_proxy_trace_guard.ps1).</remarks>
+    function Answer(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc = nil): Boolean;
     /// <summary>Waits until every request Answer took has been replied to.</summary>
     /// <param name="ATimeoutMs">Longest wait, in milliseconds.</param>
     /// <returns>True when none is outstanding (any more).</returns>
@@ -414,6 +435,17 @@ const
   METHOD_INITIALIZE       = 'initialize';
   METHOD_REFERENCES       = 'textDocument/references';
   METHOD_WORKSPACE_SYMBOL = 'workspace/symbol';
+  METHOD_CANCEL_REQUEST   = '$/cancelRequest';
+  { Proxy-answered ids remembered for a later $/cancelRequest (group-4 P1). }
+  ANSWERED_IDS_MAX = 1024;
+  { How far into a body HeadStringValue looks (group-4 P3). }
+  HEAD_SCAN_BYTES = 4096;
+  { Depths HeadStringValue matches at: the top-level object, and
+    params.textDocument (depth 3). }
+  JSON_DEPTH_TOP           = 1;
+  JSON_DEPTH_TEXT_DOCUMENT = 3;
+  { JSON white space: tab, LF, CR, space. }
+  JSON_WS: set of Byte = [9, 10, 13, 32];
   MERGE_DEFINITION_PREFIX = 'drag-lint lsp --proxy: merge-definition ';
   CAP_REFERENCES       = 'referencesProvider';
   CAP_WORKSPACE_SYMBOL = 'workspaceSymbolProvider';
@@ -670,6 +702,106 @@ begin
   Result:= False;
 end;
 
+{ Group-4 P3: index of the first body byte of the frame, or -1 when no header
+  terminator lies within ALen. }
+function BodyStart(const AFrame: TBytes; ALen: Integer): Integer;
+var
+  I, K: Integer;
+begin
+  Result:= -1;
+  if ALen > Length(AFrame) then ALen:= Length(AFrame);
+  for I:= 0 to ALen - Length(HEADER_END) do
+  begin
+    K:= 0;
+    while (K < Length(HEADER_END)) and (AFrame[I + K] = HEADER_END[K]) do Inc(K);
+    if K = Length(HEADER_END) then Exit(I + Length(HEADER_END));
+  end;
+end;
+
+{ Group-4 P3: reads the JSON string that starts at AAt (after optional white
+  space) and ends before AStop. False when there is none, it runs past AStop,
+  or it holds an escape (the caller then parses the whole body). }
+function ReadPlainString(const AFrame: TBytes; AAt, AStop: Integer; out AValue: string): Boolean;
+var
+  J, Start: Integer;
+begin
+  Result:= False;
+  AValue:= '';
+  J:= AAt;
+  while (J < AStop) and (AFrame[J] in JSON_WS) do Inc(J);
+  if (J >= AStop) or (AFrame[J] <> Ord('"')) then Exit;
+  Inc(J);
+  Start:= J;
+  while (J < AStop) and (AFrame[J] <> Ord('"')) and (AFrame[J] <> Ord('\')) do Inc(J);
+  if (J >= AStop) or (AFrame[J] <> Ord('"')) then Exit;
+  AValue:= TEncoding.UTF8.GetString(AFrame, Start, J - Start);
+  Result:= True;
+end;
+
+{ Group-4 P3: the string value of key AKey at nesting depth ADepth (1 = the
+  top-level object; braces and brackets both count), found within the first
+  HEAD_SCAN_BYTES of the frame's body by a byte-level tokenizer -- no decode,
+  no parse. Strings are skipped whole (escapes honoured), so a key-like text
+  inside a string never matches, and a key at another depth is ignored (fix
+  round: a nested "method" must not pass for the frame's own). False when the
+  key is not in the head, a string runs past the head, or the value is not a
+  plain unescaped string: the caller then parses the whole body, so the
+  answer is never a guess. }
+function HeadStringValue(const AFrame: TBytes; ALen: Integer; const AKey: string; ADepth: Integer;
+  out AValue: string): Boolean;
+var
+  Key  : TBytes;
+  Body : Integer;
+  Stop : Integer;
+  I    : Integer;
+  J    : Integer;
+  K    : Integer;
+  Depth: Integer;
+  Esc  : Boolean;
+begin
+  Result:= False;
+  AValue:= '';
+  Body  := BodyStart(AFrame, ALen);
+  if Body < 0 then Exit;
+  if ALen > Length(AFrame) then ALen:= Length(AFrame);
+  Stop := if ALen < Body + HEAD_SCAN_BYTES then ALen else Body + HEAD_SCAN_BYTES;
+  Key  := TEncoding.ASCII.GetBytes(AKey);
+  Depth:= 0;
+  I    := Body;
+  while I < Stop do
+  begin
+    case AFrame[I] of
+      Ord('{'), Ord('['): Inc(Depth);
+      Ord('}'), Ord(']'): Dec(Depth);
+      Ord('"'):
+        begin
+          J  := I + 1;
+          Esc:= False;
+          while (J < Stop) and (AFrame[J] <> Ord('"')) do
+          begin
+            if AFrame[J] = Ord('\') then
+            begin
+              Esc:= True;
+              Inc(J);
+            end;
+            Inc(J);
+          end;
+          if J >= Stop then Exit;   { the string runs past the head }
+          K:= 0;
+          if (Depth = ADepth) and not Esc and (J - I - 1 = Length(Key)) then
+            while (K < Length(Key)) and (AFrame[I + 1 + K] = Key[K]) do Inc(K);
+          if (K = Length(Key)) and (K > 0) then
+          begin
+            K:= J + 1;
+            while (K < Stop) and (AFrame[K] in JSON_WS) do Inc(K);
+            if (K < Stop) and (AFrame[K] = Ord(':')) then Exit(ReadPlainString(AFrame, K + 1, Stop, AValue));
+          end;
+          I:= J;   { the closing quote; stepped over below }
+        end;
+    end;
+    Inc(I);
+  end;
+end;
 { The dirty-set key of a file path: case-folded, so the client's and the
   server's spellings of one file agree. }
 function DocKey(const APath: string): string;
@@ -717,6 +849,9 @@ begin
   FJobDone   := TEvent.Create(nil, True , False, '');
   FWorker    := TMergeWorker.Create(Self);
   FTestEmptyReplacement:= GetEnvironmentVariable('DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT') = '1';
+  FTestAnswerInline    := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_ANSWER_INLINE') = '1';
+  FTestFastPath        := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_FASTPATH') = '1';
+  FAnsweredIds         := TDictionary<string, Boolean>.Create;
   FDirty    := TDictionary<string, Boolean>.Create;
   FDirtyLock:= TCriticalSection.Create;
   FQueue      := TQueue<TProc>.Create;
@@ -747,6 +882,7 @@ begin
   FQueue.Free;
   FDirty.Free;
   FDirtyLock.Free;
+  FAnsweredIds.Free;
   FJobDone.Free;
   FJobReady.Free;
   FStateLock.Free;
@@ -955,8 +1091,26 @@ var
   Path  : string;
   LiveText: string;
   Upd   : TLiveUpdate;
+  DirtyOnly: Boolean;
 begin
   if not FrameContains(AFrame, ALen, METHOD_DID_PREFIX) then Exit;
+  { Group-4 P3: with no overlay to feed, a didChange only marks its URI dirty,
+    so method and uri are read from the head of the body and the (possibly
+    whole-file) text is never parsed. Anything the scan cannot read for
+    certain falls through to the full parse below. }
+  DirtyOnly:= FOptions.MergeDiagnostics and not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition);
+  if DirtyOnly and HeadStringValue(AFrame, ALen, 'method', JSON_DEPTH_TOP, Method) and (Method = METHOD_DID_CHANGE)
+     and HeadStringValue(AFrame, ALen, 'uri', JSON_DEPTH_TEXT_DOCUMENT, Uri) then
+  begin
+    if FTestFastPath then MergeErrLine(MERGE_ERR_PREFIX + 'test: didChange read from the head (no parse).');
+    FDirtyLock.Enter;
+    try
+      FDirty.AddOrSetValue(DocKey(TLSPServer.FileFromUri(Uri)), True);
+    finally
+      FDirtyLock.Leave;
+    end;
+    Exit;
+  end;
   Method:= '';
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
@@ -1216,7 +1370,39 @@ begin
   end;
 end;
 
-function TProxyMergeEngine.Answer(const AFrame: TBytes; ALen: Integer): Boolean;  // dl:ok too-many-exit-points@698f -- each Exit before the commit point is a decline (the frame is forwarded); one flat guard sequence reads better than nesting
+{ C>S pump: consumes a $/cancelRequest for an id Answer took (group-4 P1).
+  DelphiLSP never saw that request, so the cancel is not forwarded; the reply
+  (already written or still on the worker) is unaffected. }
+function TProxyMergeEngine.TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+var
+  Json : TJSONValue;
+  Id   : string;
+  IdVal: TJSONValue;
+begin
+  Result:= False;
+  if (FAnsweredIds.Count = 0) or not FrameContains(AFrame, ALen, METHOD_CANCEL_REQUEST) then Exit;
+  Id:= '';
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if (Json is TJSONObject) and (TJSONObject(Json).GetValue<string>('method', '') = METHOD_CANCEL_REQUEST) then
+      begin
+        IdVal:= Json.FindValue('params.id');
+        if IdVal <> nil then Id:= IdVal.ToJSON;
+      end;
+    finally
+      Json.Free;
+    end;
+  except
+    on Exception do Exit(False);   { unreadable: forwarded, as before }
+  end;
+  if (Id = '') or not FAnsweredIds.ContainsKey(Id) then Exit;
+  FAnsweredIds.Remove(Id);
+  if Assigned(AOnTake) then AOnTake;
+  Result:= True;
+end;
+
+function TProxyMergeEngine.Answer(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;  // dl:ok too-many-exit-points@7911 -- each Exit before the commit point is a decline (the frame is forwarded); one flat guard sequence reads better than nesting
 var
   Json  : TJSONValue;
   Method: string;
@@ -1229,6 +1415,7 @@ var
 begin
   Result:= False;
   if not FOptions.MergeDefinition or not Assigned(FClientWriter) then Exit;
+  if TakeCancel(AFrame, ALen, AOnTake) then Exit(True);
   Refs:= (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
   Syms:= (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
   if not (Refs or Syms) then Exit;
@@ -1274,6 +1461,11 @@ begin
     end;
   end;
   { From here the request is ours: exactly one reply, [] at worst. }
+  if Assigned(AOnTake) then AOnTake;   { P2: the relay traces C>P before any reply exists }
+  { After the callback: a raising AOnTake forwards the frame, and an id left
+    behind would then swallow DelphiLSP's legitimate cancel for it. }
+  if FAnsweredIds.Count >= ANSWERED_IDS_MAX then FAnsweredIds.Clear;
+  FAnsweredIds.AddOrSetValue(Job.Id, True);
   FStateLock.Enter;
   try
     Inc(FAnswersOut);
@@ -1281,7 +1473,7 @@ begin
   finally
     FStateLock.Leave;
   end;
-  if not Enqueue(
+  if FTestAnswerInline or not Enqueue(
     procedure
     begin
       AnswerOnWorker(Job);
