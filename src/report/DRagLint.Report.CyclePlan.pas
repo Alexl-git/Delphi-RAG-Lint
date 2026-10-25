@@ -1753,7 +1753,8 @@ begin
   Cands:= CandidatesFor(pR.NameText);
   if Length(Cands) = 0 then Exit(False);
   Best:= PickCandidate(pF, SectOf(pF, pR.StartLine), Cands);
-  if (Best = CNotFound) or IsLocalName(pR) then Exit(False);
+  if (Best = CNotFound) or IsLocalName(pR) or
+    IsClassChainMember(FStore, FLibStore, pR.EnclosingSymbolId, pR.NameText) then Exit(False);
   pNeed.Owner    := Cands[Best].Owner;
   pNeed.OwnerStem:= Cands[Best].Stem;
   pNeed.Sect     := SectOf(pF, pR.StartLine);

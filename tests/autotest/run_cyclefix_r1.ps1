@@ -33,8 +33,9 @@
   (k) a second overload in R1Title -- `refused: overloaded-routine` (the index binds an overload's
       call by name; the pointer type could mirror the wrong signature -- E2010 seen).
   Fix round 2 (RED on the round-1 engine / with the refusal disabled):
-  (l) tests\fixtures\cyclefix\r1stillused: TR1Form calls its INHERITED class method R1Note; the
-      planner binds the bare name to R1Title.R1Note -- `refused: edge-still-used`.
+  (l) tests\fixtures\cyclefix\r1stillused: TR1Form calls its INHERITED class method R1Note. Round 2 refused
+      this as edge-still-used (the planner bound the bare name to R1Title.R1Note); since C3 (2026-10-25)
+      the inherited member wins and the edge is cut.
   (n) `export; stdcall;` -- an unclassified directive refuses (stdcall is no longer silently lost).
   (o) `R1Title.R1TitleCount` -- any name qualified by the declaring unit refuses `qualified-ref`.
   (p) `TR1Local.R1TitleOf` -- a same-named method through a non-unit receiver does NOT refuse.
@@ -379,9 +380,8 @@ try {
   Check 'l0 indexed' ((Invoke-Index (Join-Path $su 'R1StillUsed.dproj') $dbSu 'l') -eq 0)
   $pl = Get-Cycles $dbSu 'l' @('--plan')
   $txL = (Get-CycleBlock $pl.Out 1) -join "`n"
-  Check 'l1 refused: edge-still-used naming R1Note (the uses entry of R1Title stays)' `
-    ($txL.Contains('refused: edge-still-used -- the implementation section of `R1Form.pas` still uses `R1Title`: `R1Note` line 31') -and
-     ($pl.Dump[1].verdict -eq 'refused') -and (($pl.Dump[1].refusals -split ',') -contains 'edge-still-used')) "[$($pl.Dump[1].verdict) / $($pl.Dump[1].refusals)]"
+  Check 'l1 C3: the inherited R1Note is a class member, not a use of R1Title -- the edge is cut (run_cyclefix_c3_false_positives.ps1 holds the control)' `
+    (-not $txL.Contains('refused: edge-still-used') -and ($pl.Dump[1].verdict -eq 'mechanical')) "[$($pl.Dump[1].verdict) / $($pl.Dump[1].refusals)]"
   Write-Host '== (n) an unlisted directive before stdcall' -ForegroundColor Cyan
   $vn = Get-Variant 'r1export' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; export; stdcall;`r`n`r`nimplementation"
   Check 'n1 `export; stdcall;`: refused: unsupported-directive naming export (stdcall is not silently lost)' `

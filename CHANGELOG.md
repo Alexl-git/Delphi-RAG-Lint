@@ -22,6 +22,9 @@ needs a re-parse.
   errors go to stderr; `cycles --plan` status counts interface `uses` (E14).
 - `doc-drift`: an `<exception cref>` raised up to three calls down is no longer drift (H2; was one hop).
 - `allow`: a finding on a `///` doc-comment line is reviewed on its declaration (H2).
+- `cycles --plan` (C3): `init-order` no longer fires when the initialization section only names the
+  routine in a `{ }` / `(* *)` / `//` comment, and `edge-still-used` no longer binds an inherited class
+  member (a bare name in a method body) to a same-named routine of the used unit.
 - `circular-uses` reports one anchor line in both scopes (`lint` and `lint-all`), and one `dl:ok`
   reviews the cycle everywhere (H2).
 - **MIGRATION NOTE (H2):** an old `circular-uses` `dl:ok` marker recorded on a header line (the `unit`
