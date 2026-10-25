@@ -531,6 +531,24 @@ type
       /// </remarks>
       class function CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
         const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+      /// <summary>X4 rule 'enum-bare-read-scoped': a BARE read (ref kind
+      /// 'read', no receiver) that the project index bound to a value of an
+      /// enum declared under the SCOPEDENUMS ON switch. The compiler admits
+      /// only the qualified spelling TEnum.Value there, so the bare name is
+      /// either another symbol of the same name or code that does not compile
+      /// -- the index's binding is wrong either way.</summary>
+      /// <param name="AFile">Path reported on each finding; not read.</param>
+      /// <param name="AStore">Project symbol store; nil yields no findings.</param>
+      /// <param name="AFileId">The file's id in AStore; 0 or less yields no
+      /// findings (the evidence is this file's refs).</param>
+      /// <returns>One 'warning' finding per such ref, anchored at the ref, naming
+      /// the scoped enum value; empty when there is none.</returns>
+      /// <remarks>Reads the extractor fact symbols.directives = 'scopedenums'
+      /// on the parent enum type, so an index built before that fact existed
+      /// is silent ("not computed"), never wrong. A qualified read is a
+      /// 'member-access' ref and never fires. Does not catch store errors.</remarks>
+      class function CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
+        AFileId: Int64): TArray<TLintFinding>;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
       /// Findings.ToArray.</returns>
@@ -4681,6 +4699,55 @@ type
   (FMX `Left`, `Top`) and invisible library enums from ever firing. It also
   admits RECORD targets (RecSurface), which the older rule does not: the spec's
   own control is a record, and `with Rec do` is where the collision lives. }
+class function TAstChecker.CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
+  AFileId: Int64): TArray<TLintFinding>;
+const
+  SCOPED_DIRECTIVE = 'scopedenums';
+var
+  Findings: TList<TLintFinding>;
+  Scoped  : TDictionary<Int64, Boolean>; { enum type id -> declared scoped }
+begin
+  Result:= nil;
+  if (AStore = nil) or (AFileId <= 0) then Exit;
+  Findings:= TList<TLintFinding>.Create;
+  Scoped  := TDictionary<Int64, Boolean>.Create;
+  try
+    for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
+    begin
+      if (R.SymbolId <= 0) or (R.ReceiverText <> '') or not SameText(R.Kind, 'read') then Continue;
+      var Val: TSymbol:= AStore.GetSymbolById(R.SymbolId);
+      if (Val.Kind <> skEnumValue) or (Val.ParentId <= 0) then Continue;
+      var IsScoped: Boolean;
+      if not Scoped.TryGetValue(Val.ParentId, IsScoped) then
+      begin
+        var Enm: TSymbol:= AStore.GetSymbolById(Val.ParentId);
+        IsScoped:= (Enm.Kind = skEnum) and ContainsText(Enm.Directives, SCOPED_DIRECTIVE);
+        Scoped.Add(Val.ParentId, IsScoped);
+      end;
+      if not IsScoped then Continue;
+      var F: TLintFinding:= Default(TLintFinding);
+      F.RuleId    := 'enum-bare-read-scoped';
+      F.Severity  := 'warning';
+      F.FilePath  := AFile;
+      F.StartLine := R.StartLine;
+      F.StartCol  := R.StartCol;
+      F.EndLine   := R.EndLine;
+      F.EndCol    := R.EndCol;
+      F.SymbolName:= R.NameText;
+      F.Message   := Format(
+        'Bare ''%s'' is bound to %s, a value of an enum declared under SCOPEDENUMS ON -- ' +
+        'the compiler admits only the qualified form there, so this name is another symbol ' +
+        'or does not compile. Verify the binding; write it qualified if the enum value is meant.',
+        [R.NameText, Val.QualifiedName]);
+      Findings.Add(F);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Scoped.Free;
+    Findings.Free;
+  end;
+end; // function
+
 class function TAstChecker.CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
   const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 const

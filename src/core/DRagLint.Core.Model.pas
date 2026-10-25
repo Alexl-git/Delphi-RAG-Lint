@@ -427,7 +427,10 @@ type
     // assembler export inline deprecated platform experimental message stdcall
     // cdecl pascal register safecall winapi varargs -- plus `external`, in
     // canonical lowercase, DECLARATION order, space-joined. '' when the routine
-    // carries none; '' for every non-routine symbol.
+    // carries none; '' for every non-routine symbol, with ONE exception: an
+    // skEnum declared while the $SCOPEDENUMS switch is ON carries
+    // 'scopedenums' (X4, INBOX-new-rules A3) -- its values are reachable only
+    // as TEnum.Value; rule enum-bare-read-scoped reads it.
     //
     // A NEW COLUMN RATHER THAN MORE WORDS IN Modifiers, and the reason is not
     // taste: four consumers equality-match Trim(Modifiers) as THE visibility

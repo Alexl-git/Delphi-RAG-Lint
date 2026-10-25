@@ -3194,9 +3194,9 @@
       },
       "family": "lint-rules",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-25",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.34.1-alpha",
         "surfaceHash": "24f0fa153a4d6847545dfaabc80f851eaed458dfa6bb009d8b811fc6f9ba7289"
       }
     },
@@ -11677,6 +11677,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "empty-procedure-body"
+      },
+      {
+        "id": "rule.enum-bare-read-scoped",
+        "title": "enum-bare-read-scoped",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A bare name the index bound to a value of an enum declared under $SCOPEDENUMS ON -- the compiler admits only TEnum.Value there, so th... (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule enum-bare-read-scoped"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "enum-bare-read-scoped"
       },
       {
         "id": "rule.enum-helper-separate-units",
