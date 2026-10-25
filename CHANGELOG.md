@@ -30,6 +30,10 @@ needs a re-parse.
 - Battery: the heartbeat guard matches the exact TIMEOUT line (a malformed line is rejected, with a
   positive control), and the charts interface-loop runner (A-CY-ILOOP) is wired as a standalone
   runner with a positive control (W5-G).
+- New rule `line-too-long` (structure, warning, ON by default; 191 rules): a line over 1020 characters compiles only at some file offsets in dcc64 37.0 (F2069) (W5-F2, owner ruling D3).
+- CLI: an unknown verb (2), unknown flag (3) or stale index on `menu-tree` / `menu-drift` (3) also says why: a stderr line `error[<reason>]:`, or with `--json` a stderr object `{"error":"<reason>"}`; exit codes unchanged (W5-A14). `ask` / `compare` stale are still prose.
+- CLI: the missing-db refusal and `index`'s `Database:` line name the `.drag-lint.json` whose `db` key decided them; a defaults file that failed to parse now also stops `document --apply` and `lint --fix --apply` (W5-F1).
+- `index --dry-run` touches no disk (no DB file is created), and a positional path beats the config `path` key (W5-C).
 
 ### Fixed
 - Storage: `Migrate` re-raises a real DDL failure and tolerates only a duplicate-column error (F2);
@@ -52,6 +56,10 @@ needs a re-parse.
   encoding, BOM and line breaks (F8).
 - `doc-drift`: a `dl:ok` marker's colon is no longer read as a return type on a parameterless
   procedure (W4-ret).
+- Control channel: the stand-down BUSY reply after a hung store close sets `FReplied` (no 5 s teardown wait), and the audit grace is computed in milliseconds, not by integer division (W5-C).
+- Plugin: `ProcRun` reads engine output through a 1 MB stdout pipe, so a large report is no longer throttled to one 4 KB buffer per poll slice (8 MB: 15.4 s -> 3.4 s) (W5-E).
+- Review markers: a second `// dl:ok` comment on the same line is a marker, not prose (W5-B).
+- Battery: `Copy-TreeSitterDlls` skips an identical locked DLL (no collision under `-Jobs 4`); `run_info_verb` and `run_cli_narrowing_is_reported` are self-contained (W5-F1).
 
 ## v1.34.0-alpha -- 2026-10-25
 

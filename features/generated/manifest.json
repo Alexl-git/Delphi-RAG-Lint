@@ -240,7 +240,7 @@
             }
           ],
           "helpOrder": 100,
-          "help": ["  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project's _D-RAG folder", "  drag-lint --version", "  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,", "                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS", "                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.", "                               There is no per-verb help TEXT -- one banner answers them all.", ""]
+          "help": ["  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project's _D-RAG folder", "  drag-lint --version", "  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,", "                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS", "                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.", "                               There is no per-verb help TEXT -- one banner answers them all.", "  Exit reason: an unknown verb (2), unknown flag (3) or stale index (3) also says WHY -- stderr line error[<reason>]:, or with --json a stderr object {\"error\":\"<reason>\"}.", ""]
         },
         {
           "type": "ide-menu",

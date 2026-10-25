@@ -368,6 +368,8 @@ by the code: a stale index names the reindex command, a fatal starts `FATAL:`. L
 by default) pin the unknown-flag `3`. A verb's own line in `--help` can
 define further codes.
 
+**Machine-readable reason (A14, 2026-10-25).** The three ambiguous exits also say WHY, exit codes unchanged: with `--json` one object on stderr `{"error":"<reason>",...}` (stdout stays empty), otherwise a stderr line that starts `error[<reason>]:`. Reasons: `unknown-verb` (exit 2), `unknown-flag` (3), `stale-index` (3; `menu-tree` / `menu-drift` only -- `ask` and `compare` stale are still prose). Parse the reason, not the code.
+
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
 |------|--------------|
@@ -1205,6 +1207,8 @@ either miss rules or fail a build on the wrong threshold:
 | `--enable id1,id2` | turn named rules ON for this run, over their catalog default. **Some rules ship OFF because they flood on LEGACY code** -- `magic-literal`, `multiple-statements-per-line`, `commented-out-code`. That is a property of the old code, not of yours: code written today should pass them, so pass `--enable` when linting NEW work and hold it to the whole standard. |
 | `--profile <name>` | apply a named rule profile from `drag-lint-lint.json` instead of listing ids by hand. |
 | `--fail-on <level>` | the exit-code threshold -- `error`, `warning`, `info` or `hint`. This is what makes a lint run a BUILD GATE rather than a report; without it a wall of warnings still exits 0. |
+
+**ON by default, new in 1.34.1:** `line-too-long` (structure, warning) flags any line over 1020 characters -- dcc64 37.0 compiles such a line only at some file offsets (F2069). Split the line, or review it with `dl:ok`.
 
 ---
 

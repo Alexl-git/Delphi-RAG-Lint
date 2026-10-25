@@ -951,7 +951,7 @@ Win64 build.
 
 #### Lint
 
-**190 rules across 16 categories -- 137 built-in + 53 external `.scm`, 160
+**191 rules across 16 categories -- 138 built-in + 53 external `.scm`, 161
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1176,11 +1176,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (190 rules)
+### Lint rule pack (191 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.20.1-alpha: **190 rules across 16 categories -- 137
-built-in and 53 external `.scm`, 160 enabled by default, and 23 with an
+external `.scm`). As of v1.20.1-alpha: **191 rules across 16 categories -- 138
+built-in and 53 external `.scm`, 161 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
