@@ -6634,20 +6634,28 @@ begin
     Q.ParamByName('x').AsLargeInt:= AEnclosingSymbolId;
     Q.ParamByName('k').AsString  := REF_KIND_CALL;
     Q.Open;
+    var IdF   : TField:= Q.FieldByName('id'        );
+    var FileF : TField:= Q.FieldByName('file_id'   );
+    var KindF : TField:= Q.FieldByName('kind'      );
+    var NameF : TField:= Q.FieldByName('name_text' );
+    var SLineF: TField:= Q.FieldByName('start_line');
+    var SColF : TField:= Q.FieldByName('start_col' );
+    var ELineF: TField:= Q.FieldByName('end_line'  );
+    var EColF : TField:= Q.FieldByName('end_col'   );
+    { FindField: a pre-v20 DB has no receiver_text, which reads as '' (bare). }
+    var RcvF  : TField:= Q.FindField('receiver_text');
     while not Q.Eof do
     begin
       R:= Default(TReference);
-      R.Id               := Q.FieldByName('id'        ).AsLargeInt;
-      R.FileId           := Q.FieldByName('file_id'   ).AsLargeInt;
-      R.Kind             := Q.FieldByName('kind'      ).AsString;
-      R.NameText         := Q.FieldByName('name_text' ).AsString;
-      R.StartLine        := Q.FieldByName('start_line').AsInteger;
-      R.StartCol         := Q.FieldByName('start_col' ).AsInteger;
-      R.EndLine          := Q.FieldByName('end_line'  ).AsInteger;
-      R.EndCol           := Q.FieldByName('end_col'   ).AsInteger;
+      R.Id               := IdF.AsLargeInt;
+      R.FileId           := FileF.AsLargeInt;
+      R.Kind             := KindF.AsString;
+      R.NameText         := NameF.AsString;
+      R.StartLine        := SLineF.AsInteger;
+      R.StartCol         := SColF.AsInteger;
+      R.EndLine          := ELineF.AsInteger;
+      R.EndCol           := EColF.AsInteger;
       R.EnclosingSymbolId:= AEnclosingSymbolId;
-      { FindField: a pre-v20 DB has no receiver_text, which reads as '' (bare). }
-      var RcvF: TField:= Q.FindField('receiver_text');
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
       List.Add(R);
       Q.Next;
