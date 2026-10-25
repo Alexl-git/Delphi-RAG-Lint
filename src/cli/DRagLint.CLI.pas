@@ -27227,6 +27227,7 @@ var
   BookUnreachable: TArray<TUnreachablePath>;
   BatchJson      : TJSONArray;
   BookBuilt      : Integer; { classes the book validation built (C13: per-unit classes_built) }
+  CastLib        : TCastLib; { 1.33.1: parsed ONCE before any unit runs; a configuration error fails the whole batch (exit 6) }
   { --format json / --json. Both are parsed globally (ParseArgs), so this verb
     only has to READ them. Under JSON every Writeln on the success and failure
     paths is suppressed -- one stray line and the document stops parsing. }
@@ -27412,6 +27413,15 @@ var
       Writeln('no .dfm instance matches a #convert block -- component part skipped, unit rules only');
   end;
 
+  // 1.33.1: the castlib configuration error, the same text for every unit.
+  // Exit 6 = a CONFIGURATION error (1.28.0); 2 means a write failure / rollback.
+  const EXIT_CASTLIB_UNUSABLE = 6;
+
+  function CastLibFailure: string;
+  begin
+    Result:= Format('castlib %s: %s', [AArgs.CastLibFile, String.Join('; ', CastLib.Errors)]);
+  end;
+
   // ERROR: <AMsg> for one unit -- text, or under batch JSON an apply/1 object
   // with ok=false -- and AExit as that unit's exit code.
   function FailUnit(const AMsg: string; AExit: Integer): Integer;
@@ -27483,6 +27493,8 @@ var
     JCtx.Freshness.Fresh:= True;
     JCtx.Sink   := BatchJson;
     JCtx.UnitPas:= UnitPas;
+    { 1.33.1: an unusable castlib refuses EVERY unit of the batch, before anything else is looked at }
+    if Length(CastLib.Errors) > 0 then Exit(FailUnit(CastLibFailure, EXIT_CASTLIB_UNUSABLE));
     if not TFile.Exists(UnitPas) then Exit(FailUnit(Format('unit not found: %s', [UnitPas]), 2));
     { a bare #convert / .dfm class name resolves in THIS unit's scope }
     Trees.SetScope(UnitPas, Rules);
@@ -27663,10 +27675,7 @@ var
       transform) fails the unit -- a cast silently not performed is the worse outcome.
       1.28.0 (owner 2026-10-11): its own exit code 6, a CONFIGURATION error; 2 means a
       write failure / rollback on this verb and must not be read as one. }
-    const EXIT_CASTLIB_UNUSABLE = 6;
-    var CastLib: TCastLib:= ParseCastLib(AArgs.CastLibFile);
-    if Length(CastLib.Errors) > 0 then
-      Exit(FailUnit(Format('castlib %s: %s', [AArgs.CastLibFile, String.Join('; ', CastLib.Errors)]), EXIT_CASTLIB_UNUSABLE));
+    { the castlib was parsed and validated once, before the unit loop (see CastLibFailure) }
     if JCtx.ComponentPart = 'applied' then
     begin
       var Book: TApplyBook:= TApplyBook.Create(Rules, JCtx.Unreachable);
@@ -27888,6 +27897,7 @@ begin
     Exit(2);
   end;
 
+  CastLib     := ParseCastLib(AArgs.CastLibFile);
   BookBuilt   := 0;
   BookChecked := False;
   FreshChecked:= False;
