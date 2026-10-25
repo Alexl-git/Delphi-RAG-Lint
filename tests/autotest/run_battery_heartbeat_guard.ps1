@@ -169,10 +169,13 @@ Check 'the heartbeat is given the same per-runner budget, not the bare -TimeoutS
   ($driverText -match 'Test-BatteryHeartbeat\s+\(\$i - 1\)[^\r\n]*\[Math\]::Max\(\$TimeoutSec,\s*\[int\]\$RunnerBudgetSec\[\$r\.Name\]\)\)') ''
 Check 'behaviour: the live heartbeat reports the effective budget (3s for the sleeper)' `
   ($beat.Text -match 'budget 3s') ''
+# The exact line run_battery.ps1 prints ("[{0,3}/{1}] {2} ... " then "{0} ({1:N1}s)"): the runner name, then
+# TIMEOUT and a seconds figure at or just past the 3 s budget -- not any stray 'TIMEOUT' word.
+$TimeoutLineRx = '(?m)^\[\s*\d+/\d+\] \S*' + [regex]::Escape($SlowRunner) + '\.ps1 \.\.\. TIMEOUT \([34]\.\ds\)\s*$'
 Check 'behaviour: the killed runner is reported against the 3s budget' `
-  ($beat.Text -match '(?m)TIMEOUT.*3s|budget 3s') ''
+  ($beat.Text -match $TimeoutLineRx) ''
 Check 'a runner that outlives -TimeoutSec is still reported TIMEOUT' `
-  ($beat.Text -match '(?m)TIMEOUT') `
+  ($beat.Text -match $TimeoutLineRx) `
   'this is the check that exists because of the CHANGE: a polled wait is where a budget goes wrong'
 Check 'a timed-out run still exits 1' `
   ($beat.Exit -eq 1) "exit=$($beat.Exit)"
@@ -187,6 +190,15 @@ Write-Host 'The heartbeat does not corrupt the runner result line' -ForegroundCo
 Check 'the runner name and its result appear on one line' `
   ($beat.Text -match '(?m)^\[\s*\d+/\d+\]\s+\S*' + [regex]::Escape($SlowRunner) + '.*(TIMEOUT|PASS|FAIL)') `
   'if the -NoNewline prefix is not re-drawn after a beat, the result is orphaned from its runner'
+
+Write-Host ''
+Write-Host 'POSITIVE CONTROL -- the TIMEOUT-line regex rejects malformed lines' -ForegroundColor Cyan
+$good = "[  1/1] tests/sleepy/$SlowRunner.ps1 ... TIMEOUT (3.1s)"
+foreach ($bad in @('TIMEOUT', "[  1/1] $SlowRunner ... PASS (3.1s)", "[  1/1] $SlowRunner ... TIMEOUT",
+                   'budget 3s TIMEOUT (3.1s)', '[  1/1] other ... TIMEOUT (3.1s)', "[  1/1] $SlowRunner ... TIMEOUT (31.0s)")) {
+  Check ("malformed line rejected: $bad") ($bad -notmatch $TimeoutLineRx) ''
+}
+Check 'a well-formed TIMEOUT line is accepted' ($good -match $TimeoutLineRx) ''
 
 try { [IO.Directory]::Delete($tmp, $true); [IO.Directory]::Delete($arena, $true) } catch { }
 
