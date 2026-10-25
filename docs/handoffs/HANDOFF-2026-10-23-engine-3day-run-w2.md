@@ -65,6 +65,10 @@ OWNER APPROVED (10-25): commit, push, deploy, git/branch/worktree cleanup. PUSH 
 UPDATE ~21:30: item 1 DONE fb401d58 (657 changed lines all comments -> re-pinned, guards PASS); item 3 DONE 617a93af
 (4 verifies vs deployed exe). Item 2 RE-PARSE RUNNING via a background agent (it messages CONVERTER "re-parse done"
 and appends "REPARSE DONE" to the ledger) -- on resume: check the ledger line / `drag-lint.exe info --db` versions.
+CONVERTER merged FG-M+FG-N 8234fe33 (featuregen 244/0, registry + docs-sync PASS, its verifies done) -- include in push.
+New engine finding (CONVERTER): per-file `lint` flags `dl:ok uses-global-census` as review-marker-unused although that
+rule only runs in lint-all (src\tools\featuregen\FeatureGen.Check.pas:28) -- per-file lint must not judge markers for
+lint-all-only rules (add to extra lanes).
 OPEN, in order:
  1 version guards RED: surface changed after rc2's re-pin (03c6078c) by lint sweep + B-41 (sampled: doc comments;
    Core.Indexer.pas 26 lines + Core.Model.pas changed -- check all 26 surface files). If no extraction/resolve change:
