@@ -775,9 +775,9 @@ begin
   { The verb reference below is GENERATED (featuregen build --all) from the cli surfaces of features\entries: each surface carries
     its verbatim --help block (helpOrder + help). Edit the entry, not this unit. The comments that sat inside the hand-written
     reference are kept here because they explain wording choices:
-    // v(ADP3 T15): this line used to read "summary/param left as TODO ... add
-    // --stubs to also create all-TODO stub comments". Both halves went stale in
-    // v(ADP3 T3), which deleted the TODO placeholders outright: an empty tag is
+    // v(ADP3 T15): this line used to read "summary/param left as to-do ... add
+    // --stubs to also create all-to-do stub comments". Both halves went stale in
+    // v(ADP3 T3), which deleted the to-do placeholders outright: an empty tag is
     // now not written at all, a <param> never gets a skeleton, and a <summary> is
     // only written when one can be HARVESTED from a nearby // comment. --stubs
     // survives but means something narrower now -- keep a fresh comment even when
@@ -1731,7 +1731,7 @@ begin
     else if A = '--no-near-search' then Result.PpNoNearSearch:= True
     // v1.2.1 port change #5: opt into the dcc-tolerance pass.
     else if A = '--tolerances' then Result.PpTolerances:= True
-    else if A = '--include-sites' then Result.PpIncludeSites:= True
+    else if A = '--include-sites' then Result.PpIncludeSites:= True  // dl:ok duplicate-code@9bc8 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the ParseArgs boolean-flag arm shape (else if A = <flag> then Result.Field:= True); one arm per flag extends the chain by design
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -20685,7 +20685,7 @@ begin
     var StaleReason: string:= TRenameRefactoring.StaleEditReason(Edits);
     if StaleReason <> '' then
     begin
-      Writeln('ERROR: cannot rename -- ' + StaleReason);
+      Writeln('ERROR: cannot rename -- ' + StaleReason);  // dl:ok duplicate-code@5675 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the refactor verbs' refuse / no-edits / emit tail (rename, extract-method); each verb owns its own refusal text and exit code
       Exit(2);
     end;
 
@@ -27430,7 +27430,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0b2d -- each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0b2d, cyclomatic-complexity@d6f3, method-too-long@0ad6 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
