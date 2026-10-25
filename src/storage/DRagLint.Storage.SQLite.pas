@@ -98,6 +98,13 @@ var
   /// path is exactly the old behaviour, statement for statement.</para></remarks>
   CaseSensitiveLookups: Boolean = False;
 
+var
+  /// <summary>TEST HOOK (B2, 2026-10-25): when True, Migrate treats the FTS5
+  /// trigram tokenizer as unavailable without probing, so a test can simulate
+  /// an sqlite3.dll older than 3.34 on a build that has it.</summary>
+  /// <remarks>Production code never sets it. Read once per Migrate call.</remarks>
+  SimulateNoTrigramTokenizer: Boolean = False;
+
 /// <summary>True when <paramref name="pError"/> is SQLite's "duplicate column
 /// name" failure -- the one expected outcome of re-running an additive
 /// <c>ALTER TABLE ... ADD COLUMN</c> against a table that already has it.</summary>
@@ -190,6 +197,7 @@ type
       FQFindCompilerFindings : TFDQuery     ;
       FQInsertCompilerFinding: TFDQuery     ;
       FFts5Available         : Boolean     ; // set by Migrate; False when sqlite3.dll lacks fts5
+      FTrigramAvailable      : Boolean     ; // set by Migrate; False when fts5 lacks the trigram tokenizer (SQLite < 3.34): string_fts_tri absent, --substring unsupported
       FReadOnly              : Boolean     ; // v0.86 Task 4: opened read-only (no DDL/writes)
       FStatementsPrepared    : Boolean     ; // guard: PrepareStatements is idempotent (constructor may prepare a schema-current DB before Migrate)
       // v0.40.4: uses-clause persistence
@@ -809,6 +817,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Fts5TableExists: Boolean;
+      /// <summary>True when sqlite_master has a table named <paramref name="pName"/>.</summary>
+      function TableExists(const pName: string): Boolean;
       /// <summary>True when this DB carries the member_accesses table (2026-09-16).
       /// Probed once per store; a not-yet-migrated read-only DB answers False and
       /// every reader then behaves as it did before the table existed.</summary>
@@ -3418,6 +3428,10 @@ uses
   , FireDAC.Stan.Error          { F2: EFDDBEngineException -- ExecAdditiveDDL's one tolerated failure }
   ;
 
+var
+  /// Set once the missing-trigram warning was printed this process (B2).
+  GTrigramWarned: Boolean = False;
+
 const
   { The ONE symbol_facts column list every reader selects (through
     SymbolFactsSelectCols), so that ReadSymbolFactsFromQuery -- the one
@@ -3552,7 +3566,11 @@ begin
       Migrate, detect FTS5 read-only: the string_fts virtual table exists in
       sqlite_master iff the index was built by an FTS5-capable engine. This lets
       SearchText (query --text) run; it never issues DDL. }
-    if FReadOnly then FFts5Available := Fts5TableExists;
+    if FReadOnly then
+    begin
+      FFts5Available := Fts5TableExists;
+      FTrigramAvailable := FFts5Available and TableExists('string_fts_tri');
+    end;
   end;
 end;
 
@@ -3687,6 +3705,11 @@ begin
 end;
 
 function TSQLiteSymbolStore.Fts5TableExists: Boolean;
+begin
+  Result := TableExists('string_fts');
+end;
+
+function TSQLiteSymbolStore.TableExists(const pName: string): Boolean;
 var
   Q: TFDQuery;
 begin
@@ -3695,7 +3718,8 @@ begin
   try
     Q.Connection := FConn;
     Q.SQL.Text := 'SELECT 1 FROM sqlite_master ' +
-                  'WHERE type = ''table'' AND name = ''string_fts'' LIMIT 1';
+                  'WHERE type = ''table'' AND name = :n LIMIT 1';
+    Q.ParamByName('n').AsString := pName;
     try
       Q.Open;
       Result := not Q.IsEmpty;
@@ -3967,6 +3991,7 @@ end;
 procedure TSQLiteSymbolStore.Migrate;
 var
   I: Integer;
+  Repair: Boolean;
 
   procedure TryExec(const ASql: string);
   begin
@@ -4010,6 +4035,60 @@ var
     end;
   end;
 
+  function ProbeTrigram: Boolean;
+  begin
+    { B2: FTS5 can exist without the trigram tokenizer (added in SQLite 3.34).
+      Same temp-table trick as ProbeFts5. SimulateNoTrigramTokenizer is the
+      test hook. Only a tokenizer/trigram error means "unavailable". }
+    if SimulateNoTrigramTokenizer then Exit(False);
+    Result := True;
+    try
+      FConn.ExecSQL('CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_tri_probe USING fts5(x, tokenize=''trigram'')');
+      TryExec('DROP TABLE IF EXISTS temp.fts5_tri_probe');
+    except on E: Exception do
+      if (Pos('tokenizer', LowerCase(E.Message)) > 0) or (Pos('trigram', LowerCase(E.Message)) > 0) then
+        Result := False
+      else
+        raise;
+    end;
+  end;
+
+  function SqliteVersion: string;
+  var Q: TFDQuery;
+  begin
+    Result := '?';
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := FConn;
+      Q.SQL.Text := 'SELECT sqlite_version()';
+      Q.Open;
+      if not Q.Eof then Result := Q.Fields[0].AsString;
+    finally
+      Q.Free;
+    end;
+  end;
+
+  function TriggersReferenceTri: Boolean;
+  var Q: TFDQuery;
+  begin
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := FConn;
+      Q.SQL.Text := 'SELECT COUNT(*) FROM sqlite_master WHERE type=''trigger'' ' +
+                    'AND name LIKE ''string_literals%'' AND sql LIKE ''%string_fts_tri%''';
+      Q.Open;
+      Result := Q.Fields[0].AsInteger >= 3;
+    finally
+      Q.Free;
+    end;
+  end;
+
+  procedure DropStringLiteralTriggers;
+  begin
+    TryExec('DROP TRIGGER IF EXISTS string_literals_ai');
+    TryExec('DROP TRIGGER IF EXISTS string_literals_ad');
+    TryExec('DROP TRIGGER IF EXISTS string_literals_au');
+  end;
   procedure PrintTriggerCount(const ALabel: string);
   var Q: TFDQuery;
   begin
@@ -4071,9 +4150,35 @@ begin
     If unavailable: drop any leftover sync triggers so INSERTs into
     string_literals do not fire them and crash. }
   FFts5Available := ProbeFts5;
+  FTrigramAvailable := False;
   if FFts5Available then
   begin
-    for I := SCHEMA_DDL_FTS5_FIRST to High(SCHEMA_DDL) do TryExec(SCHEMA_DDL[I]);
+    { B2: the trigram tokenizer is probed SEPARATELY. Without it (SQLite < 3.34)
+      string_fts_tri and the tri half of the sync triggers are skipped, so the
+      DB still opens; --substring text search is then unsupported. A DB whose
+      sync triggers do not yet cover string_fts_tri (opened earlier without the
+      tokenizer) is repaired: triggers recreated, table back-filled. }
+    FTrigramAvailable := ProbeTrigram;
+    if FTrigramAvailable then
+    begin
+      Repair := (not TableExists('string_fts_tri')) or (not TriggersReferenceTri);
+      if Repair then DropStringLiteralTriggers;
+      for I := SCHEMA_DDL_FTS5_FIRST to High(SCHEMA_DDL) do TryExec(SCHEMA_DDL[I]);
+      if Repair then TryExec('INSERT INTO string_fts_tri(string_fts_tri) VALUES (''rebuild'')');
+    end
+    else
+    begin
+      TryExec(SCHEMA_DDL[SCHEMA_DDL_FTS5_FIRST]); { string_fts only; the tri table is SCHEMA_DDL_FTS5_TRI_TABLE }
+      DropStringLiteralTriggers;
+      for I := Low(SCHEMA_DDL_NOTRI_TRIGGERS) to High(SCHEMA_DDL_NOTRI_TRIGGERS) do
+        TryExec(SCHEMA_DDL_NOTRI_TRIGGERS[I]);
+      if not GTrigramWarned then
+      begin
+        GTrigramWarned := True;
+        Writeln(ErrOutput, 'WARNING: SQLite ', SqliteVersion, ' has FTS5 but no trigram tokenizer ' +
+                '(needs 3.34+); --substring text search is unavailable, --any-order and exact still work.');
+      end;
+    end;
   end
   else
   begin
@@ -7496,6 +7601,11 @@ begin
       Needle:= StringReplace(Copy(Needle, 2, Length(Needle) - 2), '''''', '''', [rfReplaceAll]);
     if SameText(AMode, 'substring') then
     begin
+      if not FTrigramAvailable then
+        raise ENotSupportedException.Create(
+          'Substring text search (--substring) requires the FTS5 trigram tokenizer ' +
+          '(SQLite 3.34+); the current sqlite3.dll has none. Use --any-order or the default phrase mode, ' +
+          'or replace sqlite3.dll with a newer build.');
       FtsTable := 'string_fts_tri';
       MatchExpr:= QuotePhrase(Needle); // trigram: phrase-quote -> substring match
     end
