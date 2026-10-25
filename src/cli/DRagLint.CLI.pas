@@ -264,6 +264,10 @@ type
       put in DbPaths; the first command-line --db then REPLACES it rather than
       appending, because the command line beats the config file. }
     DbFromConfig    : Boolean       ;
+    { True while ProjectPath holds ONLY a "project" key from a .drag-lint.json.
+      A --project on the command line clears it; a POSITIONAL .dpr/.dproj/.dpk
+      then wins over the key too (X-11, ApplyPositionalProjectPrecedence). }
+    ProjectFromConfig: Boolean      ;
     { '<file>: <key path>: expected <type>, got <type>' when the .drag-lint.json
       defaults file could not be read (LoadConfigDefaults); '' otherwise. Readers
       carry on with what was read; Run makes the WRITE verbs refuse. }
@@ -995,7 +999,11 @@ begin
         AArgs.DbFromConfig:= True;
       end;
       V:= J.GetValue('project');
-      if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
+      if (V <> nil) and (V.Value <> '') then
+      begin
+        AArgs.ProjectPath      := V.Value;
+        AArgs.ProjectFromConfig:= True;
+      end;
       V:= J.GetValue('path');
       if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
       { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
@@ -1095,6 +1103,27 @@ begin
   Writeln(ErrOutput, Format('drag-lint: note: ignoring %s in %s for `%s` -- a convert verb reads only its ' +
     'own command line; pass --db explicitly.', [AArgs.ConvertIgnoredKeys, AArgs.ConvertIgnoredFile, AArgs.Command]));
 end;
+
+/// <summary>Lets a POSITIONAL project file (.dpr / .dproj / .dpk) win over a
+/// .drag-lint.json "project" key (X-11).</summary>
+/// <param name="AArgs">The parsed arguments; ProjectPath is cleared when it came
+/// only from the defaults file and the positional path names a project file.</param>
+/// <remarks>The command line beats the config file, as it does for "db"
+/// (DbFromConfig). Without this, every `if ProjectPath &lt;&gt; ''` test downstream
+/// let the defaults key replace the file the user typed: `index App.dpr` indexed
+/// the config's project instead. An explicit --project already cleared
+/// ProjectFromConfig in ParseArgs, so it is never touched here. One note on
+/// stderr names the override. Guard: tests\autotest\run_dpk_project_target.ps1.</remarks>
+procedure ApplyPositionalProjectPrecedence(var AArgs: TArgs);
+begin
+  if not AArgs.ProjectFromConfig then Exit;
+  if not MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj', '.dpk']) then Exit;
+  Writeln(ErrOutput, Format('drag-lint: note: the positional project %s overrides the "project" key (%s) ' +
+    'of the defaults file.', [AArgs.Path, AArgs.ProjectPath]));
+  AArgs.ProjectPath      := '';
+  AArgs.ProjectFromConfig:= False;
+end;
+
 { THE ONE PLACE THAT DECIDES WHAT "ASK FOR HELP" LOOKS LIKE. INBOX
   `per-verb-help-fatals`. Three call sites in ParseArgs need this answer -- the
   first token, the optional subcommand slot, and the flag loop -- and the whole
@@ -1338,7 +1367,7 @@ begin
     else if A = '--shallow' then begin Result.Deep:= False; Result.DeepExplicit:= True; end
     else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
-    else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); end
+    else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
     else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
     else if (A = '--disable') and (i < ParamCount) then begin Inc(i); Result.Disable:= ParamStr(i); end
@@ -1781,6 +1810,7 @@ begin
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
   end; // while
+  ApplyPositionalProjectPrecedence(Result);
   CheckConvertIgnoredDefaults(Result);
 end; // function
 
@@ -5261,7 +5291,7 @@ begin
     and no plugin path issues one without resolving the DB from the manifest. }
   begin
     var TagProject: string:= AArgs.ProjectPath;
-    if (TagProject = '') and MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj']) then TagProject:= AArgs.Path;
+    if (TagProject = '') and MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj', '.dpk']) then TagProject:= AArgs.Path;
     if TagProject <> '' then
     begin
       { GetMetaValue answers '' for a DB with no schema_meta yet -- untagged. }
@@ -5507,8 +5537,7 @@ begin
     --scan-libraries-* -- is a LIBRARY scan. }
   var IsProjectScopedTarget: Boolean:=
     (AArgs.ProjectPath <> '') or
-    SameText(ExtractFileExt(AArgs.Path), '.dpr') or
-    SameText(ExtractFileExt(AArgs.Path), '.dproj');
+    MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj', '.dpk']);
 
   if AArgs.DryRun then begin Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.'); Result:= 0; Exit; end;
 
@@ -19656,6 +19685,24 @@ begin
     and the banner counts what was actually scanned. }
   var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
   if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
+  { X-10 (INBOX-2026-09-29 item 3): AN UNANCHORED PROJECT INDEX IS LINTED
+    UNSCOPED, AND MUST SAY SO. A project DB at an ad-hoc path (no _D-RAG parent,
+    no manifest section) gives LintAnchorDir nothing, so ownership filtering is
+    off and every closure unit outside the project -- vendored, shared, a
+    sibling library -- is reported as the project's own. The count came out
+    several times too large with no hint. The project_tag says the DB IS a
+    project index, so one NOTE names the skipped scoping and the remedy. A
+    folder-scan DB carries no tag and has no project to scope to: silent.
+    Guard: tests\autotest\run_lintall_unanchored_note.ps1. }
+  if (not Own.Active) and (AArgs.ProjectPath = '') then
+  begin
+    var UnscopedTag: string:= Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
+    if UnscopedTag <> '' then
+      EmitStatusLine(AArgs, Format('lint-all: NOTE: %s is the index of project %s, but no project folder could be ' +
+        'derived for it (no _D-RAG parent, no manifest section), so no ownership scoping was applied -- every ' +
+        'indexed unit is reported, third-party ones included. Pass --project <%s.dproj> to scope the run.',
+        [ProjectDb, UnscopedTag, UnscopedTag]));
+  end;
   FilePaths:= nil;
   var ExcludedCount: Integer:= 0;
   var SkippedThird : TArray<string>:= nil;
