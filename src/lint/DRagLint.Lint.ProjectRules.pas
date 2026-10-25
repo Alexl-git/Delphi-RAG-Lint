@@ -430,6 +430,46 @@ var
     if not UnitName.TryGetValue(AFid, Result) then Result:= '<unit ' + IntToStr(AFid) + '>';
   end;
 
+  { H2 (2026-10-25): the line the cycle's finding anchors on -- AFid's first uses
+    entry naming another unit of AComp (implementation section preferred), else its
+    first uses entry at all, else 0 (the caller falls back to the unit header).
+    The rule `lint <file>` (CLI CircularUsesForFile) always used; lint-all used the
+    unit header, so a dl:ok could never review a cycle in both scopes. }
+  function CycleUsesLine(AFid: Int64; const AComp: TList<Int64>): Integer;
+  var
+    ImplL, IntfL, AnyImpl, AnyIntf: Integer;
+    HL : Integer;
+    Tgt: Int64;
+  begin
+    ImplL  := 0;
+    IntfL  := 0;
+    AnyImpl:= 0;
+    AnyIntf:= 0;
+    for var U in AStore.GetUnitUsesForFile(AFid) do
+    begin
+      HL:= U.HostLine; { N-06: an include row anchors at its directive in THIS file }
+      if HL <= 0 then Continue;
+      if U.Section = uusImplementation then
+      begin
+        if (AnyImpl = 0) or (HL < AnyImpl) then AnyImpl:= HL;
+      end
+      else if (AnyIntf = 0) or (HL < AnyIntf) then AnyIntf:= HL;
+      Tgt:= 0;
+      if (not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt)) and (Pos('.', U.UnitName) = 0) then
+        FileOfStem.TryGetValue(LowerCase(U.UnitName), Tgt);
+      if (Tgt <= 0) or (Tgt = AFid) or not AComp.Contains(Tgt) then Continue;
+      if U.Section = uusImplementation then
+      begin
+        if (ImplL = 0) or (HL < ImplL) then ImplL:= HL;
+      end
+      else if (IntfL = 0) or (HL < IntfL) then IntfL:= HL;
+    end;
+    Result:= ImplL;
+    if Result <= 0 then Result:= IntfL;
+    if Result <= 0 then Result:= AnyImpl;
+    if Result <= 0 then Result:= AnyIntf;
+  end;
+
   { The symbols another unit can SEE. Implementation-section declarations are
     excluded because they cannot be the reason a second unit uses this one --
     listing them as extraction candidates would send the reader to code that is
@@ -625,8 +665,15 @@ var
             F.Message := Format('Circular unit dependency among %d units: %s -- break the cycle (extract shared code or move a use to the implementation section)', [Comp.Count, Names])
               + CycleFixPointer('', LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Anchor)), '')));
           F.FilePath:= AStore.GetFilePath(Anchor);
-          var Ln: Integer:= 1;
-          UnitLine.TryGetValue(Anchor, Ln);
+          { H2: on the anchor unit's intra-cycle uses entry -- the SAME line `lint
+            <anchor unit>` reports, so one dl:ok there reviews the cycle in both
+            scopes. The unit header only when the unit has no line-bearing uses. }
+          var Ln: Integer:= CycleUsesLine(Anchor, Comp);
+          if Ln <= 0 then
+          begin
+            Ln:= 1;
+            UnitLine.TryGetValue(Anchor, Ln);
+          end;
           F.StartLine:= Ln; F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
           var CC: TCycleCoupling;
           CC.Finding:= F;
