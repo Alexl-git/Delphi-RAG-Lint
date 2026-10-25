@@ -36,6 +36,8 @@ needs a re-parse.
 - `index --dry-run` touches no disk (no DB file is created), and a positional path beats the config `path` key (W5-C).
 - `index`: the doc-comment merge is linear (was quadratic on long runs of trailing comments) and a literal's containing symbol comes from an in-memory line map instead of one SQL call per literal; a 40k-line file indexes in ~14 s instead of ~34 s (loose-file LSP open ~2x faster). Extraction output unchanged; guard `run_index_scaling_guard` (L-perf, X-23).
 - `cycles --plan` / `--fix` F5: a `TArray<TX>` field whose only uses are SetLength/Length/High/Low, a store `F[..] := x` or a pulled-member read `F[..].M`, not published and with no ref outside its unit, now switches to `TArray<TXBase>`; circular-uses-demo Part A is now mechanical (W5-D1, owner ruling D1 a+).
+- `ask` / `compare`: a stale index now also prints `error[stale-index]:` after the existing message (`compare --format json`: the error object on stderr, the `compare/1` envelope still on stdout); the `ask-report:` prefix is unchanged (W6-misc, A14 follow-up).
+- Docs: `excludeRoots` is described in `docs\INDEXING-AND-DB-ARCHITECTURE.md`; guard `run_allow_refuses_codeless_line` follows the H2 `///` -> declaration contract (W6-misc).
 - Tests: `run_pas_uses_with_members.ps1` pins `pas_uses` with-members and RTL-ancestor classification (X3, T-16).
 
 ### Fixed
