@@ -1014,4 +1014,8 @@
 #   2026-10-24 (e3d/rc2): re-pinned WITHOUT a bump (1.23.0-alpha never released): rc2 also carries
 #   e3d/n06 (N-06) + e3d/ext2 extraction changes; the same one re-parse covers them.
 #   Superseded: 1.23.0-alpha|112f33afd1fe85edfebfb8b8bd4b32015ba21f03981b917e8432f34c69fa19e0
-1.23.0-alpha|8d7945982f34bd88b42bbcf32fbd26f968f9032479f2e64ac4f2120b7aa1357a
+#   2026-10-24 (post-1.34.0 lint sweep 1245af2d + B-41 doc regen 47cc679f): re-pinned WITHOUT a bump:
+#   every changed surface line is a // comment, a /// doc-comment or a trailing dl:ok marker -- no
+#   code token changed, so no stored parse is stale.
+#   Superseded: 1.23.0-alpha|8d7945982f34bd88b42bbcf32fbd26f968f9032479f2e64ac4f2120b7aa1357a
+1.23.0-alpha|0ac06206fabf81746d6fd1c82884e04d5dd4766d0b0f746c5f33344cf6c07b02

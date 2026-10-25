@@ -674,7 +674,11 @@
 #   2026-10-24 (e3d/rc2): re-pinned WITHOUT a bump (1.13.0-alpha never released): rc2 also carries
 #   e3d/resolver2 + e3d/resolver3 binding changes; same derived-row classes, same re-parse.
 #   Superseded: 1.13.0-alpha|ed96625733e9239b7fd28927f5b83a5a5a4df0dbad7ad01defd148ccf098dbe9
-1.13.0-alpha|481c3c680427b709b863d0cfadbc10cd7dd1bd89740fc7eaed9be39e4f7b2ea9
+#   2026-10-24 (post-1.34.0 lint sweep 1245af2d + B-41 doc regen 47cc679f): re-pinned WITHOUT a bump:
+#   every changed surface line is a // comment, a /// doc-comment or a trailing dl:ok marker -- no
+#   code token changed, so no stored edge is stale.
+#   Superseded: 1.13.0-alpha|481c3c680427b709b863d0cfadbc10cd7dd1bd89740fc7eaed9be39e4f7b2ea9
+1.13.0-alpha|5a9025a7a744f8f3cd12ecf5a7dbc9438fe5761f64cef946246d2b0ee6504166
 # superseded (same 1.12.0-alpha, re-pinned WITHOUT a bump 2026-10-18, wave 1.31.5 lane 2 / V-C): Storage.SQLite changed only the scoped-pass BOOKKEEPING -- the one-in-three share latch now divides by the file count from BEFORE the run (FScopeCorpusBefore) instead of CountFiles at the first removal (which already counted this run's new files), new/changed write counters feed the decline REASON text, the FTS5 'AVAILABLE' line is gone, and the '~37 min' warning prints only from 1M refs. No binding rule changed: the latch only chooses scoped vs whole-DB, and the two passes are designed to write the same call edges, so no stored edge is stale. 1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
 # superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd
