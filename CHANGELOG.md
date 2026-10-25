@@ -59,6 +59,10 @@ needs a re-parse.
   encoding, BOM and line breaks (F8).
 - `doc-drift`: a `dl:ok` marker's colon is no longer read as a return type on a parameterless
   procedure (W4-ret).
+- `doc-drift` / `document`: a call to `RaiseLastOSError`, `RaiseLastWin32Error`, `Win32Check` or
+  `CheckOSError` (bare or `SysUtils`-qualified, unresolved in a project DB) counts as raising `EOSError`,
+  so a documented `<exception cref="EOSError">` is no longer drift and `document` writes it; `Abort` /
+  `OleCheck` stay out (owner ruling D2 a-narrow; query-time, no re-parse) (W5-D2).
 - Control channel: the stand-down BUSY reply after a hung store close sets `FReplied` (no 5 s teardown wait), and the audit grace is computed in milliseconds, not by integer division (W5-C).
 - Plugin: `ProcRun` reads engine output through a 1 MB stdout pipe, so a large report is no longer throttled to one 4 KB buffer per poll slice (8 MB: 15.4 s -> 3.4 s) (W5-E).
 - Review markers: a second `// dl:ok` comment on the same line is a marker, not prose (W5-B).
