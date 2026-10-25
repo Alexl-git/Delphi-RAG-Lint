@@ -1688,6 +1688,16 @@ const
     + '                                 { "kind": "dynamic", "caption": "<dynamic: X>", "captionKey": "<dynamic: x>", "source": "E.pas:7", "confidence": "unknown" } ] } ] } ],'
     + ' "external": [ { "kind": "external-root", "ident": "ToolWin", "source": "E.pas:8", "children": [ { "kind": "item", "caption": "drag-lint", "captionKey": "drag-lint", "source": "E.pas:9", "confidence": "certain" } ] } ],'
     + ' "notes": [ "dynamic caption at E.pas:7: X.Caption := Y" ] }';
+  DOC_EXTRA = '{ "schema": "menu-tree/1", "engine": "x", "project": "p", "db": "d", "generated": "g", "futureTop": { "a": 1 },'
+    + ' "roots": [ { "kind": "root", "caption": "drag-lint", "captionKey": "drag-lint", "ident": "mnuRoot", "identPath": "frmMain.mnuRoot", "form": "frmMain", "source": "E.pas:1", "confidence": "certain",'
+    + '   "children": [ { "kind": "item", "caption": "Full Compile Sweep", "captionKey": "full compile sweep", "ident": "miSweep", "identPath": "frmMain.mnuRoot.miSweep", "form": "frmMain", "handler": "E.InvokeSweep", "source": "E.pas:2", "confidence": "certain" },'
+    + '                 { "kind": "separator", "source": "E.pas:3", "confidence": "certain", "ident": "N1" },'
+    + '                 { "kind": "submenu", "caption": "Uses && Dependencies", "captionKey": "uses & dependencies", "identPath": [ "x" ], "source": "E.pas:4", "confidence": "certain",'
+    + '                   "children": [ { "kind": "header", "caption": "This unit", "captionKey": "this unit", "form": 7, "source": "E.pas:5", "confidence": "certain" },'
+    + '                                 { "kind": "item", "caption": "Find Usages...", "captionKey": "find usages", "handler": "E.InvokeFind", "source": "E.pas:6", "confidence": "derived", "ident": null },'
+    + '                                 { "kind": "dynamic", "caption": "<dynamic: X>", "captionKey": "<dynamic: x>", "source": "E.pas:7", "confidence": "unknown" } ] } ] } ],'
+    + ' "external": [ { "kind": "external-root", "ident": "ToolWin", "identPath": "INTAServices.MainMenu.ToolWin", "source": "E.pas:8", "children": [ { "kind": "item", "caption": "drag-lint", "captionKey": "drag-lint", "source": "E.pas:9", "confidence": "certain" } ] } ],'
+    + ' "notes": [ "dynamic caption at E.pas:7: X.Caption := Y" ] }';
 var
   lNodes: TArray<TMenuNodeRow>;
   lNotes: TArray<string>;
@@ -1745,6 +1755,11 @@ begin
       lRaised := Pos('menu-tree/1', E.Message) > 0;
   end;
   Check('ParseMenuTree.WrongSchemaRaises', lRaised);
+  // fields a later engine adds (identPath on external roots; ident / identPath / form on --with-dfm
+  // roots and leaves; an unknown top-level key) are ignored: same rows, same handler
+  ParseMenuTreeJson(DOC_EXTRA, lNodes, lNotes);
+  Check('ParseMenuTree.UnknownFieldsIgnored', (Shape(lNodes) = lShape)
+    and (RowAt('drag-lint > Full Compile Sweep').Handler = 'E.InvokeSweep'), Shape(lNodes));
 end;
 
 procedure TestCompareFindingSetsPositiveControl;
