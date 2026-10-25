@@ -57,15 +57,23 @@ An excerpt (the full output is in [REPORT.md](REPORT.md)):
 <!-- dl:excerpt-cycles --plan -->
 ```
 ### Step 1: what moves where
-Nothing can be moved mechanically.
-
-**MANUAL -- not mechanical.** These symbols cannot be moved by the recipes above; their edge stays until you cut it by hand:
-- `TOrder` (class, `Orders.pas` line 10): refused: base-class -- `Customers.pas:13`: `TOrder` is used here as something other than a parameter type (a field, variable, cast or type argument).
+1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.
+   - New class `TOrderBase` in `Orders.Untangle` carries exactly what the units below use: nothing (an empty base).
+   - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; the members above are deleted from it.
+   - Units that switch to `TOrderBase` (the name is replaced on these lines): `Customers.pas` lines 13, 16, 30.
+...
+### Step 2: uses clauses -- keep, move or remove the old unit
+...
+- `Customers.pas` / `Orders`: nothing from it is used there any more -> **remove** it from the interface uses.
 ```
 
-`TOrder` cannot move (its method bodies use `TCustomer`), and a base class may
-stand in for it only where every use is a `const` or value parameter that its
-routine merely reads members of or compares with nil. `Customers.pas` keeps a
-FIELD of `TOrder` (line 13), so the plan refuses with `base-class` and names that
-line instead of guessing; the rest of the playbook (uses decisions, edits, a
+`TOrder` cannot move (its method bodies use `TCustomer`), so the plan slots an empty base
+class `TOrderBase` into a new leaf unit `Orders.Untangle` and switches `Customers.pas` to it.
+That includes the FIELD `FOrders: TArray<TOrder>` (line 13): every use of it is `SetLength`,
+`Length`, `High` or a store `FOrders[..] := AOrder`, it is private, and nothing outside
+`Customers.pas` refers to it, so it can become `TArray<TOrderBase>` -- and `AddOrder`, which
+only stores its parameter there, takes a `TOrderBase`. After the edits `Customers` no longer
+uses `Orders` at all and the cycle is gone. A field used any other way (read whole, passed,
+returned, an element read as a value, published, or used from another unit) keeps the
+`base-class` refusal, naming that line. The rest of the playbook (new unit text, edits, a
 checklist ending in the exact `cycles` output) is in [REPORT.md](REPORT.md).

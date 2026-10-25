@@ -73,7 +73,7 @@ other cycles are stale.
 
 ## Cycle 1: demologger <-> democonfig <-> demoaudit <-> demosession
 
-Status: **interface coupling** -- units of this cycle use each other in their INTERFACE uses clauses.
+Status: **interface coupling** -- 3 of 4 uses between the units of this cycle are in INTERFACE uses clauses.
 
 Files:
 - `demologger` -> `circular-demo\DemoLogger.pas`
