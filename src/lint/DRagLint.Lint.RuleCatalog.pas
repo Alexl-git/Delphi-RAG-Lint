@@ -286,9 +286,28 @@ function MetricHash(const AWindowHash: string; AMetric: Integer): string;
 /// <returns>Four lowercase hex digits.</returns>
 /// <remarks>The ONE definition the CLI's ApplyLineMarkers and the LSP's
 /// BuildDiagnostics both use (C2), feeding TReviewMarkers.Suppresses. Lives
-/// here, not in ReviewMarker, for the same mirror reason as MetricHash. Pure.</remarks>
+/// here, not in ReviewMarker, for the same mirror reason as MetricHash. A finding
+/// anchored on a `///` line is hashed at DocCommentMarkerLine, the declaration
+/// the block documents, because that is where its marker lives. Pure.</remarks>
 function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
   AStartLine, AMetric: Integer): string;
+
+/// <summary>The line that carries the `dl:ok` marker for a finding anchored on
+/// ALine: ALine itself, unless ALine is a `///` DocInsight doc-comment line, in
+/// which case the first line after that contiguous `///` block -- the
+/// declaration the block documents.</summary>
+/// <param name="ALines">The finding's file, one entry per line.</param>
+/// <param name="ALine">1-based anchor line (TLintFinding.StartLine).</param>
+/// <returns>A 1-based line &gt;= ALine. ALine when it is out of range, is not a
+/// `///` line, or the block runs to the end of the file.</returns>
+/// <remarks>H2 (2026-10-25). A marker written ON a `///` line becomes doc text
+/// (`///` runs to end of line), so `allow` refused such lines and doc-drift --
+/// which anchors on the block's first line -- could not be reviewed at all. The
+/// declaration is not a guess: DocInsight attaches a `///` block to the
+/// declaration that immediately follows it. Used by `allow` (where to write),
+/// ApplyLineMarkers and the LSP (how far the suppression span reaches) and
+/// MarkerExpectedHash (where the hash is taken), so the three agree. Pure.</remarks>
+function DocCommentMarkerLine(const ALines: TArray<string>; ALine: Integer): Integer;
 
 implementation
 
@@ -298,8 +317,23 @@ uses
 function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
   AStartLine, AMetric: Integer): string;
 begin
-  Result:= TReviewMarkers.HashWindow(ALines, AStartLine - 1);
+  Result:= TReviewMarkers.HashWindow(ALines, DocCommentMarkerLine(ALines, AStartLine) - 1);
   if IsRoutineMetricRule(ARuleId) then Result:= MetricHash(Result, AMetric);
+end;
+
+function DocCommentMarkerLine(const ALines: TArray<string>; ALine: Integer): Integer;
+
+  function IsDocLine(AIdx: Integer): Boolean;
+  begin
+    Result:= TrimLeft(ALines[AIdx]).StartsWith('///');
+  end;
+
+begin
+  Result:= ALine;
+  if (ALine < 1) or (ALine > Length(ALines)) or not IsDocLine(ALine - 1) then Exit;
+  var Idx: Integer:= ALine; { 0-based index of the line after ALine }
+  while (Idx < Length(ALines)) and IsDocLine(Idx) do Inc(Idx);
+  if Idx < Length(ALines) then Result:= Idx + 1;
 end;
 
 function IsRoutineMetricRule(const ARuleId: string): Boolean;

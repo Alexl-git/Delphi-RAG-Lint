@@ -16,8 +16,11 @@
     (b) the SCC's anchor unit (DemoGagePort.pas) gets ONE finding too, at its own uses line 56 --
         not the 1:1 anchor AND the uses line.
     (c) DemoBlueprint.Interfaces.pas (in no cycle) -> 0 findings.
-    (d) lint-all: one finding per SCC, at the first unit `:1:1`, no fix_hint; its message ends with
-        the fix pointer (anchor stem; --project names the project), text output too.
+    (d) lint-all: one finding per SCC, at the first unit's intra-cycle uses entry (H2 2026-10-25; it was
+        `:1:1`) -- the SAME line `lint <that unit>` reports -- no fix_hint; its message ends with the
+        fix pointer (anchor stem; --project names the project), text output too.
+    (h) ONE dl:ok at the anchor reviews the cycle in lint-all and in `lint` of EVERY unit of it;
+        the other cycles keep reporting (positive control).
     (e) `rules --json` keeps circular-uses fixable:false (the fix is a verb, not lint --fix).
     (f) POSITIVE CONTROL: a copy with the cycle cut by hand (DemoGagePort removed from
         DemoUIConnect's implementation uses), re-indexed -> 0 findings for DemoUIConnect.pas.
@@ -84,12 +87,21 @@ try {
   $db    = Index-Copy $demo 'demo'
   $dproj = Join-Path $demo 'CircularDemo.dproj'
 
-  Write-Host '== (d) lint-all: one finding per SCC at the first unit :1:1 (read first, the oracle for (a))' -ForegroundColor Cyan
+  Write-Host '== (d) lint-all: one finding per SCC at the first unit, on ITS intra-cycle uses entry (read first, the oracle for (a))' -ForegroundColor Cyan
   $allOut = (& $Exe lint-all --db $db --rule circular-uses --json --library-db none 2>$null | Out-String)
   $all = @()
   try { $all = @(($allOut | ConvertFrom-Json) | Where-Object { $_.rule -eq 'circular-uses' }) } catch { $all = @() }
   Check 'd: lint-all prints 3 circular-uses findings' ($all.Count -eq 3) $allOut
-  Check 'd: every one at start_line 1, start_col 1' (@($all | Where-Object { $_.start_line -ne 1 -or $_.start_col -ne 1 }).Count -eq 0) $allOut
+  # H2 (2026-10-25): lint-all used to anchor at the unit header :1:1 while `lint <anchor unit>` anchored
+  # on the uses entry, so no single dl:ok could review the cycle in both scopes. Same line now.
+  Check 'd: DemoGagePort cycle at start_line 56 (the line lint DemoGagePort.pas reports), start_col 1' `
+    (@($all | Where-Object { $_.file_path -like '*DemoGagePort.pas' -and $_.start_line -eq 56 -and $_.start_col -eq 1 }).Count -eq 1) $allOut
+  foreach ($af in $all) {
+    $one = Lint-One $af.file_path $db
+    Check "d: PARITY lint $([IO.Path]::GetFileName($af.file_path)) reports the anchor at the lint-all line $($af.start_line)" `
+      ($one.Rows -and $one.Rows.Count -eq 1 -and $one.Rows[0].start_line -eq $af.start_line) "lint: $($one.Out) lint-all line: $($af.start_line)"
+  }
+  Check 'd: no anchor left on the unit header :1:1' (@($all | Where-Object { $_.start_line -eq 1 }).Count -eq 0) $allOut
   Check 'd: anchored at DemoAudit / DemoBlueprint / DemoGagePort' `
     ((@($all | ForEach-Object { [IO.Path]::GetFileName($_.file_path) } | Sort-Object) -join ',') -eq 'DemoAudit.pas,DemoBlueprint.pas,DemoGagePort.pas') $allOut
   Check 'd: no fix_hint on a lint-all finding' (@($all | Where-Object { $_.PSObject.Properties.Name -contains 'fix_hint' }).Count -eq 0) $allOut
@@ -143,6 +155,25 @@ try {
   $rules = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
   $cu = @(@($rules) + @($rules.rules) | Where-Object { $_ -and $_.id -eq 'circular-uses' }) | Select-Object -First 1
   Check 'e: circular-uses listed, fixable = false' ($cu -and $cu.fixable -eq $false) "got: $($cu | ConvertTo-Json -Compress)"
+
+  Write-Host '== (h) ONE dl:ok at the anchor reviews the cycle in BOTH scopes, for every unit of it' -ForegroundColor Cyan
+  $rev = Join-Path $WorkDir 'rev'
+  Copy-Tree (Join-Path $Repo 'circular-demo') $rev
+  $rdb = Index-Copy $rev 'rev'
+  $gp  = Join-Path $rev 'DemoGagePort.pas'
+  $al  = & $Exe allow $gp --fix-line 56 --fix-rule circular-uses --apply --db $rdb --library-db none 2>&1 | Out-String
+  Check 'h: SANITY allow wrote the marker on DemoGagePort.pas:56' (([IO.File]::ReadAllLines($gp))[55] -match 'dl:ok circular-uses@[0-9a-f]{4}') $al
+  $ra = (& $Exe lint-all --db $rdb --json --library-db none 2>$null | Out-String)
+  $rows = @(); try { $rows = @(($ra | ConvertFrom-Json) | Where-Object { $_.rule -eq 'circular-uses' -or ($_.rule -like 'review-marker-*' -and $_.file_path -like '*DemoGagePort.pas') }) } catch { $rows = @() }
+  Check 'h: lint-all: the reviewed 2-unit cycle is gone' (@($rows | Where-Object { $_.rule -eq 'circular-uses' -and $_.file_path -like '*DemoGagePort.pas' }).Count -eq 0) $ra
+  Check 'h: lint-all: POSITIVE CONTROL the two unreviewed cycles still report' (@($rows | Where-Object { $_.rule -eq 'circular-uses' }).Count -eq 2) $ra
+  Check 'h: lint-all: the marker is neither unused nor stale' (@($rows | Where-Object { $_.rule -like 'review-marker-*' }).Count -eq 0) $ra
+  $r = Lint-One $gp $rdb
+  Check 'h: lint DemoGagePort.pas (the anchor) -> 0 findings' ($null -ne $r.Rows -and $r.Rows.Count -eq 0) $r.Out
+  $r = Lint-One (Join-Path $rev 'DemoUIConnect.pas') $rdb
+  Check 'h: lint DemoUIConnect.pas (same cycle, not the anchor) -> 0 findings' ($null -ne $r.Rows -and $r.Rows.Count -eq 0) $r.Out
+  $r = Lint-One (Join-Path $rev 'DemoAudit.pas') $rdb
+  Check 'h: POSITIVE CONTROL lint DemoAudit.pas (another cycle) still -> 1 finding' ($r.Rows -and $r.Rows.Count -eq 1) $r.Out
 
   Write-Host '== (f) POSITIVE CONTROL: the cycle cut -> no finding' -ForegroundColor Cyan
   $cut = Join-Path $WorkDir 'cut'

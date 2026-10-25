@@ -6,7 +6,8 @@
   exception its callee raises was reported as drift. FormsMap.pas:76 (the
   singular GenerateFormsCsv overload) was the worked example.
 
-  The fix resolves ONE hop of callee and mines that callee's raises. Suppression
+  The fix walks resolved callees up to THREE hops (H2, 2026-10-25; it was one) and mines
+  their raises. Suppression
   requires a POSITIVELY mined raise; every unresolved case still reports.
 
   Fixture: fixtures\docdrift\transitive.pas.
@@ -29,7 +30,11 @@
                               exact-name matching must survive.
     CONTROL-3 Unresolved   -- only callee is RTL, unresolved here; absence of
                               information must not suppress.
-    CONTROL-4 TwoHops      -- raise is two hops away; one hop is the bound.
+    RED-C  TwoHops   -- raise two hops away (H2 2026-10-25: the bound is THREE hops).
+    RED-D  ThreeHops -- raise exactly three hops away.
+    CONTROL-4 FourHops     -- raise is four hops away; three hops is the bound.
+    CONTROL-5 Ping         -- a Ping/Pong call cycle that raises nothing: the walk terminates
+                              and the finding stays.
 
   BASELINE against the UNFIXED exe (recorded 2026-08-16, before the fix landed):
     RED-A FAIL, RED-B FAIL, CONTROL-1..4 PASS.
@@ -105,9 +110,19 @@ try {
   $un = Get-Drift 'transitive.Unresolved'
   Check 'CONTROL-3: Unresolved -- unresolved callee STILL reports EFoo (fail-safe)' (HasEx $un 'EFoo')
 
-  # --- CONTROL-4: one hop is the bound ---
+  # --- RED-C / RED-D: two and three hops are within the bound (H2, 2026-10-25) ---
   $th = Get-Drift 'transitive.TwoHops'
-  Check 'CONTROL-4: TwoHops -- two-hop raise STILL reported (depth bound holds)' (HasEx $th 'EBoom')
+  Check 'RED-C: TwoHops -- no ddExceptionNotRaised (raise two hops down, within the bound)' (LacksEx $th)
+  $h3 = Get-Drift 'transitive.ThreeHops'
+  Check 'RED-D: ThreeHops -- no ddExceptionNotRaised (raise exactly three hops down)' (LacksEx $h3)
+
+  # --- CONTROL-4: three hops is the bound ---
+  $h4 = Get-Drift 'transitive.FourHops'
+  Check 'CONTROL-4: FourHops -- four-hop raise STILL reported (depth bound holds)' (HasEx $h4 'EBoom')
+
+  # --- CONTROL-5: a call cycle terminates and still reports ---
+  $pp = Get-Drift 'transitive.Ping'
+  Check 'CONTROL-5: Ping -- Ping/Pong cycle raises nothing, ENever STILL reported' (HasEx $pp 'ENever')
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
