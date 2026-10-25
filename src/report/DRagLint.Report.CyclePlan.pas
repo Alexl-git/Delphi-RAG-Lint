@@ -342,7 +342,8 @@ procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TA
 /// <returns>A graph whose four dictionaries are NEW and owned by the caller: release them with
 /// FreeCycleGraph.</returns>
 /// <remarks>Keys are lower-case file stems; an edge's target is the lower-case unit name as
-/// written in the uses clause, so a library unit is a node with no outgoing list. E18 T15b:
+/// written in the uses clause, so a library unit is a node with no outgoing list; a bare name
+/// binds to a project unit only as dcc binds it (BareUsesBinding, A3-b). E18 T15b:
 /// hoisted out of DoCycles so `lint &lt;file&gt;` builds the same graph.</remarks>
 function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
 
@@ -659,6 +660,10 @@ type
     procedure CollectLeafDeps;
     procedure DecideUses;
     procedure DecideOne(const pA: TPlanFile; const pU: TUnitUse);
+    procedure DecideUnseenIntfEntries;
+    procedure DecideUnseenIntfEntry(const pFrom, pTo: string);
+    function IntfEntryDecided(const pFrom, pTo: string): Boolean;
+    function LexicalUseOf(const pFrom, pTo: string; pSect: TSect; out pLine: Integer): string;
     procedure RegisterLeaves;
     procedure ExtendLeaves;
     function MergeLeafUses(const pF: TPlanFile; pSect: TSect; pAnchor: Integer;
@@ -2440,6 +2445,7 @@ begin
   CollectConsumers;
   CollectLeafDeps;
   DecideUses;
+  DecideUnseenIntfEntries;
   RegisterLeaves;
   ExtendLeaves;
   BuildUsesEdits;
@@ -2672,6 +2678,203 @@ begin
   FDecisions.Add(D);
   if D.Verdict in [uvMove, uvRemove] then DelUses(pA.Fid, D.Sect, Partner);
   if D.Verdict = uvMove then AddUses(pA.Fid, scImpl, EntryText(pA, pU));
+end;
+
+type
+  { A3-a: one identifier CodeIdentsIn found, at its 1-based line }
+  TLexIdent = record
+    Name: string;
+    Line: Integer;
+  end;
+
+{ A3-a: pLine with every comment (brace and paren-star comments, which may span lines -- the open
+  state is carried in pInBrace / pInParen -- and `//`), compiler directive and string literal blanked
+  to spaces, so only code is left. }
+function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
+const
+  CPairLen = 2;
+var
+  I: Integer;
+begin
+  Result:= pLine;
+  I:= 1;
+  while I <= Length(Result) do
+  begin
+    var Pair:= Copy(Result, I, CPairLen);
+    var Opens:= (not pInBrace) and (not pInParen) and ((Result[I] = '{') or (Pair = '(*'));
+    if Opens then
+    begin
+      pInBrace:= Result[I] = '{';
+      pInParen:= not pInBrace;
+    end;
+    if (not pInBrace) and (not pInParen) and (Pair = '//') then
+      Exit(Copy(Result, 1, I - 1));
+    if (not pInBrace) and (not pInParen) and (Result[I] = '''') then
+    begin
+      var J:= PosEx('''', Result, I + 1);
+      if J = 0 then J:= Length(Result);
+      for var K:= I to J do Result[K]:= ' ';
+      I:= J + 1;
+      Continue;
+    end;
+    if pInBrace or pInParen then
+    begin
+      var Closes:= (pInBrace and (Result[I] = '}')) or (pInParen and (Pair = '*)') and not Opens);
+      if pInParen and Closes then Result[I + 1]:= ' ';
+      if Closes then
+      begin
+        pInBrace:= False;
+        pInParen:= False;
+      end;
+      Result[I]:= ' ';
+    end;
+    Inc(I);
+  end;
+end;
+
+{ A3-a: every identifier of lines pFirst..pLast (1-based) in code (CodeOnly); a dotted name gives
+  each of its segments; the unit names of a `uses ... ;` clause are skipped (they name units, not
+  exports); numeric literals (`1e5`, `$FF`, `#13`) are not identifiers. }
+function CodeIdentsIn(const pLines: TArray<string>; pFirst, pLast: Integer): TArray<TLexIdent>;
+var
+  L      : TList<TLexIdent>;
+  InBrace: Boolean;
+  InParen: Boolean;
+  InUses : Boolean;
+  X      : TLexIdent;
+begin
+  L:= TList<TLexIdent>.Create;
+  try
+    InBrace:= False;
+    InParen:= False;
+    InUses := False;
+    for var Ln:= pFirst to pLast do
+      for var M in TRegEx.Matches(CodeOnly(LineAt(pLines, Ln), InBrace, InParen), '[0-9$#]\w*|[A-Za-z_]\w*|;') do
+      begin
+        if M.Value = ';' then InUses:= False
+        else if SameText(M.Value, 'uses') then InUses:= True
+        else if (not InUses) and not CharInSet(M.Value[1], ['0'..'9', '$', '#']) then
+        begin
+          X.Name:= M.Value;
+          X.Line:= Ln;
+          L.Add(X);
+        end;
+      end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+{ A3-a: the first identifier in section pSect of pFrom's text that names a top-level interface
+  export of pTo (an enum value counts) and is not a top-level declaration of pFrom itself; ''
+  when none. The cross-check that tells "the interface uses nothing of pTo" from "the index
+  missed a use" before an interface entry the index saw no use for is moved or removed. }
+function TCyclePlanner.LexicalUseOf(const pFrom, pTo: string; pSect: TSect; out pLine: Integer): string;
+var
+  Exported: TDictionary<string, Boolean>;
+  Owner   : TSymbol;
+begin
+  Result:= '';
+  pLine := 0;
+  Owner := Default(TSymbol);
+  var FA:= GetFile(FidOfStem(pFrom));
+  var FB:= GetFile(FidOfStem(pTo));
+  Exported:= TDictionary<string, Boolean>.Create;
+  try
+    for var S in FB.Syms do
+      if OwnerOf(S, Owner) and ((FB.ImplLine = 0) or (Owner.StartLine < FB.ImplLine)) then
+        Exported.AddOrSetValue(LowerCase(S.Name), True);
+    for var S in FA.Syms do
+      if OwnerOf(S, Owner) then Exported.Remove(LowerCase(S.Name));
+    var First:= if pSect = scIntf then FA.IntfLine + 1 else FA.ImplLine + 1;
+    var Last := if (pSect = scIntf) and (FA.ImplLine > 0) then FA.ImplLine - 1 else Length(FA.Lines);
+    if (pSect = scImpl) and (FA.ImplLine = 0) then Exit;
+    for var X in CodeIdentsIn(FA.Lines, First, Last) do
+      if Exported.ContainsKey(LowerCase(X.Name)) then
+      begin
+        pLine:= X.Line;
+        Exit(X.Name);
+      end;
+  finally
+    Exported.Free;
+  end;
+end;
+
+{ A3-a: whether DecideUnseenIntfEntries moved or removed pFrom's interface entry for pTo. }
+function TCyclePlanner.IntfEntryDecided(const pFrom, pTo: string): Boolean;
+begin
+  for var D in FDecisions do
+    if (D.Fid = FidOfStem(pFrom)) and (D.PartnerStem = pTo) and (D.Sect = scIntf) and
+      (D.Verdict in [uvMove, uvRemove]) then Exit(True);
+  Result:= False;
+end;
+
+{ A3-a (plan 2026-10-25-cycles-fix-refusal-recipes.md): an interface uses entry A -> B between
+  units of the cycle for which the index records NO interface need is decided from what the
+  implementation needs, as DecideOne decides a partner whose declarations move -- unless the text
+  of A's interface names an export of B (LexicalUseOf), which keeps the `unresolved-edge`
+  refusal. The implementation uses B (an index need or a lexical use) -> move the entry down;
+  nothing does -> remove it. A uvKeepUnseen decision DecideOne made for the same entry is
+  replaced. An entry that comes from an include is left alone (BuildClauseEdit refuses it). The
+  compile gate rolls back a use both the index and the scan missed (E2003). }
+procedure TCyclePlanner.DecideUnseenIntfEntries;
+begin
+  for var A in FComp do
+    for var B in FComp do
+      if (A <> B) and FGraph.IntfEdges.ContainsKey(A + '->' + B) and not IntfEntryDecided(A, B) then
+        DecideUnseenIntfEntry(A, B);
+end;
+
+{ A3-a: DecideUnseenIntfEntries for the one interface edge pFrom -> pTo. }
+procedure TCyclePlanner.DecideUnseenIntfEntry(const pFrom, pTo: string);
+var
+  F       : TPlanFile;
+  U       : TUnitUse;
+  D       : TUsesDecision;
+  Still   : TList<string>;
+  Idx     : Integer;
+  HitLine : Integer;
+  Lex     : string;
+  Replaced: Boolean;
+begin
+  for var N in NeedsOf(FidOfStem(pFrom)) do
+    if (N.Sect = scIntf) and (N.OwnerStem = pTo) then Exit;
+  if LexicalUseOf(pFrom, pTo, scIntf, HitLine) <> '' then Exit;
+  F:= GetFile(FidOfStem(pFrom));
+  Idx:= -1;
+  for var K:= 0 to High(F.UsesList) do
+    if (F.UsesList[K].Section = uusInterface) and not F.UsesList[K].FromInclude and
+      ((LowerCase(F.UsesList[K].UnitName) = pTo) or EndsText('.' + LowerCase(F.UsesList[K].UnitName), pTo)) then
+      Idx:= K;
+  if Idx < 0 then Exit;
+  U:= F.UsesList[Idx];
+  Still:= TList<string>.Create;
+  try
+    for var N in NeedsOf(F.Fid) do
+      if (N.Sect = scImpl) and (N.OwnerStem = pTo) and not IsDeleted(F.Fid, N.Line) then
+        AddUnique(Still, Format('`%s` line %d', [N.RefName, N.Line]));
+    Lex:= LexicalUseOf(pFrom, pTo, scImpl, HitLine);
+    if (Still.Count = 0) and (Lex <> '') then Still.Add(Format('`%s` line %d', [Lex, HitLine]));
+    D:= Default(TUsesDecision);
+    D.Fid        := F.Fid;
+    D.PartnerStem:= pTo;
+    D.Sect       := scIntf;
+    D.Verdict    := if Still.Count > 0 then uvMove else uvRemove;
+    D.Still      := string.Join(', ', Still.ToArray);
+  finally
+    Still.Free;
+  end;
+  Replaced:= False;
+  for var K:= 0 to FDecisions.Count - 1 do
+    if (FDecisions[K].Fid = F.Fid) and (FDecisions[K].Sect = scIntf) and (FDecisions[K].Verdict = uvKeepUnseen) and
+      (FDecisions[K].PartnerStem = LowerCase(U.UnitName)) then
+    begin
+      FDecisions[K]:= D;
+      Replaced:= True;
+    end;
+  if not Replaced then FDecisions.Add(D);
+  DelUses(F.Fid, scIntf, LowerCase(U.UnitName));
+  if D.Verdict = uvMove then AddUses(F.Fid, scImpl, EntryText(F, U));
 end;
 
 procedure TCyclePlanner.RegisterLeaves;
@@ -4614,9 +4817,13 @@ begin
           var Resolved:= False;
           for var N in NeedsOf(FidOfStem(A)) do
             if (N.Sect = scIntf) and (N.OwnerStem = B) then Resolved:= True;
-          if not Resolved then
-            Add('unresolved-edge', A + ' -> ' + B, PathOf(FidOfStem(A)),
-              'the index could not resolve what the interface uses', 0);
+          if Resolved or IntfEntryDecided(A, B) then Continue;
+          var HitLine: Integer;
+          var Hit:= LexicalUseOf(A, B, scIntf, HitLine);
+          Add('unresolved-edge', A + ' -> ' + B, PathOf(FidOfStem(A)),
+            (if Hit = '' then 'the index could not resolve what the interface uses'
+             else Format('`%s` at line %d names an interface export of %s that the index did not record: ' +
+               'extractor gap', [Hit, HitLine, UnitNameOfStem(B)])), HitLine);
         end;
     end
     else if pPlan.CutEdge.FromStem = '' then
@@ -5101,15 +5308,20 @@ var
   UTo  : string       ;
   L    : TList<string>;
   Uo   : TUnitUse     ;
-  Seg  : TDictionary<string, string>; { last dotted segment -> stem; '' = ambiguous }
+  Units: TDictionary<string, string>; { = Result.UnitFile, for the BareUsesBinding test }
 begin
   Result.Adj      := TDictionary<string, TList<string>>.Create;
   Result.IntfEdges:= TDictionary<string, Boolean>.Create;
   Result.UnitFile := TDictionary<string, string>.Create;
   Result.UnitFid  := TDictionary<string, Int64>.Create;
-  Seg:= TDictionary<string, string>.Create;
+  Units:= Result.UnitFile;
   try
-  try
+    var Scopes:= ProjectUnitScopes(pStore);
+    var IsUnit: TProjectUnitTest:=
+      function(const pUnitLower: string): Boolean
+      begin
+        Result:= Units.ContainsKey(pUnitLower);
+      end;
     for Fid in pStore.GetAllFileIds do
     begin
       Path:= pStore.GetFilePath(Fid);
@@ -5119,11 +5331,6 @@ begin
       if UFrom = '' then Continue;
       Result.UnitFile.AddOrSetValue(UFrom, Path);
       Result.UnitFid .AddOrSetValue(UFrom, Fid );
-      if LastDelimiter('.', UFrom) > 0 then
-      begin
-        var Last:= Copy(UFrom, LastDelimiter('.', UFrom) + 1, MaxInt);
-        if Seg.ContainsKey(Last) then Seg[Last]:= '' else Seg.Add(Last, UFrom);
-      end;
     end;
     for Fid in pStore.GetAllFileIds do
     begin
@@ -5140,13 +5347,11 @@ begin
       begin
         UTo:= LowerCase(Uo.UnitName);
         if UTo = '' then Continue;
-        { N-08: a bare name that is no indexed unit maps onto the ONE indexed dotted
-          unit with that last segment (unit scope names), as circular-uses does;
-          ambiguous or dotted -> taken as written (a library unit) }
-        var Mapped: string;
-        if (Pos('.', UTo) = 0) and not Result.UnitFile.ContainsKey(UTo) and Seg.TryGetValue(UTo, Mapped) and
-          (Mapped <> '') and (Mapped <> UFrom) then
-          UTo:= Mapped;
+        { A3-b: a bare name binds as dcc binds it -- the exact project unit, else the first
+          unit scope of the project (DCC_Namespace) that makes one; otherwise it is an
+          external unit, taken as written (a node with no outgoing list). Dotted: as written. }
+        var Mapped:= BareUsesBinding(UTo, Scopes, IsUnit);
+        if (Mapped <> '') and (Mapped <> UFrom) then UTo:= Mapped;
         if not L.Contains(UTo) then L.Add(UTo);
         if Uo.Section = uusInterface then Result.IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
       end;
@@ -5157,9 +5362,6 @@ begin
       FreeCycleGraph(Result); { fix round 1: a raise midway must not leak the partial graph }
       raise;
     end;
-  end;
-  finally
-    Seg.Free;
   end;
 end;
 
