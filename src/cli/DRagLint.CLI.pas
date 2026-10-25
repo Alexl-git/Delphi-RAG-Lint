@@ -32683,7 +32683,8 @@ end;
 
 { Sends the result where the caller asked; returns the exit code. On exit 2/3 the refusal goes
   to stderr first and is flushed, so a machine caller reading --format json still gets the
-  envelope on stdout afterwards (the rule `sql` follows). }
+  envelope on stdout afterwards (the rule `sql` follows). Exit 3 (stale) also writes the
+  stale-index reason (DRagLint.Core.CliError) -- run_cli_error_reason.ps1. }
 function CompareEmit(const AArgs: TArgs; const AReq: TCompareRequest; const AResult: TCompareResult; const AFormat: string): Integer;
 begin
   Result:= AResult.ExitCode;
@@ -32692,6 +32693,14 @@ begin
   begin
     for var W in AResult.Warnings do Writeln(ErrOutput, 'WARNING: ' + W);
     Writeln(ErrOutput, 'ERROR: ' + AResult.Message);
+    { A14 reason after the prose; JSON object form for --format json / --json. }
+    if AResult.ExitCode = COMPARE_EXIT_STALE then
+    begin
+      var First:= AResult.Message;
+      var Cut:= Pos(#13, First);
+      if Cut > 0 then SetLength(First, Cut - 1);
+      WriteCliError(CLI_ERR_STALE_INDEX, 'compare: ' + First, AArgs.AsJson or SameText(AFormat, 'json'), '', '');
+    end;
     Flush(ErrOutput);
   end;
   if SameText(AFormat, 'html') then

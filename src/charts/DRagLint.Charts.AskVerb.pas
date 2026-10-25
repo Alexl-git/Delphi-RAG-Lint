@@ -149,6 +149,8 @@ function FormatAskAnswer(const pQuestion, pShownTarget, pPlainText: string; pPla
 /// <param name="pErr">Receives each stderr line.</param>
 /// <returns>0 answered, 1 refused or failed, 2 usage or setup, 3 stale index.</returns>
 /// <remarks>Never raises: an unexpected exception is a refusal (exit 1) with its message.
+/// On exit 3 the 'ask-report: ' prose is followed by one machine-readable line
+/// error[stale-index]: ask: ... (DRagLint.Core.CliError, A14); run_cli_error_reason.ps1.
 /// The producer is called with every index resolved and AllowStale True (freshness is checked
 /// here first). Not thread-safe: the in-process producer touches the process environment.</remarks>
 function RunAsk(const pArgs: TAskVerbArgs; const pProducer: IReportProducer;
@@ -167,6 +169,7 @@ implementation
 uses
   System.SysUtils, System.IOUtils, System.JSON, System.StrUtils
   , DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
+  , DRagLint.Core.CliError  // dl:unit DRagLint.Core.CliError accepted -- the stale-index reason constant travels with CliErrorLine, which formats it
   , DRagLint.Charts.DocInsight, DRagLint.Charts.Render
   , DRagLint.Charts.Question  // dl:unit DRagLint.Charts.Question accepted -- the question catalog and its caption phrase travel with the question types
   , DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Pairs
@@ -598,6 +601,14 @@ begin
     begin
       WriteText(pErr, ASK_VERB_ERR_PREFIX + E.Message);
       Result:= E.Code;
+      { A14 reason, after the prose so the 'ask-report: ' first line keeps its prefix contract. }
+      if Result = ASK_VERB_EXIT_STALE then
+      begin
+        var First:= E.Message;
+        var Cut:= Pos(#13, First);
+        if Cut > 0 then SetLength(First, Cut - 1);
+        pErr(CliErrorLine(CLI_ERR_STALE_INDEX, 'ask: ' + First, False, '', ''));
+      end;
     end;
     on E: Exception do
     begin

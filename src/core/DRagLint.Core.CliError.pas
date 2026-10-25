@@ -8,6 +8,8 @@ unit DRagLint.Core.CliError;
 /// apart by the reason: with --json one JSON object on stderr,
 /// {"error":"unknown-flag","message":"...","flag":"--x"}; without --json a stderr line whose first
 /// token is error[unknown-flag]:. Reasons: unknown-verb, unknown-flag, stale-index.</para>
+/// <para>`ask` and `compare` keep their own stale prose (ask-report: / ERROR:) and add the
+/// stale-index line after it; compare --format json writes the JSON object form.</para>
 /// <para>stdout is never touched, so a --json verb's stdout stays clean (run_json_error_stdout.ps1).</para>
 /// </remarks>
 
