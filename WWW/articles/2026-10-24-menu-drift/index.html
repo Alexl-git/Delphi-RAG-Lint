@@ -13,13 +13,13 @@ summary: drag-lint reads the menus a Delphi program builds in code, prints the t
   <p class="standfirst">A menu declared in a DFM is easy for a tool to see. A menu built with <code>TMenuItem.Create</code>, a helper routine and a const array is not &mdash; and it is exactly the kind that drifts away from its documentation. drag-lint now reads those menus statically, prints the tree, and compares it with the menu paths your docs promise.</p>
   <div class="byline">
     <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
-    <span>Real output from the next release (the verbs are not in 1.33.0-alpha)</span>
+    <span>New in drag-lint 1.35.0-alpha</span>
   </div>
 </header>
 
 <div class="note">
   <span class="nlabel">Availability</span>
-  <p><code>menu-tree</code> and <code>menu-drift</code> are merged to the drag-lint main branch and <strong>ship in the next release</strong>. They are not in the engine deployed today. Every output below comes from a build of the merged code, run on a scratch copy of a small fixture project from the repository.</p>
+  <p><code>menu-tree</code> and <code>menu-drift</code> are new in <strong>drag-lint 1.35.0-alpha</strong>; earlier releases do not have them. Every output below comes from a pre-release build of the same code, run on a scratch copy of a small fixture project from the repository.</p>
 </div>
 
 <p><a href="https://github.com/Alexl-git/Delphi-RAG-Lint">drag-lint</a> grew out of the code base of <a href="https://www.htrmicronite.com">Micronite</a>, our quality and production-control software for manufacturers, but the first menu we pointed this feature at was closer to home: drag-lint&rsquo;s own RAD Studio plugin.</p>
@@ -240,12 +240,12 @@ menu-drift: missing=2 unregistered=3 moved=1 notes=2</code></pre>
     <li><strong>Only the menu-item shapes it knows.</strong> DevExpress <code>TdxBar*</code> items, shortcuts and menu order are not compared. Context menus, About-form buttons and tool windows are out of scope in this version.</li>
     <li><strong>External roots are not compared.</strong> Items added to a DFM menu or to a menu looked up from the IDE are listed by <code>menu-tree</code> but ignored by <code>menu-drift</code>.</li>
     <li><strong>Computed on demand.</strong> There is no stored menu table in the index yet, so each run re-reads the routines that build menus, and the index must be current (exit 3 otherwise).</li>
-    <li><strong>Ships in the next release.</strong> Until then the verbs exist only in a build of the main branch.</li>
+    <li><strong>New in 1.35.0-alpha.</strong> Earlier releases do not have the verbs.</li>
   </ul>
 </section>
 
 <footer>
-  All command output above is real output of a build of the drag-lint main branch (merge 4e3f8077, the version after 1.33.0-alpha), run on a scratch copy of <code>tests\fixtures\menutree</code> from the drag-lint repository, with the index built by <code>drag-lint index --project</code>. Behaviour descriptions follow the drag-lint wiki page &ldquo;Menu Tree (code-built menus)&rdquo; and the code-built menu reader design note.
+  All command output above is real output of a build of the drag-lint main branch (merge 4e3f8077, released in 1.35.0-alpha), run on a scratch copy of <code>tests\fixtures\menutree</code> from the drag-lint repository, with the index built by <code>drag-lint index --project</code>. Behaviour descriptions follow the drag-lint wiki page &ldquo;Menu Tree (code-built menus)&rdquo; and the code-built menu reader design note.
 </footer>
 
 </div>
