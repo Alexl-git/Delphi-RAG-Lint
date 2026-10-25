@@ -46,7 +46,7 @@ other cycles are stale.
 
 ## Cycle 1: customers <-> orders
 
-Status: **interface coupling** -- units of this cycle use each other in their INTERFACE uses clauses.
+Status: **interface coupling** -- 3 of 4 uses between the units of this cycle are in INTERFACE uses clauses.
 
 Files:
 - `customers` -> `circular-uses-demo\Customers.pas`

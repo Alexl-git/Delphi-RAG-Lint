@@ -203,6 +203,43 @@ begin
   end;
   Result := Result + ');'#10;
 end;
+{ WriteVerbHelp: one branch per verb that has help blocks (public surfaces, helpOrder > 0), in helpOrder. }
+function RenderVerbHelpFunction(const pReg: TRegistry): string;
+var
+  lSb: TStringBuilder;
+  lVerbs: TList<string>;
+  lRow: TRow;
+  lVerb, lLine: string;
+begin
+  lSb := TStringBuilder.Create;
+  lVerbs := TList<string>.Create;
+  try
+    for lRow in PublicRows(pReg) do
+      if (lRow.Order > 0) and not lVerbs.Contains(lRow.Verb) then
+        lVerbs.Add(lRow.Verb);
+    lSb.Append('function WriteVerbHelp(const pVerb: string): Boolean;  // dl:ok method-too-long@889d -- GENERATED: one Writeln per registry help line'#10);
+    lSb.Append('begin'#10);
+    lSb.Append('  Result := True;'#10);
+    for lVerb in lVerbs do
+    begin
+      lSb.Append('  if pVerb = ''' + lVerb.Replace('''', '''''') + ''' then'#10);
+      lSb.Append('  begin'#10);
+      for lRow in PublicRows(pReg) do
+        if (lRow.Order > 0) and (lRow.Verb = lVerb) then
+          for lLine in pReg.Entries[lRow.EntryIndex].Surfaces[lRow.SurfaceIndex].Help do
+            lSb.Append('  ' + WritelnStatement(lLine));
+      lSb.Append('    Exit;'#10);
+      lSb.Append('  end;'#10);
+    end;
+    lSb.Append('  Result := False;'#10);
+    lSb.Append('end;'#10#10);
+    Result := lSb.ToString;
+  finally
+    lVerbs.Free;
+    lSb.Free;
+  end;
+end;
+
 function RenderHelpTextUnit(const pReg: TRegistry): string;
 var
   lSb: TStringBuilder;
@@ -216,12 +253,17 @@ begin
     lSb.Append('interface'#10#10);
     lSb.Append('/// <summary>Writes the generated verb reference of --help to standard output.</summary>'#10);
     lSb.Append('procedure WriteVerbReference;'#10#10);
+    lSb.Append('/// <summary>Writes the own help of one verb: the help lines of its registry surfaces, in helpOrder.</summary>'#10);
+    lSb.Append('/// <param name="pVerb">Verb name, e.g. menu-tree.</param>'#10);
+    lSb.Append('/// <returns>True when the registry carries help lines for pVerb (and they were written); False writes nothing.</returns>'#10);
+    lSb.Append('function WriteVerbHelp(const pVerb: string): Boolean;'#10#10);
     lSb.Append('implementation'#10#10);
     lSb.Append('procedure WriteVerbReference;  // dl:ok method-too-long@889d -- GENERATED: one Writeln per registry help line; the length follows the verb count'#10);
     lSb.Append('begin'#10);
     for lLine in VerbReferenceLines(pReg) do
       lSb.Append(WritelnStatement(lLine));
     lSb.Append('end;'#10#10);
+    lSb.Append(RenderVerbHelpFunction(pReg));
     lSb.Append('end.'#10);
     Result := lSb.ToString;
   finally

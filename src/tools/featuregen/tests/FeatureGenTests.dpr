@@ -2330,6 +2330,10 @@ begin
   Check('Help.GeneratedUnitMatchesRegistry', SameLf(lGen, lDisk), 'run featuregen build --all');
   Check('Help.GeneratedUnitDetectsDrift', not SameLf(lGen, lDisk.Replace('drag-lint outline', 'drag-lint outlinX')), 'positive control');
   Check('Help.GeneratedUnitCarriesOutline', Pos('''  drag-lint outline  ', lGen) > 0, 'usage line of a known verb');
+  { X-26: per-verb help (menu-tree --help) comes from the same registry lines; positive control = a verb with no block gets no branch. }
+  Check('Help.PerVerbBranchForMenuTree', Pos('if pVerb = ''menu-tree'' then', lGen) > 0, 'WriteVerbHelp must carry a menu-tree branch');
+  Check('Help.PerVerbBranchCarriesHelpLine', Pos('  drag-lint menu-drift --project', Copy(lGen, Pos('if pVerb = ''menu-drift'' then', lGen), MaxInt)) > 0, 'menu-drift branch carries its help line');
+  Check('Help.PerVerbNoBranchWithoutBlock', Pos('if pVerb = ''zz-not-a-verb'' then', lGen) = 0, 'positive control');
   Check('Help.FrozenBannerPreserved', FrozenBannerPrefixProblem(pRepo) = '', FrozenBannerPrefixProblem(pRepo)
     + ' (a deliberate help edit re-freezes that line in tests\fixtures\help-verb-reference-1.33.0.txt)');
   Check('Help.GeneratedUnitIsAscii', not TRegEx.IsMatch(lGen, '[^\x00-\x7F]'), 'non-ASCII in the generated unit');

@@ -713,6 +713,7 @@ type
     function PartBBest: TEdgeEval;
     procedure RenderFixIt(const pPlan: TCycleFixPlan);
     function FixCommand(pCycle: Integer; pApply: Boolean): string;
+    function IntfStatusLine: string;
     procedure RenderIntfCycle(const pPlan: TCycleFixPlan);
     procedure RenderImplCycle(const pPlan: TCycleFixPlan);
     // planning (no output)
@@ -3989,10 +3990,31 @@ begin
   Materialize;
 end;
 
+{ E14: the Status line counts the uses between the cycle's units instead of echoing "interface":
+  every use in an INTERFACE clause = an all-interface loop the compiler refuses; otherwise N of M. }
+function TCyclePlanner.IntfStatusLine: string;
+var
+  NIntf, NAll: Integer;
+begin
+  NIntf:= 0;
+  NAll:= 0;
+  for var A in FComp do
+    for var B in FComp do
+    begin
+      if (A = B) or not FGraph.Adj.ContainsKey(A) or not FGraph.Adj[A].Contains(B) then Continue;
+      Inc(NAll);
+      if FGraph.IntfEdges.ContainsKey(A + '->' + B) then Inc(NIntf);
+    end;
+  if (NAll > 0) and (NIntf = NAll) then
+    Result:= Format('Status: **interface cycle** -- all %d uses between the units of this cycle are in INTERFACE ' +
+      'uses clauses (the compiler refuses this loop).', [NAll])
+  else
+    Result:= Format('Status: **interface coupling** -- %d of %d uses between the units of this cycle are in ' +
+      'INTERFACE uses clauses.', [NIntf, NAll]);
+end;
 procedure TCyclePlanner.RenderIntfCycle(const pPlan: TCycleFixPlan);
 begin
-  Emit('Status: **interface coupling** -- units of this cycle use each other in their INTERFACE ' +
-    'uses clauses.');
+  Emit(IntfStatusLine);
   Emit('');
   RenderFiles;
   RenderIntfWhy;

@@ -97,7 +97,7 @@ edit -- so this is an excerpt of the real output:
 ```
 ## Cycle 1: demologger <-> democonfig <-> demoaudit <-> demosession
 
-Status: **interface coupling** -- units of this cycle use each other in their INTERFACE uses clauses.
+Status: **interface coupling** -- 3 of 4 uses between the units of this cycle are in INTERFACE uses clauses.
 
 ### Why it cycles
 - `demologger` interface uses `TDemoSession` (class) at `DemoLogger.pas:40`; declared in `DemoSession.pas:20`.

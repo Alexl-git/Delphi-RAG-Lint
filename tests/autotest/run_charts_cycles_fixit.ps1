@@ -132,7 +132,7 @@ try {
   Check 'e2: the verdict row text is unchanged' ($t -match '>interface coupling: \d+ of \d+ uses interface-section; every loop crosses an implementation use<' -and $t -match '>implementation-only<') ''
   $pp = Build-Page $db $proj $Exe 'playbook' -Playbook
   $statusImpl = 'legal in Delphi, low impact'   # the engine Status of an implementation-only cycle; the chart's own verdict never says it
-  $statusIntf = '-- engine: interface coupling -- units of this cycle use each other in their INTERFACE uses clauses.'
+  $statusIntf = '-- engine: interface coupling -- 3 of 4 uses between the units of this cycle are in INTERFACE uses clauses.'
   Check 'e3: WITH -Playbook the engine Status wording is on the page (cycle 1 after the counted clause, cycles 2 and 3 verbatim)' `
     (($pp.Dot.Contains($statusIntf)) -and (([regex]::Matches($pp.Dot, [regex]::Escape($statusImpl))).Count -eq 2)) ''
   Check 'e4: WITHOUT -Playbook neither Status wording is on the page' ((-not $t.Contains($statusImpl)) -and (-not $t.Contains($statusIntf))) ''

@@ -1143,15 +1143,20 @@ begin
   Result:= (A = '--help') or (A = '-h') or (A = '-?');
 end;
 
+/// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
+/// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
+/// <param name="AMsg">The diagnostic line.</param>
+procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);
+begin
+  if AArgs.AsJson then Writeln(ErrOutput, AMsg) else Writeln(AMsg);
+end; // procedure
 /// <summary>Prints the own help of a menu verb (menu-tree --help / menu-drift --help): the `help` line of its surface in features\entries\menu-tree.json, not the global banner.</summary>
 /// <param name="AVerb">menu-tree or menu-drift.</param>
-/// <remarks>The text mirrors the registry entry; tests\autotest\run_menu_verb_help.ps1 fails on drift.</remarks>
+/// <remarks>The text is generated from the registry entry (WriteVerbHelp); tests\autotest\run_menu_verb_help.ps1 fails on drift and on a hard-coded copy.</remarks>
 procedure PrintMenuVerbHelp(const AVerb: string);
 begin
-  if AVerb = 'menu-drift' then
-    Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)')
-  else
-    Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
+  { X-26: the text is GENERATED (WriteVerbHelp in DRagLint.CLI.HelpText, featuregen from the entry's help lines); nothing is hard-coded here. }
+  if not WriteVerbHelp(AVerb) then PrintHelp;
 end; // procedure
 function ParseArgs: TArgs;
 var
@@ -23994,8 +23999,8 @@ begin
   TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Doc:= DRagLint.Doc.Document.TDocumenter.ExistingDocFor(Store, AArgs.QName, Sym, Found, HasDoc);
-  if not Found then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
-  if not HasDoc then begin Writeln(Format('no doc-comment on: %s', [AArgs.QName])); Exit(1); end;
+  if not Found then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if not HasDoc then begin ReportNotFound(AArgs, Format('no doc-comment on: %s', [AArgs.QName])); Exit(1); end;
 
   Findings:= TDocDrift.Analyze(Store, Sym, Doc);
 
@@ -24525,7 +24530,7 @@ begin
   if not RoOk then Exit(1);
 
   Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Targets) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Length(Targets) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Total:= 0;
   var JOut: TJSONArray:= nil;
@@ -24687,9 +24692,9 @@ begin
   if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from no-path = 1)
 
   FromIds:= ResolveEndpointIds(Store, AArgs.CallFrom);
-  if Length(FromIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.CallFrom])); Exit(2); end;
+  if Length(FromIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.CallFrom])); Exit(2); end;
   ToIds:= ResolveEndpointIds(Store, ToB);
-  if Length(ToIds) = 0 then begin Writeln(Format('symbol not found: %s', [ToB])); Exit(2); end;
+  if Length(ToIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [ToB])); Exit(2); end;
 
   var Cap: Integer:= AArgs.MaxDepth;
   if Cap <= 0 then Cap:= 20;
@@ -24951,7 +24956,7 @@ begin
   if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from unresolved-qname = 1)
 
   RootIds:= ResolveEndpointIds(Store, AArgs.QName);
-  if Length(RootIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Length(RootIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   if AArgs.AsJson then
   begin
@@ -28305,7 +28310,7 @@ begin
     end;
   end;
   if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if Length(RootIds) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Length(RootIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Opts.Depth:= Depth;
 
@@ -28539,7 +28544,7 @@ begin
     end;
   end;
   if not AnyDbOpened then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if Store = nil then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Store = nil then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Opts.Depth:= Depth;
 
