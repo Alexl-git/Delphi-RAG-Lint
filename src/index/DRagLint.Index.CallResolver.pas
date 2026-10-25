@@ -951,11 +951,16 @@ type
     function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
     /// <summary>X1: the rungs of TypeReceiver, before the implicit pointer
     /// dereference TypeReceiver applies to their answer.</summary>
+    /// <param name="ACallRef">The ref whose receiver is typed; supplies the file and enclosing routine.</param>
+    /// <param name="AReceiverExpr">The receiver text, as ExtractReceiverExpr returns it.</param>
+    /// <returns>The receiver type id, or 0 when no rung can type it.</returns>
     function TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;
     /// <summary>X1: Delphi's implicit dereference -- `p.K` with p: PRec = ^TRec
     /// reaches TRec.K. Answers the pointee type when ATypeId is a type alias
     /// spelled `^T` and T resolves; otherwise ATypeId unchanged (a pointer type
     /// has no members, so nothing that bound before can change).</summary>
+    /// <param name="ATypeId">A type symbol id; 0 or less is returned unchanged.</param>
+    /// <returns>The pointee type id, or ATypeId when it is not a resolvable `^T` alias.</returns>
     function DerefPointerAlias(ATypeId: Int64): Int64;
     /// <summary>X1: type a receiver with SELECTORS -- an array element or a
     /// pointer dereference: `A[0]`, `R.Arr[1]`, `pM[X]`, `P^`, `A[0].Inner`.
@@ -964,6 +969,8 @@ type
     /// element type of an `array [..] of T`, `array of T` or `TArray&lt;T&gt;`
     /// (through type aliases), each `^` the pointee of `^T`, and each `.M` the
     /// declared type of member M.</summary>
+    /// <param name="ACallRef">The ref whose receiver is typed; supplies the file and enclosing routine.</param>
+    /// <param name="AReceiverExpr">The receiver text holding at least one '[' or '^'.</param>
     /// <returns>The receiver type id, or 0 when any step cannot be read (a
     /// call or cast inside the chain, a subscript on a non-array such as an
     /// indexed property or a string, an untypable head).</returns>
@@ -4980,7 +4987,7 @@ begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr));
 end;
 
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;  // dl:ok too-many-exit-points@917e -- REVIEWED 2026-10-25 (X1): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
 var
   Encl    : TSymbol;
   ClassId : Int64  ;
