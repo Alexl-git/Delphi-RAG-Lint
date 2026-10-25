@@ -45,6 +45,8 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 
+. "$PSScriptRoot\lib\UriHandlerExe.ps1"
+if (-not $PSBoundParameters.ContainsKey('Exe')) { [void](Initialize-UriHandlerExe -Path $Exe) }  # X-06: stage into a fresh worktree
 if (-not (Test-Path -LiteralPath $Exe)) {
   Write-Host "SETUP: drag-lint-open.exe not found: $Exe" -ForegroundColor Red
   Write-Host '       build it (Win64 Debug) first; this guard builds nothing' -ForegroundColor Red

@@ -55,6 +55,8 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 
+. "$PSScriptRoot\lib\UriHandlerExe.ps1"
+if (-not $PSBoundParameters.ContainsKey('Handler')) { [void](Initialize-UriHandlerExe -Path $Handler) }  # X-06: stage into a fresh worktree
 foreach ($p in @($Exe, $Handler)) {
   if (-not (Test-Path -LiteralPath $p)) { Write-Host "SETUP: not found: $p" -ForegroundColor Red; exit 2 }
 }
