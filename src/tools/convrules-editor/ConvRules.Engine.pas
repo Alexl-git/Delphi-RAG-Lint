@@ -21,6 +21,7 @@ uses
   , System.Classes
   , System.JSON
   , System.Generics.Collections
+  , ConvRules.TextEncoding  // TTextLevel / EncodeText / NeededLevel: ValidateTextAt writes the book as the bytes the user will save
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- the exit codes and PROGRESS_INTERVAL_S are the engine-call contract this adapter implements, so they travel with it
   ;
 
@@ -1100,6 +1101,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken = nil): TValidateResult;
+      /// <summary>ValidateText with the temp rules file written as EncodeText(ARulesText, ALevel),
+      /// i.e. the bytes the book will really have when saved (spec G5).</summary>
+      /// <param name="ARulesText">The book text.</param>
+      /// <param name="ALevel">Encoding level of the temp file; must hold every character of ARulesText.</param>
+      /// <param name="AFrom">--from class, or '' (both From and To needed to be sent).</param>
+      /// <param name="ATo">--to class, or ''.</param>
+      /// <param name="ACancel">Optional cancel token; nil = not cancellable.</param>
+      /// <returns>As ValidateText. OK = False when the engine cannot be run.</returns>
+      /// <remarks>ValidateText delegates here with NeededLevel(ARulesText), so it is never lossy.
+      /// The temp file is deleted on every path.</remarks>
+      function ValidateTextAt(const ARulesText: string; ALevel: TTextLevel; const AFrom, ATo: string; const ACancel: TCancelToken = nil): TValidateResult;
 
       /// <summary>Every class the unit declares, from the engine's `outline`.</summary>
       /// <param name="APasFile">Full path to the .pas.</param>
@@ -1171,6 +1183,19 @@ type
       /// refused=true, 'would leave N unconverted instance(s) of T'). A name that matches
       /// no instance: see the C12 Task 3 report (measured on 1.22.0).</remarks>
       function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer; overload;
+      /// <summary>ApplyConversion (the --only overload) plus RaiseEncodingArgs(ARaiseFiles) before --apply.</summary>
+      /// <param name="AUnitPas">The .pas to convert in place (its .dfm goes with it).</param>
+      /// <param name="ARulesFile">The .rules book.</param>
+      /// <param name="ADbs">--db list; the unit must be indexed in one of them.</param>
+      /// <param name="AOnly">Component names; [] = no --only.</param>
+      /// <param name="ARaiseFiles">Files to write as UTF-8 with BOM; [] = no flag (same as ApplyConversion).</param>
+      /// <param name="AJson">The engine's output -- feed it to ParseApplyJson.</param>
+      /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
+      /// <remarks>Engine contract E2: one --raise-encoding "path=utf8-bom" per file; each path must be
+      /// the --unit or its sibling .dfm, else the engine exits 2 ('raise-encoding: path is not a file of
+      /// this run'); utf8-bom is the only level. The named file is written as UTF-8 with BOM in the same
+      /// write transaction as the edits, also when every value would have fitted.</remarks>
+      function ApplyConversionRaising(const AUnitPas, ARulesFile: string; const ADbs, AOnly, ARaiseFiles: TArray<string>; out AJson: string): Integer;
       /// <summary>ONE `convert-apply` over several units (apply-batch/1), bounded by
       /// ATimeoutMs (the runner passes BatchTimeoutMs(CONVERT_TIMEOUT_MS, Length(AUnits))).</summary>
       /// <param name="AUnits">The .pas files to convert in place (each .dfm goes with its
@@ -1287,6 +1312,24 @@ type
 /// <remarks>Pass ADepth &gt; 0 only when the engine reports book_depth and AProgress only
 /// when it reports progress_lines: an older engine rejects either flag.</remarks>
 function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
+
+/// <summary>PURE: the --raise-encoding arguments of a convert-apply call (engine contract E2).</summary>
+/// <param name="AFiles">Full paths of the files (a unit's .pas / .dfm) to write as UTF-8 with BOM.</param>
+/// <returns>' --raise-encoding "<path>=utf8-bom"' per file, in order; '' for [].</returns>
+/// <remarks>The ONLY place the flag is spelled: utf8-bom is the only level the engine accepts
+/// in this slice. One flag per file; the engine exits 2 on a path that is not a file of the run.</remarks>
+function RaiseEncodingArgs(const AFiles: TArray<string>): string;
+
+/// <summary>PURE: the command line of ONE single-unit convert-apply call (the part after the exe).</summary>
+/// <param name="AUnitPas">The .pas to convert in place.</param>
+/// <param name="ARulesFile">The .rules book.</param>
+/// <param name="ADbArgs">Ready-made ' --db "x"' arguments (TEngineAdapter.DbArgsFor).</param>
+/// <param name="AOnlyArgs">Ready-made ' --only "a,b"' or ''.</param>
+/// <param name="ARaiseArgs">RaiseEncodingArgs(...) or ''.</param>
+/// <param name="ACastLibArgs">Ready-made ' --castlib "x"' argument or '' (CastLibArgs).</param>
+/// <returns>'convert-apply --unit "u" --rules "r"' + db + only + raise + castlib
+/// + ' --apply --no-backup --format json'.</returns>
+function ApplyArgs(const AUnitPas, ARulesFile, ADbArgs, AOnlyArgs, ARaiseArgs, ACastLibArgs: string): string;
 
 /// <summary>PURE: the command line of ONE batch convert-apply call (the part after the exe).</summary>
 /// <param name="AUnits">The .pas files, in call order (the answer's units[] follows it).</param>
@@ -1598,15 +1641,33 @@ begin
   Result:= ApplyConversion(AUnitPas, ARulesFile, ADbs, nil, AJson);
 end;
 
+function RaiseEncodingArgs(const AFiles: TArray<string>): string;
+begin
+  Result:= '';
+  for var LFile in AFiles do
+    Result:= Result + Format(' --raise-encoding "%s=utf8-bom"', [LFile]);
+end;
+
+function ApplyArgs(const AUnitPas, ARulesFile, ADbArgs, AOnlyArgs, ARaiseArgs, ACastLibArgs: string): string;
+begin
+  Result:= Format('convert-apply --unit "%s" --rules "%s"%s%s%s%s --apply --no-backup --format json',
+    [AUnitPas, ARulesFile, ADbArgs, AOnlyArgs, ARaiseArgs, ACastLibArgs]);
+end;
+
 function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer;
+begin
+  Result:= ApplyConversionRaising(AUnitPas, ARulesFile, ADbs, AOnly, nil, AJson);
+end;
+
+function TEngineAdapter.ApplyConversionRaising(const AUnitPas, ARulesFile: string; const ADbs, AOnly, ARaiseFiles: TArray<string>; out AJson: string): Integer;
 var
   LOnly: string;
 begin
   LOnly:= '';
   if Length(AOnly) > 0 then
     LOnly:= Format(' --only "%s"', [string.Join(',', AOnly)]);
-  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s%s%s --apply --no-backup --format json',
-    [AUnitPas, ARulesFile, DbArgsFor(ADbs), LOnly, CastLibArgs]), CONVERT_TIMEOUT_MS, AJson);
+  Result:= RunCaptureTimed(ApplyArgs(AUnitPas, ARulesFile, DbArgsFor(ADbs), LOnly,
+    RaiseEncodingArgs(ARaiseFiles), CastLibArgs), CONVERT_TIMEOUT_MS, AJson);
 end;
 
 function BatchApplyArgs(const AUnits: TArray<string>; const ARulesFile, ADbArgs, ACastLibArgs: string): string;
@@ -3267,6 +3328,11 @@ begin
 end; // function
 
 function TEngineAdapter.ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken): TValidateResult;
+begin
+  Result:= ValidateTextAt(ARulesText, NeededLevel(ARulesText), AFrom, ATo, ACancel);
+end;
+
+function TEngineAdapter.ValidateTextAt(const ARulesText: string; ALevel: TTextLevel; const AFrom, ATo: string; const ACancel: TCancelToken): TValidateResult;
 var
   Tmp   : string     ;
   Output: string     ;
@@ -3280,7 +3346,7 @@ begin
   Result.Output    := '';
   Tmp:= TPath.Combine(TPath.GetTempPath, 'convrules-validate-' + TPath.GetGUIDFileName + '.rules');
   try
-    TFile.WriteAllText(Tmp, ARulesText, TEncoding.ASCII);
+    TFile.WriteAllBytes(Tmp, EncodeText(ARulesText, ALevel));
     Args:= Format('convert-validate --rules "%s"', [Tmp]);
     if (AFrom <> '') and (ATo <> '') then
       Args:= Args + Format(' --from "%s" --to "%s"', [AFrom, ATo]);
