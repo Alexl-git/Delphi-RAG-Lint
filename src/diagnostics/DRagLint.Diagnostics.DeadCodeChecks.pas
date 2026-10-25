@@ -2707,7 +2707,8 @@ var
         SName:= LowerCase(Trim(NodeStr(SNode)));
         if AFieldMaps[Idx].ContainsKey(SName) then
         begin
-          Cnt:= 0; AWriteMaps[Idx].TryGetValue(SName, Cnt);
+          Cnt:= 0;
+          AWriteMaps[Idx].TryGetValue(SName, Cnt);
           AWriteMaps[Idx].AddOrSetValue(SName, Cnt + 1);
         end;
       end;

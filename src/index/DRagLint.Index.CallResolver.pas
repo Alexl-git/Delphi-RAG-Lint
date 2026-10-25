@@ -5746,7 +5746,7 @@ begin
   end;
 end;
 
-function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;
+function TCallResolver.LocalDeclNamesOf(ARoutineId, AFileId: Int64): string;  // dl:ok cognitive-complexity@01b6 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): 69 against 65; the resolve pass reads this, so restructuring it is resolve surface (re-pin), out of scope for a behaviour-identical sweep
 var
   Toks: TArray<TCodeTok>;
 
