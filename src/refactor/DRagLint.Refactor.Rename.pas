@@ -185,6 +185,23 @@ type
       /// name, too). Binary = the file starts with the resource header byte $FF or
       /// with the 'TPF0' signature.</remarks>
       class function BinaryDfmReason(const AStore: ISymbolStore; const AQName: string): string;
+      /// <summary>The form files rename leaves alone although they may bind the
+      /// method AQName -- one note per file, for the caller to REPORT (W5-D): it
+      /// never refuses. Scanned: the sibling .dfm of the method's owner class
+      /// and of every indexed class descending from it. Noted: a BINARY .dfm
+      /// that contains the method's short name (the index cannot see inside
+      /// it), and a TEXT .dfm that is not in the index and contains the name
+      /// as an identifier (its bindings have no refs rows to rewrite).</summary>
+      /// <param name="AStore">The project index (read-only use).</param>
+      /// <param name="AQName">Qualified name of the symbol being renamed.</param>
+      /// <returns>Empty when the symbol is unknown, is not a member of a class,
+      /// or no such file exists; else one human-readable note per file, naming
+      /// the file and why it was not rewritten.</returns>
+      /// <remarks>The owner's OWN binary .dfm is BinaryDfmReason's refusal;
+      /// callers ask that first, so in practice it is never noted here. A
+      /// text .dfm that IS indexed is rewritten by Build and never noted.
+      /// Reads the files; does not write.</remarks>
+      class function SkippedDfmNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
       /// <summary>Non-empty human reason when any edit's recorded position no
       /// longer holds its old name on disk; '' when every edit is still in place.
       /// A rename must then be refused: the file changed after it was indexed, and
@@ -377,6 +394,16 @@ begin
     Edit.Col:= ByteColToCharCol(Lines[Edit.Line - 1], Edit.Col);
     AList[I]:= Edit;
   end;
+end;
+
+// True when ABytes is a BINARY form file: a resource header (first byte $FF)
+// or a bare 'TPF0' stream. Empty is not binary.
+function IsBinaryDfm(const ABytes: TBytes): Boolean;
+const
+  ResHeaderByte = $FF;
+begin
+  Result:= (Length(ABytes) > 0)
+    and ((ABytes[0] = ResHeaderByte) or TEncoding.ANSI.GetString(ABytes).StartsWith('TPF0'));
 end;
 
 procedure SnapEditsToToken(AList: TList<TRenameEdit>; ACache: TObjectDictionary<string, TStringList>);
@@ -1105,8 +1132,6 @@ end;
 
 class function TRenameRefactoring.BinaryDfmReason(const AStore: ISymbolStore;
   const AQName: string): string;
-const
-  ResHeaderByte = $FF;
 var
   Syms     : TArray<TSymbol>;
   ShortName: string;
@@ -1120,8 +1145,7 @@ begin
   DfmPath:= ChangeFileExt(AStore.GetFilePath(Syms[0].FileId), '.dfm');
   if not FileExists(DfmPath) then Exit;
   Bytes:= TFile.ReadAllBytes(DfmPath);
-  if Length(Bytes) = 0 then Exit;
-  if (Bytes[0] <> ResHeaderByte) and not TEncoding.ANSI.GetString(Bytes).StartsWith('TPF0') then Exit;
+  if not IsBinaryDfm(Bytes) then Exit;
   if FindIdentFrom(TEncoding.ANSI.GetString(Bytes), ShortName, 1) = 0 then Exit;
   Result:= Format('%s is a binary .dfm that contains "%s" -- rename only rewrites ' +
     'event bindings in text .dfm files, so the form would keep the old name. ' +
@@ -1147,6 +1171,60 @@ begin
     end;
   finally
     Cache.Free;
+  end;
+end;
+
+class function TRenameRefactoring.SkippedDfmNotes(const AStore: ISymbolStore;
+  const AQName: string): TArray<string>;
+var
+  Syms     : TArray<TSymbol>;
+  Owner    : TSymbol;
+  Cand     : TSymbol;
+  ShortName: string;
+  DfmPath  : string;
+  Text     : string;
+  Bytes    : TBytes;
+  Seen     : TDictionary<string, Boolean>;
+  Notes    : TList<string>;
+begin
+  Result:= nil;
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+  Owner:= AStore.GetSymbolById(Syms[0].ParentId);
+  if not (Owner.Kind in [skClass, skForm]) then Exit;
+  ShortName:= LastDotSegment(AQName);
+  Seen := nil;
+  Notes:= nil;
+  try
+    Seen := TDictionary<string, Boolean>.Create;
+    Notes:= TList<string>.Create;
+    for var ClsName: string in [Owner.Name] + AStore.FindDescendantNames(Owner.Name) do
+      for Cand in AStore.FindSymbolsByExactName(ClsName) do
+      begin
+        if not (Cand.Kind in [skClass, skForm]) then Continue;
+        if (Cand.Id <> Owner.Id) and not ClassDescendsFrom(AStore, Cand.Id, Owner.Id) then Continue;
+        DfmPath:= ChangeFileExt(AStore.GetFilePath(Cand.FileId), '.dfm');
+        if Seen.ContainsKey(UpperCase(DfmPath)) or not FileExists(DfmPath) then Continue;
+        Seen.Add(UpperCase(DfmPath), True);
+        Bytes:= TFile.ReadAllBytes(DfmPath);
+        if IsBinaryDfm(Bytes) then
+        begin
+          if FindIdentFrom(TEncoding.ANSI.GetString(Bytes), ShortName, 1) > 0 then
+            Notes.Add(Format('%s is a binary .dfm that contains "%s" -- not rewritten (rename edits ' +
+              'text .dfm files only); convert it to text and re-index, or fix it by hand', [DfmPath, ShortName]));
+        end
+        else if AStore.FindFileIdByPath(DfmPath) <= 0 then { -1 = not in the index }
+        begin
+          TTextFileFormat.Decode(Bytes, Text);
+          if IdentOccursIn(Text, ShortName) then
+            Notes.Add(Format('%s is not in the index and contains "%s" -- its event bindings were ' +
+              'not rewritten; re-index and run the rename again', [DfmPath, ShortName]));
+        end;
+      end;
+    Result:= Notes.ToArray;
+  finally
+    Seen.Free;
+    Notes.Free;
   end;
 end;
 
