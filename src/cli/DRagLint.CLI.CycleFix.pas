@@ -1679,6 +1679,7 @@ begin
   if pGate.AfterStatus <> CStatusSkipped then
     Result:= Result + IfThen(Result <> '', ', ') + Format('after %.1f s', [pGate.After.Seconds], TFormatSettings.Invariant);
   if Result <> '' then Result:= 'compile: ' + Result;
+  if pGate.BaselineStatus = CStatusF2047 then Result:= Result + sLineBreak + 'compile: baseline F2047 in this group -- the build after the edit is the only proof';
 end;
 
 function IntfEdgeCount(const pUnits: TArray<string>; const pGraph: TCycleGraph; pIntfOnly: Boolean): Integer;
@@ -2683,8 +2684,6 @@ begin
       WriteNotPlanned(Only, pSccs.Count, Planned);
       var Timing:= TimingLine(Gate);
       if Timing <> '' then Writeln(Timing);
-      if Gate.BaselineStatus = CStatusF2047 then
-        Writeln('compile: baseline F2047 in this group -- the build after the edit is the only proof');
     end;
   finally
     Planned.Free;
