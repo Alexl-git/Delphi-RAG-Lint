@@ -1386,6 +1386,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    function GetUnresolvedCallsFromSymbol(AEnclosingSymbolId: Int64): TArray<TReference>;
       /// <returns><!-- drag-lint:auto -->Int64 -- Observed:
       /// Q.FieldByName('n').AsLargeInt.</returns>
       /// <remarks>
@@ -6614,6 +6615,57 @@ begin
     List.Free;
   end; // try
 end; // function
+
+function TSQLiteSymbolStore.GetUnresolvedCallsFromSymbol(AEnclosingSymbolId: Int64): TArray<TReference>;
+var
+  Q   : TFDQuery         ;
+  List: TList<TReference>;
+  R   : TReference       ;
+begin
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT r.* FROM refs r ' +
+      'WHERE r.enclosing_symbol_id = :x AND r.kind = :k ' +
+      'AND NOT EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id) ' +
+      'ORDER BY r.start_line, r.start_col';
+    Q.ParamByName('x').AsLargeInt:= AEnclosingSymbolId;
+    Q.ParamByName('k').AsString  := REF_KIND_CALL;
+    Q.Open;
+    var IdF   : TField:= Q.FieldByName('id'        );
+    var FileF : TField:= Q.FieldByName('file_id'   );
+    var KindF : TField:= Q.FieldByName('kind'      );
+    var NameF : TField:= Q.FieldByName('name_text' );
+    var SLineF: TField:= Q.FieldByName('start_line');
+    var SColF : TField:= Q.FieldByName('start_col' );
+    var ELineF: TField:= Q.FieldByName('end_line'  );
+    var EColF : TField:= Q.FieldByName('end_col'   );
+    { FindField: a pre-v20 DB has no receiver_text, which reads as '' (bare). }
+    var RcvF  : TField:= Q.FindField('receiver_text');
+    while not Q.Eof do
+    begin
+      R:= Default(TReference);
+      R.Id               := IdF.AsLargeInt;
+      R.FileId           := FileF.AsLargeInt;
+      R.Kind             := KindF.AsString;
+      R.NameText         := NameF.AsString;
+      R.StartLine        := SLineF.AsInteger;
+      R.StartCol         := SColF.AsInteger;
+      R.EndLine          := ELineF.AsInteger;
+      R.EndCol           := EColF.AsInteger;
+      R.EnclosingSymbolId:= AEnclosingSymbolId;
+      if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
+      List.Add(R);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.CountCallEdges: Int64;
 var

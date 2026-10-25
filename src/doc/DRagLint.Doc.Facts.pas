@@ -892,6 +892,11 @@ type
     /// an unresolved edge (TargetSymbolId = 0, i.e. RTL or cross-DB), a
     /// vanished row, and a bodyless callee all contribute NOTHING rather than
     /// contributing "raises nothing". Absence of information is never evidence.
+    /// ONE EXCEPTION, by contract rather than by absence (owner ruling D2,
+    /// 2026-10-25): an unresolved call whose text names RaiseLastOSError,
+    /// RaiseLastWin32Error, Win32Check or CheckOSError (bare or qualified by
+    /// System.SysUtils) contributes EOSError via that RTL routine. Abort and
+    /// OleCheck are deliberately NOT in the table.
     /// A self-edge contributes nothing -- a routine cannot justify its own cref
     /// by recursing -- but is not discarded, because it is also how a call to
     /// an overload SIBLING presents. The overload arm is bounded to the same
@@ -3577,10 +3582,57 @@ end;
 {$IF EXCEPTION_VIA_DEPTH <> 1}
   {$MESSAGE ERROR 'MineCalleeRaises implements one hop. Widen the walk (and Doc.Drift) before raising EXCEPTION_VIA_DEPTH.'}
 {$IFEND}
+
+const
+  { The unit that declares every KNOWN_OS_RAISERS routine. }
+  KNOWN_RAISER_UNIT = 'System.SysUtils';
+  { The exception every KNOWN_OS_RAISERS routine raises. }
+  KNOWN_RAISER_EXC  = 'EOSError';
+  { Owner ruling D2 "a-narrow" (2026-10-25): RTL routines whose body is never
+    mined (unresolved in a project DB) but whose contract is to raise EOSError.
+    NARROW ON PURPOSE: Abort (EAbort, the silent exception, common in VCL code)
+    and OleCheck stay out -- adding them rewrites many doc blocks and was not
+    ruled. Win32Check and CheckOSError raise only on failure; a conditional
+    raise is still "may raise", the meaning of <exception cref>. }
+  KNOWN_OS_RAISERS: array[0..3] of string =
+    ('RaiseLastOSError', 'RaiseLastWin32Error', 'Win32Check', 'CheckOSError');
+
+{ The qualified name of the known raiser an UNRESOLVED call names, or '' when it
+  names none. Matches on the call's text: the bare name, or the name qualified
+  by its declaring unit (`System.SysUtils.X`, `SysUtils.X`). Any other receiver
+  (`Obj.Win32Check`) is some other routine and does not match. }
+function KnownOsRaiser(const ARef: TReference): string;
+begin
+  Result:= '';
+  var Nm: string:= LastDottedSegment(ARef.NameText);
+  var Rcv: string:= ARef.ReceiverText;
+  if Length(Nm) < Length(ARef.NameText) then { name stored dotted: split it }
+    Rcv:= Copy(ARef.NameText, 1, Length(ARef.NameText) - Length(Nm) - 1);
+  if (Rcv <> '') and not SameText(Rcv, KNOWN_RAISER_UNIT)
+     and not SameText(Rcv, LastDottedSegment(KNOWN_RAISER_UNIT)) then Exit;
+  for var K in KNOWN_OS_RAISERS do
+    if SameText(Nm, K) then Exit(KNOWN_RAISER_UNIT + '.' + K);
+end;
+
 class function TDocFactsBuilder.MineCalleeRaises(const AStore: ISymbolStore;
   const ASym: TSymbol; const AEdges: TArray<TCallEdge>): TArray<TCalleeRaise>;
 var
   Acc: TList<TCalleeRaise>;
+
+  { Dedupe on the whole triple. One callee raising a class twice with the
+    same message is one fact, not two; with DIFFERENT messages it is two,
+    which matches how MineRaisesDetailed treats the own-body case. }
+  procedure AddRaise(const AExcClass, AViaQName, AMessage: string);
+  begin
+    for var Have in Acc do
+      if SameText(Have.ExcClass, AExcClass) and SameText(Have.ViaQName, AViaQName)
+         and (Have.Message = AMessage) then Exit;
+    var CR: TCalleeRaise;
+    CR.ExcClass:= AExcClass;
+    CR.ViaQName:= AViaQName;
+    CR.Message := AMessage;
+    Acc.Add(CR);
+  end;
 
   { Everything ACand raises, attributed to ACand. Bodyless is skipped for the
     same reason as everywhere else in this unit: never looked at is not the
@@ -3591,25 +3643,7 @@ var
     var QN: string:= ACand.QualifiedName;
     if QN = '' then QN:= ACand.Name;
     for var D in MineRaisesDetailed(AStore, ACand) do
-    begin
-      { Dedupe on the whole triple. One callee raising a class twice with the
-        same message is one fact, not two; with DIFFERENT messages it is two,
-        which matches how MineRaisesDetailed treats the own-body case. }
-      var Dup: Boolean:= False;
-      for var Have in Acc do
-        if SameText(Have.ExcClass, D.ExcClass) and SameText(Have.ViaQName, QN)
-           and (Have.Message = D.Message) then
-        begin
-          Dup:= True;
-          Break;
-        end;
-      if Dup then Continue;
-      var CR: TCalleeRaise;
-      CR.ExcClass:= D.ExcClass;
-      CR.ViaQName:= QN;
-      CR.Message := D.Message;
-      Acc.Add(CR);
-    end;
+      AddRaise(D.ExcClass, QN, D.Message);
   end;
 
 begin
@@ -3633,6 +3667,15 @@ begin
           if (Cand.ParentId <> Callee.ParentId) or (Cand.FileId <> Callee.FileId) then Continue;
           Harvest(Cand);
         end;
+    end;
+
+    { The ONE exception to "unresolved contributes nothing": a call whose text
+      names a KNOWN_OS_RAISERS routine is positive evidence by contract, not by
+      absence. A resolved same-name routine never reaches here (it has an edge). }
+    for var R in AStore.GetUnresolvedCallsFromSymbol(ASym.Id) do
+    begin
+      var Via: string:= KnownOsRaiser(R);
+      if Via <> '' then AddRaise(KNOWN_RAISER_EXC, Via, '');
     end;
 
     Result:= Acc.ToArray;

@@ -36,6 +36,19 @@
     CONTROL-5 Ping         -- a Ping/Pong call cycle that raises nothing: the walk terminates
                               and the finding stays.
 
+  Known OS-error raisers (owner ruling D2 a-narrow, 2026-10-25), fixture
+  fixtures\docdrift\transitive_osraise.pas. RaiseLastOSError /
+  RaiseLastWin32Error / Win32Check / CheckOSError are unresolved RTL calls in a
+  project DB; the shared miner maps them to EOSError by call-name text.
+    RED-E..H   bare, unit-qualified, Win32Check, CheckOSError -> no drift.
+    CONTROL-6  OsNone      -- no raiser call: EOSError STILL reported.
+    CONTROL-7  AbortCref   -- Abort is NOT in the table: EAbort STILL reported.
+    CONTROL-8  TShadow.Run -- a RESOLVED member named Win32Check: still reported.
+    WRITER-1   `document` writes the EOSError cref for a Win32Check caller.
+    WRITER-C1  `document` writes no EAbort cref for an Abort caller.
+  BASELINE 2026-10-25 against the unfixed exe: RED-E..H and WRITER-1 FAIL, the
+  controls PASS.
+
   BASELINE against the UNFIXED exe (recorded 2026-08-16, before the fix landed):
     RED-A FAIL, RED-B FAIL, CONTROL-1..4 PASS.
   If a future change makes the controls fail, the rule has been gutted, not fixed.
@@ -51,6 +64,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 
 $exePath = (Resolve-Path $Exe).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docdrift\transitive.pas')).Path
+$osFixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docdrift\transitive_osraise.pas')).Path
 
 $scratch = Join-Path C:\TEMP "draglint_doctransitive_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
@@ -123,6 +137,32 @@ try {
   # --- CONTROL-5: a call cycle terminates and still reports ---
   $pp = Get-Drift 'transitive.Ping'
   Check 'CONTROL-5: Ping -- Ping/Pong cycle raises nothing, ENever STILL reported' (HasEx $pp 'ENever')
+
+  # --- Known OS-error raisers (owner ruling D2 a-narrow, 2026-10-25) ---
+  # Own unit, own folder, own DB: transitive.pas is the writer runner's human
+  # fixture and must not gain declarations.
+  $osDir = Join-Path $scratch 'os'
+  New-Item -ItemType Directory -Path $osDir | Out-Null
+  Copy-Item $osFixture (Join-Path $osDir 'transitive_osraise.pas') -Force
+  $mainDb = $db; $db = Join-Path $scratch 'os.sqlite'
+  try {
+    & $exePath index $osDir --db $db 2>$null | Out-Null
+    $c6 = Get-Drift 'transitive_osraise.OsNone'
+    Check 'OS SANITY: engine produces findings for the OS fixture' ($c6.Count -ge 1)
+    Check 'RED-E: OsBare -- RaiseLastOSError justifies cref EOSError' (LacksEx (Get-Drift 'transitive_osraise.OsBare'))
+    Check 'RED-F: OsQualified -- System.SysUtils.RaiseLastOSError justifies it' (LacksEx (Get-Drift 'transitive_osraise.OsQualified'))
+    Check 'RED-G: OsWin32 -- Win32Check justifies it' (LacksEx (Get-Drift 'transitive_osraise.OsWin32'))
+    Check 'RED-H: OsCheck -- CheckOSError justifies it' (LacksEx (Get-Drift 'transitive_osraise.OsCheck'))
+    Check 'CONTROL-6: OsNone -- no raiser call, EOSError STILL reported' (HasEx $c6 'EOSError')
+    Check 'CONTROL-7: AbortCref -- Abort is not in the table, EAbort STILL reported' (HasEx (Get-Drift 'transitive_osraise.AbortCref') 'EAbort')
+    Check 'CONTROL-8: TShadow.Run -- resolved same-name member, EOSError STILL reported' (HasEx (Get-Drift 'transitive_osraise.TShadow.Run') 'EOSError')
+    # The WRITER walks the same table: `document --qname` renders the edit.
+    $wr = (& $exePath document --qname 'transitive_osraise.OsWriter' --db $db 2>$null | Out-String)
+    Check 'WRITER-1: document adds <exception cref="EOSError"> for a Win32Check caller' ($wr -match 'exception cref="EOSError"')
+    $wa = (& $exePath document --qname 'transitive_osraise.AbortWriter' --db $db 2>$null | Out-String)
+    Check 'WRITER-C1: document adds NO EAbort cref for an Abort caller' (-not ($wa -match 'exception cref="EAbort"'))
+    Check 'WRITER-C2: the AbortWriter render is not empty (probe is live)' ($wa.Trim().Length -gt 0)
+  } finally { $db = $mainDb }
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
