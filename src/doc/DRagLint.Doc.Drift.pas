@@ -641,8 +641,16 @@ end;
   overload -- was the worked example, and this shape accounted for 3 of the 6
   findings that survived a converged autodoc.
 
-  ONE hop, deliberately. Two hops would start suppressing findings that are
-  genuinely about this declaration, and one hop covers every known case.
+  THREE hops (H2, 2026-10-25; it was one). One hop was "deliberate" on the
+  theory that deeper raises would hide findings genuinely about this
+  declaration -- but a raise that escapes a callee two or three calls down DOES
+  escape this routine, so its <exception cref> is a true statement, and the
+  2026-10-25 lint sweep found such crefs reported as drift. The walk is bounded
+  (CREF_RAISE_MAX_HOPS hops, CREF_RAISE_MAX_VISITS symbols) and cycle-safe
+  (visited set); a raise beyond the bound still reports, which
+  run_doc_exception_transitive.ps1 CONTROL-4 pins. The WRITER (`document`,
+  TDocFactsBuilder.MineCalleeRaises) still mines ONE hop: the checker may accept
+  a deeper cref a human wrote, it never demands one, so the two cannot loop.
 
   The tempting cheap fix -- skip the check when the body raises nothing but
   calls something -- is WRONG and must not be reinstated: "calls something,
@@ -655,6 +663,20 @@ end;
   or cross-DB), a missing symbol, or a bodyless callee all leave the finding
   exactly as it was. Absence of information never silences the rule.
   --------------------------------------------------------------------------- }
+const
+  { How deep a raise may sit below the documented routine and still satisfy its
+    <exception cref>: 1 = a direct callee raises it. }
+  CREF_RAISE_MAX_HOPS   = 3;
+  { Symbols the walk may queue before it gives up and lets the finding stand --
+    a fan-out cap, so one cref on a hub routine cannot walk the whole graph. }
+  CREF_RAISE_MAX_VISITS = 256;
+
+{ The writer must never mine deeper than this checker accepts, or `document` writes
+  crefs doc-drift then reports (the ping-pong EXCEPTION_VIA_DEPTH's remarks describe). }
+{$IF EXCEPTION_VIA_DEPTH > CREF_RAISE_MAX_HOPS}
+  {$MESSAGE ERROR 'EXCEPTION_VIA_DEPTH (writer) exceeds CREF_RAISE_MAX_HOPS (doc-drift checker).'}
+{$IFEND}
+
 function CalleeRaisesType(const AStore: ISymbolStore; const ASym: TSymbol;
   const ATypeName: string; var ACallEdges: TArray<TCallEdge>;
   var ALoaded: Boolean): Boolean;
@@ -686,6 +708,43 @@ begin
   // cref, matching what the own-body test does (CONTROL-2 pins this).
   for var CR in TDocFactsBuilder.MineCalleeRaises(AStore, ASym, ACallEdges) do
     if SameText(CR.ExcClass, ATypeName) then Exit(True);
+
+  { Hops 2..CREF_RAISE_MAX_HOPS: breadth-first over RESOLVED edges only (the same
+    fail-safe as hop 1). Frontier holds the callees at hop (Hop - 1); mining one
+    of them with its own edges yields the raises at hop Hop. }
+  var Visited: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
+  try
+    Visited.Add(ASym.Id, True);
+    var Frontier: TArray<Int64>:= nil;
+    for var E in ACallEdges do
+      if (E.TargetSymbolId > 0) and not Visited.ContainsKey(E.TargetSymbolId) then
+      begin
+        Visited.Add(E.TargetSymbolId, True);
+        Frontier:= Frontier + [E.TargetSymbolId];
+      end;
+    for var Hop: Integer:= 2 to CREF_RAISE_MAX_HOPS do
+    begin
+      var Next: TArray<Int64>:= nil;
+      for var Id in Frontier do
+      begin
+        var Callee: TSymbol:= AStore.GetSymbolById(Id);
+        if (Callee.Id <= 0) or (Callee.ImplStartLine <= 0) then Continue; { fail safe }
+        var Edges: TArray<TCallEdge>:= AStore.GetCallEdgesFromSymbol(Callee.Id);
+        for var CR in TDocFactsBuilder.MineCalleeRaises(AStore, Callee, Edges) do
+          if SameText(CR.ExcClass, ATypeName) then Exit(True);
+        for var E in Edges do
+          if (E.TargetSymbolId > 0) and not Visited.ContainsKey(E.TargetSymbolId) then
+          begin
+            if Visited.Count >= CREF_RAISE_MAX_VISITS then Exit(False); { bounded: report }
+            Visited.Add(E.TargetSymbolId, True);
+            Next:= Next + [E.TargetSymbolId];
+          end;
+      end;
+      Frontier:= Next;
+    end;
+  finally
+    Visited.Free;
+  end;
 end;
 
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -1051,10 +1110,11 @@ begin
     // notion of "has a body", not two that can drift apart. Pinned by
     // tests\autodoc\run_doc_ctor_bodyless.ps1.
     //
-    // v(2026-08-16): when the OWN body does not raise it, resolve ONE hop of
-    // callee before reporting -- a one-line delegation raises nothing itself
-    // but its <exception cref> is correct. See CalleeRaisesType above for the
-    // fail-safe rules and for why the cheap carve-out is not used.
+    // v(2026-08-16): when the OWN body does not raise it, resolve callees
+    // before reporting -- a one-line delegation raises nothing itself but its
+    // <exception cref> is correct. H2 (2026-10-25): up to THREE hops, bounded
+    // and cycle-safe. See CalleeRaisesType above for the fail-safe rules and
+    // for why the cheap carve-out is not used.
     var XEdges: TArray<TCallEdge>:= nil;
     var XEdgesLoaded: Boolean:= False;
     for DE in ADoc.Exceptions do

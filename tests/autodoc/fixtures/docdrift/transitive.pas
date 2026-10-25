@@ -5,7 +5,7 @@ unit transitive;
 
   A routine whose body is a one-line delegation raises nothing ITSELF, so the
   ddExceptionNotRaised check reported its (correct) <exception cref> as drift.
-  The fix resolves ONE hop of callee and mines that callee's raises.
+  The fix walks resolved callees up to THREE hops deep and mines their raises.
 
   The two RED decls below must stop reporting after the fix. The four CONTROL
   decls must KEEP reporting -- they are what fails if anyone re-implements this
@@ -55,10 +55,24 @@ procedure AncestorCref;
 /// <exception cref="EFoo">Nothing here raises it.</exception>
 function Unresolved(AValue: Integer): string;
 
-/// <summary>CONTROL-4: the raise is TWO hops away. One hop is the deliberate
-/// bound, so this keeps reporting.</summary>
-/// <exception cref="EBoom">Two levels down, beyond the one-hop bound.</exception>
+/// <summary>RED-C: the raise is TWO hops away. Within the three-hop bound, so it no
+/// longer reports.</summary>
+/// <exception cref="EBoom">Two levels down.</exception>
 procedure TwoHops;
+
+/// <summary>RED-D: the raise is THREE hops away -- exactly the bound.</summary>
+/// <exception cref="EBoom">Three levels down.</exception>
+procedure ThreeHops;
+
+/// <summary>CONTROL-4: the raise is FOUR hops away, beyond the three-hop bound, so
+/// this keeps reporting.</summary>
+/// <exception cref="EBoom">Four levels down, beyond the bound.</exception>
+procedure FourHops;
+
+/// <summary>CONTROL-5: a call cycle in which nothing raises. The walk must terminate
+/// and keep reporting.</summary>
+/// <exception cref="ENever">Nothing in the cycle raises it.</exception>
+procedure Ping;
 
 implementation
 
@@ -106,6 +120,38 @@ end;
 procedure TwoHops;
 begin
   MidHop;
+end;
+
+procedure Hop3;
+begin
+  MidHop;
+end;
+
+procedure ThreeHops;
+begin
+  Hop3;
+end;
+
+procedure Hop4;
+begin
+  Hop3;
+end;
+
+procedure FourHops;
+begin
+  Hop4;
+end;
+
+procedure Pong; forward;
+
+procedure Ping;
+begin
+  Pong;
+end;
+
+procedure Pong;
+begin
+  Ping;
 end;
 
 end.

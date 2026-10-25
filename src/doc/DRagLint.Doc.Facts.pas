@@ -20,18 +20,18 @@ const
   /// ONE constant, read by BOTH the writer and the checker, and that is the
   /// whole point of it being here rather than a literal on each side.
   ///
-  /// doc-drift accepts an <exception cref> justified by a callee this many hops
-  /// away (Doc.Drift.CalleeRaisesType). If the WRITER ever walked deeper than
-  /// the CHECKER accepts, `document` would emit tags that doc-drift then
+  /// The WRITER mines callee raises this many hops away. doc-drift ACCEPTS a cref
+  /// justified up to CREF_RAISE_MAX_HOPS (3) hops away (Doc.Drift.CalleeRaisesType;
+  /// H2 2026-10-25, a compile-time check there keeps this <= it). If the WRITER ever
+  /// walked deeper than the CHECKER accepts, `document` would emit tags that doc-drift then
   /// reports as drift, and `--fix` would delete what `document` just wrote --
   /// a ping-pong the user cannot break, because each half is behaving
   /// correctly by its own lights.
   ///
-  /// Raising it is not a one-line change: two hops starts suppressing findings
-  /// that are genuinely about the declaration itself. See
-  /// run_doc_exception_transitive.ps1 CONTROL-4 (checker side) and
-  /// run_doc_exception_transitive_writer.ps1 assertion 3 (writer side) -- both
-  /// pin the bound, and both must move together or not at all.
+  /// The checker walking DEEPER than the writer is safe (it accepts what a human
+  /// wrote, it never demands it). See run_doc_exception_transitive.ps1 CONTROL-4
+  /// (checker bound) and run_doc_exception_transitive_writer.ps1 assertion 3
+  /// (writer bound).
   EXCEPTION_VIA_DEPTH = 1;
 
   /// Display cap on how many callees are NAMED in one <exception cref> body
@@ -617,8 +617,8 @@ type
     MaxCallers    : Integer;
     /// <summary>Mine what resolved callees raise, and widen Raises with it.
     /// OFF by default.</summary>
-    /// <remarks>Only the WRITER wants this. doc-drift already walks one hop of
-    /// its own, lazily and only for a cref the own body failed to match, so
+    /// <remarks>Only the WRITER wants this. doc-drift already walks up to three
+    /// hops of its own, lazily and only for a cref the own body failed to match, so
     /// turning this on for the checker would move that cost onto every
     /// declaration in every lint-all instead of the few that need it. False is
     /// therefore the safe default in the literal sense: it is the behaviour
@@ -3571,11 +3571,9 @@ begin
 end;
 
 { This walk implements EXACTLY ONE hop, and the constant is checked at COMPILE
-  time rather than trusted. A runtime check would only fire for whoever ran the
-  build; this refuses to produce a binary in which the writer and the checker
-  could disagree about depth at all. Raising EXCEPTION_VIA_DEPTH is a real piece
-  of work -- widen this traversal, and move Doc.Drift with it -- not a constant
-  edit, so the build stopping is the correct outcome. }
+  time rather than trusted. Raising EXCEPTION_VIA_DEPTH is a real piece of work --
+  widen this traversal -- not a constant edit, so the build stopping is the correct
+  outcome. Doc.Drift checks the other half (writer depth <= checker depth). }
 {$IF EXCEPTION_VIA_DEPTH <> 1}
   {$MESSAGE ERROR 'MineCalleeRaises implements one hop. Widen the walk (and Doc.Drift) before raising EXCEPTION_VIA_DEPTH.'}
 {$IFEND}
