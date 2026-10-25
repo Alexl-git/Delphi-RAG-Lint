@@ -574,6 +574,32 @@ function RaiseFilesOf(const AAll: TArray<string>; const AUnitPas: string): TArra
 /// <returns>The csRefused rows with HasEncodingRefusal, one per unit (the first row wins).</returns>
 function EncodingRefusedRows(const ARows: TArray<TConvertRow>): TArray<TConvertRow>;
 
+const
+  /// <summary>The status lead of a re-run's summary: file count, file names.</summary>
+  RERUN_STATUS_FMT = 'Re-run after raising %d file(s) to UTF-8 with BOM: %s';
+
+/// <summary>PURE: the job of the re-run after the user's Yes to the raise question.</summary>
+/// <param name="AJob">The finished run's job.</param>
+/// <param name="AUnits">The units the user said Yes for.</param>
+/// <param name="AFiles">Their files to raise (RaiseFilesOf of each refusal).</param>
+/// <returns>AJob with Units = AUnits and RaiseFiles = AFiles; Books, Dbs, ProjectDb, features and scope unchanged.
+/// Books stay ALL the job's books: a refusal restores its unit (the earlier books' rows become csRolledBack, the later
+/// books never ran), so every book must run on it again. RunId is unchanged too: the tab's StartRun numbers every
+/// run (ruling I2).</returns>
+function RerunJob(const AJob: TConvertJob; const AUnits, AFiles: TArray<string>): TConvertJob;
+
+/// <summary>PURE: whether a finished run asks the raise question for its encoding refusals.</summary>
+/// <param name="AJob">The finished run's job.</param>
+/// <param name="ACancelled">The user cancelled the run.</param>
+/// <returns>True only for an ordinary run (no RaiseFiles: a re-run NEVER asks again, Review Focus 4) of an engine with
+/// afEncodingGuard that was not cancelled.</returns>
+function ShouldAskRaise(const AJob: TConvertJob; ACancelled: Boolean): Boolean;
+
+/// <summary>PURE: the re-run's status lead.</summary>
+/// <param name="AJob">The finished run's job.</param>
+/// <returns>Format(RERUN_STATUS_FMT) over the file NAMES of AJob.RaiseFiles joined with ', '; '' for an ordinary run.</returns>
+function RerunStatusText(const AJob: TConvertJob): string;
+
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
@@ -852,6 +878,30 @@ begin
       LSeen := LSeen + [LRow.UnitPas];
       Result:= Result + [LRow];
     end;
+end;
+
+function RerunJob(const AJob: TConvertJob; const AUnits, AFiles: TArray<string>): TConvertJob;
+begin
+  Result:= AJob;
+  Result.Units     := Copy(AUnits);
+  Result.RaiseFiles:= Copy(AFiles);
+end;
+
+function ShouldAskRaise(const AJob: TConvertJob; ACancelled: Boolean): Boolean;
+begin
+  Result:= (Length(AJob.RaiseFiles) = 0) and (afEncodingGuard in AJob.ApplyFeatures) and not ACancelled;
+end;
+
+function RerunStatusText(const AJob: TConvertJob): string;
+var
+  LNames: TArray<string>;
+begin
+  if Length(AJob.RaiseFiles) = 0 then
+    Exit('');
+  LNames:= nil;
+  for var LFile: string in AJob.RaiseFiles do
+    LNames:= LNames + [ExtractFileName(LFile)];
+  Result:= Format(RERUN_STATUS_FMT, [Length(LNames), string.Join(', ', LNames)]);
 end;
 
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;

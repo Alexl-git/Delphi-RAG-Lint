@@ -13,6 +13,7 @@ uses
   , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_BOOK_PENDING_SUFFIX travels with BookHasGlyphLinks: the greyed-book text belongs to the glyph gate
   , ConvRules.UnitStatus
   , ConvRules.WorkList  // dl:unit ConvRules.WorkList accepted -- PAS_USE_MAPPED is the status word of the pas_uses row TPasUseRow carries; the same name must not be spelled twice
+  , ConvRules.TextEncoding  // TTextLevel: TLowerCandidate's fields, LowerBookFile's level
   ;
 
 type
@@ -499,6 +500,41 @@ function EncodingRefusalText(const ARef: TEncodingRefusal): string;
 /// <returns>The question text.</returns>
 function EncodingRaiseQuestion(const AUnitPas: string; const ARef: TEncodingRefusal): string;
 
+type
+  /// <summary>A book the Convert tab offers to lower before a run (<see cref="LowerCandidates"/>).</summary>
+  TLowerCandidate = record
+    /// <summary>The book file, as the caller named it.</summary>
+    Path   : string;
+    /// <summary>Its detected level (UTF-16 or UTF-16 with BOM).</summary>
+    Current: TTextLevel;
+    /// <summary>The lower level every character of it fits (LowerOffer).</summary>
+    Offer  : TTextLevel;
+  end;
+
+const
+  /// <summary>The lower-the-book question (Yes / No): book name, LevelName(Current), LevelName(Offer).</summary>
+  ASK_LOWER_FMT = '%s is saved as %s but every character in it fits %s. Lower it before converting (a normal Save with backup)? Yes = lower, No = keep it as it is.';
+  /// <summary>The status / note of a lowering that did not happen: book name.</summary>
+  LOWER_ABORTED_FMT = 'Lowering of %s aborted -- the book was not changed.';
+  /// <summary>The note of a lowering that happened: book name, LevelName(level).</summary>
+  LOWERED_FMT = 'Saved %s as %s before converting (the old file kept as a backup).';
+
+/// <summary>PURE (reads files): the books of ABooks the Convert tab offers to lower before a run.</summary>
+/// <param name="ABooks">The run's books (TConvertJob.Books).</param>
+/// <param name="AAsked">Books already asked about this session (compared by full path, case-insensitive): skipped.</param>
+/// <returns>In ABooks order, each book whose detected level LowerOffer(level, NeededLevel(text)) would lower, with
+/// that offer. A book that cannot be read is left out (the run reports it).</returns>
+function LowerCandidates(const ABooks, AAsked: TArray<string>): TArray<TLowerCandidate>;
+
+/// <summary>Lowers a book that is NOT the editor's open book: its own text, re-encoded at ALevel, with a backup
+/// (ruling I5: never through the editor's model, which drops incomplete #convert blocks).</summary>
+/// <param name="APath">The book file.</param>
+/// <param name="ALevel">The level to write at.</param>
+/// <param name="ABackup">The backup written; '' when none was taken.</param>
+/// <returns>'' = written; else Format(LOWER_ABORTED_FMT) plus the reason in parentheses -- the file is then
+/// untouched when it was unreadable, the text does not fit ALevel or the backup failed (ABackup = '').</returns>
+function LowerBookFile(const APath: string; ALevel: TTextLevel; out ABackup: string): string;
+
 /// <summary>Reads convert-apply's apply-batch/1 document (several --unit, engine 1.23.0).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; framed as for ParseApplyJson.</param>
 /// <param name="AFeatures">As for ParseApplyJson; applied to every unit.</param>
@@ -837,6 +873,7 @@ uses
   , System.RegularExpressions
   , System.StrUtils
   , ConvRules.Model
+  , ConvRules.WorkingSet  // WriteTextWithBackupAt: LowerBookFile
   , ConvRules.UsesHarvest
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED / _TIMEOUT are the long-call runner's outcome contract ReindexOutcomeText reads, so they travel with the runner
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- the four 1.27.0 CAPABILITY_* names live with the other info --json keys; ApplyFeaturesOf maps them to the apply/1 features it gates
@@ -1257,6 +1294,53 @@ function EncodingRaiseQuestion(const AUnitPas: string; const ARef: TEncodingRefu
 begin
   Result:= Format(ASK_RAISE_FMT, [ExtractFileName(AUnitPas), ARef.CharsTotal, ExtractFileName(ARef.FileName), ARef.FileEncoding, sLineBreak,
     EncodingRefusalText(ARef), sLineBreak, ExtractFileName(ARef.FileName)]);
+end;
+
+function LowerCandidates(const ABooks, AAsked: TArray<string>): TArray<TLowerCandidate>;
+var
+  LDet : TDetectedText;
+  LText: string;
+  LCand: TLowerCandidate;
+begin
+  Result:= nil;
+  for var LBook: string in ABooks do
+  begin
+    var LAsked: Boolean:= False;
+    for var LSeen: string in AAsked do
+      if SameText(ExpandFileName(LSeen), ExpandFileName(LBook)) then
+        LAsked:= True;
+    if LAsked or not TFile.Exists(LBook) then
+      Continue;
+    try
+      LText:= ReadTextDetect(LBook, LDet);
+    except  // dl:ok try-except-swallowed -- REVIEWED 2026-10-25 not swallowed: an unreadable book is only not OFFERED; the run reads it again and reports the error
+      Continue;
+    end; // try
+    LCand.Path   := LBook;
+    LCand.Current:= LDet.Level;
+    LCand.Offer  := LowerOffer(LDet.Level, NeededLevel(LText));
+    if LCand.Offer <> LCand.Current then
+      Result:= Result + [LCand];
+  end;
+end;
+
+function LowerBookFile(const APath: string; ALevel: TTextLevel; out ABackup: string): string;
+var
+  LDet : TDetectedText;
+  LText: string;
+begin
+  ABackup:= '';
+  Result := '';
+  try
+    LText:= ReadTextDetect(APath, LDet);
+    WriteTextWithBackupAt(APath, LText, ALevel, ABackup); // checks RoundTrips BEFORE the backup
+  except
+    on E: Exception do
+    begin
+      // ABackup stays as WriteTextWithBackupAt left it: '' unless the write itself failed after the backup.
+      Result := Format(LOWER_ABORTED_FMT, [ExtractFileName(APath)]) + ' (' + E.Message + ')';
+    end;
+  end; // try
 end;
 
 function ValueCastNote(const ARow: TApplyRow): string;
