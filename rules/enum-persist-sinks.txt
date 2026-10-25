@@ -1,0 +1,27 @@
+# enum-persist-sinks.txt -- the persistence SINKS of the `enum-ordinal-persisted`
+# project rule (lane X6). One routine / member name per line, matched
+# case-insensitively against refs.name_text in the routine that holds an enum
+# ordinal cast. '#' starts a comment line. When this file is missing beside the
+# engine (<exe-dir>\rules\), the rule uses the same list compiled in -- it never
+# silently runs with an empty table.
+# stream / pipe
+WriteBuffer
+ReadBuffer
+Write
+Read
+WriteFile
+ReadFile
+WriteMessage
+ReadMessage
+SaveToStream
+LoadFromStream
+# dataset / SQL
+FieldByName
+ParamByName
+AsInteger
+AsLargeInt
+Post
+ExecSQL
+# registry / ini
+WriteInteger
+ReadInteger

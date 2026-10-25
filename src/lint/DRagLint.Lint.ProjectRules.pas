@@ -220,6 +220,9 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 
 implementation
 
+uses
+  DRagLint.Lint.EnumOrdinalPersisted; { CollectEnumOrdinalPersisted -- lane X6 }
+
 { Side-effect / operator / helper units that are legitimately used without any
   named symbol reference. Stored lowercase for fast SameText comparison. }
 const
@@ -3989,6 +3992,11 @@ begin
     if WantRule('repeated-type-switch') then
       for var Rf in WholeGraph('repeated-type-switch') do Findings.Add(Rf);
     Inc(TRts, Tick - T0);
+
+    { enum-ordinal-persisted (lane X6): ON by default, NOT OptedIn-gated -- one
+      refs read per file that names a sink, symbols by kind, no per-row query. }
+    if WantRule('enum-ordinal-persisted') then
+      for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
 
     { ONE FILE when the caller names one (`lint <file>`): every finding this loop
       emits is stamped with the loop's own Path, and the memos it fills are caches

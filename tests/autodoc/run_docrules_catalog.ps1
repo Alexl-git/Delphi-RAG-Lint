@@ -151,6 +151,10 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 #             the REVIEWED stamp is new, so every older marker would report).
 # 2026-09-28: 135 -> 136, from `cycle-participant-unit` (project-wide, info, OFF by
 #             default: the per-unit view of circular-uses, NR-C1).
+# 2026-10-25: 137 -> 139. Lane X6 adds `enum-ordinal-persisted` (project-wide, warning,
+#             ON: an enum whose ordinal crosses a stream/pipe/dataset boundary has
+#             unpinned values). Main was already at 138 live with this pin at 137
+#             (one built-in added after 2026-10-14 without updating this line).
 # 2026-10-14: 136 -> 137, from `confusable-identifier` (naming, warning, ON: two
 #             declarations that differ only by underscores), added by 40fd41b2 on
 #             2026-10-13 with the const-casing word-by-word rename. Verified the
@@ -215,8 +219,8 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-$ExpectedBuiltins = 137
-Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
+$ExpectedBuiltins = 139
+Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + (one unrecorded) + enum-ordinal-persisted); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)

@@ -105,6 +105,7 @@ uses
   DRagLint.Lint.IfdefUndefined in '..\lint\DRagLint.Lint.IfdefUndefined.pas',
   DRagLint.Lint.ProjectChecks.Parse in '..\lint\DRagLint.Lint.ProjectChecks.Parse.pas',
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',
+  DRagLint.Lint.EnumOrdinalPersisted in '..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas',
   DRagLint.Lint.RuleCache in '..\lint\DRagLint.Lint.RuleCache.pas',
   DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',

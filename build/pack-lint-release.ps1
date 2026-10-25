@@ -95,6 +95,7 @@ foreach ($plat in 'win64','win32') {
   Copy-Item (Join-Path $repo "rules\*.scm") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\*.json") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\builtin-symbols.txt") (Join-Path $stg "rules")
+  Copy-Item (Join-Path $repo "rules\enum-persist-sinks.txt") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\README.md") (Join-Path $stg "rules")
   # The IDE help line's offline feature list: the plugin reads <engine dir>\help\dl\index.json
   # first (spec 2026-10-23-ide-help-line 3.2); the website does not serve the JSON.
