@@ -179,6 +179,50 @@ begin
   Check('6i a unique match with a blank DB is still a refusal', Got = '', Got);
 end;
 
+{ 2026-10-25: AfterSave posted "reindexing..." to the Messages pane even when the
+  per-file fallback was skipped (no manifest section covers the file), i.e. when
+  nothing was started. The message now follows the decision. }
+procedure TestSaveReindexAction;
+begin
+  Check('7a POSITIVE CONTROL: a queued project job -> project action',
+        ChooseSaveReindex(True, '') = sraProject);
+  Check('7b a queued job wins over a fallback DB',
+        ChooseSaveReindex(True, DB) = sraProject);
+  Check('7c no job, a covering DB -> per-file fallback',
+        ChooseSaveReindex(False, DB) = sraFile);
+  Check('7d no job and no covering DB -> nothing started',
+        ChooseSaveReindex(False, '') = sraNone,
+        'the Messages pane would claim a reindex that never ran');
+  Check('7e only sraNone suppresses the message',
+        (ChooseSaveReindex(False, '') = sraNone) and (ChooseSaveReindex(True, '') <> sraNone) and
+        (ChooseSaveReindex(False, DB) <> sraNone));
+end;
+
+{ 2026-10-25: JobQueue calls GReindexDoneHook (-> RequestRelint) after EVERY jkReindex
+  job. A job that also carries its own OnDone re-lint makes one reindex re-lint twice.
+  The save job must be a jkReindex (so the hook fires) with NO OnDone of its own. }
+procedure TestOneRelintPerReindex;
+var
+  Job: TDragLintJob;
+begin
+  Job:= BuildProjectIndexJob(EXE, PROJ, DB, 'Win32');
+  try
+    Check('8a the save job is a jkReindex, so GReindexDoneHook re-lints it',
+          Job.Kind = jkReindex);
+    Check('8b ... and carries no OnDone of its own (the hook is the one re-lint path)',
+          not Assigned(Job.OnDone));
+  finally
+    Job.Free;
+  end;
+  Job:= TDragLintJob.Create;
+  try
+    Job.OnDone:= procedure(AExit: Integer; AOutput: string) begin end;
+    Check('8c POSITIVE CONTROL: Assigned(OnDone) can be true on a job', Assigned(Job.OnDone));
+  finally
+    Job.Free;
+  end;
+end;
+
 begin  GPass:= 0;
   GFail:= 0;
   Writeln('IndexJobTests');
@@ -190,6 +234,8 @@ begin  GPass:= 0;
     TestCoalesceKey;
     TestJob;
     TestReindexTarget;
+    TestSaveReindexAction;
+    TestOneRelintPerReindex;
   except
     on E: Exception do
     begin

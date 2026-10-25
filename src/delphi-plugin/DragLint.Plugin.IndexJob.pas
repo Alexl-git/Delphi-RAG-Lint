@@ -84,8 +84,27 @@ function BuildProjectIndexJob(const AExePath, AProjectFile, ADbPath,
 function ReindexTargetDb(const AProjectFile: string; AMatch: TProjectDbMatch;
                          const AOwnerDb: string; out AWhy: string): string;
 
+type
+  /// <summary>What a save-time reindex actually started.</summary>
+  TSaveReindexAction = (sraNone, sraProject, sraFile);
+
+/// <summary>Decides what AfterSave started, so the Messages pane only announces a
+/// reindex that is really running.</summary>
+/// <param name="AProjectQueued">True when the project reindex job was enqueued.</param>
+/// <param name="AFallbackDb">The DB the manifest assigns to the saved file, '' if none.</param>
+/// <returns>sraProject when a job was queued; else sraFile when AFallbackDb is not blank;
+/// else sraNone (nothing started: do not post "reindexing...").</returns>
+/// <remarks>Pure.</remarks>
+function ChooseSaveReindex(AProjectQueued: Boolean; const AFallbackDb: string): TSaveReindexAction;
+
 implementation
 
+function ChooseSaveReindex(AProjectQueued: Boolean; const AFallbackDb: string): TSaveReindexAction;
+begin
+  if AProjectQueued then Result:= sraProject
+  else if AFallbackDb <> '' then Result:= sraFile
+  else Result:= sraNone;
+end;
 function ReindexTargetDb(const AProjectFile: string; AMatch: TProjectDbMatch;
                          const AOwnerDb: string; out AWhy: string): string;
 begin
