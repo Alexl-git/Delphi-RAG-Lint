@@ -2150,6 +2150,18 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    /// <summary>The complement of GetCallEdgesFromSymbol: every call-site ref
+    /// enclosed by AEnclosingSymbolId that has NO call_edges row, i.e. the
+    /// calls this index could not resolve (RTL, cross-DB, unknown).</summary>
+    /// <param name="AEnclosingSymbolId">The calling routine's symbol id.</param>
+    /// <returns>One TReference per unresolved call site, in source order, with
+    /// Kind, NameText, ReceiverText, line/column and EnclosingSymbolId filled;
+    /// empty when every call resolved or the routine calls nothing.</returns>
+    /// <remarks>Read-only, query-time. Added for the doc-facts known-raiser
+    /// table (TDocFactsBuilder.MineCalleeRaises, owner ruling D2 2026-10-25):
+    /// an unresolved call carries only its name text, and that text is the
+    /// only evidence a `RaiseLastOSError` call leaves in a project DB.</remarks>
+    function GetUnresolvedCallsFromSymbol(AEnclosingSymbolId: Int64): TArray<TReference>;
     /// <summary>Total row count in call_edges. Diagnostic/test probe.</summary>
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     function CountCallEdges: Int64;

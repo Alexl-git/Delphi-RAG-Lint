@@ -669,7 +669,10 @@ end;
   FAIL-SAFE IN ONE DIRECTION ONLY: suppression requires a POSITIVELY mined
   raise in a resolved callee. An unresolved edge (TargetSymbolId = 0, i.e. RTL
   or cross-DB), a missing symbol, or a bodyless callee all leave the finding
-  exactly as it was. Absence of information never silences the rule.
+  exactly as it was. Absence of information never silences the rule. The one
+  exception is positive by contract: the shared miner's known OS-error raiser
+  table (RaiseLastOSError / RaiseLastWin32Error / Win32Check / CheckOSError ->
+  EOSError, owner ruling D2 2026-10-25), so writer and checker still agree.
   --------------------------------------------------------------------------- }
 const
   { How deep a raise may sit below the documented routine and still satisfy its
