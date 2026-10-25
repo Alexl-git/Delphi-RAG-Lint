@@ -93,8 +93,9 @@ begin
 
   LRef:= LRow.EncodingRefusal;
   Check('enc.text', EncodingRefusalText(LRef) = 'U+0413 line 57, U+0414 line 60', EncodingRefusalText(LRef));
+  LRef.Chars:= LRef.Chars + LRef.Chars + LRef.Chars + LRef.Chars;  // 8 listed
   LRef.CharsTotal:= 10;
-  Check('enc.text.more', EncodingRefusalText(LRef).EndsWith(', +8 more'), EncodingRefusalText(LRef));
+  Check('enc.text.more', EncodingRefusalText(LRef).EndsWith(', +2 more'), EncodingRefusalText(LRef));
   LRef:= LRow.EncodingRefusal;
   Check('enc.question', EncodingRaiseQuestion('C:\p\Form1.pas', LRef).StartsWith('Form1.pas: 2 character(s)')
     and (Pos('Yes = raise Form1.pas to UTF-8 with BOM', EncodingRaiseQuestion('C:\p\Form1.pas', LRef)) > 0), EncodingRaiseQuestion('C:\p\Form1.pas', LRef));

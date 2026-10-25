@@ -177,7 +177,9 @@ type
   /// pas_uses_resolution (engine 1.28.2: each pas_uses[] row's resolution and
   /// candidates[]; without it both are cleared); afQualifyFix: convert_qualify_fix
   /// (engine 1.28.3: qualify_fixes[]); afDescendants: descendant_warnings (engine 1.25.0:
-  /// descendants[]); afEncodingGuard: convert_encoding_guard (ENGINE E1'/E2: encoding_refused and\n  /// --raise-encoding; ParseApplyJson reads encoding_refused whatever the features, the set only\n  /// tells the tab whether to OFFER the raise). only_matched[], only_unmatched[], only_included[] and unlinked[] have
+  /// descendants[]); afEncodingGuard: convert_encoding_guard (ENGINE E1'/E2: encoding_refused and
+  /// --raise-encoding; ParseApplyJson reads encoding_refused whatever the features, the set only
+  /// tells the tab whether to OFFER the raise). only_matched[], only_unmatched[], only_included[] and unlinked[] have
   /// no capability of their own and are read whatever the engine.</remarks>
   TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix, afDescendants, afEncodingGuard);
   /// <summary>The apply/1 features the run's engine reported.</summary>
@@ -496,6 +498,7 @@ function EncodingRefusalText(const ARef: TEncodingRefusal): string;
 /// <param name="ARef">Its refusal.</param>
 /// <returns>The question text.</returns>
 function EncodingRaiseQuestion(const AUnitPas: string; const ARef: TEncodingRefusal): string;
+
 /// <summary>Reads convert-apply's apply-batch/1 document (several --unit, engine 1.23.0).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; framed as for ParseApplyJson.</param>
 /// <param name="AFeatures">As for ParseApplyJson; applied to every unit.</param>
@@ -1255,6 +1258,7 @@ begin
   Result:= Format(ASK_RAISE_FMT, [ExtractFileName(AUnitPas), ARef.CharsTotal, ExtractFileName(ARef.FileName), ARef.FileEncoding, sLineBreak,
     EncodingRefusalText(ARef), sLineBreak, ExtractFileName(ARef.FileName)]);
 end;
+
 function ValueCastNote(const ARow: TApplyRow): string;
 begin
   if Length(ARow.ValueCasts) + Length(ARow.ValueChecks) = 0 then
