@@ -286,6 +286,9 @@ type
     /// <returns>[] when the line carries no marker. A `dl:ok` occurring inside a
     /// string literal is NOT a marker.</returns>
     /// <remarks>
+    /// A line may carry several `// dl:ok` comments (`// dl:ok a -- one  // dl:ok b -- two`):
+    /// each one is a marker with its own reason, entries in written order. A
+    /// `dl:ok` inside a reason that is NOT led by its own `//` stays prose.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas) (+5 more)</para>
     /// <para>Calls: Copy, Default, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.SplitReason, LowerCase, Pos, Trim</para>
@@ -907,6 +910,26 @@ begin
   end;
 end;
 
+{ 1-based position of the first `//` in AText that is followed (after optional
+  blanks) by a `dl:ok` tag, or 0. Parse uses it to split a line that carries
+  more than one `// dl:ok` comment. }
+function NextLineCommentTag(const AText: string): Integer;
+var
+  Lower: string;
+  I    : Integer;
+  J    : Integer;
+begin
+  Result:= 0;
+  Lower := LowerCase(AText);
+  for I:= 1 to Length(Lower) - 1 do
+    if (Lower[I] = '/') and (Lower[I + 1] = '/') then
+    begin
+      J:= I + 2;
+      while (J <= Length(Lower)) and CharInSet(Lower[J], [' ', #9, '/']) do Inc(J);
+      if Copy(Lower, J, Length(REVIEW_MARK)) = REVIEW_MARK then Exit(I);
+    end;
+end;
+
 class function TReviewMarkers.Parse(const ALineText: string): TArray<TReviewMarker>;
 var
   CStart : Integer         ;
@@ -918,6 +941,8 @@ var
   Part   : string          ;
   AtPos  : Integer         ;
   M      : TReviewMarker   ;
+  NextTag: Integer         ;
+  Segment: string          ;
 begin
   Result:= nil;
   CStart:= LineCommentStart(ALineText);
@@ -928,21 +953,40 @@ begin
   if TagPos = 0 then Exit;
 
   Rest:= Copy(Comment, TagPos + Length(REVIEW_MARK), MaxInt);
-  SplitReason(Rest, Rules, Reason);
-
-  for Part in Rules.Split([',']) do
+  while Rest <> '' do
   begin
-    M:= Default(TReviewMarker);
-    M.Reason:= Reason;
-    AtPos:= Pos('@', Part);
-    if AtPos > 0 then
+    { A further `// dl:ok` on the same line opens a SECOND marker (W5-B): before,
+      it was read as prose inside the first marker's reason, so its rules were
+      silently never honoured. Only a tag led by its own `//` counts -- a bare
+      `dl:ok` inside a reason stays prose. }
+    NextTag:= NextLineCommentTag(Rest);
+    if NextTag > 0 then
     begin
-      M.RuleId:= Trim(Copy(Part, 1, AtPos - 1));
-      M.Hash  := LowerCase(Trim(Copy(Part, AtPos + 1, MaxInt)));
+      Segment:= Copy(Rest, 1, NextTag - 1);
+      Rest   := Copy(Rest, NextTag, MaxInt);
+      Rest   := Copy(Rest, Pos(REVIEW_MARK, LowerCase(Rest)) + Length(REVIEW_MARK), MaxInt);
     end
     else
-      M.RuleId:= Trim(Part);
-    if M.RuleId <> '' then Result:= Result + [M];
+    begin
+      Segment:= Rest;
+      Rest   := '';
+    end;
+    SplitReason(Segment, Rules, Reason);
+
+    for Part in Rules.Split([',']) do
+    begin
+      M:= Default(TReviewMarker);
+      M.Reason:= Reason;
+      AtPos:= Pos('@', Part);
+      if AtPos > 0 then
+      begin
+        M.RuleId:= Trim(Copy(Part, 1, AtPos - 1));
+        M.Hash  := LowerCase(Trim(Copy(Part, AtPos + 1, MaxInt)));
+      end
+      else
+        M.RuleId:= Trim(Part);
+      if M.RuleId <> '' then Result:= Result + [M];
+    end;
   end;
 end;
 
@@ -1156,6 +1200,12 @@ begin
     there plus the new one, so there is exactly one dl:ok comment on the line. An
     existing reason wins -- it was written by a human about this same code. }
   Reason:= Existing[0].Reason;
+  { A line written as two `// dl:ok` comments carries one reason per comment;
+    the merge keeps every distinct one so no human-written reason is dropped. }
+  for var R: Integer:= 1 to High(Existing) do
+    if (Trim(Existing[R].Reason) <> '') and (Pos(Trim(Existing[R].Reason), Reason) = 0) then
+      Reason:= if Trim(Reason) = '' then Trim(Existing[R].Reason)
+               else Trim(Reason) + '; ' + Trim(Existing[R].Reason);
   if Trim(Reason) = '' then Reason:= Trim(AReason);
 
   Refreshed:= False;
