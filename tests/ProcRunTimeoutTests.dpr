@@ -20,6 +20,10 @@ program ProcRunTimeoutTests;
     4 a CHATTY child (ping prints every second) past its deadline: same
       bound. A read loop that only checks the clock when the pipe is idle
       would never time out here.
+    5 ONE sleeping child (ping -n 4) under a 1 s deadline is killed, output
+      kept; the same command under a 30 s deadline exits 0 (positive control).
+    6 an 8 MB burst (cmd /c type) arrives whole and is not throttled by the
+      idle poll slice of the bounded read loop.
 
   The grandchild is found by parent PID (Toolhelp) while the run is still in
   progress and held open by handle, so its PID cannot be reused under the
@@ -38,6 +42,13 @@ const
   CTimeoutMs        = 2000;
   CSlackMs          = 2000;
   CLineCount        = 3000;
+  CSleeperPings     = 4;        { ping -n 4: ~3 s, a line about every second }
+  CShortTimeoutMs   = 1000;
+  CLongTimeoutMs    = 30000;
+  CBigBytes         = 8 * 1024 * 1024;
+  CBigLineLen       = 100;
+  CBigRunMs         = 120000;
+  CBigBoundMs       = 8000;     { at 100% CPU: 4 KB pipe 15.4 s, 1 MB pipe 3.4 s }
 
 var
   GPass, GFail: Integer;
@@ -175,12 +186,75 @@ begin
   Check('4c output read before the deadline is kept', Pos('127.0.0.1', Outp) > 0, 'output=' + Outp);
 end;
 
+{ 5: ONE sleeping child under two deadlines. Under CTimeoutMs it is killed and
+  reports the timeout; under CLongTimeoutMs the very same command line ends on
+  its own, exit 0, no timeout notice. The control is what proves 5a-5c come
+  from the deadline and not from a child that cannot run here. }
+procedure TestSleeperBothWays;
+var
+  Cmd : string ;
+  Outp: string ;
+  Rc  : Integer;
+  SW  : TStopwatch;
+begin
+  Cmd:= Format('"%s" -n %d 127.0.0.1', [SysExe('ping.exe'), CSleeperPings]);
+  SW:= TStopwatch.StartNew;
+  Rc:= RunCaptureStdout(Cmd, Outp, CShortTimeoutMs);
+  SW.Stop;
+  Check('5a sleeper past a short deadline returns within it + 2 s',
+        SW.ElapsedMilliseconds <= CShortTimeoutMs + CSlackMs, Format('elapsed=%d ms', [SW.ElapsedMilliseconds]));
+  Check('5b sleeper reports the timeout', Rc = CExpectedTimedOut, Format('rc=%d', [Rc]));
+  Check('5c sleeper output read before the kill is kept', Pos('127.0.0.1', Outp) > 0, 'output=' + Outp);  // dl:ok hardcoded-ip-address@8ae1 -- the loopback the test child pings, matched in its own output; not a host to configure
+  Rc:= RunCaptureStdout(Cmd, Outp, CLongTimeoutMs);
+  Check('5d control: same sleeper under a long deadline exits 0', Rc = 0, Format('rc=%d', [Rc]));
+  Check('5e control: no timeout notice', Pos('timed out', Outp) = 0, 'output=' + Outp);
+end;
+
+{ 6: a child that writes CBigBytes as fast as it can (cmd /c type of a file)
+  must not be throttled by the bounded read loop. A loop that parks
+  PROCRUN_POLL_MS whenever a small pipe buffer is momentarily empty caps the
+  rate near one buffer per slice (4 KB / 25 ms = 160 KB/s), so a large engine
+  report would crawl -- and hit the very deadline B-19 made real. }
+procedure TestThroughput;
+var
+  FileName: string ;
+  Outp    : string ;
+  Rc      : Integer;
+  SW      : TStopwatch;
+  Line    : string ;
+  SB      : TStringBuilder;
+begin
+  FileName:= TPath.Combine(TPath.GetTempPath, Format('procrun-throughput-%d.txt', [GetCurrentProcessId]));
+  Line:= StringOfChar('x', CBigLineLen - 2) + sLineBreak;
+  SB:= TStringBuilder.Create(CBigBytes);
+  try
+    while SB.Length < CBigBytes do SB.Append(Line);
+    TFile.WriteAllText(FileName, SB.ToString, TEncoding.ASCII);
+  finally
+    SB.Free;
+  end;
+  try
+    SW:= TStopwatch.StartNew;
+    Rc:= RunCaptureStdout(Format('"%s" /c type "%s"', [SysExe('cmd.exe'), FileName]), Outp, CBigRunMs);
+    SW.Stop;
+    Writeln(Format('      (8 MB in %d ms)', [SW.ElapsedMilliseconds]));
+    Check('6a big write exits 0', Rc = 0, Format('rc=%d elapsed=%d ms', [Rc, SW.ElapsedMilliseconds]));
+    Check('6b every byte arrives', Length(Outp) >= CBigBytes, Format('len=%d', [Length(Outp)]));
+    Check('6c not throttled by the poll slice', SW.ElapsedMilliseconds <= CBigBoundMs,
+          Format('elapsed=%d ms', [SW.ElapsedMilliseconds]));
+  finally
+    TFile.Delete(FileName);
+  end;
+end;
+
 begin
   try
     TestQuickChild;
     TestBigOutput;
     TestSilentTree;
     TestChattyChild;
+    TestSleeperBothWays;
+    TestThroughput;
   except
     on E: Exception do begin Inc(GFail); Writeln('FAIL  exception: ', E.ClassName, ': ', E.Message); end;
   end;
