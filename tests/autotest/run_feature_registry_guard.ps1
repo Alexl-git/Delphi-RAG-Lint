@@ -1,4 +1,5 @@
 #Requires -Version 7.3
+# Run with pwsh (PowerShell 7.3+), not powershell.exe (5.1).
 <#
   run_feature_registry_guard.ps1 -- every live surface has a registry entry and every
   entry points at something that exists; the generated pages are current and untouched.

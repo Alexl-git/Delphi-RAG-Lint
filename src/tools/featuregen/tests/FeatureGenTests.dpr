@@ -1896,11 +1896,47 @@ begin
   Check('Live.HarvestRaisesOnEmptySubMap', lMsg = 'live surface: 0 subcommands harvested from DRagLint.CLI.pas; expected > 0', lMsg);
 end;
 
+{ Health of the LIVE surface (not a golden comparison): '' when every kind of the real repo is
+  non-empty, else a detail naming the cause. A harvest that raises (e.g. a stale plugin DB: menu-tree
+  exits 3) yields the exception text, never an access violation. }
+function LiveHealthDetail(const pRepo, pEngine: string): string;
+var
+  lMsg: string;
+  lLive: TLiveSurface;
+begin
+  lMsg := '';
+  lLive := nil;
+  try
+    lLive := SharedLiveFrom(pRepo, pEngine);
+  except
+    on E: Exception do
+      lMsg := E.ClassName + ': ' + E.Message;
+  end;
+  if lLive = nil then
+  begin
+    Result := 'live harvest failed: ' + lMsg;
+    if lMsg = '' then
+      Result := 'live harvest returned no surface';
+    Exit;
+  end;
+  Result := Trim(string.Join(' ', EmptyLiveKinds(lLive)));
+  if Result <> '' then
+    Result := 'empty live kinds: ' + Result;
+end;
+
+procedure TestHarvestFailureIsCleanFail;
+var
+  lDetail: string;
+begin
+  FreeAndNil(GLive);
+  lDetail := LiveHealthDetail(ExtractFilePath(ParamStr(0)), TPath.Combine(SCRATCH, 'no-such-engine.exe'));
+  Check('Live.HarvestFailureIsCleanFail', lDetail <> '', lDetail);
+end;
+
 procedure TestLiveHarvestParity(const pRepo: string);
 var
   lFile: string;
   lPsLines, lMine, lMissing, lExtra: TArray<string>;
-  lLive: TLiveSurface;
   lMsg: string;
 begin
   lFile := GoldenFile(pRepo, 'live\live.txt');
@@ -1917,16 +1953,7 @@ begin
   CompareFindingSets(lPsLines, lMine, lMissing, lExtra);
   Check('Live.HarvestEqualsGolden', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),  // dl:ok magic-literal@c059 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));  // dl:ok magic-literal@8005 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
-  // health of the LIVE surface (not a golden comparison): every kind of the real repo is non-empty
-  lMsg := '';
-  lLive := nil;
-  try
-    lLive := SharedLive(pRepo);
-  except
-    on E: Exception do
-      lMsg := E.ClassName + ': ' + E.Message;
-  end;
-  Check('Live.HarvestEveryKindNonEmpty', (lMsg = '') and (Length(EmptyLiveKinds(lLive)) = 0), lMsg + ' ' + string.Join(' ', EmptyLiveKinds(lLive)));
+  Check('Live.HarvestEveryKindNonEmpty', LiveHealthDetail(pRepo, MainEngine) = '', LiveHealthDetail(pRepo, MainEngine));
 end;
 { The "add this entry" template inside a B finding carries the date of the day it was
   rendered ("date": "2026-10-19"); the frozen golden was rendered on its capture day. The
@@ -3269,6 +3296,7 @@ begin
     if lRepo <> '' then
     begin
       TestSharedLiveNotCachedOnFailure(lRepo);
+      TestHarvestFailureIsCleanFail;
       TestHarvestRaisesOnEmptySubMap(lRepo);
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
