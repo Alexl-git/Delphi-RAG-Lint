@@ -45,6 +45,22 @@ before working on an item.**
     convert-scaffold verified by CONVERTER on 1.34.0-alpha. Also helpOrder tiebreak 2c912ce4 and
     the frozen-banner test 65550658.
   * DONE 411c1ca7: FG-O + FG-P (featuregen 245/0).
+* **Deep review 2026-10-25** (Fable, read-only; full text `docs\INBOX-2026-10-25-converter-deep-review-editor.md`):
+  * **R1** (M) batch exit 6 marks every chunk unit "config error, nothing written" and drops its
+    backups (ConvertRunner.pas:1625-1639) -- safe only on today's engine internals; asked ENGINE
+    whether it is contract. Refused entries are relabelled too.
+  * **R2** (M) a failed/timed-out `info --json` reads as "no capabilities", cached for the session
+    (ConvertTab.pas:669-683, Engine.pas:1659-1667) -- features switch off naming the wrong cause.
+  * **R3** (M) Save writes TEncoding.ASCII: non-ASCII in a rule book silently becomes '?'
+    (MainForm.pas:7696, WorkingSet.pas:546, Engine.pas:3269); validation passes on the '?'.
+  * **R4** (M) batch cancel between chunks leaves units with book A but not B, reported "not
+    reached" (ConvertRunner.pas:1737-1742) -- breaks the per-unit "never some books" invariant.
+  * **R5** (L) the batch per-entry path never reads the 1.33 per-entry `exit_code`
+    (ConvertRunner.pas:1667-1687) -- asked ENGINE for its meaning.
+  * **R6** (L) InputGate reports a swallowed SELECTION click as a red error (InputGate.pas:132/136).
+  * **R7** (L) engine output decoded ANSI per 4 KB chunk (Engine.pas:1752) then written as UTF-8.
+  * Test-kit gaps: exit-6 mixed case, BatchDistrust partial rule_errors, non-ASCII Save round
+    trip, probe-failure decision lives in the form, TRestorePoint has no direct test.
   * ~~**FG-O**~~ (medium) `Live.HarvestEveryKindNonEmpty` (FeatureGenTests.dpr ~1914) crashes with an
     AV (EmptyLiveKinds(nil)) instead of failing cleanly when the harvest raises -- e.g. on a stale
     plugin DB, where menu-tree exits 3. Make it report a FAIL.
