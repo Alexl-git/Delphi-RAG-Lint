@@ -31,6 +31,13 @@
     Delphi, the only legal way to call a method with no receiver at the site, and
     deterministic. Verified on the fixture index before this guard was written.
 
+    X2 (resolver 1.14.0-alpha, 2026-10-25): with A a TAlpha that shape is now
+    PROVEN -- a class's implemented interface no longer competes with its own
+    method, so the with call binds TAlpha.TransferFile 'certain'. Alpha_with is
+    therefore listed unmarked on TAlpha and not at all on TBeta. The unprovable
+    shape moved to Unknown_with: `with X do` over a type the index does not hold,
+    which the resolver declines by design.
+
   THE CONTROLS, and what each rules out:
     * TBeta carries BOTH a marked and an unmarked entry on the SAME line, so
       "mark everything" and "mark nothing" each fail;
@@ -86,6 +93,8 @@ $recv = (& $Exe sql --db $db --query "select r.start_line, coalesce(nullif(r.rec
 Write-Host ($recv -split "`r?`n" | Where-Object { $_ -match 'TDispatchTests' } | ForEach-Object { "  $_" }) -ForegroundColor DarkGray
 Check 'Alpha_with recorded an EMPTY receiver' `
   ($recv -match '<EMPTY>\s+dispatchtest\.TDispatchTests\.Alpha_with') ''
+Check 'Unknown_with recorded an EMPTY receiver' `
+  ($recv -match '<EMPTY>\s+dispatchtest\.TDispatchTests\.Unknown_with') ''
 Check 'CONTROL: Beta_direct recorded receiver B (so "empty" is not universal)' `
   ($recv -match '\bB\s+dispatchtest\.TDispatchTests\.Beta_direct') ''
 Check 'CONTROL: the nested-in-arguments call DID capture its receiver M' `
@@ -134,10 +143,12 @@ $beta = CoveredForType 'TBeta'
 Write-Host "  TBeta.TransferFile -> $beta" -ForegroundColor DarkGray
 Check 'TBeta has a Covered by: line at all' ($null -ne $beta) ''
 if ($null -ne $beta) {
-  # Alpha_with never touches TBeta. The fact is KEPT per the ruling, and MARKED.
+  # Unknown_with cannot be tied to TBeta. The fact is KEPT per the ruling, and MARKED.
   Check 'the cross-attributed test IS listed (kept, per the ruling -- not dropped)' `
-    ($beta -match 'Alpha_with') $beta
-  Check 'and it is MARKED unverified' ($beta -match 'Alpha_with \(unverified\)') $beta
+    ($beta -match 'Unknown_with') $beta
+  Check 'and it is MARKED unverified' ($beta -match 'Unknown_with \(unverified\)') $beta
+  # X2: the with over a TYPED TAlpha is proven, so it no longer leaks onto TBeta.
+  Check 'X2: Alpha_with (a with over a typed TAlpha) is NOT on TBeta' ($beta -notmatch 'Alpha_with') $beta
   # POSITIVE CONTROL on the same line: a real, receiver-anchored caller.
   Check 'CONTROL: the genuine caller Beta_direct is listed' ($beta -match 'Beta_direct') $beta
   Check 'CONTROL: and is NOT marked -- "mark everything" fails here' `
@@ -145,12 +156,15 @@ if ($null -ne $beta) {
 }
 
 Write-Host ''
-Write-Host '-- the real target is marked too: nothing PROVED it either' -ForegroundColor Cyan
+Write-Host '-- an unprovable attribution is marked on every candidate; a proven one is not' -ForegroundColor Cyan
 $alpha = CoveredForType 'TAlpha'
 Write-Host "  TAlpha.TransferFile -> $alpha" -ForegroundColor DarkGray
-Check 'TAlpha lists Alpha_with' ($null -ne $alpha -and $alpha -match 'Alpha_with') "$alpha"
-Check 'and marks it unverified -- being RIGHT is not the same as being PROVEN' `
-  ($null -ne $alpha -and $alpha -match 'Alpha_with \(unverified\)') "$alpha"
+Check 'TAlpha lists Unknown_with' ($null -ne $alpha -and $alpha -match 'Unknown_with') "$alpha"
+Check 'and marks it unverified -- nothing PROVED it' `
+  ($null -ne $alpha -and $alpha -match 'Unknown_with \(unverified\)') "$alpha"
+Check 'X2: TAlpha lists Alpha_with' ($null -ne $alpha -and $alpha -match 'Alpha_with') "$alpha"
+Check 'X2: and does NOT mark it -- the resolver proved the with call' `
+  ($null -ne $alpha -and $alpha -notmatch 'Alpha_with \(unverified\)') "$alpha"
 
 Write-Host ''
 Write-Host '-- NEGATIVE CONTROL: a free routine is never marked' -ForegroundColor Cyan

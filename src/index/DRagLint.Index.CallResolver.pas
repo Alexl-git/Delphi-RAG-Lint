@@ -712,6 +712,16 @@ type
     /// it cannot decide -- several candidates of the same arity, or none that
     /// fits -- the result is exactly what it was before B1, so a call that used
     /// to resolve still resolves.
+    /// <para>X2 (resolver 1.14.0-alpha, owner ruling 2026-09-16): on a CLASS or
+    /// RECORD, the interfaces its heritage names are NOT searched while the
+    /// type's own chain declares the method -- an implemented interface's method
+    /// is not a member of the class, so `C.M` with `C: TImpl` binds TImpl.M
+    /// 'certain' instead of 'ambiguous' against IFoo.M. Only when the class chain
+    /// declares nothing (the implementation lives in an unindexed ancestor) do
+    /// those interfaces answer, as before. An INTERFACE receiver searches its
+    /// interface ancestors as always, so an interface-dispatched call binds the
+    /// interface method and never an implementor. Pinned by
+    /// tests\callresolve\run_interface_dispatch_bind.ps1.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfMember (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.WithMemberKind (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: DRagLint.Index.CallResolver.TCallResolver.AncestorsOf, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods, DRagLint.Index.CallResolver.TCallResolver.PickFromMatches, SameText</para>
@@ -1114,6 +1124,30 @@ type
     /// <param name="AName">The identifier.</param>
     /// <returns>A type symbol id, or 0.</returns>
     function TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
+    /// <summary>X2 (resolver 1.14.0-alpha): the declared RETURN type of the
+    /// function a receiver names -- `GetCopy.M`, `MakeCopy.M`,
+    /// `MakeCopy().M`.</summary>
+    /// <param name="ARef">The call or member ref; supplies the file and the
+    /// enclosing routine.</param>
+    /// <param name="AName">The function name as written, without its argument
+    /// list.</param>
+    /// <returns>A type symbol id, or 0 when no routine of the name is visible, a
+    /// value of the name shadows it, or the visible candidates lack or disagree
+    /// on a return type.</returns>
+    /// <remarks>Candidates come from FindParenlessCandidates -- lexical scopes,
+    /// the enclosing class chain, then the unit and the interfaces of used units
+    /// -- so the shadowing rules are the parenless-call pass's. EVERY candidate
+    /// must declare the same return type text, so an overload set types only
+    /// when the choice cannot matter. Pinned by
+    /// tests\callresolve\run_interface_dispatch_bind.ps1 (IF6-IF8,
+    /// CLS3-CLS4).</remarks>
+    function TypeOfFunctionResult(const ARef: TReference; const AName: string): Int64;
+    /// <summary>X2: True when ancestor AAncestor is an INTERFACE named in the
+    /// heritage of AOwnerId and AOwnerId is not itself an interface.</summary>
+    /// <param name="AOwnerId">The type whose ancestors are walked.</param>
+    /// <param name="AAncestor">A resolved ancestor row of AOwnerId.</param>
+    /// <returns>True for an implemented interface of a class or record.</returns>
+    function IsImplementedInterface(AOwnerId: Int64; const AAncestor: TTypeAncestor): Boolean;
     /// <summary>What ATypeId declares under AName, nearest declaring level first.</summary>
     /// <param name="ATypeId">A with target's type.</param>
     /// <param name="AName">The bare name.</param>
@@ -2619,14 +2653,28 @@ begin
     // on an ancestor counts too; overrides on the type itself already counted in
     // step 1 (so a class + its base each declaring M yields 2 matches ->
     // ambiguous, correctly flagging that the concrete target is uncertain).
+    // X2: a class's IMPLEMENTED interfaces are not on its member chain; they
+    // answer only below, when the chain declared nothing.
     for A in AncestorsOf(ATypeSymbolId) do
     begin
-      if not A.Resolved or (A.SymbolId <= 0) then Continue;
+      if not A.Resolved or (A.SymbolId <= 0) or IsImplementedInterface(ATypeSymbolId, A) then Continue;
       Kids:= ChildrenOf(A.SymbolId);
       if Kids = nil then Continue;
       for S in Kids do
         if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
     end;
+    // 2b. X2: the implemented interfaces, as a fallback only -- the method is
+    // then implemented in an ancestor the index does not hold, and the
+    // interface method is the nearest declaration it has (the pre-X2 answer).
+    if Matches.Count = 0 then
+      for A in AncestorsOf(ATypeSymbolId) do
+      begin
+        if not A.Resolved or (A.SymbolId <= 0) or not IsImplementedInterface(ATypeSymbolId, A) then Continue;
+        Kids:= ChildrenOf(A.SymbolId);
+        if Kids = nil then Continue;
+        for S in Kids do
+          if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
+      end;
 
     { 3. HELPER methods -- but ONLY when steps 1 and 2 found nothing.
 
@@ -3702,9 +3750,21 @@ var
 
 begin
   if ATypeId <= 0 then Exit;
+  var Before: Integer:= AMatches.Count;
   AddFrom(ATypeId);
+  { X2: a class's implemented interfaces answer only when its own chain
+    declares nothing -- the LookupMethodOnType rule. }
   for A in AncestorsOf(ATypeId) do
-    if A.Resolved and (A.SymbolId > 0) then AddFrom(A.SymbolId);
+    if A.Resolved and (A.SymbolId > 0) and not IsImplementedInterface(ATypeId, A) then AddFrom(A.SymbolId);
+  if AMatches.Count = Before then
+    for A in AncestorsOf(ATypeId) do
+      if A.Resolved and (A.SymbolId > 0) and IsImplementedInterface(ATypeId, A) then AddFrom(A.SymbolId);
+end;
+
+function TCallResolver.IsImplementedInterface(AOwnerId: Int64; const AAncestor: TTypeAncestor): Boolean;
+begin
+  Result:= (AAncestor.SymbolId > 0) and (SymbolById(AAncestor.SymbolId).Kind = skInterface)
+    and (SymbolById(AOwnerId).Kind <> skInterface);
 end;
 
 function TCallResolver.ClassChainParenlessLookup(AClassId: Int64; const AName: string;
@@ -4118,6 +4178,37 @@ begin
   else if Hits = 1 then Result:= ResolveTypeNameToSymbol(M.Signature, M.FileId)
   else Result:= 0;
 end;
+
+function TCallResolver.TypeOfFunctionResult(const ARef: TReference; const AName: string): Int64;
+var
+  Probe  : TReference    ;
+  Matches: TList<TSymbol>;
+  S      : TSymbol       ;
+  RetType: string        ;
+  TypeId : Int64         ;
+begin
+  Result:= 0;
+  if AName = '' then Exit;
+  Probe         := ARef;
+  Probe.NameText:= AName;
+  Matches       := TList<TSymbol>.Create;
+  try
+    if FindParenlessCandidates(Probe, '', Matches) <> '' then Exit;
+    { Every candidate must be a function, and all must name ONE type: the
+      return type is resolved in the DECLARING unit's scope, where it is
+      written. }
+    for S in Matches do
+    begin
+      RetType:= SignatureReturnType(S.Signature);
+      TypeId := if RetType = '' then 0 else ResolveTypeNameToSymbol(RetType, S.FileId);
+      if (TypeId = 0) or ((Result > 0) and (TypeId <> Result)) then Exit(0);
+      Result:= TypeId;
+    end;
+  finally
+    Matches.Free;
+  end;
+end;
+
 function TCallResolver.WithEntityType(const ARef: TReference; const AStmts: TArray<TWithStatement>;
   AStmt, AEnt: Integer): Int64;
 var
@@ -4747,8 +4838,15 @@ begin
   ClassId:= Encl.ParentId; // the enclosing routine's owning class (for kinds 2/3)
 
   // --- Kind 6: cast '(X as TBar).M' / 'TBar(X).M' -> the cast target type.
+  //     Kind 11 (X2, resolver 1.14.0-alpha): 'F(...)' / 'F()' whose F is not a
+  //     type is a CALL -- typed from F's declared return type.
   if TryParseCastTarget(AReceiverExpr, CastType) then
-    Exit(ResolveTypeNameToSymbol(CastType, ACallRef.FileId));
+  begin
+    Result:= ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
+    if (Result = 0) and AReceiverExpr.StartsWith(CastType + '(', True) and IsIdentChain([CastType]) then
+      Result:= TypeOfFunctionResult(ACallRef, CastType);
+    Exit;
+  end;
 
   // --- Kind 7 (v20b): a UNIT-QUALIFIED TYPE receiver, 'Unit.TType.M' /
   //     'System.JSON.TJSONArray.Create'. Mandatory Delphi whenever two used units
@@ -4868,6 +4966,14 @@ begin
   //     rung is still the last word when no value of the name is in scope. Pinned by
   //     tests\callresolve\run_unit_var_receiver_bind.ps1.
   Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr);
+  if Result > 0 then Exit;
+
+  // --- Kind 11 (X2, resolver 1.14.0-alpha): a PARENLESS FUNCTION CALL as the
+  //     receiver -- `GetCopy.TransferFile(...)`, `MakeCopy.Run`. Last: every
+  //     value and type rung above had its say, so a value or type of the name
+  //     already answered. Known gap: a unit-level var of the name found by
+  //     TypeOfOrdinaryName wins over a nearer class METHOD of the name.
+  Result:= TypeOfFunctionResult(ACallRef, AReceiverExpr);
   if Result > 0 then Exit;
 
   // Unresolved receiver identifier (unknown local/param/field, and not a type we
