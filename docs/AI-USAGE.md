@@ -326,7 +326,7 @@ published while `modifiers` says `public` for both.
 >   rename or wrap (`DL_NONE(inst.Old)`) the member at the converted instances' bound `.pas` sites --
 >   items[] `migrate-applied` / `deliberate-break` / `migrate-check`, `pas_uses[]` status `mapped`; `convert_qualify_fix` -- JSON `true` since the link-scope fix (owner ruling 2026-10-11): an ambiguous bare `#convert` class is inferred (project framework, `.dfm` properties) with a `convert-class-inferred` warning or refused, either way with apply/1 `qualify_fixes[]` (ready-to-paste qualified lines); `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is
->   retyped, and its fields followed in code, `inherited[].action`). Read-only. This is what the IDE
+>   retyped, and its fields followed in code, `inherited[].action`); `convert_encoding_guard` -- JSON `true` since 1.34.1: convert-apply refuses a unit whose value does not fit the file's encoding (apply/1 `refusal_kind` `encoding_refused` + `encoding_refused{file,file_encoding,raise_to,chars_total,chars[]}`), accepts `--raise-encoding "<path>=utf8-bom"` and writes `#codes` into a text `.dfm`. Read-only. This is what the IDE
 >   Help>About box calls. Each `--db <index>` adds that index's freshness
 >   verdict: in `--json` an `indexes` entry, in text an
 >   `index: <path>  verdict: <v>` line plus `  remedy: ...` when one is owed.

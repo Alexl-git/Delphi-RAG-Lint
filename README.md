@@ -578,7 +578,7 @@ auto-drafts a validated reFind-superset rules file from both trees;
 typos that reFind's blind PCRE cannot -- and checks any `G[I/N]` glyph expression on a
 `#link` (syntax, ranges, one alternative per N; see `docs\CONVERSION-RULES.md`); and `convert-apply` rewrites the real
 `.pas` + `.dfm` files (dry-run by default, `--apply` to write for real, with
-automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`). The book's
+automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`; a value an ANSI `.pas` cannot hold refuses the unit as `encoding_refused`, and `--raise-encoding "<path>=utf8-bom"` re-stores that file as UTF-8 with BOM). The book's
 unit rules act on the unit's uses clauses in the same run: `#unuse Old` removes Old,
 `#use New` adds New to the implementation uses, `#useswap Old -> New1, New2` removes
 Old and adds each New once into the section Old was in -- never a duplicate, a unit

@@ -17305,7 +17305,7 @@ begin
   JCap.AddPair('convert_qualify_fix', TJSONBool.Create(True));
   { 1.34.1 (CONV-ENC E1'/E2/E3, shipped together): convert-apply refuses a unit whose
     value does not fit the target .pas/.dfm encoding (apply/1 refusal_kind
-    encoding_refused + encoding_refused{}), --raise-encoding "<path>=utf8-bom",
+    encoding_refused + encoding_refused object), --raise-encoding "<path>=utf8-bom",
     and writes #codes in a text .dfm. }
   JCap.AddPair('convert_encoding_guard', TJSONBool.Create(True));
       { 1.27.0 (C15), same contract: the castlib `value strip-db` VALUE cast
@@ -28251,7 +28251,7 @@ begin
 
   if (Length(Units) = 0) or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
     Exit(2);
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
