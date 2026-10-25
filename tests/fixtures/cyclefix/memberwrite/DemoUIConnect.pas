@@ -1,7 +1,7 @@
 unit DemoUIConnect;
 
 // E18 T6 fixture memberwrite: OnData assigns LastGage := 0 inside the `with` --
-// recipe R2 must refuse `member-write`.
+// since B1 (2026-10-25) a read/write interface property with a one-line setter carries it.
 //
 // CYCLE ROLE: member-access cycle, edge DemoUIConnect -> DemoGagePort (the
 // cuttable one). Everything this unit takes from DemoGagePort is: the class

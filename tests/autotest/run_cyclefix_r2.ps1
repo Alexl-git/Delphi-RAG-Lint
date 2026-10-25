@@ -21,8 +21,9 @@
       the plan is mechanical; line 57 becomes `with TComponent(Sender) as IDemoGagePortSurface do`
       (TObject receiver) and line 49 `with Owner as IDemoGagePortSurface do` (TComponent
       receiver); followed and re-indexed, `cycles` prints 2 groups ([4], [3]) as predicted.
-  (b) tests\fixtures\cyclefix\memberwrite: `LastGage := 0` inside the `with` -- `refused:
-      member-write`. POSITIVE CONTROL: the same copy without that line is cut by R2 (created
+  (b) tests\fixtures\cyclefix\memberwrite: `LastGage := 0` inside the `with` -- since B1 a
+      read/write property with a setter (the write shapes that stay `member-write` are
+      run_cyclefix_b1_memberwrite.ps1). The same copy without that line is cut by R2 (created
       leaf, registered), followed, and no cycle remains.
   (c) tests\fixtures\cyclefix\classmethod: `TDemoGagePort.ClassName` -- `refused: class-method`.
   (d) tests\fixtures\cyclefix\r2extend: the EXISTING DemoGagePort.Untangle is extended (insert after
@@ -276,9 +277,9 @@ try {
   # --- (b) memberwrite + its positive control ---------------------------------------------------
   Write-Host '== (b) memberwrite: a write inside the `with` body' -ForegroundColor Cyan
   $vb = Get-VariantPlan (New-Variant (Join-Path $Fx 'memberwrite') 'memberwrite' @()) 'b' $Lib
-  Check 'b1 refused: member-write, naming line 65 and LastGage; no Step 4' `
-    ($vb.Ok -and $vb.Text.Contains('refused: member-write -- line 65 writes `LastGage`') -and ($vb.Dump.verdict -eq 'refused') -and
-     (($vb.Dump.refusals -split ',') -contains 'member-write') -and -not $vb.Text.Contains('### Step 4')) "[$($vb.Dump.verdict) / $($vb.Dump.refusals)]"
+  Check 'b1 (B1) mechanical: the write becomes a read/write property with a setter (run_cyclefix_b1_memberwrite.ps1)' `
+    ($vb.Ok -and ($vb.Dump.verdict -eq 'mechanical') -and ($vb.Dump.refusals -eq '') -and
+     $vb.Text.Contains('    property LastGage: Integer read GetLastGage write SetLastGage;')) "[$($vb.Dump.verdict) / $($vb.Dump.refusals)]"
   $Clean = @(, @('DemoUIConnect.pas', "    LastGage := 0; // <-- a WRITE through the with: an interface of reads cannot carry it`n", ''))
   $vc = Get-VariantPlan (New-Variant (Join-Path $Fx 'memberwrite') 'clean' $Clean) 'bc' $Lib
   Check 'b2 positive control: without the write the same pair IS cut by R2 (leaf created)' `

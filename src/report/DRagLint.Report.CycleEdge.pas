@@ -221,6 +221,10 @@ type
     ConsumerUses: TArray<string>;
     /// <summary>R2: `Name: Type` of every member carried, in declaration order.</summary>
     MemberSigs: TArray<string>;
+    /// <summary>R2 (B1): `Set&lt;Member&gt;` of every member the consumer WRITES, in declaration
+    /// order; each is a read/write property of the interface with a one-line setter. Empty when
+    /// the consumer only reads.</summary>
+    Setters: TArray<string>;
     /// <summary>R2: the ancestor a receiver that does not implement IInterface is cast
     /// through; '' when no line needs a cast.</summary>
     CastAncestor: string;
@@ -1454,6 +1458,93 @@ begin
   Result:= TRegEx.Replace(TRegEx.Replace(BareCode(pLine), '''[^'']*''', ''''''), '\{[^}]*\}', ' ');
 end;
 
+const
+  { compiler intrinsics that take their arguments by value (B1) }
+  CValueIntrinsics: array[0..13] of string = ('Exit', 'Ord', 'Chr', 'Abs', 'Length', 'High', 'Low', 'Succ', 'Pred',
+    'Assigned', 'SizeOf', 'Odd', 'Round', 'Trunc');
+  { words a `(` follows that are no call }
+  CIdentChars = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
+  CNoCallee: array[0..13] of string = ('if', 'while', 'until', 'not', 'and', 'or', 'xor', 'div', 'mod', 'in', 'then',
+    'do', 'of', 'case');
+
+{ B1: whether the routine pS takes a parameter by var / out / [ref]; a type (a cast) does not. }
+function SignatureMayWrite(const pS: TSymbol): Boolean;
+begin
+  Result:= (pS.Kind in [skProcedure, skFunction, skMethod, skConstructor]) and
+    TRegEx.IsMatch(pS.Signature, '\b(var|out)\s|\[\s*ref\s*\]', [roIgnoreCase]);
+end;
+{ B1: the 1-based index of the last character before pAt that is not a blank, or 0. }
+function SkipBlanksBack(const pCode: string; pAt: Integer): Integer;
+begin
+  Result:= pAt;
+  while (Result >= 1) and (pCode[Result] = ' ') do Dec(Result);
+end;
+
+{ B1: back from pAt (the character before a member name) over a receiver chain -- `X.`,
+  `A.B.`, `(A as T).`, `T(A).` -- to the first character before it that is not a blank. }
+function SkipReceiverBack(const pCode: string; pAt: Integer): Integer;
+begin
+  Result:= SkipBlanksBack(pCode, pAt);
+  while (Result >= 1) and (pCode[Result] = '.') do
+  begin
+    Result:= SkipBlanksBack(pCode, Result - 1);
+    if (Result >= 1) and (pCode[Result] = ')') then
+    begin
+      var Nest:= 0;
+      repeat
+        if pCode[Result] = ')' then Inc(Nest) else if pCode[Result] = '(' then Dec(Nest);
+        Dec(Result);
+      until (Result < 1) or (Nest = 0);
+    end;
+    while (Result >= 1) and CharInSet(pCode[Result], CIdentChars) do Dec(Result);
+    Result:= SkipBlanksBack(pCode, Result);
+  end;
+end;
+
+{ B1: the innermost bracket `(` or `[` still open at pAt (counting back), or 0. }
+function OpenBracketBack(const pCode: string; pAt: Integer): Integer;
+begin
+  var Depth:= 0;
+  for var I:= pAt downto 1 do
+    if CharInSet(pCode[I], [')', ']']) then Inc(Depth)
+    else if CharInSet(pCode[I], ['(', '[']) then
+    begin
+      if Depth = 0 then Exit(I);
+      Dec(Depth);
+    end;
+  Result:= 0;
+end;
+
+{ B1: the identifier right before the `(` at pOpen, when it names a call (no keyword, no
+  number); else ''. }
+function CalleeBefore(const pCode: string; pOpen: Integer): string;
+begin
+  var E:= SkipBlanksBack(pCode, pOpen - 1);
+  var B:= E;
+  while (B >= 1) and CharInSet(pCode[B], CIdentChars) do Dec(B);
+  Result:= Copy(pCode, B + 1, E - B);
+  if (Result <> '') and (CharInSet(Result[1], ['0'..'9']) or MatchText(Result, CNoCallee)) then Result:= '';
+end;
+
+{ B1: the routine of which pName is a WHOLE argument in pCode (`Foo(X.F)`, `Foo(1, F)`,
+  `Foo((A as T).F, 2)`), or '' -- an element of an open-array constructor `[F]`, a part of
+  an expression or a parenthesised operand is no argument. }
+function CallArgumentCallee(const pCode, pName: string): string;
+begin
+  Result:= '';
+  for var Mt in TRegEx.Matches(pCode, '(?<!\w)' + TRegEx.Escape(pName) + '(?!\w)', [roIgnoreCase]) do
+  begin
+    var K:= Mt.Index + Mt.Length;
+    while (K <= Length(pCode)) and (pCode[K] = ' ') do Inc(K);
+    if (K > Length(pCode)) or not CharInSet(pCode[K], [',', ')']) then Continue;
+    var J:= SkipReceiverBack(pCode, Mt.Index - 1);
+    if (J < 1) or not CharInSet(pCode[J], ['(', ',']) then Continue;
+    var Open:= OpenBracketBack(pCode, J);
+    if (Open > 0) and (pCode[Open] = '(') then Result:= CalleeBefore(pCode, Open);
+    if Result <> '' then Exit;
+  end;
+end;
+
 { The last line of the statement the `with ... do` at line pLine governs: a begin..end
   block, or one statement up to its `;` (an enclosing `end` also ends it). }
 function WithBodyEnd(const pLines: TArray<string>; pLine: Integer): Integer;
@@ -1528,6 +1619,7 @@ type
     FMembers : TList<TSymbol>;
     FGetters : TList<string>;
     FReads   : TList<string>;  // per member: what its getter returns
+    FSetters : TArray<string>; // per member: its setter (B1), '' when the consumer only reads it
     FEdits   : TList<TRecipeEdit>;
     FUses    : TList<string>;  // consumer implementation uses to add
     FLeafUses: TList<string>;
@@ -1540,6 +1632,13 @@ type
     function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
     function CheckShape: Boolean;
     function CheckMembers: Boolean;
+    function MemberOf(const pR: TEdgeRef): TSymbol;
+    function MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+    function CallMayWrite(const pCallee: string; pLine: Integer): Boolean;
+    function CheckWrites: Boolean;
+    procedure AddSetterLines(pI: Integer; const pIndent: string; pDecls, pBodies: TList<string>);
+    procedure AddIfaceSetters(pL: TList<string>);
+    function WriteClause(pI: Integer): string;
     function CheckClass: Boolean;
     function ConsumerSees(const pUnit: string): Boolean;
     function ReceiverType(const pX: string; pEnclosing: Int64; out pType: string): Boolean;
@@ -1619,12 +1718,8 @@ begin
   pWhat:= '';
   var S:= if pR.SymbolId > 0 then FStore.GetSymbolById(pR.SymbolId) else Default(TSymbol);
   case pR.Kind of
-    erTypeIs, erTypeAs, erMemberRead: Exit(False);
-    erMemberWrite:
-      begin
-        pKind:= 'member-write';
-        pWhat:= Format('writes `%s`; the interface carries reads only', [pR.Name]);
-      end;
+    erTypeIs, erTypeAs: Exit(False);
+    erMemberRead, erMemberWrite: Exit(MemberUseRefusal(pR, pKind, pWhat));
     erClassReceiver:
       if SameText(pR.Name, 'Create') or (FStore.FindChildSymbolByName(pR.SymbolId, pR.Name).Kind = skConstructor) then
       begin
@@ -1727,10 +1822,10 @@ begin
   Ids:= TList<Int64>.Create;
   try
     for var R in FSurface.Refs do
-      if (R.Kind = erMemberRead) and not Ids.Contains(R.SymbolId) then
+      if (R.Kind in [erMemberRead, erMemberWrite]) and not Ids.Contains(MemberOf(R).Id) then
       begin
-        Ids.Add(R.SymbolId);
-        var M:= FStore.GetSymbolById(R.SymbolId);
+        var M:= MemberOf(R);
+        Ids.Add(M.Id);
         if M.Kind in [skMethod, skFunction, skProcedure] then
           Exit(Refuse('class-method', M.Name, FFromFid, R.Line, Format('line %d calls the method `%s` of `%s` ' +
             '(`%s`); the interface carries field and property reads only', [R.Line, M.Name, FCls.Name, R.LineText])));
@@ -1773,6 +1868,138 @@ begin
     FReads.Add(Read);
   end;
   Result:= True;
+end;
+
+{ B1: the member a member ref names. A write through a `with` body is a bare ref whose
+  SymbolId is the class (TakeBareRef binds it to its top-level owner): its member is the
+  child of that name. }
+function TMemberPlan.MemberOf(const pR: TEdgeRef): TSymbol;
+begin
+  Result:= if pR.SymbolId > 0 then FStore.GetSymbolById(pR.SymbolId) else Default(TSymbol);
+  if (Result.Kind = skClass) and (pR.Kind = erMemberWrite) then Result:= FStore.FindChildSymbolByName(Result.Id, pR.Name);
+end;
+
+{ B1: whether one member read or write of the edge has a shape no interface property can
+  carry. The index records `Inc(X.F)`, `X.F` as a call argument and `X.F.Sub := v` as READS
+  of F, so both kinds are checked: Inc / Dec, a whole argument of a call that may take it by
+  var / out, a write into a member that is no class or interface (through a property it would
+  change a copy), a write that is not a plain `F :=`, and a write of something that is no
+  member of a class. Every such shape is `member-write`; a plain write is carried by a
+  read/write property (CheckWrites). }
+function TMemberPlan.MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+var
+  T: TStoredType;
+begin
+  pKind:= 'member-write';
+  pWhat:= '';
+  var S     := MemberOf(pR);
+  var Code  := PlainCode(pR.LineText);
+  var Name  := TRegEx.Escape(pR.Name);
+  var Callee:= CallArgumentCallee(Code, pR.Name);
+  if (pR.Kind = erMemberWrite) and not ((S.Kind in [skField, skProperty]) and (S.ParentId > 0)) then
+    pWhat:= Format('writes `%s`, which is no field or property of a class; an interface carries members only',
+      [pR.Name])
+  else if TRegEx.IsMatch(Code, '\b(Inc|Dec)\s*\([^,;]*?(?<!\w)' + Name + '\s*[,)]', [roIgnoreCase]) then
+    pWhat:= Format('changes `%s` with Inc / Dec, which takes a variable; a property cannot be passed to it',
+      [pR.Name])
+  else if (Callee <> '') and CallMayWrite(Callee, pR.Line) then
+    pWhat:= Format('passes `%s` as an argument of `%s`, which may take it as a var / out parameter; a property ' +
+      'cannot be passed to one', [pR.Name, Callee])
+  else if TRegEx.IsMatch(Code, '(?<!\w)' + Name + '(\s*(\.\s*\w+|\[[^\]]*\]|\^))+\s*:=', [roIgnoreCase]) and
+    not FIdx.Find(Trim(S.Signature), False, T) then
+    pWhat:= Format('writes into `%s` (of type `%s`), which is no class or interface; through a property the ' +
+      'write would change a copy', [pR.Name, Trim(S.Signature)])
+  else if (pR.Kind = erMemberWrite) and not TRegEx.IsMatch(Code, '(?<!\w)' + Name + '\s*:=', [roIgnoreCase]) then
+    pWhat:= Format('writes `%s` other than by a plain `%s :=` assignment', [pR.Name, pR.Name]);
+  Result:= pWhat <> '';
+  if not Result then pKind:= '';
+end;
+
+{ B1: whether the routine pCallee called on line pLine may take an argument by var / out.
+  The call ref of that line decides when the index resolved it; else the routines of that
+  name in the nearest index that declares any (the project before the library): False when
+  each takes all its parameters by value / const, or the name is a type (a cast) or a
+  by-value intrinsic. A name no index declares may write. }
+function TMemberPlan.CallMayWrite(const pCallee: string; pLine: Integer): Boolean;
+var
+  Found: Boolean;
+begin
+  if MatchText(pCallee, CValueIntrinsics) then Exit(False);
+  for var R in FStore.GetReferencesFromFile(FFromFid) do
+    if (R.StartLine = pLine) and SameText(R.NameText, pCallee) and (R.SymbolId > 0) then
+      Exit(SignatureMayWrite(FStore.GetSymbolById(R.SymbolId)));
+  for var St in [FStore, FIdx.Lib] do
+  begin
+    if St = nil then Continue;
+    Found:= False;
+    Result:= False;
+    for var S in St.FindSymbolsByExactName(pCallee) do
+      if S.Kind in [skClass, skInterface, skRecord, skEnum, skTypeAlias, skProcedure, skFunction, skMethod,
+        skConstructor] then
+      begin
+        Found := True;
+        Result:= Result or SignatureMayWrite(S);
+      end;
+    if Found then Exit;
+  end;
+  Result:= True;
+end;
+
+{ B1: each member the consumer writes becomes a read/write property: a field, or a property
+  with a `write` accessor, and the class declares no `Set<Member>` yet. FSetters runs
+  parallel to FMembers ('' for a member only read). }
+function TMemberPlan.CheckWrites: Boolean;
+begin
+  SetLength(FSetters, FMembers.Count);
+  for var I:= 0 to FMembers.Count - 1 do
+  begin
+    var M   := FMembers[I];
+    var Line:= 0;
+    for var R in FSurface.Refs do
+      if (Line = 0) and (R.Kind = erMemberWrite) and (MemberOf(R).Id = M.Id) then Line:= R.Line;
+    if Line = 0 then Continue;
+    var Parts: TArray<string>:= nil;
+    for var L:= M.StartLine to Max(M.StartLine, M.EndLine) do Parts:= Parts + [BareCode(LineOf(FClsLines, L))];
+    if (M.Kind = skProperty) and not TRegEx.IsMatch(string.Join(' ', Parts), '\bwrite\s+[A-Za-z_]', [roIgnoreCase]) then
+      Exit(Refuse('member-write', M.Name, FFromFid, Line, Format('line %d writes `%s`, a property of `%s` without ' +
+        'a `write` accessor', [Line, M.Name, FCls.Name])));
+    var Dup:= FStore.FindChildSymbolByName(FCls.Id, 'Set' + M.Name);
+    if Dup.Id > 0 then
+      Exit(Refuse('duplicate-identifier', Dup.Name, FClsFid, Dup.StartLine, Format('`%s` already declares ' +
+        '`%s` (line %d), the setter the interface needs', [FCls.Name, Dup.Name, Dup.StartLine])));
+    FSetters[I]:= 'Set' + M.Name;
+  end;
+  Result:= True;
+end;
+
+{ B1: the declaration and the one-line body of member pI's setter, when the consumer writes
+  it; the body assigns the member itself, so a property runs its own write accessor. }
+procedure TMemberPlan.AddSetterLines(pI: Integer; const pIndent: string; pDecls, pBodies: TList<string>);
+begin
+  if FSetters[pI] = '' then Exit;
+  var Ty:= Trim(FMembers[pI].Signature);
+  pDecls.Add(Format('%s/// <summary>%s: sets %s (cycles --plan, member hand-over).</summary>', [pIndent, FIface,
+    FMembers[pI].Name]));
+  pDecls.Add(Format('%sprocedure %s(const pValue: %s);', [pIndent, FSetters[pI], Ty]));
+  pBodies.Add('');
+  pBodies.Add(Format('procedure %s.%s(const pValue: %s);', [FCls.Name, FSetters[pI], Ty]));
+  pBodies.Add('begin');
+  pBodies.Add(Format('  %s := pValue;', [FMembers[pI].Name]));
+  pBodies.Add('end;');
+end;
+
+{ B1: the setter declarations of the interface, after its getters. }
+procedure TMemberPlan.AddIfaceSetters(pL: TList<string>);
+begin
+  for var I:= 0 to FMembers.Count - 1 do
+    if FSetters[I] <> '' then
+      pL.Add(Format('    procedure %s(const pValue: %s);', [FSetters[I], Trim(FMembers[I].Signature)]));
+end;
+
+{ B1: ` write Set<Member>` for a member the consumer writes, else ''. }
+function TMemberPlan.WriteClause(pI: Integer): string;
+begin
+  Result:= if FSetters[pI] <> '' then ' write ' + FSetters[pI] else '';
 end;
 
 { The class: heritage on its declaration line, an `end;` line, an IInterface ancestor and
@@ -1969,6 +2196,7 @@ begin
         '`%s`, which no index given declares: what a `with` body binds to it cannot be checked (pass --library-db)',
         [FCls.Name, Stop])));
     Names.AddStrings(FGetters.ToArray);
+    for var St in FSetters do if St <> '' then Names.Add(St);
     Names.AddStrings(CIInterfaceMethods);
     for var M in FMembers do
       if Names.IndexOf(M.Name) >= 0 then Names.Delete(Names.IndexOf(M.Name));
@@ -2188,6 +2416,7 @@ begin
       Bodies.Add('begin');
       Bodies.Add(Format('  Result := %s;', [FReads[I]]));
       Bodies.Add('end;');
+      AddSetterLines(I, Indent, Decls, Bodies);
     end;
     AddEdit(FClsFid, FCls.EndLine - 1, False, Decls.ToArray);
     AddEdit(FClsFid, BodyAnchor(FClsLines), False, Bodies.ToArray);
@@ -2209,8 +2438,10 @@ begin
     L.Add(Format('    [''%s'']', [SurfaceGuid(pLeafUnit + '.' + FIface)]));
     for var I:= 0 to FMembers.Count - 1 do
       L.Add(Format('    function %s: %s;', [FGetters[I], Trim(FMembers[I].Signature)]));
+    AddIfaceSetters(L);
     for var I:= 0 to FMembers.Count - 1 do
-      L.Add(Format('    property %s: %s read %s;', [FMembers[I].Name, Trim(FMembers[I].Signature), FGetters[I]]));
+      L.Add(Format('    property %s: %s read %s%s;', [FMembers[I].Name, Trim(FMembers[I].Signature), FGetters[I],
+        WriteClause(I)]));
     L.Add('  end;');
     Result:= L.ToArray;
   finally
@@ -2227,7 +2458,7 @@ begin
   begin
     FIface:= 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckClass and RewriteConsumer;
+    Ok:= CheckMembers and CheckWrites and CheckClass and RewriteConsumer;
     Ok:= Ok and CheckCastExceptions and CheckWithBodies and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
@@ -2250,6 +2481,7 @@ begin
   Result.CastAncestor := FCastAnc;
   Result.Edits        := FEdits.ToArray;
   for var M in FMembers do Result.MemberSigs:= Result.MemberSigs + [M.Name + ': ' + Trim(M.Signature)];
+  for var St in FSetters do if St <> '' then Result.Setters:= Result.Setters + [St];
 end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;

@@ -159,7 +159,9 @@ The engine never guesses; every kind it can give:
   consumer and the program's `.dpr` does not list it: after the cut the linker drops it, its
   initialization never assigns the pointer and the call is a nil call at run time -- add the
   unit to the `.dpr` uses; a `DCCReference` alone does not link it).
-* **R2 (member hand-over):** `member-write`, `construction`, `class-method`, `class-ref`,
+* **R2 (member hand-over):** `member-write` (a plain write `F := v` is carried by a read/write
+  property with a one-line setter; `Inc` / `Dec(F)`, `F` passed to a var / out parameter and a
+  write into a record-typed member are refused), `construction`, `class-method`, `class-ref`,
   `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported`,
   `duplicate-identifier`, `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`,
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
