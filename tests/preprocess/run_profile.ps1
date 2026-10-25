@@ -15,6 +15,12 @@
   recursion token, all lowercased + deduped. (The two platform groups were added
   2026-09-23; fixtures/platform_groups.dproj covers them.)
 
+  Since X5 (2026-10-25) the groups are applied IN ORDER with MSBuild semantics: a
+  DCC_Define without $(DCC_Define) REPLACES the set so far
+  (fixtures/replace_groups.dproj), and the config NAME is mapped to its Cfg_N key
+  through the .dproj's own '$(Config)'=='Name' groups, walking CfgParent for a
+  child config (fixtures/custom_configs.dproj).
+
   Fixture fixtures/sample.dproj mirrors src/cli/drag-lint.dproj's structure:
     Base  PropertyGroup DCC_Define = CUSTOM_BASE;$(DCC_Define)
     Cfg_1 (Debug)       DCC_Define = DEBUG;$(DCC_Define)
@@ -100,6 +106,51 @@ try {
   $p64r = Profile $plat 'Win64' 'Release'
   Check 'plat Win64/Release NOT cfg1_w64 (Debug platform group not selected)' (-not ($p64r -contains 'cfg1_w64'))
   Check 'plat Win64/Release CONTAINS plat64_only (Base_Win64 is config-independent)' ($p64r -contains 'plat64_only')
+
+  # --- REPLACE semantics (X5, 2026-10-25) ---
+  # A DCC_Define WITHOUT the $(DCC_Define) recursion token REPLACES the set
+  # inherited so far instead of appending to it -- 94 such non-Base groups in the
+  # C:\Projects corpus. The union reader kept the replaced define, so the index
+  # parsed {$IFDEF} branches the build never compiles.
+  $repl = Join-Path $fixDir 'replace_groups.dproj'
+  $r64d = Profile $repl 'Win64' 'Debug'
+  Check 'repl Win64/Debug CONTAINS w64_only (Base_Win64 replaces)'      ($r64d -contains 'w64_only')
+  Check 'repl Win64/Debug CONTAINS debug (Cfg_1 appends, token first)'  ($r64d -contains 'debug')
+  Check 'repl Win64/Debug NOT base_a (replaced by Base_Win64)'          (-not ($r64d -contains 'base_a'))
+  Check 'repl Win64/Debug CONTAINS win64 (builtins survive a replace)'  ($r64d -contains 'win64')
+  $r32d = Profile $repl 'Win32' 'Debug'
+  Check 'repl Win32/Debug CONTAINS base_a (no replace on Win32)'        ($r32d -contains 'base_a')
+  Check 'repl Win32/Debug CONTAINS debug'                               ($r32d -contains 'debug')
+  $r32r = Profile $repl 'Win32' 'Release'
+  Check 'repl Win32/Release CONTAINS only_r32 (Cfg_2_Win32 replaces)'   ($r32r -contains 'only_r32')
+  Check 'repl Win32/Release NOT release (replaced by Cfg_2_Win32)'      (-not ($r32r -contains 'release'))
+  Check 'repl Win32/Release NOT base_a (replaced by Cfg_2_Win32)'       (-not ($r32r -contains 'base_a'))
+  $r64r = Profile $repl 'Win64' 'Release'
+  Check 'repl Win64/Release CONTAINS release (appends after replace)'   ($r64r -contains 'release')
+  Check 'repl Win64/Release NOT base_a'                                 (-not ($r64r -contains 'base_a'))
+
+  # --- CONFIG NAMES map through the .dproj, not a hard-coded alias (X5) ---
+  # custom_configs.dproj: Release=Cfg_1 and Debug=Cfg_2 (SWAPPED), Profiling=Cfg_3
+  # (child of Release/Cfg_1), Staging=Cfg_4 (child of Base). The old reader
+  # mapped Debug->Cfg_1 and everything else->Cfg_2.
+  $cust = Join-Path $fixDir 'custom_configs.dproj'
+  $c64d = Profile $cust 'Win64' 'Debug'
+  Check 'cust Win64/Debug CONTAINS debug (Debug is Cfg_2 here)'         ($c64d -contains 'debug')
+  Check 'cust Win64/Debug NOT release (Cfg_1 is Release here)'          (-not ($c64d -contains 'release'))
+  Check 'cust Win64/Debug NOT rel_w64'                                  (-not ($c64d -contains 'rel_w64'))
+  $c64r = Profile $cust 'Win64' 'Release'
+  Check 'cust Win64/Release CONTAINS release + rel_w64'                 (($c64r -contains 'release') -and ($c64r -contains 'rel_w64'))
+  Check 'cust Win64/Release NOT debug'                                  (-not ($c64r -contains 'debug'))
+  $c64p = Profile $cust 'Win64' 'Profiling'
+  Check 'cust Win64/Profiling CONTAINS profiling + prof_w64 (Cfg_3, Cfg_3_Win64)' (($c64p -contains 'profiling') -and ($c64p -contains 'prof_w64'))
+  Check 'cust Win64/Profiling CONTAINS release + rel_w64 (parent Cfg_1 chain)'    (($c64p -contains 'release') -and ($c64p -contains 'rel_w64'))
+  Check 'cust Win64/Profiling CONTAINS all_base'                        ($c64p -contains 'all_base')
+  Check 'cust Win64/Profiling NOT debug (not Cfg_2)'                    (-not ($c64p -contains 'debug'))
+  $c32p = Profile $cust 'Win32' 'Profiling'
+  Check 'cust Win32/Profiling NOT prof_w64 / rel_w64 (other platform)'  (-not (($c32p -contains 'prof_w64') -or ($c32p -contains 'rel_w64')))
+  $c64s = Profile $cust 'Win64' 'Staging'
+  Check 'cust Win64/Staging CONTAINS staging + all_base'                (($c64s -contains 'staging') -and ($c64s -contains 'all_base'))
+  Check 'cust Win64/Staging NOT release / debug (parent is Base)'       (-not (($c64s -contains 'release') -or ($c64s -contains 'debug')))
 
   # --- nonexistent .dproj -> Win64 builtins only, no crash ---
   $none = Profile $missing 'Win64' 'Release'
