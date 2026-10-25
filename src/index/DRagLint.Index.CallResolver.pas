@@ -949,6 +949,25 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    /// <summary>X1: the rungs of TypeReceiver, before the implicit pointer
+    /// dereference TypeReceiver applies to their answer.</summary>
+    function TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    /// <summary>X1: Delphi's implicit dereference -- `p.K` with p: PRec = ^TRec
+    /// reaches TRec.K. Answers the pointee type when ATypeId is a type alias
+    /// spelled `^T` and T resolves; otherwise ATypeId unchanged (a pointer type
+    /// has no members, so nothing that bound before can change).</summary>
+    function DerefPointerAlias(ATypeId: Int64): Int64;
+    /// <summary>X1: type a receiver with SELECTORS -- an array element or a
+    /// pointer dereference: `A[0]`, `R.Arr[1]`, `pM[X]`, `P^`, `A[0].Inner`.
+    /// The head identifier is typed as a value (local / param / Result / own
+    /// field or property / the ordinary-name walk), then each `[..]` takes the
+    /// element type of an `array [..] of T`, `array of T` or `TArray&lt;T&gt;`
+    /// (through type aliases), each `^` the pointee of `^T`, and each `.M` the
+    /// declared type of member M.</summary>
+    /// <returns>The receiver type id, or 0 when any step cannot be read (a
+    /// call or cast inside the chain, a subscript on a non-array such as an
+    /// indexed property or a string, an untypable head).</returns>
+    function TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string): Int64;
     /// <summary>R3(a): True when the enclosing routine, or any routine on its
     /// lexical chain, declares a local, parameter, const, var or nested routine
     /// spelled AName -- i.e. something NEARER than the enum's unit scope.</summary>
@@ -1876,11 +1895,29 @@ begin
       StopL:= I;
       // A '(' or '[' group may be preceded by an identifier: TName(expr) or Arr[i].
       Dec(I);
+      // X1: `LCaps [LRole].Style` -- Delphi allows blanks before a subscript.
+      // Only for '[': a blank before '(' may separate a keyword from a group.
+      if (I >= 1) and (Line[I] = ' ') and (Line[StopL] = '[') then
+      begin
+        var J: Integer:= I;
+        while (J >= 1) and (Line[J] = ' ') do Dec(J);
+        if (J >= 1) and IsIdentPart(Line[J]) then I:= J;
+      end;
       while (I >= 1) and IsIdentPart(Line[I]) do begin StopL:= I; Dec(I); end;
     end
     else if IsIdentPart(Ch) then
     begin
       while (I >= 1) and IsIdentPart(Line[I]) do begin StopL:= I; Dec(I); end;
+    end
+    else if Ch = '^' then
+    begin
+      // X1: a POSTFIX DEREFERENCE -- `P^.K`, `A[i]^.K`. Keep the '^' and consume
+      // the operand to its left as the same selector segment. Before this the
+      // scan broke here and returned '' -- the value a BARE call yields -- so
+      // `P^.Ping;` resolved as a bare call on the enclosing class.
+      StopL:= I;
+      Dec(I);
+      Continue;
     end
     else
       Break; // not part of a primary expression
@@ -4708,7 +4745,242 @@ begin
   else Inc(FMemberReadStats.Unreadable);
 end;
 
+{ X1: the ELEMENT type text of an array type text, or '' when ATypeText is not
+  one this pass reads. `array[0..1] of T` / `packed array of T` / `array of T`
+  / `TArray<T>` -> `T`. A multi-dimensional `array[a, b] of T` and
+  `array of const` answer '' (one subscript does not reach a T we can name). }
+function ArrayElementTypeText(const ATypeText: string): string;
+const
+  TARRAY_OPEN = 'TArray<';
+  KW_PACKED   = 'packed ';
+  KW_ARRAY    = 'array';
+  KW_OF       = 'of ';
+var
+  T    : string ;
+  Depth: Integer;
+  i    : Integer;
+begin
+  Result:= '';
+  T:= Trim(ATypeText);
+  if T.StartsWith(TARRAY_OPEN, True) and T.EndsWith('>') then
+    Exit(Trim(Copy(T, Length(TARRAY_OPEN) + 1, Length(T) - Length(TARRAY_OPEN) - 1)));
+  if T.StartsWith(KW_PACKED, True) then T:= Trim(Copy(T, Length(KW_PACKED) + 1, MaxInt));
+  if not T.StartsWith(KW_ARRAY, True) then Exit;
+  T:= Trim(Copy(T, Length(KW_ARRAY) + 1, MaxInt));
+  if T.StartsWith('[') then
+  begin
+    Depth:= 0;
+    for i:= 1 to Length(T) do
+    begin
+      if T[i] = '[' then Inc(Depth)
+      else if (T[i] = ',') and (Depth = 1) then Exit // multi-dimensional
+      else if T[i] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          T:= Trim(Copy(T, i + 1, MaxInt));
+          Break;
+        end;
+      end;
+    end;
+  end;
+  if not T.StartsWith(KW_OF, True) then Exit;
+  Result:= Trim(Copy(T, Length(KW_OF) + 1, MaxInt));
+  if SameText(Result, 'const') then Result:= '';
+end;
+
+function TCallResolver.DerefPointerAlias(ATypeId: Int64): Int64;
+begin
+  Result:= ATypeId;
+  if ATypeId <= 0 then Exit;
+  var S: TSymbol:= SymbolById(ATypeId);
+  var Sig: string:= Trim(S.Signature);
+  if (S.Kind <> skTypeAlias) or (not Sig.StartsWith('^')) then Exit;
+  var Pointee: Int64:= ResolveTypeNameToSymbol(Copy(Sig, 2, MaxInt), S.FileId);
+  if Pointee > 0 then Result:= Pointee;
+end;
+
+{ X1: split a receiver at its TOP-LEVEL dots only -- `A[I.J].K` is the two
+  segments `A[I.J]` and `K`. False when the brackets do not balance. }
+function SplitTopLevelDots(const AText: string; out ASegs: TArray<string>): Boolean;
+var
+  Parts: TList<string>;
+  Depth: Integer;
+  Start: Integer;
+  i    : Integer;
+begin
+  Parts:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    for i:= 1 to Length(AText) do
+    begin
+      if AText[i] = '[' then Inc(Depth)
+      else if AText[i] = ']' then Dec(Depth)
+      else if (AText[i] = '.') and (Depth = 0) then
+      begin
+        Parts.Add(Trim(Copy(AText, Start, i - Start)));
+        Start:= i + 1;
+      end;
+    end;
+    Parts.Add(Trim(Copy(AText, Start, MaxInt)));
+    ASegs := Parts.ToArray;
+    Result:= Depth = 0;
+  finally
+    Parts.Free;
+  end;
+end;
+
+{ X1: one receiver segment -> its leading identifier and its SELECTORS, one
+  char per selector: '[' for a `[..]` group, '^' for a dereference (blanks
+  between them are skipped). `A[0]^` -> 'A', '[^'. False when the segment does
+  not start with an identifier or holds anything else -- a call, a cast, an
+  operator. }
+function SplitSelectorSegment(const ASeg: string; out AName, ASelectors: string): Boolean;
+var
+  P, Depth: Integer;
+  Sels    : TStringBuilder;
+begin
+  AName     := '';
+  ASelectors:= '';
+  P:= 1;
+  while (P <= Length(ASeg)) and IsIdentPart(ASeg[P]) do Inc(P);
+  Result:= (P > 1) and IsIdentStart(ASeg[1]);
+  if not Result then Exit;
+  AName:= Copy(ASeg, 1, P - 1);
+  Sels := TStringBuilder.Create;
+  try
+    while Result and (P <= Length(ASeg)) do
+    begin
+      if ASeg[P] = '[' then
+      begin
+        Sels.Append('[');
+        Depth:= 0;
+        repeat
+          if ASeg[P] = '[' then Inc(Depth)
+          else if ASeg[P] = ']' then Dec(Depth);
+          Inc(P);
+        until (Depth = 0) or (P > Length(ASeg));
+      end
+      else
+      begin
+        if ASeg[P] = '^' then Sels.Append('^')
+        else Result:= ASeg[P] = ' ';
+        Inc(P);
+      end;
+    end;
+    ASelectors:= Sels.ToString;
+  finally
+    Sels.Free;
+  end;
+end;
+
+function TCallResolver.TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+const
+  MAX_ALIAS_HOPS = 4; // `TMsgs = TArray<TMsg>` is one; a longer alias chain declines
+var
+  Segs    : TArray<string>;
+  Name    : string ;
+  Sels    : string ;
+  Ok      : Boolean;
+  SegIx   : Integer;
+  TypeText: string ; // the current value's declared type TEXT, or '' when TypeId holds it
+  TypeId  : Int64  ;
+
+  { Step the current type through one selector: '[' (element) or '^' (pointee).
+    A type text this cannot read directly is resolved as a NAMED type and, when
+    that is an alias, read again through its signature. }
+  function ApplySelector(ASel: Char): Boolean;
+  begin
+    Result:= False;
+    for var Hop:= 0 to MAX_ALIAS_HOPS do
+    begin
+      if TypeText = '' then
+      begin
+        if TypeId <= 0 then Exit;
+        if SymbolById(TypeId).Kind <> skTypeAlias then Exit; // a class / record: no default property model
+        var Alias: TSymbol:= SymbolById(TypeId);
+        TypeText:= Trim(Alias.Signature);
+        TypeId  := 0;
+      end;
+      var Next: string:= if ASel = '^' then (if TypeText.StartsWith('^') then Trim(Copy(TypeText, 2, MaxInt)) else '')
+                         else ArrayElementTypeText(TypeText);
+      if Next <> '' then
+      begin
+        TypeText:= Next;
+        Exit(True);
+      end;
+      TypeId  := ResolveTypeNameToSymbol(TypeText, ACallRef.FileId);
+      TypeText:= '';
+    end;
+  end;
+
+  { The current value's type as a symbol id, implicitly dereferenced. }
+  function CurrentTypeId: Int64;
+  begin
+    Result:= TypeId;
+    if TypeText <> '' then
+      Result:= if TypeText.StartsWith('^') or (ArrayElementTypeText(TypeText) <> '') then 0 // no members
+               else ResolveTypeNameToSymbol(TypeText, ACallRef.FileId);
+    Result:= DerefPointerAlias(Result);
+  end;
+
+  { Type the HEAD identifier as a value, in the order TypeReceiverCore uses. }
+  function TypeHead(const AName: string): Boolean;
+  var
+    Declared, AnonDeclined: Boolean;
+  begin
+    TypeText:= '';
+    TypeId  := 0;
+    var Encl: TSymbol:= SymbolById(ACallRef.EnclosingSymbolId);
+    var Decl: TSymbol:= LocalInScopeAt(ACallRef, AName, Declared);
+    if (Decl.Id <= 0) and (not Declared) and (Encl.ParentId > 0) and not SameText(AName, 'Result') then
+      Decl:= FindChildOfKind(Encl.ParentId, AName, [skField, skProperty]);
+    if Decl.Id > 0 then
+      TypeText:= Trim(Decl.Signature)
+    else if Declared then
+      Exit(False) // a local of that name exists but none covers the site
+    else if SameText(AName, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
+    begin
+      TypeText:= ResultTypeAt(ACallRef, AnonDeclined);
+      if AnonDeclined then TypeText:= '';
+    end
+    else
+      TypeId:= TypeOfOrdinaryName(ACallRef, AName);
+    Result:= (TypeText <> '') or (TypeId > 0);
+  end;
+
+  { Type member AName of the current type. }
+  function TypeMember(const AName: string): Boolean;
+  begin
+    var Owner: Int64:= CurrentTypeId;
+    var Member: TSymbol:= if Owner > 0 then LookupMemberOnType(Owner, AName) else Default(TSymbol);
+    TypeText:= Trim(Member.Signature);
+    TypeId  := 0;
+    Result  := (Member.Id > 0) and (TypeText <> '');
+  end;
+
+begin
+  TypeText:= '';
+  TypeId  := 0;
+  Ok      := SplitTopLevelDots(AReceiverExpr, Segs);
+  SegIx   := 0;
+  while Ok and (SegIx <= High(Segs)) do
+  begin
+    Ok:= SplitSelectorSegment(Segs[SegIx], Name, Sels)
+         and (if SegIx = 0 then TypeHead(Name) else TypeMember(Name));
+    for var Sel: Char in Sels do Ok:= Ok and ApplySelector(Sel);
+    Inc(SegIx);
+  end;
+  Result:= if Ok then CurrentTypeId else 0;
+end;
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+begin
+  Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr));
+end;
+
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;
 var
   Encl    : TSymbol;
   ClassId : Int64  ;
@@ -4750,6 +5022,16 @@ begin
   if TryParseCastTarget(AReceiverExpr, CastType) then
     Exit(ResolveTypeNameToSymbol(CastType, ACallRef.FileId));
 
+  // --- Kind 11 (X1, 2026-10-25): a receiver with SELECTORS -- an array element
+  //     or a pointer dereference: `A[0].K`, `R.Arr[1].K`, `pM[X].Sev`, `P^.K`.
+  //     Before this rung any '[' fell through to the "real expression" floor
+  //     below and the member stayed unbound, and `P^` never got here at all
+  //     (ExtractReceiverExpr stopped at '^'). A chain this cannot read answers
+  //     0 -- the same floor as before. Pinned by
+  //     tests\callresolve\run_local_read_chain_bind.ps1.
+  if (Pos('[', AReceiverExpr) > 0) or (Pos('^', AReceiverExpr) > 0) then
+    Exit(TypeOfSelectorChain(ACallRef, AReceiverExpr));
+
   // --- Kind 7 (v20b): a UNIT-QUALIFIED TYPE receiver, 'Unit.TType.M' /
   //     'System.JSON.TJSONArray.Create'. Mandatory Delphi whenever two used units
   //     export the same type name -- exactly when a developer reaches for it --
@@ -4782,7 +5064,7 @@ begin
     while (ChainType > 0) and (SegIx <= High(Segs)) do
     begin
       var SegMember: TSymbol:= LookupMemberOnType(ChainType, Segs[SegIx]);
-      ChainType:= if SegMember.Id > 0 then ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId) else 0;
+      ChainType:= if SegMember.Id > 0 then DerefPointerAlias(ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId)) else 0;
       Inc(SegIx);
     end;
     if ChainType > 0 then Exit(ChainType);

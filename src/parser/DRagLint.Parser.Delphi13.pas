@@ -312,12 +312,24 @@ end;
   text (`S[First]`) is recovered from the source by the resolve pass, exactly as
   for `A[i].Method;`, which EmitStatementCall already emitted as a call.
 
-  A CALL receiver (`F(x).M`) still answers False: deliberately out of scope. }
+  A CALL receiver (`F(x).M`) still answers False: deliberately out of scope.
+
+  X1 (2026-10-25): a POSTFIX DEREFERENCE of such a receiver -- `P^`, `A[i]^`,
+  `R.P^` (an exprUnary whose operator follows its operand) -- answers True as
+  well, so `P^.K` emits its member-access like `P.K` does. A PREFIX unary
+  (`@X`, `not X`, `-X`) still answers False. }
 function IsIndexedMemberReceiver(const ANode: TTSNode): Boolean;
 begin
   Result:= False;
   if ANode.IsNull then Exit;
   if ANode.NodeType = 'exprSubscript' then Exit(True);
+  if ANode.NodeType = 'exprUnary' then
+  begin
+    var Op     := ANode.ChildByField('operator');
+    var Operand:= ANode.ChildByField('operand');
+    if Op.IsNull or Operand.IsNull or (Op.StartByte < Operand.EndByte) then Exit; // prefix operator
+    Exit(IsDottedIdentChain(Operand) or IsIndexedMemberReceiver(Operand));
+  end;
   if ANode.NodeType <> 'exprDot' then Exit;
   var R:= ANode.ChildByField('rhs');
   if R.IsNull or (R.NodeType <> 'identifier') then Exit;
