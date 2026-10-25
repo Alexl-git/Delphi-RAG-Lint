@@ -37,8 +37,8 @@
 
   WHY IT KILLS A RUNNER ON PURPOSE
   --------------------------------
-  Check 5 selects tests\run_doctests_v021.ps1 (~188 s) with -TimeoutSec 3, so it
-  is killed at three seconds. That is not collateral damage -- killing an
+  Check 5 selects a dedicated sleeper runner (30 s, no RunnerBudgetSec floor) in a
+  temp repo with -TimeoutSec 3, so it is killed at three seconds. That is not collateral damage -- killing an
   over-budget runner WITH ITS WHOLE PROCESS TREE is the production path this
   guard is verifying, and the driver does it precisely because an orphaned
   drag-lint.exe holds a .sqlite lock that would fail the NEXT runner too.
@@ -53,7 +53,7 @@ param(
   # The runner used as the "slow" subject. It must (a) be enumerated by the
   # driver and (b) reliably outlive -TimeoutSec 3. Parameterised so that a
   # future retirement of this runner is a one-line fix rather than a mystery.
-  [string]$SlowRunner = 'run_doctests_v021'
+  [string]$SlowRunner = 'run_sleeper'
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -70,6 +70,16 @@ if (-not (Test-Path $driver)) { Write-Host "FATAL: no driver at $driver" -Foregr
 
 $driverText = Get-Content -LiteralPath $driver -Raw
 
+# Hermetic arena: a temp repo holding a COPY of the real driver plus one sleeping
+# runner. run_doctests_v021 (the old subject) has an 1800 s RunnerBudgetSec floor,
+# so -TimeoutSec 3 could never fire on it; a sleeper has no floor. The driver text
+# under test is still the real one (copied, not re-written).
+$arena = Join-Path ([System.IO.Path]::GetTempPath()) ("hbrepo_" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Force -Path (Join-Path $arena 'tests\sleepy') | Out-Null
+Copy-Item -LiteralPath $driver -Destination (Join-Path $arena 'tests\run_battery.ps1')
+[IO.File]::WriteAllText((Join-Path $arena "tests\sleepy\$SlowRunner.ps1"), "Start-Sleep -Seconds 30`r`n")
+$driver = Join-Path $arena 'tests\run_battery.ps1'
+
 Write-Host ''
 Write-Host 'The driver declares the heartbeat parameter' -ForegroundColor Cyan
 Check 'run_battery.ps1 declares [double]$HeartbeatMin and defaults it to 10' `
@@ -83,12 +93,12 @@ New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 function Invoke-Battery([string]$Tag, [string]$Beat) {
   $out = Join-Path $tmp "$Tag.log"
   $p = Start-Process pwsh -ArgumentList @(
-        '-NoProfile', '-NonInteractive', '-File', $driver,
+        '-NoProfile', '-NonInteractive', '-File', $driver, '-SkipPrepare',
         '-Include', $SlowRunner,
         '-TimeoutSec', '3',
         '-HeartbeatMin', $Beat,
         '-LogDir', (Join-Path $tmp "logs_$Tag")
-      ) -WorkingDirectory $RepoRoot -PassThru -Wait `
+      ) -WorkingDirectory $arena -PassThru -Wait `
         -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden
   return [pscustomobject]@{
     Text = (Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)
@@ -149,8 +159,18 @@ Write-Host 'THE TIMEOUT BUDGET SURVIVED THE POLLED WAIT' -ForegroundColor Cyan
 Check 'the driver still polls in bounded slices rather than one blocking wait' `
   ($driverText -match 'WaitForExit\(\[Math\]::Min\(\$remainMs,\s*500\)\)') `
   'the beat is only possible because the wait is sliced'
-Check 'the deadline is computed ONCE, so slices cannot accumulate into a longer budget' `
-  ($driverText -match '\$deadline\s*=\s*\[DateTime\]::UtcNow\.AddSeconds\(\$TimeoutSec\)') ''
+# Today's driver: deadline = UtcNow + Max(base -TimeoutSec, per-runner RunnerBudgetSec floor),
+# assigned exactly once per runner (outside the poll loop); the heartbeat is handed the same Max.
+$dlAssign = [regex]::Matches($driverText, '\$deadline\s*=\s*\[DateTime\]::UtcNow\.AddSeconds\(')
+Check 'the deadline is computed ONCE per runner from the per-runner budget (Max of -TimeoutSec and RunnerBudgetSec)' `
+  ($dlAssign.Count -eq 1 -and $driverText -match '\$deadline\s*=\s*\[DateTime\]::UtcNow\.AddSeconds\(\[Math\]::Max\(\$TimeoutSec,\s*\[int\]\$RunnerBudgetSec\[\$r\.Name\]\)\)') `
+  "assignments=$($dlAssign.Count)"
+Check 'the heartbeat is given the same per-runner budget, not the bare -TimeoutSec' `
+  ($driverText -match 'Test-BatteryHeartbeat\s+\(\$i - 1\)[^\r\n]*\[Math\]::Max\(\$TimeoutSec,\s*\[int\]\$RunnerBudgetSec\[\$r\.Name\]\)\)') ''
+Check 'behaviour: the live heartbeat reports the effective budget (3s for the sleeper)' `
+  ($beat.Text -match 'budget 3s') ''
+Check 'behaviour: the killed runner is reported against the 3s budget' `
+  ($beat.Text -match '(?m)TIMEOUT.*3s|budget 3s') ''
 Check 'a runner that outlives -TimeoutSec is still reported TIMEOUT' `
   ($beat.Text -match '(?m)TIMEOUT') `
   'this is the check that exists because of the CHANGE: a polled wait is where a budget goes wrong'
@@ -168,7 +188,7 @@ Check 'the runner name and its result appear on one line' `
   ($beat.Text -match '(?m)^\[\s*\d+/\d+\]\s+\S*' + [regex]::Escape($SlowRunner) + '.*(TIMEOUT|PASS|FAIL)') `
   'if the -NoNewline prefix is not re-drawn after a beat, the result is orphaned from its runner'
 
-try { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue } catch { }
+try { [IO.Directory]::Delete($tmp, $true); [IO.Directory]::Delete($arena, $true) } catch { }
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
