@@ -336,24 +336,57 @@ var
     else Result:= #0;
   end;
 
+  { Folds each run of same-kind line comments on consecutive lines into ONE
+    region (the run's first StartLine/StartCol, last EndLine, texts joined by
+    sLineBreak). X-23: one compacting pass -- a write index plus a builder per
+    run. The old fold concatenated the growing RawText and Delete'd one list
+    entry per merge, O(n) each, so a run of n trailing `// step` comments cost
+    O(n^2) (0.43 s at 20k lines, 4.79 s at 40k). Output is identical. }
   procedure MergeAdjacentSameKind;
   var
-    J   : Integer          ;
-    Prev: TDocCommentRegion;
+    R     : Integer          ;
+    W     : Integer          ;
+    Cur   : TDocCommentRegion;
+    Next  : TDocCommentRegion;
+    Joined: TStringBuilder   ;
+    Grown : Boolean          ;
   begin
-    J:= 1;
-    while J < Result.Count do
-    begin
-      Prev:= Result[J - 1];
-      if (Result[J].Kind = Prev.Kind) and (Result[J].StartLine = Prev.EndLine + 1) and (Result[J].Kind in [dckTripleSlash, dckDoubleSlashOne, dckTripleSlashOne, dckLooseLine]) then
+    if Result.Count < 2 then Exit;
+    Joined:= TStringBuilder.Create;
+    try
+      W    := 0;
+      Cur  := Result[0];
+      Grown:= False;
+      for R:= 1 to Result.Count - 1 do
       begin
-        Prev.EndLine:= Result[J].EndLine;
-        Prev.RawText:= Prev.RawText + sLineBreak + Result[J].RawText;
-        Result[J - 1]:= Prev;
-        Result.Delete(J);
-      end
-      else Inc(J);
-    end;
+        Next:= Result[R];
+        if (Next.Kind = Cur.Kind) and (Next.StartLine = Cur.EndLine + 1) and (Next.Kind in [dckTripleSlash, dckDoubleSlashOne, dckTripleSlashOne, dckLooseLine]) then
+        begin
+          if not Grown then
+          begin
+            Joined.Clear;
+            Joined.Append(Cur.RawText);
+            Grown:= True;
+          end;
+          Joined.Append(sLineBreak);
+          Joined.Append(Next.RawText);
+          Cur.EndLine:= Next.EndLine;
+        end
+        else
+        begin
+          if Grown then Cur.RawText:= Joined.ToString;
+          Result[W]:= Cur;
+          Inc(W);
+          Cur  := Next;
+          Grown:= False;
+        end;
+      end; // for
+      if Grown then Cur.RawText:= Joined.ToString;
+      Result[W]:= Cur;
+      Result.Count:= W + 1;
+    finally
+      Joined.Free;
+    end; // try
   end; // procedure
 
 begin

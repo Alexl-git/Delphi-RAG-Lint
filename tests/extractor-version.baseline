@@ -1033,4 +1033,12 @@
 #   the commit. Error REPORTING only: no parser, preprocess or emit path changed, so no stored parse is
 #   stale. Guard: run_index_file_failure_exit.ps1.
 #   Superseded: 1.23.0-alpha|63794a830db6b91b219c4ec669399a8c720f4735c5436ab5ce18a6d0f0a42bf7
-1.23.0-alpha|06d73ba32296ebe0e17bba76e97c37b28e8b93f232e0a229eaba67967c786945
+#   2026-10-25 (X-23, lane L-perf): re-pinned WITHOUT a bump. Two PERFORMANCE changes, same output:
+#   Parser.DocComments MergeAdjacentSameKind is one compacting pass (was O(n^2) concat + Delete per
+#   merge), and Core.Indexer answers each literal's containing symbol from an in-memory line map
+#   (BuildContainingLineMap) instead of one SQL FindContainingSymbol per literal, keeping the SQL for
+#   ties. Proven identical on the engine's own src\ (366 files): string_literals (path, line, col,
+#   kind, containing symbol) and symbol_docs dumps byte-equal old vs new; row counts equal.
+#   Guard: run_index_scaling_guard.ps1.
+#   Superseded: 1.23.0-alpha|06d73ba32296ebe0e17bba76e97c37b28e8b93f232e0a229eaba67967c786945
+1.23.0-alpha|ccc5480e3c6654e7e61d3df54d1e23cbf2db4da556a5f1e83c8f16c07ba97c19
