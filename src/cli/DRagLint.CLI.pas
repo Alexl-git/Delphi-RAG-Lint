@@ -14184,6 +14184,9 @@ begin
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(EffPath, FlowStore, FlowLibStore, FlowFid) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
+      { X4: a bare read the index bound to a scoped-enum value (needs the index) }
+      if LintRuleWants(NarrowRule, ['enum-bare-read-scoped']) then
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
         Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
       if LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) then
@@ -20056,6 +20059,8 @@ begin
           lives on TCustomForm, which no project index can resolve. }
         if LintRuleWants(Nr, LINT_GATE_WITH_HIDING) then
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
+        if LintRuleWants(Nr, ['enum-bare-read-scoped']) then { X4 }
+          ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@099b -- REVIEWED 2026-10-25 profiler scan-slot id of the ScanAdd table, not a quantity
         { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
         if LintRuleWants(Nr, LINT_GATE_NAMING) then
           for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];

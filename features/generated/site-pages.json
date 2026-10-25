@@ -204,8 +204,8 @@
     "version": "1.33.0-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "782f9f502bb50bd8bcf3cdb12dcf29e3f921e4102891fb5a77931487345a366a",
-    "version": "1.33.0-alpha"
+    "hash": "197f9f68713120b2db6d70c9706b003a2ef346187140fbfad8ebc84654d988e8",
+    "version": "1.34.1-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
     "hash": "2bf8110f84d3a37f2dc096ac0c5d0c35b841f547a2cf7f2c53233a397eed37ae",
@@ -288,16 +288,16 @@
     "version": "1.33.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "25692c499c91c0830cbbf53e1b9c3893fbce6034e5440c70a6660c3226d28771",
-    "version": "1.33.0-alpha"
+    "hash": "04520b6bc6f4f5e52f438bdee11c3ec7f76dbb5a4d5bc0ebd88177f551637925",
+    "version": "1.34.1-alpha"
   },
   "features/fix-all-reliability.md": {
     "hash": "3f121e26d3bb97b803e3a4e4bf7bde5375fabd918865a7bf4d287b53bac28ab8",
     "version": "1.33.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "32b65756c0f605827bdb76dcde2cddea02dc60d03a01bbbfdaa6767c6a9ca9d9",
-    "version": "1.33.0-alpha"
+    "hash": "75505c9987347be50244ed3711a6f41672873257bf1f25fd0055da9d227e6fdf",
+    "version": "1.34.1-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
     "hash": "b2d21dc4e3b92bb6a8a8f8c1d037fbc4e9e5a12cdfd20fcf44966037ff1cd6f0",
@@ -392,8 +392,8 @@
     "version": "1.33.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "a5752ee7d43a44948e751842d824d6a0d23053eba29b4b4f95c9b68d2d296157",
-    "version": "1.33.0-alpha"
+    "hash": "180bf02108a0c85c7c3c4ede91e0c5dde526433f21f42294abe0507a940da330",
+    "version": "1.34.1-alpha"
   },
   "features/lint-tree.md": {
     "hash": "0c6c9d862e84900d5f2fb68a43227a858aed86cf42e07946f82efed85054e306",
@@ -560,8 +560,8 @@
     "version": "1.33.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "1d732d3d54da620deff63040cc950dd2bee5fb75decf9ec5c0ec491637ab2a38",
-    "version": "1.33.0-alpha"
+    "hash": "e74c130717b333684b4365232ef9495f7e46e4871e577a4b0af42decd35a38a9",
+    "version": "1.34.1-alpha"
   },
   "features/safe-delete.md": {
     "hash": "a51a31ca2a9b75a196e6e9371561220f8f05fdfd465f5165f9454bc8192ff1f6",

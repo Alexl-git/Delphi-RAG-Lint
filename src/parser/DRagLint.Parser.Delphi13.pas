@@ -130,8 +130,111 @@ begin
 end;
 
 type
+  { X4: one SCOPEDENUMS switch met in the parsed text. Offset is the byte
+    offset of the directive's opening bracket; IsOn is the state it sets. }
+  TScopedEnumSwitch = record
+    Offset: Integer;
+    IsOn  : Boolean;
+  end;
+
+{ X4 (INBOX-new-rules A3): every SCOPEDENUMS ON/OFF switch in ASource, in
+  source order. ASource is the text the parser sees -- the PREPROCESSED bytes
+  when the indexer preprocesses, where an unknown dollar-directive in an
+  ACTIVE branch survives verbatim and one in an inactive branch is blanked, so
+  only switches the compiler would honour are found. String literals, line
+  comments and brace / paren-star comments that are not directives are
+  skipped, so commented-out text never counts. A switch inside an INCLUDE file
+  is not seen (the include body is not in ASource): the enum then reads as
+  unscoped, the absence-over-wrong direction for the rule that consumes it.
+  Directive bytes are named constants; this comment deliberately writes no
+  bare bracket so the directive lexer never mistakes it for one. }
+function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;
+const
+  B_LF     = 10 ;
+  B_QUOTE  = 39 ;
+  B_LPAREN = 40 ;
+  B_RPAREN = 41 ;
+  B_STAR   = 42 ;
+  B_SLASH  = 47 ;
+  B_DOLLAR = 36 ;
+  B_LBRACE = 123;
+  B_RBRACE = 125;
+  SWITCH_NAME = 'SCOPEDENUMS';
+var
+  Len : Integer;
+  I   : Integer;
+  Body: Integer;
+  Stop: Integer;
+  Found: TList<TScopedEnumSwitch>;
+
+  { The directive body [ABody, AStop) names SCOPEDENUMS followed by ON or OFF:
+    record the switch at AAt. Anything else is ignored. }
+  procedure ConsiderDirective(AAt, ABody, AStop: Integer);
+  var
+    Text : string;
+    Words: TArray<string>;
+    Sw   : TScopedEnumSwitch;
+  begin
+    if AStop <= ABody then Exit;
+    Text:= UpperCase(Trim(TEncoding.ASCII.GetString(ASource, ABody, AStop - ABody)));
+    Words:= Text.Split([' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty);
+    if (Length(Words) < 2) or (Words[0] <> SWITCH_NAME) then Exit;
+    if (Words[1] <> 'ON') and (Words[1] <> 'OFF') then Exit;
+    Sw.Offset:= AAt;
+    Sw.IsOn  := Words[1] = 'ON';
+    Found.Add(Sw);
+  end;
+
+begin
+  Result:= nil;
+  Len:= Length(ASource);
+  Found:= TList<TScopedEnumSwitch>.Create;
+  try
+    I:= 0;
+    while I < Len do
+    begin
+      if ASource[I] = B_QUOTE then
+      begin
+        Inc(I);
+        while (I < Len) and (ASource[I] <> B_QUOTE) and (ASource[I] <> B_LF) do Inc(I);
+        Inc(I);
+      end
+      else if (ASource[I] = B_SLASH) and (I + 1 < Len) and (ASource[I + 1] = B_SLASH) then
+      begin
+        while (I < Len) and (ASource[I] <> B_LF) do Inc(I);
+      end
+      else if ASource[I] = B_LBRACE then
+      begin
+        Body:= I + 1;
+        Stop:= Body;
+        while (Stop < Len) and (ASource[Stop] <> B_RBRACE) do Inc(Stop);
+        if (Body < Len) and (ASource[Body] = B_DOLLAR) then ConsiderDirective(I, Body + 1, Stop);
+        I:= Stop + 1;
+      end
+      else if (ASource[I] = B_LPAREN) and (I + 1 < Len) and (ASource[I + 1] = B_STAR) then
+      begin
+        Body:= I + 2;
+        Stop:= Body;
+        while (Stop + 1 < Len) and not ((ASource[Stop] = B_STAR) and (ASource[Stop + 1] = B_RPAREN)) do Inc(Stop);
+        if Stop + 1 >= Len then Stop:= Len;
+        if (Body < Len) and (ASource[Body] = B_DOLLAR) then ConsiderDirective(I, Body + 1, Stop);
+        I:= Stop + 2;
+      end
+      else
+        Inc(I);
+    end;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
+end; // function
+
+type
   TWalkState = class
     Source     : TBytes              ;
+    { X4: the SCOPEDENUMS switches of Source, in source order (see
+      ScanScopedEnumSwitches); read by ScopedEnumsAt. }
+    ScopedEnumSwitches: TArray<TScopedEnumSwitch>;
     Symbols    : TList<TSymbol>      ;
     References : TList<TReference>   ;
     UsesEntries: TList<TUnitUse>     ; { v0.40.4 }
@@ -162,6 +265,9 @@ type
     RoutineDepth: Integer;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
+    { X4: True when the last SCOPEDENUMS switch before byte AOffset is ON;
+      False with no switch before it (the compiler default is OFF). }
+    function ScopedEnumsAt(AOffset: Integer): Boolean;
     { v22: ADirectives and AVisExplicit are DEFAULTED so the other Emit call
       sites -- types, fields, consts, params -- are untouched by this change.
       AVisExplicit defaults to True ("a keyword was written"), which is the
@@ -183,6 +289,7 @@ constructor TWalkState.Create(const ASource: TBytes);
 begin
   inherited Create;
   Source:= ASource;
+  ScopedEnumSwitches:= ScanScopedEnumSwitches(ASource);
   Symbols    := TList<TSymbol      >.Create;
   References := TList<TReference   >.Create;
   UsesEntries:= TList<TUnitUse     >.Create;
@@ -196,6 +303,16 @@ begin
   UsesEntries.Free;
   DiBindings.Free;
   inherited;
+end;
+
+function TWalkState.ScopedEnumsAt(AOffset: Integer): Boolean;
+begin
+  Result:= False;
+  for var Sw: TScopedEnumSwitch in ScopedEnumSwitches do
+  begin
+    if Sw.Offset >= AOffset then Break;
+    Result:= Sw.IsOn;
+  end;
 end;
 
 procedure TWalkState.EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -1096,7 +1213,11 @@ begin
   if TypeName = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  EnumIdx:= AState.Emit(skEnum, TypeName, QName, AParentSymbolIdx, ADeclTypeNode);
+  // X4 (INBOX-new-rules A3): the SCOPEDENUMS state in force at the declaration
+  // travels as directives = 'scopedenums' on the enum TYPE (never on its
+  // values); '' when unscoped. enum-bare-read-scoped reads it.
+  EnumIdx:= AState.Emit(skEnum, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', '', False, False, '',
+    (if AState.ScopedEnumsAt(Integer(ADeclTypeNode.StartByte)) then 'scopedenums' else ''));
   // Emit each enum value as a child symbol, carrying its ORDINAL VALUE in the
   // signature (like the IDE's "= 128"). The ordinal runs by declaration position
   // (0-based) and is RESET by an explicit `name = N` initializer, matching Pascal

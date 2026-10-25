@@ -77,7 +77,7 @@ Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes no source file and no index. With `--apply`, naming fixes may
 first reindex stale owning project indexes. Always dry-run first.
 
-Only rules marked fixable are applied; 23 of the 190 rules are fixable
+Only rules marked fixable are applied; 23 of the 192 rules are fixable
 (`drag-lint rules --json` reports a `fixable` field per rule).
 
 ## What it needs
