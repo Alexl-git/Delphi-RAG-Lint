@@ -480,6 +480,8 @@ begin
 end;
 
 function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
+const
+  FIRST_NON_ASCII = $80; { first code unit that may need a #code }
 var
   SB      : TStringBuilder;
   SrcIn   : Boolean; { the source is inside a quoted literal }
@@ -490,19 +492,29 @@ var
 
   procedure CloseOut;
   begin
-    if OutIn then begin SB.Append(''''); OutIn:= False; end;
+    if OutIn then
+    begin
+      SB.Append('''');
+      OutIn:= False;
+    end;
   end;
 
   procedure OpenOut;
   begin
-    if not OutIn then begin SB.Append(''''); OutIn:= True; end;
+    if not OutIn then
+    begin
+      SB.Append('''');
+      OutIn:= True;
+    end;
     LitAny:= True;
   end;
 
 begin
   SB:= TStringBuilder.Create;
   try
-    SrcIn:= False; OutIn:= False; LitAny:= False;
+    SrcIn := False;
+    OutIn := False;
+    LitAny:= False;
     I:= 1;
     while I <= Length(AText) do
     begin
@@ -510,7 +522,13 @@ begin
       if not SrcIn then
       begin
         SB.Append(C);
-        if C = '''' then begin SrcIn:= True; SB.Length:= SB.Length - 1; OutIn:= False; LitAny:= False; end;
+        if C = '''' then
+        begin
+          SrcIn := True;
+          SB.Length:= SB.Length - 1;
+          OutIn := False;
+          LitAny:= False;
+        end;
         Inc(I);
         Continue;
       end;
@@ -518,7 +536,10 @@ begin
       begin
         if (I < Length(AText)) and (AText[I + 1] = '''') then
         begin
-          OpenOut; SB.Append(''''''); Inc(I, 2); Continue;
+          OpenOut;
+          SB.Append('''''');
+          Inc(I, 2);
+          Continue;
         end;
         if not LitAny then SB.Append('''''') else CloseOut;
         SrcIn:= False;
@@ -526,7 +547,7 @@ begin
         Continue;
       end;
       CodePointAt(AText, I, Len);
-      if (Ord(C) >= $80) and not EncodingHolds(AEnc, Copy(AText, I, Len)) then
+      if (Ord(C) >= FIRST_NON_ASCII) and not EncodingHolds(AEnc, Copy(AText, I, Len)) then
       begin
         CloseOut;
         LitAny:= True;
@@ -534,7 +555,8 @@ begin
       end
       else
       begin
-        OpenOut; SB.Append(Copy(AText, I, Len));
+        OpenOut;
+        SB.Append(Copy(AText, I, Len));
       end;
       Inc(I, Len);
     end;

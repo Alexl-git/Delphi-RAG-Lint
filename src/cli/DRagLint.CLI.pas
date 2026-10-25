@@ -27665,7 +27665,10 @@ var
         var RPath: string:= RaiseEntryPath(RE);
         if (SameFilePath(RPath, UnitPas) or SameFilePath(RPath, JCtx.DfmPath)) and TFile.Exists(RPath)
           and not TouchedSet.ContainsKey(RPath) then
-        begin TouchedSet.Add(RPath, True); TouchedFiles.Add(RPath); end;
+        begin
+          TouchedSet.Add(RPath, True);
+          TouchedFiles.Add(RPath);
+        end;
       end;
 
       Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
