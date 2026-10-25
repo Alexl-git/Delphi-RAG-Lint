@@ -62,6 +62,9 @@ sha256 7EF273E27E3721F6B35A70E2C47A48001FDFD125844ED7FEB8CCA824070327DF; extract
 Lint sweep merged 1245af2d (19 -> 3). CONVERTER told "deployed 0b308ab9" (it merges FG-M/FG-N + verifies next).
 OWNER APPROVED (10-25): commit, push, deploy, git/branch/worktree cleanup. PUSH WAS BLOCKED by the autonomy guard
 (mode.json still armed by the converter run) -> owner runs `git push origin main`, or disarm then push.
+UPDATE ~21:30: item 1 DONE fb401d58 (657 changed lines all comments -> re-pinned, guards PASS); item 3 DONE 617a93af
+(4 verifies vs deployed exe). Item 2 RE-PARSE RUNNING via a background agent (it messages CONVERTER "re-parse done"
+and appends "REPARSE DONE" to the ledger) -- on resume: check the ledger line / `drag-lint.exe info --db` versions.
 OPEN, in order:
  1 version guards RED: surface changed after rc2's re-pin (03c6078c) by lint sweep + B-41 (sampled: doc comments;
    Core.Indexer.pas 26 lines + Core.Model.pas changed -- check all 26 surface files). If no extraction/resolve change:
