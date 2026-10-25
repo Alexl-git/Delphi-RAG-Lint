@@ -415,7 +415,7 @@ const
   { R1 directive classes (fix round 1): carried into the procedural type / refused / no effect on it }
   CConventionWords       = ' register pascal cdecl stdcall safecall winapi ';
   CUnsupportedDirectives = ' varargs ';
-  CNeutralDirectives     = ' inline overload external forward deprecated platform library experimental assembler delayed ';
+  CNeutralDirectives     = ' inline overload external forward deprecated platform library experimental assembler delayed export local near far ';
   CMaxDeclLines          = 8;
   CDeclStartWords        = ' function procedure constructor destructor class operator type var const threadvar ' +
     'resourcestring label begin asm implementation interface initialization finalization exports uses ' +
