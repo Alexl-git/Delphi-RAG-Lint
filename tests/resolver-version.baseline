@@ -681,9 +681,10 @@
 #   2026-10-25 (X batch, 1.35.0-alpha): BUMP 1.13.0 -> 1.14.0-alpha, ONE bump for X1 (array-element /
 #   pointer-deref member chains), X2 (interface-dispatched calls bind the interface method; class
 #   receivers stop competing with implemented interfaces; function-result receivers typed) and X6
-#   (enum hard casts bind the enum type: ResolveEnumCastRefs + BindRefStream on the surface).
+#   (enum hard casts bind the enum type: ResolveEnumCastRefs + BindRefStream on the surface). Pin taken
+#   after the TypeReceiverCore dl:ok re-hash (comment only).
 #   Superseded: 1.13.0-alpha|5a9025a7a744f8f3cd12ecf5a7dbc9438fe5761f64cef946246d2b0ee6504166
-1.14.0-alpha|fb4111af8933fb0a9520b5741cbe2e7a0a0a9034fdfdf490649738099e9d3a0c
+1.14.0-alpha|0a2040c83d4e465ce9840a0c7f9051917da5d30439685c5ca28cdd4adb77b0b1
 # superseded (same 1.12.0-alpha, re-pinned WITHOUT a bump 2026-10-18, wave 1.31.5 lane 2 / V-C): Storage.SQLite changed only the scoped-pass BOOKKEEPING -- the one-in-three share latch now divides by the file count from BEFORE the run (FScopeCorpusBefore) instead of CountFiles at the first removal (which already counted this run's new files), new/changed write counters feed the decline REASON text, the FTS5 'AVAILABLE' line is gone, and the '~37 min' warning prints only from 1M refs. No binding rule changed: the latch only chooses scoped vs whole-DB, and the two passes are designed to write the same call edges, so no stored edge is stale. 1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
 # superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd

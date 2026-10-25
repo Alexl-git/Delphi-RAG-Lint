@@ -5105,7 +5105,7 @@ begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr));
 end;
 
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;  // dl:ok too-many-exit-points@917e -- REVIEWED 2026-10-25 (X1): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;  // dl:ok too-many-exit-points@5c21 -- REVIEWED 2026-10-25 (X1; re-read at the X batch merge, X2 added the function-result rung, kind 11): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
 var
   Encl    : TSymbol;
   ClassId : Int64  ;
