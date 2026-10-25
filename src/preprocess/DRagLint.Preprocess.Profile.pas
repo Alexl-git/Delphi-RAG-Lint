@@ -83,8 +83,8 @@ type
   /// alias that last put it there.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Preprocess.Profile.pas), DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Lint.PlatformDivergent.NameSet (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
-  /// <para>Used in units: DRagLint.Lint.PlatformDivergent, DRagLint.Preprocess.Profile</para>
+  /// <para>Used by: declaration (DRagLint.Preprocess.Profile.pas), DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Lint.PlatformDivergent.NameSet (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Lint.PlatformDivergent, DRagLint.Preprocess.Profile, DRagLint.Project.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDprojDefine = record
@@ -93,6 +93,9 @@ type
     /// <summary>The group alias that added it to the current set: 'Base',
     /// 'Base_Win32', 'Cfg_1', 'Cfg_3_Win64', ...</summary>
     Group: string;
+    /// <summary>Every group alias that sets it since the last replacing group,
+    /// in application order; Groups[0] = Group.</summary>
+    Groups: TArray<string>;
   end;
 
 /// <summary>The EFFECTIVE DCC_Define set of one config + platform, computed the
@@ -114,10 +117,10 @@ type
 /// <remarks>
 /// Pure: reads only AContent. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
-/// <para>Calls: ContainsText, DRagLint.Preprocess.Profile.ConfigChain, DRagLint.Preprocess.Profile.TryDccDefineInGroup, LowerCase, StartsStr, Trim</para>
+/// <para>Called from: DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.Preprocess.Profile.DprojGroupChain, DRagLint.Preprocess.Profile.TryDccDefineInGroup, IndexText, LowerCase, StartsStr, Trim</para>
 /// <para>Returns: Order.ToArray</para>
-/// <seealso cref="DRagLint.Preprocess.Profile.ConfigChain"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.DprojGroupChain"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.TryDccDefineInGroup"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -137,6 +140,26 @@ function DprojEffectiveDefines(const AContent, APlatform, AConfig: string): TArr
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DprojConfigNames(const AContent: string): TArray<string>;
+
+/// <summary>The PropertyGroup aliases MSBuild applies for one config +
+/// platform, in order: Base, Base_&lt;P&gt;, then each config of AConfig's
+/// CfgParent chain from the root down, each followed by its _&lt;P&gt;
+/// group -- the order DprojEffectiveDefines applies DCC_Define in.</summary>
+/// <param name="AContent">The .dproj text.</param>
+/// <param name="APlatform">The platform group suffix, used verbatim.</param>
+/// <param name="AConfig">A config name or 'Base'; mapped as in
+/// DprojEffectiveDefines.</param>
+/// <returns>Aliases such as ['Base', 'Base_Win64', 'Cfg_2', 'Cfg_2_Win64'].
+/// The last 'Cfg_N' entry (or 'Base') is the config's own key.</returns>
+/// <remarks>
+/// Pure: reads only AContent. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.ConfigChain</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.ConfigChain"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DprojGroupChain(const AContent, APlatform, AConfig: string): TArray<string>;
 
 /// <summary>The platforms a .dproj enables:
 /// &lt;Platform value="P"&gt;True&lt;/Platform&gt; entries, in document
@@ -315,28 +338,34 @@ begin
   end;
 end;
 
+function DprojGroupChain(const AContent, APlatform, AConfig: string): TArray<string>;
+var
+  Key: string;
+begin
+  Result := [BASE_KEY, BASE_KEY + '_' + APlatform];
+  for Key in ConfigChain(AContent, AConfig) do
+    Result := Result + [Key, Key + '_' + APlatform];
+end;
+
 function DprojEffectiveDefines(const AContent, APlatform, AConfig: string): TArray<TDprojDefine>;
 var
   Aliases: TArray<string>;
   Alias  : string;
-  Key    : string;
   Value  : string;
   Part   : string;
   Sym    : string;
   Def    : TDprojDefine;
   Order  : TList<TDprojDefine>;
-  Seen   : TDictionary<string, Byte>;
+  Seen   : TDictionary<string, Integer>;
+  Idx    : Integer;
 begin
   // MSBuild applies, in order: Base, Base_<P>, then each config of the chain
   // from the root ancestor down, each followed by its own _<P> group. The two
   // platform groups were missed until 2026-09-23 (Micronite2027's EUREKALOG);
   // REPLACE semantics and the name -> Cfg_N mapping until 2026-10-25 (X5).
-  Aliases := [BASE_KEY, BASE_KEY + '_' + APlatform];
-  for Key in ConfigChain(AContent, AConfig) do
-    Aliases := Aliases + [Key, Key + '_' + APlatform];
-
+  Aliases := DprojGroupChain(AContent, APlatform, AConfig);
   Order := TList<TDprojDefine>.Create;
-  Seen  := TDictionary<string, Byte>.Create;
+  Seen  := TDictionary<string, Integer>.Create;
   try
     for Alias in Aliases do
     begin
@@ -352,10 +381,18 @@ begin
         Sym := Trim(Part);
         // Drop blanks and MSBuild property references, the recursion token
         // included -- a macro cannot be expanded here.
-        if (Sym = '') or StartsStr('$(', Sym) or Seen.ContainsKey(LowerCase(Sym)) then Continue;
-        Seen.Add(LowerCase(Sym), 0);
-        Def.Name  := Sym;
-        Def.Group := Alias;
+        if (Sym = '') or StartsStr('$(', Sym) then Continue;
+        if Seen.TryGetValue(LowerCase(Sym), Idx) then
+        begin
+          Def := Order[Idx];
+          if IndexText(Alias, Def.Groups) < 0 then Def.Groups := Def.Groups + [Alias];
+          Order[Idx] := Def;
+          Continue;
+        end;
+        Seen.Add(LowerCase(Sym), Order.Count);
+        Def.Name   := Sym;
+        Def.Group  := Alias;
+        Def.Groups := [Alias];
         Order.Add(Def);
       end;
     end;

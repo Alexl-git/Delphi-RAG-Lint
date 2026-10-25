@@ -152,6 +152,33 @@ try {
   Check 'cust Win64/Staging CONTAINS staging + all_base'                (($c64s -contains 'staging') -and ($c64s -contains 'all_base'))
   Check 'cust Win64/Staging NOT release / debug (parent is Base)'       (-not (($c64s -contains 'release') -or ($c64s -contains 'debug')))
 
+  # --- project-facts reads the SAME effective set (X5 follow-up) ---
+  # Project.Facts had its own copy of the old union reader; it now goes through
+  # DprojEffectiveDefines / the config chain, so its define list and cfg alias
+  # must agree with pp-profile on the replace and custom-config fixtures.
+  function Facts([string]$dproj, [string]$platform, [string]$config) {
+    $raw = (& $exePath project-facts --dproj $dproj --platform $platform --config $config --json 2>$null) -join "`n"
+    $i = $raw.IndexOf('{'); if ($i -lt 0) { return $null }
+    return ($raw.Substring($i) | ConvertFrom-Json)
+  }
+  function FactNames($f) { return @($f.defines | ForEach-Object { $_.name.ToLower() }) }
+  $fr = Facts $repl 'Win64' 'Debug'
+  Check 'facts repl Win64/Debug NOT base_a (Base_Win64 replaces)'       (-not ((FactNames $fr) -contains 'base_a'))
+  Check 'facts repl Win64/Debug CONTAINS w64_only + debug'              (((FactNames $fr) -contains 'w64_only') -and ((FactNames $fr) -contains 'debug'))
+  $fr32 = Facts $repl 'Win32' 'Release'
+  Check 'facts repl Win32/Release NOT release / base_a (Cfg_2_Win32 replaces)' (-not (((FactNames $fr32) -contains 'release') -or ((FactNames $fr32) -contains 'base_a')))
+  $fc = Facts $cust 'Win64' 'Debug'
+  Check 'facts cust Win64/Debug cfg = Cfg_2 (swapped alias)'            ($fc.cfg -eq 'Cfg_2')
+  Check 'facts cust Win64/Debug CONTAINS debug, NOT release'            (((FactNames $fc) -contains 'debug') -and -not ((FactNames $fc) -contains 'release'))
+  $fp = Facts $cust 'Win64' 'Profiling'
+  Check 'facts cust Win64/Profiling cfg = Cfg_3, config = Profiling'    (($fp.cfg -eq 'Cfg_3') -and ($fp.config -eq 'Profiling'))
+  Check 'facts cust Win64/Profiling CONTAINS profiling + release (chain)' (((FactNames $fp) -contains 'profiling') -and ((FactNames $fp) -contains 'release'))
+  $fpb = @($fp.defines | Where-Object { $_.name -eq 'ALL_BASE' })
+  Check 'facts cust: ALL_BASE source is Base'                           (($fpb.Count -eq 1) -and ($fpb[0].sources -contains 'Base'))
+  $plat2 = Facts (Join-Path $fixDir 'platform_groups.dproj') 'Win64' 'Debug'
+  $both = @($plat2.defines | Where-Object { $_.name -eq 'win64' })
+  Check 'facts platform_groups: builtin win64 still reported'           ($both.Count -eq 1 -and $both[0].sources -contains 'builtin')
+
   # --- nonexistent .dproj -> Win64 builtins only, no crash ---
   $none = Profile $missing 'Win64' 'Release'
   Check 'missing.dproj CONTAINS win64 (builtins still returned)'       ($none -contains 'win64')

@@ -47,7 +47,9 @@ type
     DprojPath  : string;
     Platform   : string;
     Config     : string;
-    /// <summary>The config's Cfg_N alias (Release -> Cfg_2, Debug -> Cfg_1).</summary>
+    /// <summary>The config's own group key from the .dproj's selector groups:
+    /// Cfg_N for a declared config, 'Base' for Base; an undeclared name falls back
+    /// to Debug -> Cfg_1, anything else -> Cfg_2.</summary>
     CfgAlias   : string;
     /// <summary>False when the file is missing or unreadable; every other
     /// field is then empty.</summary>
@@ -83,16 +85,34 @@ type
 /// <param name="ADprojPath">The .dproj; missing or unreadable -> Found=False.</param>
 /// <param name="APlatform">'Win32' or 'Win64' (case-insensitive); anything else
 /// is Win64, as DRagLint.Preprocess.Profile treats it.</param>
-/// <param name="AConfig">'Debug' selects Cfg_1; anything else is Release (Cfg_2).</param>
+/// <param name="AConfig">A config name the .dproj declares ('Debug', 'Release',
+/// a custom name) or 'Base'; '' means 'Release'. Mapped and applied by
+/// DRagLint.Preprocess.Profile.DprojEffectiveDefines (REPLACE semantics, CfgParent
+/// chain).</param>
 /// <returns>The facts. Defines include the platform built-ins as source
 /// 'builtin'. Never raises: an unreadable file is Found=False.</returns>
-/// <remarks>A group is matched on its exact `'$(X)'!=''` condition, the shape
+/// <remarks>
+/// A group is matched on its exact `'$(X)'!=''` condition, the shape
 /// RAD Studio writes for the four definition groups; when a file has no such
 /// group for X, the first group whose condition CONTAINS `$(X)` and sets the
 /// property is used -- DRagLint.Preprocess.Profile's rule. An optset import is
 /// read (relative to the .dproj) for its own DCC_Define when its path carries
 /// no macro and its Condition names an active group or none. Macros are never
-/// expanded; paths are reported as written.</remarks>
+/// expanded; paths are reported as written.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.Profile.DprojEffectiveDefines, DRagLint.Preprocess.Profile.DprojGroupChain, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Project.Facts.AddDefines, DRagLint.Project.Facts.AttrOf, DRagLint.Project.Facts.ConditionIsActive, DRagLint.Project.Facts.GroupBody, DRagLint.Project.Facts.ImportKind, DRagLint.Project.Facts.PostProcessorNotices (+7 more)</para>
+/// <para>Returns: Default(TProjectFacts)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 91 lines (full implementation)</para>
+/// <para>Catches: EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.DprojEffectiveDefines"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.DprojGroupChain"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
+/// <seealso cref="DRagLint.Project.Facts.AddDefines"/>
+/// <seealso cref="DRagLint.Project.Facts.AttrOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadProjectFacts(const ADprojPath, APlatform, AConfig: string): TProjectFacts;
 
 /// <summary>The post-processors ReadProjectFacts checks for.</summary>
@@ -288,12 +308,13 @@ var
   Sym    : string;
   OptPath: string;
   Part   : string;
+  Def    : TDprojDefine;
 begin
   Result:= Default(TProjectFacts);
   Result.DprojPath:= ADprojPath;
   Result.Platform := IfThen(SameText(APlatform, 'Win32'), 'Win32', 'Win64');
-  Result.Config   := IfThen(SameText(AConfig, 'Debug'), 'Debug', 'Release');
-  Result.CfgAlias := IfThen(Result.Config = 'Debug', 'Cfg_1', 'Cfg_2');
+  Result.Config   := if AConfig = '' then 'Release' else AConfig;
+  Result.CfgAlias := '';
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
   try
     Content:= TFile.ReadAllText(ADprojPath);
@@ -305,16 +326,21 @@ begin
     end;
   end;
   Result.Found:= True;
-  { MSBuild's order for one platform + config -- the later group wins a scalar. }
-  Labels:= ['Base', 'Base_' + Result.Platform, Result.CfgAlias, Result.CfgAlias + '_' + Result.Platform];
+  { MSBuild's order for one platform + config -- the later group wins a scalar.
+    The ONE define reader (DRagLint.Preprocess.Profile) owns the order, the
+    config-name mapping and REPLACE semantics; this report only labels it. }
+  Labels:= DprojGroupChain(Content, Result.Platform, Result.Config);
+  { The config's own key: the last Cfg_N of the chain, or Base. }
+  Result.CfgAlias:= Labels[High(Labels) - 1];
 
   Order:= TList<TProjectDefine>.Create;
   Idx  := TDictionary<string, Integer>.Create;
   try
     for Sym in PlatformBuiltins(Result.Platform) do AddDefines(Sym, 'builtin', Order, Idx);
+    for Def in DprojEffectiveDefines(Content, Result.Platform, Result.Config) do
+      for Lbl in Def.Groups do AddDefines(Def.Name, Lbl, Order, Idx);
     for Lbl in Labels do
     begin
-      AddDefines(PropertyIn(GroupBody(Content, Lbl, 'DCC_Define'), 'DCC_Define'), Lbl, Order, Idx);
       Body:= GroupBody(Content, Lbl, 'DCC_ExeOutput');
       Value:= PropertyIn(Body, 'DCC_ExeOutput');
       if Value <> '' then Result.ExeOutput:= Value;
