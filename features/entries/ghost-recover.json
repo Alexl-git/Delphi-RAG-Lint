@@ -30,6 +30,7 @@
     }
   ],
   "access": "cli-only",
+  "noFlags": true,
   "accessReviewed": {
     "date": "2026-10-21",
     "by": "ENGINE"

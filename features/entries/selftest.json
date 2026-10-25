@@ -17,6 +17,7 @@
   ],
   "audience": "agent",
   "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed",
+  "noFlags": true,
   "verified": {
     "date": "2026-10-23",
     "by": "ENGINE",

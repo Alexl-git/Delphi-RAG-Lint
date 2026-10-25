@@ -1652,6 +1652,116 @@ begin
   end;
 end;
 
+{ FG-M item 3: the caption-key vector SHARED with the engine (tests\MenuTreeTests.dpr
+  TestCaptionKeyVector, spec 2026-10-23-code-built-menu-reader-design.md section 6). The
+  rows are the same text on both sides so a divergence between DRagLint.MenuTree.MenuCaptionKey /
+  MenuPathKey and featuregen's CaptionKey / MenuPathKey / MenuKey fails one of the two batteries. }
+procedure TestCaptionKeyVector;
+
+  procedure CheckEq(const pName, pWant, pGot: string);
+  begin
+    Check('KeyVector.' + pName, pWant = pGot, Format('want [%s] got [%s]', [pWant, pGot]));
+  end;
+
+begin
+  CheckEq('key: && and ...', 'uses & deps tab -- review & apply fixes', CaptionKey('Uses && Deps Tab -- review && apply fixes...'));
+  CheckEq('key: trailing ...', 'find usages', CaptionKey('Find Usages...'));
+  CheckEq('key: plain', 'reports', CaptionKey('Reports'));
+  CheckEq('key: trim ) only at the end', 'drag-lint (!', CaptionKey('drag-lint (!)'));
+  CheckEq('key: quote chars and whitespace', 'a b c', CaptionKey('  `A`  *b*  "C" '));
+  CheckEq('path key', 'fixture > tools > find usages', MenuPathKey('Fixture > Tools  > Find Usages...'));
+  CheckEq('path key drops empty segments', 'a > b', MenuPathKey('A > ... > B'));
+  // FeatureGen.Commands.MenuKey (implementation-private) delegates to MenuPathKey: one rule, no second copy to drift
+end;
+
+{ FG-M item 1: the menu-tree/1 document (drag-lint menu-tree --format json) flattened to
+  full paths; external roots are left out, '&&' reduced, separators carry the parent's path. }
+procedure TestParseMenuTreeJson;
+const
+  DOC = '{ "schema": "menu-tree/1", "engine": "x", "project": "p", "db": "d", "generated": "g",'
+    + ' "roots": [ { "kind": "root", "caption": "drag-lint", "captionKey": "drag-lint", "source": "E.pas:1", "confidence": "certain",'
+    + '   "children": [ { "kind": "item", "caption": "Full Compile Sweep", "captionKey": "full compile sweep", "handler": "E.InvokeSweep", "source": "E.pas:2", "confidence": "certain" },'
+    + '                 { "kind": "separator", "source": "E.pas:3", "confidence": "certain" },'
+    + '                 { "kind": "submenu", "caption": "Uses && Dependencies", "captionKey": "uses & dependencies", "source": "E.pas:4", "confidence": "certain",'
+    + '                   "children": [ { "kind": "header", "caption": "This unit", "captionKey": "this unit", "source": "E.pas:5", "confidence": "certain" },'
+    + '                                 { "kind": "item", "caption": "Find Usages...", "captionKey": "find usages", "handler": "E.InvokeFind", "source": "E.pas:6", "confidence": "derived" },'
+    + '                                 { "kind": "dynamic", "caption": "<dynamic: X>", "captionKey": "<dynamic: x>", "source": "E.pas:7", "confidence": "unknown" } ] } ] } ],'
+    + ' "external": [ { "kind": "external-root", "ident": "ToolWin", "source": "E.pas:8", "children": [ { "kind": "item", "caption": "drag-lint", "captionKey": "drag-lint", "source": "E.pas:9", "confidence": "certain" } ] } ],'
+    + ' "notes": [ "dynamic caption at E.pas:7: X.Caption := Y" ] }';
+  DOC_EXTRA = '{ "schema": "menu-tree/1", "engine": "x", "project": "p", "db": "d", "generated": "g", "futureTop": { "a": 1 },'
+    + ' "roots": [ { "kind": "root", "caption": "drag-lint", "captionKey": "drag-lint", "ident": "mnuRoot", "identPath": "frmMain.mnuRoot", "form": "frmMain", "source": "E.pas:1", "confidence": "certain",'
+    + '   "children": [ { "kind": "item", "caption": "Full Compile Sweep", "captionKey": "full compile sweep", "ident": "miSweep", "identPath": "frmMain.mnuRoot.miSweep", "form": "frmMain", "handler": "E.InvokeSweep", "source": "E.pas:2", "confidence": "certain" },'
+    + '                 { "kind": "separator", "source": "E.pas:3", "confidence": "certain", "ident": "N1" },'
+    + '                 { "kind": "submenu", "caption": "Uses && Dependencies", "captionKey": "uses & dependencies", "identPath": [ "x" ], "source": "E.pas:4", "confidence": "certain",'
+    + '                   "children": [ { "kind": "header", "caption": "This unit", "captionKey": "this unit", "form": 7, "source": "E.pas:5", "confidence": "certain" },'
+    + '                                 { "kind": "item", "caption": "Find Usages...", "captionKey": "find usages", "handler": "E.InvokeFind", "source": "E.pas:6", "confidence": "derived", "ident": null },'
+    + '                                 { "kind": "dynamic", "caption": "<dynamic: X>", "captionKey": "<dynamic: x>", "source": "E.pas:7", "confidence": "unknown" } ] } ] } ],'
+    + ' "external": [ { "kind": "external-root", "ident": "ToolWin", "identPath": "INTAServices.MainMenu.ToolWin", "source": "E.pas:8", "children": [ { "kind": "item", "caption": "drag-lint", "captionKey": "drag-lint", "source": "E.pas:9", "confidence": "certain" } ] } ],'
+    + ' "notes": [ "dynamic caption at E.pas:7: X.Caption := Y" ] }';
+var
+  lNodes: TArray<TMenuNodeRow>;
+  lNotes: TArray<string>;
+  lLive: TLiveSurface;
+  lRaised: Boolean;
+  lShape: string;
+
+  { kind:path per node, in order -- one string pins count, order, kinds, paths and the '&&' reduction }
+  function Shape(const pRows: TArray<TMenuNodeRow>): string;
+  var
+    lRow: TMenuNodeRow;
+    lParts: TArray<string>;
+  begin
+    lParts := nil;
+    for lRow in pRows do
+      lParts := lParts + [lRow.Kind + ':' + lRow.Path];
+    Result := string.Join('|', lParts);
+  end;
+
+  function RowAt(const pPath: string): TMenuNodeRow;
+  var
+    lRow: TMenuNodeRow;
+  begin
+    Result := Default(TMenuNodeRow);
+    for lRow in lNodes do
+      if lRow.Path = pPath then
+        Exit(lRow);
+  end;
+
+begin
+  ParseMenuTreeJson(DOC, lNodes, lNotes);
+  lShape := 'root:drag-lint|item:drag-lint > Full Compile Sweep|separator:drag-lint|submenu:drag-lint > Uses & Dependencies'
+    + '|header:drag-lint > Uses & Dependencies > This unit|item:drag-lint > Uses & Dependencies > Find Usages...'
+    + '|dynamic:drag-lint > Uses & Dependencies > <dynamic: X>';
+  Check('ParseMenuTree.Shape', Shape(lNodes) = lShape, Shape(lNodes));
+  Check('ParseMenuTree.LeafHandler', RowAt('drag-lint > Full Compile Sweep').Handler = 'E.InvokeSweep');
+  Check('ParseMenuTree.NestedLeafConfidence', RowAt('drag-lint > Uses & Dependencies > Find Usages...').Confidence = 'derived');
+  Check('ParseMenuTree.DynamicKind', RowAt('drag-lint > Uses & Dependencies > <dynamic: X>').Kind = MENU_KIND_DYNAMIC);
+  Check('ParseMenuTree.Notes', string.Join('|', lNotes) = 'dynamic caption at E.pas:7: X.Caption := Y', string.Join('|', lNotes));
+  lLive := TLiveSurface.Create;
+  try
+    lLive.MenuNodes := lNodes;
+    Check('ParseMenuTree.LeavesAreItemsOnly', Shape(lLive.MenuLeaves) = 'item:drag-lint > Full Compile Sweep|item:drag-lint > Uses & Dependencies > Find Usages...', Shape(lLive.MenuLeaves));
+    Check('ParseMenuTree.NoSourceMeansNoTree', not lLive.HasMenuTree);
+    lLive.MenuSource := MENU_SOURCE_TREE;
+    Check('ParseMenuTree.TreeSourceMeansTree', lLive.HasMenuTree);
+  finally
+    lLive.Free;
+  end;
+  lRaised := False;
+  try
+    ParseMenuTreeJson('{ "schema": "menu-drift/1", "roots": [] }', lNodes, lNotes);
+  except
+    on E: EFeatureGenLive do
+      lRaised := Pos('menu-tree/1', E.Message) > 0;
+  end;
+  Check('ParseMenuTree.WrongSchemaRaises', lRaised);
+  // fields a later engine adds (identPath on external roots; ident / identPath / form on --with-dfm
+  // roots and leaves; an unknown top-level key) are ignored: same rows, same handler
+  ParseMenuTreeJson(DOC_EXTRA, lNodes, lNotes);
+  Check('ParseMenuTree.UnknownFieldsIgnored', (Shape(lNodes) = lShape)
+    and (RowAt('drag-lint > Full Compile Sweep').Handler = 'E.InvokeSweep'), Shape(lNodes));
+end;
+
 procedure TestCompareFindingSetsPositiveControl;
 var
   lMissing, lExtra: TArray<string>;
@@ -2249,6 +2359,77 @@ begin
   end;
 end;
 
+function MenuRow(const pPath, pKind, pHandler: string): TMenuNodeRow;
+begin
+  Result.Path := pPath;
+  Result.Kind := pKind;
+  Result.Handler := pHandler;
+  Result.Source := 'Zz.pas:1';
+  Result.Confidence := 'certain';
+  Result.Caption := pPath;
+  if Pos(' > ', pPath) > 0 then
+    Result.Caption := Copy(pPath, LastDelimiter('>', pPath) + 2, MaxInt);
+end;
+
+function MenuProbe(const pId, pPath: string): TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{"id": "' + pId + '", "title": "Menu probe", "group": "maintenance", "owner": "CONVERTER", "status": "shipped",'
+    + ' "since": "1.0.0", "summary": "A probe entry registered at a menu path",'
+    + ' "intro": "Probe.", "wikiPage": "Home",'
+    + ' "surfaces": [ { "type": "ide-menu", "path": "' + pPath + '" } ],'
+    + ' "audience": "both", "lastVerified": { "date": "2026-10-19", "by": "test", "build": "1.0.0" } }') as TJSONObject;
+end;
+
+{ FG-M item 2: with the menu TREE present, checks B and C compare full PATHS, so a moved item
+  fails -- a leaf-only comparison (the regex era) could not see it. The probe leaf is added
+  to the flat Captions too, exactly what the regex harvest would have seen, so the only
+  thing that can make these findings is the path comparison. }
+procedure TestMenuPathChecks(const pRepo: string);
+var
+  lLive: TLiveSurface;
+  lReg: TRegistry;
+  lMoved, lRight: TJSONObject;
+  lF: TArray<TFinding>;
+  lNotes: TArray<string>;
+  lSavedCaps: TArray<string>;
+  lSavedNodes: TArray<TMenuNodeRow>;
+  lSavedSource: string;
+begin
+  lLive := SharedLive(pRepo);
+  lReg := TRegistry.Create;
+  lMoved := MenuProbe('zz-menu-moved', 'drag-lint > Zz Probe Sub > Zz Probe Item');
+  lRight := MenuProbe('zz-menu-right', 'drag-lint > Zz Other Sub > Zz Right Item');
+  try
+    lReg.Load(pRepo);
+    lSavedCaps := lLive.Captions;
+    lSavedNodes := lLive.MenuNodes;
+    lSavedSource := lLive.MenuSource;
+    lLive.MenuSource := MENU_SOURCE_TREE;
+    lLive.MenuNodes := lLive.MenuNodes + [MenuRow('drag-lint > Zz Other Sub', 'submenu', ''),
+      MenuRow('drag-lint > Zz Other Sub > Zz Probe Item', MENU_KIND_ITEM, 'Zz.Probe'),
+      MenuRow('drag-lint > Zz Other Sub > Zz Right Item', MENU_KIND_ITEM, 'Zz.Right')];
+    lLive.Captions := lLive.Captions + ['Zz Other Sub', 'Zz Probe Item', 'Zz Right Item'];
+    try
+      lF := RunChecks(lReg, lLive, clFull, [lMoved, lRight], True, lNotes);
+    finally
+      lLive.Captions := lSavedCaps;
+      lLive.MenuNodes := lSavedNodes;
+      lLive.MenuSource := lSavedSource;
+    end;
+    Check('Check.MovedMenuItemFailsC',
+      HasFinding(lF, 'C', 'zz-menu-moved: ide-menu ''drag-lint > Zz Probe Sub > Zz Probe Item'' moved -- now at ''drag-lint > Zz Other Sub > Zz Probe Item'''),
+      FindingsNaming(lF, 'zz-menu-moved'));
+    Check('Check.UnregisteredMenuPathFailsB', HasFinding(lF, 'B', 'unregistered: ''drag-lint > Zz Other Sub > Zz Probe Item'''), FindingsNaming(lF, 'Zz Probe Item'));
+    Check('Check.RegisteredMenuPathPasses', not HasFinding(lF, 'C', 'zz-menu-right') and not HasFinding(lF, 'B', 'Zz Right Item'), FindingsNaming(lF, 'Zz Right'));
+    Check('Check.SubmenuIsNeverUnregistered', not HasFinding(lF, 'B', 'unregistered: ''drag-lint > Zz Other Sub'''), FindingsNaming(lF, 'Zz Other Sub'''));
+  finally
+    lRight.Free;
+    lMoved.Free;
+    lReg.Free;
+  end;
+end;
+
 function PlannedProbe(const pStatus: string): TJSONObject;
 begin
   Result := TJSONObject.ParseJSONValue(
@@ -2668,6 +2849,15 @@ begin
     + ' "summary": "Reachable from the IDE", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "ide-menu", "path": "drag-lint > Has menu" } ], "audience": "both" }', TEncoding.ASCII);
   lF := AuditOf(lCopy, nil, nil, Date);
   Check('Audit.NoAccessPositiveControl', not HasKind(lF, 'has-menu', 'no-access'));
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\nf-marked.json'),
+    '{ "id": "nf-marked", "title": "NF", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "No flags", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "nfmarked", "usage": "drag-lint nfmarked" } ], "audience": "both", "noFlags": true }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\nf-bare.json'),
+    '{ "id": "nf-bare", "title": "NF", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "No flags", "intro": "A real introduction.", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "nfbare", "usage": "drag-lint nfbare" } ], "audience": "both" }', TEncoding.ASCII);
+  lF := AuditOf(lCopy, nil, nil, Date);
+  Check('Audit.NoFlagsMarkerSilencesNoFlags', not HasKind(lF, 'nf-marked', 'no-flags'));
+  Check('Audit.NoFlagsMarkerNegativeControl', HasKind(lF, 'nf-bare', 'no-flags'));
 end;
 
 procedure TestCmdReviewAccess(const pRepo: string);
@@ -3071,6 +3261,8 @@ begin
       TestDeadLinkPositiveControl(lRepo);
     if lRepo <> '' then
       TestWikiParity(lRepo);
+    TestCaptionKeyVector;
+    TestParseMenuTreeJson;
     TestCompareFindingSetsPositiveControl;
     TestEmptyKindsPositiveControl;
     TestExclusionCountPositiveControl;
@@ -3092,6 +3284,7 @@ begin
       TestSeededImporterAndFileChecks(lRepo);
       TestSinceOverride(lRepo);
       TestPositiveControls(lRepo);
+      TestMenuPathChecks(lRepo);
       TestHelpText(lRepo);
       TestHelpOrderTiebreak;
       TestPlannedSkipsLive(lRepo);
