@@ -453,6 +453,23 @@ Check 'H3 stderr audits the unfinished stand-down' ((ErrText $Hz) -match 'contro
 Check 'H4 engine H still exits once its store close returns' (WaitUntil { $Hz.P.HasExited } 30000) ''
 
 Write-Host ''
+Write-Host 'H-S: after a store-close BUSY reply the engine exits promptly (W5-C: FReplied was never set -> teardown waited the 5 s reply join) and the audit grace is not integer-divided to 0 s' -ForegroundColor Cyan
+$slowEnv = @{ DRAGLINT_TEST_HANG_STORE_CLOSE_MS = '3000'; DRAGLINT_TEST_STORE_CLOSE_GRACE_MS = '500' }
+$c8 = Join-Path $WorkDir 'c8.sqlite'; Copy-Item $pristine $c8
+$Hs = Start-Lsp $c8 'HS' $slowEnv
+Check 'H-S0 engine HS answered initialize' $Hs.Init ''
+$leafHs = PipeLeafOf $Hs 5000
+$null = WaitUntil { (OutText $Hs) -match 'publishDiagnostics' } 15000
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$rs = ''
+if ($leafHs -ne '') { try { $rs = Send-Ctl $leafHs "shutdown`t5000" 10000 } catch { $rs = "ERROR: $($_.Exception.Message)" } }
+Check 'H-S1 reply is the busy "not finished" answer' ($rs -match '^busy\t' -and $rs -match 'not finished') "got [$rs]"
+$null = WaitUntil { $Hs.P.HasExited } 30000
+$hsMs = $sw.ElapsedMilliseconds
+Check 'H-S2 engine HS exited promptly after its 3 s store close (< 8500 ms from the request; measured 6.1 s fixed, 11.2 s with the 5 s reply join)' ($Hs.P.HasExited -and ($hsMs -lt 8500)) "$hsMs ms"
+Check 'H-S3 the audit names the grace in ms, not 0 s' ((ErrText $Hs) -match 'not closed its stores after 500 ms') ''
+
+Write-Host ''
 Write-Host 'H-P: POSITIVE CONTROL -- same seams, hang shorter than the grace -> exiting (the FDone path)' -ForegroundColor Cyan
 $okEnv = @{ DRAGLINT_TEST_HANG_STORE_CLOSE_MS = '1000'; DRAGLINT_TEST_STORE_CLOSE_GRACE_MS = '6000' }
 $c7 = Join-Path $WorkDir 'c7.sqlite'; Copy-Item $pristine $c7

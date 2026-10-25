@@ -73,6 +73,7 @@ uses
   // The next unit and DragLint.Plugin.OpenSourcePath are listed so the CLI project index and lint cover the
   // draglint:// gate shared with drag-lint-open.exe (the engine does not use them); keep them for reconcile-project.
   DRagLint.Core.DragLintUri in '..\core\DRagLint.Core.DragLintUri.pas',
+  DRagLint.Core.CliError in '..\core\DRagLint.Core.CliError.pas',
   DRagLint.Core.ProtocolReg in '..\core\DRagLint.Core.ProtocolReg.pas',
   DragLint.Plugin.OpenSourcePath in '..\delphi-plugin\DragLint.Plugin.OpenSourcePath.pas',
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',

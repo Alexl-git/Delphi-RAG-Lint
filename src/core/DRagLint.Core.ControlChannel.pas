@@ -462,7 +462,6 @@ const
   CC_WAKE_ATTEMPTS                 = 10;
   CC_LF                            = 10;    { the one-line wire terminator }
   CC_NO_WAIT_MS                    = 0;     { TEvent.WaitFor poll: is it signalled right now }
-  MS_PER_SECOND                    = 1000;
   PIPE_PREFIX_FULL                 = '\\.\pipe\';
   CC_FILE_FLAG_FIRST_PIPE_INSTANCE = $00080000;
   CC_PIPE_REJECT_REMOTE_CLIENTS    = $00000008;
@@ -992,8 +991,11 @@ begin
       if FOwner.FDone.WaitFor(StoreCloseGraceMs) <> wrSignaled then
       begin
         Audit('shutdown asked by ' + Who + ' at ' + NowIso + ' -- read cancelled but the host has not closed its stores after '
-          + IntToStr(StoreCloseGraceMs div MS_PER_SECOND) + ' s');
+          + IntToStr(StoreCloseGraceMs) + ' ms');
         Reply(APipe, CONTROL_REPLY_BUSY + #9 + Pid + #9 + 'stand-down started but not finished');
+        { the final reply IS written: without this the host's teardown, finding the state TAKEN,
+          waited the whole CC_REPLY_JOIN_MS for a reply that had already gone (W5-C) }
+        FOwner.FReplied.SetEvent;
         Exit;
       end;
     end

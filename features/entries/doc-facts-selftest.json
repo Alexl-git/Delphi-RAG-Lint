@@ -22,11 +22,17 @@
     }
   ],
   "audience": "agent",
+  "questions": [
+    {
+      "ask": "Does the doc-facts renderer still pass its self-test on this index?",
+      "command": "drag-lint doc-facts-selftest --db <file.sqlite>"
+    }
+  ],
   "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown",
   "verified": {
-    "date": "2026-10-23",
+    "date": "2026-10-25",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.34.0-alpha",
     "surfaceHash": "f972cd161d5f8941eb68cd16d089453d4ca6a1b04cde9196635d0bab9b70cd3c"
   }
 }

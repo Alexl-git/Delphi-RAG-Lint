@@ -1,4 +1,4 @@
-unit DRagLint.LSP.Proxy;  // dl:ok circular-uses@3f25 -- implementation-only cycle forced by the P0 contract: Merge's interface takes TLspProxyOptions from this unit, this unit installs TProxyMergeEngine from Merge's implementation uses; it compiles
+unit DRagLint.LSP.Proxy;
 
 { v1.7 Task 1 -- the transparent LSP relay.
 
@@ -181,7 +181,7 @@ uses
   , System.Classes
   , DRagLint.Core.JobObject
   , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
-  , DRagLint.LSP.Proxy.Merge { TFrameInterceptor, TProxyMergeEngine -- implementation-only: Merge's interface uses this unit }
+  , DRagLint.LSP.Proxy.Merge { TFrameInterceptor, TProxyMergeEngine -- implementation-only: Merge's interface uses this unit }  // dl:ok circular-uses@5b36 -- implementation-only cycle forced by the P0 contract: Merge's interface takes TLspProxyOptions from this unit, this unit installs TProxyMergeEngine from Merge's implementation uses; it compiles
   ;
 
 var

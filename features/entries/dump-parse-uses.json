@@ -11,9 +11,28 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "dump-parse-uses"
+      "verb": "dump-parse-uses",
+      "usage": "drag-lint dump-parse-uses --file PATH",
+      "flags": [
+        {
+          "name": "--file",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "agent",
-  "notes": "internal: diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1."
+  "questions": [
+    {
+      "ask": "What uses entries and implementation line does the parser see in this file?",
+      "command": "drag-lint dump-parse-uses --file <U.pas>"
+    }
+  ],
+  "notes": "internal: diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1.",
+  "verified": {
+    "date": "2026-10-25",
+    "by": "ENGINE",
+    "build": "1.34.0-alpha",
+    "surfaceHash": "109c6dd9cb725520c0d30448a256b4dc402787b87ab3c4c92b1204a342dc8a72"
+  }
 }

@@ -115,6 +115,7 @@
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.LiveDocs.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.DragLintUri.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.CliError.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.ProtocolReg.pas"/>
         <DCCReference Include="..\delphi-plugin\DragLint.Plugin.OpenSourcePath.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.Schema.pas"/>

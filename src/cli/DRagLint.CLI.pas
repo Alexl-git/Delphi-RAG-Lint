@@ -96,6 +96,7 @@ implementation
 
 uses
   Winapi.Windows
+  , DRagLint.Core.CliError
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
@@ -264,10 +265,17 @@ type
       put in DbPaths; the first command-line --db then REPLACES it rather than
       appending, because the command line beats the config file. }
     DbFromConfig    : Boolean       ;
+    { The .drag-lint.json whose "db" key DbPaths holds, while DbFromConfig is
+      True; '' otherwise. Named wherever that db decides a write or a refusal,
+      because the user typed no --db (INBOX 2026-09-29 items 4b/5). }
+    DbConfigFile    : string        ;
     { True while ProjectPath holds ONLY a "project" key from a .drag-lint.json.
       A --project on the command line clears it; a POSITIONAL .dpr/.dproj/.dpk
       then wins over the key too (X-11, ApplyPositionalProjectPrecedence). }
     ProjectFromConfig: Boolean      ;
+    { True while Path holds ONLY a "path" key from a .drag-lint.json. The first POSITIONAL path
+      or --dir replaces it (command line beats the config file, W5-C). }
+    PathFromConfig  : Boolean       ;
     { '<file>: <key path>: expected <type>, got <type>' when the .drag-lint.json
       defaults file could not be read (LoadConfigDefaults); '' otherwise. Readers
       carry on with what was read; Run makes the WRITE verbs refuse. }
@@ -997,6 +1005,7 @@ begin
         AArgs.DbPath      := V.Value;
         AArgs.DbPaths     := [V.Value];
         AArgs.DbFromConfig:= True;
+        AArgs.DbConfigFile:= Candidate;
       end;
       V:= J.GetValue('project');
       if (V <> nil) and (V.Value <> '') then
@@ -1005,7 +1014,11 @@ begin
         AArgs.ProjectFromConfig:= True;
       end;
       V:= J.GetValue('path');
-      if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
+      if (V <> nil) and (V.Value <> '') then
+      begin
+        AArgs.Path          := V.Value;
+        AArgs.PathFromConfig:= True;
+      end;
       { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
         It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
         .drag-lint.json anywhere above the CWD turned every lint-all into a
@@ -1142,6 +1155,10 @@ function IsHelpToken(const A: string): Boolean;
 begin
   Result:= (A = '--help') or (A = '-h') or (A = '-?');
 end;
+
+const
+  /// <summary>The message prefix ParseArgs raises for an argument no flag accepts; Run turns it into the unknown-flag reason.</summary>
+  UNKNOWN_ARG_PREFIX = 'Unknown argument: ';
 
 /// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
 /// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
@@ -1323,6 +1340,7 @@ begin
         { the command line replaces a .drag-lint.json "db"; it does not add to it }
         Result.DbPaths     := nil;
         Result.DbFromConfig:= False;
+        Result.DbConfigFile:= '';
       end;
       if Length(Result.DbPaths) = 0 then Result.DbPath:= ParamStr(i);
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
@@ -1634,7 +1652,7 @@ begin
     else if (Result.Command = 'format'   ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'allow'    ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
-    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
+    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); Result.PathFromConfig:= False; end  // dl:ok multiple-statements-per-line -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; W5-C adds the config-flag reset to it
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
     { v1.7 Task 1: LSP merge proxy. --delphi-lsp names the child to spawn and
       exists chiefly so the guard can substitute a stub server; without it the
@@ -1811,8 +1829,12 @@ begin
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
-    else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
-    else raise Exception.CreateFmt('Unknown argument: %s', [A]);
+    else if ((Result.Path = '') or Result.PathFromConfig) and (not A.StartsWith('--')) then
+    begin
+      Result.Path          := A;
+      Result.PathFromConfig:= False;
+    end
+    else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while
   ApplyPositionalProjectPrecedence(Result);
@@ -4554,9 +4576,20 @@ begin
     if TFile.Exists(P) then Continue;
     Result:= False;
     if P = '' then Shown:= '(empty)' else Shown:= P;
-    Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d does not exist: %s',
-      [AVerb, I + 1, Length(AArgs.DbPaths), Shown]));
-    Writeln(ErrOutput, '       An explicit --db must be an existing index. Nothing was answered.');
+    if AArgs.DbFromConfig then
+    begin
+      { The user typed no --db: name the file that supplied it (INBOX 2026-09-29 item 5). }
+      Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d (the "db" key of %s) does not exist: %s',
+        [AVerb, I + 1, Length(AArgs.DbPaths), AArgs.DbConfigFile, Shown]));
+      Writeln(ErrOutput, '       A .drag-lint.json "db" counts as an explicit --db and must be an existing index. ' +
+        'Nothing was answered.');
+    end
+    else
+    begin
+      Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d does not exist: %s',
+        [AVerb, I + 1, Length(AArgs.DbPaths), Shown]));
+      Writeln(ErrOutput, '       An explicit --db must be an existing index. Nothing was answered.');
+    end;
     Writeln(ErrOutput, '       Find it:  drag-lint resolve-dbs --project <x.dproj>   (or --in <x.pas>)');
     Writeln(ErrOutput, Format('       Build it: drag-lint index --project <x.dproj> --db "%s"', [Shown]));
   end;
@@ -5314,6 +5347,12 @@ begin
     Exit(2);
   end;
   Writeln('Database: ', ResolvedDb);
+  { A "db" key found by walking up from the CWD decides this write although the
+    user typed no --db -- and it may belong to another project's tree (INBOX
+    2026-09-29 item 4b). Say where it came from, on its own line so a reader of
+    the Database: line is unaffected. }
+  if AArgs.DbFromConfig and SameText(ResolvedDb, AArgs.DbPath) then
+    Writeln('          (the "db" key of ', AArgs.DbConfigFile, '; pass --db to write elsewhere)');
 
   { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
     for a manifest item; this single-target path never did, because the old
@@ -5323,9 +5362,13 @@ begin
     measured 2026-08-26, and it reads like a permissions problem rather than a
     missing directory. }
   var DbHome: string:= ExtractFilePath(ResolvedDb);
-  if (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
+  { --dry-run MUST NOT TOUCH THE DISK (W5-C): no _D-RAG home, no DB file, no Migrate or
+    fingerprint stamp on an existing one. The pipeline below needs a store to report what it
+    would do, so a dry run gets a throw-away in-memory one. The cost: a dry run does not
+    preview refusals that read the stored DB (project-tag conflict, engine older than DB). }
+  if (not AArgs.DryRun) and (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
 
-  Store:= TSQLiteSymbolStore.Create(ResolvedDb);
+  Store:= TSQLiteSymbolStore.Create(if AArgs.DryRun then ':memory:' else ResolvedDb);
   { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
     byte-identical. Exit 2, the code every other refusal in this verb uses. }
   if RefuseIfEngineOlderThanDb(Store, ResolvedDb) then Exit(2);
@@ -5589,7 +5632,7 @@ begin
   else Folders:= [AArgs.Path];
 
   { PROJECT-scoped: `--project` (the compile-closure scan above) or a bare
-    .dpr/.dproj path. The bare path does NOT reach the closure arm -- it walks
+    .dpr/.dproj/.dpk path. The bare path does NOT reach the closure arm -- it walks
     only that one file (Folders:= [AArgs.Path]) with the platform built-in
     defines -- but it is counted here, so it stamps the scope and the project
     tag as a --project run does. Everything else -- an explicit folder,
@@ -12865,14 +12908,15 @@ const
     'type-name-prefix', 'field-name-prefix', 'param-name-prefix', 'method-pascalcase', 'const-casing',
     'local-var-casing', 'unit-name-matches-file', 'reserved-word-casing', 'hungarian-or-short-identifier',
     'local-field-prefix', 'confusable-identifier');
-  LINT_GATE_DEAD_CODE: array[0..24] of string = (
+  LINT_GATE_DEAD_CODE: array[0..25] of string = (
     'unused-parameter', 'identical-then-else', 'referenced-never-set', 'redundant-parentheses',
     'commented-out-code', 'function-result-ignored', 'destructor-without-override',
     'case-with-too-few-branches', 'boolean-expression-complexity', 'exception-constructed-but-not-raised',
     'duplicate-exception-handler', 'repeated-else-if-condition', 'property-references-itself',
     'unit-too-large', 'weak-random-for-security', 'create-inside-try', 'insecure-temp-file',
     'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'message-chain',
-    'public-writable-field', 'loop-control-flag', 'default-encoding-io', 'doc-orphan-block');
+    'public-writable-field', 'loop-control-flag', 'default-encoding-io', 'doc-orphan-block',
+    'line-too-long');
   { RunDocDrift splits one analysis over three ids (DocRules.IsDocDriftFamily). }
   LINT_GATE_DOC_DRIFT: array[0..2] of string = ('doc-drift', 'doc-param-no-description', 'doc-param-not-in-signature');
 
@@ -29471,7 +29515,7 @@ begin
   except
     on E: EMenuTreeStale do
     begin
-      Writeln(ErrOutput, 'menu-tree: stale index: ', E.Message);
+      WriteCliError(CLI_ERR_STALE_INDEX, 'menu-tree: stale index: ' + E.Message, AArgs.AsJson, '', '');
       Exit(EXIT_STALE_INDEX);
     end;
     on E: EMenuTreeSetup do
@@ -29558,7 +29602,7 @@ begin
     except
       on E: EMenuTreeStale do
       begin
-        Writeln(ErrOutput, 'menu-drift: stale index: ', E.Message);
+        WriteCliError(CLI_ERR_STALE_INDEX, 'menu-drift: stale index: ' + E.Message, AArgs.AsJson, '', '');
         Exit(EXIT_STALE_INDEX);
       end;
       on E: EMenuTreeSetup do
@@ -32925,9 +32969,14 @@ begin
       LoadConfigDefaults has warned and kept only the keys before the bad one.
       A reader carries on with that; a verb that WRITES an index or a manifest
       refuses, because the half it read may be the very "db" it would write.
-      compile-check computes and skips its cache instead (ResolveCompileCheckDb). }
+      compile-check computes and skips its cache instead (ResolveCompileCheckDb).
+      The SOURCE writers refuse too (INBOX 2026-09-29 item 5): `document --apply`
+      and `lint --fix --apply` render from the docs keys, and would otherwise
+      write the default for the key that failed to parse. Their dry runs read. }
+    var WritesSource: Boolean:= (SameText(Args.Command, 'document') and Args.Apply) or
+                                (SameText(Args.Command, 'lint') and Args.Fix and Args.Apply);
     if (Args.ConfigError <> '') and
-       MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
+       (WritesSource or MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project'])) then
     begin
       ReportManifestRefusal(Args.Command, Args.ConfigError);
       Exit(2);
@@ -33222,7 +33271,15 @@ begin
         Server.Free;
       end;
     end // if
-    else begin Writeln(ErrOutput, 'ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
+    else begin
+      WriteCliError(CLI_ERR_UNKNOWN_VERB, 'unknown command: ' + Args.Command, Args.AsJson, 'verb', Args.Command);
+      if not Args.AsJson then
+      begin
+        Writeln(ErrOutput, 'ERROR: unknown command: ', Args.Command);
+        PrintHelp;
+      end;
+      Result:= 2;
+    end;
   except
     on E: Exception do
     begin
@@ -33248,7 +33305,13 @@ begin
         Writeln reappears on either of these two paths -- the invariant lived
         only in a comment before, and was violated ~60 lines below the comment
         that stated it. }
-      Writeln(ErrOutput, 'FATAL: ', E.ClassName, ': ', E.Message);
+      { The reason first (owner ruling A14): exit 3 is also the stale-index code, so an unknown
+        flag says so in a stable token; --json gets the JSON object only, not the FATAL prose. }
+      var BadFlag:= '';
+      if E.Message.StartsWith(UNKNOWN_ARG_PREFIX) then BadFlag:= E.Message.Substring(Length(UNKNOWN_ARG_PREFIX));
+      if BadFlag <> '' then WriteCliError(CLI_ERR_UNKNOWN_FLAG, E.Message, CommandLineWantsJson, 'flag', BadFlag);
+      if (BadFlag = '') or not CommandLineWantsJson then
+        Writeln(ErrOutput, 'FATAL: ', E.ClassName, ': ', E.Message);
       { A breadcrumb that survives a broken transport. Without this, a TRANSIENT
         fatal is unfalsifiable after the fact: there is no --log-file, and
         stderr is only as durable as whoever happened to be capturing it.

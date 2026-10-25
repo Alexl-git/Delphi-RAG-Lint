@@ -7,7 +7,7 @@ group: documentation
 order: 40002
 since: 0.93.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.34.1-alpha
 ---
 
 # doc-drift
@@ -44,6 +44,15 @@ drag-lint doc-drift --qname X --db PATH [--json]
 
 This is labeled a "diagnostic" in the CLI banner -- it is a troubleshooting
 tool, not a daily driver.
+
+### Exceptions raised in callees
+An `<exception cref="EFoo">` is not drift when the routine, or a callee up to
+three calls down (resolved call edges only), raises `EFoo`. The walk is
+breadth-first and cycle-safe, capped at 256 visited symbols
+(`CREF_RAISE_MAX_HOPS = 3`, `CREF_RAISE_MAX_VISITS = 256` in
+`src\doc\DRagLint.Doc.Drift.pas`) so a hub routine cannot walk the whole call
+graph. A raise beyond three hops, or past the cap, is still reported. It used
+to be one hop.
 
 ### Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.

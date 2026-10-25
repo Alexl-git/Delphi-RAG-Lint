@@ -210,7 +210,8 @@ uses
   { DRagLint.Doc.Facts moved to the INTERFACE uses -- TDocFactsRenderOptions is
     part of Analyze's signature now. It still supplies TDocFactsBuilder here. }
   DRagLint.Refactor.DocStub, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
-  DRagLint.Doc.SharedFacts;
+  DRagLint.Doc.SharedFacts,
+  DRagLint.Lint.ProjectChecks.Parse; { StripPasCommentsKeepLayout -- ReadDeclLine, as Facts.ReadDeclLine }
 
 // ---------------------------------------------------------------------------
 // Small deterministic helpers
@@ -338,10 +339,17 @@ begin
   if ALine <= Length(Lines) then Result:= Lines[ALine - 1];
 end;
 
-// ReadDeclLineRaw, trimmed.
+// ReadDeclLineRaw with its comments blanked, trimmed. Comments go for the reason
+// Facts.ReadDeclLine strips them (see its header): this line is EffectiveSignature's
+// fallback for a parameterless routine, and ParseReturnType reads "text after the last
+// ':'" as a return type -- so a parameterless procedure carrying a review marker (the
+// one `allow` writes on the declaration line since H2; its `dl`-colon-`ok` prefix
+// holds a colon) read as a function returning the marker text and drew a false
+// "no <returns> tag" finding. Same scrubber as Facts.
+// Pinned by tests\autotest\run_doc_drift_procedure_marker.ps1.
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
 begin
-  Result:= Trim(ReadDeclLineRaw(AFilePath, ALine));
+  Result:= Trim(StripPasCommentsKeepLayout(ReadDeclLineRaw(AFilePath, ALine)));
 end;
 
 // v(1.20.6 T5): the lines of AFilePath, for the indent decision. Drift asks once
