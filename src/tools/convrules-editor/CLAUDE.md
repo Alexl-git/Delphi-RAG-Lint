@@ -42,7 +42,7 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 2460 pass / 0 fail / 19 skip** after B4 batch mode (2026-10-23). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 2625 pass / 0 fail / 20 skip** after conv-enc Task 6 (2026-10-25). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
   **2615 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
@@ -66,6 +66,8 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-convert-request.ps1` 28 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
   * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
+  * `drive-save-encoding.ps1` <N> -- Save question, File > Encoding, UTF-16 BOM note
+  * `drive-convert-encoding.ps1` <N> -- Convert tab raise / lower questions (raise.* SKIP without `convert_encoding_guard`)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
 ## Unit map (who owns which decision)
@@ -85,12 +87,14 @@ two different builds have reported the same version; compare SHA256 and build st
 * `WorkList` (pure) / `WorkListTab` (UI) -- pas_uses work list.
 * `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).
 * `ConvCatalog` / `Casts` -- cast options incl. `ckValue` (StripDB).
+* `TextEncoding` -- the encoding ladder, detection, round trip, pre-save decision, ReadTextDetect / WriteTextAtLevel.
 * `Engine` -- `TEngineAdapter`: every engine call (incl. `ApplyConversionBatch`, apply-batch/1), pipes, timeouts, capabilities, resolve cache.
 * `EngineWait` -- progress window / cancellable long call (editor-only). `InputGate` -- N7/N11 queue filter decisions (`MainForm.AppMessage` wires it). `DropTarget` -- OLE glue only.
 * `MainForm` -- wiring only.
 
 ## Standing traps
 
+* Never `TFile.ReadAllText` / `WriteAllText(.., TEncoding.ASCII)` on a user's book: `ReadTextDetect` / `WriteTextAtLevel`.
 * `IfThen` evaluates BOTH arguments -- a nil deref in the unused branch still crashes.
 * `GetMenu(main)` returns 0 (VCL style paints its own bar): drivers ask the form with
   `MAIN_MENU_QUERY_MSG` and invoke items by PATH (`[W]::InvokeMenu($main, 'File|Save As...')`).
