@@ -77,6 +77,7 @@ type
     /// </returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas)</para>
     /// <para>Calls: SameText</para>
     /// <para>Returns: (ExtractorVersion &lt;&gt; '')</para>
     /// <para>Reads: ExtractorVersion, SchemaVersion</para>

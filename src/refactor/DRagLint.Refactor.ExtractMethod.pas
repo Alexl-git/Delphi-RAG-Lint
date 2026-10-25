@@ -53,7 +53,7 @@ type
   /// 1-based line/column span from the first statement's start to the last
   /// statement's end, as reported by tree-sitter's StartPoint/EndPoint.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ItemInRunSpan (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.VarUsedOutsideRun (DRagLint.Refactor.ExtractMethod.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -83,7 +83,7 @@ type
   /// new method parameter or return type cannot be synthesized without it.
   /// All fields are undefined when Refuse &lt;> ''.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.EmitInternalDeletions (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas)</para>
   /// <para>Used in units: DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

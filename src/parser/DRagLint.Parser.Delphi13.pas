@@ -18,8 +18,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Format.Yadf, DRagLint.LSP.Server</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoDumpParseUses (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.UsesReconcile, DRagLint.Format.Yadf, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDelphi13Parser = class(TInterfacedObject, IParser)
@@ -32,9 +32,11 @@ type
       /// <summary><!-- drag-lint:auto sum -->TDelphi13Parser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+2 more)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoDumpParseUses (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+4 more)</para>
+      /// <para>Calls: DRagLint.Parser.Delphi13.tree_sitter_delphi13</para>
       /// <para>constructor</para>
       /// <para>Writes: FLanguage</para>
+      /// <seealso cref="DRagLint.Parser.Delphi13.tree_sitter_delphi13"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
@@ -87,6 +89,7 @@ type
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas)</para>
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

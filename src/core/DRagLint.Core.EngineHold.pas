@@ -69,8 +69,11 @@ const
 /// on a variable either of them may have inherited differently. Caught by
 /// running it, not by reading it.
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), DRagLint.Core.EngineHold.EngineIsHeld (DRagLint.Core.EngineHold.pas), DRagLint.Core.EngineHold.HoldEngine (DRagLint.Core.EngineHold.pas), DRagLint.Core.EngineHold.ReleaseEngineHold (DRagLint.Core.EngineHold.pas)</para>
+/// <para>Calls: DRagLint.Core.EngineHold.EngineHoldDir</para>
 /// <para>Returns: TPath.Combine(EngineHoldDir, HOLD_FILE_NAME)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineHoldDir"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EngineHoldFilePath: string;
@@ -89,11 +92,14 @@ function EngineHoldFilePath: string;
 /// still wait for it.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
-/// <para>Calls: IntToStr</para>
+/// <para>Calls: DRagLint.Core.EngineHold.EngineHoldDir, DRagLint.Core.EngineHold.EngineHoldFilePath, DRagLint.Core.EngineHold.NowEpochUtc, IntToStr</para>
 /// <para>Returns: True; False</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AError (out)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineHoldDir"/>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineHoldFilePath"/>
+/// <seealso cref="DRagLint.Core.EngineHold.NowEpochUtc"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function HoldEngine(ASeconds: Integer; out AError: string): Boolean;
@@ -105,10 +111,12 @@ function HoldEngine(ASeconds: Integer; out AError: string): Boolean;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.EngineHold.EngineHoldFilePath</para>
 /// <para>Returns: True; False</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AError (out)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineHoldFilePath"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReleaseEngineHold(out AError: string): Boolean;
@@ -122,11 +130,13 @@ function ReleaseEngineHold(out AError: string): Boolean;
 /// read. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
-/// <para>Calls: Integer, Trim, TryStrToInt64</para>
+/// <para>Calls: DRagLint.Core.EngineHold.EngineHoldFilePath, DRagLint.Core.EngineHold.NowEpochUtc, Integer, Trim, TryStrToInt64</para>
 /// <para>Returns: False; True</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Mutates: ASecondsLeft (out)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineHoldFilePath"/>
+/// <seealso cref="DRagLint.Core.EngineHold.NowEpochUtc"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EngineIsHeld(out ASecondsLeft: Integer): Boolean;

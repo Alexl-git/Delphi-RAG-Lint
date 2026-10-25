@@ -87,15 +87,15 @@ type
       /// <returns><!-- drag-lint:auto -->TParseResult -- Observed: Default(TParseResult).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Parser.Sql.ComputeLineCol, DRagLint.Parser.Sql.FindMatchingParen, DRagLint.Parser.Sql.ParseColumnList, DRagLint.Parser.Sql.ReadSqlExceptionMessage, DRagLint.Parser.Sql.StripCommentsAndStrings, DRagLint.Parser.Sql.TSqlState.AddRef, DRagLint.Parser.Sql.TSqlState.AddSymbol, DRagLint.Parser.Sql.TSqlState.Create</para>
+      /// <para>Calls: Default, DRagLint.Parser.Sql.ComputeLineCol, DRagLint.Parser.Sql.FindMatchingParen, DRagLint.Parser.Sql.ParseColumnList, DRagLint.Parser.Sql.ReadSqlExceptionMessage, DRagLint.Parser.Sql.StoredIdent, DRagLint.Parser.Sql.StripCommentsAndStrings, DRagLint.Parser.Sql.TSqlState.AddRef, DRagLint.Parser.Sql.TSqlState.AddSymbol, DRagLint.Parser.Sql.TSqlState.Create</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 151 lines (full implementation)</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 153 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Sql.ComputeLineCol"/>
       /// <seealso cref="DRagLint.Parser.Sql.FindMatchingParen"/>
       /// <seealso cref="DRagLint.Parser.Sql.ParseColumnList"/>
       /// <seealso cref="DRagLint.Parser.Sql.ReadSqlExceptionMessage"/>
-      /// <seealso cref="DRagLint.Parser.Sql.StripCommentsAndStrings"/>
+      /// <seealso cref="DRagLint.Parser.Sql.StoredIdent"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;

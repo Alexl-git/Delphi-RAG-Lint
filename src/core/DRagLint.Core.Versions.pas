@@ -50,7 +50,7 @@ const
 /// 1.9.0 -- is the pair tests\autotest\run_index_never_downgrades.ps1 plants.
 /// Pure; no allocation beyond the split.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.RefuseIfEngineOlderThanDb (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.CLI.RefuseIfEngineOlderThanDb (DRagLint.CLI.pas), DRagLint.CLI.ResolverRefusal (DRagLint.CLI.pas)</para>
 /// <para>Calls: CompareStr, Copy, DRagLint.Core.Versions.CompareDottedVersions.LimbAt, DRagLint.Core.Versions.CompareDottedVersions.Split, Pos, StrToIntDef, Trim</para>
 /// <para>Returns: CompareStr(SA, SB)</para>
 /// <para>Pure</para>

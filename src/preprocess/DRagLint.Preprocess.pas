@@ -85,13 +85,14 @@ uses
 /// No shared mutable state -- each call builds its own defines
 /// dictionary and IF stack.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
-/// <para>Calls: DRagLint.Preprocess.Preprocess/2</para>
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Preprocess/2, DRagLint.Preprocess.Types.TPPOptionsDefault</para>
 /// <para>Returns: Preprocess(AUtf8, Opts)</para>
-/// <para>Overload 1 of 2</para>
+/// <para>Overload 1 of 3</para>
 /// <para>Recursive</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Preprocess.Types.TPPOptionsDefault"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;
@@ -112,12 +113,12 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// directive is always blanked, never spliced.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Preprocess.PreprocessInto, DRagLint.Preprocess.Tolerance.ApplyTolerances, LowerCase</para>
-/// <para>Overload 2 of 2</para>
+/// <para>Calls: DRagLint.Preprocess.PreprocessWithSites</para>
+/// <para>Returns: PreprocessWithSites(AUtf8, AOptions, nil)</para>
+/// <para>Overload 2 of 3</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
-/// <seealso cref="DRagLint.Preprocess.PreprocessInto"/>
-/// <seealso cref="DRagLint.Preprocess.Tolerance.ApplyTolerances"/>
+/// <seealso cref="DRagLint.Preprocess.PreprocessWithSites"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; overload;

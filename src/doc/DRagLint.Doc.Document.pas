@@ -179,9 +179,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+25 more)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+29 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 539 lines (full implementation)</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 553 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

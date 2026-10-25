@@ -40,9 +40,10 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TSymbolKindHelper.ToText</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
       /// <seealso cref="DRagLint.Refactor.DeadCode.TDeadCodeFinder.Find"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>

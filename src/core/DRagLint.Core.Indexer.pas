@@ -173,15 +173,16 @@ type
       /// </remarks>
       function IsUnderExcludeRoot  (const APath: string): Boolean;
       /// <param name="ADir"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True; False.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+      /// IsUnderExcludeRoot(IncludeTrailingPathDelimiter(ADir)) or
+      /// DirPrunedByFilter(ADir, FWalkFilter).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot, DRagLint.Index.Glob.TGlob.MatchesAny, ExcludeTrailingPathDelimiter, ExtractFileName, IncludeTrailingPathDelimiter, LowerCase, Pos</para>
+      /// <para>Calls: DRagLint.Core.Indexer.DirPrunedByFilter, DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot, IncludeTrailingPathDelimiter</para>
       /// <para>Reads: FWalkFilter</para>
-      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Indexer.DirPrunedByFilter"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
-      /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
@@ -318,16 +319,16 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.Create/3</para>
+      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.Create/3, DRagLint.Core.Model.DefaultDocConfig</para>
       /// <para>Overload 2 of 2</para>
-      /// <para>constructor</para>
       /// <para>Pure</para>
+      /// <para>constructor</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Model.DefaultDocConfig"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>); overload;
@@ -361,18 +362,18 @@ type
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DateTimeToUnix, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.Intern, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines (+32 more)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DateTimeToUnix, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.ProfNow, DRagLint.Core.Indexer.TIndexer.Intern, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress (+37 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.IndexFile</para>
-      /// <para>Complexity: 32 (cyclomatic, outer body), 391 lines (full implementation)</para>
+      /// <para>Complexity: 41 (cyclomatic, outer body), 421 lines (full implementation)</para>
       /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FForceReparse, FPreprocessEnabled, FProfile (+2 more)   Writes: FSkippedUpToDate, FParsedFiles</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Core.Indexer.BuildEnclosingLineMap"/>
       /// <seealso cref="DRagLint.Core.Indexer.FindDocRegionAbove"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Intern"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce"/>
+      /// <seealso cref="DRagLint.Core.Indexer.HasBinaryDfmHeader"/>
+      /// <seealso cref="DRagLint.Core.Indexer.ProfNow"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFile(const AFilePath: string);
@@ -482,7 +483,6 @@ type
       /// <param name="AProfile"><!-- drag-lint:auto type -->const TDefineProfile</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.SetPreprocess</para>
       /// <para>Writes: FPreprocessEnabled, FProfile, FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>

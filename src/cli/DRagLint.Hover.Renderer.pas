@@ -56,7 +56,7 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverMarkdown (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverMarkdown (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 17 (cyclomatic, outer body), 136 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -92,7 +92,7 @@ function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; o
 /// <returns><!-- drag-lint:auto -->string -- Observed: ''; SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Format, Pos, StartsText, Trim</para>
 /// <para>Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>

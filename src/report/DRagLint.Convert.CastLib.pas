@@ -47,7 +47,7 @@ type
   /// the target's filer framing (graphic | bitmap | metafile | picture), '' when
   /// the engine is to take it from the yields class.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+2 more)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.PlanValueCastSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -108,7 +108,7 @@ type
   /// Fallback is '' when the block declares no `else`, and an unmatched value
   /// is then reported rather than guessed at.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -124,8 +124,8 @@ type
   /// <summary>Everything one .castlib file declares.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.CastLib.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.CastLib.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastLib = record
@@ -165,8 +165,8 @@ function LoadCastLibText(const AText: string): TArray<TCastDef>;
 /// this so the two can never disagree about the block grammar.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.CastLib.LoadCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas)</para>
-/// <para>Calls: Copy, Default, DRagLint.Convert.CastLib.SplitArrow, DRagLint.Convert.CastLib.SplitList, DRagLint.Convert.CastLib.Unquote, LowerCase, Pos, Trim</para>
-/// <para>Complexity: 26 (cyclomatic, outer body), 116 lines (full implementation)</para>
+/// <para>Calls: Copy, Default, DRagLint.Convert.CastLib.SplitArrow, DRagLint.Convert.CastLib.SplitList, DRagLint.Convert.CastLib.Unquote, Format, LowerCase, Pos, SameText, Trim</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 129 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.CastLib.SplitArrow"/>
 /// <seealso cref="DRagLint.Convert.CastLib.SplitList"/>
@@ -196,7 +196,7 @@ function LoadCastLib(const APath: string): TArray<TCastDef>;
 /// ParseCastLibText(TFile.ReadAllText(APath)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.CastLib.ParseCastLibText</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
@@ -238,7 +238,7 @@ function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): 
 /// lookups cannot drift apart. It lives here rather than in a consumer for the
 /// reason this unit exists: one parser, two consumers, no drift.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: Default, SameText</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: ADef (out)</para>
@@ -253,7 +253,7 @@ function FindClassCast(const ALib: TCastLib; const AName: string; out ADef: TCas
 /// <returns>True and fills ADef when found.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: Default, SameText</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: ADef (out)</para>
@@ -271,7 +271,7 @@ function FindEnumCast(const ALib: TCastLib; const AName: string; out ADef: TEnum
 /// target enum is how a form acquires a value nobody chose.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: SameText, Trim</para>
 /// <para>Returns: True; False</para>
 /// <para>Mutates: AResult (out)</para>

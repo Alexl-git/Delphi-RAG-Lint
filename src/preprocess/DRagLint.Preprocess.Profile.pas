@@ -39,9 +39,8 @@ uses
 /// <returns>Lowercased built-in define names.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
 /// <para>Calls: SameText</para>
-/// <para>Owns returned: new (caller owns)</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -66,14 +65,15 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// lowercased).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Preprocess.Profile.AddDccDefines, DRagLint.Preprocess.Profile.CfgAliasFor, DRagLint.Preprocess.Profile.DccDefineInGroup, DRagLint.Preprocess.Profile.PlatformBuiltins</para>
+/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.AddDccDefines, DRagLint.Preprocess.Profile.CfgAliasFor, DRagLint.Preprocess.Profile.DccDefineInGroup, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Preprocess.Profile.PlatformGroupSuffix</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.AddDccDefines"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.CfgAliasFor"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.DccDefineInGroup"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.PlatformGroupSuffix"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ProfileFromDproj(const ADprojPath, APlatform, AConfig: string): TDefineProfile;

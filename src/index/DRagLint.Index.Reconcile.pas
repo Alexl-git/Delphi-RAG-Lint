@@ -89,7 +89,7 @@ type
   /// a caller offering revert must look at Backups, and a caller reporting
   /// 'N units added' must look at Edited.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.ReconcileNothingWrittenReason (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

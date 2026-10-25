@@ -30,7 +30,7 @@ type
   /// filter by "any method-shaped kind" / "any type-defining kind" in one test.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.EnclosingClassChainDeclares (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LexicalParenlessLookup (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LexicalScopeDeclaresValue (DRagLint.Index.CallResolver.pas) (+8 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbolKindSet = set of TSymbolKind;
@@ -314,7 +314,7 @@ type
   /// Not thread-safe; single owning thread only. Holds the ISymbolStore
   /// for the resolver's lifetime -- the store must outlive the resolver.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveEnumValueRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveEnumValueRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -499,14 +499,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetTypeCandidates, DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelRoutines, DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges, LowerCase</para>
-    /// <para>Reads: FStore, FNameToCands, FNameToRoutines, FFileScope</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetEnumValueSymbols, DRagLint.Core.Interfaces.ISymbolStore.GetTypeCandidates, DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelRoutines, DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelValueDecls, DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges, LowerCase</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 52 lines (full implementation)</para>
+    /// <para>Reads: FStore, FNameToCands, FNameToRoutines, FNameToEnumValues, FNameToUnitValues, FFileScope</para>
     /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetEnumValueSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTypeCandidates"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelRoutines"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelValueDecls"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure BuildMaps;
@@ -518,14 +519,14 @@ type
     /// L.IndexOf(ACandFile) &gt;= 0.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeUse (DRagLint.Index.CallResolver.pas) (+6 more)</para>
     /// <para>Reads: FFileScope</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
@@ -538,16 +539,16 @@ type
     /// Cands[0].Id.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.TypeReceiver (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.IsProceduralTypeText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfMember (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfOrdinaryName (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeReceiver (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.WithEntityType (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: Copy, DRagLint.Index.CallResolver.TCallResolver.CandInScope, LowerCase, Pos, Trim</para>
     /// <para>Complexity: 11 (cyclomatic, outer body), 35 lines (full implementation)</para>
     /// <para>Reads: FNameToCands</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
@@ -568,8 +569,8 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveExternally(const AReceiver, ACallName: string): string;
@@ -579,15 +580,15 @@ type
     /// TList&lt;TSymbol&gt;.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods (DRagLint.Index.CallResolver.pas) ?, DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LevelMemberKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LexicalParenlessLookup (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LexicalScopeDeclaresValue (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LocalInScopeAt (DRagLint.Index.CallResolver.pas) (+6 more)</para>
     /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols</para>
     /// <para>Reads: FChildCache, FStore</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ChildrenOf(AParentId: Int64): TList<TSymbol>;
@@ -596,16 +597,16 @@ type
     /// <returns><!-- drag-lint:auto -->TStringList -- Observed: TStringList.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.MemberAccessMode (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BareReadSite (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.InsideAnonymousMethod (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LocalDeclNamesOf (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LocalScopeCovers (DRagLint.Index.CallResolver.pas) (+5 more)</para>
     /// <para>Calls: DateTimeToUnix, DRagLint.Core.Interfaces.ISymbolStore.FileIsUpToDate, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
     /// <para>Reads: FLineCache, FStore, FStaleFiles</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FileIsUpToDate"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LinesOf(AFileId: Int64): TStringList;
@@ -621,14 +622,14 @@ type
     /// FStaleFiles.ContainsKey(AFileId).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BareReadSite (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveWriteRef (DRagLint.Index.CallResolver.pas) (+1 more)</para>
     /// <para>Reads: FStaleFiles</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsStale(AFileId: Int64): Boolean;
@@ -648,14 +649,14 @@ type
     /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol); S.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeReceiver (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ClassChainParenlessLookup (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.EnclosingClassChainDeclares (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.NearestClassMember (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.QualifiedValueTarget (DRagLint.Index.CallResolver.pas) (+3 more)</para>
     /// <para>Calls: Default, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, SameText</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet;
@@ -678,15 +679,15 @@ type
     /// method-chain and unit-level rungs so the two cannot drift apart on how a
     /// tie is broken.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitQualifiedRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveParenlessRead (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: DRagLint.Index.CallResolver.SignatureArityRange</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 52 lines (full implementation)</para>
     /// <para>Mutates: AConfidence (out)</para>
     /// <seealso cref="DRagLint.Index.CallResolver.SignatureArityRange"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
@@ -712,16 +713,15 @@ type
     /// fits -- the result is exactly what it was before B1, so a call that used
     /// to resolve still resolves.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods, DRagLint.Index.CallResolver.TCallResolver.PickFromMatches, SameText</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfMember (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.WithMemberKind (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.CallResolver.TCallResolver.AncestorsOf, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods, DRagLint.Index.CallResolver.TCallResolver.PickFromMatches, SameText</para>
     /// <para>Complexity: 14 (cyclomatic, outer body), 100 lines (full implementation)</para>
-    /// <para>Reads: FStore</para>
     /// <para>Mutates: AConfidence (out)</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.PickFromMatches"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
@@ -740,15 +740,14 @@ type
     /// declaration -- the nearest declaration is the one the source names. No
     /// arity to pick by, so no ambiguity: the first hit is the answer.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind</para>
-    /// <para>Reads: FStore</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ClassChainParenlessLookup (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.EnclosingClassChainDeclares (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveBareMemberRead (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas) (+4 more)</para>
+    /// <para>Calls: Default, DRagLint.Index.CallResolver.TCallResolver.AncestorsOf, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
@@ -782,9 +781,9 @@ type
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Index.CallResolver.IsIdentPart"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LinesOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function MemberAccessMode(const ARef: TReference): string;
@@ -814,9 +813,9 @@ type
     /// <para>Mutates: AFound (out)</para>
     /// <seealso cref="DRagLint.Index.CallResolver.SignatureArityRange"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PickAccessor(AParentId: Int64; const AName: string; AArity: Integer;
@@ -834,14 +833,13 @@ type
     /// PickAccessor(A.SymbolId, Ident, WantArity, ACCESSOR_KINDS, Found).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.AccessorIdentAfter, DRagLint.Index.CallResolver.PropertyIndexArity, DRagLint.Index.CallResolver.TCallResolver.FileIsStale, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.PickAccessor, Min</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveBareMemberRead (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: Default, DRagLint.Index.CallResolver.AccessorIdentAfter, DRagLint.Index.CallResolver.PropertyIndexArity, DRagLint.Index.CallResolver.TCallResolver.AncestorsOf, DRagLint.Index.CallResolver.TCallResolver.FileIsStale, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.PickAccessor, Min</para>
     /// <para>Complexity: 17 (cyclomatic, outer body), 42 lines (full implementation)</para>
-    /// <para>Reads: FStore</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
     /// <seealso cref="DRagLint.Index.CallResolver.AccessorIdentAfter"/>
     /// <seealso cref="DRagLint.Index.CallResolver.PropertyIndexArity"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LinesOf"/>
     /// <!-- drag-lint:auto END -->
@@ -869,17 +867,16 @@ type
     /// belong to the receiver-typed and unit-level lookups, which this must
     /// neither duplicate nor pre-empt.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, SameText</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, DRagLint.Index.CallResolver.TCallResolver.SymbolById, SameText</para>
     /// <para>Returns: 0; Matches[0].Id</para>
     /// <para>Complexity: 14 (cyclomatic, outer body), 55 lines (full implementation)</para>
-    /// <para>Reads: FStore</para>
     /// <para>Mutates: AConfidence (out)</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.SymbolById"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupInLexicalScopes(AEnclosingSymbolId: Int64; const AName: string;
@@ -918,9 +915,9 @@ type
     /// <para>Mutates: AConfidence (out)</para>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.PickFromMatches"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupUnitLevelRoutine(ACallFileId: Int64; const AName: string;
@@ -931,23 +928,24 @@ type
     /// the enclosing routine's owning class is used.</summary>
     /// <param name="ACallRef"><!-- drag-lint:auto type -->const TReference</param>
     /// <param name="AReceiverExpr"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; Encl.ParentId;
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0;
+    /// TypeReceiverThroughWith(ACallRef, AReceiverExpr, WithHandled); Encl.ParentId;
     /// ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
     /// ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
     /// ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId);
-    /// ResolveTypeNameToSymbol(AReceiverExpr, ACallRef.FileId).</returns>
+    /// TypeOfOrdinaryName(ACallRef, AReceiverExpr).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.CallResolver.IsIdentPart, DRagLint.Index.CallResolver.IsIdentStart, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol, DRagLint.Index.CallResolver.TryParseCastTarget, Pos, SameText</para>
-    /// <para>Complexity: 20 (cyclomatic, outer body), 117 lines (full implementation)</para>
-    /// <para>Reads: FStore</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.CalleeTakesProcedural (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeReceiver (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.CallResolver.IsIdentChain, DRagLint.Index.CallResolver.IsIdentPart, DRagLint.Index.CallResolver.IsIdentStart, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.LocalInScopeAt, DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType, DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol, DRagLint.Index.CallResolver.TCallResolver.ResultTypeAt, DRagLint.Index.CallResolver.TCallResolver.SymbolById, DRagLint.Index.CallResolver.TCallResolver.TypeOfOrdinaryName, DRagLint.Index.CallResolver.TCallResolver.TypeReceiver, DRagLint.Index.CallResolver.TCallResolver.TypeReceiverThroughWith, DRagLint.Index.CallResolver.TryParseCastTarget, Pos, SameText</para>
+    /// <para>Complexity: 24 (cyclomatic, outer body), 164 lines (full implementation)</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.Index.CallResolver.IsIdentChain"/>
     /// <seealso cref="DRagLint.Index.CallResolver.IsIdentPart"/>
     /// <seealso cref="DRagLint.Index.CallResolver.IsIdentStart"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LocalInScopeAt"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
@@ -1377,9 +1375,9 @@ type
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LinesOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsStaleProbe(AFileId: Int64): Boolean;
@@ -1394,27 +1392,27 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
-    /// <para>Calls: DRagLint.Index.CallResolver.TCallResolver.BuildMaps</para>
+    /// <para>Calls: Default, DRagLint.Index.CallResolver.TCallResolver.BuildMaps</para>
     /// <para>constructor</para>
-    /// <para>Writes: FStore, FExtraStores, FNameToCands, FNameToRoutines, FFileScope, FChildCache, FLineCache, FStaleFiles</para>
+    /// <para>Reads: FWith, FRows   Writes: FStore, FExtraStores, FNameToCands, FNameToRoutines, FNameToEnumValues, FNameToUnitValues, FEnumStats, FParenlessStats (+10 more)</para>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     constructor Create(const AStore: ISymbolStore;
       const AExtraStores: TArray<ISymbolStore> = nil);
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Reads: FLineCache, FStaleFiles, FChildCache, FFileScope, FNameToRoutines, FNameToCands   Writes: FStore</para>
+    /// <para>Reads: FRows, FWith, FLineCache, FUnitFileOf, FFileTypes, FLocalDecls, FWriteScopes, FStaleFiles (+6 more)   Writes: FStore</para>
     /// <para>Directives: override</para>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
@@ -1429,15 +1427,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
-    /// <para>Calls: Default, DRagLint.Index.CallResolver.CountCallArgs, DRagLint.Index.CallResolver.ExtractReceiverExpr, DRagLint.Index.CallResolver.TCallResolver.FileIsStale, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes, DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType, DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine, DRagLint.Index.CallResolver.TCallResolver.MemberAccessMode, DRagLint.Index.CallResolver.TCallResolver.ResolveAccessor, DRagLint.Index.CallResolver.TCallResolver.ResolveExternally, DRagLint.Index.CallResolver.TCallResolver.TypeReceiver, SameText</para>
-    /// <para>Complexity: 18 (cyclomatic, outer body), 158 lines (full implementation)</para>
-    /// <para>Reads: FExtraStores</para>
+    /// <para>Calls: Default, DRagLint.Index.CallResolver.CountCallArgs, DRagLint.Index.CallResolver.ExtractReceiverExpr, DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes, DRagLint.Index.CallResolver.TCallResolver.FileIsStale, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType, DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine, DRagLint.Index.CallResolver.TCallResolver.LookupUnitQualifiedRoutine (+6 more)</para>
+    /// <para>Complexity: 23 (cyclomatic, outer body), 212 lines (full implementation)</para>
+    /// <para>Reads: FUnitValueBound, FExtraStores</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Index.CallResolver.CountCallArgs"/>
     /// <seealso cref="DRagLint.Index.CallResolver.ExtractReceiverExpr"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BareCallInNearScopes"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LinesOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveOne(const ACallRef: TReference): TCallEdge;
@@ -1692,7 +1690,7 @@ type
   /// ARefCol - 1 - StopL)).</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
+  /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.AssignedTypeText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.BareReadSite (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.CalleeTakesProcedural (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveWriteRef (DRagLint.Index.CallResolver.pas)</para>
   /// <para>Calls: Copy, DRagLint.Index.CallResolver.IsIdentPart, Trim</para>
   /// <para>Complexity: 34 (cyclomatic, outer body), 96 lines (full implementation)</para>
   /// <para>Pure</para>
@@ -1736,10 +1734,11 @@ type
   /// contribute separators. Pure over ALines.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-  /// <para>Calls: DRagLint.Index.CallResolver.IsIdentPart</para>
+  /// <para>Calls: DRagLint.Index.CallResolver.CountCallArgs.Next, DRagLint.Index.CallResolver.IsIdentPart</para>
   /// <para>Returns: 0; Commas + 1</para>
   /// <para>Complexity: 57 (cyclomatic, outer body), 152 lines (full implementation)</para>
   /// <para>Mutates: AKnown (out)</para>
+  /// <seealso cref="DRagLint.Index.CallResolver.CountCallArgs.Next"/>
   /// <seealso cref="DRagLint.Index.CallResolver.IsIdentPart"/>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -1756,7 +1755,7 @@ type
   /// which case the caller must not filter on it.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Index.CallResolver.PropertyIndexArity (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickFromMatches (DRagLint.Index.CallResolver.pas)</para>
+  /// <para>Called from: DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Index.CallResolver.IsParenlessCallable (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.PropertyIndexArity (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickFromMatches (DRagLint.Index.CallResolver.pas)</para>
   /// <para>Calls: Copy, Pos, SplitString, StartsText, Trim</para>
   /// <para>Returns: False; True</para>
   /// <para>Complexity: 25 (cyclomatic, outer body), 103 lines (full implementation)</para>

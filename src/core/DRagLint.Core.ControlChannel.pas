@@ -116,6 +116,7 @@ function ControlChannelEnabledFor(const ACommand: string): Boolean;
 /// <returns>The SID string, or '' when the token cannot be read.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: CloseHandle, ConvertSidToStringSidW, GetTokenInformation, HLOCAL, LocalFree, OpenProcessToken, PTokenUser</para>
 /// <para>Returns: ''; SidStr</para>
 /// <para>Pure</para>
@@ -127,6 +128,7 @@ function CurrentUserSidString: string;
 /// <returns>The session id (0 when it cannot be read).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: ProcessIdToSessionId</para>
 /// <para>Returns: S</para>
 /// <para>Pure</para>
@@ -168,8 +170,11 @@ function PidFromControlPipeLeaf(const APipeLeaf: string): Cardinal;
 /// also the live instance list -- no registry file to go stale.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Core.ControlChannel.PidFromControlPipeLeaf, FindFirstFileW, FindNextFileW, IntToStr</para>
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.CurrentSessionId, DRagLint.Core.ControlChannel.CurrentUserSidString, DRagLint.Core.ControlChannel.PidFromControlPipeLeaf, FindFirstFileW, FindNextFileW, IntToStr</para>
 /// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.CurrentSessionId"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.CurrentUserSidString"/>
 /// <seealso cref="DRagLint.Core.ControlChannel.PidFromControlPipeLeaf"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -199,6 +204,7 @@ function ControlRequest(const APipeName, AMessage: string; AConnectTimeoutMs: In
 /// <returns><c>%LOCALAPPDATA%\drag-lint\control-channel-audit.log</c>.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ControlChannel.Audit (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: GetEnvironmentVariable</para>
 /// <para>Returns: TPath.Combine(TPath.Combine(Base, AUDIT_DIR_NAME), AUDIT_FILE_NAME)</para>
 /// <para>Touches: file system</para>
@@ -285,14 +291,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Core.ControlChannel.ControlPipeNameFor</para>
-      /// <para>constructor</para>
+      /// <para>Calls: Copy, DRagLint.Core.ControlChannel.ControlPipeNameFor, DRagLint.Core.ControlChannel.CurrentUserSidString</para>
       /// <para>Pure</para>
+      /// <para>constructor</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.ControlPipeNameFor"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.CurrentUserSidString"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
-      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string);
@@ -408,6 +414,7 @@ type
       /// <summary>Host hook: every store is closed; the `exiting` reply may go.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
       /// <para>Calls: InterlockedCompareExchange</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>

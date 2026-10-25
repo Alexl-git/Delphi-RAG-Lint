@@ -36,7 +36,7 @@ type
   /// its cache. Never raises: an unreadable file answers '' for every symbol
   /// in it, and '' means UNKNOWN -- never "the clause is absent".
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas), DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.TPropMemberResolver.Create (DRagLint.Convert.PropTree.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.PropTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -66,7 +66,7 @@ type
     /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Called from: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.TPropMemberResolver.Create (DRagLint.Convert.PropTree.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FStore, FLines</para>
     /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Destroy"/>
@@ -97,7 +97,7 @@ type
     /// clause is absent -- that conflation is what made a bare redeclaration
     /// ('property AutoSize;') report as having no default.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree.DeclTextOf (DRagLint.Convert.PropTree.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.TPropMemberResolver.DeclTextOf (DRagLint.Convert.PropTree.pas)</para>
     /// <para>Calls: DRagLint.Core.DeclText.TDeclTextReader.LinesOf, Trim</para>
     /// <para>Returns: ''; Trim(string.Join(' ', Span))</para>
     /// <para>Pure</para>

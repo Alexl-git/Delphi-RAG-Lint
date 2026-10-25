@@ -38,7 +38,7 @@ type
       type
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// <para>Used by: DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas)</para>
+        /// <para>Used by: declaration (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas)</para>
         /// <para>Used in units: DRagLint.Index.IgnoreFiles</para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>

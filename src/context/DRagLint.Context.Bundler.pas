@@ -44,14 +44,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Context.Bundler.OwnerIsClassKind, DRagLint.Context.Bundler.ResolveUniqueName, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+7 more)</para>
-      /// <para>Complexity: 28 (cyclomatic, outer body), 279 lines (full implementation)</para>
+      /// <para>Calls: Copy, DRagLint.Context.Bundler.CallersOfTarget, DRagLint.Context.Bundler.DistinctCallSites, DRagLint.Context.Bundler.OwnerIsClassKind, DRagLint.Context.Bundler.ResolveUniqueName, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName (+9 more)</para>
+      /// <para>Complexity: 30 (cyclomatic, outer body), 287 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Context.Bundler.CallersOfTarget"/>
+      /// <seealso cref="DRagLint.Context.Bundler.DistinctCallSites"/>
       /// <seealso cref="DRagLint.Context.Bundler.OwnerIsClassKind"/>
       /// <seealso cref="DRagLint.Context.Bundler.ResolveUniqueName"/>
       /// <seealso cref="DRagLint.Context.Bundler.StripDfmFields"/>
-      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics"/>
-      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(
@@ -76,7 +76,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime, IfThen</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 123 lines (full implementation)</para>
+      /// <para>Complexity: 22 (cyclomatic, outer body), 131 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>

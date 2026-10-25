@@ -249,7 +249,7 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarg
 /// candidate; a tsStalePosition target increments AStaleCount.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Refactor.NamingFix.BuildNamingTargets, DRagLint.Refactor.NamingFix.BuildTargetEdits, DRagLint.Refactor.NamingFix.FreeCandidates</para>
+/// <para>Calls: DRagLint.Refactor.NamingFix.BuildNamingTargets, DRagLint.Refactor.NamingFix.BuildTargetEdits, DRagLint.Refactor.NamingFix.FreeCandidates, SameText</para>
 /// <para>Catches: Exception (empty)</para>
 /// <para>Mutates: AFixCount (out), ASkippedCount (out), AStaleCount (out)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingTargets"/>

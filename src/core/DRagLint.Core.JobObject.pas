@@ -43,8 +43,9 @@ uses
 /// Thread-safety: call from the main (IDE) thread, like the spawn sites.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
-/// <para>Calls: AssignProcessToJobObject</para>
+/// <para>Calls: AssignProcessToJobObject, DRagLint.Core.JobObject.EnsureJob</para>
 /// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.JobObject.EnsureJob"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure AssignToDragLintJob(AProcess: THandle);

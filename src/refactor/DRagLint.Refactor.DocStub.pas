@@ -175,7 +175,7 @@ function SignatureHasReturn(const ASig: string): Boolean;
 /// procedure. An unbalanced signature returns False rather than guessing.
 /// Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Called from: DRagLint.Lint.ProjectRules.CollectDiscardedEffectFreeResult (DRagLint.Lint.ProjectRules.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
 /// <para>Calls: Copy, Pos, Trim</para>
 /// <para>Returns: Pos(':', Copy(S, i, MaxInt)) &gt; 0</para>
 /// <para>Pure</para>

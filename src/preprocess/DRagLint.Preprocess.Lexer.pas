@@ -44,7 +44,7 @@ uses
 /// Concatenating every chunk's [SrcStart, SrcEnd) span, in order,
 /// reproduces the whole input UTF-8 byte stream exactly (no gaps, no overlaps).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.Lexer.IsAsciiLetter, DRagLint.Preprocess.Lexer.IsKnownKeyword, DRagLint.Preprocess.Lexer.LexDirectives.FlushText, DRagLint.Preprocess.Lexer.LexDirectives.LineAt, DRagLint.Preprocess.Lexer.SliceToStr, LowerCase, Trim</para>
 /// <para>Returns: Chunks.ToArray</para>
 /// <para>Complexity: 47 (cyclomatic, outer body), 186 lines (full implementation)</para>

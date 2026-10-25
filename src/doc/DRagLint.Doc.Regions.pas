@@ -575,7 +575,7 @@ type
     /// carries none of the six.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2, Format, StartsStr, StringReplace</para>
     /// <para>Returns: Lines.ToStringArray</para>
     /// <para>Complexity: 39 (cyclomatic, outer body), 283 lines (full implementation)</para>

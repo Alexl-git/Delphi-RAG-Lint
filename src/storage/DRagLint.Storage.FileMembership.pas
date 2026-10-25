@@ -213,7 +213,7 @@ type
 /// remarks). Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Storage.FileMembership.DbContainsFile (DRagLint.Storage.FileMembership.pas)</para>
-/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.NormalizeForLookup</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.NormalizeForLookup, DRagLint.Storage.FileMembership.RebuildInProgress</para>
 /// <para>Returns: dmUnknown; if Found then dmMember</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>SQL: reads FILES</para>
@@ -221,6 +221,7 @@ type
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.RebuildInProgress"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TDbMembership;
