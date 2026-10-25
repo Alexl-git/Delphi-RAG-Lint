@@ -7,7 +7,7 @@ group: editor-integration
 order: 110006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.34.1-alpha
 ---
 
 # Help line (DL page)
@@ -19,8 +19,17 @@ Read this to find help for a feature from inside the IDE and to point the plugin
 ## Where to click
 
 * Tool window: **View > Tool Windows > drag-lint**
+   1. Open View > Tool Windows > drag-lint and go to the DL page
+   2. Type part of a feature name in the Help line box
+   3. Pick a match; its menu path is shown with it
+   4. The feature help page opens at the configured help root
 * RAD Studio main menu: **drag-lint > Help > Help on a feature...**
+   1. Choose drag-lint > Help > Help on a feature...
+   2. Type part of a feature name and pick a match
+   3. The feature help page opens at the configured help root
 * RAD Studio main menu: **drag-lint > Help > All features (web)**
+   1. Choose drag-lint > Help > All features (web)
+   2. The full feature index opens at the configured help root
 
 ## Details
 

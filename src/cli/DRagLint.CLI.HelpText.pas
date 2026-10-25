@@ -15,7 +15,7 @@ function WriteVerbHelp(const pVerb: string): Boolean;
 
 implementation
 
-procedure WriteVerbReference;  // dl:ok method-too-long@889d -- GENERATED: one Writeln per registry help line; the length follows the verb count
+procedure WriteVerbReference;  // dl:ok method-too-long@c473 -- GENERATED: one Writeln per registry help line; the length follows the verb count
 begin
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
@@ -36,7 +36,7 @@ begin
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths; alias --scan-libraries)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]');
-  Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr>');
+  Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
   Writeln('                               members, the project-local units they transitively use, each one''s sibling');
   Writeln('                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose');
@@ -65,6 +65,9 @@ begin
   Writeln('                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local');
   Writeln('                               .drag-lint.json, or --config -- naming the file, the key path and both types');
   Writeln('                               ("indexes: expected object, got array"). Read verbs only warn.');
+  Writeln('                               A POSITIONAL .dpr/.dproj/.dpk beats the "project" key of the defaults file (one stderr note names the override); an explicit --project beats both.');
+  Writeln('                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.');
+  Writeln('                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -130,6 +133,7 @@ begin
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+  Writeln('                               [--output <file>] (alias --out): with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).');
   Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
   Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
   Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
@@ -149,6 +153,7 @@ begin
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('                               --output <file> (alias --out): the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
@@ -405,7 +410,7 @@ begin
   Writeln('       see wiki page: Circular-Uses-Report-cycles-fix-plan');
 end;
 
-function WriteVerbHelp(const pVerb: string): Boolean;  // dl:ok method-too-long@889d -- GENERATED: one Writeln per registry help line
+function WriteVerbHelp(const pVerb: string): Boolean;  // dl:ok method-too-long@4716 -- GENERATED: one Writeln per registry help line
 begin
   Result := True;
   if pVerb = 'index' then
@@ -429,7 +434,7 @@ begin
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths; alias --scan-libraries)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
     Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]');
-    Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr>');
+    Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
     Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
     Writeln('                               members, the project-local units they transitively use, each one''s sibling');
     Writeln('                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose');
@@ -458,6 +463,9 @@ begin
     Writeln('                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local');
     Writeln('                               .drag-lint.json, or --config -- naming the file, the key path and both types');
     Writeln('                               ("indexes: expected object, got array"). Read verbs only warn.');
+    Writeln('                               A POSITIONAL .dpr/.dproj/.dpk beats the "project" key of the defaults file (one stderr note names the override); an explicit --project beats both.');
+    Writeln('                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.');
+    Writeln('                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed.');
     Exit;
   end;
   if pVerb = 'query' then
@@ -552,6 +560,7 @@ begin
   begin
     Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]');
     Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+    Writeln('                               [--output <file>] (alias --out): with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).');
     Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
     Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
     Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
@@ -587,6 +596,7 @@ begin
   if pVerb = 'lint-all' then
   begin
     Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+    Writeln('                               --output <file> (alias --out): the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
     Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
     Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');

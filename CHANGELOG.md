@@ -3,9 +3,59 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.34.1-alpha -- 2026-10-25
+
+Patch release on top of v1.34.0-alpha (commit ed87f842). No extractor or resolver bump: nothing here
+needs a re-parse.
+
+### Changed
+- `index` exits 1 when any file's store step fails (F1; the failure is counted and listed instead of
+  being swallowed), and the `--jobs` worker pool handles `WAIT_FAILED` (F9). A library section with a
+  real per-file exception can now fail `index --all`; check the next library reindex.
+- A `.dpk` is a project target for `index` / `lint` / `resolve-dbs`; a positional project beats the
+  config `project` key (X-11). `lint-all` says when it runs against an unscoped project DB (X-10).
+- `lint` / `lint-all` `--output <file>` now also applies to `--json` and `--format sarif` (a note goes
+  to stderr); the battery's TIMEOUT line prints the effective per-runner budget (H1).
+- `convert-apply` puts the stamped `.pas` into its backup set (F7) and its write helpers keep each
+  file's encoding, BOM and line breaks (F8).
+- `menu-tree` / `menu-drift` help is generated from the feature registry (X-26); `--json` not-found
+  errors go to stderr; `cycles --plan` status counts interface `uses` (E14).
+- `doc-drift`: an `<exception cref>` raised up to three calls down is no longer drift (H2; was one hop).
+- `allow`: a finding on a `///` doc-comment line is reviewed on its declaration (H2).
+- `circular-uses` reports one anchor line in both scopes (`lint` and `lint-all`), and one `dl:ok`
+  reviews the cycle everywhere (H2).
+- **MIGRATION NOTE (H2):** an old `circular-uses` `dl:ok` marker recorded on a header line (the `unit`
+  / `uses` line) no longer matches the new single anchor; re-record it with `allow` and re-run
+  `review-marker-stale` to find the ones that went stale.
+- Battery: the heartbeat guard matches the exact TIMEOUT line (a malformed line is rejected, with a
+  positive control), and the charts interface-loop runner (A-CY-ILOOP) is wired as a standalone
+  runner with a positive control (W5-G).
+
+### Fixed
+- Storage: `Migrate` re-raises a real DDL failure and tolerates only a duplicate-column error (F2);
+  the FTS5 trigram tokenizer is probed separately and `string_fts_tri` is skipped when absent, so
+  Migrate no longer raises on SQLite < 3.34 (B2).
+- Storage: `SCHEMA_DDL_FTS5_FIRST` was off by 2, so `symbol_facts` was never created on a SQLite
+  without FTS5 (B2).
+- Guards: the extractor-version guard hashes the storage emit routines (F3) and its fingerprint check
+  is no longer a tautology (F4); re-pinned without a version bump.
+- Control channel: the stand-down BUSY reply is reachable when the store close hangs (F5).
+- Plugin: the SaveNotifier per-file fallback goes through the job queue (no detached spawn, no fixed
+  buffer) (F6); one re-lint per save reindex, only a started reindex is announced, and
+  `run_indexjob_tests` guards it (F2-plugin).
+- Lint: per-file `lint` no longer calls a `dl:ok` marker of an opted-in, `lint-all`-only rule unused (G).
+- Battery: the heartbeat guard checks today's driver (per-runner budget) and a reachable timeout (HB);
+  `run_uri_handler` / `run_protocol_verb` stage `drag-lint-open.exe` into a fresh worktree (X-06).
+- Plugin: unused `TDragLintDiagContext.DbArgs` removed (H1).
+- `rename`: a same-named handler on another form is left untouched and a `.dfm` event binding is
+  rewritten only for the owner form and forms that inherit from it (X-25); `Apply` keeps each file's
+  encoding, BOM and line breaks (F8).
+- `doc-drift`: a `dl:ok` marker's colon is no longer read as a return type on a parameterless
+  procedure (W4-ret).
+
 ## v1.34.0-alpha -- 2026-10-25
 
-**Requires a re-parse.** This section includes the release branch `e3d/rc2` (merged to main): extractor
+**Requires a re-parse.** This section includes the unmerged release branch `e3d/rc2`: extractor
 1.23.0-alpha + resolver 1.13.0-alpha. The first run after the upgrade re-parses every DB once
 (hours on large projects). Items marked [rc2] need that bump; the rest do not.
 
@@ -110,24 +160,6 @@ breaking changes** until v1.0.
   message ending ` (in include <Name.inc>, line <n>)` (rc2).
 - Schema (rc2): `unit_uses.origin_path TEXT`, `unit_uses.include_line INTEGER`,
   `idx_unit_uses_origin` -- additive, ALTERed on the next writable open; no schema-version bump.
-- `index` exits 1 when any file's store step fails (F1; the failure is counted and listed instead of
-  being swallowed), and the `--jobs` worker pool handles `WAIT_FAILED` (F9). A library section with a
-  real per-file exception can now fail `index --all`; check the next library reindex.
-- A `.dpk` is a project target for `index` / `lint` / `resolve-dbs`; a positional project beats the
-  config `project` key (X-11). `lint-all` says when it runs against an unscoped project DB (X-10).
-- `lint` / `lint-all` `--output <file>` now also applies to `--json` and `--format sarif` (a note goes
-  to stderr); the battery's TIMEOUT line prints the effective per-runner budget (H1).
-- `convert-apply` puts the stamped `.pas` into its backup set (F7) and its write helpers keep each
-  file's encoding, BOM and line breaks (F8).
-- `menu-tree` / `menu-drift` help is generated from the feature registry (X-26); `--json` not-found
-  errors go to stderr; `cycles --plan` status counts interface `uses` (E14).
-- `doc-drift`: an `<exception cref>` raised up to three calls down is no longer drift (H2; was one hop).
-- `allow`: a finding on a `///` doc-comment line is reviewed on its declaration (H2).
-- `circular-uses` reports one anchor line in both scopes (`lint` and `lint-all`), and one `dl:ok`
-  reviews the cycle everywhere (H2).
-- **MIGRATION NOTE (H2):** an old `circular-uses` `dl:ok` marker recorded on a header line (the `unit`
-  / `uses` line) no longer matches the new single anchor; re-record it with `allow` and re-run
-  `review-marker-stale` to find the ones that went stale.
 ### Fixed
 - `context`: the Impl slice refuses a stale anchor instead of showing another routine's body.
 - `document`: `--qname` documents every overload of the name; two declarations on one line are
@@ -149,24 +181,6 @@ breaking changes** until v1.0.
 - Resolver (rc2): anonymous-method `Result` types compare after unit-qualification normalisation;
   `Result` typing is declined only inside an anonymous method of ANOTHER return type; a local
   declared after the site is never bound.
-- Storage: `Migrate` re-raises a real DDL failure and tolerates only a duplicate-column error (F2);
-  the FTS5 trigram tokenizer is probed separately and `string_fts_tri` is skipped when absent, so
-  Migrate no longer raises on SQLite < 3.34 (B2).
-- Storage: `SCHEMA_DDL_FTS5_FIRST` was off by 2, so `symbol_facts` was never created on a SQLite
-  without FTS5 (B2).
-- Guards: the extractor-version guard hashes the storage emit routines (F3) and its fingerprint check
-  is no longer a tautology (F4); re-pinned without a version bump.
-- Control channel: the stand-down BUSY reply is reachable when the store close hangs (F5).
-- Plugin: the SaveNotifier per-file fallback goes through the job queue (no detached spawn, no fixed
-  buffer) (F6); one re-lint per save reindex, only a started reindex is announced, and
-  `run_indexjob_tests` guards it (F2-plugin).
-- Lint: per-file `lint` no longer calls a `dl:ok` marker of an opted-in, `lint-all`-only rule unused (G).
-- Battery: the heartbeat guard checks today's driver (per-runner budget) and a reachable timeout (HB);
-  `run_uri_handler` / `run_protocol_verb` stage `drag-lint-open.exe` into a fresh worktree (X-06).
-- Plugin: unused `TDragLintDiagContext.DbArgs` removed (H1).
-- `rename`: a same-named handler on another form is left untouched and a `.dfm` event binding is
-  rewritten only for the owner form and forms that inherit from it (X-25); `Apply` keeps each file's
-  encoding, BOM and line breaks (F8).
 
 ## v1.33.0-alpha -- 2026-10-20
 
