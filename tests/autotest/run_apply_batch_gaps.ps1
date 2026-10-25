@@ -129,6 +129,26 @@ Check 'G1e stdout is byte-identical with and without --progress (exit identical)
   "with=$($bp.Out.Length) without=$($b.Out.Length)"
 Check 'G1f --progress never writes a progress line to stdout' (-not ($bp.Out -match '"progress"')) $bp.Out
 
+# ---- CL6 (1.33.1): a castlib configuration error fails the WHOLE batch --------
+# parsed once before any unit runs; every unit refused with the castlib reason, exit 6
+$badCl = P 'bad.castlib'
+[IO.File]::WriteAllText($badCl, "cast StripZip`n  value strip-zip`nend`n", [Text.Encoding]::ASCII)
+$goodCl = (Resolve-Path (Join-Path $PSScriptRoot '..\..\docs\examples\convrules\casts.castlib')).Path
+$h1 = Hash 'MixForm.pas'; $h2 = Hash 'LooseForm.pas'; $d1 = Hash 'MixForm.dfm'; $d2 = Hash 'LooseForm.dfm'
+$bb = Run @('MixForm.pas', 'LooseForm.pas') @('--castlib', $badCl, '--apply')
+$jb = $bb.J
+Check 'CL6a bad castlib batch: exit 6, apply-batch/1 with 2 units each exit_code 6 naming the castlib' `
+  (($bb.Code -eq 6) -and ($null -ne $jb) -and ($jb.schema -eq 'apply-batch/1') -and ($jb.exit_code -eq 6) -and (@($jb.units).Count -eq 2) -and `
+   ($jb.units[0].exit_code -eq 6) -and ($jb.units[1].exit_code -eq 6) -and ($jb.units[0].error -match 'bad\.castlib') -and ($jb.units[1].error -match 'strip-zip')) $bb.Out
+Check 'CL6b bad castlib --apply: both units (.pas and .dfm) byte-identical, no backups' `
+  (((Hash 'MixForm.pas') -eq $h1) -and ((Hash 'LooseForm.pas') -eq $h2) -and ((Hash 'MixForm.dfm') -eq $d1) -and ((Hash 'LooseForm.dfm') -eq $d2) -and `
+   (@(Get-ChildItem $WorkDir -Filter '*.BCK*' -Recurse -ErrorAction SilentlyContinue).Count -eq 0))
+$bs = Run @('MixForm.pas') @('--castlib', $badCl, '--apply')
+Check 'CL6c bad castlib single --unit: exit 6, bare apply/1 exit_code 6, unit untouched' `
+  (($bs.Code -eq 6) -and ($null -ne $bs.J) -and ($bs.J.exit_code -eq 6) -and ($bs.J.ok -eq $false) -and ((Hash 'MixForm.pas') -eq $h1))
+$bg = Run @('MixForm.pas', 'LooseForm.pas') @('--castlib', $goodCl)
+Check 'CL6d POSITIVE CONTROL a valid castlib batch still plans (units[0] ok, edits > 0, exit != 6)' `
+  (($bg.Code -ne 6) -and ($null -ne $bg.J) -and ($bg.J.units[0].ok -eq $true) -and ($bg.J.units[0].edits_count -gt 0)) $bg.Out
 # ---- G2 batch --apply: the refused unit is untouched, the other written ------
 $hM = Hash 'MixForm.pas'; $hL = Hash 'LooseForm.pas'
 $ba = Run @('MixForm.pas', 'LooseForm.pas') @('--apply', '--no-backup', '--no-reindex')

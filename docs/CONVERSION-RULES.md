@@ -877,6 +877,7 @@ order, equal to that unit's single-unit `apply/1` (its `classes_built` is the
 unit's own: the book's validation set plus what its run added). A single
 `--unit` still emits a bare `apply/1`. A unit's refusal or failure never stops
 the others; the process exits with the worst unit's code (6 > 2 > 1 > 0). Exit 6 (1.28.0) is a castlib the engine cannot load or execute (an unknown `value` keyword) -- a CONFIGURATION error, deliberately not 2, which on this verb means a write failure or rollback. Under
+Addendum (1.33.1): the castlib is parsed and validated ONCE, before any unit runs. A top-level exit 6 = no unit of the batch was touched: every unit is refused with the castlib reason and `exit_code` 6 (a normal `units[]` of `apply/1` objects, nothing written, no backups), whatever the other units would have done.
 `--apply`, every file a unit would touch is checked writable FIRST: a read-only
 or locked file fails that unit (exit 2, `ok: false`, `refused: false`,
 `cannot write <file>: ... -- unit not changed, nothing written`) with nothing
