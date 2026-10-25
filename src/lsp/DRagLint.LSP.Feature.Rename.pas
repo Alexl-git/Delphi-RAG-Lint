@@ -72,6 +72,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.Rename
+  , DRagLint.Refactor.TextEdit
   , DRagLint.Core.LiveDocs
   ;
 
@@ -106,7 +107,11 @@ begin
   begin
     Lines:= TStringList.Create;
     ACache.Add(APath, Lines);
-    if TFile.Exists(APath) then Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+    { W5-D: the shared reader, so the text is the one TRenameRefactoring.Build
+      counted its CHARACTER columns in (ANSI, or UTF-8 with or without a BOM) }
+    var Text: string;
+    TTextFileFormat.ReadFile(APath, Text);
+    Lines.Text:= Text;
   end;
   if (ALine1 >= 1) and (ALine1 <= Lines.Count) then Result:= Lines[ALine1 - 1] else Result:= '';
 end;
@@ -225,12 +230,11 @@ begin
     begin
       var DiskTxt: string:= DiskLine(Cache, Ed.FilePath, Ed.Line);
       var Col0: Integer;
-      // S7: Ed.Col is the store's 1-based UTF-8 BYTE column (tree-sitter); DiskTxt is a UTF-16 string and the edit range is
-      // UTF-16, so the byte column is converted to a UTF-16 column (Col16, 1-based) before the text is compared.
-      var ByteCol0: Integer:= Ed.Col - 1;
-      var Col16   : Integer:= 0;
-      var LineBytes: TBytes:= TEncoding.UTF8.GetBytes(DiskTxt);
-      if (ByteCol0 >= 0) and (ByteCol0 <= Length(LineBytes)) then Col16:= TEncoding.UTF8.GetCharCount(LineBytes, 0, ByteCol0) + 1;
+      // S7 / W5-D: Ed.Col is a 1-based CHARACTER (UTF-16) column of the decoded file -- Build converts the store's
+      // UTF-8 byte columns -- so it is the edit range's column as is; IdentifierAtPosition below takes the tree-sitter
+      // BYTE column, rebuilt from the UTF-8 length of the text before it.
+      var Col16   : Integer:= if (Ed.Col >= 1) and (Ed.Col <= Length(DiskTxt) + 1) then Ed.Col else 0;
+      var ByteCol0: Integer:= if Col16 > 0 then Length(TEncoding.UTF8.GetBytes(Copy(DiskTxt, 1, Col16 - 1))) else Ed.Col - 1;
       // Build reports the identifier token's column for EVERY edit, the declaration included: each must start exactly there
       // as a whole word, or the file changed after indexing (a forward scan could retarget a shifted token).
       if (Col16 > 0) and IsWholeWordAt(DiskTxt, Col16, Ed.OldName) then Col0:= Col16 - 1

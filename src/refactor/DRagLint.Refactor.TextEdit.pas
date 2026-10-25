@@ -12,7 +12,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils,
   System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Core.Encoding;
 
 type
   /// <remarks>
@@ -61,14 +61,15 @@ type
   /// its line-break style -- so a tool that rewrites the file writes it back
   /// the same way (deep review F8, 2026-10-25).</summary>
   /// <remarks>
-  /// A UTF-8 or UTF-16 BOM selects that encoding and is kept; a file with no
-  /// BOM is ANSI (the system code page), exactly as before, so a plain ANSI
-  /// file round-trips byte-identical. LineBreak is LF only when the text holds
-  /// an LF and no CRLF; otherwise (CRLF, mixed, or no line break at all) it is
-  /// CRLF, the historical output. Encoding is an RTL standard singleton --
-  /// never owned, never freed. A UTF-8 file WITHOUT a BOM is still read as
-  /// ANSI: lossless on a CP1252 system for the bytes it holds, but text a tool
-  /// inserts is written in the code page.
+  /// A UTF-8 or UTF-16 BOM selects that encoding and is kept. A file with no
+  /// BOM whose bytes include a high byte AND are valid UTF-8 (IsValidUtf8, the
+  /// indexer's own rule) is UTF-8 without a BOM, and is written back without
+  /// one (W5-D, 2026-10-25). Any other BOM-less file -- pure ASCII, or high
+  /// bytes that are not valid UTF-8 -- is ANSI (the system code page), exactly
+  /// as before, so a plain ANSI file round-trips byte-identical. LineBreak is
+  /// LF only when the text holds an LF and no CRLF; otherwise (CRLF, mixed, or
+  /// no line break at all) it is CRLF, the historical output. Encoding is an
+  /// RTL standard singleton -- never owned, never freed.
   /// </remarks>
   TTextFileFormat = record
     Encoding : TEncoding;  { ANSI, UTF8, Unicode or BigEndianUnicode singleton }
@@ -79,6 +80,13 @@ type
     /// <param name="AText">Out: the text, without the BOM.</param>
     /// <returns>The format to hand to Encode when the text is written back.</returns>
     class function Decode(const ABytes: TBytes; out AText: string): TTextFileFormat; static;
+    /// <summary>Reads a file and decodes it as Decode does -- the one reader
+    /// every tool that edits a file in place uses, so a column it computes
+    /// counts the same characters the writer will write.</summary>
+    /// <param name="APath">The file to read.</param>
+    /// <param name="AText">Out: the text, without the BOM; '' when the file is missing.</param>
+    /// <returns>The file's format; ANSI + CRLF when the file is missing.</returns>
+    class function ReadFile(const APath: string; out AText: string): TTextFileFormat; static;
     /// <summary>The line break a rewrite of AText should use: #10 when AText
     /// holds an LF and no CRLF, else #13#10.</summary>
     /// <param name="AText">Text as read from a file.</param>
@@ -349,6 +357,15 @@ procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
 
 implementation
 
+function HasHighByte(const ABytes: TBytes): Boolean;
+const
+  FirstNonAscii = $80;
+begin
+  Result:= False;
+  for var B: Byte in ABytes do
+    if B >= FirstNonAscii then Exit(True);
+end;
+
 class function TTextFileFormat.Decode(const ABytes: TBytes; out AText: string): TTextFileFormat;
 var
   Enc : TEncoding;
@@ -356,10 +373,17 @@ var
 begin
   Enc := nil; { nil = detect a UTF-8 / UTF-16 BOM, else fall back to ANSI }
   Skip:= TEncoding.GetBufferEncoding(ABytes, Enc, TEncoding.ANSI);
+  { W5-D: no BOM, a high byte, and valid UTF-8 = UTF-8 without a BOM }
+  if (Skip = 0) and (Enc = TEncoding.ANSI) and HasHighByte(ABytes) and IsValidUtf8(ABytes) then Enc:= TEncoding.UTF8;
   Result.Encoding:= Enc;
   Result.Preamble:= Copy(ABytes, 0, Skip);
   AText:= if Length(ABytes) > Skip then Enc.GetString(ABytes, Skip, Length(ABytes) - Skip) else '';
   Result.LineBreak:= LineBreakOf(AText);
+end;
+
+class function TTextFileFormat.ReadFile(const APath: string; out AText: string): TTextFileFormat;
+begin
+  Result:= Decode(if TFile.Exists(APath) then TFile.ReadAllBytes(APath) else nil, AText);
 end;
 
 class function TTextFileFormat.LineBreakOf(const AText: string): string;

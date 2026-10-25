@@ -1239,7 +1239,12 @@ begin
         end;
         var RenAppliedStr: string;
         if RenApplied then RenAppliedStr:= 'true' else RenAppliedStr:= 'false';
-        ResultText:= '{"edits":' + RenEditsJson + ',"files_touched":' + IntToStr(RenFilesTouched) + ',"applied":' + RenAppliedStr + '}';
+        { W5-D: form files rename leaves alone (binary / unindexed .dfm) are reported, never refused }
+        var RenSkipped: string:= '';
+        for var RenNote: string in TRenameRefactoring.SkippedDfmNotes(RenStore, RenQName) do
+          RenSkipped:= RenSkipped + (if RenSkipped = '' then '' else ',') + '"' + JsonEscape(RenNote) + '"';
+        ResultText:= '{"edits":' + RenEditsJson + ',"files_touched":' + IntToStr(RenFilesTouched) + ',"applied":' + RenAppliedStr +
+          ',"skipped_dfm":[' + RenSkipped + ']}';
       end; // else
     end // if
     else if ToolName = 'run_ast_checks' then
