@@ -89,7 +89,7 @@ nothing. A `--shadow-out` dir is never deleted. In the JSON, `shadow_kept` says 
 still exists after the run.
 
 **Apply.** `--apply` runs the same plan, then:
-1. the baseline build must pass (else `dirty-baseline`, nothing written);
+1. the baseline build must pass (else `dirty-baseline`, nothing written) -- except a baseline whose ONLY error is an `F2047 Circular unit reference` on a unit of the Part A group being fixed (owner ruling 2026-10-25): the plan is made anyway, `baseline.status` is `f2047-in-group`, and the build after the edit is the only proof;
 2. every file it touches is backed up as `<file>.BCK<n>` (the lowest free n) plus a
    `recovery.txt`, unless `--no-backup`;
 3. the edits are written and the project is built in place; one bounded repair (R4: a cast

@@ -447,10 +447,11 @@ var
   P   : Integer;
   Name: string;
 begin
-  FDirectives.Add(AStart);
   P:= ABodyStart;
   while (P <= Length(FText)) and IsIdentChar(FText[P]) do Inc(P);
   Name:= UpperCase(Copy(FText, ABodyStart, P - ABodyStart));
+  { W6 C5: a non-conditional directive neither selects text nor changes it -- trivia, like a comment }
+  if Pos(' ' + Name + ' ', ' REGION ENDREGION WARN HINTS MESSAGE ') = 0 then FDirectives.Add(AStart);
   if (Name = 'IF') or (Name = 'IFDEF') or (Name = 'IFNDEF') or (Name = 'IFOPT') then
     Inc(FDepth)
   else if ((Name = 'ENDIF') or (Name = 'IFEND')) and (FDepth > 0) then

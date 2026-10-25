@@ -36,7 +36,7 @@
   (l) tests\fixtures\cyclefix\r1stillused: TR1Form calls its INHERITED class method R1Note. Round 2 refused
       this as edge-still-used (the planner bound the bare name to R1Title.R1Note); since C3 (2026-10-25)
       the inherited member wins and the edge is cut.
-  (n) `export; stdcall;` -- an unclassified directive refuses (stdcall is no longer silently lost).
+  (n) W6 C7: `export; stdcall;` is mechanical (export / local / near / far are neutral, stdcall carried); control: an unknown directive refuses.
   (o) `R1Title.R1TitleCount` -- any name qualified by the declaring unit refuses `qualified-ref`.
   (p) `TR1Local.R1TitleOf` -- a same-named method through a non-unit receiver does NOT refuse.
   Final review F2 (RED on the 038c6b75 engine):
@@ -382,12 +382,18 @@ try {
   $txL = (Get-CycleBlock $pl.Out 1) -join "`n"
   Check 'l1 C3: the inherited R1Note is a class member, not a use of R1Title -- the edge is cut (run_cyclefix_c3_false_positives.ps1 holds the control)' `
     (-not $txL.Contains('refused: edge-still-used') -and ($pl.Dump[1].verdict -eq 'mechanical')) "[$($pl.Dump[1].verdict) / $($pl.Dump[1].refusals)]"
-  Write-Host '== (n) an unlisted directive before stdcall' -ForegroundColor Cyan
+  Write-Host '== (n) an unlisted directive before stdcall; W6 C7: export / local / near / far are neutral' -ForegroundColor Cyan
   $vn = Get-Variant 'r1export' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; export; stdcall;`r`n`r`nimplementation"
-  Check 'n1 `export; stdcall;`: refused: unsupported-directive naming export (stdcall is not silently lost)' `
-    ($vn.Ok -and $vn.Text.Contains('refused: unsupported-directive -- `R1TitleOf`: the directive `export` is not one the plan can classify') -and
-     (($vn.Dump.refusals -split ',') -contains 'unsupported-directive')) "[$($vn.Dump.verdict) / $($vn.Dump.refusals)]"
-  Write-Host '== (o) another symbol named through the unit: R1Title.R1TitleCount' -ForegroundColor Cyan
+  Check 'n1 (C7) `export; stdcall;`: mechanical, export is neutral and stdcall is still carried into the pointer type' `
+    ($vn.Ok -and ($vn.Dump.verdict -eq 'mechanical') -and ($vn.Text -match '(?m)^\s*TR1TitleOfPtr = function.*stdcall;')) "[$($vn.Dump.verdict) / $($vn.Dump.refusals)]"
+  $vn2 = Get-Variant 'r1bogus' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; bogusdir; stdcall;`r`n`r`nimplementation"
+  Check 'n2 control: an unknown directive `bogusdir; stdcall;` still refuses unsupported-directive naming it' `
+    ($vn2.Ok -and $vn2.Text.Contains('refused: unsupported-directive -- `R1TitleOf`: the directive `bogusdir` is not one the plan can classify') -and
+     (($vn2.Dump.refusals -split ',') -contains 'unsupported-directive')) "[$($vn2.Dump.verdict) / $($vn2.Dump.refusals)]"
+  foreach ($dir in 'local', 'near', 'far') {
+    $vd = Get-Variant "r1$dir" 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; $dir;`r`n`r`nimplementation"
+    Check "n3 (C7) $dir; is neutral: mechanical" ($vd.Ok -and ($vd.Dump.verdict -eq 'mechanical')) "[$($vd.Dump.verdict) / $($vd.Dump.refusals)]"
+  }  Write-Host '== (o) another symbol named through the unit: R1Title.R1TitleCount' -ForegroundColor Cyan
   $vo = Get-Variant 'r1qualother' 'R1Form.pas' "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));" `
     ("  Writeln(Format('[form] %s', [R1TitleOf(pId)]));`r`n  Writeln(R1Title.R1TitleCount);") `
     'R1Title.pas' "function R1TitleOf(const pId: Integer): string;`r`n`r`nimplementation" `

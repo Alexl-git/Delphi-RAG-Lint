@@ -366,7 +366,7 @@ try {
     @('f13', 'no-iinterface', 'no ancestor of `TDemoGagePort` implements IInterface', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', '  TDemoGagePort = class(TObject)'))),
     @('f14', 'ref-counted', 'descends from `TInterfacedObject`, which counts references', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', '  TDemoGagePort = class(TInterfacedObject)'))),
     @('f15', 'receiver-unknown', 'the static type of `GetOwner`', $cleanDir, @(, @($U, '  with Owner as TDemoGagePort do', '  with GetOwner as TDemoGagePort do'))),
-    @('f16', 'cast-unseen', '`TDemoGageBase`, the ancestor a receiver is cast through, is declared in `DemoGagePort`', $cleanDir, @(, @($G, "  TDemoGagePort = class(TComponent)`n  private", "  TDemoGageBase = class(TComponent, IInterface)`n  end;`n`n  TDemoGagePort = class(TDemoGageBase)`n  private"))),
+    # f16 (cast-unseen on an IInterface ancestor declared in the cycle) became mechanical in W6 C1: see f16c1 below
     @('f17', 'with-member', '`Name` at line 63 names a member of `TDemoGagePort` or its ancestors', $cleanDir, @(, @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf + Name);"))),
     @('f18', 'ancestry-unknown', 'the ancestry of `TDemoGagePort` stops at `TComponent`', $cleanDir, @(@($U, "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n", ''), @($U, 'Sender: TObject', 'Sender: TComponent')), 'stub'),
     @('f19', 'leaf-uses-cycle', '`TDemoGageUnit`, the type of `TDemoGagePort.GageUnit`, is declared in `demogageport`', $cleanDir, @(@($G, "type`n  /// <summary>Stand-in", "type`n  /// <summary>Units.</summary>`n  TDemoGageUnit = (guMm, guInch);`n`n  /// <summary>Stand-in"), @($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FUnit: TDemoGageUnit;"), @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    property GageUnit: TDemoGageUnit read FUnit;"), @($U, "    Log.Add(Format('gage now %d', [LastGage]));", "    Log.Add(Format('gage now %d %d', [LastGage, Ord(GageUnit)]));"))),
@@ -396,7 +396,14 @@ try {
   $v25 = Get-VariantPlan (New-Variant $cleanDir 'v-f25' @(, @($U, $AttachGuarded, $AttachTryGuarded))) 'v-f25' $Lib
   Check 'f25 control for f24: EInvalidCast handled, but every `as` follows its `is` guard -- still cut' `
     ($v25.Ok -and ($v25.Dump.verdict -eq 'mechanical') -and $v25.Text.Contains('by **member hand-over through an extracted interface**')) "[$($v25.Dump.verdict) / $($v25.Dump.refusals)]"
-  # E18 T6-follow (b): a signature type written `System.Classes.TStrings` while the class unit's uses
+  # W6 C1: the first IInterface ancestor of the class lives IN the cycle (the old f16 shape, TDemoGageBase = class(TComponent, IInterface)):
+  # the ancestor walk goes on to TComponent, so the cast is `TComponent(Owner) as IDemoGagePortSurface` instead of `cast-unseen`
+  $vC1 = Get-VariantPlan (New-Variant $cleanDir 'v-f16c1' @(, @($G, "  TDemoGagePort = class(TComponent)`n  private", "  TDemoGageBase = class(TComponent, IInterface)`n  end;`n`n  TDemoGagePort = class(TDemoGageBase)`n  private"))) 'v-f16c1' $Lib
+  Write-Host ("  f16c1 refusals: " + $vC1.Dump.refusals) -ForegroundColor DarkGray
+  Check 'f16c1 (C1) the cast-unseen walk continues past the cycle ancestor: cut, no cast-unseen' `
+    ($vC1.Ok -and ($vC1.Dump.verdict -eq 'mechanical') -and (@($vC1.Dump.refusals -split ',') -notcontains 'cast-unseen')) "[$($vC1.Dump.verdict) / $($vC1.Dump.refusals)]"
+  Check 'f16c1 (C1) the receiver is cast through TComponent, never through TDemoGageBase (a class of the cycle)' `
+    ($vC1.Text -match 'TComponent\(Sender\) as IDemoGagePortSurface' -and $vC1.Text -notmatch 'TDemoGageBase\(') ((@($vC1.Text -split "`n") | Where-Object { $_ -match 'IDemoGagePortSurface' -or $_ -match 'TComponent' }) -join ' | ')  # E18 T6-follow (b): a signature type written `System.Classes.TStrings` while the class unit's uses
   # names `Classes` (unit scope): the longest dotted prefix `System.Classes` is the UNIT, never `System`.
   $v26 = Get-VariantPlan (New-Variant $cleanDir 'v-f26' @(@($G, "  System.Classes;`n`ntype", "  Classes;`n`ntype"),
     @($G, '    property Log: TStrings read FLog;', '    property Log: System.Classes.TStrings read FLog;'))) 'v-f26' $Lib
