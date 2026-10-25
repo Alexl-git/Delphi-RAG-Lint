@@ -873,7 +873,7 @@ Step 'E-CY' {
   # is the same as cy2's.
   $script:cy2p = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir (Join-Path $OutDir 'cy-playbook') -Playbook
   $t2p = Dot $cy2p
-  if (-not $t2p.Contains(">$cyCounted -- engine: interface coupling -- units of this cycle use each other in their INTERFACE uses clauses.<")) {
+  if (-not $t2p.Contains(">$cyCounted -- engine: interface coupling -- 3 of 4 uses between the units of this cycle are in INTERFACE uses clauses.<")) {
     Fail 'A-CY2P-VERDICT' 'the -Playbook verdict does not lead with the counted clause ahead of the engine line' }
   if ($t2p -match '>interface cycle') { Fail 'A-CY2P-NOCYCLE' 'the -Playbook verdict calls the group an interface cycle' }
 

@@ -35,6 +35,16 @@ foreach ($s in $entry.surfaces | Where-Object { $_.type -eq 'cli' }) {
     foreach ($f in $s.flags) { Check "$n mentions $($f.name)" ($r.Text.Contains($f.name)) }
   }
 }
+# X-26: the per-verb text is GENERATED (DRagLint.CLI.HelpText.WriteVerbHelp), never a hard-coded copy in CLI.pas.
+function Test-HardCoded([string]$src) {
+  $m = [regex]::Match($src, '(?s)procedure PrintMenuVerbHelp\(.*?\r?\nend;')
+  return ($m.Success -and ($m.Value -match "Writeln\('\s+drag-lint menu-"))
+}
+$cli = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas'))
+Check 'X-26: PrintMenuVerbHelp has no hard-coded verb text' (-not (Test-HardCoded $cli))
+Check 'X-26: PrintMenuVerbHelp calls the generated WriteVerbHelp' ($cli -match '(?s)procedure PrintMenuVerbHelp\(.*?WriteVerbHelp\(AVerb\)')
+$planted = "procedure PrintMenuVerbHelp(const AVerb: string);`r`nbegin`r`n  Writeln('  drag-lint menu-tree --project');`r`nend;"
+Check 'control: the check detects a hard-coded Writeln' (Test-HardCoded $planted)
 # positive controls: the banner is still the answer elsewhere
 $b = Help @('--help')
 Check 'control: bare --help prints the banner' (($b.Code -eq 0) -and ($b.Text -match 'COMMON QUESTIONS'))
