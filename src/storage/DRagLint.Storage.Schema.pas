@@ -38,7 +38,10 @@ const
   // v18 (ADP2 T1): symbol_facts (base SQLite, no FTS5) inserted at index 53
   // (right after the string_literals indexes, before the FTS5 block), so the
   // FTS5-first index shifted from 53 to 54.
-  SCHEMA_DDL_FTS5_FIRST = 54;
+  // B2 (2026-10-25): corrected 54 -> 56. v19 grew the base block by two statements
+  // without moving this, so the FTS5 loop started at idx_string_literals_source /
+  // symbol_facts and, with FTS5 or trigram absent, symbol_facts was never created.
+  SCHEMA_DDL_FTS5_FIRST = 56;
 
   // Each statement is terminated with a semicolon on its own conceptual block.
   // We rely on FireDAC ExecSQL with a single statement per call (split at ';').
@@ -338,6 +341,23 @@ const
     '  INSERT INTO string_fts(rowid, text) VALUES (new.id, new.text);' +
     '  INSERT INTO string_fts_tri(rowid, text) VALUES (new.id, new.text); END');
 
+  /// <summary>Index of the string_fts_tri CREATE VIRTUAL TABLE inside
+  /// SCHEMA_DDL (B2). Migrate skips it when the sqlite3.dll has no trigram
+  /// tokenizer (SQLite older than 3.34).</summary>
+  SCHEMA_DDL_FTS5_TRI_TABLE = SCHEMA_DDL_FTS5_FIRST + 1;
+
+  /// <summary>The three string_literals sync triggers WITHOUT the string_fts_tri
+  /// statements (B2), created instead of SCHEMA_DDL[FIRST+2..FIRST+4] when the
+  /// trigram tokenizer is unavailable. Same names, so a later trigram-capable
+  /// open replaces them.</summary>
+  SCHEMA_DDL_NOTRI_TRIGGERS: array[0..2] of string = (
+    'CREATE TRIGGER IF NOT EXISTS string_literals_ai AFTER INSERT ON string_literals BEGIN' +
+    '  INSERT INTO string_fts(rowid, text) VALUES (new.id, new.text); END',
+    'CREATE TRIGGER IF NOT EXISTS string_literals_ad AFTER DELETE ON string_literals BEGIN' +
+    '  INSERT INTO string_fts(string_fts, rowid, text) VALUES (''delete'', old.id, old.text); END',
+    'CREATE TRIGGER IF NOT EXISTS string_literals_au AFTER UPDATE ON string_literals BEGIN' +
+    '  INSERT INTO string_fts(string_fts, rowid, text) VALUES (''delete'', old.id, old.text);' +
+    '  INSERT INTO string_fts(rowid, text) VALUES (new.id, new.text); END');
 implementation
 
 end.
