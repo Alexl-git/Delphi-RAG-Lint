@@ -56,6 +56,24 @@ watchdog fresh-session handoff for ENGINE; rely on this file through auto-compac
   re-dispatch the unfinished rows with a prompt that says "continue from the branch state".
 - Ledger rows are authoritative: `.superpowers\sdd\2026-10-23-engine-3day\progress.md`.
 
+## STATE 2026-10-25 ~03:40 -- WAVE 4 MID-RUN (controller delphi-rag-lint-65) -- RESUME HERE
+MERGED on local main (not pushed): W4-C 98d2a338, W4-F, W4-B, W4-G, W4-F2 f1eed3ca (conflict resolved), W4-H1 b12fdd8f, W4-hyg1 (X-06).
+Plugin compiles W32/W64 at f1eed3ca. LESSON: harness worktrees branch from ORIGIN/main -> tell every new lane git merge main first.
+STILL RUNNING (reports lost on /clear -> inspect branch worktree-agent-<id> in .claude\worktrees\agent-<id>): W4-A (F1/F9),
+W4-D (F5, was waiting on own bg job), W4-E (F7/F8), W4-H2 (lint rules), W4-cfg, W4-ren, W4-B2 (trigram; told to merge main),
+W4-HB (heartbeat guard), W4-doc1 (decisions walkthrough), W4-T11m (measurement). Re-parse watcher armed (PID 50768).
+AFTER ALL MERGE: end docs lane = CHANGELOG lines owed (ledger rows), --help/README/AI-USAGE for --output json/sarif + exit code (A),
+cli-flag-audit 5 undocumented flags, featuregen audit 11 gaps, battery list entries (run_indexjob_tests, run_migrate_ddl_raises,
+new guards), T-23 header sweep, X-24; then L-cli (X-26, E16 --sites, E14), L-perf (X-23, after A). Then featuregen build --all
+(ask convrules-editor-31 + lsp-4e first), full battery, deploy at owner's word. FINAL: full what's-left report to owner (user asked).
+## STATE 2026-10-25 ~02:15 -- WAVE 4 RUNNING (controller delphi-rag-lint-65) -- RESUME HERE
+Owner: "resume, highly parallel subagents, use tokens till 09:00". 11 background lanes dispatched (ledger "Wave 4"
+table; rules .superpowers\sdd\2026-10-23-engine-3day\LANE-RULES-w4.md): W4-A..H2 code lanes in harness worktrees
+(.claude\worktrees\agent-*), 2 doc lanes. Reports are LOST on /clear: inspect git branch --list 'worktree-agent-*'
+logs vs main, re-dispatch unfinished rows "continue from branch state". Merge each: review diff, rerun its guards
+on main, apply its listed docs/registry/CHANGELOG lines, ledger row -> MERGED. Re-parse PID 50768 still running
+(lib-Win32 since 22:12); on exit: verify summaries + info --db, message convrules-editor-31 "ENGINE: re-parse done".
+Peers now: convrules-editor-31, www-5b, lsp-4e. CHANGELOG:8 wording fixed.
 ## STATE 2026-10-25 ~02:10 -- RESUME HERE
 PUSHED by owner: origin/main = 6511fe41. castlib-once merged (exit 6 = no unit touched; tell convrules-editor-31 the sha; deploy with next engine build). RE-PARSE PID 50768 still running (index --all --jobs 1, sections one after another, log ...\scratchpad\agent-REPARSE\all.log); on resume: if gone, check every section's '=== <name> -> ... files=' summary line incl. library-Win32/Win64, spot-check info --db, then SendMessage convrules-editor-31 'ENGINE: re-parse done'. Deep review findings: docs\INBOX-2026-10-25-converter-to-engine-deep-review-dl.md (5 M + 4 L). Owner requests: decision walkthrough in detail, full backlog with effort, parallel plan till 09:00.
 
