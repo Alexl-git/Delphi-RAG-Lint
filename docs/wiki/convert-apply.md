@@ -97,8 +97,11 @@ points, at most 8, first line each). The dry run reports the same refusal.
 of the call or its `.dfm`, the only level is `utf8-bom`, anything else is exit
 `2`) stores that file as UTF-8 with a BOM in the same write transaction as the
 edits, also when every value would have fitted; the `.BCK<n>` backup applies as
-usual. A text `.dfm` never refuses: a value its encoding cannot hold is written
-as Delphi `#codes` (`'Gr'#246'sse'`). A binary (TPF0) `.dfm` has no text
+usual. In a text `.dfm` a string-literal value its encoding cannot hold is
+written as Delphi `#codes` (`'Gr'#246'sse'`) and never refuses; a character it
+cannot hold OUTSIDE a string literal (an identifier: a class name, an enum or
+other bare-word value), where DFM syntax has no `#code`, refuses the unit as a
+`.pas` does (`encoding_refused` naming the `.dfm`; raise the `.dfm`). A binary (TPF0) `.dfm` has no text
 encoding and is never compared or rewritten. `info --json`
 `capabilities.convert_encoding_guard` is `true` when this ships.
 ## Exit codes
