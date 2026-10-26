@@ -647,6 +647,7 @@ type
     function TakeReceiverRef(const pR: TReference): Boolean;
     procedure TakeClassMemberAccess(const pR: TReference);
     procedure TakeBareRef(const pR: TReference);
+    procedure TakeCastMembers(const pR: TReference; const pCls: TSymbol);
     procedure Finish;
     procedure Collect;
   public
@@ -654,6 +655,8 @@ type
     destructor Destroy; override;
     function Run: TEdgeSurface;
   end;
+
+function PlainCode(const pLine: string): string; forward;
 
 constructor TSurfaceBuilder.Create(const pSource: IEdgeSurfaceSource; pFromFid: Int64; const pToStem: string);
 begin
@@ -834,8 +837,13 @@ begin
   Kind:= erOther;
   if SameText(pR.Kind, 'call') then
   begin
-    Kind:= erCall;
-    Inc(FSurface.CallCount);
+    { C7: the index records a hard cast `TX(Y)` as a call of TX }
+    if (Owner.Kind = skClass) and SameText(pR.NameText, Owner.Name) then Kind:= erTypeCast
+    else
+    begin
+      Kind:= erCall;
+      Inc(FSurface.CallCount);
+    end;
   end
   else if SameText(pR.Kind, 'type_use') then
   begin
@@ -849,6 +857,35 @@ begin
   end
   else if SameText(pR.Kind, 'read') and (Owner.Kind = skClass) then FClassUses.Add(pR);
   AddRef(pR, Kind, Owner.Id);
+  if Kind = erTypeCast then TakeCastMembers(pR, Owner);
+end;
+
+{ C7: the index records no member access after a hard cast, so `TX(Y).M` and `TX(Y).M := v` get
+  their member read / write from the line: one ref per field or property of TX named that way
+  (a member TX does not declare itself is left to RefRefusal, which refuses the cast). }
+procedure TSurfaceBuilder.TakeCastMembers(const pR: TReference; const pCls: TSymbol);
+var
+  R: TReference;
+begin
+  var C:= TRegEx.Escape(pCls.Name);
+  for var M in TRegEx.Matches(PlainCode(LineText(pR.StartLine)),
+    '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)(\s*:=)?', [roIgnoreCase]) do
+  begin
+    var Child:= FStore.FindChildSymbolByName(pCls.Id, M.Groups[1].Value);
+    if (Child.Id <= 0) or not (Child.Kind in [skField, skProperty]) then Continue;
+    R:= pR;
+    R.NameText:= Child.Name;
+    if (M.Groups.Count > 2) and (M.Groups[2].Value <> '') then
+    begin
+      FSurface.HasWrite:= True;
+      AddRef(R, erMemberWrite, Child.Id);
+    end
+    else
+    begin
+      FMembers.Add(Child.Name);
+      AddRef(R, erMemberRead, Child.Id);
+    end;
+  end;
 end;
 
 procedure TSurfaceBuilder.Finish;
@@ -2281,6 +2318,7 @@ type
     function Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
     function Stored(const pSym: TSymbol): TStoredType;
     function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+    function HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
     function CheckShape: Boolean;
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
@@ -2416,14 +2454,17 @@ begin
       end;
     erTypeCast:
       begin
+        { C7: `TX(Y).M` with M a field / property of TX is carried; any other cast stays }
+        pWhat:= HardCastWhat(pR, S);
+        if pWhat = '' then Exit(False);
         pKind:= 'type-cast';
-        pWhat:= Format('casts to `%s`, which would still need its unit', [pR.Name]);
       end;
     erCall:
       if (S.Kind = skClass) and SameText(pR.Name, S.Name) then
       begin
+        pWhat:= HardCastWhat(pR, S);
+        if pWhat = '' then Exit(False);
         pKind:= 'type-cast';
-        pWhat:= Format('casts to `%s`, which would still need its unit', [pR.Name]);
       end
       else if (S.Kind = skClass) or ((S.ParentId > 0) and (FStore.GetSymbolById(S.ParentId).Kind in [skClass, skRecord])) then
       begin
@@ -2448,6 +2489,28 @@ begin
     end;
   end;
   Result:= True;
+end;
+
+{ C7: '' when every hard cast `TX(...)` of the line is `TX(name).M` with M a field or property TX
+  declares itself (the surface synthesised that member's read / write; RewriteLine turns the cast
+  into `(name as ISurface).M`); else why the cast cannot be carried. }
+function TMemberPlan.HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
+begin
+  var C    := TRegEx.Escape(pCls.Name);
+  var Code := PlainCode(pR.LineText);
+  var Casts:= TRegEx.Matches(Code, '(?<![\w.])' + C + '\s*\(', [roIgnoreCase]).Count;
+  var Shaped:= 0;
+  for var M in TRegEx.Matches(Code, '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+  begin
+    var Child:= FStore.FindChildSymbolByName(pCls.Id, M.Groups[1].Value);
+    if (Child.Id <= 0) or not (Child.Kind in [skField, skProperty]) then
+      Exit(Format('casts to `%s` and reads `%s` through the cast, which is not a field or property `%s` ' +
+        'declares itself', [pCls.Name, M.Groups[1].Value, pCls.Name]));
+    Inc(Shaped);
+  end;
+  if Shaped < Casts then
+    Exit(Format('casts to `%s` other than as `%s(name).member`, which would still need its unit', [pCls.Name, pCls.Name]));
+  Result:= '';
 end;
 
 { Every ref is an `is` / `as` operand or a member read, on one class; no `B.X` in A. }
@@ -2899,6 +2962,24 @@ begin
     end;
     pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
   end;
+  { C7: a hard cast followed by a member, `TX(X).M` -> `(X as I).M`, through the IInterface ancestor
+    when X's static type lacks it; a wrong cast now raises EIntfCastError instead of reading garbage }
+  while True do
+  begin
+    var M:= TRegEx.Match(pText, '(?<![\w.])' + C + '\s*\(\s*([A-Za-z_]\w*)\s*\)\s*(?=\.)', [roIgnoreCase]);
+    if not M.Success then Break;
+    var X:= M.Groups[1].Value;
+    if not ReceiverType(X, pEnclosing, Ty) then
+      Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s(%s)` ' +
+        'is not that of Self, a parameter, a local, or a field or property of the class', [pLine, X, FCls.Name, X])));
+    var Repl:= '(' + X + ' as ' + FIface + ')';
+    if not ImplementsIInterface(FIdx, Ty) then
+    begin
+      Repl     := Format('(%s(%s) as %s)', [FCastAnc, X, FIface]);
+      FCastUsed:= True;
+    end;
+    pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
+  end;
   if TRegEx.IsMatch(PlainCode(pText), '\b' + C + '\b', [roIgnoreCase]) then
     Exit(Refuse('receiver-unknown', FCls.Name, FFromFid, pLine, Format('line %d still names `%s` after the rewrite ' +
       '(`%s`): an `is` / `as` operand that is not a plain name', [pLine, FCls.Name, Trim(pText)])));
@@ -2914,7 +2995,7 @@ begin
   try
     for var R in FSurface.Refs do
     begin
-      if not (R.Kind in [erTypeIs, erTypeAs]) or Done.Contains(R.Line) then Continue;
+      if not (R.Kind in [erTypeIs, erTypeAs, erTypeCast]) or Done.Contains(R.Line) then Continue;
       Done.Add(R.Line);
       if not RewriteLine(R.Line, R.EnclosingId, Text) then Exit(False);
       AddEdit(FFromFid, R.Line, True, [Text]);

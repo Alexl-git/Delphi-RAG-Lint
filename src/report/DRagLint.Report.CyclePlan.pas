@@ -5448,15 +5448,17 @@ end;
 
 procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
 var
-  IsLines, AsLines: TList<string>;
+  IsLines, AsLines, CastLines: TList<string>;
 begin
   EmitFmt('### Step %d: what moves where', [pStep]);
-  IsLines:= TList<string>.Create;
-  AsLines:= TList<string>.Create;
+  IsLines  := TList<string>.Create;
+  AsLines  := TList<string>.Create;
+  CastLines:= TList<string>.Create;
   try
     for var R in FCutEdge.Surface.Refs do
       if (R.Kind = erTypeIs) and not IsLines.Contains(IntToStr(R.Line)) then IsLines.Add(IntToStr(R.Line))
-      else if (R.Kind = erTypeAs) and not AsLines.Contains(IntToStr(R.Line)) then AsLines.Add(IntToStr(R.Line));
+      else if (R.Kind = erTypeAs) and not AsLines.Contains(IntToStr(R.Line)) then AsLines.Add(IntToStr(R.Line))
+      else if (R.Kind = erTypeCast) and not CastLines.Contains(IntToStr(R.Line)) then CastLines.Add(IntToStr(R.Line));
     var Decl    := UnitNameOfStem(FInversion.DeclStem);
     var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
     EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
@@ -5485,12 +5487,19 @@ begin
         FInversion.IfaceName, string.Join(', ', AsLines.ToArray),
         (if FInversion.CastAncestor <> '' then Format('; a receiver whose type does not implement IInterface ' +
           'is cast through `%s` first', [FInversion.CastAncestor]) else '')]);
+    if CastLines.Count > 0 then
+      EmitFmt('- `%s`: the hard cast `%s(X).M` becomes `(X as %s).M` (line %s)%s. Behaviour change, stated: a ' +
+        'cast of an object that is no `%s` used to read through the wrong object; it now raises EIntfCastError.',
+        [Consumer, FInversion.ClassTypeName, FInversion.IfaceName, string.Join(', ', CastLines.ToArray),
+         (if FInversion.CastAncestor <> '' then Format(' -- through `%s` when X''s type does not implement IInterface',
+           [FInversion.CastAncestor]) else ''), FInversion.ClassTypeName]);
     Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
       'properties of the class itself, read only.');
     EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
       'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
       '`is` guard.', [FInversion.IfaceName, FInversion.ClassTypeName, Consumer]);
   finally
+    CastLines.Free;
     AsLines.Free;
     IsLines.Free;
   end;
