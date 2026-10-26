@@ -55,6 +55,7 @@ uses
   , ConvRules.UnitMask    // TUnitRow: a field's type
   , ConvRules.ConvertTab  // TConvertTab: a field's type
   , ConvRules.WorkListTab // TWorkListTab: a field's type
+  , ConvRules.MembersPanel // A4: TMembersPanel, a field's type
   , ConvRules.ValidateScope // TValidateJob: a method parameter's type, so INTERFACE-visible
   , ConvRules.TextEncoding // TTextLevel: a field's type, so INTERFACE-visible; dl:unit ConvRules.TextEncoding accepted -- ASK_SAVE_FMT and LOST_CHARS_SHOWN are the save question's text and cap, they travel with PreSaveDecision's lost-character list
   ;
@@ -143,6 +144,8 @@ type
       FConvertTab    : TConvertTab           ; // checked rule books x source units
       FTabWorkList   : TTabSheet             ; // the Work list page (Task 3, engine 1.27.0 pas_uses)
       FWorkListTab   : TWorkListTab          ; // what the last run's converted code still uses
+      FMembersPanel  : TMembersPanel         ; // A4: the active block's #migrate lines
+      FMigrateOk     : Boolean               ; // A4: engine reports migrate_members
       FHarvestStrip  : TPanel                ; // the control strip above FUnitList
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
       FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
@@ -582,6 +585,15 @@ type
       /// <summary>Re-read every rules-list row's Check column from the book's marks,
       /// in place (no rebuild, so the selection and the loaded grid stay).</summary>
       procedure RefreshRuleMarks;
+      // A4: the Migrate dialog for a pair + member; writes the pick, returns the status text ('' = cancelled).
+      function RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string): string;
+      // A4: the views a #migrate edit changes (rule tree, raw text, Members list, Work list Rule cells).
+      procedure RefreshMigrateViews;
+      // A4: applies FMigrateOk (set by ProbeStartupCapabilities) to the Members list and the Work list.
+      procedure ApplyMigrateCapability;
+      procedure MembersAdd;
+      procedure MembersEdit(ANode: TRuleNode);
+      procedure MembersDelete(ANode: TRuleNode);
       /// <summary>FRules.OnInfoTip: the validation messages on the row's block.</summary>
       /// <param name="Sender">FRules; unused.</param>
       /// <param name="Item">The row under the mouse.</param>
@@ -2769,10 +2781,21 @@ uses
   , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
   , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText
   , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
+  , ConvRules.MigrateRules   // A4: CAPABILITY_MIGRATE_MEMBERS
+  , ConvRules.Migrate        // A4: the member-migration decisions the Members list and the Work list run
+  , ConvRules.MigrateForm    // A4: the Migrate dialog
+  , ConvRules.ConvertRunner  // A4: TConvertRow, the MigrateChecksReady parameter
+  , ConvRules.MigrateRun     // A4: MigrateChecksForBook
   , ConvRules.QualifyFix     // A2: ApplyQualifyPicks / QualifyStatusText behind the Convert host's QualifyBook
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
   , ConvRules.InputGate      // dl:unit ConvRules.InputGate accepted -- N7/N11: GateVerdict & co. behind AppMessage; LOST_COMMAND_CONVERT travels with LostCommandStatus (WMSetCursor names the Convert command by it)
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
+
+const
+  // A4: the Members list height and the Migrate texts.
+  MEMBERS_PANEL_H     = 150;
+  MIGRATE_INTO_FMT    = 'into %s (line %d of %s)';
+  MIGRATE_DELETED_FMT = 'Deleted %s from %s -- not saved: File > Save, then Convert again';
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
     ConvRulesEditorStyles.rc -- not the file names. Verified with
@@ -3725,6 +3748,15 @@ begin
     begin
       FWorkListTab.ShowRun(ARun);
     end;
+  // A4 (D8 B): the engine's rule-level migrate-check verdicts as marks on the open book's lines.
+  LHost.MigrateChecksReady:= procedure(ARows: TArray<TConvertRow>)
+    begin
+      if AddMigrateCheckMarks(FBook, MigrateChecksForBook(ARows, FFilePath)) > 0 then
+      begin
+        RefreshRuleMarks;
+        FMembersPanel.ShowBlock(FBook, FActiveHdr);
+      end;
+    end;
   LHost.WorkListRefused:= procedure
     begin
       FWorkListTab.MarkLastRefused;
@@ -3902,6 +3934,13 @@ begin
 
   // Examine / Clear marks moved to the Conversion menu; the second row
   // of this filter bar went with them.
+
+  // A4: the Members list (#migrate lines of the block) under the grid.
+  FMembersPanel:= TMembersPanel.Create(Self, MembersAdd, MembersEdit, MembersDelete);
+  FMembersPanel.Parent:= GridPanel;
+  FMembersPanel.Align := alBottom;
+  FMembersPanel.Height:= MEMBERS_PANEL_H;
+  FMembersPanel.SetEngineOk(FMigrateOk);
 
   FGrid:= TStringGrid.Create(Self);
   FGrid.Parent:= GridPanel; FGrid.Align:= alClient;
@@ -4843,6 +4882,7 @@ begin
   Inc(FTreeLoads);
   try
   FActiveHdr:= AHdrIdx;
+  FMembersPanel.ShowBlock(FBook, AHdrIdx);
   // A fresh block: drop any pool type-narrowing carried over from the last selection.
   FPoolTypeFilter:= '';
   if FMiOnlyType <> nil then
@@ -6470,6 +6510,8 @@ begin
   var LNote  : string:= StartupProbeVerdict(LCode, LParsed, LCached);
   FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
   FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
+  FMigrateOk           := MatchText(CAPABILITY_MIGRATE_MEMBERS, LCaps);
+  ApplyMigrateCapability;
   FStartupProbed:= LCached;
   if LCached then
     FProbeFailedAt:= 0
@@ -7552,6 +7594,9 @@ end; // procedure
 procedure TConvRulesForm.SyncRawFromModel;
 begin
   FRaw.Lines.Text:= FBook.SaveToString;
+  // A4: the Members list holds borrowed nodes -- rebuild it from the book whenever the model changes.
+  if FMembersPanel <> nil then
+    FMembersPanel.ShowBlock(FBook, FActiveHdr);
 end;
 
 { File > Validate: the syntax pass plus the ACTIVE block with its own pair -- an
@@ -7644,6 +7689,8 @@ begin
   end; // try
   FValidatePending:= NextPending(FValidatePending, AJobs, R);
   ApplyValidateMarks(FBook.Nodes.ToArray, ALineNodes, AJobs, R);
+  // A4 (D8 = B): AFTER ApplyValidateMarks, which drops the non-syntax marks of every validated block.
+  StaticMigrateMarks(FBook);
   RefreshRuleMarks;
   FGrid.Invalidate;
   AIsError:= R.Errors > 0;
@@ -7665,9 +7712,111 @@ begin
     MarksText(BlockMarkNodes(FBook, Integer(FRules.Items[k].Data)), E, W);
     while FRules.Items[k].SubItems.Count < 2 do
       FRules.Items[k].SubItems.Add('');
-    FRules.Items[k].SubItems[1]:= MarkerText(E, W);
+    FRules.Items[k].SubItems[1]:= MarkerText(E, W) + MigrateMarkerText(FBook, Integer(FRules.Items[k].Data));
   end;
 end; // procedure
+
+{ A4: the Members list's Add / Edit and the Work list's Migrate... button follow the latest
+  capability probe (D4 = A: the button is hidden without migrate_members). }
+procedure TConvRulesForm.ApplyMigrateCapability;
+begin
+  if (FMembersPanel = nil) or (FWorkListTab = nil) then
+    Exit; // the probe ran before BuildUI made them
+  FMembersPanel.SetEngineOk(FMigrateOk);
+  // A4: the Migrate... button (hidden without migrate_members, D4 = A) and the Rule cells.
+  if FMigrateOk then
+    FWorkListTab.SetMigrateHost(
+      function(ARow: TPasUseRow): Boolean
+      begin
+        Result:= ARow.Instance <> '';
+      end,
+      function(ARow: TPasUseRow): string
+      begin
+        Result:= RunMigrateDialog(ARow.FromType, ARow.ToType, ARow.Member,
+          Format('%s.%s  (%s, %s, %s)', [ARow.Instance, ARow.Member, ARow.Kind, ARow.Visibility, ARow.DeclaredIn]), False, '');
+      end,
+      function(ARow: TPasUseRow): string
+      begin
+        Result:= RuleForRow(FBook, ARow);
+      end)
+  else
+    FWorkListTab.SetMigrateHost(nil, nil,
+      function(ARow: TPasUseRow): string
+      begin
+        Result:= RuleForRow(FBook, ARow);
+      end);
+end;
+
+function TConvRulesForm.RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string): string;
+var
+  LBlock    : TMigrateBlock;
+  LBlockText: string;
+  LPick     : TMigratePick;
+  LActive   : TRuleNode;
+  LOut      : TMigrateOutcome;
+begin
+  LBlock:= FindMigrateBlock(FBook, AFrom, ATo, ExtractFileName(FFilePath));
+  LBlockText:= if LBlock.State = mbFound then Format(MIGRATE_INTO_FMT, [LBlock.HeaderText, LBlock.NodeIndex + 1, ExtractFileName(FFilePath)]) else LBlock.Reason;
+  if not TMigrateForm.Run(Self, AMember, ADetail, LBlockText, AOldEditable, ANew,
+    function(APick: TMigratePick): string
+    begin
+      Result:= MigrateCheck(FBook, FBook.Nodes.IndexOf(LBlock.Header), APick);
+    end, LPick) then
+    Exit('');
+  // The active header is held by NODE across the insert and re-found after it.
+  LActive:= if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then FBook.Nodes[FActiveHdr] else nil;
+  LOut:= ApplyMigratePick(FBook, LBlock, LPick);
+  if LActive <> nil then
+    FActiveHdr:= FBook.Nodes.IndexOf(LActive);
+  RefreshMigrateViews;
+  Result:= MigrateStatusText(FFilePath, LBlock, LOut);
+end;
+
+procedure TConvRulesForm.RefreshMigrateViews;
+begin
+  RefreshRulesList;
+  RefreshRuleMarks;
+  SyncRawFromModel;
+  FWorkListTab.RefreshRules;
+end;
+
+procedure TConvRulesForm.MembersAdd;
+var
+  LText: string;
+begin
+  if (FActiveHdr < 0) or (FActiveHdr >= FBook.Nodes.Count) then
+    Exit;
+  LText:= RunMigrateDialog(FBook.Nodes[FActiveHdr].FromType, FBook.Nodes[FActiveHdr].ToType, '', '', True, '');
+  if LText <> '' then
+    SetStatus(LText);
+end;
+
+procedure TConvRulesForm.MembersEdit(ANode: TRuleNode);
+var
+  LText: string;
+begin
+  if (ANode = nil) or (FActiveHdr < 0) or (FActiveHdr >= FBook.Nodes.Count) then
+    Exit;
+  LText:= RunMigrateDialog(FBook.Nodes[FActiveHdr].FromType, FBook.Nodes[FActiveHdr].ToType, ANode.MigOld, '', False, ANode.MigNew);
+  if LText <> '' then
+    SetStatus(LText);
+end;
+
+procedure TConvRulesForm.MembersDelete(ANode: TRuleNode);
+var
+  LActive: TRuleNode;
+  LLine  : string;
+begin
+  if (ANode = nil) or (FBook.Nodes.IndexOf(ANode) < 0) then
+    Exit;
+  LActive:= if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then FBook.Nodes[FActiveHdr] else nil;
+  LLine:= ANode.Emit;
+  FBook.Nodes.Remove(ANode); // owned: frees the node
+  if LActive <> nil then
+    FActiveHdr:= FBook.Nodes.IndexOf(LActive);
+  RefreshMigrateViews;
+  SetStatus(Format(MIGRATE_DELETED_FMT, [LLine, ExtractFileName(FFilePath)]));
+end;
 
 procedure TConvRulesForm.RulesInfoTip(Sender: TObject; Item: TListItem; var InfoTip: string);
 var

@@ -180,9 +180,10 @@ type
   /// (engine 1.28.3: qualify_fixes[]); afDescendants: descendant_warnings (engine 1.25.0:
   /// descendants[]); afEncodingGuard: convert_encoding_guard (ENGINE E1'/E2: encoding_refused and
   /// --raise-encoding; ParseApplyJson reads encoding_refused whatever the features, the set only
-  /// tells the tab whether to OFFER the raise). only_matched[], only_unmatched[], only_included[] and unlinked[] have
+  /// tells the tab whether to OFFER the raise). afMigrateMembers: migrate_members (engine 1.32.0+:
+  /// items[] migrate-applied / deliberate-break / migrate-check, A4). only_matched[], only_unmatched[], only_included[] and unlinked[] have
   /// no capability of their own and are read whatever the engine.</remarks>
-  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix, afDescendants, afEncodingGuard);
+  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix, afDescendants, afEncodingGuard, afMigrateMembers);
   /// <summary>The apply/1 features the run's engine reported.</summary>
   TApplyFeatures = set of TApplyFeature;
 
@@ -311,6 +312,15 @@ type
     /// <summary>qualify_fixes[] (afQualifyFix): the #convert sides to qualify, on a converted AND a
     /// refused row; [] without the feature.</summary>
     QualifyFixes: TArray<TQualifyFix>;
+    /// <summary>items[] migrate-applied (afMigrateMembers): one per .pas site a member-form
+    /// #migrate renamed; never a to-do. [] without the feature.</summary>
+    MigrateApplied  : TArray<TApplyItem>;
+    /// <summary>items[] deliberate-break (afMigrateMembers): one per site wrapped in
+    /// DL_NONE(...); each is also a todos[] line, counted once (MigrateNote), not in Remainder.</summary>
+    DeliberateBreaks: TArray<TApplyItem>;
+    /// <summary>items[] migrate-check (afMigrateMembers): a #migrate line (Line 0) or one site
+    /// the engine did not apply; each is also a warnings[] line, counted once, not in Remainder.</summary>
+    MigrateChecks   : TArray<TApplyItem>;
     /// <summary>only_matched[] -- the --only names that matched an instance (case as
     /// the engine wrote them); [] for an unscoped run or an engine that sends none.</summary>
     OnlyMatched  : TArray<string>;
@@ -885,6 +895,7 @@ uses
   , System.RegularExpressions
   , System.StrUtils
   , ConvRules.Model
+  , ConvRules.MigrateRules  // dl:unit ConvRules.MigrateRules accepted -- CAPABILITY_MIGRATE_MEMBERS and the three APPLY_KIND_* migrate kinds are the A4 contract ApplyFeaturesOf / ParseApplyJson read
   , ConvRules.WorkingSet  // WriteTextWithBackupAt: LowerBookFile
   , ConvRules.UsesHarvest
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED / _TIMEOUT are the long-call runner's outcome contract ReindexOutcomeText reads, so they travel with the runner
@@ -1286,6 +1297,8 @@ begin
     Include(Result, afDescendants);
   if MatchText(CAPABILITY_ENCODING_GUARD, ACapNames) then
     Include(Result, afEncodingGuard);
+  if MatchText(CAPABILITY_MIGRATE_MEMBERS, ACapNames) then
+    Include(Result, afMigrateMembers);
 end;
 
 function HasEncodingRefusal(const ARow: TApplyRow): Boolean;
@@ -1895,6 +1908,12 @@ begin
     end;
     if afQualifyFix in AFeatures then
       Result.QualifyFixes:= QualifyFixes(Obj);
+    if afMigrateMembers in AFeatures then
+    begin
+      Result.MigrateApplied  := ApplyItems(Obj, APPLY_KIND_MIGRATE_APPLIED);
+      Result.DeliberateBreaks:= ApplyItems(Obj, APPLY_KIND_DELIBERATE_BREAK);
+      Result.MigrateChecks   := ApplyItems(Obj, APPLY_KIND_MIGRATE_CHECK);
+    end;
     if (afPasUses in AFeatures) and (Obj.Values['pas_uses'] is TJSONArray) then
       Result.PasUses:= ParsePasUses(TJSONArray(Obj.Values['pas_uses']), Str(Obj, 'unit'), 0);
     LinkInheritedPasUses(Result);
@@ -1914,7 +1933,9 @@ begin
     Result.OnlyUnmatched:= JsonStrings(Obj, 'only_unmatched');
     Result.OnlyIncluded := OnlyIncludedOf(Obj);
     Result.Unlinked     := UnlinkedOf(Obj);
-    LOwnItems:= Result.CastSites + Result.ValueChecks;
+    // A4: a migrate-check is a warnings[] line and a deliberate break a todos[] line (G1:
+    // the item text verbatim); each is counted once, in MigrateNote.
+    LOwnItems:= Result.CastSites + Result.ValueChecks + Result.MigrateChecks;
     if Length(Result.Unlinked) > 0 then
       LOwnItems:= LOwnItems + ApplyItems(Obj, APPLY_KIND_UNLINKED);
     if afDescendants in AFeatures then
@@ -1923,7 +1944,7 @@ begin
       if Length(Result.Descendants) > 0 then
         LOwnItems:= LOwnItems + ApplyItems(Obj, APPLY_KIND_DESCENDANT);
     end;
-    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes')
+    Result.Remainder := WithoutItemTexts(Strings(Obj, 'todos'), Result.DeliberateBreaks) + Strings(Obj, 'reemit_notes')
       + WithoutItemTexts(OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0), LOwnItems);
     // The applier's refusal reaches us on stderr, outside the document (no apply/1
     // key carries it, up to engine 1.25.0); warnings[] / error are read as well.

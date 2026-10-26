@@ -662,6 +662,7 @@ uses
   , System.Diagnostics
   , ConvRules.Glyph
   , ConvRules.UnitStatus  // TFileProbe (FileProbe's return type) is declared here
+  , ConvRules.Migrate  // dl:unit ConvRules.Migrate accepted -- A4: the REPORT_STATUS_* migrate columns travel with MigrateNote / MigrateReportNote, the report lines' own contract
   , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- the batch loop executes these pure batch decisions; BATCH_MAX_UNITS and BATCH_REINDEX_FAILED_FMT are part of that contract
   ;
 
@@ -797,6 +798,12 @@ begin
     Result:= Result + [Line(REPORT_STATUS_VALUE_CAST, ApplyItemReportNote(LItem))];
   for var LItem: TApplyItem in ARow.Apply.ValueChecks do
     Result:= Result + [Line(REPORT_STATUS_VALUE_CHECK, ApplyItemReportNote(LItem))];
+  for var LItem: TApplyItem in ARow.Apply.MigrateApplied do
+    Result:= Result + [Line(REPORT_STATUS_MIGRATE, MigrateReportNote(LItem))];
+  for var LItem: TApplyItem in ARow.Apply.DeliberateBreaks do
+    Result:= Result + [Line(REPORT_STATUS_BREAK, MigrateReportNote(LItem))];
+  for var LItem: TApplyItem in ARow.Apply.MigrateChecks do
+    Result:= Result + [Line(REPORT_STATUS_MIGRATE_CHECK, MigrateReportNote(LItem))];
   for var LUses: TUsesRow in ARow.Apply.UsesRows do
     Result:= Result + [Line(REPORT_STATUS_USES + LUses.Action, UsesReportNote(LUses))];
   for var LText: string in ARow.Apply.UsesUnresolved do
@@ -1393,7 +1400,7 @@ var
     Row.Status:= csConverted;
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
-    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs) + QualifyFixNote(Row.Apply);
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs) + QualifyFixNote(Row.Apply) + MigrateNote(Row.Apply);
     // A scoped row says what the engine matched (only_matched[] / only_unmatched[]); an
     // engine that sends neither falls back to what was asked.
     if LScoped then
@@ -1794,7 +1801,7 @@ var
       begin
         LRow:= LPendRows[P];
         LRow.Status:= csConverted;
-        LRow.Note  := ConvertedRowNote(LRow.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(LRow.Apply.Glyphs) + QualifyFixNote(LRow.Apply);
+        LRow.Note  := ConvertedRowNote(LRow.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(LRow.Apply.Glyphs) + QualifyFixNote(LRow.Apply) + MigrateNote(LRow.Apply);
         Units[AChunk[LPending[P]]].Changed:= True;
         Units[AChunk[LPending[P]]].Rows   := Units[AChunk[LPending[P]]].Rows + [LRow];
       end

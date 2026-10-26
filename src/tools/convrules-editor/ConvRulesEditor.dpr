@@ -60,6 +60,11 @@ uses
   , ConvRules.GlyphForm in 'ConvRules.GlyphForm.pas'
   , ConvRules.QualifyFix in 'ConvRules.QualifyFix.pas'
   , ConvRules.QualifyForm in 'ConvRules.QualifyForm.pas'
+  , ConvRules.MigrateRules in 'ConvRules.MigrateRules.pas'
+  , ConvRules.Migrate in 'ConvRules.Migrate.pas'
+  , ConvRules.MigrateRun in 'ConvRules.MigrateRun.pas'
+  , ConvRules.MigrateForm in 'ConvRules.MigrateForm.pas'
+  , ConvRules.MembersPanel in 'ConvRules.MembersPanel.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 
