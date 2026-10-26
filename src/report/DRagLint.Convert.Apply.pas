@@ -1970,6 +1970,23 @@ begin
   end;
 end;
 
+{ Lane H (2026-10-26): a unit's text for the uses planner, decoded as the writer decodes it
+  (TTextFileFormat.ReadFile): a UTF-8 / UTF-16 BOM is stripped and its encoding honoured. The
+  old ANSI read kept a UTF-8 BOM as three characters in front of 'unit', so a UTF-8 + BOM unit
+  with any #use rule was refused as "not a unit". Lane L1 (2026-10-26): EVERY convert-apply
+  read of a user .pas / .dfm goes through here or DecodeUnitBytes -- a column computed on an
+  ANSI-decoded UTF-8 line drifted against the writer's text, and a .dfm block re-emitted from
+  an ANSI decode wrote its non-ASCII captions back as mojibake. }
+function ReadUnitText(const APath: string): string;
+begin
+  TTextFileFormat.ReadFile(APath, Result);
+end;
+
+{ Lane L1: ReadUnitText for bytes already read (a caller that first checks for a binary .dfm). }
+function DecodeUnitBytes(const ABytes: TBytes): string;
+begin
+  TTextFileFormat.Decode(ABytes, Result);
+end;
 // owner ruling 2026-10-11 (b): the property paths the .dfm at ADfmPath streams
 // directly on every object whose class is AClassName (bare, case-insensitive):
 // the 'Name = value' lines one level inside each 'object|inherited|inline
@@ -1980,7 +1997,7 @@ const
 begin
   Result:= nil;
   if not TFile.Exists(ADfmPath) then Exit;
-  var Lines: TArray<string>:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath))
+  var Lines: TArray<string>:= ReadUnitText(ADfmPath)
     .Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
   var Header: TRegEx:= TRegEx.Create('^(?<ind>\s*)(object|inherited|inline)\s+\w+\s*:\s*(?<cls>[\w.]+)', [roIgnoreCase]);
   var Prop  : TRegEx:= TRegEx.Create('^(?<ind>\s*)(?<name>[A-Za-z_][\w.]*)\s*=', []);
@@ -2560,7 +2577,7 @@ var
       AWhy:= 'is binary (TPF0)';
       Exit(False);
     end;
-    AText:= TEncoding.ANSI.GetString(Bytes);
+    AText:= DecodeUnitBytes(Bytes);
     if not StartsWithBlockHeader(AText) then
     begin
       AText:= '';
@@ -2632,7 +2649,7 @@ var
 begin
   Result:= nil;
   if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
-  for var Found: TInheritedInstance in ScanInheritedConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules) do
+  for var Found: TInheritedInstance in ScanInheritedConvertInstances(ReadUnitText(ADfmPath), ARules) do
     if InOnlyList(Found.Name, AOnly) then Result:= Result + [Found];
   DfmTexts:= TDictionary<string, string>.Create;
   try
@@ -2754,7 +2771,7 @@ var
     if TFile.Exists(APath) then
     try
       Bytes:= TFile.ReadAllBytes(APath);
-      if not IsBinaryDfmBytes(Bytes) then Result:= TEncoding.ANSI.GetString(Bytes);
+      if not IsBinaryDfmBytes(Bytes) then Result:= DecodeUnitBytes(Bytes);
     except
       on EInOutError do Result:= '';
       on EFileStreamError do Result:= '';
@@ -3133,7 +3150,7 @@ var
     try
       Bytes:= TFile.ReadAllBytes(ADfm);
       if not IsBinaryDfmBytes(Bytes) then
-        Result:= ScanInheritedConvertInstances(TEncoding.ANSI.GetString(Bytes), ARules);
+        Result:= ScanInheritedConvertInstances(DecodeUnitBytes(Bytes), ARules);
     except
       on EInOutError do Result:= nil;     { unreadable: it cannot be listed }
       on EFileStreamError do Result:= nil;
@@ -3299,7 +3316,7 @@ var
 begin
   Result:= nil;
   if (Length(AConverted) = 0) or (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
-  DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+  DfmText:= ReadUnitText(ADfmPath);
   Root   := DfmRootClass(DfmText);
   if Root = '' then Exit;
   Descs    := TList<TDescClass>.Create;
@@ -3352,7 +3369,7 @@ var
 begin
   Result:= nil;
   if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
-  var DfmText: string:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+  var DfmText: string:= ReadUnitText(ADfmPath);
   var All: TArray<TConvertInstance>:= FindConvertInstances(DfmText, ARules, AOnly);
   for var NO: TNestedOnly in NestedOnlyInstances(DfmText, ARules, AOnly) do All:= All + [NO.Instance];
   for var Inst: TConvertInstance in All do
@@ -4044,14 +4061,6 @@ type
     PlannerNeeded   : Boolean;             { unit rules or a C13 move: the planner owns every edit }
   end;
 
-{ Lane H (2026-10-26): a unit's text for the uses planner, decoded as the writer decodes it
-  (TTextFileFormat.ReadFile): a UTF-8 / UTF-16 BOM is stripped and its encoding honoured. The
-  old ANSI read kept a UTF-8 BOM as three characters in front of 'unit', so a UTF-8 + BOM unit
-  with any #use rule was refused as "not a unit". }
-function ReadUnitText(const APath: string): string;
-begin
-  TTextFileFormat.ReadFile(APath, Result);
-end;
 
 const
   { C18: the '#migrate Old -> DL_NONE' replacement -- a deliberate break. A
@@ -4099,7 +4108,7 @@ begin
   OrigDfm:= '';
   if (DfmPath <> '') and TFile.Exists(DfmPath) then
   begin
-    OrigDfm    := TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath));
+    OrigDfm    := ReadUnitText(DfmPath);
     UnitIn.ConvDfm:= TTextEditApplier.ApplyToText(DfmPath, OrigDfm, AArgs.Edits);
   end;
   Res:= ReconcileUses(ATrees.UnitIndex, UnitIn);
@@ -4460,7 +4469,7 @@ begin
   Refs:= AStore.GetReferencesFromFile(AFileId);
   Classes:= nil;
   var Root: string:= '';
-  if (ADfmPath <> '') and TFile.Exists(ADfmPath) then Root:= DfmRootClass(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)));
+  if (ADfmPath <> '') and TFile.Exists(ADfmPath) then Root:= DfmRootClass(ReadUnitText(ADfmPath));
   for var S: TSymbol in AStore.FindSymbolsByFile(AStore.GetFilePath(AFileId)) do
     if (S.Kind = skClass) and SameText(S.Name, Root) then Classes:= Classes + [S];
   FieldIds:= TDictionary<string, TArray<Int64>>.Create;
@@ -6829,7 +6838,7 @@ begin
   if Length(Stores) = 0 then
   begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
 
-  DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+  DfmText:= ReadUnitText(ADfmPath);
   Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);
   { C8 N2 / N2a (1.26.0): a retyped inherited instance goes through the same
     loop as an own one (InhIndex tells them apart); a code-only entry joins
@@ -6890,7 +6899,7 @@ begin
   RefFactRows := 0;
   RefFactsAsked:= False;
   try
-    PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
+    PasLines.Text:= ReadUnitText(AUnitPas);
 
     var StaleDfm: string:= '';
     for Inst in Instances do
@@ -7177,7 +7186,7 @@ begin
   Leaves:= '';
   Skips := nil;
   if UsesPlan.Ok and (ADfmPath <> '') and TFile.Exists(ADfmPath) then
-    Leaves:= RemovalLeavesUnconverted(ATrees, TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules,
+    Leaves:= RemovalLeavesUnconverted(ATrees, ReadUnitText(ADfmPath), ARules,
       nil, AOnly, UsesPlan.Changes, Skips);
   { C13 N4: every instance was left out by --only -- skip, do not refuse }
   if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then

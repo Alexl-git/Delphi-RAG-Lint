@@ -15,6 +15,9 @@
        E3e/E3f (lane H): an unfit character OUTSIDE a literal (identifier) has no #code: refused
        like a .pas; --raise-encoding on the .dfm writes it raw.
   U1.  (lane H) A UTF-8 + BOM .pas with a #use rule is a unit (was refused "not a unit").
+  L1.  (lane L1) Every convert-apply READ decodes the file's own encoding: a BOM-less UTF-8 or a
+       UTF-16 .pas with a non-ASCII comment before the field is retyped on the type token (was:
+       column drift), a UTF-8 .dfm's non-ASCII caption survives the block re-emit (was: mojibake).
   Capability: info --json capabilities.convert_encoding_guard is JSON true.
 
   Fixtures are GENERATED here (bytes written with explicit encodings), in a $PID scratch folder.
@@ -186,6 +189,34 @@ Check 'U1 UTF-8 + BOM .pas + #use: exit 0, applied (was: refused "not a unit"), 
   (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and ($Utf8.GetString($b) -match 'UnitBom') -and (HasBom "$d\Form1.pas") -and `
    -not (($b[3] -eq 0xEF) -and ($b[4] -eq 0xBB) -and ($b[5] -eq 0xBF))) $r.Out
 
+# ---- lane L1: every convert-apply READ decodes the file's own encoding (BOM, else valid UTF-8, else ANSI) ----
+$Utf16 = New-Object Text.UnicodeEncoding($false, $true)
+$pasSave = $pasText; $dfmSave = $dfmText
+$pasText = $pasSave.Replace('    btnOne: TSrcBtn;', "    { caf$Eac $CyD } btnOne: TSrcBtn;")
+$d = NewCase 'l1a_utf8_col' $Utf8 $Utf8 'TDstBtn'
+$r = Apply $d @('--apply'); $j = Json $r.Out
+$t = $Utf8.GetString((Bytes "$d\Form1.pas"))
+Check 'L1a BOM-less UTF-8 .pas, non-ASCII comment BEFORE the field on its line: the retype lands on the type token (was: column drift)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and ($t -match [regex]::Escape("{ caf$Eac $CyD } btnOne: TDstBtn;")) -and -not (HasBom "$d\Form1.pas")) ($r.Out + "`n" + $t)
+$d = NewCase 'l1c_utf16_pas' $Utf16 $Ansi 'TDstBtn'
+$r = Apply $d @('--apply'); $j = Json $r.Out
+$b = Bytes "$d\Form1.pas"
+$t = $Utf16.GetString($b, 2, $b.Length - 2)
+Check 'L1c UTF-16 LE + BOM .pas with a non-ASCII comment before the field: retyped on the token, still UTF-16 + BOM' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and ($b[0] -eq 0xFF) -and ($b[1] -eq 0xFE) -and ($t -match [regex]::Escape("{ caf$Eac $CyD } btnOne: TDstBtn;"))) ($r.Out + "`n" + $t)
+$pasText = $pasSave
+$dfmText = $dfmSave.Replace("Caption = 'One'", "Caption = 'O$CyD$Eac'")
+$d = NewCase 'l1b_utf8_dfm' $Utf8 $Utf8 'TDstBtn'
+$r = Apply $d @('--apply'); $j = Json $r.Out
+$t = $Utf8.GetString((Bytes "$d\Form1.dfm"))
+Check 'L1b BOM-less UTF-8 .dfm, non-ASCII caption in the converted block: re-emitted intact (was: mojibake), still no BOM' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and ($t -match 'TDstBtn') -and ($t -match [regex]::Escape("Caption = 'O$CyD$Eac'")) -and -not (HasBom "$d\Form1.dfm")) ($r.Out + "`n" + $t)
+$d = NewCase 'l1d_utf8bom_dfm' $Utf8B $Utf8B 'TDstBtn'
+$r = Apply $d @('--apply'); $j = Json $r.Out
+$t = $Utf8.GetString((Bytes "$d\Form1.dfm"))
+Check 'L1d UTF-8 + BOM .dfm, non-ASCII caption in the converted block: re-emitted intact, one BOM' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and ($t -match 'TDstBtn') -and ($t -match [regex]::Escape("Caption = 'O$CyD$Eac'")) -and (HasBom "$d\Form1.dfm")) ($r.Out + "`n" + $t)
+$dfmText = $dfmSave
 # ---- E3 binary .dfm: never compared, one warnings[] line ----------------------------
 function PStr([string]$s) { return ,([byte[]]@([byte]$s.Length) + [Text.Encoding]::ASCII.GetBytes($s)) }
 $bin = [byte[]]([Text.Encoding]::ASCII.GetBytes('TPF0')) + (PStr 'TForm1') + (PStr 'Form1') + [byte[]](0) `
