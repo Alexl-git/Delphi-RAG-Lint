@@ -61,6 +61,25 @@ function BatchUnitsMatch(const ABatch: TApplyBatch; const AUnits: TArray<string>
 /// <returns>ACapBatch and AWholeUnitScope and (AUnitCount >= 2) and not 'off'.</returns>
 function BatchModeFor(ACapBatch, AWholeUnitScope: Boolean; AUnitCount: Integer; const AOverride: string): Boolean;
 
+/// <summary>PURE: splits a run's units into the ones that go through the book-major batch
+/// loop and the ones that run per-unit (ENC-N4). A raise run (pre-run encoding question,
+/// Yes) used to drop the WHOLE job to per-unit; now only the raised units do.</summary>
+/// <param name="AUnits">Unit paths in run order.</param>
+/// <param name="ARaiseFiles">TConvertJob.RaiseFiles: the .pas / .dfm files the user agreed
+/// to raise. A unit is raised when its .pas or its sibling .dfm (same path, extension
+/// .dfm) is listed, case-insensitive.</param>
+/// <param name="ACapBatch">Engine capability (see BatchModeFor).</param>
+/// <param name="AWholeUnitScope">True for a whole-unit scope (see BatchModeFor).</param>
+/// <param name="AOverride">CONVRULES_BATCH (see BatchModeFor).</param>
+/// <param name="ABatched">The units WITHOUT a raise, run order kept; [] when batching
+/// does not apply.</param>
+/// <param name="APerUnit">The units that run per-unit, run order kept: the raised ones, or
+/// every unit when batching does not apply.</param>
+/// <remarks>Batching applies when BatchModeFor holds for the count of units without a raise:
+/// one such unit alone runs per-unit (decision D9), so a job whose raise covers all but one
+/// unit is fully per-unit. Every unit lands in exactly one of the two lists.</remarks>
+procedure BatchSplit(const AUnits, ARaiseFiles: TArray<string>; ACapBatch, AWholeUnitScope: Boolean; const AOverride: string; out ABatched, APerUnit: TArray<string>);
+
 /// <summary>PURE: splits the active units into batch calls.</summary>
 /// <param name="AUnits">Unit paths in run order.</param>
 /// <param name="AMax">Units per call; 0 or less = one chunk.</param>
@@ -153,6 +172,38 @@ end;
 function BatchModeFor(ACapBatch, AWholeUnitScope: Boolean; AUnitCount: Integer; const AOverride: string): Boolean;
 begin
   Result:= ACapBatch and AWholeUnitScope and (AUnitCount >= 2) and not SameText(AOverride, 'off');
+end;
+
+procedure BatchSplit(const AUnits, ARaiseFiles: TArray<string>; ACapBatch, AWholeUnitScope: Boolean; const AOverride: string; out ABatched, APerUnit: TArray<string>);
+var
+  LPlain: TArray<string>;
+  LDfm  : string;
+  LRaised: Boolean;
+begin
+  LPlain := nil;
+  APerUnit:= nil;
+  for var LUnit: string in AUnits do
+  begin
+    LDfm   := ChangeFileExt(LUnit, '.dfm');
+    LRaised:= False;
+    for var LFile: string in ARaiseFiles do
+      if SameText(LFile, LUnit) or SameText(LFile, LDfm) then
+      begin
+        LRaised:= True;
+        Break;
+      end;
+    if LRaised then
+      APerUnit:= APerUnit + [LUnit]
+    else
+      LPlain:= LPlain + [LUnit];
+  end;
+  if BatchModeFor(ACapBatch, AWholeUnitScope, Length(LPlain), AOverride) then
+    ABatched:= LPlain
+  else
+  begin
+    ABatched:= nil;
+    APerUnit:= AUnits;
+  end;
 end;
 
 function BatchChunks(const AUnits: TArray<string>; AMax: Integer): TArray<TArray<string>>;
