@@ -2563,16 +2563,8 @@ var
   BodyAt : Integer;
   BodyCol: Integer;
 begin
-  Routine:= Default(TSymbol);
   var F:= GetFile(pFid);
-  for var S in F.Syms do
-    if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
-      (S.ImplStartLine > 0) and (S.ImplStartLine <= pLine) and (pLine <= S.ImplEndLine) and
-      (S.ImplStartLine > Routine.ImplStartLine) then Routine:= S;
-  if Routine.Id = 0 then
-    for var S in F.Syms do
-      if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
-        (S.StartLine <= pLine) and (pLine <= S.EndLine) then Routine:= S;
+  Routine:= RoutineAt(F, pLine);
   if (Routine.Id = 0) or (Routine.ImplStartLine <= 0) or (Routine.ImplEndLine < Routine.ImplStartLine) then
     Exit(Format('it belongs to no routine body in this file (abstract, external or not ' +
       'implemented here), so nothing shows a base class is enough for `%s`', [pParam]));
