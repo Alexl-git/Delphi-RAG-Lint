@@ -125,6 +125,7 @@ uses
   DRagLint.Convert.GlyphExpr,
   DRagLint.Convert.GlyphStrip,
   DRagLint.Convert.PropTree,
+  DRagLint.Refactor.TextEdit, { TTextFileFormat.Decode }
   DRagLint.Convert.PropCache; { BuildPropTree -- through the per-class member cache (1.20.6 T2c) }
 
 const
@@ -571,9 +572,9 @@ begin
   try
     Bytes:= TFile.ReadAllBytes(APath);
     // FilerSignature (TPF0) means the file is a compiled binary .dfm --
-    // convert it in memory; otherwise it is already a text .dfm (ANSI).
+    // convert it in memory; otherwise it is already a text .dfm (decoded per TTextFileFormat).
     if not BinaryDfmToText(Bytes, Text) then
-      Text:= TEncoding.Default.GetString(Bytes);
+      TTextFileFormat.Decode(Bytes, Text); { project .dfm rule: BOM / valid UTF-8 / else ANSI -- not the machine code page (1026c E1) }
     if SameText(TPath.GetExtension(APath), '.fmx') then Surface:= 'fmx' else Surface:= 'dfm';
     PasUnit:= TPath.ChangeExtension(TPath.GetFileName(APath), '.pas');
     if not TFile.Exists(TPath.Combine(TPath.GetDirectoryName(APath), PasUnit)) then PasUnit:= '';
