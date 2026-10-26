@@ -253,7 +253,8 @@ function StatusText($main) { (@(Find $main 'TStatusBar' $null) | ForEach-Object 
 # Double-click the Classes row for CLS; '' when done, else why not.
 function OpenClass($main, $cls) {
   [void][W]::ClickTab($main, 'Classes'); Start-Sleep -Milliseconds 500
-  $lb = @(Find $main 'TCheckListBox' $null)[0]
+  # the Work list tab's filter is a TCheckListBox too (its items include 'unmapped'): skip it
+  $lb = @(Find $main 'TCheckListBox' $null | Where-Object { (ListTexts $_) -notcontains 'unmapped' })[0]
   if ($null -eq $lb) { return 'no Classes list' }
   $rows = ListTexts $lb
   $row = -1; for ($i = 0; $i -lt $rows.Count; $i++) { if ($rows[$i] -match "\b$cls\b") { $row = $i; break } }

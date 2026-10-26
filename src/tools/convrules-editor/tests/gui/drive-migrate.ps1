@@ -12,7 +12,7 @@
 # -ProofNoMigrate presses Cancel on the first dialog instead of Apply. These checks must then FAIL (6):
 #   migrate.layout.status, migrate.layout.rule, migrate.saved.disk, migrate.rerun.note, migrate.pas.break
 #   and migrate.worklist.after (Layout stays unmapped).
-#   (Run time not yet measured: the driver has not been run; the coordinator runs it.)
+#   Measured 2026-10-26 on the 1.35.0-alpha pin: 18 pass / 0 fail in ~60 s; -ProofNoMigrate 12 pass / 6 fail (the six above).
 param([string]$Exe, [switch]$ProofNoMigrate)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
@@ -262,6 +262,32 @@ public static class CT {
 }
 '@
 $script:pass = 0; $script:fail = 0
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  /* N7/N11: 'ConvRulesEditor.Busy' answers 2 busy / 1 idle; no answer within the timeout = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+"@
+# idle = no progress window / message box / common dialog, the editor enabled and saying idle (B::Busy), for 2 s
+# running. Convert clicked during the C8 inherited-instances check after Add... is refused ("clicked while the
+# editor was busy"), so RunConvert waits for this first.
+function WaitIdle($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [B]::IsWindowEnabled($main) -or [B]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 200
+  }
+  return $false
+}
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
@@ -445,6 +471,7 @@ function RunConvert($main) {
   [void][W]::InvokeMenu($main, 'Conversion|Convert...')
   Start-Sleep -Seconds 2
   $conv = @(Find $main 'TButton' 'Convert' | Where-Object { [W]::IsWindowVisible($_) -and @(Find ([CT]::Parent($_)) 'TProgressBar' $null).Count -eq 1 })[0]
+  [void](WaitIdle $p.Id $main 90)
   Click $conv
   $t0 = Get-Date; $st = ''
   while (((Get-Date) - $t0).TotalSeconds -lt 600) {
