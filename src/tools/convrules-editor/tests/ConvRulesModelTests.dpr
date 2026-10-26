@@ -397,6 +397,38 @@ begin
   Check('batch.job.one.unit.off', not JobRunsBatched(LJob));
 end;
 
+{ ENC-N4: a raise on some units no longer drops the whole job to per-unit: the units
+  WITHOUT a raise stay batched, only the raised ones (their .pas or sibling .dfm in
+  RaiseFiles) run per-unit. }
+procedure TestBatchSplit;
+var
+  LBatched, LPerUnit: TArray<string>;
+  LJob              : TConvertJob;
+begin
+  BatchSplit(['A.pas', 'B.pas', 'C.pas'], [], True, True, '', LBatched, LPerUnit);
+  Check('batch.split.noraise.all.batched', (Length(LBatched) = 3) and (Length(LPerUnit) = 0));
+  BatchSplit(['A.pas', 'B.pas', 'C.pas', 'D.pas'], ['b.PAS', 'D.dfm'], True, True, '', LBatched, LPerUnit);
+  Check('batch.split.mixed.batched', (Length(LBatched) = 2) and (LBatched[0] = 'A.pas') and (LBatched[1] = 'C.pas'));
+  Check('batch.split.mixed.perunit', (Length(LPerUnit) = 2) and (LPerUnit[0] = 'B.pas') and (LPerUnit[1] = 'D.pas'));
+  BatchSplit(['A.pas', 'B.pas', 'C.pas'], ['B.pas'], True, True, '', LBatched, LPerUnit);
+  Check('batch.split.keeps.order.when.two.left', (Length(LBatched) = 2) and (Length(LPerUnit) = 1));
+  BatchSplit(['A.pas', 'B.pas', 'C.pas'], ['B.pas', 'C.pas'], True, True, '', LBatched, LPerUnit);
+  Check('batch.split.one.left.all.perunit', (Length(LBatched) = 0) and (Length(LPerUnit) = 3) and (LPerUnit[0] = 'A.pas'));
+  BatchSplit(['A.pas', 'B.pas'], [], True, False, '', LBatched, LPerUnit);
+  Check('batch.split.scoped.all.perunit', (Length(LBatched) = 0) and (Length(LPerUnit) = 2));
+  BatchSplit(['A.pas', 'B.pas'], [], True, True, 'off', LBatched, LPerUnit);
+  Check('batch.split.env.off.all.perunit', (Length(LBatched) = 0) and (Length(LPerUnit) = 2));
+  BatchSplit(['A.pas', 'B.pas'], [], False, True, '', LBatched, LPerUnit);
+  Check('batch.split.cap.off.all.perunit', (Length(LBatched) = 0) and (Length(LPerUnit) = 2));
+  LJob:= Default(TConvertJob);
+  LJob.Units         := ['A.pas', 'B.pas', 'C.pas'];
+  LJob.BatchSupported:= True;
+  LJob.RaiseFiles    := ['B.pas'];
+  Check('batch.split.job.mixed.batched', JobRunsBatched(LJob));
+  LJob.RaiseFiles:= ['B.pas', 'C.pas'];
+  Check('batch.split.job.one.left.perunit', not JobRunsBatched(LJob));
+end;
+
 { proptree/2 (engine schema v17): per-leaf is_writable / visibility / member_kind,
   with proptree/1 back-compat defaults (absent is_writable => True; absent
   member_kind => 'property'; absent visibility => ''). }
@@ -15925,6 +15957,7 @@ begin
     TestRunnerDecisions;
     TestRestorePoint;
     TestJobRunsBatched;
+    TestBatchSplit;
     TestReindexProject;
     TestConvertRunnerLive;
     TestInheritanceScan;

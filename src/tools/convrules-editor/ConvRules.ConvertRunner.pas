@@ -581,9 +581,10 @@ function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks:
 /// the path the runner really takes.</summary>
 /// <param name="AJob">The job as RunConversion will receive it: Scope, Units,
 /// BatchSupported and BatchOverride already set.</param>
-/// <returns>BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit,
-/// Length(AJob.Units), AJob.BatchOverride). A scoped job (an IDE request) is never
-/// batched, whatever its unit count.</returns>
+/// <returns>True when BatchSplit leaves at least one unit to the batch loop: BatchModeFor
+/// holds for the units WITHOUT a raise (AJob.RaiseFiles); the raised ones run per-unit
+/// after the batched ones (ENC-N4). A scoped job (an IDE request) is never batched,
+/// whatever its unit count.</returns>
 function JobRunsBatched(const AJob: TConvertJob): Boolean;
 
 /// <summary>PURE: the files of a raise run that belong to one unit.</summary>
@@ -908,8 +909,9 @@ end;
 
 function JobRunsBatched(const AJob: TConvertJob): Boolean;
 begin
-  Result:= (Length(AJob.RaiseFiles) = 0)
-    and BatchModeFor(AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit, Length(AJob.Units), AJob.BatchOverride);
+  var LBatched, LPerUnit: TArray<string>;
+  BatchSplit(AJob.Units, AJob.RaiseFiles, AJob.BatchSupported, AJob.Scope.Kind = skWholeUnit, AJob.BatchOverride, LBatched, LPerUnit);
+  Result:= Length(LBatched) > 0;
 end;
 
 function RaiseFilesOf(const AAll: TArray<string>; const AUnitPas: string): TArray<string>;
@@ -1078,11 +1080,16 @@ var
   LJob   : TConvertJob;
   LEngine: TEngineAdapter;
   LScope : TScopeFn;
+  LBatched, LPerUnit: TArray<string>; // ENC-N4: units without a raise are batched, raised ones per-unit
+  LBatchRows: TArray<TConvertRow>;
 begin
   LJob   := AJob;
   LEngine:= AEngine;
-  if (Length(LJob.RaiseFiles) = 0) and BatchModeFor(LJob.BatchSupported, LJob.Scope.Kind = skWholeUnit, Length(AUnits), LJob.BatchOverride) then
-    Exit(RunBatchLoop(AUnits, ABooks,
+  BatchSplit(AUnits, LJob.RaiseFiles, LJob.BatchSupported, LJob.Scope.Kind = skWholeUnit, LJob.BatchOverride, LBatched, LPerUnit);
+  LBatchRows:= nil;
+  if Length(LBatched) > 0 then
+  begin
+    LBatchRows:= RunBatchLoop(LBatched, ABooks,
       function(const AChunk: TArray<string>; const ARulesFile: string; out AJson: string): Integer
       begin
         Result:= LEngine.ApplyConversionBatch(AChunk, ARulesFile, LJob.Dbs, BatchTimeoutMs(CONVERT_TIMEOUT_MS, Length(AChunk)), AJson);
@@ -1091,13 +1098,16 @@ begin
       begin
         Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
       end,
-      AProgress, ACancelled, AOnStep, LJob.InheritedSupported, LJob.RetypeSupported, BATCH_MAX_UNITS, LJob.ApplyFeatures));
+      AProgress, ACancelled, AOnStep, LJob.InheritedSupported, LJob.RetypeSupported, BATCH_MAX_UNITS, LJob.ApplyFeatures);
+    if Length(LPerUnit) = 0 then
+      Exit(LBatchRows);
+  end;
   // The book is read on the worker thread; an unreadable one is out of scope.
   LScope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
     begin
       Result:= ScopedNamesForBookFile(LJob.Scope, AUnitPas, ABook, ANames);
     end;
-  Result:= RunUnitLoop(AUnits, ABooks,
+  Result:= LBatchRows + RunUnitLoop(LPerUnit, ABooks,
     function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
     begin
       var LRaise: TArray<string>:= RaiseFilesOf(LJob.RaiseFiles, AUnitPas);
