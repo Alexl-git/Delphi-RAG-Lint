@@ -4,7 +4,7 @@
   "group": "indexing",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.3.0-alpha",
+  "since": "0.95.0-alpha",
   "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
   "intro": "Read this when you need to know exactly what an index database contains before you query it: schema prints the schema version, every table and column, and row counts, read-only.",
   "wikiPage": "schema",

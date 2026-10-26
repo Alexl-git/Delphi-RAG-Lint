@@ -4,7 +4,7 @@
   "group": "compiler",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.47.0-alpha",
   "summary": "Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)",
   "intro": "Read this if a Compile Buffer (unsaved) run was interrupted, for example by a crash. It restores any file left holding the unsaved-buffer content so no unit keeps overlaid text instead of its saved original; the IDE can run it for you.",
   "wikiPage": "Recover-Buffer-Compile-Files",

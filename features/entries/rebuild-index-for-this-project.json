@@ -4,7 +4,7 @@
   "group": "indexing",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "0.2.0-alpha",
   "summary": "Walks a project's .dproj compile closure and (re)builds its index",
   "intro": "Read this after adding or moving units, or when hover, Find Usages or lint results feel stale. It walks the project .dproj compile closure and rebuilds the index for that project.",
   "wikiPage": "Rebuild-Index-for-This-Project",

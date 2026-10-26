@@ -4,7 +4,7 @@
   "group": "graphs-reports",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.96.0-alpha",
+  "since": "0.98.0-alpha",
   "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
   "intro": "Read this when you want to click through the callers of a symbol instead of reading a flat report: the IDE shows the reverse call tree in the Messages window, and each line jumps to the caller.",
   "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",

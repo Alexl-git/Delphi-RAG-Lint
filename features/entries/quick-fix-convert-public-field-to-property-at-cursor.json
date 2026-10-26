@@ -4,9 +4,9 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.2.0-alpha",
   "summary": "Rewrites a public field under the caret as a property",
-  "intro": "Read this when you are tightening a class public surface. With the caret on a public field, this rewrites it as a property.",
+  "intro": "Read this when you are tightening a class public surface. With the caret on a lone public field such as Name: TType;, this turns it into a private FName plus a read/write property Name, so existing callers need no change.",
   "wikiPage": "Quick-Fix-Convert-Public-Field-to-Property-at-Cursor",
   "surfaces": [
     {
