@@ -1387,7 +1387,18 @@ begin
                            or (ANode.NamedChild(I).NodeType = 'statements')) then
         begin
           HdrIdx := Cfg.NewBlock.Index;
-          Cfg.Blocks[BodyIdx].AddSucc(HdrIdx); { try entry -> handler (conservative) }
+          Cfg.Blocks[BodyIdx].AddSucc(HdrIdx); { try entry block -> handler }
+          { B-30/B4: BodyIdx is not empty -- the body's leading statements are
+            emitted INTO it -- so its out-state already holds their assignments
+            (`Result := StrToInt(S)`), and a handler fed only from it never saw
+            "the body raised before anything ran". A swallowing handler then
+            returned with Result unset and function-result-not-set stayed
+            silent. The block BEFORE the try carries exactly that state. Kept
+            in addition to the BodyIdx edge: dropping that one would make a
+            store in the first body block read only by the handler look dead
+            (the C1 class below). Pinned: tests/lint/function-result-not-set.pas
+            T1/T2 fire, T3-T5 stay silent. }
+          Cfg.Blocks[ACur].AddSucc(HdrIdx);
 
           { C1: AN EXCEPTION CAN BE RAISED AT ANY STATEMENT IN THE BODY, NOT ONLY
             BEFORE THE FIRST ONE. The entry edge above models "it threw before
@@ -1412,7 +1423,7 @@ begin
             from an assignment; it never removes an assignment from a path. So
             it cannot manufacture a used-before-assignment: the "nothing in the
             body ran" state still arrives via the entry edge above and remains
-            the dominating one for that rule.
+            the dominating one for that rule (from the pre-try block -- B-30).
 
             NOT extended to `finally` -- that edge is refused deliberately just
             above, and for a different reason (it would route the skipped-body

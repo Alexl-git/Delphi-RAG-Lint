@@ -14,3 +14,10 @@ function-result-not-set 34
 !function-result-not-set 48
 # F8<T> CONTROL: a generic function that never sets it still fires
 function-result-not-set 52
+# B-30/B4: a swallowing try..except handler leaves Result unset when the body raised -> possible
+function-result-not-set 59
+function-result-not-set 68
+# controls: handler assigns, handler re-raises, Result set before the try
+!function-result-not-set 76
+!function-result-not-set 84
+!function-result-not-set 92
