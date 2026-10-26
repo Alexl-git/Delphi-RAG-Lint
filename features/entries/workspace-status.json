@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Reports the status of every project registered in a .drag-lint-workspace.json workspace config",
-  "intro": "Read this when you want to see at a glance which projects of a workspace are indexed, stale or missing.",
+  "intro": "Read this when you want to see at a glance how many files of each workspace project are in the shared index; a project with 0 files is not indexed yet.",
   "wikiPage": "workspace-status",
   "surfaces": [
     {

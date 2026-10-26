@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.7.0-alpha",
   "summary": "The format of a dl:wiki block -- the concept notes the wiki verb reads",
-  "intro": "Read this when you want your team own words for a concept to find the right code: it describes how to write a dl:wiki block inside a DocInsight comment so the wiki verb can read it.",
+  "intro": "Read this when you want your team's own words for a concept to find the right code: it describes how to write a dl:wiki block inside a DocInsight comment so the wiki verb can read it.",
   "wikiPage": "Wiki-Blocks-Authoring",
   "surfaces": [
     {

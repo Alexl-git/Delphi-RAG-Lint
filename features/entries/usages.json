@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.33.0-alpha",
   "summary": "Finds usage sites of a named symbol, with a choice of report width",
-  "intro": "Read this when you want every place a symbol is used, outside the IDE: usages lists the usage sites of a named symbol, with a narrow, wide or very-wide report width.",
+  "intro": "Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites of a named symbol, with a narrow, wide or very-wide report width.",
   "wikiPage": "usages",
   "surfaces": [
     {

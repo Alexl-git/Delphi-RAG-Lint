@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "internal",
-  "since": "0.0.0",
+  "since": "1.2.0-alpha",
   "summary": "Store-freshness probe used by a test runner; it needs --db and does nothing else",
   "intro": "Internal: a store-freshness probe used by a test runner; it needs --db and does nothing else. It is not a user verb.",
   "wikiPage": "Maintenance",
