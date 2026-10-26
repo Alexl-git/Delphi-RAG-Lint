@@ -31770,10 +31770,10 @@ begin
   else begin Writeln('STUDIOROOT-FAIL: ', Failure); Result:= 1; end;
 end; // function
 
-// selftest fact-wrap: the TDocRegions.WrapFactLine / FoldFactLine / FactLinePrefix
+// selftest fact-wrap: the WrapFactLine / FoldFactLine / FactLinePrefix
 // contract (1.20.5) -- a managed-block fact line over DOC_FACT_MAX_COLS is broken
 // at entry boundaries, and every reader folds it back. The cases live in
-// TDocRegions.SelfTestFactWrap beside the code they pin.
+// SelfTestFactWrap beside the code they pin.
 //
 // Prints FACTWRAP-FAIL: <case> and returns 1 on the first failed case;
 // FACTWRAP-OK and 0 on success.
@@ -31781,7 +31781,7 @@ function DoSelfTestFactWrap: Integer;
 var
   Failure: string;
 begin
-  if TDocRegions.SelfTestFactWrap(Failure) then
+  if SelfTestFactWrap(Failure) then
   begin
     Writeln('FACTWRAP-OK');
     Result:= 0;
