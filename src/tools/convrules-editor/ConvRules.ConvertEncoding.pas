@@ -64,6 +64,9 @@ type
     ChangeRules: Boolean;
     /// <summary>The places of the unit whose answer stopped the run; [] otherwise.</summary>
     Places     : TArray<TEncodingPlace>;
+    /// <summary>The places the Convert tab keeps as note rows (PlaceNoteText): every place of each unit
+    /// answered Yes, plus the stopping unit's places after a No; [] after a Cancel (nothing is kept).</summary>
+    Notes      : TArray<TEncodingPlace>;
   end;
 
 /// <summary>PURE: a book's text with every comment line (trimmed text starting with //) blanked;
@@ -109,12 +112,19 @@ function CanRaisePlaces(const APlaces: TArray<TEncodingPlace>; AGuard: Boolean):
 /// <returns>The dialog text.</returns>
 function PreRunQuestion(const AUnitPas: string; const APlaces: TArray<TEncodingPlace>; ACanRaise: Boolean): string;
 
+/// <summary>PURE: the text of one place's note row on the Convert tab.</summary>
+/// <param name="APlace">One place.</param>
+/// <returns>'encoding: book line:col U+XXXX unit does not fit level (rule)'-style text, rule appended.</returns>
+function PlaceNoteText(const APlace: TEncodingPlace): string;
+
 /// <summary>PURE: asks once per unit that has places, in order, until a No or Cancel.</summary>
 /// <param name="APlaces">As EncodingPlaces returns them.</param>
 /// <param name="AGuard">The engine reports convert_encoding_guard.</param>
 /// <param name="AAsk">The dialog; nil = nobody to ask: the run stops (Cancel) when there are places.</param>
 /// <returns>Yes (only where CanRaisePlaces) adds the unit's .pas to RaiseFiles; No (or a Yes that
-/// cannot raise) stops with ChangeRules; Cancel stops. No place = no question, an empty plan.</returns>
+/// cannot raise) stops with ChangeRules; Cancel stops. No place = no question, an empty plan.
+/// Notes: every place of each Yes unit (the run goes on, the places stay visible), the stopping
+/// unit's places after a No; a Cancel leaves Notes empty.</returns>
 function PreRunPlan(const APlaces: TArray<TEncodingPlace>; AGuard: Boolean; const AAsk: TPreRunAskFn): TPreRunPlan;
 
 implementation
@@ -134,6 +144,7 @@ const
   SURR_LAST      = $DFFF;
   COMMENT_LEAD   = '//';
   PLACE_FMT      = '  %s %d:%d  %s  in: %s';
+  NOTE_FMT       = 'encoding: %s %d:%d %s does not fit %s (%s) -- rule: %s';
   MORE_FMT       = '  ... and %d more';
   HEAD_FMT       = '%s is %s, but the rule books would write %d character(s) it cannot hold -- converting would raise the file''s encoding:';
   CHOICE_RAISE   = 'Yes = raise %s to UTF-8 with BOM, then convert.';
@@ -273,6 +284,12 @@ begin
   Result:= string.Join(sLineBreak, LLines);
 end;
 
+function PlaceNoteText(const APlace: TEncodingPlace): string;
+begin
+  Result:= Format(NOTE_FMT, [ExtractFileName(APlace.Book), APlace.Line, APlace.Col, CharLabel(APlace.Code),
+    ExtractFileName(APlace.UnitPas), LevelName(APlace.UnitLevel), APlace.Rule]);
+end;
+
 function PreRunPlan(const APlaces: TArray<TEncodingPlace>; AGuard: Boolean; const AAsk: TPreRunAskFn): TPreRunPlan;
 var
   LSeen  : TArray<string>;
@@ -293,11 +310,16 @@ begin
     if (LAnswer = mrYes) and LCan then
     begin
       Result.RaiseFiles:= Result.RaiseFiles + [LPlace.UnitPas];
+      Result.Notes     := Result.Notes + LOwn;
       Continue;
     end;
     Result.Stop       := True;
     Result.ChangeRules:= LAnswer <> mrCancel;
     Result.Places     := LOwn;
+    if LAnswer = mrCancel then
+      Result.Notes:= nil
+    else
+      Result.Notes:= Result.Notes + LOwn;
     Exit;
   end;
 end;

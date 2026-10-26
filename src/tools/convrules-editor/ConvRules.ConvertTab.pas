@@ -1780,15 +1780,13 @@ begin
     begin
       Result:= MessageDlg(AQuestion, mtWarning, if ACanRaise then [mbYes, mbNo, mbCancel] else [mbNo, mbCancel], 0);
     end);
+  for var LPlace: TEncodingPlace in LPlan.Notes do // Yes keeps every place visible; a Cancel has none
+    AddResultRow(['', '', 'note', '', '', '', '', PlaceNoteText(LPlace)]);
   if not LPlan.Stop then
   begin
     pJob.RaiseFiles:= LPlan.RaiseFiles;
     Exit(True);
   end;
-  for var LPlace: TEncodingPlace in LPlan.Places do
-    AddResultRow(['', '', 'note', '', '', '', '', Format('encoding: %s %d:%d %s does not fit %s (%s) -- rule: %s',
-      [ExtractFileName(LPlace.Book), LPlace.Line, LPlace.Col, CharLabel(LPlace.Code), ExtractFileName(LPlace.UnitPas),
-       LevelName(LPlace.UnitLevel), LPlace.Rule])]);
   if LPlan.ChangeRules then
     FHost.SetStatus('Convert not started: change the rule text listed in the results (or raise the unit), then Convert again.', True)
   else
