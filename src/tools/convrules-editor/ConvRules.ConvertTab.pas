@@ -1755,7 +1755,7 @@ var
   LPlan  : TPreRunPlan;
 begin
   try
-    LPlaces:= EncodingPlaces(pJob.Books, pJob.Units,
+    LPlaces:= EncodingPlacesFor(pJob.Books, pJob.Units,
       function(const APath: string): string
       begin
         Result:= ReadBookText(APath);
@@ -1767,6 +1767,11 @@ begin
         Result:= TFile.Exists(APas);
         if Result then
           ALevel:= DetectTextLevel(TFile.ReadAllBytes(APas)).Level;
+      end,
+      function(const APas: string): TFromTypeAppliesFn
+      begin
+        // ENC-N1: only the #convert blocks this unit's .dfm / .pas / C8 analysis names count.
+        Result:= FromTypeApplier(APas, DiskTextReader(), InheritanceOf(APas));
       end);
   except
     on E: Exception do
