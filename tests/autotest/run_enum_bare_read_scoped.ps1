@@ -183,19 +183,19 @@ Check 'NEG: TSeIfdef (ON only in an inactive IFDEF branch) carries nothing' ((Fa
 Check 'NEG: TSeComment (ON only inside comments) carries nothing' ((FactOf 'TSeComment') -eq '') (FactOf 'TSeComment')
 
 Write-Host ''
-Write-Host 'PRECONDITION -- the positive site is bound to the enum value, bare' -ForegroundColor Cyan
-Check 'line 15 ssAlpha is bound to enum_value uSeTypes.TSeScoped.ssAlpha with no receiver' `
-  ($bind13 -match 'enum_value:uSeTypes\.TSeScoped\.ssAlpha:\s*$' -or $bind13 -match '(?m)enum_value:uSeTypes\.TSeScoped\.ssAlpha:\s*\r?$') ($bind13.Trim())
-
-Write-Host ''
-Write-Host 'THE FINDING' -ForegroundColor Cyan
+Write-Host 'E14 (1.36.0) -- the resolver now DECLINES the bare scoped read' -ForegroundColor Cyan
+# Until E14 the index bound `E := ssAlpha` to the scoped value and this rule
+# flagged that wrong edge. The resolver now declines it (TEnumValueDecl.Scoped;
+# guard run_enum_scoped_decline.ps1), so the rule has no input left on a fresh
+# index: its positives below are inverted DELIBERATELY, not weakened. Whether
+# the rule is retired or retargeted (e.g. at the unbound bare read) is an owner
+# decision recorded in the E14 lane report.
+Check 'line 15 ssAlpha is NOT bound (E14 decline)' ($bind13 -notmatch 'enum_value:') ($bind13.Trim())
 $h13 = HitAt $onOut 15
-Check 'BARE SCOPED: E := ssAlpha fires once' ($h13.Count -eq 1) ("got " + $h13.Count + " of " + $lines.Count + " total")
-Check 'and it names the scoped enum value' (($h13 -join ' ') -match 'TSeScoped\.ssAlpha') ''
-Check 'and it is a warning' (($h13 -join ' ') -match '\[warning\]') ''
-Check 'BARE SCOPED (*$ *) spelling: X := sxAlpha fires once' ((HitAt $onOut 51).Count -eq 1) ''
-
-Write-Host ''
+Check 'BARE SCOPED: E := ssAlpha no longer fires (nothing bound)' ($h13.Count -eq 0) ("got " + $h13.Count + " of " + $lines.Count + " total")
+Check 'BARE SCOPED (*$ *) spelling: X := sxAlpha no longer fires' ((HitAt $onOut 51).Count -eq 0) ''
+Check 'single-file lint --rule agrees: silent on both' `
+  (((HitAt $fileOut 15).Count -eq 0) -and ((HitAt $fileOut 51).Count -eq 0)) ''
 Write-Host 'THE NEGATIVE CONTROLS' -ForegroundColor Cyan
 Check 'QUALIFIED: TSeScoped.ssBeta (16) is SILENT' ((HitAt $onOut 16).Count -eq 0) ''
 Check 'QUALIFIED: TSeScoped.ssAlpha (21) is SILENT' ((HitAt $onOut 21).Count -eq 0) ''
@@ -204,13 +204,7 @@ Check 'SWITCHED OFF: bare saAlpha (33) is SILENT' ((HitAt $onOut 33).Count -eq 0
 Check 'INACTIVE BRANCH: bare siAlpha (39) is SILENT' ((HitAt $onOut 39).Count -eq 0) ''
 Check 'COMMENT ONLY: bare scAlpha (45) is SILENT' ((HitAt $onOut 45).Count -eq 0) ''
 Check 'QUALIFIED: TSeParen.sxBeta (52) is SILENT' ((HitAt $onOut 52).Count -eq 0) ''
-Check 'exactly the two positives, nothing else' ($lines.Count -eq 2) ("got " + $lines.Count)
-
-Write-Host ''
-Write-Host 'SINGLE-FILE lint --rule' -ForegroundColor Cyan
-Check 'lint <file> --rule enum-bare-read-scoped reports both positives' `
-  (((HitAt $fileOut 15).Count -eq 1) -and ((HitAt $fileOut 51).Count -eq 1)) `
-  'RED means the per-file path never runs the check under --rule'
+Check 'nothing at all (was: exactly the two positives before E14)' ($lines.Count -eq 0) ("got " + $lines.Count)
 
 Write-Host ''
 Write-Host 'CATALOGUE + OFF SWITCH' -ForegroundColor Cyan

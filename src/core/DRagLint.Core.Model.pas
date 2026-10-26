@@ -922,6 +922,11 @@ type
     StartLine    : Integer;
     /// <summary>Declaration span end; the other half.</summary>
     EndLine      : Integer;
+    /// <summary>E14: True when the parent enum TYPE carries the X4 fact
+    /// symbols.directives = 'scopedenums'. Such a value never enters the
+    /// enclosing scope, so it is no candidate for a BARE name (nor for a
+    /// Unit.Value one) and shadows nothing; only TEnum.Value reaches it.</summary>
+    Scoped       : Boolean;
   end;
 
   /// <summary>2026-09-23 (enum-value-ref-binding): per-run counters of the
@@ -961,6 +966,9 @@ type
     /// could not be typed and so might declare the name; the residual that
     /// enum-read-inside-with reports.</summary>
     WithUndecided     : Int64;
+    /// <summary>E14: declined because every candidate of the bare name is a
+    /// value of a SCOPEDENUMS enum, which the bare form cannot reach.</summary>
+    Scoped            : Int64;
   end;
 
   /// <summary>v8: one Spring4D DI registration (interface implemented by impl,

@@ -7056,6 +7056,7 @@ var
   ColRoutine                       : TField;
   ColName, ColQName, ColSection    : TField;
   ColStart, ColEnd                 : TField;
+  ColScoped                        : TField;
 begin
   List:= TList<TEnumValueDecl>.Create;
   Q   := TFDQuery.Create(nil);
@@ -7066,7 +7067,8 @@ begin
                    '       CASE WHEN o.kind IN (''class'',''record'',''interface'') ' +
                    '            THEN o.id ELSE 0 END AS owner_type_id, ' +
                    '       CASE WHEN o.kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'') ' +
-                   '            THEN o.id ELSE 0 END AS owner_routine_id ' +
+                   '            THEN o.id ELSE 0 END AS owner_routine_id, ' +
+                   '       CASE WHEN e.directives = ''scopedenums'' THEN 1 ELSE 0 END AS scoped ' +   { E14 }
                    'FROM symbols v ' +
                    'JOIN symbols e ON e.id = v.parent_id ' +
                    'LEFT JOIN symbols o ON o.id = e.parent_id ' +
@@ -7084,6 +7086,7 @@ begin
     ColSection:= Q.FieldByName('section'       );
     ColStart  := Q.FieldByName('start_line'    );
     ColEnd    := Q.FieldByName('end_line'      );
+    ColScoped := Q.FieldByName('scoped'        );
     while not Q.Eof do
     begin
       E:= Default(TEnumValueDecl);
@@ -7097,6 +7100,7 @@ begin
       E.Section      := ColSection.AsString  ;
       E.StartLine    := ColStart  .AsInteger ;
       E.EndLine      := ColEnd    .AsInteger ;
+      E.Scoped       := ColScoped .AsInteger = 1;
       List.Add(E);
       Q.Next;
     end;
@@ -13726,12 +13730,13 @@ begin
       on a corpus that has real name collisions. }
     ResolveLog(Format('calls      enum-values: %d of %d bare read(s) bound (Shape A); ' +
       '%d qualified bound (Shape B); declined (both streams) ' +
-      'not-visible %d, ambiguous %d, shadowed %d; ' +
+      'not-visible %d, ambiguous %d, shadowed %d, scoped (bare form unreachable) %d; ' +
       'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d; ' +
       'with scope: declined as a with member %d, bound under an undecidable with target %d; ' +
       'unit receiver declined (nearer value or with target) %d',
       [EnumBound, EnumCandidates, WrittenValues,
        Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
+       Resolver.EnumStats.Scoped,
        Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
        EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided,
        Resolver.EnumUnitGateDeclined]));
