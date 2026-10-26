@@ -878,6 +878,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasMemberAccesses: Boolean;
+      /// <summary>True when this database has the dispatch_edges / classref_args
+      /// tables (created by Migrate since 2026-10-26). Readers answer as before
+      /// without them.</summary>
+      /// <returns>True when dispatch_edges exists.</returns>
+      function HasDispatchEdges: Boolean;
       /// <summary>Purity v2: True when symbol_facts carries the three effect
       /// columns. They are Migrate ALTERs with NO schema bump, and a READ-ONLY
       /// open never runs Migrate, so every schema-23 DB indexed before this
@@ -2420,6 +2425,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
+      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
+      /// then wipes and rewrites dispatch_edges and classref_args in one
+      /// transaction.</summary>
+      /// <param name="AExtraStores">Library stores for class-reference type lookup; may be nil.</param>
+      /// <remarks>Logs `dispatch: overrides=N implements=N classref-args=N` plus the
+      /// decline counts. A read-only store or a DB without the tables does nothing.</remarks>
+      procedure ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
       /// <summary>Implements ISymbolStore.CallEdgesNeedRebuild -- two LIMIT 1 probes.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (not ProbeExists('SELECT 1
       /// FROM call_edges LIMIT 1')); True.</returns>
@@ -3471,6 +3483,7 @@ uses
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
   , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
+  , DRagLint.Index.DispatchResolver { 2026-10-26: ResolveDispatch }
   , FireDAC.Stan.Error          { F2: EFDDBEngineException -- ExecAdditiveDDL's one tolerated failure }
   ;
 
@@ -3617,6 +3630,70 @@ begin
       FFts5Available := Fts5TableExists;
       FTrigramAvailable := FFts5Available and TableExists('string_fts_tri');
     end;
+  end;
+end;
+
+function TSQLiteSymbolStore.HasDispatchEdges: Boolean;
+begin
+  Result:= TableExists('dispatch_edges');
+end;
+
+procedure TSQLiteSymbolStore.ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
+var
+  Res: TDispatchResolver;
+  QE : TFDQuery;
+  QA : TFDQuery;
+  T0 : Int64;
+  E  : TDispatchEdge;
+  A  : TClassRefArg;
+  C  : TDispatchCounters;
+begin
+  if FReadOnly or not HasDispatchEdges then Exit;
+  T0 := TStopwatch.GetTimeStamp;
+  Res:= TDispatchResolver.Create(Self, FConn, AExtraStores);
+  QE := TFDQuery.Create(nil);
+  QA := TFDQuery.Create(nil);
+  try
+    Res.Run;
+    QE.Connection:= FConn;
+    QE.SQL.Text  := 'INSERT INTO dispatch_edges(base_symbol_id, impl_symbol_id, kind, confidence) VALUES (:b, :i, :k, :c)';
+    QA.Connection:= FConn;
+    QA.SQL.Text  := 'INSERT INTO classref_args(ref_id, arg_index, param_symbol_id, class_symbol_id, confidence) VALUES (:r, :a, :p, :k, :c)';
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DELETE FROM dispatch_edges');
+      FConn.ExecSQL('DELETE FROM classref_args');
+      for E in Res.Edges do
+      begin
+        QE.ParamByName('b').AsLargeInt  := E.BaseId;
+        QE.ParamByName('i').AsLargeInt  := E.ImplId;
+        QE.ParamByName('k').AsWideString:= E.Kind;
+        QE.ParamByName('c').AsWideString:= E.Confidence;
+        QE.ExecSQL;
+      end;
+      for A in Res.Args do
+      begin
+        QA.ParamByName('r').AsLargeInt  := A.RefId;
+        QA.ParamByName('a').AsInteger   := A.ArgIndex;
+        QA.ParamByName('p').AsLargeInt  := A.ParamId;
+        QA.ParamByName('k').AsLargeInt  := A.ClassId;
+        QA.ParamByName('c').AsWideString:= A.Confidence;
+        QA.ExecSQL;
+      end;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+    C:= Res.Counters;
+    ResolveLog(Format('dispatch: overrides=%d implements=%d classref-args=%d declined: no-base=%d external=%d ' +
+      'no-impl=%d generic=%d indirect=%d stale=%d unread=%d  [%.1fs]',
+      [C.Overrides, C.Implements, C.ClassRefArgs, C.NoBase, C.External, C.NoImpl, C.Generic, C.Indirect, C.Stale,
+       C.Unread, ResolveSecs(T0)]));
+  finally
+    QA.Free;
+    QE.Free;
+    Res.Free;
   end;
 end;
 
@@ -4446,6 +4523,26 @@ begin
           '  receiver_type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_member   ON member_accesses(member_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_accessor ON member_accesses(accessor_symbol_id)');
+  { 2026-10-26 (polymorphic form launches, spec 2026-10-26-extract-polymorphic-
+    form-launches): two DERIVED tables, wiped and rebuilt by ResolveDispatch
+    after the calls pass. ADDITIVE and probed for (HasDispatchEdges), so NO
+    SCHEMA_VERSION bump, exactly like member_accesses above. }
+  TryExec('CREATE TABLE IF NOT EXISTS dispatch_edges (' +
+          '  base_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  impl_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  kind           TEXT NOT NULL,' +
+          '  confidence     TEXT NOT NULL,' +
+          '  PRIMARY KEY (base_symbol_id, impl_symbol_id))');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dispatch_edges_impl ON dispatch_edges(impl_symbol_id)');
+  TryExec('CREATE TABLE IF NOT EXISTS classref_args (' +
+          '  ref_id          INTEGER NOT NULL REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  arg_index       INTEGER NOT NULL,' +
+          '  param_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  class_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  confidence      TEXT NOT NULL,' +
+          '  PRIMARY KEY (ref_id, arg_index))');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_class ON classref_args(class_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_param ON classref_args(param_symbol_id)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a

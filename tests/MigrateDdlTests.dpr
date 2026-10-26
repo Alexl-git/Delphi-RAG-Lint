@@ -153,6 +153,16 @@ begin
       Msg:= RaisedBy(Conn, 'ALTER TABLE symbols ADD COLUMN heritage TEXT');
       Check('T2 duplicate column is tolerated', Msg = '', Msg);
 
+      // T10 (2026-10-26, polymorphic form launches): Migrate creates the two
+      // derived dispatch tables, additively, with their FK-child indexes.
+      Check('T10 dispatch_edges created', ScalarInt(Conn,
+        'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name = ''dispatch_edges''') = 1);
+      Check('T10 classref_args created', ScalarInt(Conn,
+        'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name = ''classref_args''') = 1);
+      Check('T10 three dispatch indexes created', ScalarInt(Conn,
+        'SELECT COUNT(*) FROM sqlite_master WHERE type = ''index'' AND name IN ' +
+        '(''idx_dispatch_edges_impl'', ''idx_classref_args_class'', ''idx_classref_args_param'')') = 3);
+
       Msg:= RaisedBy(Conn, 'CREATE TABLE IF NOT EXISTS f2_broken (');
       Check('T3 broken DDL raises', Msg <> '');
 
