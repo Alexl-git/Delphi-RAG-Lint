@@ -128,6 +128,7 @@ uses
   , System.Hash
   , System.JSON
   , FeatureGen.Json
+  , FeatureGen.HelpText
   , FeatureGen.Live
   ;
 
@@ -603,7 +604,7 @@ begin
   Result := '['#10 + lItems + #10']'#10;
 end;
 
-function CliMd(const pFmt: TSiteFormat; const pInc: TArray<TFeatureEntry>): string;
+function CliMd(const pFmt: TSiteFormat; const pInc: TArray<TFeatureEntry>; const pAliases: TArray<TFlagAlias>): string;
 var
   lVerbs: TDictionary<string, TList<Integer>>;
   lKeys: TArray<string>;
@@ -691,6 +692,7 @@ begin
         Result := Result + #10;  // dl:ok concat-in-loop@02e6 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
       end;
     end;
+    Result := Result + FlagAliasesMarkdown(pAliases, True);
   finally
     lVerbs.Free;
   end;
@@ -980,7 +982,7 @@ begin
   end;
   pW.Put('index.md', IndexMd(pFmt, pReg, lInc), 'index.md');
   pW.Put('index.json', IndexJson(pFmt, pReg, lInc), 'index.json');
-  pW.Put('cli.md', CliMd(pFmt, lInc), 'cli.md');
+  pW.Put('cli.md', CliMd(pFmt, lInc, pReg.FlagAliases), 'cli.md');
   pW.Put('ide.md', IdeMd(pFmt, lInc), 'ide.md');
   pW.Put('whats-new.md', WhatsNewMd(pFmt, lInc), 'whats-new.md');
   pW.Put('wiki-map.json', WikiMapJson(pFmt, lInc), 'wiki-map.json');
@@ -1028,7 +1030,7 @@ var
   lM: TMatch;
   lSb: TStringBuilder;
 begin
-  lMd := CliMd(pFmt, IncludedEntries(pFmt, pReg));
+  lMd := CliMd(pFmt, IncludedEntries(pFmt, pReg), pReg.FlagAliases);
   lAt := Pos(FRONT_END, lMd);
   if lMd.StartsWith('---'#10) and (lAt > 0) then
     lMd := Copy(lMd, lAt + Length(FRONT_END), MaxInt);

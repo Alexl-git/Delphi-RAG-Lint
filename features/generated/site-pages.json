@@ -16,8 +16,8 @@
     "version": "1.33.0-alpha"
   },
   "features/ambiguous-calls.md": {
-    "hash": "dfe4137e9a54650035cf6ad0cfa8f0ee10cc65656685f6d2ea36f6065d415334",
-    "version": "1.33.0-alpha"
+    "hash": "d5e9b4d57b79b66eb3cb6bdf94687aafc95edb4e50b926b2a46ca6998f9ce09e",
+    "version": "1.35.0-alpha"
   },
   "features/ask.md": {
     "hash": "58ba82ce17f0cf9db5aaa73c24d0ad75376aa695daaa5d0b0a984294dae14584",
@@ -248,8 +248,8 @@
     "version": "1.33.0-alpha"
   },
   "features/extract-method.md": {
-    "hash": "c2a351345564acde05fef922f632d6bfe8d87e32f605b95fcab433f20c50db3c",
-    "version": "1.33.0-alpha"
+    "hash": "5c7095fdf2d8da80095b3d822b3f33a7088174e2758a6e6a67fbb8e55e046e78",
+    "version": "1.35.0-alpha"
   },
   "features/fb-snapshot.md": {
     "hash": "081da72a0bb36a53ade68dc9c28326b79a7cc6a6e15e5e1c8ea4fcfd47cf1dd4",
@@ -448,16 +448,16 @@
     "version": "1.33.0-alpha"
   },
   "features/outline.md": {
-    "hash": "f39db03b8cb0a0352225665eaef4f86f3fc6bf0f4ea511223ac44de3efd77650",
-    "version": "1.33.0-alpha"
+    "hash": "7cf05f7ed18b2b5b4d529f84dc0b8b6c08a2db0f3043e521c7011ea2200f26cd",
+    "version": "1.35.0-alpha"
   },
   "features/pp-profile.md": {
     "hash": "e98528fed1d4c3f3434dd42812fe0fd53c109d9396b4e1bf682f9dbbc8bded78",
     "version": "1.33.0-alpha"
   },
   "features/preprocess-file.md": {
-    "hash": "91d3fcb5007595bc90a844874d161bc81faf2396395dfc2f928f145f78ec9e1b",
-    "version": "1.33.0-alpha"
+    "hash": "d037fd9539eb8aac5d2663c6e66f3ac3f803d32cafb60a75eb0c2266938192fa",
+    "version": "1.35.0-alpha"
   },
   "features/project-facts.md": {
     "hash": "1ca6576b12ec054f888bc8abd64cf7935161a29a52fda81a19161920910347b0",
@@ -616,8 +616,8 @@
     "version": "1.33.0-alpha"
   },
   "features/sql.md": {
-    "hash": "6ff10de0415c1879cf35997028a2a89ee0ba0162b9d09c71e7521b352a243cff",
-    "version": "1.33.0-alpha"
+    "hash": "2b4f6e9c0fc9159db7c6bf48c1f4e625fa7c42f07a7ce13d970ff81adc12551c",
+    "version": "1.35.0-alpha"
   },
   "features/symbol-search.md": {
     "hash": "e6c3ac2de65d0a2beb4d5048c5b4216f44f934a5e791da7f75b78dccbb7e711c",

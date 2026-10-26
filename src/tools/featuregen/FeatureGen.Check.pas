@@ -154,6 +154,13 @@ function FindingText(const pFinding: TFinding): string;
 /// <returns>Ordered by case-insensitive Levenshtein distance, then case-insensitively by text.</returns>
 function NearestCandidates(const pValue: string; const pCandidates: TArray<string>; pTop: Integer = 3): TArray<string>;
 
+/// <summary>Flag alias policy problems (docs\CLI-FLAG-ALIASES.md), reported by check A.</summary>
+/// <param name="pAliases">Rows of features\flag-aliases.json.</param>
+/// <param name="pEntries">Registry entries.</param>
+/// <returns>One text per problem: a malformed row (empty or dash-less canonical / alias, no alias), a spelling listed twice or an alias that is also a canonical, and every cli surface usage / help line / flags[] name and question command that names an alias instead of its canonical flag. Empty when clean.</returns>
+/// <remarks>An alias is matched as a whole flag token, so --in never matches inside --include.</remarks>
+function FlagAliasProblems(const pAliases: TArray<TFlagAlias>; const pEntries: TArray<TFeatureEntry>): TArray<string>;
+
 implementation
 
 uses
@@ -2081,6 +2088,7 @@ var
   lFull: TCheckContext;
   lFirst: Integer;
   i: Integer;
+  lReg: TRegistry;
 begin
   // ---- A. well-formed
   if not TDirectory.Exists(TPath.Combine(FRepo, 'features\entries')) then
@@ -2126,7 +2134,8 @@ begin
       lHome.Free;
     end;
     lFiles := SortedFiles(TPath.Combine(FRepo, 'features\templates'), '*')
-      + [TPath.Combine(FRepo, 'features\related-projects.json'), TPath.Combine(FRepo, 'features\exemptions.json'), TPath.Combine(FRepo, 'features\seed-backlog.json')]
+      + [TPath.Combine(FRepo, 'features\related-projects.json'), TPath.Combine(FRepo, 'features\exemptions.json'), TPath.Combine(FRepo, 'features\seed-backlog.json'),
+         TPath.Combine(FRepo, FLAG_ALIASES_PATH)]
       + SortedFiles(TPath.Combine(FRepo, 'features\families'), '*.json');
     for lF in lFiles do
       if TFile.Exists(lF) then
@@ -2135,6 +2144,20 @@ begin
         if lAsc <> '' then
           Fail('A', lAsc);
       end;
+    // FLAG lane: the alias policy (docs\CLI-FLAG-ALIASES.md) -- a well-formed table, canonical-only cli surfaces.
+    lReg := TRegistry.Create;
+    try
+      try
+        lReg.Load(FRepo);
+        for lPr in FlagAliasProblems(lReg.FlagAliases, lReg.Entries) do
+          Fail('A', lPr);
+      except
+        on E: Exception do
+          Fail('A', 'flag aliases: ' + E.Message);
+      end;
+    finally
+      lReg.Free;
+    end;
     for lF in SortedFiles(TPath.Combine(FRepo, 'features\families'), '*.json') do
       try
         lFam.Name := TPath.GetFileNameWithoutExtension(lF);
@@ -2195,6 +2218,81 @@ begin
 end;
 
 { ---- public ---- }
+
+function FlagAliasProblems(const pAliases: TArray<TFlagAlias>; const pEntries: TArray<TFeatureEntry>): TArray<string>;
+const
+  POLICY = ' (docs\CLI-FLAG-ALIASES.md)';
+var
+  lOut: TList<string>;
+  lSeen: TDictionary<string, string>;
+  lAliasOf: TDictionary<string, string>;
+  lA: TFlagAlias;
+  lE: TFeatureEntry;
+  lS: TSurface;
+  lF: TFlag;
+  lQ: TQuestion;
+  lName, lLine, lWhere: string;
+
+  procedure Spelling(const pSpelling, pRow: string);
+  var
+    lPrev: string;
+  begin
+    if (pSpelling = '') or not pSpelling.StartsWith('-') then
+      lOut.Add(Format('%s: row %s: "%s" is not a flag spelling%s', [FLAG_ALIASES_PATH, pRow, pSpelling, POLICY]))
+    else if lSeen.TryGetValue(pSpelling, lPrev) then
+      lOut.Add(Format('%s: %s is listed twice (rows %s and %s); one spelling belongs to one row%s', [FLAG_ALIASES_PATH, pSpelling, lPrev, pRow, POLICY]))
+    else
+      lSeen.Add(pSpelling, pRow);
+  end;
+
+  procedure Scan(const pText, pWhat: string);
+  var
+    lPair: TPair<string, string>;
+  begin
+    for lPair in lAliasOf do
+      if TRegEx.IsMatch(pText, '(?<![A-Za-z0-9-])' + TRegEx.Escape(lPair.Key) + '(?![A-Za-z0-9-])') then
+        lOut.Add(Format('%s: %s names the alias %s; write the canonical %s%s', [lE.Id, pWhat, lPair.Key, lPair.Value, POLICY]));
+  end;
+
+begin
+  lOut := TList<string>.Create;
+  lSeen := TDictionary<string, string>.Create;
+  lAliasOf := TDictionary<string, string>.Create;
+  try
+    for lA in pAliases do
+    begin
+      Spelling(lA.Canonical, lA.Canonical);
+      if Length(lA.Aliases) = 0 then
+        lOut.Add(Format('%s: row %s lists no alias%s', [FLAG_ALIASES_PATH, lA.Canonical, POLICY]));
+      for lName in lA.Aliases do
+      begin
+        Spelling(lName, lA.Canonical);
+        lAliasOf.AddOrSetValue(lName, lA.Canonical);
+      end;
+    end;
+    for lE in pEntries do
+    begin
+      for lS in lE.Surfaces do
+      begin
+        if not SameText(lS.Kind, 'cli') then
+          Continue;
+        lWhere := 'cli surface ' + Trim(lS.Verb + ' ' + lS.Sub);
+        Scan(lS.Usage, lWhere + ' usage');
+        for lLine in lS.Help do
+          Scan(lLine, lWhere + ' help line');
+        for lF in lS.Flags do
+          Scan(lF.Name, lWhere + ' flags[]');
+      end;
+      for lQ in lE.Questions do
+        Scan(lQ.Command, 'question command');
+    end;
+    Result := lOut.ToArray;
+  finally
+    lAliasOf.Free;
+    lSeen.Free;
+    lOut.Free;
+  end;
+end;
 
 function RunChecks(const pReg: TRegistry; const pLive: TLiveSurface; pLevel: TCheckLevel; const pExtraEntries: TArray<TJSONObject>;
   pSkipGenerated: Boolean; out pNotes: TArray<string>): TArray<TFinding>;

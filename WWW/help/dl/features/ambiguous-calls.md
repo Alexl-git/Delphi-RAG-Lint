@@ -7,7 +7,7 @@ group: maintenance
 order: 120002
 since: 0.91.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # ambiguous-calls
@@ -25,7 +25,7 @@ Full flag list: [ambiguous-calls in the CLI reference](../cli.md#ambiguous-calls
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--qname` | `<Foo.Bar>` |  |  |
-| `--file` | `<file>` |  |  |
+| `--in` | `<file>` |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 

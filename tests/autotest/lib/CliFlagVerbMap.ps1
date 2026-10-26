@@ -623,7 +623,12 @@ function Get-CliVerbFlagMap {
   # verb's gap count (verbs affected fell 27 -> 26 with no banner change).
   # Named, not inferred: a field missing from the pre-dispatch span throws, so a
   # rename or a moved check cannot leave a dead entry here.
-  foreach ($p in @('RuleConflict')) {
+  # Apply / Fix (FLAG lane 2026-10-26): Run reads them only to compute
+  # WritesSource -- `document --apply` and `lint --fix --apply` are REFUSED when
+  # .drag-lint.json could not be read (INBOX 2026-09-29 item 5). Same shape as
+  # RuleConflict: a refusal, not a cross-verb binding. Before this they joined
+  # the pinned set (+--apply +--fix) and were exempted from every verb's count.
+  foreach ($p in @('RuleConflict', 'Apply', 'Fix')) {
     if (-not $global.Remove($p)) {
       throw "refusal-only field '$p' is no longer read before dispatch -- renamed or moved? update CliFlagVerbMap.ps1"
     }

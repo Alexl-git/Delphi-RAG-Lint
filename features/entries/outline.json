@@ -12,10 +12,10 @@
     {
       "type": "cli",
       "verb": "outline",
-      "usage": "drag-lint outline --file <path.pas> [--db <path>] [--format text|json]",
+      "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json]",
       "flags": [
         {
-          "name": "--file",
+          "name": "--in",
           "arg": "<path.pas>"
         },
         {
@@ -27,7 +27,7 @@
         }
       ],
       "helpOrder": 6,
-      "help": ["  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
+      "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
     },
     {
       "type": "ide-menu",
@@ -39,17 +39,17 @@
   "questions": [
     {
       "ask": "What is in this unit?",
-      "command": "drag-lint outline --file <U.pas> --db <db>"
+      "command": "drag-lint outline --in <U.pas> --db <db>"
     },
     {
       "ask": "Can I get the outline as JSON?",
-      "command": "drag-lint outline --file <U.pas> --format json"
+      "command": "drag-lint outline --in <U.pas> --format json"
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "403cc97d8b5859a7a5f24acd6ebdb949aaf72f2958dd8a4d8a937d744ea96109"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "5226ebaf7d59c51ed909bc29b49c81c20f93e5aa323134c42d8d859b29fcfd97"
   }
 }

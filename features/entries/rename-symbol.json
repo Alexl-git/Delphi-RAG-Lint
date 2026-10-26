@@ -45,7 +45,7 @@
         }
       ],
       "helpOrder": 52,
-      "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]", "      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2)"]
+      "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]", "      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2)"]
     }
   ],
   "audience": "both",
@@ -61,9 +61,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "92115d3a46966ce85706d01bd7b4bf2ebc2a4b8c581f012be046a2db1970ee22"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "5b48df501c23aef8780d62a82863b62912362721669c9c38adb98289487ba99c"
   }
 }

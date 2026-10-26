@@ -7,7 +7,7 @@ group: maintenance
 order: 120013
 since: 0.40.5-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # sql
@@ -25,7 +25,7 @@ Full flag list: [sql in the CLI reference](../cli.md#sql).
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--query` |  |  |  |
-| `--file` | `<q.sql>` |  |  |
+| `--in` | `<q.sql>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |

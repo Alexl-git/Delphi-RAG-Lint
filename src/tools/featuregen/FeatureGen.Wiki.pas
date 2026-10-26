@@ -1315,6 +1315,8 @@ var
   lFmt: TSiteFormat;
   lHelp: TLiveHelp;
   lReg: TRegistry;
+  lUsage, lReadme: string;
+  lAliases: TArray<TFlagAlias>;
 begin
   lEngine := (if pEngine <> '' then pEngine else TPath.Combine(pRepo, 'third_party\dll-win64\drag-lint.exe'));
   lM := TWikiModel.Create;
@@ -1324,10 +1326,17 @@ begin
     pWriter.Put('docs\wiki\Features.md', RenderFeatures(lM), 'docs\wiki\Features.md');
     pWriter.Put('docs\wiki\Feature-Index.md', RenderFeatureIndex(lM), 'docs\wiki\Feature-Index.md');
     pWriter.Put('docs\wiki\Quick-Help.md', RenderQuickHelp(lM), 'docs\wiki\Quick-Help.md');
-    pWriter.Put('README.md', UpdateMarkedBlock(ReadAsciiStrict(TPath.Combine(pRepo, 'README.md')), 'feature-summary', RenderFeatureSummary(lM)),
-      'README.md feature-summary block');
-    pWriter.Put('docs\AI-USAGE.md', UpdateMarkedBlock(ReadAsciiStrict(TPath.Combine(pRepo, 'docs\AI-USAGE.md')), 'agent-verbs', RenderAgentVerbs(lM)),
-      'docs\AI-USAGE.md agent-verbs block');
+    lAliases := LoadFlagAliases(pRepo);
+    lReadme := UpdateMarkedBlock(ReadAsciiStrict(TPath.Combine(pRepo, 'README.md')), 'feature-summary', RenderFeatureSummary(lM));
+    lUsage := UpdateMarkedBlock(ReadAsciiStrict(TPath.Combine(pRepo, 'docs\AI-USAGE.md')), 'agent-verbs', RenderAgentVerbs(lM));
+    { A root without an alias table (a test fixture) has no flag-aliases markers either; a root WITH one must carry them. }
+    if Length(lAliases) > 0 then
+    begin
+      lReadme := UpdateMarkedBlock(lReadme, 'flag-aliases', FlagAliasesMarkdown(lAliases, False));
+      lUsage := UpdateMarkedBlock(lUsage, 'flag-aliases', FlagAliasesMarkdown(lAliases, False));
+    end;
+    pWriter.Put('README.md', lReadme, 'README.md feature-summary + flag-aliases blocks');
+    pWriter.Put('docs\AI-USAGE.md', lUsage, 'docs\AI-USAGE.md agent-verbs + flag-aliases blocks');
     pWriter.Put('features\generated\manifest.json', RenderManifest(lM), 'features\generated\manifest.json');
   finally
     lM.Free;

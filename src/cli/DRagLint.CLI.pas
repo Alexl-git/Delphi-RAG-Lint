@@ -744,7 +744,7 @@ begin
     docs\AI-USAGE.md, and those three must agree. }
   Writeln('COMMON QUESTIONS -- the shortest command for each. Full reference below.');
   Writeln('');
-  Writeln('  What is in this unit?                 drag-lint outline --file <U.pas> --db <db>');
+  Writeln('  What is in this unit?                 drag-lint outline --in <U.pas> --db <db>');
   Writeln('  Is this report still true?            drag-lint compare --in <U.pas> --line <L>');
   Writeln('  Which unit declares X?                drag-lint find-unit --name X --in <U.pas> --db <db>');
   Writeln('       ^ for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database');
@@ -757,7 +757,7 @@ begin
   Writeln('  Is unit U part of project P?          drag-lint query --name U --db <P.sqlite> --exact');
   Writeln('       ^ a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.');
   Writeln('  What are the members of a type?       drag-lint surface --qname <Unit.TType> --db <db>');
-  Writeln('       ^ names, TYPES and trailing comments. outline --file lists them with line numbers.');
+  Writeln('       ^ names, TYPES and trailing comments. outline --in lists them with line numbers.');
   Writeln('  Where does a DOC COMMENT say this?    drag-lint query find --doc-contains "<phrase>" --db <db>');
   Writeln('       ^ case-insensitive, over /// blocks and harvested // above a declaration.');
   Writeln('  Which DECLARATIONS say this?          drag-lint query find --decl-contains "stored IsFontStored" --kind property --db <db>');
@@ -799,6 +799,7 @@ begin
     // it carries no managed facts block.
   }
   WriteVerbReference;
+  WriteFlagAliases;
   Writeln('Databases (--db is repeatable, on every verb that takes it):');
   Writeln('  THE FIRST --db IS THE PRIMARY. Every later --db is an EXTRA store.');
   Writeln('  The primary answers the query and is the only store that contributes RESOLVED');
@@ -835,7 +836,7 @@ begin
   Writeln('         OWN database only -- its exact manifest owner, else');
   Writeln('         <project dir>\_D-RAG\<base>.sqlite -- plus, for readers that use');
   Writeln('         the consumer DB list, the platform library; no sibling project DB.');
-  Writeln('         Exceptions: outline --file also opens DBs that hold or folder-match');
+  Writeln('         Exceptions: outline --in also opens DBs that hold or folder-match');
   Writeln('         the file, and lint''s dl:shared check opens the sibling projects a');
   Writeln('         unit declares. index <x.dpr|.dproj> refreshes ONLY that one file');
   Writeln('         (use --project for the compile-closure scan). index and');
@@ -1175,12 +1176,21 @@ const
   /// <summary>The message prefix ParseArgs raises for an argument no flag accepts; Run turns it into the unknown-flag reason.</summary>
   UNKNOWN_ARG_PREFIX = 'Unknown argument: ';
 
+/// <summary>Prints a "not found" diagnostic: to stderr when the verb was asked for JSON (stdout must stay parseable), to stdout otherwise.</summary>
+/// <param name="AJson">The verb's own JSON test -- AsJson, SameText(Format, 'json'), or both, whichever the verb accepts.</param>
+/// <param name="AMsg">The diagnostic line.</param>
+/// <remarks>The caller passes the test so each verb reads only the output flags it documents (run_flag_verb_map.ps1 attributes a field read to every verb that reaches it).</remarks>
+procedure ReportNotFoundFor(AJson: Boolean; const AMsg: string);
+begin
+  if AJson then Writeln(ErrOutput, AMsg) else Writeln(AMsg);
+end; // procedure
+
 /// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
 /// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
 /// <param name="AMsg">The diagnostic line.</param>
 procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);
 begin
-  if AArgs.AsJson then Writeln(ErrOutput, AMsg) else Writeln(AMsg);
+  ReportNotFoundFor(AArgs.AsJson, AMsg);
 end; // procedure
 /// <summary>Prints the own help of a menu verb (menu-tree --help / menu-drift --help): the `help` line of its surface in features\entries\menu-tree.json, not the global banner.</summary>
 /// <param name="AVerb">menu-tree or menu-drift.</param>
@@ -9394,7 +9404,11 @@ begin
     if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
     Store:= nil; { release before trying the next db }
   end;
-  if (Length(Syms) = 0) or (Store = nil) then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
+  if (Length(Syms) = 0) or (Store = nil) then
+  begin
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName]));
+    Exit(1);
+  end;
 
   Doc:= Store.GetSymbolDoc(Syms[0].Id);
   { v0.43: no doc comment is no longer fatal -- the renderer still shows the
@@ -9646,7 +9660,11 @@ begin
 
   // Validate that the symbol exists and is a class/record/interface.
   Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Syms) = 0 then begin Writeln(System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName])); Exit(1); end;
+  if Length(Syms) = 0 then
+  begin
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), System.SysUtils.Format('No symbol matched qname: %s', [AArgs.QName]));
+    Exit(1);
+  end;
   { INBOX 2.6: an ENUM's members were indexed but reachable by NO query. They
     exist as separate symbols (kind='enum_value', qualified_name
     '<EnumQName>.<member>'), but `query --qname <Enum>` returned only the enum,
@@ -9854,7 +9872,11 @@ var
   JArr : TJSONArray     ;
   JObj : TJSONObject    ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint outline --file <path.pas> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint outline --in <path.pas> ' + '[--db <path>] [--format text|json]');
+    Exit(2);
+  end;
 
   { Resolve from the FILE, not from the cwd. See ResolveReadDbsForFile's header
     for the defect this closes. The old single-path behaviour survives as the
@@ -10135,7 +10157,11 @@ begin
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'slice', AArgs.DbPath) then Exit(2);
   Slice:= Store.GetSymbolSlice(AArgs.QName);
 
-  if Length(Slice) = 0 then begin Writeln(System.SysUtils.Format( 'No slice returned for qname: %s', [AArgs.QName])); Exit(1); end;
+  if Length(Slice) = 0 then
+  begin
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), System.SysUtils.Format('No slice returned for qname: %s', [AArgs.QName]));
+    Exit(1);
+  end;
 
   if SameText(AArgs.Format, 'json') then
   begin
@@ -14625,7 +14651,7 @@ begin
                                 [AArgs.BundleQName, Length(Bundle.WikiTopics)]));
     end
     else
-      Writeln(Format('No symbol matched: %s', [AArgs.BundleQName]));
+      ReportNotFoundFor(SameText(AArgs.Format, 'json'), Format('No symbol matched: %s', [AArgs.BundleQName]));
     Exit(1);
   end;
 
@@ -25443,7 +25469,11 @@ begin
     end;
   end;
   if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if not Found then begin Writeln(Format('class not found: %s', [AArgs.QName])); Exit(1); end;
+  if not Found then
+  begin
+    ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), Format('class not found: %s', [AArgs.QName]));
+    Exit(1);
+  end;
 
   if (Fmt = 'json') or ((Fmt = '') and AArgs.AsJson) then
   begin
@@ -28892,7 +28922,11 @@ begin
     end;
   end;
   if not AnyDbOpened then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if Store = nil then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Store = nil then
+  begin
+    ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), Format('symbol not found: %s', [AArgs.QName]));
+    Exit(1);
+  end;
 
   Opts.Depth:= Depth;
 

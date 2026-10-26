@@ -12,14 +12,14 @@
     {
       "type": "cli",
       "verb": "ambiguous-calls",
-      "usage": "drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)",
+      "usage": "drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)",
       "flags": [
         {
           "name": "--qname",
           "arg": "<Foo.Bar>"
         },
         {
-          "name": "--file",
+          "name": "--in",
           "arg": "<file>"
         },
         {
@@ -31,7 +31,7 @@
         }
       ],
       "helpOrder": 78,
-      "help": ["  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)"]
+      "help": ["  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)"]
     }
   ],
   "audience": "both",
@@ -43,7 +43,7 @@
     },
     {
       "ask": "Which calls in a file could the resolver not pin to one target?",
-      "command": "drag-lint ambiguous-calls --file <file> --db <db>"
+      "command": "drag-lint ambiguous-calls --in <file> --db <db>"
     }
   ],
   "access": "cli-only",
@@ -52,9 +52,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "6deed3e6818af0d1162b7a28e41e9da9955222bb103a7cc5b0452a6f7e160ab4"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "23bdccae19ab78dd9e92d3f249419aa8f6b72a29be67ee574ef342b917b2f979"
   }
 }

@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "check-ast",
-      "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]",
+      "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]",
       "flags": [
         {
           "name": "--db",
@@ -32,7 +32,7 @@
         }
       ],
       "helpOrder": 73,
-      "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
+      "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]"]
     }
   ],
   "audience": "both",
@@ -47,9 +47,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "15dbfbd9a3674b0bb56e8437ae8bf98fd49bafe382e7636419d1a325fdbb1e94"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "975b22774294b38887a7a7f6a7c1c58c7c149151c521777172967957ba730dc1"
   }
 }

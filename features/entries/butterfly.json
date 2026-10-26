@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "butterfly",
-      "usage": "drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)",
+      "usage": "drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)",
       "flags": [
         {
           "name": "--qname",
@@ -35,7 +35,7 @@
         }
       ],
       "helpOrder": 87,
-      "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
+      "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
     },
     {
       "type": "ide-menu",
@@ -56,9 +56,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "dcb48864388d7967b51de30c1e98f913c646c85e0d0c6b288f363f777527c1c3"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "646ea26eaf11f813317fa3e265f230d630c170a55a2a452b8ef96473d1969fe4"
   }
 }

@@ -2337,6 +2337,52 @@ begin
   Check('Help.FrozenBannerPreserved', FrozenBannerPrefixProblem(pRepo) = '', FrozenBannerPrefixProblem(pRepo)
     + ' (a deliberate help edit re-freezes that line in tests\fixtures\help-verb-reference-1.33.0.txt)');
   Check('Help.GeneratedUnitIsAscii', not TRegEx.IsMatch(lGen, '[^\x00-\x7F]'), 'non-ASCII in the generated unit');
+  { FLAG lane: the alias policy (docs\CLI-FLAG-ALIASES.md) -- one generated "Flag aliases:" section, canonical-only verb lines. }
+  Check('Help.FlagAliasesProcedure', Pos('procedure WriteFlagAliases;', lGen) > 0, 'WriteFlagAliases must be generated');
+  Check('Help.FlagAliasesHeader', Pos('Writeln(''Flag aliases:'');', lGen) > 0, 'section header (the scanners stop the last verb block on it)');
+  Check('Help.FlagAliasRowForOutput', TRegEx.IsMatch(lGen, 'Writeln\(''  --output +also: --out''\);'), 'row: --output also: --out');
+  Check('Help.FlagAliasRowForIn', TRegEx.IsMatch(lGen, 'Writeln\(''  --in +also: --file''\);'), 'row: --in also: --file');
+end;
+
+{ FLAG lane: FlagAliasProblems -- the alias table is well-formed and no registry cli surface names an alias. }
+procedure TestFlagAliasPolicy(const pRepo: string);
+var
+  lReg: TRegistry;
+  lA: TArray<TFlagAlias>;
+  lE: TArray<TFeatureEntry>;
+  lP: TArray<string>;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    Check('Alias.TableLoaded', Length(lReg.FlagAliases) > 1, IntToStr(Length(lReg.FlagAliases)) + ' row(s) -- else the checks below are vacuous');
+    lP := FlagAliasProblems(lReg.FlagAliases, lReg.Entries);
+    Check('Alias.RegistryClean', Length(lP) = 0, string.Join(' | ', lP));
+  finally
+    lReg.Free;
+  end;
+  SetLength(lA, 1);
+  lA[0].Canonical := '--zz-canon';
+  lA[0].Aliases := ['--zz-short'];
+  SetLength(lE, 1);
+  lE[0].Id := 'zz-entry';
+  SetLength(lE[0].Surfaces, 1);
+  lE[0].Surfaces[0].Kind := 'cli';
+  lE[0].Surfaces[0].Verb := 'zz-verb';
+  lE[0].Surfaces[0].Usage := 'drag-lint zz-verb [--zz-canon <f>] [--zz-canonical-not-an-alias]';
+  Check('Alias.ControlCleanSurfacePasses', Length(FlagAliasProblems(lA, lE)) = 0, string.Join(' | ', FlagAliasProblems(lA, lE)));
+  lE[0].Surfaces[0].Help := ['  drag-lint zz-verb [--zz-short <f>]'];
+  lP := FlagAliasProblems(lA, lE);
+  Check('Alias.AliasOnHelpLineReported', (Length(lP) = 1) and (Pos('--zz-short', lP[0]) > 0) and (Pos('--zz-canon', lP[0]) > 0), string.Join(' | ', lP));
+  lE[0].Surfaces[0].Help := nil;
+  SetLength(lE[0].Surfaces[0].Flags, 1);
+  lE[0].Surfaces[0].Flags[0].Name := '--zz-short';
+  Check('Alias.AliasInFlagsReported', Length(FlagAliasProblems(lA, lE)) = 1, string.Join(' | ', FlagAliasProblems(lA, lE)));
+  lE[0].Surfaces[0].Flags := nil;
+  SetLength(lA, 2);
+  lA[1].Canonical := '--zz-short';
+  lA[1].Aliases := ['--zz-other'];
+  Check('Alias.AliasThatIsAlsoCanonicalReported', Length(FlagAliasProblems(lA, lE)) = 1, string.Join(' | ', FlagAliasProblems(lA, lE)));
 end;
 { Runs the full check with one extra live item; the live surface is restored after. }
 procedure TestPositiveControls(const pRepo: string);
@@ -3318,6 +3364,7 @@ begin
       TestPositiveControls(lRepo);
       TestMenuPathChecks(lRepo);
       TestHelpText(lRepo);
+      TestFlagAliasPolicy(lRepo);
       TestHelpOrderTiebreak;
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);

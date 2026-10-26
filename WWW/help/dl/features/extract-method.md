@@ -7,7 +7,7 @@ group: refactoring
 order: 50005
 since: 0.85.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # extract-method
@@ -24,7 +24,7 @@ Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--file` | `<F>` |  |  |
+| `--in` | `<F>` |  |  |
 | `--from-line` | `<L1>` |  |  |
 | `--to-line` | `<L2>` |  |  |
 | `--name` | `<N>` |  |  |
