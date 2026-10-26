@@ -32,8 +32,10 @@ uses
 /// from preprocessed text (not from this parse). The read callback hands
 /// tree-sitter at most 64 KiB per call, so a re-read never copies the whole
 /// remaining buffer. Thread-safe per call (a parser per call; the
-/// preprocess settings are read-only after start-up).
-/// Guard: tests\autotest\run_lsp_c9_preprocess_guard.ps1.</remarks>
+/// per-file define profile is resolved on every call through TAstParseCache's
+/// resolver, whose cache is thread-safe).
+/// Guards: tests\autotest\run_lsp_c9_preprocess_guard.ps1,
+/// tests\autotest\run_lsp_c10_feature_parse_guard.ps1.</remarks>
 function ParseDelphiUtf8(const ASource: TBytes; const AFile: string = ''): TTSTree;
 
 implementation
