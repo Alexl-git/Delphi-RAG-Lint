@@ -29,6 +29,19 @@ before working on an item.**
   1.35.1). **Owed at the 1.36.0 re-pin:** the engine's text output becomes ascii with `\uXXXX` escapes by
   default -- the editor (Engine.pas pipe readers) must pass `--output-encoding utf8` (probe the
   capability) or decode the escapes; add a model test with a non-ASCII name before re-pinning.
+* 2026-10-26: L2 #migrate D5 + D6-B merged; ENGINE lane CONV (pre-run encoding question) reviewed +
+  merged 45d84771. Its follow-ups (CONVERTER, review a1514a9a, all minor):
+  * **ENC-N1** (M) narrow `ConvertEncoding.BookPlaces` (:172-211) to lines of #convert blocks that apply to
+    the unit (match headers against `Inheritance.AnalyzeUnits` / `ListDfmInstances` / `AncestorChain`;
+    needs the book parsed through Model; decide units without a .dfm). Today any non-comment line
+    counts -> a needless (lossless) raise.
+  * **ENC-N2** (S) Yes path: `PreRunQuestion` (:258-266) shows 20 places + "and N more"; also leave
+    every place as note rows on Yes (No/Cancel already do). Cancel adds note rows then says
+    "cancelled" -- drop them on Cancel.
+  * **ENC-N3** (S) rule text `Copy(Trim(Line),1,80)` (:202) can cut the offending char off: window
+    the excerpt around the column.
+  * **ENC-N4** (S, perf) `JobRunsBatched` (ConvertRunner.pas:911/1084) goes per-unit for the whole job
+    once any RaiseFiles exist: batch the units without a raise.
 
 ## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- historical
 
