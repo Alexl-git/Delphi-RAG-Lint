@@ -212,6 +212,25 @@ try {
   Check 'd4 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $c2 = Invoke-Compile $rd 'UntangleReuse.dpr'
   Check 'd5 the followed tree compiles (no F2092 self-use)' $c2.Ok ($c2.Log -split "`r?`n" | Select-String 'Error|Fatal' | Select-Object -First 3)
+
+  # --- (e) the Task-17 Part B shape: an IMPLEMENTATION cycle cut by moving a const into the ----
+  #         existing leaf its source already uses (tests\fixtures\cyclefix\partbselfuse) ------------
+  Write-Host '== (e) Part B moves CSuMaxVia into SuFacts.Untangle, which SuFacts already uses' -ForegroundColor Cyan
+  $re = Join-Path $WorkDir 'partbselfuse'
+  Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\partbselfuse') $re
+  $dbE = Join-Path $WorkDir 'partbselfuse.sqlite'
+  Check 'e1 fixture indexed' ((Invoke-Index (Join-Path $re 'PartBSelfUse.dproj') $dbE 'e') -eq 0)
+  $pe = Get-Cycles $dbE 'e' @('--plan')
+  $blkE = Get-CycleBlock $pe.Out 1
+  Check 'e2 the cycle is implementation-only (Part B)' (($blkE -join "`n").Contains('**implementation-only**')) ''
+  $leafE = (Get-FileEdits $blkE 'SuFacts.Untangle.pas') -join "`n"
+  Check 'e3 the existing leaf receives CSuMaxVia (positive control: the edits are there)' $leafE.Contains('  CSuMaxVia = 3;') $leafE
+  Check 'e4 no edit of SuFacts.Untangle.pas adds SuFacts.Untangle to its own uses' `
+    (-not ($leafE -match '(?m)^\s*SuFacts\.Untangle[;,]')) $leafE
+  $fe = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pe.File -Cycle 1 -Root $re 2>&1 | Out-String
+  Check 'e5 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fe.Trim() -replace "`r?`n", ' | ')
+  $c3 = Invoke-Compile $re 'PartBSelfUse.dpr'
+  Check 'e6 the followed tree compiles (no F2092 self-use)' $c3.Ok ($c3.Log -split "`r?`n" | Select-String 'Error|Fatal' | Select-Object -First 3)
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

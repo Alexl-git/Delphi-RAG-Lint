@@ -29,6 +29,26 @@ breaking changes** until v1.0.
 - `index --all`: a library section's `"include"` folders are library roots on every platform the
   section targets (empty for every existing manifest, so no plan changes until one is written).
   Guard for all three: `tests\autotest\run_reconcile_project_or_library.ps1`.
+- `cycles --plan` / `--fix` R1 (routine-call inversion), plan 2026-10-25 B3: an edge may now carry
+  SEVERAL routines, and globals on the same edge that can move -- each routine gets its own
+  `T<Routine>Ptr` / `<Routine>Ptr` in the leaf, a consumer line calling several is rewritten once,
+  and the declaring unit gets ONE `initialization` edit with all assignments; the movable globals
+  (and a plain type of the cycle a signature names: enum, record, alias) move into the same
+  `<Declaring>.Untangle` leaf first. A class with bodies in a signature still refuses
+  `signature-in-cycle`; one routine with `varargs` refuses `unsupported-directive` naming it.
+  Guards: `tests\autotest\run_cyclefix_b3.ps1`; `run_cyclefix_r1_dcc.ps1` builds and runs the three
+  new fixtures (r1two, r1mixed, sigincycleenum).
+- `cycles --plan` F5 base-class gate, plan 2026-10-25 B4 (a, b, c, e): the extracted `TXBase` now also
+  stands in for a LOCAL `L: TX` (`var` section, inline `var`, `for var L: TX in F`), a plain FIELD
+  `F: TX` (not published, no ref outside its unit), a `TList<TX>` / `TObjectList<TX>` field, and a
+  parameter stored into one of them -- each only when every use is a member read, a nil test /
+  `Assigned`, `Free` / `FreeAndNil`, an assignment from or to another slot that switches, or (lists)
+  Create / Add / Insert / Remove / IndexOf / Contains / Delete / Clear / Count; anything else still
+  refuses `base-class`, naming the line. A property read through a METHOD accessor pulls the method
+  (`virtual; abstract;` in the base, `override;` in the class) instead of refusing; an accessor that
+  already carries directives refuses, naming it. B4-d (inheriting classes; owner ruling 2 pending)
+  and B4-f (the base class in Part B) are not done. Guards: `tests\autotest\run_cyclefix_b4.ps1`,
+  `run_cyclefix_b4_dcc.ps1` (each accepted tree followed, built and run: stdout byte-identical).
 
 ### Fixed
 - autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
@@ -41,6 +61,9 @@ breaking changes** until v1.0.
   implementor names into its unit list, and the reconciler then preserved them as unvouchable.
   IParser's `TDFMParser` / `TFirebirdSqlParser` are restored on that line. Guard:
   `tests\autotest\run_doc_used_in_classes.ps1`. No extractor change, no re-parse.
+- cycles (test only): the Task-17 Part B rollback (F2092: a reused `.Untangle` leaf getting itself in its uses) was
+  T17b D2, fixed in 2bb75e83; its Part B shape is now pinned too
+  (`run_cyclefix_untangle_catalog.ps1` case e, fixture `partbselfuse`; RED on a mutant without the fix).
 
 ## v1.35.0-alpha -- 2026-10-25
 

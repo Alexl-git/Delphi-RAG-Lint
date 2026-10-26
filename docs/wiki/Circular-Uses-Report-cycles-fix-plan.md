@@ -112,9 +112,12 @@ group); an implementation-only one is Part B (one edge is cut). `--part a|b` ask
 after each iteration -- so it **needs `--apply` and refuses `--no-reindex`**.
 
 **Recipes.** Part A moves globals into a `<Declaring>.Untangle` leaf, as `--plan` describes.
-Part B cuts one edge: **R1** routine-call inversion (an edge that is exactly one routine whose
-signature types all live outside the cycle is called through a procedural variable declared in
-a leaf and assigned in the declaring unit's initialization section); **R2** member hand-over
+Part B cuts one edge: **R1** routine-call inversion (each routine on the edge whose signature
+types all live outside the cycle is called through a procedural variable declared in a leaf and
+assigned in the declaring unit's initialization section -- one `initialization` edit for all of
+them; since plan B3 an edge may carry several routines, and globals on the same edge that can move,
+or a plain type a signature names (enum, record, alias), move into the same `<Declaring>.Untangle`
+leaf first); **R2** member hand-over
 (an edge that is only `is` / `as` against one class plus reads of its members: the class
 implements an `I<Class>Surface` interface declared in its leaf, and the consumer uses
 `Supports` / `as`).
@@ -147,7 +150,11 @@ The engine never guesses; every kind it can give:
   the file is ANSI), `outside-roots` (the plan would edit a file outside the project's own
   roots).
 * **Plan:** `base-class` (a class whose bodies use the cycle would need a base class
-  extracted -- a manual step), `blocked-symbol` (a declaration the move needs cannot move: a
+  extracted -- a manual step; the base class stands in for the class at a const / value
+  parameter, a private `TArray<TX>` field, and -- plan B4 -- a local, a plain field `F: TX`, a
+  `TList<TX>` / `TObjectList<TX>` field and a property read through a method accessor, each only
+  when every use is on a closed whitelist; the refusal names the first site that is not),
+  `blocked-symbol` (a declaration the move needs cannot move: a
   routine, a class whose method bodies use the cycle, an unrecognised declaration block),
   `directive` (a conditional compiler directive inside an edited region; `{$REGION}`,
   `{$ENDREGION}`, `{$WARN}`, `{$HINTS}` and `{$MESSAGE}` inside a uses clause are kept byte for
