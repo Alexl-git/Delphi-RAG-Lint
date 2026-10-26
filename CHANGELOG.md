@@ -88,6 +88,10 @@ breaking changes** until v1.0.
   names an alias. `run_docs_sync_guard.ps1` retires exemption class (b) and fails if an alias is
   exempted. `run_json_error_stdout.ps1` covers the five readers above.
 
+### Fixed
+- X-10: resolve-dbs --in <file> prints a stderr NOTE when the config covers the file but none of the resolved index files exists yet (index not built); stdout and exit code unchanged.
+- X-13: the generated DRagLint.CLI.HelpText.pas no longer carries length-bound dl:ok method-too-long@hash markers (they went stale on every regeneration); the file is excluded in drag-lint-lint.json.
+
 ## v1.35.0-alpha -- 2026-10-25
 
 The X batch on top of v1.34.1-alpha: five lanes (X1, X2, X4, X5, X6) on ONE extractor bump
