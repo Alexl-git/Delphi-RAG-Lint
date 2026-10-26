@@ -96,6 +96,26 @@ type
 function tree_sitter_delphi13: PTSLanguage; cdecl;
 external 'tree-sitter-delphi13';
 
+type
+  /// <summary>X4: one SCOPEDENUMS switch met in a scanned text.</summary>
+  /// <remarks>Offset is the byte offset of the directive's opening bracket;
+  /// IsOn is the state it sets. E14 exported it so the indexer can carry a
+  /// switch written inside an include file into the host.</remarks>
+  TScopedEnumSwitch = record
+    /// <summary>Byte offset of the directive's opening bracket.</summary>
+    Offset: Integer;
+    /// <summary>True for ON, False for OFF.</summary>
+    IsOn  : Boolean;
+  end;
+
+/// <summary>Every SCOPEDENUMS ON/OFF switch in ASource, in source order.</summary>
+/// <param name="ASource">Preprocessed bytes (an inactive branch is already
+/// blanked); a host file or an include's TPPIncludeSite.Resolved.</param>
+/// <returns>The switches; empty when none. String literals and comments that
+/// are not directives are skipped.</returns>
+/// <remarks>Pure; thread-safe. X4, exported for E14.</remarks>
+function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;
+
 implementation
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
@@ -129,14 +149,6 @@ begin
   end;
 end;
 
-type
-  { X4: one SCOPEDENUMS switch met in the parsed text. Offset is the byte
-    offset of the directive's opening bracket; IsOn is the state it sets. }
-  TScopedEnumSwitch = record
-    Offset: Integer;
-    IsOn  : Boolean;
-  end;
-
 { X4 (INBOX-new-rules A3): every SCOPEDENUMS ON/OFF switch in ASource, in
   source order. ASource is the text the parser sees -- the PREPROCESSED bytes
   when the indexer preprocesses, where an unknown dollar-directive in an
@@ -144,8 +156,9 @@ type
   only switches the compiler would honour are found. String literals, line
   comments and brace / paren-star comments that are not directives are
   skipped, so commented-out text never counts. A switch inside an INCLUDE file
-  is not seen (the include body is not in ASource): the enum then reads as
-  unscoped, the absence-over-wrong direction for the rule that consumes it.
+  is not seen HERE (the include body is not in ASource); since E14 the indexer
+  scans each active include's own bytes with this same function and re-derives
+  the fact (DRagLint.Index.IncludeUses.ApplyIncludeScopedEnums).
   Directive bytes are named constants; this comment deliberately writes no
   bare bracket so the directive lexer never mistakes it for one. }
 function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;

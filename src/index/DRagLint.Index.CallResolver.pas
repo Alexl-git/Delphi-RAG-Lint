@@ -1518,7 +1518,7 @@ type
     /// StartCol and EnclosingSymbolId are consulted.</param>
     /// <param name="AReason">OUT: '' when the ref bound OR when its name is not
     /// an enum-value name at all; otherwise the decline reason --
-    /// 'with-member' | 'not-visible' | 'ambiguous' | 'shadowed'.</param>
+    /// 'with-member' | 'scoped' | 'not-visible' | 'ambiguous' | 'shadowed'.</param>
     /// <returns>The enum_value symbol id, or 0 for every decline.</returns>
     /// <remarks>
     /// READS NO SOURCE LINE for the value rules themselves: R1-R4 are a pure
@@ -1530,6 +1530,11 @@ type
     /// in EnumStats.WithUndecided: an enum value almost never collides with a
     /// library object's member, and enum-read-inside-with -- which reads the
     /// library index too -- reports the collisions that do exist.
+    ///
+    /// E14: a value of an enum declared under SCOPEDENUMS ON (the X4 fact,
+    /// TEnumValueDecl.Scoped) is never a candidate for the bare form. When the
+    /// only R1-visible candidates are such values the pass declines 'scoped'
+    /// (EnumStats.Scoped), so a same-named const or var can bind instead.
     ///
     /// Not counted as a decline when the name matches no enum value: the store's
     /// candidate SQL already filtered the stream to enum-value names, so such a
@@ -3125,7 +3130,7 @@ begin
   end;
 end;
 
-function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@d157 -- REVIEWED 2026-09-23: each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
+function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@b863 -- REVIEWED 2026-10-26 (E14 added the scoped exit; first reviewed 2026-09-23): each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), scoped (E14), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
 
   { R1: a value declared in AFileId / ASection is visible from ARef's file when
     it is the SAME file (both sections of one's own unit are in scope), or it is
@@ -3221,6 +3226,7 @@ begin
     type or a descendant of it; treating such a value as unit-scoped is how a
     bare identifier binds to a declaration the compiler would not have seen. }
   Visible:= nil;
+  var ScopedOnly: Boolean:= False;
   for var C: TEnumValueDecl in Cands do
   begin
     if not VisibleHere(C.FileId, C.Section) then Continue;
@@ -3237,6 +3243,13 @@ begin
       if not OwnerOk then Continue;
     end;
     if (C.OwnerRoutineId > 0) and not RoutineOnChain(C.OwnerRoutineId) then Continue;
+    { E14: a value of a SCOPEDENUMS enum is in scope here but not under its BARE
+      name -- only TEnum.Value reaches it -- so it is no candidate at all. }
+    if C.Scoped then
+    begin
+      ScopedOnly:= True;
+      Continue;
+    end;
     Visible:= Visible + [C];
   end;
   { A routine-local value in scope is NEARER than any unit-level one of the
@@ -3257,6 +3270,12 @@ begin
     and would otherwise be indistinguishable from the totals. Delphi settles a
     tie between two used units by uses-clause ORDER; this engine does not model
     that order and must not pretend to. }
+  if (Length(Visible) = 0) and ScopedOnly then
+  begin
+    AReason:= 'scoped';
+    Inc(FEnumStats.Scoped);
+    Exit;
+  end;
   if Length(Visible) = 0 then
   begin
     AReason:= 'not-visible';
@@ -3878,7 +3897,7 @@ begin
   if not Result and FNameToCands.TryGetValue(ALc, L) then
     for S in L do Result:= Result or Visible(S.FileId, S.Section);
   if not Result and FNameToEnumValues.TryGetValue(ALc, E) then
-    for V in E do Result:= Result or Visible(V.FileId, V.Section);
+    for V in E do Result:= Result or (not V.Scoped and Visible(V.FileId, V.Section));  { E14: a scoped value shadows nothing }
 end;
 
 function TCallResolver.UnitLevelValueVisible(ARefFileId: Int64; const ALc: string): Boolean;
@@ -5726,6 +5745,7 @@ begin
         InUnit:= nil;
         for C in Enums do
           if (C.FileId = UnitFile) and (C.OwnerRoutineId = 0)   { W5-ext: a routine-local value has no Unit.value form }
+             and not C.Scoped                                   { E14: nor has a scoped one -- only Unit.TEnum.Value }
              and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
             InUnit:= InUnit + [C];
         InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
@@ -5882,7 +5902,7 @@ function TCallResolver.UnitScopeWriteTarget(ARefFileId: Int64; const ALc: string
         if OnRung(ARung, S.FileId, S.Section) then Inc(Result);
     if FNameToEnumValues.TryGetValue(ALc, E) then
       for V in E do
-        if OnRung(ARung, V.FileId, V.Section) then Inc(Result);
+        if not V.Scoped and OnRung(ARung, V.FileId, V.Section) then Inc(Result);  { E14: a scoped value competes with nothing }
   end;
 
 var
