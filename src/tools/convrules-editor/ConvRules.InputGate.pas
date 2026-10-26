@@ -79,6 +79,24 @@ function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 /// by itself (a Convert edits units in place).</remarks>
 function GateVerdict(AMsg: Cardinal; ABusy, ATargetInMainForm: Boolean): TGateVerdict;
 
+/// <summary>PURE: whether a window class is a selection or navigation control, where a
+/// left press picks a row or moves a caret and never runs a command (R6).</summary>
+/// <param name="AWndClass">The Win32 class name of the press target (GetClassName); '' = unknown.</param>
+/// <returns>True for the list box, list view, tree view, combo box and edit classes
+/// (case-insensitive); False for anything else, so an unknown target stays a command.</returns>
+function IsSelectionClass(const AWndClass: string): Boolean;
+
+/// <summary>PURE: GateVerdict refined by what the press landed on (R6).</summary>
+/// <param name="AMsg">The message number (TMsg.message).</param>
+/// <param name="ABusy">EditorBusy now.</param>
+/// <param name="ATargetInMainForm">As for GateVerdict.</param>
+/// <param name="AWndClass">The Win32 class name of the message's window; '' = unknown.</param>
+/// <returns>GateVerdict's answer, except a left press or double-click on a selection
+/// control (IsSelectionClass) is gvDrop, not gvRefuse: swallowed quietly, no red notice.
+/// BM_CLICK and WM_COMMAND stay gvRefuse whatever the class.</returns>
+/// <remarks>Report commands, not selections: a swallowed selection loses nothing the user
+/// must repeat deliberately, and a red error for it reads as a failure.</remarks>
+function GateVerdictFor(AMsg: Cardinal; ABusy, ATargetInMainForm: Boolean; const AWndClass: string): TGateVerdict;
 /// <summary>PURE: the name a refused command is reported by.</summary>
 /// <param name="ACaption">The button's or menu item's caption, e.g. '&amp;Add...'.</param>
 /// <returns>The caption without its hotkey ampersands ('&amp;&amp;' stays one '&amp;') and
@@ -111,11 +129,13 @@ implementation
 
 uses
   System.SysUtils
+  , System.StrUtils
   , ConvRules.ConvertRun
   ;
 
 const
   ELLIPSIS        = '...';
+  SELECTION_CLASSES: array[0..4] of string = ('ListBox', 'SysListView32', 'SysTreeView32', 'ComboBox', 'Edit');
   STATUS_JOIN     = ' | '; // ConvertRun's own join, which its implementation keeps private
 
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
@@ -139,6 +159,18 @@ begin
     Result:= gvDrop;
 end;
 
+function IsSelectionClass(const AWndClass: string): Boolean;
+begin
+  Result:= MatchText(AWndClass, SELECTION_CLASSES);
+end;
+
+function GateVerdictFor(AMsg: Cardinal; ABusy, ATargetInMainForm: Boolean; const AWndClass: string): TGateVerdict;
+begin
+  Result:= GateVerdict(AMsg, ABusy, ATargetInMainForm);
+  if (Result = gvRefuse) and ((AMsg = GATE_WM_LBUTTONDOWN) or (AMsg = GATE_WM_LBUTTONDBLCLK))
+    and IsSelectionClass(AWndClass) then
+    Result:= gvDrop;
+end;
 function CommandName(const ACaption: string): string;
 begin
   // '&&' is a literal '&': parked on #0 while the hotkey markers go.

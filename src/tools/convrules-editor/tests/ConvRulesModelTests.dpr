@@ -15359,6 +15359,17 @@ begin
     '(Cancel and Esc on the progress window, a message box, the Open dialog)');
   Check('gate.idle.passes', (GateVerdict(BM_CLICK, False, True) = gvPass) and (GateVerdict(WM_COMMAND, False, True) = gvPass)
     and (GateVerdict(WM_KEYDOWN, False, True) = gvPass));
+  // R6: a left press on a selection control is swallowed quietly; a command still reported.
+  Check('gate.sel.listbox.dropped', GateVerdictFor(WM_LBUTTONDOWN, True, True, 'ListBox') = gvDrop, 'a list selection is not a command');
+  Check('gate.sel.dblclk.dropped', (GateVerdictFor(WM_LBUTTONDBLCLK, True, True, 'SysListView32') = gvDrop)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'SysTreeView32') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'ComboBox') = gvDrop));
+  Check('gate.sel.button.refused', (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'Button') = gvRefuse)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, '') = gvRefuse), 'unknown target stays a command');
+  Check('gate.sel.command.refused', (GateVerdictFor(BM_CLICK, True, True, 'ListBox') = gvRefuse)
+    and (GateVerdictFor(WM_COMMAND, True, True, 'ListBox') = gvRefuse), 'only the press is softened');
+  Check('gate.sel.idle.passes', (GateVerdictFor(WM_LBUTTONDOWN, False, True, 'ListBox') = gvPass)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, False, 'ListBox') = gvPass));
+  Check('gate.sel.class', IsSelectionClass('listbox') and not IsSelectionClass('Button') and not IsSelectionClass(''));
   Check('gate.name.add', CommandName('&Add...') = 'Add', CommandName('&Add...'));
   Check('gate.name.amp', CommandName('Save && close') = 'Save & close', CommandName('Save && close'));
   Check('gate.name.plain', CommandName('Delete') = 'Delete', CommandName('Delete'));

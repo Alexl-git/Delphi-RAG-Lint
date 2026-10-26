@@ -6676,7 +6676,8 @@ begin
     Exit;
   var LBusy: Boolean:= EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass);
   var LInMain: Boolean:= (Msg.hwnd <> 0) and (GetAncestor(Msg.hwnd, GA_ROOT) = Handle);
-  var LVerdict: TGateVerdict:= GateVerdict(Msg.message, LBusy, LInMain);
+  var LClass: array[0..63] of Char;
+  var LVerdict: TGateVerdict:= GateVerdictFor(Msg.message, LBusy, LInMain, if (Msg.hwnd <> 0) and (GetClassName(Msg.hwnd, LClass, Length(LClass)) > 0) then string(PChar(@LClass)) else '');
   if LVerdict = gvPass then
     Exit;
   Handled:= True;
