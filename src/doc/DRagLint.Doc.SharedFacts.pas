@@ -1397,6 +1397,15 @@ begin
   end;
 end;
 
+{ Both stored-only exemptions BlockDrifted applies before comparing: the
+  legacy purity line and the `Used in classes:` line. One call there, so
+  TSharedFacts' response set stays inside the high-response limit. }
+procedure WithoutStoredOnlyFacts(var AStored, AFresh: string);
+begin
+  WithoutLegacyPure(AStored, AFresh);
+  WithoutUsedInClasses(AStored);
+end;
+
 { X-24: the entries of the stored `Used in classes:` line (flattened block
   body), or none. Bounded like any fact: FactContentEnd stops a wrapped fact at
   its '</para>' and an unwrapped one at the next registered label. }
@@ -1520,9 +1529,8 @@ begin
     blocks this calls current. `document --migrate-pure` turns both off. }
   StoredCmp:= AStored;
   FreshCmp := AFresh;
-  WithoutLegacyPure(StoredCmp, FreshCmp);
-  { X-24: the stored-only `Used in classes:` line is never drift on its own. }
-  WithoutUsedInClasses(StoredCmp);
+  { X-24: so is the stored-only `Used in classes:` line (WithoutStoredOnlyFacts). }
+  WithoutStoredOnlyFacts(StoredCmp, FreshCmp);
 
   { A DUPLICATED INBOUND LABEL CANNOT BE SET-COMPARED, so it keeps the byte
     compare -- the fail-safe direction this unit's header requires ("if a block
