@@ -30577,8 +30577,20 @@ begin
       capture stdout as paths -- so the explanation goes to stderr. }
     if Length(Paths) = 0 then
       Writeln(ErrOutput, Format('NOTE: no index covers %s -- no manifest section includes it or its folder. ' +
-        'Add its project with: drag-lint register-project <file.dproj> --apply', [AArgs.InFile]));
-
+        'Add its project with: drag-lint register-project <file.dproj> --apply', [AArgs.InFile]))
+    else
+    begin
+      { X-10: the config names a root that covers the file, but none of the DB
+        files it resolved to exist yet -- the index was never built (or was
+        deleted). The path is still printed (scripts capture stdout; a later
+        index run creates it); the NOTE says why a query on it will find nothing. }
+      var AnyBuilt: Boolean:= False;
+      for P in Paths do
+        if TFile.Exists(P) then AnyBuilt:= True;
+      if not AnyBuilt then
+        Writeln(ErrOutput, Format('NOTE: the config covers %s but its index is not built: %s does not exist. ' +
+          'Build it with: drag-lint index --all --only <section>', [AArgs.InFile, Paths[0]]));
+    end;
     if AArgs.AsJson then
     begin
       J:= TJSONArray.Create;
