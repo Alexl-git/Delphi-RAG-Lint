@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "compare",
       "example": "drag-lint compare --in U.pas --line 120",
-      "usage": "drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]",
+      "usage": "drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>] [--out-root <dir>]",
       "flags": [
         {
           "name": "--old",
