@@ -12,6 +12,7 @@ uses
   , System.StrUtils
   , System.IOUtils
   , System.RegularExpressions
+  , Winapi.Windows
   , FeatureGen.Json in 'FeatureGen.Json.pas'
   , FeatureGen.Model in 'FeatureGen.Model.pas'
   , FeatureGen.Output in 'FeatureGen.Output.pas'
@@ -439,49 +440,64 @@ begin
   end;
 end;
 
+{ The words of the command line by the C runtime rules (SplitCommandLine): System.ParamStr turns \" into \, so a
+  --set value with quotes passed from bash or PowerShell arrived mangled. }
+function ArgCount: Integer;
+begin
+  Result := Length(SplitCommandLine(GetCommandLine)) - 1;
+end;
+
+function Arg(pIndex: Integer): string;
+var
+  lAll: TArray<string>;
+begin
+  lAll := SplitCommandLine(GetCommandLine);
+  Result := (if pIndex < Length(lAll) then lAll[pIndex] else '');
+end;
+
 var
   lArgs: TArray<string>;
   lI: Integer;
 begin
-  if (ParamCount >= 1) and ((ParamStr(1) = '--help') or (ParamStr(1) = '-h')) then
+  if (ArgCount >= 1) and ((Arg(1) = '--help') or (Arg(1) = '-h')) then
   begin
     PrintUsage;
     ExitCode := 0;
   end
-  else if (ParamCount >= 1) and (ParamStr(1) = 'dump-live') then
+  else if (ArgCount >= 1) and (Arg(1) = 'dump-live') then
   begin
-    SetLength(lArgs, ParamCount - 1);
-    for lI := 2 to ParamCount do
-      lArgs[lI - 2] := ParamStr(lI);
+    SetLength(lArgs, ArgCount - 1);
+    for lI := 2 to ArgCount do
+      lArgs[lI - 2] := Arg(lI);
     ExitCode := DumpLiveCommand(lArgs);
   end
-  else if (ParamCount >= 1) and (ParamStr(1) = 'build') then
+  else if (ArgCount >= 1) and (Arg(1) = 'build') then
   begin
-    SetLength(lArgs, ParamCount - 1);
-    for lI := 2 to ParamCount do
-      lArgs[lI - 2] := ParamStr(lI);
+    SetLength(lArgs, ArgCount - 1);
+    for lI := 2 to ArgCount do
+      lArgs[lI - 2] := Arg(lI);
     ExitCode := BuildSiteCommand(lArgs);
   end
-  else if (ParamCount >= 1) and (ParamStr(1) = 'import-help') then
+  else if (ArgCount >= 1) and (Arg(1) = 'import-help') then
   begin
-    SetLength(lArgs, ParamCount - 1);
-    for lI := 2 to ParamCount do
-      lArgs[lI - 2] := ParamStr(lI);
+    SetLength(lArgs, ArgCount - 1);
+    for lI := 2 to ArgCount do
+      lArgs[lI - 2] := Arg(lI);
     ExitCode := ImportHelpCommand(lArgs);
   end
-  else if (ParamCount >= 1) and (ParamStr(1) = 'check') then
+  else if (ArgCount >= 1) and (Arg(1) = 'check') then
   begin
-    SetLength(lArgs, ParamCount - 1);
-    for lI := 2 to ParamCount do
-      lArgs[lI - 2] := ParamStr(lI);
+    SetLength(lArgs, ArgCount - 1);
+    for lI := 2 to ArgCount do
+      lArgs[lI - 2] := Arg(lI);
     ExitCode := CheckCommand(lArgs);
   end
-  else if (ParamCount >= 1) and IsRegistryVerb(ParamStr(1)) then
+  else if (ArgCount >= 1) and IsRegistryVerb(Arg(1)) then
   begin
-    SetLength(lArgs, ParamCount - 1);
-    for lI := 2 to ParamCount do
-      lArgs[lI - 2] := ParamStr(lI);
-    ExitCode := RunRegistryCommand(ParamStr(1), lArgs, (if FindRepo(GetCurrentDir) <> '' then FindRepo(GetCurrentDir) else FindRepo(ExtractFilePath(ParamStr(0)))),
+    SetLength(lArgs, ArgCount - 1);
+    for lI := 2 to ArgCount do
+      lArgs[lI - 2] := Arg(lI);
+    ExitCode := RunRegistryCommand(Arg(1), lArgs, (if FindRepo(GetCurrentDir) <> '' then FindRepo(GetCurrentDir) else FindRepo(ExtractFilePath(Arg(0)))),
       procedure(const pLine: string)
       begin
         Writeln(pLine);
