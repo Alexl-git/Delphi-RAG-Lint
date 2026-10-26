@@ -101,6 +101,7 @@
   "convert-validate": "convert-validate",
   "convrules-editor": "convrules-editor",
   "convrules-editor-convert-progress": "convrules-convert-progress",
+  "convrules-editor-encoding": "convrules-encoding",
   "convrules-editor-migrate": "convrules-migrate-members",
   "convrules-editor-qualify-fix": "convrules-qualify-fix",
   "convrules-editor-reindex-project": "convrules-reindex-project",

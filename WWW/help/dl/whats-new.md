@@ -11,6 +11,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.35.0-alpha
 
+* [Rule book and source encoding](features/convrules-encoding.md) -- ConvRulesEditor keeps each rule book's encoding (ASCII-7 to UTF-16 BOM), asks before a lossy save, and raises a refused source to UTF-8 with BOM on a yes.
 * [Member migration (#migrate)](features/convrules-migrate-members.md) -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE into a #convert block from a Work list row or the block's Members list.
 
 ## 1.33.0-alpha

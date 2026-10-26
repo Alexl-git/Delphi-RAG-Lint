@@ -4,7 +4,7 @@ title: proptree
 summary: "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties"
 product: DL
 group: component-conversion
-order: 60012
+order: 60013
 since: 1.1.0-alpha
 status: shipped
 updated: 1.35.0-alpha

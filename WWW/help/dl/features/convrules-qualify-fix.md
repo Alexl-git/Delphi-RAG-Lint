@@ -4,7 +4,7 @@ title: "Qualify #convert quick fix"
 summary: "ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book"
 product: DL
 group: component-conversion
-order: 60008
+order: 60009
 since: 1.31.5-alpha
 status: shipped
 updated: 1.35.0-alpha

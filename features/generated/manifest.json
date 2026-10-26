@@ -5968,7 +5968,8 @@
       "title": "Rule book and source encoding",
       "group": "component-conversion",
       "owner": "CONVERTER",
-      "status": "planned",
+      "status": "shipped",
+      "since": "1.35.0-alpha",
       "summary": "ConvRulesEditor keeps each rule book's encoding (ASCII-7 to UTF-16 BOM), asks before a lossy save, and raises a refused source to UTF-8 with BOM on a yes",
       "intro": "Work with non-ASCII captions and names without the editor turning them into question marks.",
       "wikiPage": "convrules-editor-encoding",
@@ -6005,9 +6006,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-25",
+        "date": "2026-10-26",
         "by": "CONVERTER",
-        "build": "1.34.1-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "e307c21a37217ea3f4dc7b8b4dc62d13e21d90e4075f967e1b734f58770de358"
       }
     },

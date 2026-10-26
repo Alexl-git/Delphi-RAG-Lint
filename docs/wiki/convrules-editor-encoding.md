@@ -27,7 +27,7 @@ nothing and leaves no stray backup. A book that is never given such characters
 never sees the question.
 
 UTF-16 is always saved with a BOM: the engine cannot read UTF-16 without one. The
-status line says so once per session.
+status line says so once per open book.
 
 ## Save As and File > Encoding
 **File > Encoding** lists ASCII-7, ASCII-8 (ANSI), UTF-8, UTF-8 with BOM and
@@ -35,18 +35,20 @@ UTF-16 with BOM as radio items; the checked one is what Save and Save As write
 (the question above still applies). There is no plain UTF-16 item.
 
 ## The Convert tab
-Two questions, both asked before the unit or book is touched:
+Two questions. Neither changes a file without your Yes:
 
-* **Raise a source** -- when the engine refuses a unit because a character the
-  rules write does not fit the `.pas` / `.dfm` encoding, the tab asks: Yes raises
+* **Raise a source** -- asked after the run. When the engine has refused a unit
+  because a character the rules write does not fit the `.pas` / `.dfm` encoding
+  (the refused unit is left unchanged), the tab asks: Yes raises
   that file to UTF-8 with BOM and converts the unit again (all its books are
   applied again, because a refused unit is restored unchanged); No skips this unit;
   Cancel skips all remaining. This needs an engine that reports the
   `convert_encoding_guard` capability.
-* **Lower a book** -- when a book is saved at a higher level than its text needs
-  (for example UTF-16 with only ASCII text), the tab offers to lower it before
-  converting, as a normal Save with a backup. Yes lowers, No keeps it. Each book
-  is asked once per session.
+* **Lower a book** -- asked before the run, for UTF-16 books only. When a UTF-16
+  book's text fits a lower level (for example only ASCII text), the tab offers to
+  lower it before converting, as a normal Save with a backup. Yes lowers, No keeps
+  it. ASCII-8 is never offered (it is code-page bound): text that needs more than
+  ASCII-7 is offered UTF-8. Each book is asked once per session.
 
 ## What is never done silently
 * No character is replaced by `?` without the Save question.

@@ -141,6 +141,7 @@ Rule-driven migration of legacy component types.
 | [convert-validate](features/convert-validate.md) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees | 1.1.0-alpha |
 | [Convert progress](features/convrules-convert-progress.md) | ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab | 1.26.7-alpha |
 | [ConvRulesEditor](features/convrules-editor.md) | Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27) | 0.0.0 |
+| [Rule book and source encoding](features/convrules-encoding.md) | ConvRulesEditor keeps each rule book's encoding (ASCII-7 to UTF-16 BOM), asks before a lossy save, and raises a refused source to UTF-8 with BOM on a yes | 1.35.0-alpha |
 | [Member migration (#migrate)](features/convrules-migrate-members.md) | ConvRulesEditor: write #migrate Old -> New or -> DL_NONE into a #convert block from a Work list row or the block's Members list | 1.35.0-alpha |
 | [Qualify #convert quick fix](features/convrules-qualify-fix.md) | ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book | 1.31.5-alpha |
 | [Reindex project](features/convrules-reindex-project.md) | ConvRulesEditor command: incremental index --project of the editor's project index, cancellable | 1.26.7-alpha |

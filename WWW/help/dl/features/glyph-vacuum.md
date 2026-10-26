@@ -4,7 +4,7 @@ title: glyph-vacuum
 summary: Measure every streamed glyph or picture under a tree before writing a glyph rule
 product: DL
 group: component-conversion
-order: 60011
+order: 60012
 since: 1.15.0-alpha
 status: shipped
 updated: 1.35.0-alpha
