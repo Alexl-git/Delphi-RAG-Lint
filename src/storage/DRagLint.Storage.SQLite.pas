@@ -3682,7 +3682,7 @@ begin
         QA.ExecSQL;
       end;
       FConn.Commit;
-    except
+    except // dl:ok bare-except@4bef -- rollback and RE-RAISE: nothing is swallowed, any failure must undo the wipe
       FConn.Rollback;
       raise;
     end;

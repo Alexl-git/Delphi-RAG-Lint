@@ -2599,8 +2599,8 @@ const
     'unit', 'program', 'package', 'class', 'interface', 'record', 'enum', 'enum_value', 'procedure', 'function', 'method', 'constructor', 'destructor', 'property', 'field', 'var',
     'const', 'type', 'form', 'component', 'sql_table', 'sql_column', 'sql_index', 'sql_trigger', 'sql_generator', 'sql_procedure', 'sql_view', 'sql_exception', 'sql_domain',
     'sql_constraint', 'initialization', 'finalization',
-    'local_var', 'param',    // v14 (D5)
-    'classref');             // 1.25.0 extractor (E1)
+    'local_var', 'param',
+    'classref');   // v14 (D5): local_var, param; 1.25.0 extractor (E1): classref
 
 function TSymbolKindHelper.ToText: string;
 begin

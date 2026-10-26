@@ -64,7 +64,7 @@ type
   /// <summary>Builds dispatch_edges and classref_args in memory from one index.</summary>
   /// <remarks>Maps are built once per Run. Not thread-safe. Owns nothing it
   /// is given; AConn and AStore must outlive the instance.</remarks>
-  TDispatchResolver = class
+  TDispatchResolver = class  // dl:ok high-response@cc6c -- the response set is the FireDAC/dictionary calls of three passes sharing one set of maps; splitting would rebuild the maps per pass
   strict private
     type
       TMeth = record
@@ -196,24 +196,28 @@ begin
   FMethods.Free;
   FGenericOf.Free;
   FKindOf.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TDispatchResolver.LoadTypes;
 var
-  Q   : TFDQuery;
-  M   : TMeth;
-  List: TList<TMeth>;
+  Q    : TFDQuery;
+  M    : TMeth;
+  List : TList<TMeth>;
+  FldId, FldKind, FldGen, FldPar, FldName, FldSig, FldVirt, FldDir, FldOrd, FldAnc: TField;
 begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT id, kind, generic_params FROM symbols WHERE kind IN (''class'', ''interface'')';
     Q.Open;
+    FldId  := Q.FieldByName('id');
+    FldKind:= Q.FieldByName('kind');
+    FldGen := Q.FieldByName('generic_params');
     while not Q.Eof do
     begin
-      FKindOf.AddOrSetValue(Q.Fields[0].AsLargeInt, Q.Fields[1].AsString);
-      if Q.Fields[1].AsString = 'interface' then FGenericOf.AddOrSetValue(Q.Fields[0].AsLargeInt, Trim(Q.Fields[2].AsString) <> '');
+      FKindOf.AddOrSetValue(FldId.AsLargeInt, FldKind.AsString);
+      if FldKind.AsString = 'interface' then FGenericOf.AddOrSetValue(FldId.AsLargeInt, Trim(FldGen.AsString) <> '');
       Q.Next;
     end;
     Q.Close;
@@ -223,17 +227,23 @@ begin
       'WHERE p.kind IN (''class'', ''interface'') ' +
       'AND s.kind IN (''method'', ''procedure'', ''function'', ''constructor'', ''destructor'') ORDER BY s.id';
     Q.Open;
+    FldId  := Q.FieldByName('id');
+    FldPar := Q.FieldByName('parent_id');
+    FldName:= Q.FieldByName('name');
+    FldSig := Q.FieldByName('signature');
+    FldVirt:= Q.FieldByName('is_virtual');
+    FldDir := Q.FieldByName('directives');
     while not Q.Eof do
     begin
-      M.Id       := Q.Fields[0].AsLargeInt;
-      M.Name     := LowerCase(Q.Fields[2].AsString);
-      M.Signature:= Q.Fields[3].AsString;
-      M.IsVirtual:= Q.Fields[4].AsInteger = 1;
-      M.Override_:= ContainsText(' ' + Q.Fields[5].AsString + ' ', ' override ');
-      if not FMethods.TryGetValue(Q.Fields[1].AsLargeInt, List) then
+      M.Id       := FldId.AsLargeInt;
+      M.Name     := LowerCase(FldName.AsString);
+      M.Signature:= FldSig.AsString;
+      M.IsVirtual:= FldVirt.AsInteger = 1;
+      M.Override_:= ContainsText(' ' + FldDir.AsString + ' ', ' override ');
+      if not FMethods.TryGetValue(FldPar.AsLargeInt, List) then
       begin
         List:= TList<TMeth>.Create;
-        FMethods.Add(Q.Fields[1].AsLargeInt, List);
+        FMethods.Add(FldPar.AsLargeInt, List);
       end;
       List.Add(M);
       Q.Next;
@@ -245,15 +255,18 @@ begin
       interface, whatever its ordinal. }
     Q.SQL.Text:= 'SELECT symbol_id, ordinal, ancestor_symbol_id FROM type_ancestors ORDER BY symbol_id, ordinal';
     Q.Open;
+    FldId  := Q.FieldByName('symbol_id');
+    FldOrd := Q.FieldByName('ordinal');
+    FldAnc := Q.FieldByName('ancestor_symbol_id');
     while not Q.Eof do
     begin
-      var Sym:= Q.Fields[0].AsLargeInt;
-      var Anc:= if Q.Fields[2].IsNull then Int64(0) else Q.Fields[2].AsLargeInt;
+      var Sym:= FldId.AsLargeInt;
+      var Anc:= if FldAnc.IsNull then Int64(0) else FldAnc.AsLargeInt;
       var SymKind, AncKind: string;
       if FKindOf.TryGetValue(Sym, SymKind) then
       begin
         if not FKindOf.TryGetValue(Anc, AncKind) then AncKind:= '';
-        if (Q.Fields[1].AsInteger = 0) and (SymKind = 'class') and (AncKind <> 'interface') then
+        if (FldOrd.AsInteger = 0) and (SymKind = 'class') and (AncKind <> 'interface') then
           FParentOf.AddOrSetValue(Sym, Anc);
         if AncKind = 'interface' then
         begin
@@ -275,22 +288,26 @@ end;
 
 procedure TDispatchResolver.LoadUses;
 var
-  Q: TFDQuery;
-  D: TDictionary<Int64, Boolean>;
+  Q    : TFDQuery;
+  D    : TDictionary<Int64, Boolean>;
+  FldFile: TField;
+  FldTgt : TField;
 begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT DISTINCT file_id, target_file_id FROM unit_uses WHERE target_file_id IS NOT NULL';
     Q.Open;
+    FldFile:= Q.FieldByName('file_id');
+    FldTgt := Q.FieldByName('target_file_id');
     while not Q.Eof do
     begin
-      if not FUsedFiles.TryGetValue(Q.Fields[0].AsLargeInt, D) then
+      if not FUsedFiles.TryGetValue(FldFile.AsLargeInt, D) then
       begin
         D:= TDictionary<Int64, Boolean>.Create;
-        FUsedFiles.Add(Q.Fields[0].AsLargeInt, D);
+        FUsedFiles.Add(FldFile.AsLargeInt, D);
       end;
-      D.AddOrSetValue(Q.Fields[1].AsLargeInt, True);
+      D.AddOrSetValue(FldTgt.AsLargeInt, True);
       Q.Next;
     end;
   finally
@@ -306,9 +323,17 @@ begin
   { An empty signature is a parameterless routine: arity 0..0. A signature
     SignatureArityRange cannot shape does not filter (same rule as CallResolver). }
   BKnown:= (Trim(ABaseSig) = '') or SignatureArityRange(ABaseSig, BMin, BMax);
-  if Trim(ABaseSig) = '' then begin BMin:= 0; BMax:= 0; end;
+  if Trim(ABaseSig) = '' then
+  begin
+    BMin:= 0;
+    BMax:= 0;
+  end;
   IKnown:= (Trim(AImplSig) = '') or SignatureArityRange(AImplSig, IMin, IMax);
-  if Trim(AImplSig) = '' then begin IMin:= 0; IMax:= 0; end;
+  if Trim(AImplSig) = '' then
+  begin
+    IMin:= 0;
+    IMax:= 0;
+  end;
   Result:= not (BKnown and IKnown) or ((BMin = IMin) and (BMax = IMax));
 end;
 
@@ -524,7 +549,7 @@ begin
       end;
       FLines.AddOrSetValue(AFileId, Result);
     end;
-  except
+  except // dl:ok try-except-swallowed@c7b1 -- not swallowed: the file is RECORDED stale and every site in it is counted (Stale)
     on E: EInOutError do FStaleFiles.AddOrSetValue(AFileId, True);
     on E: EFOpenError do FStaleFiles.AddOrSetValue(AFileId, True);
   end;
@@ -536,6 +561,8 @@ var
   Ids    : TList<Int64>;
   InScope: TList<Int64>;
   Used   : TDictionary<Int64, Boolean>;
+  FldId    : TField;
+  FldFile  : TField;
 begin
   Result:= 0;
   AConf := '';
@@ -548,11 +575,13 @@ begin
     Q.ParamByName('n').AsWideString:= AName;
     Q.Open;
     if not FUsedFiles.TryGetValue(ASiteFile, Used) then Used:= nil;
+    FldId  := Q.FieldByName('id');
+    FldFile:= Q.FieldByName('file_id');
     while not Q.Eof do
     begin
-      Ids.Add(Q.Fields[0].AsLargeInt);
-      if (Q.Fields[1].AsLargeInt = ASiteFile) or ((Used <> nil) and Used.ContainsKey(Q.Fields[1].AsLargeInt)) then
-        InScope.Add(Q.Fields[0].AsLargeInt);
+      Ids.Add(FldId.AsLargeInt);
+      if (FldFile.AsLargeInt = ASiteFile) or ((Used <> nil) and Used.ContainsKey(FldFile.AsLargeInt)) then
+        InScope.Add(FldId.AsLargeInt);
       Q.Next;
     end;
     if InScope.Count = 1 then
@@ -592,6 +621,7 @@ var
   Texts   : TArray<string>;
   A       : TClassRefArg;
   Conf    : string;
+  FldId, FldPar, FldSig, FldRef, FldFile, FldLine, FldCol, FldName: TField;
 begin
   Cache    := TDictionary<string, Boolean>.Create;
   ByRoutine:= TObjectDictionary<Int64, TList<TParamAt>>.Create([doOwnsValues]);
@@ -606,23 +636,26 @@ begin
       'WHERE p.kind = ''param'' AND p.parent_id IN (SELECT DISTINCT target_symbol_id FROM call_edges) ' +
       'ORDER BY p.parent_id, p.id';
     Q.Open;
+    FldId := Q.FieldByName('id');
+    FldPar:= Q.FieldByName('parent_id');
+    FldSig:= Q.FieldByName('signature');
     LastPar:= -1;
     Idx    := 0;
     while not Q.Eof do
     begin
-      if Q.Fields[1].AsLargeInt <> LastPar then
+      if FldPar.AsLargeInt <> LastPar then
       begin
-        LastPar:= Q.Fields[1].AsLargeInt;
+        LastPar:= FldPar.AsLargeInt;
         Idx    := 0;
       end;
-      if IsClassRefTypeName(Q.Fields[2].AsString, Cache) then
+      if IsClassRefTypeName(FldSig.AsString, Cache) then
       begin
         if not ByRoutine.TryGetValue(LastPar, PL) then
         begin
           PL:= TList<TParamAt>.Create;
           ByRoutine.Add(LastPar, PL);
         end;
-        PA.Id   := Q.Fields[0].AsLargeInt;
+        PA.Id   := FldId.AsLargeInt;
         PA.Index:= Idx;
         PL.Add(PA);
       end;
@@ -638,16 +671,21 @@ begin
     begin
       Q.ParamByName('t').AsLargeInt:= R.Key;
       Q.Open;
+      FldRef := Q.FieldByName('ref_id');
+      FldFile:= Q.FieldByName('file_id');
+      FldLine:= Q.FieldByName('start_line');
+      FldCol := Q.FieldByName('start_col');
+      FldName:= Q.FieldByName('name_text');
       while not Q.Eof do
       begin
-        var RefId := Q.Fields[0].AsLargeInt;
-        var FileId:= Q.Fields[1].AsLargeInt;
+        var RefId := FldRef.AsLargeInt;
+        var FileId:= FldFile.AsLargeInt;
         var Lines := LinesOf(FileId);
         if FStaleFiles.ContainsKey(FileId) then
           Inc(FCounters.Stale)
         else
         begin
-          Known:= LexCallArguments(Lines, Q.Fields[2].AsInteger, Q.Fields[3].AsInteger + Length(Q.Fields[4].AsString), Texts);
+          Known:= LexCallArguments(Lines, FldLine.AsInteger, FldCol.AsInteger + Length(FldName.AsString), Texts);
           if not Known then Inc(FCounters.Unread)
           else
             for PA in R.Value do

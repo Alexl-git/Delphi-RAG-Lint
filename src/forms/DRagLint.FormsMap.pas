@@ -1795,6 +1795,7 @@ var
   Cur  : Int64;
   Item : TDispatchCaller;
   Hops : Integer;
+  FldB, FldK, FldQ, FldE: TField;
 begin
   Result:= [];
   if not AStore.HasDispatchEdges then Exit;
@@ -1818,20 +1819,24 @@ begin
       Cur:= Todo.Dequeue;
       QB.ParamByName('i').AsLargeInt:= Cur;
       QB.Open;
+      FldB:= QB.FieldByName('b'); // dl:ok field-by-name-in-loop@da4d -- once per Open: the query is re-opened per base, and Open rebuilds its fields
+      FldK:= QB.FieldByName('k');
+      FldQ:= QB.FieldByName('q');
       while not QB.Eof do
       begin
-        var B:= QB.FieldByName('b').AsLargeInt;
+        var B:= FldB.AsLargeInt;
         if not Seen.ContainsKey(B) then
         begin
           Seen.Add(B, True);
           Todo.Enqueue(B);
-          Item.Note:= 'via ' + QB.FieldByName('q').AsString +
-            (if QB.FieldByName('k').AsString = 'implements' then ' (interface dispatch)' else ' (virtual dispatch)');
+          Item.Note:= 'via ' + FldQ.AsString +
+            (if FldK.AsString = 'implements' then ' (interface dispatch)' else ' (virtual dispatch)');
           QC.ParamByName('t').AsLargeInt:= B;
           QC.Open;
+          FldE:= QC.FieldByName('e');
           while not QC.Eof do
           begin
-            Item.Id:= QC.FieldByName('e').AsLargeInt;
+            Item.Id:= FldE.AsLargeInt;
             Result := Result + [Item];
             QC.Next;
           end;
@@ -2436,6 +2441,7 @@ var
   Site : TLaunchSite;
   Callee: TRoutineInfo;
   Lines: TArray<string>;
+  FldE, FldP, FldT: TField;
 begin
   if not AStore.HasDispatchEdges then Exit;
   Q   := TFDQuery.Create(nil);
@@ -2449,11 +2455,14 @@ begin
       'WHERE k.name = :cls COLLATE NOCASE AND r.enclosing_symbol_id IS NOT NULL';
     Q.ParamByName('cls').AsWideString:= AY.FormClass;
     Q.Open;
+    FldE:= Q.FieldByName('e');
+    FldP:= Q.FieldByName('pn');
+    FldT:= Q.FieldByName('t');
     while not Q.Eof do
     begin
-      var StartId:= Q.FieldByName('e').AsLargeInt;
-      var Param  := Q.FieldByName('pn').AsString;
-      Callee:= Routine(AStore, Q.FieldByName('t').AsLargeInt);
+      var StartId:= FldE.AsLargeInt;
+      var Param  := FldP.AsString;
+      Callee:= Routine(AStore, FldT.AsLargeInt);
       Q.Next;
       if (Callee.Id = 0) or (Callee.ImplStart < 1) or Seen.ContainsKey(StartId) then Continue;
       Lines:= Body(Callee);
