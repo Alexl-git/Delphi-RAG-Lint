@@ -251,13 +251,13 @@ function TryWindowHiddenCount(const AContent: string; out ACount: Integer): Bool
 /// marker pair) are never touched -- a label outside the fence is prose. A line
 /// nothing changed on is kept byte for byte. Pure: no I/O.
 /// v(1.20.5): works on LOGICAL fact lines -- a list the writer split over
-/// several `///` lines is read whole (TDocRegions.FoldFactLine), a changed one
-/// is written back through TDocRegions.WrapFactLine with its first line's line
+/// several `///` lines is read whole (FoldFactLine), a changed one
+/// is written back through WrapFactLine with its first line's line
 /// ending on every line it emits, and "deleted whole" means every physical
 /// line of it (LinesDropped still counts one).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoDocForget (DRagLint.CLI.pas)</para>
-/// <para>Calls: Default, DRagLint.Doc.ProjectTags.AddWrappedFact, DRagLint.Doc.ProjectTags.FenceCarriesTags, DRagLint.Doc.ProjectTags.ForgetEntry, DRagLint.Doc.ProjectTags.ParseFactLine, DRagLint.Doc.Regions.TDocRegions.FoldFactLine, EndsStr, Pos</para>
+/// <para>Calls: Default, DRagLint.Doc.ProjectTags.AddWrappedFact, DRagLint.Doc.ProjectTags.FenceCarriesTags, DRagLint.Doc.ProjectTags.ForgetEntry, DRagLint.Doc.ProjectTags.ParseFactLine, DRagLint.Doc.Regions.FoldFactLine, EndsStr, Pos</para>
 /// <para>Returns: string.Join(#10, Kept.ToArray)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 58 lines (full implementation)</para>
 /// <para>Mutates: AStats (out)</para>
@@ -265,7 +265,7 @@ function TryWindowHiddenCount(const AContent: string; out ACount: Integer): Bool
 /// <seealso cref="DRagLint.Doc.ProjectTags.FenceCarriesTags"/>
 /// <seealso cref="DRagLint.Doc.ProjectTags.ForgetEntry"/>
 /// <seealso cref="DRagLint.Doc.ProjectTags.ParseFactLine"/>
-/// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
+/// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ForgetTags(const AText: string; const AOptions: TDocForgetOptions;
@@ -284,12 +284,12 @@ function ForgetTags(const AText: string; const AOptions: TDocForgetOptions;
 /// lines of a wrapped list are listed too.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DocForgetListTags (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Doc.ProjectTags.FenceCarriesTags, DRagLint.Doc.ProjectTags.ParseFactLine, DRagLint.Doc.ProjectTags.SplitTagged, DRagLint.Doc.Regions.TDocRegions.FoldFactLine, Pos</para>
+/// <para>Calls: DRagLint.Doc.ProjectTags.FenceCarriesTags, DRagLint.Doc.ProjectTags.ParseFactLine, DRagLint.Doc.ProjectTags.SplitTagged, DRagLint.Doc.Regions.FoldFactLine, Pos</para>
 /// <para>Returns: L.ToArray</para>
 /// <seealso cref="DRagLint.Doc.ProjectTags.FenceCarriesTags"/>
 /// <seealso cref="DRagLint.Doc.ProjectTags.ParseFactLine"/>
 /// <seealso cref="DRagLint.Doc.ProjectTags.SplitTagged"/>
-/// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
+/// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ListTags(const AText: string): TArray<string>;
@@ -516,7 +516,7 @@ begin
 end;
 
 { Does the fence opening after line AFrom carry any tagged inbound entry?
-  v(1.20.5): reads LOGICAL fact lines (TDocRegions.FoldFactLine), so a tag on
+  v(1.20.5): reads LOGICAL fact lines (FoldFactLine), so a tag on
   the continuation line of a wrapped list counts. }
 function FenceCarriesTags(const ALines: TArray<string>; AFrom: Integer): Boolean;
 var
@@ -530,22 +530,22 @@ begin
   while I <= High(ALines) do
   begin
     if Pos(AUTO_END, ALines[I]) > 0 then Exit;
-    if ParseFactLine(TDocRegions.FoldFactLine(ALines, I, Last), Head, Entries, More, Tail, CR)
+    if ParseFactLine(FoldFactLine(ALines, I, Last), Head, Entries, More, Tail, CR)
        and AnyTagged(Entries) then Exit(True);
     I:= Last + 1;
   end;
 end;
 
 { v(1.20.5): appends ALogical to AKept as the physical lines
-  TDocRegions.WrapFactLine makes of it, each ending in ACR -- the line ending of
+  WrapFactLine makes of it, each ending in ACR -- the line ending of
   the fact's original first line, so a CRLF file gets no bare-LF line. }
 procedure AddWrappedFact(const AKept: TList<string>; const ALogical, ACR: string);
 var
   Prefix: string;
   S     : string;
 begin
-  Prefix:= TDocRegions.FactLinePrefix(ALogical);
-  for S in TDocRegions.WrapFactLine(Prefix, Copy(ALogical, Length(Prefix) + 1, MaxInt)) do
+  Prefix:= FactLinePrefix(ALogical);
+  for S in WrapFactLine(Prefix, Copy(ALogical, Length(Prefix) + 1, MaxInt)) do
     AKept.Add(S + ACR);
 end;
 
@@ -619,7 +619,7 @@ begin
         Tagged := FenceCarriesTags(Lines, I + 1);
       end
       else if Pos(AUTO_END, Lines[I]) > 0 then InFence:= False
-      else if InFence and ParseFactLine(TDocRegions.FoldFactLine(Lines, I, Last), Head, Entries, More, Tail, CR) then
+      else if InFence and ParseFactLine(FoldFactLine(Lines, I, Last), Head, Entries, More, Tail, CR) then
       begin
         Keep.Clear;
         Changed:= False;
@@ -674,7 +674,7 @@ begin
         Tagged := FenceCarriesTags(Lines, I + 1);
       end
       else if Pos(AUTO_END, Lines[I]) > 0 then InFence:= False
-      else if InFence and Tagged and ParseFactLine(TDocRegions.FoldFactLine(Lines, I, Last), Head, Entries, More, Tail, CR) then
+      else if InFence and Tagged and ParseFactLine(FoldFactLine(Lines, I, Last), Head, Entries, More, Tail, CR) then
         for E in Entries do
         begin
           SplitTagged(E, Tags, Bare);

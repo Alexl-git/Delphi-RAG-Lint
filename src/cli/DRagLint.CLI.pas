@@ -21053,6 +21053,9 @@ begin
         stderr (stdout stays the edit list / --json array), never refused }
       for var SkipNote: string in TRenameRefactoring.SkippedDfmNotes(KStore, QN) do
         Writeln(ErrOutput, 'drag-lint: note: ' + SkipNote);
+      { E5: an unbound ref another indexed symbol also names is left unrenamed; say so }
+      for var CandNote: string in TRenameRefactoring.UnresolvedCandidateNotes(KStore, QN) do
+        Writeln(ErrOutput, 'drag-lint: note: ' + CandNote);
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
 
@@ -21128,6 +21131,8 @@ begin
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   for var SkipNote: string in TRenameRefactoring.SkippedDfmNotes(Store, AArgs.QName) do
     Writeln(ErrOutput, 'drag-lint: note: ' + SkipNote);
+  for var CandNote: string in TRenameRefactoring.UnresolvedCandidateNotes(Store, AArgs.QName) do
+    Writeln(ErrOutput, 'drag-lint: note: ' + CandNote);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
   IncReason:= TRenameRefactoring.StaleEditReason(Edits);
   if IncReason <> '' then
@@ -31787,10 +31792,10 @@ begin
   else begin Writeln('STUDIOROOT-FAIL: ', Failure); Result:= 1; end;
 end; // function
 
-// selftest fact-wrap: the TDocRegions.WrapFactLine / FoldFactLine / FactLinePrefix
+// selftest fact-wrap: the WrapFactLine / FoldFactLine / FactLinePrefix
 // contract (1.20.5) -- a managed-block fact line over DOC_FACT_MAX_COLS is broken
 // at entry boundaries, and every reader folds it back. The cases live in
-// TDocRegions.SelfTestFactWrap beside the code they pin.
+// SelfTestFactWrap beside the code they pin.
 //
 // Prints FACTWRAP-FAIL: <case> and returns 1 on the first failed case;
 // FACTWRAP-OK and 0 on success.
@@ -31798,7 +31803,7 @@ function DoSelfTestFactWrap: Integer;
 var
   Failure: string;
 begin
-  if TDocRegions.SelfTestFactWrap(Failure) then
+  if SelfTestFactWrap(Failure) then
   begin
     Writeln('FACTWRAP-OK');
     Result:= 0;

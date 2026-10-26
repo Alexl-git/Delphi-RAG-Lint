@@ -1243,8 +1243,12 @@ begin
         var RenSkipped: string:= '';
         for var RenNote: string in TRenameRefactoring.SkippedDfmNotes(RenStore, RenQName) do
           RenSkipped:= RenSkipped + (if RenSkipped = '' then '' else ',') + '"' + JsonEscape(RenNote) + '"';
+        { E5: unbound refs another symbol also names are left unrenamed and reported }
+        var RenCands: string:= '';
+        for var RenCand: string in TRenameRefactoring.UnresolvedCandidateNotes(RenStore, RenQName) do
+          RenCands:= RenCands + (if RenCands = '' then '' else ',') + '"' + JsonEscape(RenCand) + '"';
         ResultText:= '{"edits":' + RenEditsJson + ',"files_touched":' + IntToStr(RenFilesTouched) + ',"applied":' + RenAppliedStr +
-          ',"skipped_dfm":[' + RenSkipped + ']}';
+          ',"skipped_dfm":[' + RenSkipped + '],"unresolved_candidates":[' + RenCands + ']}';
       end; // else
     end // if
     else if ToolName = 'run_ast_checks' then
