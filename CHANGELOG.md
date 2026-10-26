@@ -51,6 +51,7 @@ breaking changes** until v1.0.
   `run_cyclefix_b4_dcc.ps1` (each accepted tree followed, built and run: stdout byte-identical).
 
 ### Fixed
+- X-26 remainder (CLI lane): under the verb's own JSON flag, usage / error / "nothing to do" lines of `query unit-usage`, `impact`, `wiring`, `reverse-calltree`, `outline`, `find-unit`, `lint` and `shared-unit` go to stderr, so stdout is empty or parseable JSON; without the flag they stay on stdout. `reverse-calltree` on an unresolved qname over a readable index now says `symbol not found` and exits 1 (it printed "no readable drag-lint index" and exited 2). `menu-tree`/`menu-drift --help` are byte-checked against the registry (`run_menu_verb_help.ps1`).
 - autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
   stored entry the index resolves as a class / interface / record (and not as a unit) is no
   longer carried forever as a "foreign" unit: doc-drift reports the block (fixable) and the
@@ -66,6 +67,7 @@ breaking changes** until v1.0.
   (`run_cyclefix_untangle_catalog.ps1` case e, fixture `partbselfuse`; RED on a mutant without the fix).
 
 ### Changed
+- `--in` is the canonical input-file flag (owner ruling 2026-10-26); `--file` stays a silent alias on every verb. README, AI-USAGE, the wiki pages and four registry entries now write `--in` in examples (CLI lane).
 - **Flag aliases are uniform** (owner ruling 2026-10-25; policy `docs\CLI-FLAG-ALIASES.md`). One table,
   `features\flag-aliases.json`, lists every alias group the parser accepts: `--force-reparse` /
   `--no-skip`, `--help` / `-h` / `-?`, `--in` / `--file`, `--output` / `--out`, `--scan-libraries-win` /
