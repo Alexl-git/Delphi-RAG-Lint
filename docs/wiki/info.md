@@ -26,7 +26,7 @@ stale, never newer.
 ## Reaching it in the IDE
 
 CLI+internal: the plugin calls this internally from
-`DragLint.Plugin.About.pas:217` (the About dialog). There is no menu item
+`StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas)` (the About dialog). There is no menu item
 for it beyond that internal call site.
 
 ## What it needs

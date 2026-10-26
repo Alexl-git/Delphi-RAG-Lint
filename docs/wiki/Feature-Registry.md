@@ -27,7 +27,7 @@ scripts `feature-registry.ps1` and `build-feature-pages.ps1`). It is not on PATH
 `featuregen` means `src\tools\featuregen\featuregen.exe`, run from the repo root (build it with
 `build\_build_featuregen_local.bat`; the gates rebuild it when it is missing or stale).
 
-1. `featuregen add --id <id> --title "<name>" --group <group> --owner <TEAM> --summary "<one line>" --intro "<what, when, needs>" --wiki-page <page> --surface "cli:<verb>[/<sub>] ;; ide-menu:drag-lint > Uses & Dependencies > Call Graph" [--requires index,...] [--aliases "..."]`
+1. `featuregen add --id <id> --title "<name>" --group <group> --owner <TEAM> --summary "<one line>" --intro "<what, when, needs>" --wiki-page <page> --surface "cli:<verb>[/<sub>] ;; ide-menu:drag-lint > Uses & Dependencies > Call Graph (Butterfly)..." [--requires index,...] [--aliases "..."]`
    -- an unknown group or team is refused unless `--new-group` / `--new-team` creates it.
    Several surfaces go in one `--surface` argument separated by ` ;; `.
 2. Write or update `docs\wiki\<page>.md` -- you own it.

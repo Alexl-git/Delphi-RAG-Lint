@@ -25,7 +25,7 @@ current directory.
 ## Reaching it in the IDE
 No menu item calls this by name directly; the feature map's "Recover
 Buffer-Compile Files" menu item is the user-facing action for it. The
-plugin's editor code (Editor.pas:2522) shells out to this verb, both on
+plugin's editor code (RunGhostRecoverForProject, DragLint.Plugin.Editor.pas) shells out to this verb, both on
 demand and automatically after a project loads, to restore any file left
 overlaid by a crashed ghost-check.
 

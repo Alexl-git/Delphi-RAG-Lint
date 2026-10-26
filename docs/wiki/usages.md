@@ -14,10 +14,10 @@ further description -- not documented. `--format json` is the only format the
 usage line lists.
 
 ## Reaching it in the IDE
-No main-menu item calls this directly. The "Symbol Search..." dialog
-(drag-lint > Symbol Search...) has a "Kind" dropdown with Symbol, Text, and
-Usages options; choosing "Usages" and running a search shells out to this
-verb (source: SearchForm.pas:155).
+In the IDE choose drag-lint > Find Usages... with the caret on a symbol. The
+"Symbol Search..." dialog (drag-lint > Symbol Search...) also has a "Kind"
+dropdown with Symbol, Text, and Usages options; choosing "Usages" and running a
+search shells out to this verb (source: TSearchHandler.RunSearch, SearchForm.pas).
 
 ## What it needs
 Optional, per the feature map's Index column.

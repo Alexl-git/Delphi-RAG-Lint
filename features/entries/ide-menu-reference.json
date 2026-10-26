@@ -16,14 +16,14 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Help > IDE Menu Reference",
-      "steps": ["drag-lint > Help > IDE Menu Reference (wiki)", "The page opens in the browser"]
+      "steps": ["drag-lint > Help > IDE Menu Reference", "The page opens in the browser"]
     }
   ],
   "audience": "both",
   "questions": [
     {
       "ask": "What does each drag-lint menu item do?",
-      "command": "drag-lint > Help > IDE Menu Reference (wiki)"
+      "command": "drag-lint > Help > IDE Menu Reference"
     },
     {
       "ask": "Where is the full verb reference?",

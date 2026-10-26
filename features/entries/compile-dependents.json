@@ -19,7 +19,7 @@
   "questions": [
     {
       "ask": "I changed a unit -- do the units that use it still compile?",
-      "command": "drag-lint > Compile Dependents (IDE menu)"
+      "command": "drag-lint > Compile Dependents"
     }
   ],
   "notes": "seed: needs own page; seed: since unknown",

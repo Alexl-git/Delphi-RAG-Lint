@@ -10,7 +10,7 @@ drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]
 ```
 
 ## Reaching it in the IDE
-drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...
+drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...
 
 ## What it needs
 Required. You must have indexed the project first -- the audit resolves

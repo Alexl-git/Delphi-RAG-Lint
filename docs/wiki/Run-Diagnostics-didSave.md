@@ -10,7 +10,7 @@ No CLI equivalent. The feature map lists this action's CliVerb as
 the plugin without shelling out to the drag-lint executable.
 
 ## Reaching it in the IDE
-drag-lint > Run Diagnostics (didSave)
+Open the About window (drag-lint > About) and click the Run Diagnostics (didSave) button.
 
 ## What it needs
 Not documented as needing an index -- the feature map marks this row's

@@ -14,7 +14,7 @@ usage line). `--depth N` bounds how deep the tree walks; the tree is
 cycle-guarded. `--json` emits machine-readable output.
 
 ## Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... with the caret on a routine.
 
 ## What it needs
 An index IS required. The project's DB lives at

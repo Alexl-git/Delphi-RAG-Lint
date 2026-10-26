@@ -19,11 +19,11 @@ makes no edit. The usage line lists `--apply` as a flag; whether omitting it
 produces a dry run is not documented in the help text for this verb.
 
 ## Reaching it in the IDE
-
-Reachable in the IDE only through the Structure form's right-click menu, not
-the main menu -- see [Create helper class](Create-helper-class) for the
-IDE-side walkthrough. The feature map's internal call site is
-`DragLint.Plugin.StructureForm.pas:1226`.
+In the IDE choose drag-lint > Generate & Export > Enum Record Helper (symbol)...
+It is also offered from the Structure form's right-click menu -- see
+[Create helper class](Create-helper-class) for the IDE-side walkthrough. The
+feature map's internal call site is `TDragLintStructureForm.NodeIsFixableFinding`
+(DragLint.Plugin.StructureForm.pas).
 
 ## What it needs
 

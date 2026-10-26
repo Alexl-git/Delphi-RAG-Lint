@@ -17,7 +17,7 @@ doc comments from the bundle.
 
 ## Reaching it in the IDE
 No menu item calls this directly. The plugin uses it internally from
-`DragLint.Plugin.Editor.pas:633`; there is no menu item for it. The MCP
+`GetActiveEditorInfo (DragLint.Plugin.Editor.pas)`; there is no menu item for it. The MCP
 `get_context_bundle` tool wraps this same engine.
 
 ## What it needs

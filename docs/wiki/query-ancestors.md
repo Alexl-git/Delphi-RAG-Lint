@@ -14,8 +14,7 @@ drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json]
 specific ancestor.
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Inspect Symbol > Ancestors of Type (full chain)... with the caret on a type.
 
 ## What it needs
 

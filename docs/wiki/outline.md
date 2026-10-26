@@ -40,10 +40,10 @@ declaration BOTH stay listed, and the stub row is tagged `[forward -> line N]`
 declaration. A lone stub with no completion in the unit is still a class.
 
 ## Reaching it in the IDE
-No menu item calls this directly. The plugin's structure cache
-(StructureCache.pas:338) shells out to this verb to populate the Structure
-form/tree used by "Show Structure" and the drag-lint Panel (dockable),
-caching the result per file.
+In the IDE choose drag-lint > Show Structure. The plugin's structure cache
+(TDragLintStructureCache.GetSymbolsForFile, DragLint.Plugin.StructureCache.pas)
+shells out to this verb to populate the Structure form/tree used by that item
+and by the drag-lint Panel (dockable), caching the result per file.
 
 ## What it needs
 Optional, per the feature map's Index column.

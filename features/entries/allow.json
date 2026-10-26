@@ -63,7 +63,7 @@
       "command": "drag-lint allow <file> --fix-line <L> --fix-rule <id>"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061",
+  "notes": "issued by the plugin from TDragLintStructureForm.ShowInButterflyClick (DragLint.Plugin.StructureForm.pas)",
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

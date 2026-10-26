@@ -13,8 +13,7 @@ drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all
 `--db` may be repeated to roll up dependencies across more than one index.
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)...
 
 ## What it needs
 

@@ -16,8 +16,7 @@ Without `--apply` this is a dry run -- it reports what it would move
 without moving anything.
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG...
 
 ## What it needs
 

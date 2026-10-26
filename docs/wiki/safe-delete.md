@@ -15,8 +15,7 @@ whether omitting it produces a dry run is not documented in the help text
 for this verb.
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Safe Delete Symbol... with the caret on the symbol to delete.
 
 ## What it needs
 

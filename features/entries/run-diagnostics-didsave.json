@@ -19,7 +19,7 @@
   "questions": [
     {
       "ask": "Why do drag-lint findings refresh by themselves when I save?",
-      "command": "drag-lint > Run Diagnostics (didSave)"
+      "command": "drag-lint > About > Run Diagnostics (didSave)"
     }
   ],
   "notes": "seed: since unknown",

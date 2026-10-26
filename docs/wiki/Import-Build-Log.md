@@ -13,7 +13,7 @@ drag-lint import-log <logfile> --db <file.sqlite>
 to write the findings into.
 
 ## Reaching it in the IDE
-drag-lint > Import Build Log...
+Open the About window (drag-lint > About) and click the Import Build Log... button.
 
 ## What it needs
 An index IS required. The project's DB lives at

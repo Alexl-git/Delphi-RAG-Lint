@@ -12,7 +12,7 @@ drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]
 machine-readable output.
 
 ## Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Uses & Dependencies > What This Routine Calls (callees)... with the caret on a routine.
 
 ## What it needs
 An index IS required. The project's DB lives at

@@ -39,7 +39,7 @@
       "command": "drag-lint rules --category <name>"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.LintOptionsFrame.pas:88",
+  "notes": "issued by the plugin from ReloadCatalogAndConfig (DragLint.Plugin.LintOptionsFrame.pas)",
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

@@ -31,8 +31,7 @@ means. It fires when all three hold:
 One finding per enum, at its declaration; the message names one boundary site
 and its sink. Fix: pin every value (`kA = 0, kB = 1, ...`).
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Code Quality > Project Structure Rules (god-class, layering...)...
 
 ## What it needs
 

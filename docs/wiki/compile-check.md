@@ -13,7 +13,7 @@ drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [-
 ## Reaching it in the IDE
 
 CLI+internal: the plugin calls this internally from
-`DragLint.Plugin.Editor.pas:2037`. There is no menu item for it -- it is
+`DoCompletion (DragLint.Plugin.Editor.pas)`. There is no menu item for it -- it is
 invoked in-process by the plugin, not exposed as a user-facing command.
 
 ## What it needs

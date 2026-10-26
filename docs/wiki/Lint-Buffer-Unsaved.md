@@ -14,7 +14,7 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 ```
 
 ## Reaching it in the IDE
-drag-lint > Lint Buffer (Unsaved)
+Open the About window (drag-lint > About) and click the Lint Buffer (Unsaved) button.
 
 ## What it needs
 No index needed. This action lints the buffer's content directly; the
