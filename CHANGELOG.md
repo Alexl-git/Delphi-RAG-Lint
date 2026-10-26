@@ -5,6 +5,9 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed
+- `cycles --plan` Part B (CYCDEMO): a routine edge whose signature names a type Part A already moves (circular-demo `democonfig -> demologger`, `TDemoLogLevel`) was predicted `refused: signature-in-cycle`, labelled with the wrong kind (`TDemoLogLevel` (var)); the re-run after Part A cuts it by routine-call inversion, and Part B now predicts that. Regression from CYC-B B3 (37ec566d): `ProbeInversionMoves` only counted types the probe itself added. Guard `run_cycle_plan_split_identity.ps1` (new Part B check); oracle `demo-plan.txt` and `circular-demo\CYCLE-REPORT.md` regenerated (one line).
+
 ### Added
 - `cycles --fix` C6 (W6, CYC-C): `end.` followed by a block comment is still the final `end.` (R1 assignment edit), and an R2 class heritage spread over lines is read up to its closing `)` (the interface is appended there); an unbalanced heritage still refuses manual-edit. The same-line / indented `type` header forms of C6 are NOT done (the move planner is column-1 structured). Guard `run_cyclefix_w6_rest.ps1` c6a-c6c; `run_cyclefix_r2.ps1` f12 now uses an unclosed heritage.
 - `cycles --fix` C2 (W6, CYC-C): an R1 leaf that already declares the pointer's names no longer refuses `duplicate-identifier`: identical `T<Routine>Ptr` / `<Routine>Ptr` text is reused (nothing inserted; the assignment is skipped when the declaring unit already makes it), different text gets the lowest free `<Routine>Ptr2`, `Ptr3` ... The R2 interface name and an existing `Get<M>` still refuse. Guard `run_cyclefix_w6_rest.ps1` c2a-c2c; `run_cyclefix_r1.ps1` e1 flipped.

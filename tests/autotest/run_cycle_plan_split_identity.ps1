@@ -224,6 +224,13 @@ if ($LibArgs.Count -eq 0) {
   # E18 T5: cycle 3 is cut by R1 (routine-call inversion) -- mechanical, no refusal.
   Check "demo: cycle 3 is mechanical (R1)" (($byCycle[3].verdict -eq 'mechanical') -and ($byCycle[3].refusals -eq '')) "[$($byCycle[3].verdict) / $($byCycle[3].refusals)]"
   Check 'demo: cycle 1 plan is non-trivial (items, new units, edits)' (([int]$byCycle[1].items -gt 0) -and ($byCycle[1].newunits -ne '') -and ($byCycle[1].edits -ne '')) $run.Dump[0]
+  # CYCDEMO 2026-10-26: Part B is a PREDICTION of the re-run after Part A, and that re-run cuts
+  # democonfig -> demologger by routine-call inversion (TDemoLogLevel already sits in DemoLogger.Untangle).
+  # CYC-B B3 (37ec566d) predicted `refused: signature-in-cycle` instead: a signature type Part A had
+  # already moved was not counted as moved, so it still read as a type of the cycle.
+  $partB = @($run.Text -split "`r?`n" | Where-Object { $_.StartsWith('- `democonfig -> demologger`:') })
+  Check 'demo: Part B predicts democonfig -> demologger as routine-call inversion (as the re-run after Part A does)' `
+    (($partB.Count -eq 1) -and $partB[0].EndsWith('-- mechanical: recipe: routine-call inversion')) ($partB -join ' | ')
 
   # POSITIVE CONTROL: one dumped count off by one must be reported by the same compare.
   $mutated = @($run.Dump)
