@@ -223,6 +223,11 @@ type
     Reason  : string;
   end;
 
+const
+  /// <summary>TApplyRow.ExitCode when the apply/1 object carries no exit_code.</summary>
+  APPLY_EXIT_ABSENT = -1;
+
+type
   /// <summary>One convert-apply run, read from its apply/1 JSON.</summary>
   TApplyRow = record
     /// <summary>The engine's own ok flag; False also for unparseable output.</summary>
@@ -251,6 +256,11 @@ type
     /// rules failed validation", file untouched) -- a book fault, not a unit
     /// fault.</summary>
     RuleErrorCount: Integer;
+    /// <summary>exit_code (engine 1.33.0, G3) -- THIS unit's own code: 0 ok, 1 refused
+    /// (incl. unindexed), 2 write failure / rollback, 6 configuration (castlib).
+    /// APPLY_EXIT_ABSENT when the key is absent or not a number (an older engine, or
+    /// unparseable output).</summary>
+    ExitCode  : Integer;
     /// <summary>converted[] -- one line per converted instance.</summary>
     Converted : TArray<string>;
     /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder. When inherited[]
@@ -1837,6 +1847,7 @@ var
   LOwnItems: TArray<TApplyItem>;
 begin
   Result:= Default(TApplyRow);
+  Result.ExitCode:= APPLY_EXIT_ABSENT;
   Errs:= nil;
   // stderr is merged into the pipe: skip anything before the document, and --
   // measured 2026-09-29, the engine's "(loaded defaults ...)" line lands AFTER
@@ -1858,6 +1869,8 @@ begin
     // Type-checked, never GetValue<T>: it coerces ("3" -> 3, 1 -> True) on a wrong type.
     Result.Ok        := JsonTrue(Obj, 'ok');
     Result.EditsCount:= JsonInt(Obj, 'edits_count');
+    if Obj.Values['exit_code'] is TJSONNumber then
+      Result.ExitCode:= JsonInt(Obj, 'exit_code');
     Result.UnitPath  := Str(Obj, 'unit');
     Result.Converted := Strings(Obj, 'converted');
     Result.InheritedLeft:= InheritedItems(Obj);

@@ -27,6 +27,7 @@ uses
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED is the long-call runner's cancel contract the analysis work returns and reads back, so it travels with the runner
   , ConvRules.ConvertRun
   , ConvRules.ConvertRunner
+  , ConvRules.ConvertRerun  // the raise-and-re-run decisions (Task 6)
   , ConvRules.ConvertRequest  // dl:unit ConvRules.ConvertRequest accepted -- WHOLE_UNIT_SCOPE_TEXT is the E4 Scope line ScopeText returns for no scope; it travels with ScopeText so the reset caption cannot drift from it
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
   , ConvRules.WorkList  // TWorkRun: TConvertHost.WorkListReady's parameter
@@ -1915,7 +1916,7 @@ begin
   FProgress.Position:= FProgress.Max;
   // This run's own rows: a re-run (Task 6) appends to the first run's, which the grid and the
   // report keep, but its tally, stops and not-reached units are its own.
-  var LRows: TArray<TConvertRow>:= Copy(FRunRows, FRunRowsFrom, Length(FRunRows) - FRunRowsFrom);
+  var LRows: TArray<TConvertRow>:= RunRowsOf(FRunRows, FRunRowsFrom);
   NotReached := nil;
   if FRunBatch then
     NotReached:= NotReachedUnits(LRows, AJob.Units, AJob.Books) // cancel polls count chunks there, not units
@@ -1988,30 +1989,19 @@ end;
 
 procedure TConvertTab.AskRaiseAndRerun(const AJob: TConvertJob);
 var
-  LUnits: TArray<string>;
-  LFiles: TArray<string>;
+  LPlan: TRaisePlan;
 begin
   if not ShouldAskRaise(AJob, FCancelRequested) then
     Exit;
-  LUnits:= nil;
-  LFiles:= nil;
-  for var LRow: TConvertRow in EncodingRefusedRows(Copy(FRunRows, FRunRowsFrom, Length(FRunRows) - FRunRowsFrom)) do
-  begin
-    var LAnswer: Integer:= MessageDlg(EncodingRaiseQuestion(LRow.UnitPas, LRow.Apply.EncodingRefusal), mtConfirmation, [mbYes, mbNo, mbCancel], 0);
-    if LAnswer = mrCancel then
-      Break;
-    if LAnswer <> mrYes then
-      Continue;
-    // Only a file of the unit itself (its .pas or .dfm) can be raised by its own call.
-    var LOwn: TArray<string>:= RaiseFilesOf([LRow.Apply.EncodingRefusal.FileName], LRow.UnitPas);
-    if Length(LOwn) = 0 then
-      Continue;
-    LUnits:= LUnits + [LRow.UnitPas];
-    LFiles:= LFiles + LOwn;
-  end;
-  if Length(LUnits) = 0 then
+  // The Yes / No / Cancel loop is RaiseRerunPlan's (pure, tested); the tab asks.
+  LPlan:= RaiseRerunPlan(RunRowsOf(FRunRows, FRunRowsFrom),
+    function(const ARow: TConvertRow): Integer
+    begin
+      Result:= MessageDlg(EncodingRaiseQuestion(ARow.UnitPas, ARow.Apply.EncodingRefusal), mtConfirmation, [mbYes, mbNo, mbCancel], 0);
+    end);
+  if Length(LPlan.Units) = 0 then
     Exit;
-  StartRun(RerunJob(AJob, LUnits, LFiles), '');
+  StartRun(RerunJob(AJob, LPlan.Units, LPlan.Files), '');
 end;
 
 end.

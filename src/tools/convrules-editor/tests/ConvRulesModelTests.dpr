@@ -12,6 +12,7 @@ uses
   , System.Classes
   , System.StrUtils
   , Vcl.Dialogs // mbYes ..: OfferButtons
+  , System.UITypes // mrYes ..: RaiseRerunPlan's asker
   , System.Generics.Collections
   , System.JSON
   , Winapi.Windows
@@ -43,6 +44,7 @@ uses
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertBatch in '..\ConvRules.ConvertBatch.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.ConvertRerun in '..\ConvRules.ConvertRerun.pas'
   , ConvRules.QualifyFix in '..\ConvRules.QualifyFix.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
@@ -2849,10 +2851,28 @@ var
     Polls:= LPolls;
     LNotSeen:= NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules']);
     // Plan 3.6: a unit short of a book is not reached by it -- chunk 1's units miss book B.
-    Check('batch.cancel.between.chunks', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConverted, RowOf(S2, 'A.rules').Status = csConverted,
+    // R4: and it ends UNCHANGED, as on the per-unit path: book A is undone (csRolledBack), the
+    // backup that undid it is kept and named.
+    Check('batch.cancel.between.chunks.restores', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csRolledBack, RowOf(S2, 'A.rules').Status = csRolledBack,
+      Pos('cancelled', RowOf(S1, 'A.rules').Note) > 0, Pos('S1.pas.BCK1', RowOf(S1, 'A.rules').Note) > 0, Untouched(S1), Untouched(S2), BackupsOf(S1) = 1,
       string.Join('|', Calls) = 'A:S1,S2', string.Join(',', LNotSeen) = string.Join(',', [S1, S2, S3]),
       Untouched(S3), BackupsOf(S3) = 0]), Describe + ' notreached=' + string.Join(',', LNotSeen));
     Check('batch.cancel.polled.per.chunk', Polls = 2, IntToStr(Polls)); // 1 chunk attempted + the poll that cancelled
+
+    // --- R4: cancel before book B's second chunk: S1/S2 have every book and stay converted,
+    // S3 has book A only and is restored ---
+    Reset;
+    LPolls:= 0;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow,
+      function: Boolean
+      begin
+        Inc(LPolls);
+        Result:= LPolls >= CHUNKS_4;
+      end, OnStep, False, False, 2);
+    LNotSeen:= NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules']);
+    Check('batch.cancel.keeps.complete.units', AllOf([RowOf(S1, 'B.rules').Status = csConverted, RowOf(S2, 'B.rules').Status = csConverted,
+      not Untouched(S1), RowOf(S3, 'A.rules').Status = csRolledBack, Untouched(S3), BackupsOf(S3) = 1,
+      string.Join(',', LNotSeen) = S3]), Describe + ' notreached=' + string.Join(',', LNotSeen));
 
     // --- S1's backup cannot be taken: csUnitSkipped, never in a --unit list ---
     Reset;
@@ -2893,6 +2913,109 @@ var
     Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
     Check('batch.unindexed.refused.25cd99de', AllOf([RowOf(S1, 'A.rules').Status = csConverted, RowOf(S2, 'A.rules').Status = csRefused,
       Pos('not covered by any supplied --db', RowOf(S2, 'A.rules').Note) > 0, Untouched(S2), BackupsOf(S2) = 0, BackupsOf(S1) = 1]), Describe);
+  end;
+
+  // R1 / R5: an exit-6 chunk under the 1.33.1 contract (every entry refused, exit_code 6) is
+  // a configuration stop that wrote nothing; an entry of an exit-6 chunk that says it WROTE
+  // (an older engine) is restored instead of trusted; an entry's exit_code that contradicts
+  // its ok flag distrusts the whole chunk.
+  procedure CheckEntryExitCodes;
+  const
+    CASTLIB = 'castlib C.cast: unknown value keyword Foo';
+  var
+    LDoc: string;
+
+    function Refused6(const AUnit: string): string;
+    begin
+      Result:= '{"schema":"apply/1","unit":"' + BatchJ(AUnit) + '","ok":false,"refused":true,"reason":"' + CASTLIB + '","error":"' + CASTLIB
+        + '","rule_errors":[],"edits_count":0,"exit_code":6}';
+    end;
+
+  begin
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'r';
+      end;
+    LDoc:= '{"schema":"apply-batch/1","mode":"apply","units_count":2,"ok":false,"exit_code":6,"ok_count":0,"refused_count":2,"failed_count":0,'
+      + '"classes_built":0,"units":[' + Refused6(S1) + ',' + Refused6(S2) + ']}';
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LDoc;
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.contract.refused.is.config.error', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConfigError,
+      RowOf(S2, 'A.rules').Status = csConfigError, RowOf(S1, 'A.rules').Note = CASTLIB, RowOf(S1, 'A.rules').StoppedRun,
+      BackupsOf(S1) = 0, BackupsOf(S2) = 0, Untouched(S1), Untouched(S2), string.Join('|', Calls) = 'A:S1,S2']), Describe);
+
+    // An older engine's exit-6 chunk: S1's entry says ok and the fake WROTE it.
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if FileStem(AUnit) = 'S1' then 'o' else 'f';
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.entry.wrote.restored', AllOf([RowOf(S1, 'A.rules').Status = csConfigError, Untouched(S1), BackupsOf(S1) = 1,
+      Pos('restored', RowOf(S1, 'A.rules').Note) > 0, RowOf(S2, 'A.rules').Status = csConfigError, BackupsOf(S2) = 0, Untouched(S2)]), Describe);
+
+    // R5: S1's entry says ok=true with exit_code 2 -- the chunk is not trusted.
+    Reset;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(AJson, '"edits_count":1,', '"edits_count":1,"exit_code":2,', []);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.entry.exit.contradicts.restores.chunk', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
+      Pos(PREFIX + 'units[0] exit_code 2 contradicts ok=true', RowAt(0).Note) = 1, Untouched(S1), Untouched(S2)]), Describe);
+
+    // Positive control: consistent per-entry codes are trusted.
+    Reset;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(AJson, '"edits_count":1,', '"edits_count":1,"exit_code":0,', [rfReplaceAll]);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.entry.exit.consistent.trusted', AllOf([Length(Rows) = 2, RowAt(0).Status = csConverted, RowAt(1).Status = csConverted,
+      RowAt(0).Apply.ExitCode = 0]), Describe);
+  end;
+
+  // I3: a batched refusal on book B restores its unit (book A rolled back), so the re-run of
+  // RerunJob (ALL books, refused units only) applies every book exactly ONCE to the file.
+  procedure CheckRefusedRerun;
+  var
+    LJob : TConvertJob;
+    LText: string;
+
+    function Times(const ANeedle: string): Integer;
+    begin
+      Result:= (Length(LText) - Length(StringReplace(LText, ANeedle, '', [rfReplaceAll]))) div Length(ANeedle);
+    end;
+
+  begin
+    Reset;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if (FileStem(AUnit) <> 'S1') and (ABook = 'B.rules') then 'r' else 'o';
+      end;
+    LJob:= Default(TConvertJob);
+    LJob.Units:= [S1, S2, S3];
+    LJob.Books:= ['A.rules', 'B.rules'];
+    Rows:= RunConversionBatched(LJob.Units, LJob.Books, Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.rerun.first.run.restored', AllOf([RowOf(S2, 'A.rules').Status = csRolledBack, RowOf(S2, 'B.rules').Status = csRefused,
+      RowOf(S3, 'A.rules').Status = csRolledBack, Untouched(S2), Untouched(S3), BackupsOf(S2) = 1]), Describe);
+    LJob:= RerunJob(LJob, [S2, S3], [S2, S3]);
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'o';
+      end;
+    Calls:= nil;
+    Rows:= RunConversionBatched(LJob.Units, LJob.Books, Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    LText:= TFile.ReadAllText(S2);
+    Check('batch.rerun.each.book.once', AllOf([string.Join('|', Calls) = 'A:S2,S3|B:S2,S3', Times('// A.rules') = 1, Times('// B.rules') = 1,
+      RowOf(S2, 'B.rules').Status = csConverted, RowOf(S3, 'B.rules').Status = csConverted, BackupsOf(S2) = 2]),
+      Describe + ' calls=' + string.Join('|', Calls) + ' text=' + LText);
   end;
 
   procedure CheckNotReachedPure;
@@ -3009,6 +3132,8 @@ begin
     CheckUntrusted;
     CheckStops;
     CheckUnindexedRefused;
+    CheckEntryExitCodes;
+    CheckRefusedRerun;
     CheckNotReachedPure;
     CheckDispatch;
   finally
@@ -15494,6 +15619,7 @@ end;
 {$I inc\EncodingEngineTests.inc}
 {$I inc\EncodingApplyTests.inc}
 {$I inc\EncodingTabTests.inc}
+{$I inc\RunnerDecisionTests.inc}
 
 begin
   try
@@ -15639,6 +15765,7 @@ begin
     TestRunStepText;
     TestBatchStepText;
     TestBatchRunner;
+    TestRunnerDecisions;
     TestJobRunsBatched;
     TestReindexProject;
     TestConvertRunnerLive;

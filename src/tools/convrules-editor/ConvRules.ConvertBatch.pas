@@ -25,6 +25,15 @@ const
   /// <summary>Format of the row note when the ONE reindex after a chunk failed; %s = the
   /// reindex error.</summary>
   BATCH_REINDEX_FAILED_FMT = 'reindex after batch apply failed: %s';
+  /// <summary>Format of the row note of a unit whose entry in a configuration-stopped chunk
+  /// says it may have been written (ConfigStopMayHaveWritten); %s = the backup it is
+  /// restored from.</summary>
+  CONFIG_STOP_WROTE_FMT = 'the run stopped (cast library unusable) but the engine reported this unit written -- restored from this run''s backup %s';
+  /// <summary>Format of the note on a converted row that a cancel between batch chunks undid
+  /// (R4: a unit gets every book or none); %s = the backup it was restored from.</summary>
+  BATCH_CANCEL_UNDONE_FMT = 'undone: the run was cancelled before every book reached this unit; restored from %s';
+  /// <summary>Format of the unit-level row when that restore failed; %s = the error, %s = the backups.</summary>
+  BATCH_CANCEL_RESTORE_FAILED_FMT = 'the run was cancelled before every book reached this unit and the restore failed: %s; the unit may be half-converted -- backup at %s';
 
 /// <summary>PURE: True when the answer of one batch call lines up with the units asked for.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's reading.</param>
@@ -77,6 +86,26 @@ function BatchUntrustedNote(const AWhy: string): string;
 /// refusal) or FailedCount set to 1 -- so BatchContractBroken says what ApplyExitBroken
 /// says for a single apply. Else not Valid.</returns>
 function BatchOfSingle(const AJson: string; ACode: Integer; AFeatures: TApplyFeatures): TApplyBatch;
+
+/// <summary>PURE (R5): why the per-entry exit_code of a batch answer is not trusted; ''
+/// when it is. Engine 1.33.0 (G3): each units[] entry carries THAT unit's code (0 ok, 1
+/// refused, 2 write failure, 6 configuration), the batch's exit_code is the worst unit's.</summary>
+/// <param name="ABatch">ParseApplyBatchJson's (or BatchOfSingle's) reading.</param>
+/// <returns>'' when every entry's ExitCode is APPLY_EXIT_ABSENT (an older engine) or agrees
+/// with its ok flag (0 exactly when ok) and is no worse than ABatch.ExitCode. Else
+/// 'units[I] exit_code E contradicts ok=true|false' or 'units[I] exit_code E exceeds the
+/// batch exit_code X', for the first such entry (I zero-based).</returns>
+function BatchEntryExitBroken(const ABatch: TApplyBatch): string;
+
+/// <summary>PURE (R1): whether one entry of a configuration-stopped chunk (exit
+/// ENGINE_EXIT_CONFIG) may have written its unit. The engine's 1.33.1 contract says a
+/// top-level exit 6 touched no unit -- every entry refused, exit_code 6 -- and the runner
+/// then drops the unit's unneeded backup; an entry that says otherwise is not believed.</summary>
+/// <param name="AEntry">The entry, read like a single apply/1.</param>
+/// <returns>True when AEntry is ok, half written (ApplyHalfWritten) or has exit_code 2 (a
+/// write failure, possibly a failed rollback); False for a refusal, an exit_code of 1 or 6,
+/// or a failure without exit_code (an engine before 1.33.0).</returns>
+function ConfigStopMayHaveWritten(const AEntry: TApplyRow): Boolean;
 
 implementation
 
@@ -144,6 +173,30 @@ end;
 function BatchUntrustedNote(const AWhy: string): string;
 begin
   Result:= BATCH_UNTRUSTED_PREFIX + AWhy;
+end;
+
+function BatchEntryExitBroken(const ABatch: TApplyBatch): string;
+var
+  LEntry: TApplyRow;
+begin
+  for var I: Integer:= 0 to High(ABatch.Units) do
+  begin
+    LEntry:= ABatch.Units[I];
+    if LEntry.ExitCode = APPLY_EXIT_ABSENT then
+      Continue;
+    if LEntry.Ok <> (LEntry.ExitCode = 0) then
+      Exit(Format('units[%d] exit_code %d contradicts ok=%s', [I, LEntry.ExitCode, if LEntry.Ok then 'true' else 'false']));
+    if LEntry.ExitCode > ABatch.ExitCode then
+      Exit(Format('units[%d] exit_code %d exceeds the batch exit_code %d', [I, LEntry.ExitCode, ABatch.ExitCode]));
+  end;
+  Result:= '';
+end;
+
+function ConfigStopMayHaveWritten(const AEntry: TApplyRow): Boolean;
+const
+  EXIT_WRITE_FAILED = 2; // the engine's per-unit code for a write failure or rollback
+begin
+  Result:= AEntry.Ok or ApplyHalfWritten(AEntry) or (AEntry.ExitCode = EXIT_WRITE_FAILED);
 end;
 
 end.
