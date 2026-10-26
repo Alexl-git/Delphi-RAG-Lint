@@ -8775,43 +8775,65 @@ end;
   stand-in engine (a .cmd that sleeps) must give [] within the bound. A second
   stand-in that answers proves the .cmd mechanism reaches CapabilityNames at all --
   without it, a stand-in that never started would pass the timeout check. }
-{ R7: engine stdout is UTF-8; a character split across two pipe reads must stay whole.
-  Every 2-way split point, plus 1-byte feeding, over 1-, 2-, 3- and 4-byte characters. }
-procedure TestUtf8ChunkDecode;
+{ R7: engine pipe output is the system ANSI code page (ACP), not UTF-8. A DBCS character split
+  across two pipe reads must stay whole; on a single-byte code page nothing is held and E9 stays e-acute. }
+procedure TestAnsiChunkDecode;
+const
+  CP1252 = 1252;
+  CP932  = 932;
 var
-  LText   : string;
-  LBytes  : TBytes;
   LPending: TBytes;
   LGot    : string;
   LBad    : Integer;
+  LSjis   : TBytes;
 begin
-  LText:= 'a' + #$00E9 + 'b' + #$20AC + 'c' + #$D83D#$DE00 + 'd';  // a e-acute b euro c U+1F600 d
-  LBytes:= TEncoding.UTF8.GetBytes(LText);
+  // cp1252: E9 is U+00E9, whole or at any chunk boundary; nothing is ever held.
+  LPending:= nil;
+  LGot:= DecodeAnsiChunk(LPending, [Byte($61), Byte($E9), Byte($62)], CP1252);
+  Check('ansi.cp1252.e9', (LGot = 'a' + #$00E9 + 'b') and (Length(LPending) = 0));
+  LPending:= nil;
+  LGot:= DecodeAnsiChunk(LPending, [Byte($61)], CP1252) + DecodeAnsiChunk(LPending, [Byte($E9)], CP1252) + DecodeAnsiChunk(LPending, [Byte($62)], CP1252);
+  Check('ansi.cp1252.e9.boundary', (LGot = 'a' + #$00E9 + 'b') and (Length(LPending) = 0));
+  // The regression a UTF-8 decoder would cause: a lone E9 is not a valid UTF-8 sequence.
+  var LUtf8: TEncoding:= TMBCSEncoding.Create(CP_UTF8, 0, 0);
+  try
+    Check('ansi.utf8.would.break.e9', LUtf8.GetString([Byte($E9)]) = #$FFFD);
+  finally
+    LUtf8.Free;
+  end; // try
+  // cp932 (Shift-JIS): 82 A0 = U+3042; 'a' 82 A0 'b' 83 41 (U+30A2). Every 2-way split.
+  LSjis:= [Byte($61), Byte($82), Byte($A0), Byte($62), Byte($83), Byte($41)];
   LBad:= 0;
-  for var LCut: Integer:= 0 to Length(LBytes) do
+  for var LCut: Integer:= 0 to Length(LSjis) do
   begin
     LPending:= nil;
-    LGot:= DecodeUtf8Chunk(LPending, Copy(LBytes, 0, LCut));
-    LGot:= LGot + DecodeUtf8Chunk(LPending, Copy(LBytes, LCut, Length(LBytes) - LCut));
-    LGot:= LGot + FlushUtf8Pending(LPending);
-    if LGot <> LText then
+    LGot:= DecodeAnsiChunk(LPending, Copy(LSjis, 0, LCut), CP932);
+    LGot:= LGot + DecodeAnsiChunk(LPending, Copy(LSjis, LCut, Length(LSjis) - LCut), CP932);
+    LGot:= LGot + FlushAnsiPending(LPending, CP932);
+    if LGot <> 'a' + #$3042 + 'b' + #$30A2 then
       Inc(LBad);
   end;
-  Check('utf8.chunk.every.split.point', LBad = 0, IntToStr(LBad) + ' bad splits');
+  Check('ansi.cp932.every.split', LBad = 0, IntToStr(LBad) + ' bad splits');
   LPending:= nil;
-  LGot:= '';
-  for var LIx: Integer:= 0 to High(LBytes) do
-    LGot:= LGot + DecodeUtf8Chunk(LPending, [LBytes[LIx]]);
-  Check('utf8.chunk.byte.at.a.time', (LGot = LText) and (Length(LPending) = 0));
-  // The old per-chunk ANSI decode: the pending tail of a cut character is held, not emitted.
+  DecodeAnsiChunk(LPending, [Byte($82)], CP932);
+  Check('ansi.cp932.holds.lead', Length(LPending) = 1);
+  Check('ansi.cp932.completes', DecodeAnsiChunk(LPending, [Byte($A0)], CP932) = #$3042);
+  // A lead byte with no trail byte at end of stream is flushed, not dropped silently.
   LPending:= nil;
-  LGot:= DecodeUtf8Chunk(LPending, [Byte($C3)]);
-  Check('utf8.chunk.holds.incomplete', (LGot = '') and (Length(LPending) = 1));
-  Check('utf8.chunk.completes', DecodeUtf8Chunk(LPending, [Byte($A9)]) = #$00E9);
-  // A truncated final sequence is flushed (U+FFFD), never dropped silently.
-  LPending:= nil;
-  DecodeUtf8Chunk(LPending, [Byte($E2), Byte($82)]);
-  Check('utf8.flush.truncated', (Length(LPending) = 2) and (FlushUtf8Pending(LPending) <> '') and (Length(LPending) = 0));
+  DecodeAnsiChunk(LPending, [Byte($82)], CP932);
+  Check('ansi.flush.truncated', (FlushAnsiPending(LPending, CP932) <> '') and (Length(LPending) = 0));
+end;
+{ R2b round 1: a failed start-up probe is not repeated on every refresh (a hung engine would
+  freeze the UI up to 15 s each time). }
+procedure TestStartupProbeDue;
+const
+  T0 = 100000;
+begin
+  Check('probe.due.first', StartupProbeDue(False, 0, T0, False));
+  Check('probe.due.cached.never', not StartupProbeDue(True, 0, T0, False) and not StartupProbeDue(True, T0, T0 + STARTUP_REPROBE_MS * 2, False));
+  Check('probe.due.failed.waits', not StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS - 1, False));
+  Check('probe.due.failed.after.60s', StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS, False) and (STARTUP_REPROBE_MS = 60000));
+  Check('probe.due.busy.never', not StartupProbeDue(False, 0, T0, True) and not StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS * 2, True));
 end;
 
 procedure TestCapabilityProbeTimeout;
@@ -15731,7 +15753,8 @@ begin
     TestEngineProgress;
     TestEngineArgsAndCaps;
     TestCapabilityProbeTimeout;
-    TestUtf8ChunkDecode;
+    TestAnsiChunkDecode;
+    TestStartupProbeDue;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
     TestChooseTestEngine;

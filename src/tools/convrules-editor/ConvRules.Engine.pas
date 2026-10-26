@@ -1347,22 +1347,24 @@ function ApplyArgs(const AUnitPas, ARulesFile, ADbArgs, AOnlyArgs, ARaiseArgs, A
 /// batch --only would bind every unit).</returns>
 function BatchApplyArgs(const AUnits: TArray<string>; const ARulesFile, ADbArgs, ACastLibArgs: string): string;
 
-/// <summary>PURE (R7): decodes one pipe chunk of engine UTF-8 output without breaking a multi-byte
-/// character that is split across chunk boundaries.</summary>
-/// <param name="APending">In: the bytes held back from the previous chunk (an incomplete trailing
-/// sequence). Out: the incomplete trailing sequence of this chunk, [] when it ends on a boundary.</param>
+/// <summary>PURE (R7): decodes one pipe chunk of engine output in a given ANSI code page without
+/// breaking a double-byte character that is split across chunk boundaries.</summary>
+/// <param name="APending">In: the lead byte held back from the previous chunk ([] when none). Out: the
+/// trailing lead byte of this chunk that still needs its trail byte, [] when the chunk ends on a boundary.</param>
 /// <param name="AChunk">The bytes just read.</param>
-/// <returns>The text of APending + AChunk up to the last complete character; the held-back tail
-/// is decoded with the next chunk (or by FlushUtf8Pending at end of stream).</returns>
-/// <remarks>Invalid bytes become U+FFFD as TEncoding.UTF8 decodes them; only a lead byte whose
-/// continuation bytes are still to come is held back (at most 3 bytes).</remarks>
-function DecodeUtf8Chunk(var APending: TBytes; const AChunk: TBytes): string;
+/// <param name="ACodePage">The code page the engine writes in (CP_ACP in production; a parameter so the
+/// DBCS and single-byte paths are testable).</param>
+/// <returns>The text of APending + AChunk up to the last complete character. On a single-byte code page
+/// nothing is ever held back.</returns>
+/// <remarks>The engine output contract is ACP, not UTF-8 (ENGINE INBOX pending on a UTF-8 switch).
+/// Invalid bytes become U+FFFD or the code page's default, never an exception.</remarks>
+function DecodeAnsiChunk(var APending: TBytes; const AChunk: TBytes; ACodePage: Cardinal): string;
 
-/// <summary>PURE (R7): decodes what DecodeUtf8Chunk still holds back at end of stream.</summary>
+/// <summary>PURE (R7): decodes what DecodeAnsiChunk still holds back at end of stream.</summary>
 /// <param name="APending">The held-back bytes; emptied.</param>
-/// <returns>Their text (U+FFFD for the truncated sequence); '' when nothing was held.</returns>
-function FlushUtf8Pending(var APending: TBytes): string;
-
+/// <param name="ACodePage">As for DecodeAnsiChunk.</param>
+/// <returns>Their text; '' when nothing was held.</returns>
+function FlushAnsiPending(var APending: TBytes; ACodePage: Cardinal): string;
 /// <summary>PURE: the capability keys whose value is the JSON literal true.</summary>
 /// <param name="AInfoOutput">Raw `info --json` output; text before the first '{' and after
 /// the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
@@ -1732,38 +1734,27 @@ begin
     Result:= Result + Format(' --progress-interval %d', [PROGRESS_INTERVAL_S]);
 end;
 
-function Utf8CompletePrefixLen(const ABytes: TBytes): Integer;
-const
-  MAX_TAIL = 3;     // a UTF-8 sequence has at most 3 continuation bytes
-  LEN_LEAD2 = 2;    // sequence length by lead byte
-  LEN_LEAD3 = 3;
-  LEN_LEAD4 = 4;
-  CONT_MASK = $C0;
-  CONT_BITS = $80;
-  LEAD2 = $C0;
-  LEAD3 = $E0;
-  LEAD4 = $F0;
+// Bytes of ABytes that end on a character boundary: a trailing DBCS lead byte (its trail byte is
+// in the next chunk) is excluded. Scanned forward: a trail byte may look like a lead byte.
+function AnsiCompletePrefixLen(const ABytes: TBytes; ACodePage: Cardinal): Integer;
 begin
-  Result:= Length(ABytes);
-  var LPos: Integer:= Result - 1;
-  var LBack: Integer:= 0;
-  while (LPos >= 0) and (LBack < MAX_TAIL) and ((ABytes[LPos] and CONT_MASK) = CONT_BITS) do
+  Result:= 0;
+  while Result < Length(ABytes) do
   begin
-    Dec(LPos);
-    Inc(LBack);
+    if IsDBCSLeadByteEx(ACodePage, ABytes[Result]) then
+    begin
+      if Result + 1 >= Length(ABytes) then
+        Exit;
+      Inc(Result);
+    end;
+    Inc(Result);
   end;
-  if (LPos < 0) or (ABytes[LPos] < LEAD2) then
-    Exit; // only ASCII or stray continuation bytes at the end: nothing is split
-  var LNeed: Integer:= if ABytes[LPos] >= LEAD4 then LEN_LEAD4 else if ABytes[LPos] >= LEAD3 then LEN_LEAD3 else LEN_LEAD2;
-  if Result - LPos < LNeed then
-    Result:= LPos;
 end;
 
-// TEncoding.UTF8 RAISES on an invalid sequence; engine output must never kill the pump,
-// so decode with flags 0 (invalid bytes become U+FFFD).
-function LossyUtf8(const ABytes: TBytes; ACount: Integer): string;
+// Flags 0: invalid bytes never raise (the engine's output must not kill the pump).
+function AnsiToString(const ABytes: TBytes; ACount: Integer; ACodePage: Cardinal): string;
 begin
-  var LEnc: TEncoding:= TMBCSEncoding.Create(CP_UTF8, 0, 0);
+  var LEnc: TEncoding:= TMBCSEncoding.Create(ACodePage, 0, 0);
   try
     Result:= LEnc.GetString(ABytes, 0, ACount);
   finally
@@ -1771,17 +1762,17 @@ begin
   end; // try
 end;
 
-function DecodeUtf8Chunk(var APending: TBytes; const AChunk: TBytes): string;
+function DecodeAnsiChunk(var APending: TBytes; const AChunk: TBytes; ACodePage: Cardinal): string;
 begin
   var LAll: TBytes:= APending + AChunk;
-  var LKeep: Integer:= Utf8CompletePrefixLen(LAll);
-  Result:= LossyUtf8(LAll, LKeep);
+  var LKeep: Integer:= AnsiCompletePrefixLen(LAll, ACodePage);
+  Result:= AnsiToString(LAll, LKeep, ACodePage);
   APending:= Copy(LAll, LKeep, Length(LAll) - LKeep);
 end;
 
-function FlushUtf8Pending(var APending: TBytes): string;
+function FlushAnsiPending(var APending: TBytes; ACodePage: Cardinal): string;
 begin
-  Result:= LossyUtf8(APending, Length(APending));
+  Result:= AnsiToString(APending, Length(APending), ACodePage);
   APending:= nil;
 end;
 
@@ -1913,7 +1904,7 @@ var
       var LRaw: TBytes;
       SetLength(LRaw, BytesRead);
       Move(Buf, LRaw[0], BytesRead);
-      AInto(DecodeUtf8Chunk(APending, LRaw)); // R7: a character split across two reads stays whole
+      AInto(DecodeAnsiChunk(APending, LRaw, CP_ACP)); // R7: a DBCS character split across two reads stays whole
       Result:= True;
     end;
   end;
@@ -2000,8 +1991,8 @@ begin
           More:= Drain(OutRead, PendOut, ToOut);
           More:= Drain(ErrRead, PendErr, ToErr) or More;
         until not More;
-        ToOut(FlushUtf8Pending(PendOut)); // a truncated final sequence, if any
-        ToErr(FlushUtf8Pending(PendErr));
+        ToOut(FlushAnsiPending(PendOut, CP_ACP)); // a lead byte with no trail byte, if any
+        ToErr(FlushAnsiPending(PendErr, CP_ACP));
         Break;
       end;
       if (ACancel <> nil) and ACancel.IsCancelled then
