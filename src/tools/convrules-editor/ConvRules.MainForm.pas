@@ -7763,7 +7763,7 @@ var
 begin
   var LOpen: Boolean:= (FFilePath <> '') and SameText(ExpandFileName(APath), ExpandFileName(FFilePath));
   CommitPendingDepth; // the dirty check must see a pick still waiting on its timer
-  if LOpen and (FBook.Snapshot = FSnapshot) then
+  if LOpen and not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
   begin
     var LOldLevel: TTextLevel:= FBookLevel;
     SetBookLevel(ALevel);

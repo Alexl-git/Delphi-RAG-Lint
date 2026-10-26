@@ -258,7 +258,8 @@ try {
   $before = Stamp $book
   [void][W]::InvokeMenu($main, 'File|Save')
   $asked = (WaitCls $p.Id 'TMessageForm' 3) -ne [IntPtr]::Zero
-  [void](WaitWrite $book $before 30)
+  $wrote = WaitWrite $book $before 30
+  Check 'save.ascii.wrote' $wrote ('LastWriteTime unchanged: ' + (Stamp $book))
   $b = Bytes $book
   Check 'save.ascii.silent' ((-not $asked) -and (AllAscii $b) -and (BytesEqual $b ([Text.Encoding]::ASCII.GetBytes($fixture)))) ("asked=$asked len=$($b.Length) bytes=" + (Hex $b[0..15]))
   Start-Sleep -Seconds 1

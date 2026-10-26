@@ -137,6 +137,7 @@ begin
     WS.Free;
   end;
 end;
+
 procedure TestEncodingReaders;
 var
   Dir, P, B, Msg: string;

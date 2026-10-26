@@ -152,6 +152,7 @@ begin
   D:= PreSaveDecision('#use A', tlAscii7);
   Check('bomnote.none', (Utf16BomNote(D, Noted) = '') and (not Noted));
 end;
+
 procedure TestEncodingLevels;
 begin
   TestEncodingLevelBasics;

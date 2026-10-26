@@ -542,6 +542,7 @@ procedure WriteTextWithBackup(const APath, AText: string; out ABackup: string);
 /// <param name="ABackup">The backup path WriteTextWithBackup / WriteTextAskingRaise returned; '' when the target did not exist.</param>
 /// <returns>' (backup &lt;file&gt;)' with the file name only, or '' when no backup was taken.</returns>
 function BackupNote(const ABackup: string): string;
+
 /// <summary>Back APath up as WriteTextWithBackup does, then write AText at ALevel.</summary>
 /// <param name="APath">Target file.</param>
 /// <param name="AText">Text to write; line terminators untouched.</param>
@@ -594,7 +595,6 @@ begin
   else
     Result:= ' (backup ' + ExtractFileName(ABackup) + ')';
 end;
-
 
 function NormalizedPath(const APath: string): string;
 begin
