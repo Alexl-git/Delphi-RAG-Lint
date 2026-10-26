@@ -718,7 +718,7 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."],
+      "pitfalls": ["names, TYPES and trailing comments. outline --in lists them with line numbers."],
       "questions": [
         {
           "ask": "What does this class expose, without reading the whole unit?",
@@ -730,9 +730,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "33468bcf47a4aa5ed6f13f368b9c77b9820ef9bb367b4364629cf946590d86fc"
       }
     },
@@ -3354,7 +3354,7 @@
         {
           "type": "cli",
           "verb": "lint",
-          "example": "lint --file <f> --fix --fix-line <L> --fix-rule const-casing --db <db>",
+          "example": "lint --in <f> --fix --fix-line <L> --fix-rule const-casing --db <db>",
           "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
           "flags": [
             {
@@ -3417,10 +3417,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "3767539f0d8aa8dc7e3ed8e6c1cdbc2537928739a85d38dea267d1fd04280f6f"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "a30d6b709fe9ade05739a8899f6b26c13cc3e39906c3f1f1cd15fe5c5972b974"
       }
     },
     {
@@ -9976,7 +9976,7 @@
       "status": "internal",
       "since": "1.33.0-alpha",
       "summary": "Diagnostic dump of what the Delphi parser reports for one file's uses clauses and implementation line, without an index",
-      "intro": "Read this only when debugging uses-clause extraction: dump-parse-uses --file PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database.",
+      "intro": "Read this only when debugging uses-clause extraction: dump-parse-uses --in PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {
@@ -10060,7 +10060,7 @@
       "status": "internal",
       "since": "0.92.0-alpha",
       "summary": "Diagnostic dump of the preprocessor lexer; the documented preprocessor verbs are preprocess-file and pp-profile",
-      "intro": "Read this only when debugging preprocessor handling of a source file: dump-pp-lex --file PATH dumps the preprocessor lexer output. It is a diagnostic; the documented preprocessor verbs are preprocess-file and pp-profile.",
+      "intro": "Read this only when debugging preprocessor handling of a source file: dump-pp-lex --in PATH dumps the preprocessor lexer output. It is a diagnostic; the documented preprocessor verbs are preprocess-file and pp-profile.",
       "wikiPage": "Maintenance",
       "surfaces": [
         {

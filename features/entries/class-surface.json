@@ -42,7 +42,7 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."],
+  "pitfalls": ["names, TYPES and trailing comments. outline --in lists them with line numbers."],
   "questions": [
     {
       "ask": "What does this class expose, without reading the whole unit?",
@@ -54,9 +54,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.0-alpha",
     "surfaceHash": "33468bcf47a4aa5ed6f13f368b9c77b9820ef9bb367b4364629cf946590d86fc"
   }
 }

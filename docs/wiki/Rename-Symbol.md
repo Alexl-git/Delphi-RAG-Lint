@@ -15,7 +15,7 @@ item runs the CLI `rename` verb rather than an in-process edit:
 ```
 drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>
 ```
-Two related forms also exist: `--kind param --file <F> --line <L> --col <C> --to <New> [...]` for a routine-local parameter/var rename, and
+Two related forms also exist: `--kind param --in <F> --line <L> --col <C> --to <New> [...]` for a routine-local parameter/var rename, and
 `--qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]`.
 Without `--apply` (or with `--dry-run`), the run is a preview only.
 

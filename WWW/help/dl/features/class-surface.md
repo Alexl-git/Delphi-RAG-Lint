@@ -7,7 +7,7 @@ group: search-navigation
 order: 20002
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # Class Surface
@@ -39,7 +39,7 @@ Full flag list: [surface in the CLI reference](../cli.md#surface).
 
 ## Pitfalls
 
-* names, TYPES and trailing comments. outline --file lists them with line numbers.
+* names, TYPES and trailing comments. outline --in lists them with line numbers.
 
 ## Details
 
