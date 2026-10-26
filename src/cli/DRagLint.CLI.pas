@@ -7388,7 +7388,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'query type-usage') then Exit(2);
   if AArgs.InFile = '' then
-  begin Writeln('ERROR: query type-usage requires --in <file.pas>'); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: query type-usage requires --in <file.pas>'); Exit(2); end;
 
   { The list may come from --names or --names-file. A file is the practical form
     once the list is an RTL surface rather than three names on a command line,
@@ -7400,15 +7400,15 @@ begin
   if AArgs.NamesFile <> '' then
   begin
     if not TFile.Exists(AArgs.NamesFile) then
-    begin Writeln('ERROR: --names-file not found: ', AArgs.NamesFile); Exit(2); end;
+    begin ReportNotFound(AArgs, 'ERROR: --names-file not found: ' + AArgs.NamesFile); Exit(2); end;
     for var Ln: string in TFile.ReadAllLines(AArgs.NamesFile) do
       if (Trim(Ln) <> '') and (not Trim(Ln).StartsWith('#')) then Wanted:= Wanted + [Trim(Ln)];
   end;
   if Length(Wanted) = 0 then
-  begin Writeln('ERROR: query type-usage requires --names A,B,C or --names-file <f>'); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: query type-usage requires --names A,B,C or --names-file <f>'); Exit(2); end;
 
   if not TFile.Exists(AArgs.InFile) then
-  begin Writeln('ERROR: file not found: ', AArgs.InFile); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: file not found: ' + AArgs.InFile); Exit(2); end;
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
 
@@ -7459,8 +7459,8 @@ begin
 
     if not Found then
     begin
-      Writeln('ERROR: no index contains ', AArgs.InFile);
-      Writeln('Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
+      ReportNotFound(AArgs, 'ERROR: no index contains ' + AArgs.InFile);
+      ReportNotFound(AArgs, 'Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
       Exit(2);
     end;
 
@@ -9879,7 +9879,7 @@ var
 begin
   if AArgs.InFile = '' then
   begin
-    ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'Usage: drag-lint outline --in <path.pas> ' + '[--db <path>] [--format text|json]');
+    ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), 'Usage: drag-lint outline --in <path.pas> ' + '[--db <path>] [--format text|json] [--json]');
     Exit(2);
   end;
 
@@ -9926,8 +9926,8 @@ begin
 
   if Store = nil then
   begin
-    ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'ERROR: outline: no index that resolves here contains ' + AArgs.InFile);
-    ReportNotFoundFor(SameText(AArgs.Format, 'json'), System.SysUtils.Format('       Tried %d database(s). Index the file, or pass --db <file.sqlite>.', [Length(Dbs)]));
+    ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), 'ERROR: outline: no index that resolves here contains ' + AArgs.InFile);
+    ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), System.SysUtils.Format('       Tried %d database(s). Index the file, or pass --db <file.sqlite>.', [Length(Dbs)]));
     Exit(2);
   end;
   if UsedDb = '' then UsedDb:= Dbs[0];
@@ -9938,7 +9938,7 @@ begin
     are in hand, so children are answered from Syms, not the store. }
   var StubOf: TArray<Integer>:= PairForwardStubs(Syms, HasChildInSet(Syms));
 
-  if SameText(AArgs.Format, 'json') then
+  if (AArgs.AsJson or SameText(AArgs.Format, 'json')) then
   begin
     JArr:= TJSONArray.Create;
     try
@@ -18835,7 +18835,12 @@ begin
   if UnitStore = nil then UnitStore:= NameStore;
   var IncReason: string;
   Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already, IncReason);
-  if Already then begin ReportNotFound(AArgs, Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
+  if Already then
+  begin
+    ReportNotFound(AArgs, Format('"%s" is already in the uses clause.', [ResolvedUnit]));
+    if AArgs.AsJson then Writeln('[]'); { the --json contract: the edits to apply, none here }
+    Exit(0);
+  end;
   if ResolvedUnit  = '' then begin ReportNotFound(AArgs, Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
   if (Length(Edits) = 0) and (IncReason <> '') then { N-06 }
   begin

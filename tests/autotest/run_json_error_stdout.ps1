@@ -5,7 +5,8 @@
   died on a valid "not found" answer.
 
   Verbs: doc-drift, find-callees, call-path, callgraph; CLI lane (2026-10-26): + query unit-usage, impact,
-  wiring, reverse-calltree (incl. its not-found exit code), outline, find-unit, lint, shared-unit.
+  wiring, reverse-calltree (incl. its not-found exit code), outline (incl. --json), find-unit (incl. the
+  already-used [] answer), lint, shared-unit, query type-usage.
   FLAG lane (2026-10-26): + proptree; and under --format json butterfly, context, surface, slice, hover, proptree.
   Each verb tests only the output flags it documents (ReportNotFoundFor), so run_flag_verb_map stays honest.
   Controls: (1) the JSON test rejects a planted plain-text line; (2) without --json the same
@@ -85,6 +86,11 @@ $rem = @(
   @{ n = 'reverse-calltree --format json, not found'; a = @('reverse-calltree', '--qname', $bogus, '--db', $DbPath); j = @('--format', 'json'); m = 'symbol not found' }
   @{ n = 'outline, file in no index';           a = @('outline', '--in', $noFile, '--db', $DbPath); j = @('--format', 'json'); m = 'no index that resolves' }
   @{ n = 'outline, no --in';                    a = @('outline', '--db', $DbPath); j = @('--format', 'json'); m = 'Usage: drag-lint outline' }
+  @{ n = 'outline --json, file in no index';    a = @('outline', '--in', $noFile, '--db', $DbPath); j = @('--json'); m = 'no index that resolves' }
+  @{ n = 'query type-usage, no --in';           a = @('query', 'type-usage', '--names', 'TFoo', '--db', $DbPath); j = @('--json'); m = 'requires --in' }
+  @{ n = 'query type-usage, no --names';        a = @('query', 'type-usage', '--in', $realUnit, '--db', $DbPath); j = @('--json'); m = 'requires --names' }
+  @{ n = 'query type-usage, --in missing';      a = @('query', 'type-usage', '--in', $noFile, '--names', 'TFoo', '--db', $DbPath); j = @('--json'); m = 'file not found' }
+  @{ n = 'query type-usage, --names-file missing'; a = @('query', 'type-usage', '--in', $realUnit, '--names-file', $noFile, '--db', $DbPath); j = @('--json'); m = '--names-file not found' }
   @{ n = 'find-unit, unresolvable name';        a = @('find-unit', '--name', $bogus, '--in', $realUnit, '--db', $DbPath); j = @('--json'); m = 'Could not resolve a unit' }
   @{ n = 'find-unit, no --name';                a = @('find-unit', '--in', $realUnit, '--db', $DbPath); j = @('--json'); m = 'needs --name' }
   @{ n = 'find-unit, already in uses';          a = @('find-unit', '--name', 'BuildHoverModel', '--in', $cliUnit, '--db', $DbPath); j = @('--json'); m = 'already in the uses clause' }
@@ -108,6 +114,14 @@ foreach ($c in $rem) {
 # reverse-calltree: an unresolved qname over a READABLE index is "not found" (exit 1), not "no readable index" (exit 2).
 $null = & $Exe reverse-calltree --qname $bogus --db $DbPath --json 2>$null
 Check 'reverse-calltree: unresolved qname exits 1 (not found), not 2' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
+# find-unit --json when the unit is already used: a valid JSON answer on stdout (the edits array, empty), exit 0.
+$fu = (& $Exe find-unit --name 'BuildHoverModel' --in $cliUnit --db $DbPath --json 2>$null) -join "`n"
+$fuExit = $LASTEXITCODE
+Check 'find-unit --json, already in uses: stdout is exactly [] and exit 0' (($fu.Trim() -eq '[]') -and ($fuExit -eq 0)) "stdout=[$fu] exit=$fuExit"
+# outline --json is the same request as --format json: identical stdout on an indexed unit.
+$oj = (& $Exe outline --in $realUnit --db $DbPath --json 2>$null) -join "`n"
+$of = (& $Exe outline --in $realUnit --db $DbPath --format json 2>$null) -join "`n"
+Check 'outline --json prints what --format json prints (non-empty JSON)' ((-not [string]::IsNullOrWhiteSpace($oj)) -and ($oj -ceq $of) -and (Test-StdoutJsonOrEmpty $oj))
 # Positive control: success paths of the same verbs were already JSON and stay JSON (non-empty, parses).
 $ok = (& $Exe outline --in $realUnit --db $DbPath --format json 2>$null) -join "`n"
 Check 'control: outline --format json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))

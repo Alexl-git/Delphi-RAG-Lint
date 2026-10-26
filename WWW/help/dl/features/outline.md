@@ -27,6 +27,7 @@ Full flag list: [outline in the CLI reference](../cli.md#outline).
 | `--in` | `<path.pas>` |  |  |
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
+| `--json` |  |  |  |
 
 ## Where to click
 

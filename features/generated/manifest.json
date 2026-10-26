@@ -1388,7 +1388,7 @@
         {
           "type": "cli",
           "verb": "outline",
-          "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json]",
+          "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json]",
           "flags": [
             {
               "name": "--in",
@@ -1400,10 +1400,13 @@
             },
             {
               "name": "--format"
+            },
+            {
+              "name": "--json"
             }
           ],
           "helpOrder": 6,
-          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
+          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json]", "                               unit outline; backs the IDE Structure form."]
         },
         {
           "type": "ide-menu",
@@ -1426,7 +1429,7 @@
         "date": "2026-10-26",
         "by": "ENGINE",
         "build": "1.35.0-alpha",
-        "surfaceHash": "5226ebaf7d59c51ed909bc29b49c81c20f93e5aa323134c42d8d859b29fcfd97"
+        "surfaceHash": "d1d20b3a34a76dd6d2b5868ad178cc0976c2d06608b5a358b6edfd192999c921"
       }
     },
     {
