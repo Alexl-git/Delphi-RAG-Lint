@@ -4,9 +4,9 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.43.0-alpha",
   "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
-  "intro": "Read this when you are browsing the Structure form and want to land on where a symbol is declared. Right-click the tree node and choose Go to Declaration; it is an editor jump with no command line equivalent and needs no index.",
+  "intro": "Read this when you are in the Structure form and want the editor to jump to where a node's symbol is declared. Right-click the node and choose Go to Declaration; it is an editor jump with no command line equivalent.",
   "wikiPage": "Go-to-Declaration",
   "surfaces": [
     {

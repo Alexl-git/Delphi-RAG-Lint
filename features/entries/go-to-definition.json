@@ -4,9 +4,9 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.47.0-alpha",
   "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
-  "intro": "Read this to jump straight to where the symbol under the cursor is defined. Choose drag-lint > Go to Definition; it is served by the IDE plugin with no one-shot command line verb.",
+  "intro": "Read this to jump straight to where the symbol under the cursor is declared. Choose drag-lint > Go to Definition; the plugin asks the drag-lint language server, so the project needs an index, and a pick list appears when several declarations match. There is no one-shot command line verb; use query --name for that.",
   "wikiPage": "Go-to-Definition",
   "surfaces": [
     {
