@@ -279,8 +279,9 @@ type
       const ADirectives: string = ''; AVisExplicit: Boolean = True; const AGenericParams: string = ''
     ): Integer;
     { AReceiver is persisted as refs.receiver_text at insert time (N-05: the
-      member of `Self.X`). '' keeps the column NULL, as every other ref has it
-      until the call stream computes one. }
+      member of `Self.X`; T-11: the receiver of every qualified call and
+      member-access, see ReceiverTextOf). '' keeps the column NULL -- a bare
+      call, and every read/write ref -- until the call stream writes one. }
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string = '');
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
   end;
@@ -453,6 +454,113 @@ begin
   Result:= IsIndexedMemberReceiver(ANode.ChildByField('lhs'));
 end;
 
+{ Ref-gap G4 support (T-11 R5, INBOX-member-access-after-paren-cast): is this
+  node a PARENTHESISED receiver -- `(pShape as TBfShape)` -- or a dotted chain
+  of identifier members rooted in one, `(X as T).A.B`? G / G2 / G3 all answer
+  False for it, so `Writeln((pShape as TBfShape).Name)` recorded no ref for
+  Name at all and `cycles --plan` could not see the member. }
+function IsParenRootedReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprParens' then Exit(True);
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsParenRootedReceiver(ANode.ChildByField('lhs'));
+end;
+
+const
+  { T-11: a longer receiver is not recorded at parse ('' -> NULL), and the
+    resolver falls back to its line scan for it. }
+  RECEIVER_TEXT_MAX = 512;
+
+{ T-11: ARaw (a receiver's source slice) with comments dropped, every run of
+  whitespace / comments folded to ONE blank, and no blank kept next to
+  . ( ) [ ] , ^ -- so `O.Mk('a')<NL>    .Mk('b')` reads `O.Mk('a').Mk('b')`
+  and a single-line tight receiver is returned byte-identical. String literals
+  are copied verbatim. }
+function NormaliseReceiverText(const ARaw: string): string;
+const
+  TIGHT = ['.', '(', ')', '[', ']', ',', '^'];
+var
+  SB : TStringBuilder;
+  I  : Integer;
+  N  : Integer;
+  Gap: Boolean;
+
+  procedure Put(C: Char);
+  begin
+    if Gap and (SB.Length > 0) and not CharInSet(SB.Chars[SB.Length - 1], TIGHT) and not CharInSet(C, TIGHT) then
+      SB.Append(' ');
+    Gap:= False;
+    SB.Append(C);
+  end;
+
+begin
+  N  := Length(ARaw);
+  I  := 1;
+  Gap:= False;
+  SB := TStringBuilder.Create;
+  try
+    while I <= N do
+    begin
+      if ARaw[I] = '''' then
+      begin
+        Put('''');
+        Inc(I);
+        while (I <= N) and (ARaw[I] <> '''') do
+        begin
+          SB.Append(ARaw[I]);
+          Inc(I);
+        end;
+        if I <= N then SB.Append('''');
+      end
+      else if ARaw[I] = '{' then
+      begin
+        while (I <= N) and (ARaw[I] <> '}') do Inc(I);
+        Gap:= True;
+      end
+      else if (ARaw[I] = '(') and (I < N) and (ARaw[I + 1] = '*') then
+      begin
+        Inc(I, 2);
+        while (I < N) and not ((ARaw[I] = '*') and (ARaw[I + 1] = ')')) do Inc(I);
+        Inc(I);
+        Gap:= True;
+      end
+      else if (ARaw[I] = '/') and (I < N) and (ARaw[I + 1] = '/') then
+      begin
+        while (I <= N) and not CharInSet(ARaw[I], [#10, #13]) do Inc(I);
+        Gap:= True;
+      end
+      else if ARaw[I] <= ' ' then Gap:= True
+      else Put(ARaw[I]);
+      Inc(I);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ T-11 (extractor 1.25.0): the RECEIVER of a qualified call / member access as
+  a PARSE fact -- the lhs of the exprDot ADot, normalised by
+  NormaliseReceiverText. Recorded in refs.receiver_text, so the resolver no
+  longer re-reads one source line (which lost a fluent chain continued on the
+  next line, a dot at line end, and every receiver of a file edited since).
+  '' -- the column stays NULL and the resolver's line scan runs as before --
+  when ADot is not an exprDot, its lhs is missing, is or holds an ERROR node
+  (never a partial slice), or the text exceeds RECEIVER_TEXT_MAX. }
+function ReceiverTextOf(const ADot: TTSNode; const ASource: TBytes): string;
+begin
+  Result:= '';
+  if ADot.IsNull or (ADot.NodeType <> 'exprDot') then Exit;
+  var L:= ADot.ChildByField('lhs');
+  if L.IsNull or L.IsError or L.HasError then Exit;
+  Result:= NormaliseReceiverText(NodeText(L, ASource));
+  if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
 // v0.8: every `typeref` node that appears in a parameter type, field type,
@@ -563,7 +671,8 @@ begin
   // call resolver walks and the two unresolved-call queries take their
   // complement against, so producer and consumers read one declaration -- see
   // the block comment above REF_KIND_CALL in DRagLint.Core.Model (register E1).
-  AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode);
+  // T-11: a qualified callee carries its receiver text from the CST.
+  AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode, ReceiverTextOf(EntityNode, AState.Source));
 end; // procedure
 
 { PHASE B item B3 -- a bare parameterless call in EXPRESSION position.
@@ -2347,7 +2456,8 @@ var
     else if AExpr.NodeType = 'exprDot' then
     begin
       RhsNode:= AExpr.ChildByField('rhs');
-      if not RhsNode.IsNull then AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode);
+      if not RhsNode.IsNull then
+        AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode, ReceiverTextOf(AExpr, AState.Source)); { T-11 }
     end;
   end;
 
@@ -2998,7 +3108,7 @@ begin
       begin
         var RG:= ANode.ChildByField('rhs');
         if (not RG.IsNull) and (RG.NodeType = 'identifier') then
-          AState.EmitRef('member-access', NodeText(RG, AState.Source), RG);
+          AState.EmitRef('member-access', NodeText(RG, AState.Source), RG, ReceiverTextOf(ANode, AState.Source));
       end;
       // Ref-gap G2 (2026-09-10): the same capture when the receiver is itself a
       // dotted chain of identifiers -- `A.B.C.Proc`. G above handles only a
@@ -3023,7 +3133,7 @@ begin
       begin
         var RG2:= ANode.ChildByField('rhs');
         if (not RG2.IsNull) and (RG2.NodeType = 'identifier') then
-          AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2);
+          AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2, ReceiverTextOf(ANode, AState.Source));
       end;
       // Ref-gap G3 (B-13): the same capture when the receiver is INDEXED --
       // `S[First].IsWhiteSpace`, `A[I].Field:= 1`, `A[I].Sub.Leaf`. See
@@ -3032,7 +3142,16 @@ begin
       begin
         var RG3:= ANode.ChildByField('rhs');
         if (not RG3.IsNull) and (RG3.NodeType = 'identifier') then
-          AState.EmitRef('member-access', NodeText(RG3, AState.Source), RG3);
+          AState.EmitRef('member-access', NodeText(RG3, AState.Source), RG3, ReceiverTextOf(ANode, AState.Source));
+      end;
+      // Ref-gap G4 (T-11 R5): the same capture when the receiver is
+      // PARENTHESISED -- `(pShape as TBfShape).Name`, `(X as T).A.B`. See
+      // IsParenRootedReceiver; 'member-access' for the reasons G2 gives.
+      if IsParenRootedReceiver(L) then
+      begin
+        var RG4:= ANode.ChildByField('rhs');
+        if (not RG4.IsNull) and (RG4.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG4, AState.Source), RG4, ReceiverTextOf(ANode, AState.Source));
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
