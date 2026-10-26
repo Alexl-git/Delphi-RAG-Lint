@@ -846,17 +846,32 @@ begin
   if ANegated then Result:= not Result;
 end;
 
-{ True when ADecl (declVar / declArg / varDef) names AName. Every direct
-  `identifier` child is a declared name -- `A, B: T` carries two -- and the
-  type sits inside its own `type` node, so it is never mistaken for one. }
-function DeclNamesIdent(const ADecl: TTSNode; const ASource: TBytes; const AName: string): Boolean;
+{ ANode's named children, in order, from ONE tree-cursor walk.
+
+  NOT a loop over NamedChild(I): tree-sitter answers ts_node_named_child by
+  re-walking the child list from the first child, so such a loop is O(n^2) on
+  a wide node -- a routine body of 10k statements is one `block` with 10k
+  children. The cursor steps sibling to sibling, O(n) in all. }
+function NamedChildrenOf(const ANode: TTSNode): TArray<TTSNode>;
 var
-  I: Integer;
+  Cur : TTSTreeCursor  ;
+  List: TList<TTSNode> ;
 begin
-  for I:= 0 to Integer(ADecl.NamedChildCount) - 1 do
-    if (ADecl.NamedChild(I).NodeType = 'identifier') and SameText(NodeText(ADecl.NamedChild(I), ASource), AName) then
-      Exit(True);
-  Result:= False;
+  List:= TList<TTSNode>.Create;
+  try
+    Cur:= TTSTreeCursor.Create(ANode);
+    try
+      if Cur.GotoFirstChild then
+        repeat
+          if Cur.CurrentNode.IsNamed then List.Add(Cur.CurrentNode);
+        until not Cur.GotoNextSibling;
+    finally
+      Cur.Free;
+    end;
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end; // try
 end;
 
 { The `type` field text of ADecl with all whitespace removed (`^ Char` ->
@@ -871,64 +886,146 @@ begin
   Result:= TRegEx.Replace(NodeText(Ty, ASource), '\s', '');
 end;
 
-{ Looks for the declaration of AName among the direct children of AScope.
+type
+  { One name a scope declares among its direct children (see
+    TDeclScopeCache.Build). IsInline marks a block's inline var, which is in
+    scope only for uses at or after EndByte. }
+  TScopeDecl = record
+    TypeText: string ;
+    EndByte : UInt32 ;
+    IsInline: Boolean;
+  end;
+
+  { Per-scope declaration tables for ONE TQueryRule.Run (X-23, 2026-10-26).
+
+    #declared-type? walks from a capture to every enclosing scope and asks
+    "is this name declared here?". Answered by scanning the scope's children
+    per match, that is O(children) per match: on a routine body of n
+    statements each matched `X + n` paid for the whole block, O(n^2) per file
+    (2k lines 11.7 s, 4k 40.8 s, 10k 252 s of `lint` / LSP didOpen). This
+    builds each scope's table once, from one cursor walk, and answers every
+    later question from it.
+
+    Keyed by the node's identity (tree-sitter subtree id + start byte), so it
+    is valid for ONE tree only -- Run creates and frees it around one cursor
+    execution and never shares it. Not thread-safe; it never needs to be. }
+  TDeclScopeCache = class
+  strict private
+    FScopes: TObjectDictionary<string, TDictionary<string, TArray<TScopeDecl>>>;
+    class procedure AddNames(AMap: TDictionary<string, TArray<TScopeDecl>>; const ADecl: TTSNode;
+      const ASource: TBytes; AEndByte: UInt32; AIsInline: Boolean); static;
+    class function Build(const AScope: TTSNode; const ASource: TBytes): TDictionary<string, TArray<TScopeDecl>>; static;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function Find(const AScope: TTSNode; const ASource: TBytes; const AName: string;
+      ABeforeByte: UInt32; out AType: string): Boolean;
+  end;
+
+constructor TDeclScopeCache.Create;
+begin
+  inherited Create;
+  FScopes:= TObjectDictionary<string, TDictionary<string, TArray<TScopeDecl>>>.Create([doOwnsValues]);
+end;
+
+destructor TDeclScopeCache.Destroy;
+begin
+  FScopes.Free;
+  inherited Destroy;
+end;
+
+{ Records every `identifier` directly under ADecl (`A, B: T` carries two; the
+  type sits inside its own `type` node, so it is never mistaken for a name)
+  under its lowercased text, in declaration order. }
+class procedure TDeclScopeCache.AddNames(AMap: TDictionary<string, TArray<TScopeDecl>>; const ADecl: TTSNode;
+  const ASource: TBytes; AEndByte: UInt32; AIsInline: Boolean);
+var
+  D   : TScopeDecl       ;
+  Id  : TTSNode          ;
+  Key : string           ;
+  Prev: TArray<TScopeDecl>;
+begin
+  D.TypeText:= DeclTypeText(ADecl, ASource);
+  D.EndByte := AEndByte;
+  D.IsInline:= AIsInline;
+  for Id in NamedChildrenOf(ADecl) do
+    if Id.NodeType = 'identifier' then
+    begin
+      Key:= LowerCase(NodeText(Id, ASource));
+      if AMap.TryGetValue(Key, Prev) then AMap[Key]:= Prev + [D]
+      else AMap.Add(Key, [D]);
+    end;
+end;
+
+{ The declarations among the direct children of AScope, in child order.
   Var sections (`declVars` > `declVar`) count wherever they sit; a routine's
   header contributes its `declArgs`; inline vars (`varDef`, and the
-  `varAssignDef` lhs of an `assignment`) count only inside a `block` and only
-  when they END before ABeforeByte -- an inline var is not in scope above its
-  declaration. A nested routine is a child of its parent's `defProc`, but its
-  own locals are never visited here: they are not in scope for the parent.
-  True with AType set when found; AType is '' for an untyped inline var. }
-function FindDeclInScope(const AScope: TTSNode; const ASource: TBytes; const AName: string;
-  ABeforeByte: UInt32; out AType: string): Boolean;
+  `varAssignDef` lhs of an `assignment`) count only inside a `block`, tagged
+  IsInline with the END of the statement that declares them. A nested
+  routine is a child of its parent's `defProc`, but its own locals are never
+  visited here: they are not in scope for the parent. }
+class function TDeclScopeCache.Build(const AScope: TTSNode; const ASource: TBytes): TDictionary<string, TArray<TScopeDecl>>;
 var
-  I, J  : Integer;
-  Child : TTSNode;
-  Sub   : TTSNode;
-  Args  : TTSNode;
+  IsBlock: Boolean;
+  Child  : TTSNode;
+  Sub    : TTSNode;
+  Args   : TTSNode;
+  Kind   : string ;
 begin
-  AType:= '';
-  for I:= 0 to Integer(AScope.NamedChildCount) - 1 do
+  Result:= TDictionary<string, TArray<TScopeDecl>>.Create;
+  IsBlock:= AScope.NodeType = 'block';
+  for Child in NamedChildrenOf(AScope) do
   begin
-    Child:= AScope.NamedChild(I);
-    if Child.NodeType = 'declVars' then
+    Kind:= Child.NodeType;
+    if Kind = 'declVars' then
     begin
-      for J:= 0 to Integer(Child.NamedChildCount) - 1 do
-      begin
-        Sub:= Child.NamedChild(J);
-        if (Sub.NodeType = 'declVar') and DeclNamesIdent(Sub, ASource, AName) then
-        begin
-          AType:= DeclTypeText(Sub, ASource);
-          Exit(True);
-        end;
-      end;
+      for Sub in NamedChildrenOf(Child) do
+        if Sub.NodeType = 'declVar' then AddNames(Result, Sub, ASource, 0, False);
     end
-    else if Child.NodeType = 'declProc' then
+    else if Kind = 'declProc' then
     begin
       Args:= Child.ChildByField('args');
       if not Args.IsNull then
-        for J:= 0 to Integer(Args.NamedChildCount) - 1 do
-        begin
-          Sub:= Args.NamedChild(J);
-          if (Sub.NodeType = 'declArg') and DeclNamesIdent(Sub, ASource, AName) then
-          begin
-            AType:= DeclTypeText(Sub, ASource);
-            Exit(True);
-          end;
-        end;
+        for Sub in NamedChildrenOf(Args) do
+          if Sub.NodeType = 'declArg' then AddNames(Result, Sub, ASource, 0, False);
     end
-    else if (AScope.NodeType = 'block') and (Child.EndByte <= ABeforeByte) then
+    else if IsBlock then
     begin
       Sub:= Child;
-      if Child.NodeType = 'assignment' then Sub:= Child.ChildByField('lhs');
-      if (not Sub.IsNull) and ((Sub.NodeType = 'varDef') or (Sub.NodeType = 'varAssignDef'))
-        and DeclNamesIdent(Sub, ASource, AName) then
+      if Kind = 'assignment' then Sub:= Child.ChildByField('lhs');
+      if (not Sub.IsNull) and ((Sub.NodeType = 'varDef') or (Sub.NodeType = 'varAssignDef')) then
+        AddNames(Result, Sub, ASource, Child.EndByte, True);
+    end;
+  end; // for
+end;
+
+{ True, with AType set, when AScope's direct children declare AName in a way
+  that is in scope at ABeforeByte; the FIRST such declaration in child order
+  wins. An inline var counts only when its statement ENDS at or before
+  ABeforeByte -- it is not in scope above its declaration. AType is '' for an
+  untyped inline var. The scope's table is built on its first question. }
+function TDeclScopeCache.Find(const AScope: TTSNode; const ASource: TBytes; const AName: string;
+  ABeforeByte: UInt32; out AType: string): Boolean;
+var
+  Key : string                                  ;
+  Map : TDictionary<string, TArray<TScopeDecl>> ;
+  Hits: TArray<TScopeDecl>                      ;
+  D   : TScopeDecl                              ;
+begin
+  AType:= '';
+  Key:= Format('%p:%d', [AScope.id, AScope.StartByte]);
+  if not FScopes.TryGetValue(Key, Map) then
+  begin
+    Map:= Build(AScope, ASource);
+    FScopes.Add(Key, Map);
+  end;
+  if Map.TryGetValue(LowerCase(AName), Hits) then
+    for D in Hits do
+      if (not D.IsInline) or (D.EndByte <= ABeforeByte) then
       begin
-        AType:= DeclTypeText(Sub, ASource);
+        AType:= D.TypeText;
         Exit(True);
       end;
-    end;
-  end;
   Result:= False;
 end;
 
@@ -947,8 +1044,13 @@ end;
   deliberate choice of silence over a guess -- the rule this was written for
   (pchar-arithmetic) used to guess from a `P` prefix and reported
   `PRows := PRows + [Row]` on a TArray. Malformed arguments pass, like every
-  predicate here. }
-function DeclaredTypeMatches(const ANode: TTSNode; const ASource: TBytes; const ATypeRx: string): Boolean;
+  predicate here.
+
+  ACache answers each scope's "declared here?" from a table built once per
+  scope (X-23): without it every match re-scanned every enclosing scope and
+  the rule was quadratic in the routine's length. }
+function DeclaredTypeMatches(const ANode: TTSNode; const ASource: TBytes; const ATypeRx: string;
+  ACache: TDeclScopeCache): Boolean;
 var
   Name : string ;
   Cur  : TTSNode;
@@ -960,7 +1062,7 @@ begin
   Cur:= ANode.Parent;
   while not Cur.IsNull do
   begin
-    if FindDeclInScope(Cur, ASource, Name, ANode.StartByte, Ty) then
+    if ACache.Find(Cur, ASource, Name, ANode.StartByte, Ty) then
     begin
       if Ty = '' then Exit;
       try
@@ -974,7 +1076,7 @@ begin
 end;
 
 function EvalDeclaredType(const AMatch: TTSQueryMatch; const ASource: TBytes;
-  const AArgs: TArray<TPredicateArg>): Boolean;
+  const AArgs: TArray<TPredicateArg>; ACache: TDeclScopeCache): Boolean;
 const
   OP_CAPTURE_RX = 3; // the operator + one capture + the regex
   CAP_ARG       = 1;
@@ -982,11 +1084,12 @@ const
 begin
   if (Length(AArgs) <> OP_CAPTURE_RX) or not AArgs[CAP_ARG].IsCapture or AArgs[RX_ARG].IsCapture then Exit(True);
   Result:= DeclaredTypeMatches(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource,
-    AArgs[RX_ARG].StringValue);
+    AArgs[RX_ARG].StringValue, ACache);
 end;
 
 // Evaluate one predicate. Returns True if it passes.
-function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>): Boolean;
+function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+  ACache: TDeclScopeCache): Boolean;
 const
   { #in? / #not-in? argument positions: (#in? @cap "nodeType" ["nameRegex"]) }
   CapArg    = 1;
@@ -1078,14 +1181,15 @@ begin
     Exit(EvalResetInLoop(AMatch, ASource, AArgs, Op = 'not-reset-in-loop?'));
 
   if Op = 'declared-type?' then
-    Exit(EvalDeclaredType(AMatch, ASource, AArgs));
+    Exit(EvalDeclaredType(AMatch, ASource, AArgs, ACache));
 
   // Unknown predicate - treat as pass (don't suppress matches just because
   // we don't recognise a directive).
   Result:= True;
 end; // function
 
-function AllPredicatesPass(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes): Boolean;
+function AllPredicatesPass(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes;
+  ACache: TDeclScopeCache): Boolean;
 var
   Steps  : TTSQueryPredicateStepArray;
   Current: TList<TPredicateArg>      ;
@@ -1117,7 +1221,7 @@ begin
         begin
           // End of one predicate. Evaluate; if false, the whole match
           // fails. Then reset Current for the next predicate (if any).
-          if not EvalPredicate(AQuery, AMatch, ASource, Current.ToArray) then Exit(False);
+          if not EvalPredicate(AQuery, AMatch, ASource, Current.ToArray, ACache) then Exit(False);
           Current.Clear;
         end;
       end; // case
@@ -1144,6 +1248,7 @@ var
   i          : Integer             ;
   ProfT0     : Int64               ;
   Profiled   : Boolean             ;
+  DeclCache  : TDeclScopeCache     ; { X-23: #declared-type? scope tables, this tree only }
 begin
   { P3 MEASUREMENT. Off unless DRAGLINT_PROFILE is set -- see QueryRuleTimings.
     try/finally rather than a tail call: several Exit paths below would otherwise
@@ -1154,12 +1259,13 @@ begin
   try
     FoundList:= TList<TLintFinding>.Create;
     Cursor:= TTSQueryCursor.Create;
+    DeclCache:= TDeclScopeCache.Create;
     try
       Cursor.Execute(FQuery, ARootNode);
       while Cursor.NextMatch(Match) do
       begin
         // v0.3: evaluate predicates before emitting a finding.
-        if not AllPredicatesPass(FQuery, Match, ASource) then Continue;
+        if not AllPredicatesPass(FQuery, Match, ASource, DeclCache) then Continue;
 
         Captures:= Match.CapturesArray;
         // Prefer the capture named @<FWarnCapture>; otherwise pin to the
@@ -1208,6 +1314,7 @@ begin
       end; // while
       Result:= FoundList.ToArray;
     finally
+      DeclCache.Free;
       Cursor.Free;
       FoundList.Free;
     end; // try
