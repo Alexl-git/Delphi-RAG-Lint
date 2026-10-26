@@ -25,6 +25,10 @@ before working on an item.**
   fix/conv-apply-read-encoding (Convert.Apply ANSI reads, to ENGINE for merge); L2 #migrate D5 + D6-B;
   L4 VARINSP 5 with-engine fails; non-ANSI identifiers in the index = ENGINE EXTRACT, 1.36.0;
   re-pin + baseline after ENGINE's next deploy.
+* 2026-10-26 later: L4 VARINSP fixture merged (with-engine 2956/0/0); L1 merged by ENGINE 891543ae (ships
+  1.35.1). **Owed at the 1.36.0 re-pin:** the engine's text output becomes ascii with `\uXXXX` escapes by
+  default -- the editor (Engine.pas pipe readers) must pass `--output-encoding utf8` (probe the
+  capability) or decode the escapes; add a model test with a non-ASCII name before re-pinning.
 
 ## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- historical
 
