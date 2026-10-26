@@ -235,6 +235,13 @@ type
       /// <param name="ABooks">Paths of the books to check; a book already asked this session is skipped.</param>
       /// <returns>The outcome texts (LOWERED_FMT or the abort status), one per Yes.</returns>
       function OfferLowering(const ABooks: TArray<string>): TArray<string>;
+      /// <summary>Owner ruling 2026-10-26: before the run, asks per unit whose .pas cannot hold a
+      /// character of the books' rule text (ConvRules.ConvertEncoding.PreRunPlan): Yes raises
+      /// that .pas (pJob.RaiseFiles), No (change the rules) and Cancel stop the run with every
+      /// place as a note row.</summary>
+      /// <param name="pJob">The built job; its RaiseFiles gets the Yes answers.</param>
+      /// <returns>False = the run must not start (the status says why).</returns>
+      function AskEncodingBeforeRun(var pJob: TConvertJob): Boolean;
       /// <summary>Starts a built job on the worker thread: numbers it (Inc(FRunId), ruling I2),
       /// captures the run's settings and appends its rows to FRunRows.</summary>
       /// <param name="AJob">The job; RunId is overwritten.</param>
@@ -428,6 +435,7 @@ uses
   , ConvRules.QualifyForm
   , ConvRules.Migrate  // A4: MigrateBookNotes, the D4 Preflight note
   , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- PROBE_SHOW_AFTER_MS is the probe's own window delay; it travels with the probe decisions the tab asks (ProbeCaseFor, ProbeStatusText)
+  , ConvRules.ConvertEncoding  // the pre-run encoding question (owner ruling 2026-10-26)
   ;
 
 // A rule book's text at its detected encoding (UTF-16 / ANSI / UTF-8, BOM or none).
@@ -1733,7 +1741,59 @@ begin
     FNotes:= FNotes + [LNote];
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
   end;
+  if not AskEncodingBeforeRun(Job) then
+  begin
+    KeepWorkListRefused;
+    Exit;
+  end;
   StartRun(Job, string.Join(' ', LLowered));
+end;
+
+function TConvertTab.AskEncodingBeforeRun(var pJob: TConvertJob): Boolean;
+var
+  LPlaces: TArray<TEncodingPlace>;
+  LPlan  : TPreRunPlan;
+begin
+  try
+    LPlaces:= EncodingPlaces(pJob.Books, pJob.Units,
+      function(const APath: string): string
+      begin
+        Result:= ReadBookText(APath);
+      end,
+      function(const APas: string; out ALevel: TTextLevel): Boolean
+      begin
+        // The level the run writes the unit at is the level its .pas has now.
+        ALevel:= tlAscii7;
+        Result:= TFile.Exists(APas);
+        if Result then
+          ALevel:= DetectTextLevel(TFile.ReadAllBytes(APas)).Level;
+      end);
+  except
+    on E: Exception do
+    begin
+      FHost.SetStatus('Convert refused: the encoding check could not read a file: ' + E.Message, True);
+      Exit(False);
+    end;
+  end; // try
+  LPlan:= PreRunPlan(LPlaces, afEncodingGuard in pJob.ApplyFeatures,
+    function(const AUnitPas, AQuestion: string; ACanRaise: Boolean): Integer
+    begin
+      Result:= MessageDlg(AQuestion, mtWarning, if ACanRaise then [mbYes, mbNo, mbCancel] else [mbNo, mbCancel], 0);
+    end);
+  if not LPlan.Stop then
+  begin
+    pJob.RaiseFiles:= LPlan.RaiseFiles;
+    Exit(True);
+  end;
+  for var LPlace: TEncodingPlace in LPlan.Places do
+    AddResultRow(['', '', 'note', '', '', '', '', Format('encoding: %s %d:%d %s does not fit %s (%s) -- rule: %s',
+      [ExtractFileName(LPlace.Book), LPlace.Line, LPlace.Col, CharLabel(LPlace.Code), ExtractFileName(LPlace.UnitPas),
+       LevelName(LPlace.UnitLevel), LPlace.Rule])]);
+  if LPlan.ChangeRules then
+    FHost.SetStatus('Convert not started: change the rule text listed in the results (or raise the unit), then Convert again.', True)
+  else
+    FHost.SetStatus('Convert cancelled -- nothing was converted.', False);
+  Result:= False;
 end;
 
 function TConvertTab.OfferLowering(const ABooks: TArray<string>): TArray<string>;

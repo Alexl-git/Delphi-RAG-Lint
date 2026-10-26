@@ -65,6 +65,8 @@ const
   DETECT_UTF16_UNSURE  = 'UTF-16 without BOM suspected but not sure -- read as ASCII-8 (ANSI)';
   NOTE_FITS_AFTER_ALL  = 'Encoding checked: every character fits %s.';
   NOTE_UTF16_BOM_ADDED = 'UTF-16 saved with a BOM (the engine cannot read UTF-16 without one).';
+  /// <summary>Appended to a lone surrogate's U+XXXX wherever a lost character is listed.</summary>
+  LONE_SURROGATE_TEXT  = ' (a lone surrogate: fits UTF-16 only -- save as UTF-16 or fix the text)';
   ASK_SAVE_FMT         = '%d character(s) in %s cannot be saved as %s and would become "?":%s%s%sYes = save the book as %s instead (nothing is lost). Cancel = do not save.';
 
 /// <summary>Rank of a level on the ladder: Ascii7=0, Ascii8=1, Utf8/Utf8Bom=2, Utf16/Utf16Bom=3.</summary>
@@ -108,9 +110,11 @@ function EncodeText(const AText: string; ALevel: TTextLevel): TBytes;
 /// <returns>True when nothing is lost at ALevel.</returns>
 function RoundTrips(const AText: string; ALevel: TTextLevel): Boolean;
 
-/// <summary>Lowest of tlAscii7, tlAscii8, tlUtf8 that round-trips the text.</summary>
+/// <summary>Lowest of tlAscii7, tlAscii8, tlUtf8 that round-trips the text; tlUtf16Bom when not even
+/// UTF-8 does (a lone surrogate -- U+D800..U+DFFF without its pair -- fits UTF-16 only; with a BOM,
+/// because the engine cannot read UTF-16 without one).</summary>
 /// <param name="AText">The text to test.</param>
-/// <returns>The lowest sufficient level.</returns>
+/// <returns>The lowest sufficient, writable level.</returns>
 function NeededLevel(const AText: string): TTextLevel;
 
 /// <summary>Distinct characters (by code point, first occurrence) that ALevel cannot hold.</summary>
@@ -121,7 +125,8 @@ function NeededLevel(const AText: string): TTextLevel;
 /// <returns>Up to AMax lost characters in order of first occurrence.</returns>
 function LostChars(const AText: string; ALevel: TTextLevel; AMax: Integer; out ATotal: Integer): TArray<TLostChar>;
 
-/// <summary>One 'line N: U+XXXX' per entry, joined with sLineBreak.</summary>
+/// <summary>One 'line N: U+XXXX' per entry, joined with sLineBreak; a lone surrogate's entry adds
+/// LONE_SURROGATE_TEXT.</summary>
 /// <param name="ALost">Entries as returned by LostChars.</param>
 /// <returns>The joined listing; empty for an empty array.</returns>
 function LostCharsText(const ALost: TArray<TLostChar>): string;
@@ -131,11 +136,13 @@ function LostCharsText(const ALost: TArray<TLostChar>): string;
 /// <returns>The level a save writes at.</returns>
 function SaveLevelFor(ACurrent: TTextLevel): TTextLevel;
 
-/// <summary>The level offered when the current one loses characters: from tlAscii7 / tlAscii8 it is
-/// tlUtf8 (owner default); from a UTF level ACurrent.</summary>
+/// <summary>The level offered when the current one loses characters: tlUtf16Bom when the text needs
+/// UTF-16 (ANeeded = tlUtf16Bom: a lone surrogate, which UTF-8 cannot hold -- owner ruling 2026-10-26);
+/// else from tlAscii7 / tlAscii8 tlUtf8 (owner default), from a UTF level ACurrent.</summary>
 /// <param name="ACurrent">The level that loses characters.</param>
+/// <param name="ANeeded">NeededLevel of the text being written.</param>
 /// <returns>The level to offer.</returns>
-function RaiseTarget(ACurrent: TTextLevel): TTextLevel;
+function RaiseTarget(ACurrent, ANeeded: TTextLevel): TTextLevel;
 
 /// <summary>Offers a lower level for a UTF-16 book: ANeeded (tlAscii7/8/Utf8) when ACurrent is UTF-16
 /// and LevelRank(ANeeded) &lt; 3; else ACurrent (= no offer).</summary>
@@ -413,8 +420,10 @@ begin
     Result:= tlAscii7
   else if RoundTrips(AText, tlAscii8) then
     Result:= tlAscii8
+  else if RoundTrips(AText, tlUtf8) then
+    Result:= tlUtf8
   else
-    Result:= tlUtf8;
+    Result:= tlUtf16Bom;
 end;
 
 function LostChars(const AText: string; ALevel: TTextLevel; AMax: Integer; out ATotal: Integer): TArray<TLostChar>;
@@ -486,7 +495,8 @@ begin
   begin
     if I > 0 then
       Result:= Result + sLineBreak;  // dl:ok concat-in-loop@c7fe -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
-    Result:= Result + Format('line %d: U+%.4X', [ALost[I].Line, ALost[I].Code]);  // dl:ok concat-in-loop@7389 -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
+    var LLone: string:= if (ALost[I].Code >= SURROGATE_FIRST) and (ALost[I].Code <= SURROGATE_LOW_LAST) then LONE_SURROGATE_TEXT else '';
+    Result:= Result + Format('line %d: U+%.4X', [ALost[I].Line, ALost[I].Code]) + LLone;  // dl:ok concat-in-loop@7389 -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
   end;
 end;
 
@@ -498,10 +508,11 @@ begin
     Result:= ACurrent;
 end;
 
-function RaiseTarget(ACurrent: TTextLevel): TTextLevel;
+function RaiseTarget(ACurrent, ANeeded: TTextLevel): TTextLevel;
 begin
-  // NeededLevel never exceeds tlUtf8, so no needed-level clause can rank above this result.
-  if ACurrent in [tlAscii7, tlAscii8] then
+  if ANeeded = tlUtf16Bom then
+    Result:= tlUtf16Bom
+  else if ACurrent in [tlAscii7, tlAscii8] then
     Result:= tlUtf8
   else
     Result:= ACurrent;
@@ -542,7 +553,7 @@ begin
   else
   begin
     Result.Action:= psaAsk;
-    Result.RaiseTo:= RaiseTarget(ACurrent);
+    Result.RaiseTo:= RaiseTarget(ACurrent, Needed);
     Result.Lost:= LostChars(AText, L, LOST_CHARS_SHOWN, Result.LostTotal);
   end;
 end;

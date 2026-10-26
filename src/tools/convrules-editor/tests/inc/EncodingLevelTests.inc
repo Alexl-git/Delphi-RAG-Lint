@@ -18,8 +18,8 @@ begin
       AllOk:= False;
   Check('name.roundtrip', AllOk);
   Check('save.level.d-b', (SaveLevelFor(tlUtf16) = tlUtf16Bom) and (SaveLevelFor(tlUtf8) = tlUtf8));
-  Check('raise.target', (RaiseTarget(tlAscii7) = tlUtf8) and (RaiseTarget(tlAscii8) = tlUtf8)
-    and (RaiseTarget(tlUtf8Bom) = tlUtf8Bom));
+  Check('raise.target', (RaiseTarget(tlAscii7, tlUtf8) = tlUtf8) and (RaiseTarget(tlAscii8, tlUtf8) = tlUtf8)
+    and (RaiseTarget(tlUtf8Bom, tlUtf8) = tlUtf8Bom));
   Check('lower.offer', (LowerOffer(tlUtf16Bom, tlAscii7) = tlAscii7) and (LowerOffer(tlUtf16, tlUtf8) = tlUtf8)
     and (LowerOffer(tlUtf16Bom, tlAscii8) = tlUtf8) and (LowerOffer(tlUtf8Bom, tlAscii7) = tlUtf8Bom) and (LowerOffer(tlUtf16Bom, tlUtf16) = tlUtf16Bom));
 end;
@@ -203,14 +203,26 @@ begin
   Lost:= LostChars(#$D83D#$DE00'x'#$0413, tlAscii7, 8, Total);
   Check('lost.col.after.surrogate', (Total = 2) and (Length(Lost) = 2) and (Lost[0].Col = 1) and (Lost[1].Col = 4) and (Lost[1].Line = 1),
     IntToStr(Lost[1].Col));
-  // --- a lone surrogate cannot be written at UTF-8: asked, and the raise target is the current level ---
+  // --- a lone surrogate cannot be written at UTF-8: asked, and the raise target is UTF-16 with BOM
+  //     (owner ruling 2026-10-26; this pin was RaiseTo = tlUtf8, a no-op offer) ---
   P:= PreSaveDecision('a'#$D83D'b', tlUtf8);
-  Check('presave.lone.surrogate.utf8', (P.Action = psaAsk) and (P.LostTotal = 1) and (P.Lost[0].Code = $D83D) and (P.RaiseTo = tlUtf8));
+  Check('presave.lone.surrogate.utf8', (P.Action = psaAsk) and (P.LostTotal = 1) and (P.Lost[0].Code = $D83D) and (P.RaiseTo = tlUtf16Bom),
+    LevelName(P.RaiseTo));
+  P:= PreSaveDecision('a'#$D83D'b', tlAscii7);
+  Check('presave.lone.surrogate.ascii7', (P.Action = psaAsk) and (P.RaiseTo = tlUtf16Bom), LevelName(P.RaiseTo));
   P:= PreSaveDecision('a'#$D83D'b', tlUtf16Bom);
   Check('presave.lone.surrogate.utf16.writes', (P.Action = psaWrite) and (P.WriteLevel = tlUtf16Bom));
+  Check('needed.lone.surrogate', NeededLevel('a'#$D83D'b') = tlUtf16Bom, LevelName(NeededLevel('a'#$D83D'b')));
+  Check('lower.offer.lone.surrogate.none', LowerOffer(tlUtf16Bom, NeededLevel('a'#$D83D'b')) = tlUtf16Bom);
+  Check('lost.text.lone.surrogate.says.so', LostCharsText(LostChars('a'#$D83D'b', tlUtf8, 8, Total)).Contains('lone surrogate'),
+    LostCharsText(LostChars('a'#$D83D'b', tlUtf8, 8, Total)));
+  Check('lost.text.plain.unchanged', LostCharsText(LostChars('a'#$0413, tlAscii7, 8, Total)) = 'line 1: U+0413');
 
-  // --- RaiseTarget: ASCII levels go to UTF-8; a UTF level stays ---
-  Check('raise.target.utf16.stays', (RaiseTarget(tlUtf16) = tlUtf16) and (RaiseTarget(tlUtf16Bom) = tlUtf16Bom) and (RaiseTarget(tlUtf8) = tlUtf8));
+  // --- RaiseTarget: ASCII levels go to UTF-8; a UTF level stays; text that needs UTF-16 gets UTF-16 with BOM ---
+  Check('raise.target.utf16.stays', (RaiseTarget(tlUtf16, tlUtf8) = tlUtf16) and (RaiseTarget(tlUtf16Bom, tlUtf8) = tlUtf16Bom)
+    and (RaiseTarget(tlUtf8, tlUtf8) = tlUtf8));
+  Check('raise.target.needs.utf16', (RaiseTarget(tlUtf8, tlUtf16Bom) = tlUtf16Bom) and (RaiseTarget(tlAscii7, tlUtf16Bom) = tlUtf16Bom)
+    and (RaiseTarget(tlUtf8Bom, tlUtf16Bom) = tlUtf16Bom));
 
   // --- non-ASCII Save round trip: the exact bytes on disk, and the text and level read back ---
   Tmp:= TPath.GetTempFileName;

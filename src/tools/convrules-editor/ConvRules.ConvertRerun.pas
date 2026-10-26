@@ -15,6 +15,8 @@ uses
 const
   /// <summary>The status lead of a re-run's summary: file count, file names.</summary>
   RERUN_STATUS_FMT = 'Re-run after raising %d file(s) to UTF-8 with BOM: %s';
+  /// <summary>The status lead of a first run that raised files after the PRE-run question.</summary>
+  RAISED_STATUS_FMT = 'Raised %d file(s) to UTF-8 with BOM (asked before the run): %s';
 
 type
   /// <summary>The user's answer to the raise question for one encoding-refused row:
@@ -38,7 +40,7 @@ function EncodingRefusedRows(const ARows: TArray<TConvertRow>): TArray<TConvertR
 /// <param name="AJob">The finished run's job.</param>
 /// <param name="AUnits">The units the user said Yes for.</param>
 /// <param name="AFiles">Their files to raise (RaiseFilesOf of each refusal).</param>
-/// <returns>AJob with Units = AUnits and RaiseFiles = AFiles; Books, Dbs, ProjectDb, features and scope unchanged.
+/// <returns>AJob with Units = AUnits, RaiseFiles = AFiles and Rerun = True; Books, Dbs, ProjectDb, features and scope unchanged.
 /// Books stay ALL the job's books: a refusal restores its unit (the earlier books' rows become csRolledBack, the later
 /// books never ran), so every book must run on it again -- on the per-unit AND the batch path (test
 /// batch.rerun.each.book.once). RunId is unchanged too: the tab's StartRun numbers every run (ruling I2).</returns>
@@ -47,13 +49,13 @@ function RerunJob(const AJob: TConvertJob; const AUnits, AFiles: TArray<string>)
 /// <summary>PURE: whether a finished run asks the raise question for its encoding refusals.</summary>
 /// <param name="AJob">The finished run's job.</param>
 /// <param name="ACancelled">The user cancelled the run.</param>
-/// <returns>True only for an ordinary run (no RaiseFiles: a re-run NEVER asks again, Review Focus 4) of an engine with
+/// <returns>True only for a first run (not Rerun: a re-run NEVER asks again, Review Focus 4; a first run with pre-run RaiseFiles does) of an engine with
 /// afEncodingGuard that was not cancelled.</returns>
 function ShouldAskRaise(const AJob: TConvertJob; ACancelled: Boolean): Boolean;
 
 /// <summary>PURE: the re-run's status lead.</summary>
 /// <param name="AJob">The finished run's job.</param>
-/// <returns>Format(RERUN_STATUS_FMT) over the file NAMES of AJob.RaiseFiles joined with ', '; '' for an ordinary run.</returns>
+/// <returns>Format(RERUN_STATUS_FMT) for a re-run, Format(RAISED_STATUS_FMT) for a first run with pre-run RaiseFiles, over the file NAMES of AJob.RaiseFiles joined with ', '; '' for a run without RaiseFiles.</returns>
 function RerunStatusText(const AJob: TConvertJob): string;
 
 /// <summary>PURE: the rows of ONE run out of the Convert tab's accumulated rows -- a re-run
@@ -103,11 +105,12 @@ begin
   Result:= AJob;
   Result.Units     := Copy(AUnits);
   Result.RaiseFiles:= Copy(AFiles);
+  Result.Rerun     := True;
 end;
 
 function ShouldAskRaise(const AJob: TConvertJob; ACancelled: Boolean): Boolean;
 begin
-  Result:= (Length(AJob.RaiseFiles) = 0) and (afEncodingGuard in AJob.ApplyFeatures) and not ACancelled;
+  Result:= not AJob.Rerun and (afEncodingGuard in AJob.ApplyFeatures) and not ACancelled;
 end;
 
 function RerunStatusText(const AJob: TConvertJob): string;
@@ -119,7 +122,7 @@ begin
   LNames:= nil;
   for var LFile: string in AJob.RaiseFiles do
     LNames:= LNames + [ExtractFileName(LFile)];
-  Result:= Format(RERUN_STATUS_FMT, [Length(LNames), string.Join(', ', LNames)]);
+  Result:= Format(if AJob.Rerun then RERUN_STATUS_FMT else RAISED_STATUS_FMT, [Length(LNames), string.Join(', ', LNames)]);
 end;
 
 function RunRowsOf(const AAll: TArray<TConvertRow>; AFrom: Integer): TArray<TConvertRow>;

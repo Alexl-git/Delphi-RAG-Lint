@@ -10,9 +10,10 @@
 #   the run then starts and ends.
 # raise.* [needs an ENGINE with convert_encoding_guard; else every raise.* check prints SKIP, tallied apart]:
 #   rules\Raise.rules (UTF-8 with BOM: '#use New<U+0414>me' (a unit rule: the engine runs a book with no .dfm and no #convert on unit rules alone); ruling I6: Cyrillic, which
-#   cp1252 cannot hold) is added, Refresh, Check all, Convert -> a row 'refused -- not changed' and a
-#   TMessageForm 'do not fit FixUnit.pas'; Yes -> the re-run row 'converted', FixUnit.pas starts EF BB BF, the
-#   status 'Re-run after raising 1 file', FixUnit.pas.BCK1 exists. No second question after the re-run.
+#   cp1252 cannot hold) is added, Refresh, Check all, Convert -> owner ruling 2026-10-26: BEFORE the run a TMessageForm
+#   names 'FixUnit.pas is ASCII-7', 'Raise.rules 1:9', U+0414 and the rule; No -> 'Convert not started', a note row per place,
+#   FixUnit.pas untouched; Convert again, Yes -> status 'Raised 1 file(s) ... (asked before the run)', row 'converted',
+#   FixUnit.pas starts EF BB BF, FixUnit.pas.BCK1 exists. No question after the run.
 # Pre-feature RED (Task 8): lower.offer.asks FAILS on the pinned editor exe (no question; the run just starts).
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe)
@@ -506,24 +507,35 @@ try {
   if ($again -ne [IntPtr]::Zero) { [void](AnswerDlg $again 'No') }
   $t0 = Get-Date; do { Start-Sleep -Milliseconds 500; $s2 = Status $main } while (($s2 -eq $s -or $s2 -notmatch 'Converted \d+ of \d+ unit x book') -and ((Get-Date) - $t0).TotalSeconds -lt 600)
 
-  # --- raise.*: the question per encoding-refused unit, and the re-run ---
+  # --- raise.*: owner ruling 2026-10-26 -- the question comes BEFORE the run, naming every place ---
+  $names = 'raise.prerun.question', 'raise.prerun.no.stops', 'raise.prerun.no.notes', 'raise.prerun.no.untouched', 'raise.prerun.status', 'raise.converted', 'raise.unit.bom', 'raise.backup', 'raise.no.second.question'
   if ($script:raiseWhy) {
-    foreach ($n in 'raise.refused.row', 'raise.question', 'raise.rerun.converted', 'raise.rerun.status', 'raise.unit.bom', 'raise.backup', 'raise.no.second.question') { RCheck $n $false }
+    foreach ($n in $names) { RCheck $n $false }
   } else {
-    # Only Raise.rules runs: the lower books leave the folder (a refusal stops a unit's later books).
+    # Only Raise.rules runs: the lower books leave the folder.
     [IO.File]::Move($bookY, $bookY + '.off'); [IO.File]::Move($bookZ, $bookZ + '.off')
     WriteUtf8Bom $bookR ('#use New' + [char]0x0414 + 'me' + "`r`n")
     Click $refresh; Start-Sleep -Seconds 2
     Click $checkAll; Start-Sleep -Milliseconds 500
+    $before = [IO.File]::ReadAllBytes($pas)
     Click $conv
-    $dlg = WaitCls $p.Id 'TMessageForm' 600
+    $dlg = WaitCls $p.Id 'TMessageForm' 120
     $txt = if ($dlg -ne [IntPtr]::Zero) { MsgText $dlg } else { '' }
-    RCheck 'raise.refused.row' (@([W]::Column($lv, 2)) -contains 'refused -- not changed') ((@([W]::Column($lv, 2))) -join ' | ')
-    RCheck 'raise.question' ($txt -match 'do not fit FixUnit\.pas') "$txt | status: $(Status $main)"
+    RCheck 'raise.prerun.question' (($txt -match 'FixUnit\.pas is ASCII-7') -and ($txt -match 'Raise\.rules 1:9') -and ($txt -match 'U\+0414') -and ($txt -match '#use New') -and ($txt -match 'Yes = raise')) "$txt | status: $(Status $main)"
+    # No = change the rules: the run does not start, every place is a note row, the unit is untouched.
+    if ($dlg -ne [IntPtr]::Zero) { [void](AnswerDlg $dlg 'No') }
+    $st = WaitStatusMatch $main 'Convert not started' 30
+    RCheck 'raise.prerun.no.stops' ($st -match 'Convert not started: change the rule text') $st
+    RCheck 'raise.prerun.no.notes' (@(@([W]::Column($lv, 7)) | Where-Object { $_ -like 'encoding: Raise.rules 1:9 U+0414*FixUnit.pas (ASCII-7)*' }).Count -eq 1) ((@([W]::Column($lv, 7))) -join ' | ')
+    $after = [IO.File]::ReadAllBytes($pas)
+    RCheck 'raise.prerun.no.untouched' (([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after)) -and (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -eq 0)) ("head=" + (Head $pas 4))
+    # Yes = raise FixUnit.pas, then convert: the first run carries --raise-encoding.
+    Click $conv
+    $dlg = WaitCls $p.Id 'TMessageForm' 120
     if ($dlg -ne [IntPtr]::Zero) { [void](AnswerDlg $dlg 'Yes') }
-    $st = WaitStatusMatch $main 'Re-run after raising' 900
-    RCheck 'raise.rerun.status' ($st -match '^Re-run after raising 1 file\(s\) to UTF-8 with BOM: FixUnit\.pas\. ') $st
-    RCheck 'raise.rerun.converted' (@([W]::Column($lv, 2)) -contains 'converted') ((@([W]::Column($lv, 2))) -join ' | ')
+    $st = WaitStatusMatch $main 'Raised 1 file' 900
+    RCheck 'raise.prerun.status' ($st -match '^Raised 1 file\(s\) to UTF-8 with BOM \(asked before the run\): FixUnit\.pas\. ') $st
+    RCheck 'raise.converted' (@([W]::Column($lv, 2)) -contains 'converted') ((@([W]::Column($lv, 2))) -join ' | ')
     RCheck 'raise.unit.bom' ((Head $pas 3) -eq 'EF BB BF') ("head=" + (Head $pas 4))
     RCheck 'raise.backup' (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -ge 1) ((@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*' | ForEach-Object Name)) -join ',')
     Start-Sleep -Seconds 3
