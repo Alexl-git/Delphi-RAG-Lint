@@ -1047,4 +1047,9 @@
 #   custom config groups (which IFDEF branches parse); X6 enum hard-cast stream (calls stage). Pin
 #   taken after the CallResolver TypeReceiverCore dl:ok re-hash (comment only).
 #   Superseded: 1.23.0-alpha|ccc5480e3c6654e7e61d3df54d1e23cbf2db4da556a5f1e83c8f16c07ba97c19
-1.24.0-alpha|4b3275855c74f1c445c880a43460856f879cbd73ce256ec252b099dbd5fe5021
+#   2026-10-26 (T-22, lane t22): re-pinned WITHOUT a bump. Index.Plan ResolvePlan adds a library section's
+#   own "include" folders to its plan Roots -- WHICH files a library DB covers once a user writes such an
+#   include (none exist today; the plan is byte-identical without one), never HOW any file parses: no parser,
+#   preprocessor, emitted symbol/ref/uses/edge or IFDEF-branch change. Existing parses stay valid.
+#   Superseded: 1.24.0-alpha|4b3275855c74f1c445c880a43460856f879cbd73ce256ec252b099dbd5fe5021
+1.24.0-alpha|a9c3d885b75dcc236e2ab0e5249fdef4452ac54d1cd756d88e2c4bc87805dc92

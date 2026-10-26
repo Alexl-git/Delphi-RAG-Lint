@@ -1,20 +1,20 @@
 ---
 id: reconcile-project-members-dpr-dproj
 title: Reconcile Project Members (.dpr/.dproj)
-summary: Compares a project file's declared member list against what is on disk and in the compile closure
+summary: Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way
 product: DL
 group: refactoring
 order: 50009
 since: 1.18.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # Reconcile Project Members (.dpr/.dproj)
 
-Compares a project file's declared member list against what is on disk and in the compile closure.
+Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way.
 
-Read this after moving or adding units by hand. It compares the project file declared members against what is on disk and in the compile closure, and with --apply it syncs the list; without --apply it only reports.
+Read this after moving or adding units by hand, or when lint reports unit-not-in-dpr or unit-not-in-library. It lists every unit the project compiles that is neither in the .dpr/.dproj nor in the library, judges each by the project's own roots (inside = a missed project unit, outside = third-party), and offers two fixes: --apply adds the unit to the project (the default), --apply --to library adds its folder to the library. Without --apply it only reports.
 
 ## How to run it
 
@@ -25,6 +25,7 @@ Full flag list: [reconcile-project in the CLI reference](../cli.md#reconcile-pro
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--apply` |  |  |  |
+| `--to` | `project\|library` |  |  |
 | `--only` | `<unit,...>` |  |  |
 | `--db` | `<db>` |  |  |
 | `--full` |  |  |  |
@@ -36,26 +37,71 @@ Full flag list: [reconcile-project in the CLI reference](../cli.md#reconcile-pro
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...**
    1. Open the project in RAD Studio
    2. Choose drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...
-   3. Review the missing and stale entries it reports; nothing is written until you apply
-   4. From a shell: `drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>]`
+   3. Read the MISSING list: each unit is marked [project unit -> --apply] or [third-party -> library: --apply --to library]; units already in the library are not listed
+   4. Copy a command from SUGGESTED FIXES -- each is pre-narrowed with --only to the units its fix suits; nothing is written until you apply
+   5. From a shell: `drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>]`
 
 ## Details
 
-Compares a project file's declared member list against what is on disk and in
-the compile closure, and can also re-scan and recompile every member to heal
-the index and findings. Reach for it after moving or adding units by hand.
+Lists every unit a project uses that is neither a project member (in the
+`.dpr` / `.dproj`) nor in the library, says whose unit each one is, and fixes
+it one of two ways. It can also re-scan and recompile every member to heal the
+index and findings. Reach for it after moving or adding units by hand, or when
+lint reports `unit-not-in-dpr` or `unit-not-in-library`.
 
 ### Running it from the CLI
 ```text
-drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]
+drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]
 ```
-`--apply` writes the sync; without it the command reports only. `--db` also
-heals the index and findings for every project member (re-scan + recompile)
-without editing the `.dpr`; `--full` forces the recompile even when nothing
-looks incoherent.
+Without `--apply` the command only reports. `--only` narrows MISSING (and so
+what `--apply` writes) to the units you name. `--db` also heals the index and
+findings for every project member (re-scan + recompile) without editing the
+`.dpr`; `--full` forces the recompile even when nothing looks incoherent.
+
+### Project unit or library unit
+A unit counts as **in the library** when it sits under a registry library path
+(the IDE's Library path) or under a folder that the manifest's library section
+(`"source": "registry-libraries"` in `drag-lint.json`) lists in `"include"`.
+Such units are never listed.
+
+Every other MISSING unit gets a verdict from the project's own roots (the
+`ownRoots` in `<project>\_D-RAG\drag-lint-project.json`, or else the project
+folder):
+
+| Verdict | Where the unit is | Suggested fix |
+|---|---|---|
+| project unit | under the own roots -- your own code, just not listed | `--apply`: add it to the `.dpr` and `.dproj` (the default) |
+| third-party | outside the own roots -- a vendor or framework folder | `--apply --to library`: add its folder to the library section's `"include"` |
+
+Both fixes are always open to you; the verdict is a recommendation. The text
+report marks each line (`[project unit -> --apply]` or
+`[third-party -> library: --apply --to library]`) and ends with a
+**SUGGESTED FIXES** block: one command per fix, already narrowed with `--only`
+to the units that suit it. `--json` gives each MISSING item `owner`,
+`suggestedFix` and `folder`.
+
+`--apply --to library` edits the manifest named by `--config`, or else the
+`drag-lint.json` beside the exe. It writes `<manifest>.bak` first and keeps
+every key it does not model. If a `dll-win32` / `dll-win64` twin exists, it
+copies the result there too. The project files are not touched. The next
+`index --all` walks the new folder as a library root on every platform the
+section targets, and the next reconcile no longer lists those units.
+
+### In lint-all
+`unit-not-in-library` (project-wide, on by default) reports each third-party
+unit that is neither a member nor in the library, using the same analysis.
+Units under the own roots are `unit-not-in-dpr`'s job (its third direction), so
+each unit is reported exactly once.
+```text
+drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-library
+```
 
 ### Reaching it in the IDE
 drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...
+
+The menu item runs the report, verdicts and SUGGESTED FIXES included. The Uses
+tab's checklist applies the default fix to the units you tick. For the library
+fix, run the suggested command from a shell.
 
 ### What it needs
 Optional. An index is not required to run this command, but pass `--db` to
@@ -64,11 +110,13 @@ also heal the index and findings for the project's members.
 ### Example
 Illustrative only:
 ```text
-drag-lint reconcile-project C:\Projects\MyApp\MyApp.dproj --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite
+drag-lint reconcile-project C:\Projects\MyApp\Tests\MyAppTests.dproj
 ```
-This would compare `MyApp.dproj`'s member list against disk and the compile
-closure, and re-scan/recompile its members -- one of which might be the unit
-that owns `TfrmMain`.
+A test project that compiles `..\..\COMMON\FlexDateTime.pas` (inside the
+declared own roots) and `C:\Projects\DUnitX\Source\DUnitX.TestFramework.pas`
+(outside them) would show FlexDateTime as a project unit
+(`--only FlexDateTime --apply`) and DUnitX.TestFramework as third-party
+(`--only DUnitX.TestFramework,... --apply --to library`).
 
 ---
 

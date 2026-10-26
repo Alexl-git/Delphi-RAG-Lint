@@ -121,7 +121,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) | The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope | 0.0.0 |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) | Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause | 0.0.0 |
 | [Quick-Fix: Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md) | Rewrites a public field under the caret as a property | 0.0.0 |
-| [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md) | Compares a project file's declared member list against what is on disk and in the compile closure | 1.18.0-alpha |
+| [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md) | Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way | 1.18.0-alpha |
 | [Rename Symbol](features/rename-symbol.md) | Renames a symbol across the whole indexed project | 0.24.0-alpha |
 | [safe-delete](features/safe-delete.md) | Deletes a symbol if and only if it has zero references in the index | 0.69.0-alpha |
 | [Unit Test Stub (symbol)](features/unit-test-stub-symbol.md) | Uses generate-test to produce a unit-test skeleton for one qualified symbol | 0.27.0-alpha |

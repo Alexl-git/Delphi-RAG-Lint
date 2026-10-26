@@ -83,6 +83,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `ConvertRun` -- pure Convert decisions: backups, preflight, `ParseApplyJson`, row notes, progress text.
 * `ConvertRunner` -- executes a run: the per-unit loop and the book-major batch loop (B4, `RunConversionBatched`), backup/apply/restore, steps, report lines; `NotReachedUnits`, `JobRunsBatched`.
 * `ConvertBatch` -- pure batch decisions: `BatchModeFor`, `BatchChunks` (8 per call), `BatchTimeoutMs`, `BatchUnitsMatch`, `BatchOfSingle`.
+* `ConvertRerun` -- pure raise-and-re-run decisions: `EncodingRefusedRows`, `RaiseRerunPlan` (Yes/No/Cancel), `RerunJob`, `ShouldAskRaise`, `RerunStatusText`, `RunRowsOf`.
 * `ConvertTab` -- Convert tab UI (editor-only); `ConvertRequest` -- `convert-request/1` parse, validate, scope.
 * `WorkList` (pure) / `WorkListTab` (UI) -- pas_uses work list.
 * `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).

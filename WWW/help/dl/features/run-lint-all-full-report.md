@@ -52,7 +52,7 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
 ## Details
 
-Runs the full rule catalog (194 rules, 164 on by default across 16 categories,
+Runs the full rule catalog (195 rules, 165 on by default across 16 categories,
 23 auto-fixable) against a project's indexed code and reports every surviving
 finding. Reach for it as the overall project health check.
 

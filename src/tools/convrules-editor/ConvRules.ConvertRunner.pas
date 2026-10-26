@@ -86,7 +86,9 @@ type
   ///   unit's later books still run.
   /// csConfigError: convert-apply exited ENGINE_EXIT_CONFIG (the cast library is
   ///   unusable). The RUN stops: no later book or unit is tried. The unit is restored
-  ///   only when an earlier book had changed it (its rows become csRolledBack); else
+  ///   only when an earlier book had changed it (its rows become csRolledBack) or, in a
+  ///   batch, its own entry says it may have been written (ConfigStopMayHaveWritten --
+  ///   Note CONFIG_STOP_WROTE_FMT, the backup kept); else
   ///   nothing is restored and the backup is dropped, as for a first-book refusal.
   ///   Note = the engine's error text. TConvertRow.StoppedRun marks the stop, also when a
   ///   failed restore turns the row into csRestoreFailed.
@@ -347,7 +349,10 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// status, once the unit has finished: after its chunk of the last book still to run, or
 /// earlier when it failed, was refused or skipped; the rest at the end of the run.</param>
 /// <param name="ACancelled">May be nil; polled once before each chunk (never inside a
-/// call). True stops the run there: every unit keeps the books already applied to it.</param>
+/// call). True stops the run there (R4) -- as a configuration stop does: a unit every live book already reached keeps them;
+/// a unit only some books reached is restored -- its csConverted rows become csRolledBack,
+/// note BATCH_CANCEL_UNDONE_FMT (BATCH_STOP_UNDONE_FMT after a stop), backup kept (a failed restore adds a unit-level
+/// csRestoreFailed row) -- so, as on the per-unit path, a unit gets every book or none.</param>
 /// <param name="AOnStep">May be nil; receives every TRunStep: rpReindexBefore (UnitNo 0),
 /// rpBackup per unit, then per book and chunk rpApplyBatch, rpRestore per unit restored,
 /// and the chunk's rpReindexAfter (BatchUnits and Summary set).</param>
@@ -359,7 +364,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// book changed it). Per chunk: exit ENGINE_EXIT_CONFIG gives every unit of the chunk a
 /// csConfigError row (the first one StoppedRun) and stops the run with no reindex; an
 /// answer that is no apply-batch/1, whose units[] do not line up with the --unit list
-/// (BatchUnitsMatch), that breaks the exit contract (BatchContractBroken) or that lists
+/// (BatchUnitsMatch), whose per-entry exit_code contradicts an entry (BatchEntryExitBroken),
+/// that breaks the exit contract (BatchContractBroken) or that lists
 /// rule_errors on some units only is not trusted (a one-unit chunk's bare apply/1 is read
 /// with BatchOfSingle) -- every unit of the chunk is restored,
 /// csFailedRestored, note BatchUntrustedNote; rule_errors on every entry give ONE
@@ -406,8 +412,14 @@ type
     Converted  : Integer;
     /// <summary>csFailedRestored rows.</summary>
     Restored   : Integer;
-    /// <summary>csRolledBack rows.</summary>
+    /// <summary>csRolledBack rows undone by a later failure or refusal on the unit.</summary>
     RolledBack : Integer;
+    /// <summary>csRolledBack rows a cancel between batch chunks undid (note
+    /// BATCH_CANCEL_UNDONE_FMT).</summary>
+    UndoneByCancel: Integer;
+    /// <summary>csRolledBack rows a configuration stop between batch chunks undid (note
+    /// BATCH_STOP_UNDONE_FMT).</summary>
+    UndoneByStop: Integer;
     /// <summary>csBookSkipped rows.</summary>
     BookSkips  : Integer;
     /// <summary>csUnitSkipped rows.</summary>
@@ -426,6 +438,14 @@ type
 /// <param name="ARows">A run's rows.</param>
 /// <returns>The tally; every row lands in exactly one count (or NotRestored).</returns>
 function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
+
+/// <summary>PURE: the status sentences for a run's rolled-back rows, each naming its cause.</summary>
+/// <param name="ATally">TallyRows of the run's rows.</param>
+/// <returns>' N earlier conversion(s) on those units were rolled back by a later failure or
+/// refusal.' (RolledBack), then ' N conversion(s) were undone by the cancel: a unit gets every
+/// book or none.' (UndoneByCancel), then the same with 'the stop' (UndoneByStop) -- each only
+/// when its count is above 0; '' when all are 0.</returns>
+function RolledBackText(const ATally: TRunTally): string;
 
 /// <summary>PURE: the summary's lead sentence (C12 Task 3 carry): out-of-scope pairs
 /// are counted on their own and are NOT part of the "of M" denominator.</summary>
@@ -569,37 +589,6 @@ function JobRunsBatched(const AJob: TConvertJob): Boolean;
 /// case-insensitive; [] when none.</returns>
 function RaiseFilesOf(const AAll: TArray<string>; const AUnitPas: string): TArray<string>;
 
-/// <summary>PURE: the units a run left refused for an encoding reason.</summary>
-/// <param name="ARows">The run's rows.</param>
-/// <returns>The csRefused rows with HasEncodingRefusal, one per unit (the first row wins).</returns>
-function EncodingRefusedRows(const ARows: TArray<TConvertRow>): TArray<TConvertRow>;
-
-const
-  /// <summary>The status lead of a re-run's summary: file count, file names.</summary>
-  RERUN_STATUS_FMT = 'Re-run after raising %d file(s) to UTF-8 with BOM: %s';
-
-/// <summary>PURE: the job of the re-run after the user's Yes to the raise question.</summary>
-/// <param name="AJob">The finished run's job.</param>
-/// <param name="AUnits">The units the user said Yes for.</param>
-/// <param name="AFiles">Their files to raise (RaiseFilesOf of each refusal).</param>
-/// <returns>AJob with Units = AUnits and RaiseFiles = AFiles; Books, Dbs, ProjectDb, features and scope unchanged.
-/// Books stay ALL the job's books: a refusal restores its unit (the earlier books' rows become csRolledBack, the later
-/// books never ran), so every book must run on it again. RunId is unchanged too: the tab's StartRun numbers every
-/// run (ruling I2).</returns>
-function RerunJob(const AJob: TConvertJob; const AUnits, AFiles: TArray<string>): TConvertJob;
-
-/// <summary>PURE: whether a finished run asks the raise question for its encoding refusals.</summary>
-/// <param name="AJob">The finished run's job.</param>
-/// <param name="ACancelled">The user cancelled the run.</param>
-/// <returns>True only for an ordinary run (no RaiseFiles: a re-run NEVER asks again, Review Focus 4) of an engine with
-/// afEncodingGuard that was not cancelled.</returns>
-function ShouldAskRaise(const AJob: TConvertJob; ACancelled: Boolean): Boolean;
-
-/// <summary>PURE: the re-run's status lead.</summary>
-/// <param name="AJob">The finished run's job.</param>
-/// <returns>Format(RERUN_STATUS_FMT) over the file NAMES of AJob.RaiseFiles joined with ', '; '' for an ordinary run.</returns>
-function RerunStatusText(const AJob: TConvertJob): string;
-
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
@@ -631,6 +620,38 @@ function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, 
 /// one unit reporting the same global) is kept once. A csRolledBack row counts nowhere:
 /// its change was restored away.</returns>
 function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
+
+type
+  /// <summary>One unit's restore point for a run: the .pas and its .dfm copied to a shared
+  /// .BCK&lt;N&gt; (SharedBackupPaths).</summary>
+  /// <remarks>BakPas / BakDfm are set only once their copy has been made, so a failed Take
+  /// leaves them naming exactly the backups Drop must remove. Not thread-safe; one run owns it.</remarks>
+  TRestorePoint = record
+    /// <summary>The unit's .pas, as given to Take.</summary>
+    UnitPas: string;
+    /// <summary>The unit's .dfm path (the .pas with extension .dfm); it need not exist.</summary>
+    Dfm    : string;
+    /// <summary>The .pas backup made by Take; '' until made.</summary>
+    BakPas : string;
+    /// <summary>The .dfm backup made by Take; '' when the unit has no .dfm.</summary>
+    BakDfm : string;
+    /// <summary>Copies the unit (and its .dfm, when it exists) to the next free .BCK&lt;N&gt;.</summary>
+    /// <param name="AUnitPas">The unit's .pas.</param>
+    /// <param name="AError">'' on success, else the exception text.</param>
+    /// <returns>True when every needed copy was made.</returns>
+    function Take(const AUnitPas: string; out AError: string): Boolean;
+    /// <summary>Copies the backups back over the unit and its .dfm.</summary>
+    /// <param name="AError">'' on success, else the exception text.</param>
+    /// <returns>True when every restore copy was made.</returns>
+    function Restore(out AError: string): Boolean;
+    /// <summary>Deletes the backups this run made.</summary>
+    /// <returns>'' when every backup is gone; else a note naming what was kept.</returns>
+    function Drop: string;
+    /// <summary>The unit's backups for a note: both when it has a .dfm.</summary>
+    /// <param name="AFullPaths">True for full paths; False for file names only.</param>
+    /// <returns>The text, e.g. 'A.pas.BCK1 and A.dfm.BCK1'.</returns>
+    function Names(AFullPaths: Boolean): string;
+  end;
 
 implementation
 
@@ -664,6 +685,12 @@ begin
   end;
 end;
 
+// The fixed text of AFmt before its first %s.
+function FmtHead(const AFmt: string): string;
+begin
+  Result:= Copy(AFmt, 1, Pos('%s', AFmt) - 1);
+end;
+
 function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
 begin
   Result:= Default(TRunTally);
@@ -671,7 +698,13 @@ begin
     case LRow.Status of
       csConverted     : Inc(Result.Converted);
       csFailedRestored: Inc(Result.Restored);
-      csRolledBack    : Inc(Result.RolledBack);
+      csRolledBack    :
+        if LRow.Note.StartsWith(FmtHead(BATCH_CANCEL_UNDONE_FMT)) then
+          Inc(Result.UndoneByCancel)
+        else if LRow.Note.StartsWith(FmtHead(BATCH_STOP_UNDONE_FMT)) then
+          Inc(Result.UndoneByStop)
+        else
+          Inc(Result.RolledBack);
       csBookSkipped   : Inc(Result.BookSkips);
       csUnitSkipped   : Inc(Result.UnitSkips);
       csRestoreFailed : Result.NotRestored:= Result.NotRestored + [ExtractFileName(LRow.UnitPas)];
@@ -679,6 +712,19 @@ begin
       csOutOfScope    : Inc(Result.OutOfScope);
       csConfigError   : Inc(Result.ConfigErrors);
     end; // case
+end;
+
+function RolledBackText(const ATally: TRunTally): string;
+const
+  UNDONE_FMT = ' %d conversion(s) were undone by %s: a unit gets every book or none.';
+begin
+  Result:= '';
+  if ATally.RolledBack > 0 then
+    Result:= Result + Format(' %d earlier conversion(s) on those units were rolled back by a later failure or refusal.', [ATally.RolledBack]);
+  if ATally.UndoneByCancel > 0 then
+    Result:= Result + Format(UNDONE_FMT, [ATally.UndoneByCancel, 'the cancel']);
+  if ATally.UndoneByStop > 0 then
+    Result:= Result + Format(UNDONE_FMT, [ATally.UndoneByStop, 'the stop']);
 end;
 
 function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
@@ -866,44 +912,6 @@ begin
       Result:= Result + [LFile];
 end;
 
-function EncodingRefusedRows(const ARows: TArray<TConvertRow>): TArray<TConvertRow>;
-var
-  LSeen: TArray<string>;
-begin
-  Result:= nil;
-  LSeen := nil;
-  for var LRow: TConvertRow in ARows do
-    if (LRow.Status = csRefused) and HasEncodingRefusal(LRow.Apply) and not MatchText(LRow.UnitPas, LSeen) then
-    begin
-      LSeen := LSeen + [LRow.UnitPas];
-      Result:= Result + [LRow];
-    end;
-end;
-
-function RerunJob(const AJob: TConvertJob; const AUnits, AFiles: TArray<string>): TConvertJob;
-begin
-  Result:= AJob;
-  Result.Units     := Copy(AUnits);
-  Result.RaiseFiles:= Copy(AFiles);
-end;
-
-function ShouldAskRaise(const AJob: TConvertJob; ACancelled: Boolean): Boolean;
-begin
-  Result:= (Length(AJob.RaiseFiles) = 0) and (afEncodingGuard in AJob.ApplyFeatures) and not ACancelled;
-end;
-
-function RerunStatusText(const AJob: TConvertJob): string;
-var
-  LNames: TArray<string>;
-begin
-  if Length(AJob.RaiseFiles) = 0 then
-    Exit('');
-  LNames:= nil;
-  for var LFile: string in AJob.RaiseFiles do
-    LNames:= LNames + [ExtractFileName(LFile)];
-  Result:= Format(RERUN_STATUS_FMT, [Length(LNames), string.Join(', ', LNames)]);
-end;
-
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 var
   LUnits: TArray<string>;
@@ -965,24 +973,6 @@ begin
     end;
 end;
 
-type
-  // One unit's restore point for a run: the .pas and its .dfm copied to a shared .BCK<N>
-  // (SharedBackupPaths). BakPas / BakDfm are set only once their copy has been made, so a
-  // failed Take leaves them naming exactly the backups Drop must remove.
-  TRestorePoint = record
-    UnitPas: string;
-    Dfm    : string;
-    BakPas : string;
-    BakDfm : string;
-    // Copies the unit (and its .dfm, when it exists) to the next free .BCK<N>.
-    function Take(const AUnitPas: string; out AError: string): Boolean;
-    // Copies the backups back over the unit and its .dfm.
-    function Restore(out AError: string): Boolean;
-    // '' when every backup this run made for the unit is gone; else what was kept.
-    function Drop: string;
-    // The unit's backups for a Note: both when it has a .dfm; file names only unless AFullPaths.
-    function Names(AFullPaths: Boolean): string;
-  end;
 // '' when ABak ('' = none made) is gone; else a note that it was kept.
 function DropBackupFile(const ABak: string): string;
 begin
@@ -1545,7 +1535,7 @@ begin
     Exit(Format('exit_code %d contradicts %d ok / %d refused / %d failed', [ADoc.ExitCode, ADoc.OkCount, ADoc.RefusedCount, ADoc.FailedCount]));
   if LInvalid > 0 then
     Exit(Format('rule_errors on %d of %d unit(s) only', [LInvalid, Length(ADoc.Units)]));
-  Result:= '';
+  Result:= BatchEntryExitBroken(ADoc); // R5: each entry's own exit_code (engine 1.33.0)
 end;
 
 type
@@ -1567,6 +1557,7 @@ var
   Watch   : TStopwatch;
   StepsOff: Boolean;            // AOnStep raised once: no further steps this run
   Stopped : Boolean;            // a configuration stop or a cancel: no further chunk runs
+  Cancelled: Boolean;           // the stop was the user's cancel (R4)
 
   // Tells AOnStep that APhase starts now; AAt = Watch's ms the elapsed "unit" time counts from.
   procedure Step(APhase: TRunPhase; AUnitNo, ABookNo, ABatchUnits: Integer; AAt: Int64; const ASummary: string);
@@ -1729,7 +1720,21 @@ var
           LRow.Apply:= LDoc.Units[I]
         else
           LRow.Apply:= ParseApplyJson(LJson, AFeatures);
-        FailUnit(AChunk[I], LRow, LRow.Apply.Error, csConfigError, ABookNo, LAt, I = 0);
+        LReason:= LRow.Apply.Error;
+        // R1: the 1.33.1 contract says exit 6 wrote nothing; an entry that says it did, or an
+        // answer that cannot be read per unit, is not believed -- restored, backup kept.
+        if not BatchUnitsMatch(LDoc, LPaths) then
+        begin
+          // An answer not readable per unit says nothing about what was written: restore.
+          Units[AChunk[I]].Changed:= True;
+          LReason:= Format(CONFIG_STOP_UNREAD_FMT, [LReason, Units[AChunk[I]].RP.Names(False)]);
+        end
+        else if ConfigStopMayHaveWritten(LRow.Apply) then
+        begin
+          Units[AChunk[I]].Changed:= True;
+          LReason:= Format(CONFIG_STOP_WROTE_FMT, [Units[AChunk[I]].RP.Names(False)]);
+        end;
+        FailUnit(AChunk[I], LRow, LReason, csConfigError, ABookNo, LAt, I = 0);
       end;
       Exit; // no reindex: the run stops, the Convert tab's final reindex follows
     end;
@@ -1810,6 +1815,36 @@ var
         Exit(False);
   end;
 
+  // R4: a unit a cancel or a configuration stop left with some of its books but not all is
+  // restored, as the per-unit path never leaves one -- its converted rows become csRolledBack,
+  // the backup is kept.
+  procedure UndoPartial(K: Integer);
+  var
+    LError: string;
+    LRow  : TConvertRow;
+  begin
+    if not Units[K].Changed then
+      Exit; // no book changed it: Deliver drops the unneeded backup
+    Step(rpRestore, K + 1, 0, 0, Watch.ElapsedMilliseconds, '');
+    if not Units[K].RP.Restore(LError) then
+    begin
+      LRow:= Default(TConvertRow);
+      LRow.UnitPas  := AUnits[K];
+      LRow.Backup   := Units[K].RP.BakPas;
+      LRow.BackupDfm:= Units[K].RP.BakDfm;
+      LRow.Status   := csRestoreFailed;
+      LRow.Note     := Format(BATCH_PARTIAL_RESTORE_FAILED_FMT, [if Cancelled then 'was cancelled' else 'stopped (cast library unusable)', LError, Units[K].RP.Names(True)]);
+      Units[K].Rows:= Units[K].Rows + [LRow];
+      Exit;
+    end;
+    for var I: Integer:= 0 to High(Units[K].Rows) do
+      if Units[K].Rows[I].Status = csConverted then
+      begin
+        Units[K].Rows[I].Status:= csRolledBack;
+        Units[K].Rows[I].Note  := Format(if Cancelled then BATCH_CANCEL_UNDONE_FMT else BATCH_STOP_UNDONE_FMT, [Units[K].RP.Names(False)]);
+      end;
+  end;
+
   procedure RunBook(ABookNo: Integer);
   var
     LActive: TArray<Integer>;
@@ -1833,7 +1868,8 @@ var
       // Cancel is honoured BETWEEN chunks only: never inside an engine call.
       if Assigned(ACancelled) and ACancelled() then
       begin
-        Stopped:= True;
+        Stopped  := True;
+        Cancelled:= True;
         Exit;
       end;
       LChunk:= Copy(LActive, LAt, Length(LChunkPaths));
@@ -1857,8 +1893,9 @@ begin
     Exit(nil); // no book, no backup
   Total   := Length(AUnits) * Length(ABooks);
   Watch   := TStopwatch.StartNew;
-  StepsOff:= False;
-  Stopped := False;
+  StepsOff := False;
+  Stopped  := False;
+  Cancelled:= False;
   SetLength(Units, Length(AUnits));
   LOnDisk:= False;
   for var K: Integer:= 0 to High(AUnits) do
@@ -1906,6 +1943,12 @@ begin
     if not MatchText(ABooks[B], Invalid) then
       RunBook(B + 1);
   end;
+  // Every unit still undelivered after a cancel or a configuration stop is short of a book (a
+  // complete or finished one was delivered after its chunk).
+  if Stopped then
+    for var K: Integer:= 0 to High(AUnits) do
+      if not Units[K].Delivered then
+        UndoPartial(K);
   for var K: Integer:= 0 to High(AUnits) do
     Deliver(K);
   Result:= Rows;

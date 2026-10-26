@@ -134,9 +134,8 @@ function SaveLevelFor(ACurrent: TTextLevel): TTextLevel;
 /// <summary>The level offered when the current one loses characters: from tlAscii7 / tlAscii8 it is
 /// tlUtf8 (owner default); from a UTF level ACurrent.</summary>
 /// <param name="ACurrent">The level that loses characters.</param>
-/// <param name="ANeeded">The lowest level that holds the text (NeededLevel).</param>
 /// <returns>The level to offer.</returns>
-function RaiseTarget(ACurrent, ANeeded: TTextLevel): TTextLevel;
+function RaiseTarget(ACurrent: TTextLevel): TTextLevel;
 
 /// <summary>Offers a lower level for a UTF-16 book: ANeeded (tlAscii7/8/Utf8) when ACurrent is UTF-16
 /// and LevelRank(ANeeded) &lt; 3; else ACurrent (= no offer).</summary>
@@ -499,14 +498,13 @@ begin
     Result:= ACurrent;
 end;
 
-function RaiseTarget(ACurrent, ANeeded: TTextLevel): TTextLevel;
+function RaiseTarget(ACurrent: TTextLevel): TTextLevel;
 begin
+  // NeededLevel never exceeds tlUtf8, so no needed-level clause can rank above this result.
   if ACurrent in [tlAscii7, tlAscii8] then
     Result:= tlUtf8
   else
     Result:= ACurrent;
-  if LevelRank(ANeeded) > LevelRank(Result) then
-    Result:= ANeeded;
 end;
 
 function LowerOffer(ACurrent, ANeeded: TTextLevel): TTextLevel;
@@ -544,7 +542,7 @@ begin
   else
   begin
     Result.Action:= psaAsk;
-    Result.RaiseTo:= RaiseTarget(ACurrent, Needed);
+    Result.RaiseTo:= RaiseTarget(ACurrent);
     Result.Lost:= LostChars(AText, L, LOST_CHARS_SHOWN, Result.LostTotal);
   end;
 end;

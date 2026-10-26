@@ -56,6 +56,8 @@ begin
       and (EncTabBytesText(TFile.ReadAllBytes(B3)) = EncTabBytesText(Bytes)) and (Length(TFile.ReadAllBytes(B3)) = Length(Bytes)), Err);
     Err:= LowerBookFile(TPath.Combine(Dir, 'missing.rules'), tlAscii7, Bak);
     Check('lower.file.missing', Err.StartsWith('Lowering of missing.rules aborted') and (Bak = ''), Err);
+    // the abort text is also used when SaveBook failed AFTER bytes were written: it must not claim 'not changed'
+    Check('lower.aborted.wording', (Pos('may be unchanged', LOWER_ABORTED_FMT) > 0) and (Pos('was not changed', LOWER_ABORTED_FMT) = 0));
   finally
     TDirectory.Delete(Dir, True);
   end; // try

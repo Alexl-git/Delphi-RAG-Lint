@@ -18,8 +18,8 @@ begin
       AllOk:= False;
   Check('name.roundtrip', AllOk);
   Check('save.level.d-b', (SaveLevelFor(tlUtf16) = tlUtf16Bom) and (SaveLevelFor(tlUtf8) = tlUtf8));
-  Check('raise.target', (RaiseTarget(tlAscii7, tlUtf8) = tlUtf8) and (RaiseTarget(tlAscii8, tlUtf8) = tlUtf8)
-    and (RaiseTarget(tlUtf8Bom, tlUtf8) = tlUtf8Bom));
+  Check('raise.target', (RaiseTarget(tlAscii7) = tlUtf8) and (RaiseTarget(tlAscii8) = tlUtf8)
+    and (RaiseTarget(tlUtf8Bom) = tlUtf8Bom));
   Check('lower.offer', (LowerOffer(tlUtf16Bom, tlAscii7) = tlAscii7) and (LowerOffer(tlUtf16, tlUtf8) = tlUtf8)
     and (LowerOffer(tlUtf16Bom, tlAscii8) = tlUtf8) and (LowerOffer(tlUtf8Bom, tlAscii7) = tlUtf8Bom) and (LowerOffer(tlUtf16Bom, tlUtf16) = tlUtf16Bom));
 end;
@@ -130,6 +130,111 @@ begin
   end;
 end;
 
+procedure TestEncodingBookState;
+var
+  D: TPreSaveDecision;
+  Noted: Boolean;
+begin
+  // BookIsDirty: text OR encoding differing from the last load / save
+  Check('dirty.clean', not BookIsDirty('a', 'a', tlUtf8, tlUtf8));
+  Check('dirty.text', BookIsDirty('a', 'b', tlUtf8, tlUtf8));
+  Check('dirty.level.only', BookIsDirty('a', 'a', tlUtf16Bom, tlUtf8));
+  Check('dirty.both', BookIsDirty('a', 'b', tlAscii7, tlUtf8));
+  // Utf16BomNote: the BOM note once per open book, any other note every time
+  D:= PreSaveDecision('abc', tlUtf16);
+  Noted:= False;
+  Check('bomnote.first', (Utf16BomNote(D, Noted) = ' ' + NOTE_UTF16_BOM_ADDED) and Noted);
+  Check('bomnote.second.silent', (Utf16BomNote(D, Noted) = '') and Noted);
+  Noted:= False;
+  D:= PreSaveDecision('x'#$0413, tlUtf8);
+  Check('bomnote.other.always', (Utf16BomNote(D, Noted) = ' ' + Format(NOTE_FITS_AFTER_ALL, ['UTF-8'])) and (not Noted)
+    and (Utf16BomNote(D, Noted) <> ''));
+  D:= PreSaveDecision('#use A', tlAscii7);
+  Check('bomnote.none', (Utf16BomNote(D, Noted) = '') and (not Noted));
+end;
+
+// ENC-a (Task 1 deferred minors) and TK: detect branches, surrogate columns, lone surrogate,
+// BOM sniffing and a byte-exact non-ASCII Save round trip.
+procedure TestEncodingDeferredMinors;
+const
+  CYR = #$0413;
+var
+  D: TDetectedText;
+  B: TBytes;
+  Lost: TArray<TLostChar>;
+  Total: Integer;
+  P: TPreSaveDecision;
+  Tmp, Text: string;
+  Got: TBytes;
+  Level: TTextLevel;
+begin
+  // --- UTF-16 detection: an ODD byte count is never sure, even at share 1.0 ---
+  B:= TEncoding.Unicode.GetBytes('abcdefgh') + TBytes.Create($41);
+  D:= DetectTextLevel(B);
+  Check('detect.utf16.odd.length.unsure', (D.Level = tlAscii8) and (not D.Sure) and (D.Note = DETECT_UTF16_UNSURE));
+  // --- share between SUSPECT (0.5) and SURE (0.9): 5 of 8 odd bytes are NUL = 0.625 ---
+  B:= TEncoding.Unicode.GetBytes('abcdefgh');
+  B[1]:= $41;
+  B[3]:= $41;
+  B[5]:= $41;
+  D:= DetectTextLevel(B);
+  Check('detect.utf16.share.mid.unsure', (D.Level = tlAscii8) and (not D.Sure) and (D.Note = DETECT_UTF16_UNSURE));
+  // --- a NUL under the suspect share (1 of 8 odd bytes = 0.125) is plain ANSI, sure, no note ---
+  B:= TEncoding.ANSI.GetBytes('abcdefghijklmnop');
+  B[1]:= 0;
+  D:= DetectTextLevel(B);
+  Check('detect.nul.low.share.sure', (D.Level = tlAscii8) and D.Sure and (D.Note = ''));
+  // --- strict UTF-8: overlong, truncated tail, bad continuation byte are NOT UTF-8 ---
+  D:= DetectTextLevel(TBytes.Create($61, $C0, $80));
+  Check('detect.utf8.overlong.c0', (D.Level = tlAscii8) and D.Sure);
+  D:= DetectTextLevel(TBytes.Create($61, $E0, $80, $80));
+  Check('detect.utf8.overlong.e0', D.Level = tlAscii8);
+  D:= DetectTextLevel(TBytes.Create($61, $C3));
+  Check('detect.utf8.truncated.tail', D.Level = tlAscii8);
+  D:= DetectTextLevel(TBytes.Create($C3, $41));
+  Check('detect.utf8.bad.continuation', D.Level = tlAscii8);
+  D:= DetectTextLevel(TBytes.Create($C3, $A9));
+  Check('detect.utf8.valid.at.end', D.Level = tlUtf8);
+  // --- FF FE first is read as a UTF-16 BOM even when the file is Latin-1 (inherent to BOM sniffing) ---
+  D:= DetectTextLevel(TBytes.Create($FF, $FE, $61, $62));
+  Check('detect.ff.fe.latin1.is.utf16.bom', D.Level = tlUtf16Bom);
+
+  // --- LostChars columns count UTF-16 units: a surrogate pair is 2 columns ---
+  Lost:= LostChars(#$D83D#$DE00'x'#$0413, tlAscii7, 8, Total);
+  Check('lost.col.after.surrogate', (Total = 2) and (Length(Lost) = 2) and (Lost[0].Col = 1) and (Lost[1].Col = 4) and (Lost[1].Line = 1),
+    IntToStr(Lost[1].Col));
+  // --- a lone surrogate cannot be written at UTF-8: asked, and the raise target is the current level ---
+  P:= PreSaveDecision('a'#$D83D'b', tlUtf8);
+  Check('presave.lone.surrogate.utf8', (P.Action = psaAsk) and (P.LostTotal = 1) and (P.Lost[0].Code = $D83D) and (P.RaiseTo = tlUtf8));
+  P:= PreSaveDecision('a'#$D83D'b', tlUtf16Bom);
+  Check('presave.lone.surrogate.utf16.writes', (P.Action = psaWrite) and (P.WriteLevel = tlUtf16Bom));
+
+  // --- RaiseTarget: ASCII levels go to UTF-8; a UTF level stays ---
+  Check('raise.target.utf16.stays', (RaiseTarget(tlUtf16) = tlUtf16) and (RaiseTarget(tlUtf16Bom) = tlUtf16Bom) and (RaiseTarget(tlUtf8) = tlUtf8));
+
+  // --- non-ASCII Save round trip: the exact bytes on disk, and the text and level read back ---
+  Tmp:= TPath.GetTempFileName;
+  try
+    Text:= 'a' + CYR;
+    for Level in [tlUtf8, tlUtf8Bom, tlUtf16, tlUtf16Bom] do
+    begin
+      P:= PreSaveDecision(Text, Level);
+      WriteTextAtLevel(Tmp, Text, P.WriteLevel);
+      Got:= TFile.ReadAllBytes(Tmp);
+      case Level of
+        tlUtf8: B:= TBytes.Create($61, $D0, $93);
+        tlUtf8Bom: B:= TBytes.Create($EF, $BB, $BF, $61, $D0, $93);
+      else
+        B:= TBytes.Create($FF, $FE, $61, $00, $13, $04); // tlUtf16 is saved WITH a BOM (D-B)
+      end;
+      Check('save.bytes.exact.' + LevelName(Level), (P.Action = psaWrite) and EncBytesEqual(Got, B));
+      Check('save.readback.' + LevelName(Level), (ReadTextDetect(Tmp, D) = Text) and (D.Level = P.WriteLevel));
+    end;
+  finally
+    TFile.Delete(Tmp);
+  end;
+end;
+
 procedure TestEncodingLevels;
 begin
   TestEncodingLevelBasics;
@@ -138,4 +243,6 @@ begin
   TestEncodingLost;
   TestEncodingPreSave;
   TestEncodingFile;
+  TestEncodingBookState;
+  TestEncodingDeferredMinors;
 end;

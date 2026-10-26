@@ -1249,6 +1249,12 @@ type
       /// editor probes once in TConvRulesForm.Create, on the UI thread. A timeout reads
       /// as no capabilities -- the behaviour of an engine older than 1.20.6.</remarks>
       function CapabilityNames: TArray<string>;
+      /// <summary>CapabilityNames with the outcome kept (R2b): TConvRulesForm.Create must tell
+      /// "the engine answered with no capabilities" from "the engine did not answer".</summary>
+      /// <param name="ACaps">The capabilities; [] when the call failed.</param>
+      /// <param name="AParsed">True when the output held an info object.</param>
+      /// <returns>The call's exit code (ENGINE_OUTCOME_TIMEOUT on InfoTimeoutMs expiry); feed it with AParsed to ConvRules.CapabilityProbe.StartupProbeVerdict.</returns>
+      function CapabilityProbeTimed(out ACaps: TArray<string>; out AParsed: Boolean): Integer;
       /// <summary>One `drag-lint --version` call (R2): the cheapest question the engine
       /// answers; ConvRules.CapabilityProbe.EngineVersionText reads its output.</summary>
       /// <param name="ACancel">Polled while it runs; set = the engine is terminated. May be nil.</param>
@@ -1315,7 +1321,7 @@ function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
 
 /// <summary>PURE: the --raise-encoding arguments of a convert-apply call (engine contract E2).</summary>
 /// <param name="AFiles">Full paths of the files (a unit's .pas / .dfm) to write as UTF-8 with BOM.</param>
-/// <returns>' --raise-encoding "<path>=utf8-bom"' per file, in order; '' for [].</returns>
+/// <returns>' --raise-encoding "&lt;path&gt;=utf8-bom"' per file, in order; '' for [].</returns>
 /// <remarks>The ONLY place the flag is spelled: utf8-bom is the only level the engine accepts
 /// in this slice. One flag per file; the engine exits 2 on a path that is not a file of the run.</remarks>
 function RaiseEncodingArgs(const AFiles: TArray<string>): string;
@@ -1341,11 +1347,29 @@ function ApplyArgs(const AUnitPas, ARulesFile, ADbArgs, AOnlyArgs, ARaiseArgs, A
 /// batch --only would bind every unit).</returns>
 function BatchApplyArgs(const AUnits: TArray<string>; const ARulesFile, ADbArgs, ACastLibArgs: string): string;
 
+/// <summary>PURE (R7): decodes one pipe chunk of engine output in a given ANSI code page without
+/// breaking a double-byte character that is split across chunk boundaries.</summary>
+/// <param name="APending">In: the lead byte held back from the previous chunk ([] when none). Out: the
+/// trailing lead byte of this chunk that still needs its trail byte, [] when the chunk ends on a boundary.</param>
+/// <param name="AChunk">The bytes just read.</param>
+/// <param name="ACodePage">The code page the engine writes in (CP_ACP in production; a parameter so the
+/// DBCS and single-byte paths are testable).</param>
+/// <returns>The text of APending + AChunk up to the last complete character. On a single-byte code page
+/// nothing is ever held back.</returns>
+/// <remarks>The engine output contract is ACP, not UTF-8 (ENGINE INBOX pending on a UTF-8 switch).
+/// Invalid bytes become U+FFFD or the code page's default, never an exception.</remarks>
+function DecodeAnsiChunk(var APending: TBytes; const AChunk: TBytes; ACodePage: Cardinal): string;
+
+/// <summary>PURE (R7): decodes what DecodeAnsiChunk still holds back at end of stream.</summary>
+/// <param name="APending">The held-back bytes; emptied.</param>
+/// <param name="ACodePage">As for DecodeAnsiChunk.</param>
+/// <returns>Their text; '' when nothing was held.</returns>
+function FlushAnsiPending(var APending: TBytes; ACodePage: Cardinal): string;
 /// <summary>PURE: the capability keys whose value is the JSON literal true.</summary>
 /// <param name="AInfoOutput">Raw `info --json` output; text before the first '{' and after
 /// the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <returns>The keys, in document order; [] when unparseable or no capabilities object.</returns>
-function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
+function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;  // dl:ok unused-public-symbol@1a33 -- REVIEWED 2026-10-26 the pure parser the model tests pin (caps.*); TEngineAdapter.CapabilityProbeTimed calls TryParseInfoCapabilities directly because it needs the parsed flag
 
 /// <summary>PURE: True for [A-Za-z_][A-Za-z0-9_]* -- the only class and type names
 /// LookupClass / ListClassFields / ListCodeRefs put into SQL.</summary>
@@ -1710,6 +1734,48 @@ begin
     Result:= Result + Format(' --progress-interval %d', [PROGRESS_INTERVAL_S]);
 end;
 
+// Bytes of ABytes that end on a character boundary: a trailing DBCS lead byte (its trail byte is
+// in the next chunk) is excluded. Scanned forward: a trail byte may look like a lead byte.
+function AnsiCompletePrefixLen(const ABytes: TBytes; ACodePage: Cardinal): Integer;
+begin
+  Result:= 0;
+  while Result < Length(ABytes) do
+  begin
+    if IsDBCSLeadByteEx(ACodePage, ABytes[Result]) then
+    begin
+      if Result + 1 >= Length(ABytes) then
+        Exit;
+      Inc(Result);
+    end;
+    Inc(Result);
+  end;
+end;
+
+// Flags 0: invalid bytes never raise (the engine's output must not kill the pump).
+function AnsiToString(const ABytes: TBytes; ACount: Integer; ACodePage: Cardinal): string;
+begin
+  var LEnc: TEncoding:= TMBCSEncoding.Create(ACodePage, 0, 0);
+  try
+    Result:= LEnc.GetString(ABytes, 0, ACount);
+  finally
+    LEnc.Free;
+  end; // try
+end;
+
+function DecodeAnsiChunk(var APending: TBytes; const AChunk: TBytes; ACodePage: Cardinal): string;
+begin
+  var LAll: TBytes:= APending + AChunk;
+  var LKeep: Integer:= AnsiCompletePrefixLen(LAll, ACodePage);
+  Result:= AnsiToString(LAll, LKeep, ACodePage);
+  APending:= Copy(LAll, LKeep, Length(LAll) - LKeep);
+end;
+
+function FlushAnsiPending(var APending: TBytes; ACodePage: Cardinal): string;
+begin
+  Result:= AnsiToString(APending, Length(APending), ACodePage);
+  APending:= nil;
+end;
+
 function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
 begin
   // One reader for both probes; this one has no use for "was it an answer at all".
@@ -1723,12 +1789,21 @@ end;
 
 function TEngineAdapter.CapabilityNames: TArray<string>;
 var
+  LParsed: Boolean;
+begin
+  CapabilityProbeTimed(Result, LParsed);
+end;
+
+function TEngineAdapter.CapabilityProbeTimed(out ACaps: TArray<string>; out AParsed: Boolean): Integer;
+var
   Output: string;
 begin
-  Result:= nil;
+  ACaps:= nil;
+  AParsed:= False;
   // Its own short bound, not ENGINE_TIMEOUT_MS: this runs during start-up.
-  if RunCaptureTimed('info --json', FInfoTimeoutMs, Output) = 0 then
-    Result:= ParseCapabilityNames(Output);
+  Result:= RunCaptureTimed('info --json', FInfoTimeoutMs, Output);
+  if Result = 0 then
+    AParsed:= TryParseInfoCapabilities(Output, ACaps);
 end;
 
 function TEngineAdapter.VersionOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
@@ -1805,10 +1880,12 @@ var
   Splitter : TLineSplitter;
   OnErrLine: TProc<string>;
   Outcome  : Integer;
+  PendOut  : TBytes;
+  PendErr  : TBytes;
 
   // Reads what APipe has ready right now, at most MAX_READS_PER_DRAIN chunks;
   // True when anything was read.
-  function Drain(APipe: THandle; const AInto: TProc<string>): Boolean;
+  function Drain(APipe: THandle; var APending: TBytes; const AInto: TProc<string>): Boolean;
   var
     Buf      : array[0..BUF_BYTES - 1] of AnsiChar;
     Avail    : DWORD;
@@ -1824,7 +1901,10 @@ var
       BytesRead:= 0;
       if not ReadFile(APipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
         Exit;
-      AInto(string(AnsiString(Copy(Buf, 0, BytesRead))));
+      var LRaw: TBytes;
+      SetLength(LRaw, BytesRead);
+      Move(Buf, LRaw[0], BytesRead);
+      AInto(DecodeAnsiChunk(APending, LRaw, CP_ACP)); // R7: a DBCS character split across two reads stays whole
       Result:= True;
     end;
   end;
@@ -1901,16 +1981,18 @@ begin
     Outcome:= 0;
     var Deadline: UInt64:= GetTickCount64 + ATimeoutMs;
     repeat
-      var Got: Boolean:= Drain(OutRead, ToOut);
-      Got:= Drain(ErrRead, ToErr) or Got;
+      var Got: Boolean:= Drain(OutRead, PendOut, ToOut);
+      Got:= Drain(ErrRead, PendErr, ToErr) or Got;
       if WaitForSingleObject(PI.hProcess, if Got then 0 else POLL_MS) = WAIT_OBJECT_0 then
       begin
         // Exited: its output is finite now, so drain both pipes until both are empty.
         var More: Boolean;
         repeat
-          More:= Drain(OutRead, ToOut);
-          More:= Drain(ErrRead, ToErr) or More;
+          More:= Drain(OutRead, PendOut, ToOut);
+          More:= Drain(ErrRead, PendErr, ToErr) or More;
         until not More;
+        ToOut(FlushAnsiPending(PendOut, CP_ACP)); // a lead byte with no trail byte, if any
+        ToErr(FlushAnsiPending(PendErr, CP_ACP));
         Break;
       end;
       if (ACancel <> nil) and ACancel.IsCancelled then

@@ -172,8 +172,8 @@
     "version": "1.33.0-alpha"
   },
   "features/doc-drift.md": {
-    "hash": "73d38d4ce836ef37cd84b333704a8f0e85be4e5444846ad8e592b4ae15248136",
-    "version": "1.34.1-alpha"
+    "hash": "3d81a888e82300b36a34170ed4d0f2a018a4462b40b58efd83ef52206a5fec8e",
+    "version": "1.35.0-alpha"
   },
   "features/doc-forget.md": {
     "hash": "a85e1963132c02b23b64191af4c7621d3e9bde64ed0f363a820837cad8e1bfd0",
@@ -204,7 +204,7 @@
     "version": "1.33.0-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "c510356d21e205dbd7b5351bf457b313eeffc515351a5936d0055aa3fa553294",
+    "hash": "9458c25e4538b8051810bac7a31ccb69a1bffe03ce66115b39ad0c6e0ea4697b",
     "version": "1.35.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -288,7 +288,7 @@
     "version": "1.33.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "fe98963ee35291c3fe8e572049967779e39d7fbd7d69f8997eed20e233596f3f",
+    "hash": "00962518dc5fd90396dce4fcb68d1ec979f4b9359b121eeea75faa4f284772fb",
     "version": "1.35.0-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -296,7 +296,7 @@
     "version": "1.33.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "43905c2167a75d7d485b75d19a2c84a2d41d9ffef4f1a9a67a905b51381ca55e",
+    "hash": "5f609c3bd9ef386c5fa117124ee2358df3049a65c684062cb00df2b6e3c63c10",
     "version": "1.35.0-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
@@ -392,7 +392,7 @@
     "version": "1.35.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "e405c08adeed877a2cb1be5786aacd1cb0affa7ffd904935e7964cd03453b220",
+    "hash": "d5ce1c64a9508af9bdf33732332bb7fcabceeb0bdab08cd26483293efed511fb",
     "version": "1.35.0-alpha"
   },
   "features/lint-tree.md": {
@@ -524,8 +524,8 @@
     "version": "1.33.0-alpha"
   },
   "features/reconcile-project-members-dpr-dproj.md": {
-    "hash": "3714f26af8482b700c22288939f4712fcb450462ee5c169379390c01001617c1",
-    "version": "1.33.0-alpha"
+    "hash": "037bfebf0bb4c174ad15698b18eba42e5458bebb73241b581287f7b6805ef4cc",
+    "version": "1.35.0-alpha"
   },
   "features/recover-buffer-compile-files.md": {
     "hash": "6ebee5e95dd8c204e85761aca1f1b9ea1b6ebb57d453dcb86b6414af7202d5b5",
@@ -560,7 +560,7 @@
     "version": "1.33.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "fe645411b6ec7beef9a6c698d174d3b99b90a8731f5b06f39a04711478e133b9",
+    "hash": "7c79c9da45a5d0f5f637ebb8482a38f865bb94d3a7c2263d484ffc10b2119177",
     "version": "1.35.0-alpha"
   },
   "features/safe-delete.md": {

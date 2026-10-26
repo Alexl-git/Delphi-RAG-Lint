@@ -223,6 +223,11 @@ type
     Reason  : string;
   end;
 
+const
+  /// <summary>TApplyRow.ExitCode when the apply/1 object carries no exit_code.</summary>
+  APPLY_EXIT_ABSENT = -1;
+
+type
   /// <summary>One convert-apply run, read from its apply/1 JSON.</summary>
   TApplyRow = record
     /// <summary>The engine's own ok flag; False also for unparseable output.</summary>
@@ -251,6 +256,11 @@ type
     /// rules failed validation", file untouched) -- a book fault, not a unit
     /// fault.</summary>
     RuleErrorCount: Integer;
+    /// <summary>exit_code (engine 1.33.0, G3) -- THIS unit's own code: 0 ok, 1 refused
+    /// (incl. unindexed), 2 write failure / rollback, 6 configuration (castlib).
+    /// APPLY_EXIT_ABSENT when the key is absent or not a number (an older engine, or
+    /// unparseable output).</summary>
+    ExitCode  : Integer;
     /// <summary>converted[] -- one line per converted instance.</summary>
     Converted : TArray<string>;
     /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder. When inherited[]
@@ -326,7 +336,8 @@ type
     Valid       : Boolean;
     /// <summary>The batch's own ok flag.</summary>
     Ok          : Boolean;
-    /// <summary>exit_code -- the engine's exit contract: 0 only when every unit is ok.</summary>
+    /// <summary>exit_code -- the engine's exit contract: 0 only when every unit is ok;
+  /// APPLY_EXIT_ABSENT when the key is absent or not a number.</summary>
     ExitCode    : Integer;
     /// <summary>units_count.</summary>
     UnitsCount  : Integer;
@@ -515,7 +526,7 @@ const
   /// <summary>The lower-the-book question (Yes / No): book name, LevelName(Current), LevelName(Offer).</summary>
   ASK_LOWER_FMT = '%s is saved as %s but every character in it fits %s. Lower it before converting (a normal Save with backup)? Yes = lower, No = keep it as it is.';
   /// <summary>The status / note of a lowering that did not happen: book name.</summary>
-  LOWER_ABORTED_FMT = 'Lowering of %s aborted -- the book was not changed.';
+  LOWER_ABORTED_FMT = 'Lowering of %s aborted -- the book may be unchanged (check the file and its backup).';
   /// <summary>The note of a lowering that happened: book name, LevelName(level).</summary>
   LOWERED_FMT = 'Saved %s as %s before converting (the old file kept as a backup).';
 
@@ -552,7 +563,8 @@ function BatchSummaryText(const ABatch: TApplyBatch): string;
 /// <summary>PURE: True when a batch breaks the engine's all-or-nothing exit contract:
 /// exit 0 with a refused or failed unit counted, or a non-zero exit with every unit ok.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's reading.</param>
-/// <returns>False for an invalid batch and for a consistent one.</returns>
+/// <returns>False for an invalid batch and for a consistent one. An absent exit_code
+/// (APPLY_EXIT_ABSENT) is judged as 0.</returns>
 function BatchContractBroken(const ABatch: TApplyBatch): Boolean;
 
 /// <summary>PURE: the converted row's scoped part, from the engine's own answer.</summary>
@@ -1837,6 +1849,7 @@ var
   LOwnItems: TArray<TApplyItem>;
 begin
   Result:= Default(TApplyRow);
+  Result.ExitCode:= APPLY_EXIT_ABSENT;
   Errs:= nil;
   // stderr is merged into the pipe: skip anything before the document, and --
   // measured 2026-09-29, the engine's "(loaded defaults ...)" line lands AFTER
@@ -1858,6 +1871,8 @@ begin
     // Type-checked, never GetValue<T>: it coerces ("3" -> 3, 1 -> True) on a wrong type.
     Result.Ok        := JsonTrue(Obj, 'ok');
     Result.EditsCount:= JsonInt(Obj, 'edits_count');
+    if Obj.Values['exit_code'] is TJSONNumber then
+      Result.ExitCode:= JsonInt(Obj, 'exit_code');
     Result.UnitPath  := Str(Obj, 'unit');
     Result.Converted := Strings(Obj, 'converted');
     Result.InheritedLeft:= InheritedItems(Obj);
@@ -1965,7 +1980,7 @@ begin
       Exit;
     Result.Valid       := True;
     Result.Ok          := JsonTrue(Obj, 'ok');
-    Result.ExitCode    := JsonInt(Obj, 'exit_code');
+    Result.ExitCode    := if Obj.Values['exit_code'] is TJSONNumber then JsonInt(Obj, 'exit_code') else APPLY_EXIT_ABSENT;
     Result.UnitsCount  := JsonInt(Obj, 'units_count');
     Result.OkCount     := JsonInt(Obj, 'ok_count');
     Result.RefusedCount:= JsonInt(Obj, 'refused_count');
@@ -1988,9 +2003,13 @@ begin
 end;
 
 function BatchContractBroken(const ABatch: TApplyBatch): Boolean;
+var
+  LExit: Integer;
 begin
-  Result:= ABatch.Valid and (((ABatch.ExitCode = 0) and (ABatch.RefusedCount + ABatch.FailedCount > 0))
-    or ((ABatch.ExitCode <> 0) and (ABatch.RefusedCount + ABatch.FailedCount = 0)));
+  // An absent exit_code is read as 0 here, as before it was told apart (APPLY_EXIT_ABSENT).
+  LExit:= if ABatch.ExitCode = APPLY_EXIT_ABSENT then 0 else ABatch.ExitCode;
+  Result:= ABatch.Valid and (((LExit = 0) and (ABatch.RefusedCount + ABatch.FailedCount > 0))
+    or ((LExit <> 0) and (ABatch.RefusedCount + ABatch.FailedCount = 0)));
 end;
 
 function ScopedMatchText(const ARow: TApplyRow): string;

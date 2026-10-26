@@ -12,6 +12,7 @@ uses
   , System.Classes
   , System.StrUtils
   , Vcl.Dialogs // mbYes ..: OfferButtons
+  , System.UITypes // mrYes ..: RaiseRerunPlan's asker
   , System.Generics.Collections
   , System.JSON
   , Winapi.Windows
@@ -43,6 +44,7 @@ uses
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertBatch in '..\ConvRules.ConvertBatch.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.ConvertRerun in '..\ConvRules.ConvertRerun.pas'
   , ConvRules.QualifyFix in '..\ConvRules.QualifyFix.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
@@ -2539,13 +2541,15 @@ end;
 
 // B4 test helper: one apply/1 object as the engine puts it in units[] (or alone, for one
 // --unit). AKind: 'o' ok; 'f' failed, nothing written; 'w' failed after the fake wrote the
-// file (the editor's restore must undo it); 'r' refused; 'e' the book's rule_errors.
+// file (the editor's restore must undo it); 'r' refused; 'e' the book's rule_errors; 'c' the
+// 1.33.1 configuration stop (refused, exit_code 6).
 function BatchTestEntry(const AUnit: string; AKind: Char; const AText: string): string;
 begin
   case AKind of
     'o': Result:= '"ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]';
     'r': Result:= Format('"ok":false,"refused":true,"error":"%s","reason":"%s","rule_errors":[],"edits_count":0', [AText, AText]);
     'e': Result:= '"ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],"edits_count":0';
+    'c': Result:= Format('"ok":false,"refused":true,"error":"%s","reason":"%s","rule_errors":[],"edits_count":0,"exit_code":6', [AText, AText]);
     else Result:= Format('"ok":false,"refused":false,"error":"%s","rule_errors":[],"edits_count":0', [AText]);
   end; // case
   Result:= '{"schema":"apply/1","unit":"' + BatchJ(AUnit) + '",' + Result + '}';
@@ -2563,7 +2567,7 @@ begin
   for var C: Char in AKinds do
     case C of
       'o': Inc(LOk);
-      'r': Inc(LRef);
+      'r', 'c': Inc(LRef);
       else Inc(LFail);
     end; // case
   AExit:= 0;
@@ -2571,6 +2575,8 @@ begin
     AExit:= 1;
   if LFail > 0 then
     AExit:= 2;
+  if Pos('c', AKinds) > 0 then
+    AExit:= ENGINE_EXIT_CONFIG;
   Result:= Format('{"schema":"apply-batch/1","mode":"apply","units_count":%d,"ok":%s,"exit_code":%d,"ok_count":%d,"refused_count":%d,'
     + '"failed_count":%d,"classes_built":2,"units":[%s]}', [Length(AEntries), if AExit = 0 then 'true' else 'false', AExit, LOk, LRef, LFail, string.Join(',', AEntries)]);
 end;
@@ -2798,6 +2804,18 @@ var
     Check('batch.untrusted.unparseable', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
       Pos(PREFIX, RowAt(0).Note) = 1, Pos('engine died', RowAt(0).Note) > 0, Untouched(S1), Untouched(S2)]), Describe);
 
+    // --- rule_errors on SOME units only (1 of 3): not trusted, the whole chunk restored ---
+    Reset;
+    LShort:= BatchTestDoc([BatchTestEntry(S1, 'o', ''), BatchTestEntry(S2, 'e', ''), BatchTestEntry(S3, 'o', '')], 'oeo', LExit);
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LShort;
+      end;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    LAll:= Length(Rows) = UNITS_3;
+    for var LRow: TConvertRow in Rows do
+      LAll:= LAll and (LRow.Status = csFailedRestored) and LRow.Note.StartsWith(PREFIX + 'rule_errors on 1 of 3 unit(s) only');
+    Check('batch.untrusted.partial.rule.errors', LAll and Untouched(S1) and Untouched(S2) and Untouched(S3), Describe);
     // --- exit 0 with failed_count 1: the exit contract is broken ---
     Reset;
     ExitOver:= 0;
@@ -2849,10 +2867,28 @@ var
     Polls:= LPolls;
     LNotSeen:= NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules']);
     // Plan 3.6: a unit short of a book is not reached by it -- chunk 1's units miss book B.
-    Check('batch.cancel.between.chunks', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConverted, RowOf(S2, 'A.rules').Status = csConverted,
+    // R4: and it ends UNCHANGED, as on the per-unit path: book A is undone (csRolledBack), the
+    // backup that undid it is kept and named.
+    Check('batch.cancel.between.chunks.restores', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csRolledBack, RowOf(S2, 'A.rules').Status = csRolledBack,
+      Pos('cancelled', RowOf(S1, 'A.rules').Note) > 0, Pos('S1.pas.BCK1', RowOf(S1, 'A.rules').Note) > 0, Untouched(S1), Untouched(S2), BackupsOf(S1) = 1,
       string.Join('|', Calls) = 'A:S1,S2', string.Join(',', LNotSeen) = string.Join(',', [S1, S2, S3]),
       Untouched(S3), BackupsOf(S3) = 0]), Describe + ' notreached=' + string.Join(',', LNotSeen));
     Check('batch.cancel.polled.per.chunk', Polls = 2, IntToStr(Polls)); // 1 chunk attempted + the poll that cancelled
+
+    // --- R4: cancel before book B's second chunk: S1/S2 have every book and stay converted,
+    // S3 has book A only and is restored ---
+    Reset;
+    LPolls:= 0;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow,
+      function: Boolean
+      begin
+        Inc(LPolls);
+        Result:= LPolls >= CHUNKS_4;
+      end, OnStep, False, False, 2);
+    LNotSeen:= NotReachedUnits(Rows, [S1, S2, S3], ['A.rules', 'B.rules']);
+    Check('batch.cancel.keeps.complete.units', AllOf([RowOf(S1, 'B.rules').Status = csConverted, RowOf(S2, 'B.rules').Status = csConverted,
+      not Untouched(S1), RowOf(S3, 'A.rules').Status = csRolledBack, Untouched(S3), BackupsOf(S3) = 1,
+      string.Join(',', LNotSeen) = S3]), Describe + ' notreached=' + string.Join(',', LNotSeen));
 
     // --- S1's backup cannot be taken: csUnitSkipped, never in a --unit list ---
     Reset;
@@ -2893,6 +2929,143 @@ var
     Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
     Check('batch.unindexed.refused.25cd99de', AllOf([RowOf(S1, 'A.rules').Status = csConverted, RowOf(S2, 'A.rules').Status = csRefused,
       Pos('not covered by any supplied --db', RowOf(S2, 'A.rules').Note) > 0, Untouched(S2), BackupsOf(S2) = 0, BackupsOf(S1) = 1]), Describe);
+  end;
+
+  // R1 / R5: an exit-6 chunk under the 1.33.1 contract (every entry refused, exit_code 6) is
+  // a configuration stop that wrote nothing; an entry of an exit-6 chunk that says it WROTE
+  // (an older engine) is restored instead of trusted; an entry's exit_code that contradicts
+  // its ok flag distrusts the whole chunk.
+  procedure CheckEntryExitCodes;
+  const
+    CASTLIB = 'castlib C.cast: unknown value keyword Foo';
+  var
+    LDoc: string;
+
+    function Refused6(const AUnit: string): string;
+    begin
+      Result:= '{"schema":"apply/1","unit":"' + BatchJ(AUnit) + '","ok":false,"refused":true,"reason":"' + CASTLIB + '","error":"' + CASTLIB
+        + '","rule_errors":[],"edits_count":0,"exit_code":6}';
+    end;
+
+  begin
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'r';
+      end;
+    LDoc:= '{"schema":"apply-batch/1","mode":"apply","units_count":2,"ok":false,"exit_code":6,"ok_count":0,"refused_count":2,"failed_count":0,'
+      + '"classes_built":0,"units":[' + Refused6(S1) + ',' + Refused6(S2) + ']}';
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LDoc;
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.contract.refused.is.config.error', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConfigError,
+      RowOf(S2, 'A.rules').Status = csConfigError, RowOf(S1, 'A.rules').Note = CASTLIB, RowOf(S1, 'A.rules').StoppedRun,
+      BackupsOf(S1) = 0, BackupsOf(S2) = 0, Untouched(S1), Untouched(S2), string.Join('|', Calls) = 'A:S1,S2']), Describe);
+
+    // An older engine's exit-6 chunk: S1's entry says ok and the fake WROTE it.
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if FileStem(AUnit) = 'S1' then 'o' else 'f';
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.entry.wrote.restored', AllOf([RowOf(S1, 'A.rules').Status = csConfigError, Untouched(S1), BackupsOf(S1) = 1,
+      Pos('restored', RowOf(S1, 'A.rules').Note) > 0, RowOf(S2, 'A.rules').Status = csConfigError, BackupsOf(S2) = 0, Untouched(S2)]), Describe);
+
+    // R5: S1's entry says ok=true with exit_code 2 -- the chunk is not trusted.
+    Reset;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(AJson, '"edits_count":1,', '"edits_count":1,"exit_code":2,', []);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.entry.exit.contradicts.restores.chunk', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
+      Pos(PREFIX + 'units[0] exit_code 2 contradicts ok=true', RowAt(0).Note) = 1, Untouched(S1), Untouched(S2)]), Describe);
+
+    // R5: S2's refused entry says exit_code 6 under a batch exit_code of 1 -- not trusted.
+    Reset;
+    Decide:= BatchKindFor('S2', 'A.rules', 'r');
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(AJson, '"edits_count":0', '"edits_count":0,"exit_code":6', []);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.entry.exit.exceeds.restores.chunk', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
+      Pos(PREFIX + 'units[1] exit_code 6 exceeds the batch exit_code 1', RowAt(0).Note) = 1, Untouched(S1), Untouched(S2)]), Describe);
+
+    // R1 (b): an exit-6 answer that cannot be read per unit -- every unit restored, backups kept.
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= 'engine died';
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.unreadable.restores.keeps.backup', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConfigError,
+      RowOf(S2, 'A.rules').Status = csConfigError, Untouched(S1), Untouched(S2), BackupsOf(S1) = 1, BackupsOf(S2) = 1]), Describe);
+
+    // Review round 1: a configuration STOP in book B's first chunk leaves S3 with book A only --
+    // restored like a cancel (every book or none).
+    Reset;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if ABook = 'B.rules' then 'c' else 'o';
+      end;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, 2);
+    Check('batch.config.stop.partial.unit.restored', AllOf([RowOf(S1, 'B.rules').Status = csConfigError, RowOf(S1, 'A.rules').Status = csRolledBack,
+      RowOf(S3, 'A.rules').Status = csRolledBack, Pos('stopped', RowOf(S3, 'A.rules').Note) > 0, Untouched(S1), Untouched(S3), BackupsOf(S3) = 1,
+      string.Join('|', Calls) = 'A:S1,S2|A:S3|B:S1,S2']), Describe + ' calls=' + string.Join('|', Calls));
+
+    // Positive control: consistent per-entry codes are trusted.
+    Reset;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(AJson, '"edits_count":1,', '"edits_count":1,"exit_code":0,', [rfReplaceAll]);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.entry.exit.consistent.trusted', AllOf([Length(Rows) = 2, RowAt(0).Status = csConverted, RowAt(1).Status = csConverted,
+      RowAt(0).Apply.ExitCode = 0]), Describe);
+  end;
+
+  // I3: a batched refusal on book B restores its unit (book A rolled back), so the re-run of
+  // RerunJob (ALL books, refused units only) applies every book exactly ONCE to the file.
+  procedure CheckRefusedRerun;
+  var
+    LJob : TConvertJob;
+    LText: string;
+
+    function Times(const ANeedle: string): Integer;
+    begin
+      Result:= (Length(LText) - Length(StringReplace(LText, ANeedle, '', [rfReplaceAll]))) div Length(ANeedle);
+    end;
+
+  begin
+    Reset;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if (FileStem(AUnit) <> 'S1') and (ABook = 'B.rules') then 'r' else 'o';
+      end;
+    LJob:= Default(TConvertJob);
+    LJob.Units:= [S1, S2, S3];
+    LJob.Books:= ['A.rules', 'B.rules'];
+    Rows:= RunConversionBatched(LJob.Units, LJob.Books, Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.rerun.first.run.restored', AllOf([RowOf(S2, 'A.rules').Status = csRolledBack, RowOf(S2, 'B.rules').Status = csRefused,
+      RowOf(S3, 'A.rules').Status = csRolledBack, Untouched(S2), Untouched(S3), BackupsOf(S2) = 1]), Describe);
+    LJob:= RerunJob(LJob, [S2, S3], [S2, S3]);
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'o';
+      end;
+    Calls:= nil;
+    Rows:= RunConversionBatched(LJob.Units, LJob.Books, Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    LText:= TFile.ReadAllText(S2);
+    Check('batch.rerun.each.book.once', AllOf([string.Join('|', Calls) = 'A:S2,S3|B:S2,S3', Times('// A.rules') = 1, Times('// B.rules') = 1,
+      RowOf(S2, 'B.rules').Status = csConverted, RowOf(S3, 'B.rules').Status = csConverted, BackupsOf(S2) = 2]),
+      Describe + ' calls=' + string.Join('|', Calls) + ' text=' + LText);
   end;
 
   procedure CheckNotReachedPure;
@@ -3009,6 +3182,8 @@ begin
     CheckUntrusted;
     CheckStops;
     CheckUnindexedRefused;
+    CheckEntryExitCodes;
+    CheckRefusedRerun;
     CheckNotReachedPure;
     CheckDispatch;
   finally
@@ -8775,18 +8950,82 @@ end;
   stand-in engine (a .cmd that sleeps) must give [] within the bound. A second
   stand-in that answers proves the .cmd mechanism reaches CapabilityNames at all --
   without it, a stand-in that never started would pass the timeout check. }
+{ R7: engine pipe output is the system ANSI code page (ACP), not UTF-8. A DBCS character split
+  across two pipe reads must stay whole; on a single-byte code page nothing is held and E9 stays e-acute. }
+procedure TestAnsiChunkDecode;
+const
+  CP1252 = 1252;
+  CP932  = 932;
+var
+  LPending: TBytes;
+  LGot    : string;
+  LBad    : Integer;
+  LSjis   : TBytes;
+begin
+  // cp1252: E9 is U+00E9, whole or at any chunk boundary; nothing is ever held.
+  LPending:= nil;
+  LGot:= DecodeAnsiChunk(LPending, [Byte($61), Byte($E9), Byte($62)], CP1252);
+  Check('ansi.cp1252.e9', (LGot = 'a' + #$00E9 + 'b') and (Length(LPending) = 0));
+  LPending:= nil;
+  LGot:= DecodeAnsiChunk(LPending, [Byte($61)], CP1252) + DecodeAnsiChunk(LPending, [Byte($E9)], CP1252) + DecodeAnsiChunk(LPending, [Byte($62)], CP1252);
+  Check('ansi.cp1252.e9.boundary', (LGot = 'a' + #$00E9 + 'b') and (Length(LPending) = 0));
+  // The regression a UTF-8 decoder would cause: a lone E9 is not a valid UTF-8 sequence.
+  var LUtf8: TEncoding:= TMBCSEncoding.Create(CP_UTF8, 0, 0);
+  try
+    Check('ansi.utf8.would.break.e9', LUtf8.GetString([Byte($E9)]) = #$FFFD);
+  finally
+    LUtf8.Free;
+  end; // try
+  // cp932 (Shift-JIS): 82 A0 = U+3042; 'a' 82 A0 'b' 83 41 (U+30A2). Every 2-way split.
+  LSjis:= [Byte($61), Byte($82), Byte($A0), Byte($62), Byte($83), Byte($41)];
+  LBad:= 0;
+  for var LCut: Integer:= 0 to Length(LSjis) do
+  begin
+    LPending:= nil;
+    LGot:= DecodeAnsiChunk(LPending, Copy(LSjis, 0, LCut), CP932);
+    LGot:= LGot + DecodeAnsiChunk(LPending, Copy(LSjis, LCut, Length(LSjis) - LCut), CP932);
+    LGot:= LGot + FlushAnsiPending(LPending, CP932);
+    if LGot <> 'a' + #$3042 + 'b' + #$30A2 then
+      Inc(LBad);
+  end;
+  Check('ansi.cp932.every.split', LBad = 0, IntToStr(LBad) + ' bad splits');
+  LPending:= nil;
+  DecodeAnsiChunk(LPending, [Byte($82)], CP932);
+  Check('ansi.cp932.holds.lead', Length(LPending) = 1);
+  Check('ansi.cp932.completes', DecodeAnsiChunk(LPending, [Byte($A0)], CP932) = #$3042);
+  // A lead byte with no trail byte at end of stream is flushed, not dropped silently.
+  LPending:= nil;
+  DecodeAnsiChunk(LPending, [Byte($82)], CP932);
+  Check('ansi.flush.truncated', (FlushAnsiPending(LPending, CP932) <> '') and (Length(LPending) = 0));
+end;
+{ R2b round 1: a failed start-up probe is not repeated on every refresh (a hung engine would
+  freeze the UI up to 15 s each time). }
+procedure TestStartupProbeDue;
+const
+  T0 = 100000;
+begin
+  Check('probe.due.first', StartupProbeDue(False, 0, T0, False));
+  Check('probe.due.cached.never', not StartupProbeDue(True, 0, T0, False) and not StartupProbeDue(True, T0, T0 + STARTUP_REPROBE_MS * 2, False));
+  Check('probe.due.failed.waits', not StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS - 1, False));
+  Check('probe.due.failed.after.60s', StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS, False) and (STARTUP_REPROBE_MS = 60000));
+  Check('probe.due.busy.never', not StartupProbeDue(False, 0, T0, True) and not StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS * 2, True));
+end;
+
 procedure TestCapabilityProbeTimeout;
 const
   BOUND_MS  = 1500;
   MARGIN_MS = 2500;  // the bound plus process start-up; the stand-in sleeps ~6 s
   SLEEP_CMD = '@ping -n 7 127.0.0.1 >nul' + #13#10;
   ANSWER_CMD = '@echo {"capabilities":{"book_depth":true}}' + #13#10;
+  EXIT_OK   = 0;
 var
   Dir    : string;
   Eng    : TEngineAdapter;
   Caps   : TArray<string>;
   TStart : UInt64;
   Elapsed: UInt64;
+  LParsed: Boolean;
+  LCached: Boolean;
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'caps-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -8796,6 +9035,13 @@ begin
 
     Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'answer.cmd'), []);
     try
+      var LAns: TArray<string>;
+      var LAnsCode: Integer:= Eng.CapabilityProbeTimed(LAns, LParsed);
+      var LAnsNote: string:= StartupProbeVerdict(LAnsCode, LParsed, LCached);
+      Check('caps.startup.answer.cached', (LAnsCode = EXIT_OK) and LCached and (LAnsNote = '') and MatchText(CAPABILITY_BOOK_DEPTH, LAns), IntToStr(LAnsCode));
+      Check('caps.startup.verdict.pure', (StartupProbeVerdict(EXIT_OK, True, LCached) = '') and LCached
+        and (StartupProbeVerdict(ENGINE_OUTCOME_TIMEOUT, False, LCached) <> '') and not LCached
+        and (StartupProbeVerdict(EXIT_OK, False, LCached) <> '') and not LCached);
       Check('caps.info.timeout.default', Eng.InfoTimeoutMs = INFO_TIMEOUT_MS, IntToStr(Eng.InfoTimeoutMs));
       Caps:= Eng.CapabilityNames;
       Check('caps.standin.answers', MatchText(CAPABILITY_BOOK_DEPTH, Caps), string.Join(',', Caps));
@@ -8811,6 +9057,10 @@ begin
       Elapsed:= GetTickCount64 - TStart;
       Check('caps.timeout.is.none', (Length(Caps) = 0) and (Elapsed < BOUND_MS + MARGIN_MS),
         Format('%d caps in %d ms', [Length(Caps), Elapsed]));
+      // R2b: the start-up probe must see the timeout as a failure, not as "no capabilities".
+      var LCode: Integer:= Eng.CapabilityProbeTimed(Caps, LParsed);
+      var LNote: string:= StartupProbeVerdict(LCode, LParsed, LCached);
+      Check('caps.startup.timeout.not.cached', (LCode <> EXIT_OK) and not LCached and (LNote <> ''), IntToStr(LCode));
     finally
       Eng.Free;
     end;
@@ -15359,6 +15609,21 @@ begin
     '(Cancel and Esc on the progress window, a message box, the Open dialog)');
   Check('gate.idle.passes', (GateVerdict(BM_CLICK, False, True) = gvPass) and (GateVerdict(WM_COMMAND, False, True) = gvPass)
     and (GateVerdict(WM_KEYDOWN, False, True) = gvPass));
+  // R6: a left press on a selection control is swallowed quietly; a command still reported.
+  Check('gate.sel.listbox.dropped', GateVerdictFor(WM_LBUTTONDOWN, True, True, 'ListBox') = gvDrop, 'a list selection is not a command');
+  Check('gate.sel.dblclk.dropped', (GateVerdictFor(WM_LBUTTONDBLCLK, True, True, 'SysListView32') = gvDrop)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'SysTreeView32') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'ComboBox') = gvDrop));
+  Check('gate.sel.button.refused', (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'Button') = gvRefuse)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, '') = gvRefuse), 'unknown target stays a command');
+  Check('gate.sel.command.refused', (GateVerdictFor(BM_CLICK, True, True, 'ListBox') = gvRefuse)
+    and (GateVerdictFor(WM_COMMAND, True, True, 'ListBox') = gvRefuse), 'only the press is softened');
+  Check('gate.sel.idle.passes', (GateVerdictFor(WM_LBUTTONDOWN, False, True, 'ListBox') = gvPass)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, False, 'ListBox') = gvPass));
+  Check('gate.sel.vcl.names', (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TListBox') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TCheckListBox') = gvDrop)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TComboBox') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TListView') = gvDrop)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TEdit') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TcxGrid') = gvDrop), 'GetClassName of a VCL control is the Delphi class name');
+  Check('gate.sel.vcl.button', (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TButton') = gvRefuse) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TcxButton') = gvRefuse));
+  Check('gate.sel.class', IsSelectionClass('listbox') and not IsSelectionClass('Button') and not IsSelectionClass(''));
   Check('gate.name.add', CommandName('&Add...') = 'Add', CommandName('&Add...'));
   Check('gate.name.amp', CommandName('Save && close') = 'Save & close', CommandName('Save && close'));
   Check('gate.name.plain', CommandName('Delete') = 'Delete', CommandName('Delete'));
@@ -15494,6 +15759,7 @@ end;
 {$I inc\EncodingEngineTests.inc}
 {$I inc\EncodingApplyTests.inc}
 {$I inc\EncodingTabTests.inc}
+{$I inc\RunnerDecisionTests.inc}
 
 begin
   try
@@ -15639,6 +15905,8 @@ begin
     TestRunStepText;
     TestBatchStepText;
     TestBatchRunner;
+    TestRunnerDecisions;
+    TestRestorePoint;
     TestJobRunsBatched;
     TestReindexProject;
     TestConvertRunnerLive;
@@ -15678,6 +15946,8 @@ begin
     TestEngineProgress;
     TestEngineArgsAndCaps;
     TestCapabilityProbeTimeout;
+    TestAnsiChunkDecode;
+    TestStartupProbeDue;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
     TestChooseTestEngine;
