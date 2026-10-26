@@ -4761,7 +4761,16 @@ begin
   EmitFmt('  apply   : %s', [H.Apply]);
   if H.Part = 'A' then
   begin
-    Emit('  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)');
+    { C9: name the Part A recipes the plan really uses -- a base-class cut moves no global }
+    var Moves:= False;
+    var Bases:= False;
+    for var It in pPlan.Items do
+      if It.Kind = mvBase then Bases:= True
+      else if It.Kind in [mvDecl, mvWithBodies] then Moves:= True;
+    EmitFmt('  cuts    : the INTERFACE coupling of this cycle (Part A: %s)',
+      [(if Bases and Moves then 'move globals into new leaf units and extract base classes there'
+        else if Bases then 'extract base classes into new leaf units'
+        else 'move globals into new leaf units')]);
     if H.HasFollowup then
       EmitFmt('  then    : Part B, optional, after Part A: %s', [EdgeText(H.Followup)]);
   end
@@ -5477,8 +5486,10 @@ begin
         'needs no edit for them: its own methods implement them, and a virtual one still dispatches to the override.',
         [Consumer, string.Join(', ', FInversion.MethodSigs), FInversion.ClassTypeName]);
     EmitFmt('- `%s` implements it: `%s` is appended to its heritage, and a getter per member is declared before ' +
-      'the class''s `end;` and implemented in its implementation section.', [FInversion.ClassTypeName,
-      FInversion.IfaceName]);
+      'the class''s `end;` and implemented in its implementation section%s.', [FInversion.ClassTypeName,
+      FInversion.IfaceName,
+      (if Length(FInversion.KeptGetters) > 0 then Format(' -- except %s, which the class already declares and the ' +
+        'interface reuses as is', [QuoteList(FInversion.KeptGetters)]) else '')]);
     if IsLines.Count > 0 then
       EmitFmt('- `%s`: `X is %s` becomes `Supports(X, %s)` (line %s).', [Consumer, FInversion.ClassTypeName,
         FInversion.IfaceName, string.Join(', ', IsLines.ToArray)]);

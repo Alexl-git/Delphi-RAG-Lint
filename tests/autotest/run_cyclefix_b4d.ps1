@@ -197,6 +197,7 @@ try {
   $root = New-Case 'plain' $addField $null $null
   $pl = Get-Plan $root 'plain'
   Check 'plain a0 planned (exit 0), no refusal, TOrder = class(TOrderBase)' (($pl.Exit -eq 0) -and ($pl.Text -notmatch 'refused: ') -and ($pl.Text -match 'TOrder = class\(TOrderBase\)')) ''
+  Check 'plain c9 the Fix it line names the base-class recipe, not "move globals"' (($pl.Text -match '(?m)^  cuts    : the INTERFACE coupling of this cycle \(Part A: extract base classes into new leaf units\)\r?$') -and ($pl.Text -notmatch 'Part A: move globals into new leaf units\)')) ''
 
   Test-Accepted 'inherits' $inherits @{ 'Base.pas' = $BaseUnit } @('TOrder = class(TOrderBase)', 'TOrderBase = class(TEntity)', '`TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`')
   Test-Accepted 'inheritsiface' $inheritsIface @{ 'Base.pas' = $BaseUnit } @('TOrder = class(TOrderBase, IDescribable)', 'TOrderBase = class(TEntity)')

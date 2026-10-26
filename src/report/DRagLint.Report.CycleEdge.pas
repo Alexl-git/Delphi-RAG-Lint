@@ -270,6 +270,9 @@ type
     /// <summary>R1 (W6 C2): True when the declaring unit already assigns `PtrVar := Routine;` -- the
     /// plan adds no second assignment.</summary>
     AssignExists: Boolean;
+    /// <summary>R2 (W6 C2): the getters the class already declared (`Get&lt;Member&gt;`) and the interface
+    /// reuses as they are; empty when every getter is new.</summary>
+    KeptGetters: TArray<string>;
   end;
 
 const
@@ -360,10 +363,11 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// A's initialization section, or that section -- from `initialization` to `end.` --
 /// names the enclosing routine as a whole word: the variable is still nil there),
 /// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).
-/// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses two more after this one:
+/// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses one more after this one:
 /// `duplicate-identifier` (the leaf declares the pointer's names differently and every suffix up to 99 is taken --
-/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...) and `unit-leaves-program` (the
-/// declaring unit would drop out of the program after the cut, so its initialization never runs).</para>
+/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...). A declaring
+/// unit that would drop out of the program after the cut (so its initialization never ran) is no refusal since A2:
+/// the planner adds it to the program's uses clause instead (RegisterDecl).</para>
 /// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
 /// winapi) is carried into the procedural type; inline, overload, external, forward and the
 /// hint directives do not change it and are skipped.</para>
@@ -2319,6 +2323,7 @@ type
     function Stored(const pSym: TSymbol): TStoredType;
     function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
     function HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
+    function GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
     function CheckShape: Boolean;
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
@@ -2935,6 +2940,18 @@ begin
   Result:= MemberTypeInChain(FIdx, Stored(Cur), pX, pType) and TRegEx.IsMatch(pType, '^[A-Za-z_][\w.]*$');
 end;
 
+{ C1: whether an `X is TX` test on the same receiver text precedes line pLine inside the same
+  routine (the guard logic of CheckCastExceptions): a cast reached only when X IS a TX may go
+  through the IInterface ancestor although X's static type is unknown. }
+function TMemberPlan.GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
+begin
+  Result:= False;
+  var C:= TRegEx.Escape(FCls.Name);
+  for var G in FSurface.Refs do
+    if (G.Kind = erTypeIs) and (G.EnclosingId = pEnclosing) and (G.Line < pLine) and
+      TRegEx.IsMatch(G.LineText, '(?<![\w.])' + TRegEx.Escape(pX) + '\s+is\s+' + C + '\b', [roIgnoreCase]) then Exit(True);
+end;
+
 { One consumer line with every `X is TClass` / `X as TClass` rewritten to the interface. }
 function TMemberPlan.RewriteLine(pLine: Integer; pEnclosing: Int64; out pText: string): Boolean;
 var
@@ -2951,11 +2968,14 @@ begin
     var M:= TRegEx.Match(pText, '(?<![\w.)\]])([A-Za-z_]\w*)\s+as\s+' + C + '\b', [roIgnoreCase]);
     if not M.Success then Break;
     var X:= M.Groups[1].Value;
-    if not ReceiverType(X, pEnclosing, Ty) then
+    var Known:= ReceiverType(X, pEnclosing, Ty);
+    { C1: an `X is TX` guard earlier in the same routine proves X a TX there -- the ancestor cast is safe }
+    if not Known and ((FCastAnc = '') or not GuardedBefore(X, pEnclosing, pLine)) then
       Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s as %s` ' +
-        'is not that of Self, a parameter, a local, or a field or property of the class', [pLine, X, X, FCls.Name])));
+        'is not that of Self, a parameter, a local, or a field or property of the class, and no `%s is %s` guards ' +
+        'it earlier in the same routine', [pLine, X, X, FCls.Name, X, FCls.Name])));
     var Repl:= X + ' as ' + FIface;
-    if not ImplementsIInterface(FIdx, Ty) then
+    if not Known or not ImplementsIInterface(FIdx, Ty) then
     begin
       Repl     := Format('%s(%s) as %s', [FCastAnc, X, FIface]);
       FCastUsed:= True;
@@ -2969,11 +2989,13 @@ begin
     var M:= TRegEx.Match(pText, '(?<![\w.])' + C + '\s*\(\s*([A-Za-z_]\w*)\s*\)\s*(?=\.)', [roIgnoreCase]);
     if not M.Success then Break;
     var X:= M.Groups[1].Value;
-    if not ReceiverType(X, pEnclosing, Ty) then
+    var Known:= ReceiverType(X, pEnclosing, Ty);
+    if not Known and ((FCastAnc = '') or not GuardedBefore(X, pEnclosing, pLine)) then
       Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s(%s)` ' +
-        'is not that of Self, a parameter, a local, or a field or property of the class', [pLine, X, FCls.Name, X])));
+        'is not that of Self, a parameter, a local, or a field or property of the class, and no `%s is %s` guards ' +
+        'it earlier in the same routine', [pLine, X, FCls.Name, X, X, FCls.Name])));
     var Repl:= '(' + X + ' as ' + FIface + ')';
-    if not ImplementsIInterface(FIdx, Ty) then
+    if not Known or not ImplementsIInterface(FIdx, Ty) then
     begin
       Repl     := Format('(%s(%s) as %s)', [FCastAnc, X, FIface]);
       FCastUsed:= True;
@@ -3432,6 +3454,7 @@ begin
   for var M in FMembers do Result.MemberSigs:= Result.MemberSigs + [M.Name + ': ' + Trim(M.Signature)];
   for var St in FSetters do if St <> '' then Result.Setters:= Result.Setters + [St];
   for var M in FMethods do Result.MethodSigs:= Result.MethodSigs + [M.Name + Trim(M.Signature)];
+  Result.KeptGetters  := FKeptGetters.ToArray;
 end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
