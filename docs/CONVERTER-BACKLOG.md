@@ -9,7 +9,24 @@ Open it when picking the next converter job, not at session start.
 Sizes S/M/L; model = haiku / sonnet / session (owner rule 2a). **Measure against the tree
 before working on an item.**
 
-## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- supersedes the lists below
+## State 2026-10-26 (convrules-editor-31) -- supersedes everything below
+
+* Deep review R1-R7, the test-kit gaps, ENC-a, the re-pin (1.35.0-alpha-20261025-125433) and FG-M are
+  CLOSED: lane A 985c3447 (R1, R4 = cancel/stop restores partly reached units, R5), lane B 197fca60 (R2
+  bounded startup probe; R7 ruling: engine pipes are CP_ACP), lane C 54e2c81a (R6), lane E 9e0ad239,
+  FG-M 8234fe33. #migrate slice 1 merged 3b96f1ec; main pushed e98a0125.
+* Shared encoding contract (owner via ENGINE + CONVERTER, 2026-10-26): (a) engine pipe output
+  `--output-encoding ascii|utf8|utf16`, default ascii, reversible escapes (ENGINE lane OUTENC);
+  (b) written .pas/.dfm level = user-specified or inferred from the file; when rules need a higher
+  level and lossless down-convert is impossible: warn, list each place (book, line:col, U+XXXX, rule,
+  target unit), ask up-convert vs change rules. Editor side incl. the lone-surrogate no-op RaiseTo,
+  C-1 verify and B2 RefusalHint delete: ENGINE's lane CONV (wt conv-1026); CONVERTER reviews it.
+* Open: D2 owner decision (BDE tail: 15 of 43 `#migrate` lines are member form); L1
+  fix/conv-apply-read-encoding (Convert.Apply ANSI reads, to ENGINE for merge); L2 #migrate D5 + D6-B;
+  L4 VARINSP 5 with-engine fails; non-ANSI identifiers in the index = ENGINE EXTRACT, 1.36.0;
+  re-pin + baseline after ENGINE's next deploy.
+
+## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- historical
 
 * DONE on local main: A1 re-pin (1.33.0, 10-20), A2/A3 merges (faffc407, d7a289ba),
   C-1 (ENGINE castlib 8d0e2e3b + test 06439a4e), E2 (3200fc0e), B2 (c8e33da7, caller removed

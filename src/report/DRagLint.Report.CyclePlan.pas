@@ -4913,21 +4913,24 @@ end;
   plain declaration (mvDecl: an enum, a record or alias without bodies). A type that
   cannot move stays a signature-in-cycle refusal; a need that cannot move, or a routine a
   move would pull along, leaves the edge as EvaluateEdge judged it (False). pMoved gets
-  the names of the moved declarations of the declaring unit, pMoveIds the ids to TryAdd
+  the names of the moved declarations of the declaring unit (with every signature type an
+  earlier step already moved -- Part A, when Part B is predicted), pMoveIds the ids to TryAdd
   again at materialisation, pCount the number of declarations moved. Nothing stays added. }
 function TCyclePlanner.ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>;
   out pMoveIds: TArray<Int64>; out pCount: Integer): Boolean;
 var
-  Why  : string;
-  Roots: TList<Int64>;
-  Owner: TSymbol;
-  Stem : string;
+  Why    : string;
+  Roots  : TList<Int64>;
+  Already: TList<string>;
+  Owner  : TSymbol;
+  Stem   : string;
 begin
   pMoved  := nil;
   pMoveIds:= nil;
   pCount  := 0;
   var Snap:= FOrder.Count;
-  Roots:= TList<Int64>.Create;
+  Roots  := TList<Int64>.Create;
+  Already:= TList<string>.Create;
   try
     Result:= True;
     for var N in pEv.Needs do
@@ -4952,6 +4955,10 @@ begin
           Continue;
         end;
         if not Roots.Contains(Owner.Id) then Roots.Add(Owner.Id);
+        { CYCDEMO: a type an earlier step already moved (Part A, before Part B's prediction) adds
+          nothing to FOrder, yet it is out of the cycle all the same -- name it, or the signature
+          still reads as naming a type of the cycle }
+        if (FOrder.Count = Before) and not Already.Contains(Owner.Name) then Already.Add(Owner.Name);
       end;
     end;
     for var Id in pEv.Surface.RoutineIds do
@@ -4961,13 +4968,14 @@ begin
     try
       for var K:= Snap to FOrder.Count - 1 do
         if FItems[FOrder[K]].Stem = pEv.ToStem then Names.Add(FItems[FOrder[K]].Sym.Name);
-      pMoved:= Names.ToArray;
+      pMoved:= Names.ToArray + Already.ToArray;
     finally
       Names.Free;
     end;
     pMoveIds:= Roots.ToArray;
   finally
     Rollback(Snap);
+    Already.Free;
     Roots.Free;
   end;
 end;

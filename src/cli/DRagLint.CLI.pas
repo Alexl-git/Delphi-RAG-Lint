@@ -7128,8 +7128,8 @@ begin
     anywhere is what "this unit is not in any open index" actually looks like. }
   if (not ExportsKnown) and (Length(Hits) = 0) then
   begin
-    Writeln('ERROR: no interface-section symbols found in unit: ', AArgs.UnitName);
-    Writeln('       The unit may not be indexed, or it contains no public symbols.');
+    ReportNotFound(AArgs, 'ERROR: no interface-section symbols found in unit: ' + AArgs.UnitName);
+    ReportNotFound(AArgs, '       The unit may not be indexed, or it contains no public symbols.');
     Exit(2);
   end;
 
@@ -7211,7 +7211,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'query unit-usage') then Exit(2);
   if AArgs.UnitName = '' then
-  begin Writeln('ERROR: query unit-usage requires --unit <UnitName>'); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: query unit-usage requires --unit <UnitName>'); Exit(2); end;
   { --in is now OPTIONAL, and its absence is a DIFFERENT QUESTION rather than an
     error: with a file it asks "what does THIS file use of that unit", without
     one it asks "which files use that unit at all". S6 / gap G1 of DataCopy's
@@ -7219,7 +7219,7 @@ begin
   if AArgs.InFile = '' then Exit(DoQueryUnitUsageProjectWide(AArgs));
 
   if not TFile.Exists(AArgs.InFile) then
-  begin Writeln('ERROR: file not found: ', AArgs.InFile); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: file not found: ' + AArgs.InFile); Exit(2); end;
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
 
@@ -7251,8 +7251,8 @@ begin
 
     if not Found then
     begin
-      Writeln('ERROR: no index contains ', AArgs.InFile);
-      Writeln('Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
+      ReportNotFound(AArgs, 'ERROR: no index contains ' + AArgs.InFile);
+      ReportNotFound(AArgs, 'Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
       Exit(2);
     end;
 
@@ -7262,8 +7262,8 @@ begin
 
     if Length(ExportSyms) = 0 then
     begin
-      Writeln('ERROR: no interface-section symbols found in unit: ', AArgs.UnitName);
-      Writeln('       The unit may not be indexed, or it contains no public symbols.');
+      ReportNotFound(AArgs, 'ERROR: no interface-section symbols found in unit: ' + AArgs.UnitName);
+      ReportNotFound(AArgs, '       The unit may not be indexed, or it contains no public symbols.');
       Exit(2);
     end;
 
@@ -7388,7 +7388,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'query type-usage') then Exit(2);
   if AArgs.InFile = '' then
-  begin Writeln('ERROR: query type-usage requires --in <file.pas>'); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: query type-usage requires --in <file.pas>'); Exit(2); end;
 
   { The list may come from --names or --names-file. A file is the practical form
     once the list is an RTL surface rather than three names on a command line,
@@ -7400,15 +7400,15 @@ begin
   if AArgs.NamesFile <> '' then
   begin
     if not TFile.Exists(AArgs.NamesFile) then
-    begin Writeln('ERROR: --names-file not found: ', AArgs.NamesFile); Exit(2); end;
+    begin ReportNotFound(AArgs, 'ERROR: --names-file not found: ' + AArgs.NamesFile); Exit(2); end;
     for var Ln: string in TFile.ReadAllLines(AArgs.NamesFile) do
       if (Trim(Ln) <> '') and (not Trim(Ln).StartsWith('#')) then Wanted:= Wanted + [Trim(Ln)];
   end;
   if Length(Wanted) = 0 then
-  begin Writeln('ERROR: query type-usage requires --names A,B,C or --names-file <f>'); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: query type-usage requires --names A,B,C or --names-file <f>'); Exit(2); end;
 
   if not TFile.Exists(AArgs.InFile) then
-  begin Writeln('ERROR: file not found: ', AArgs.InFile); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: file not found: ' + AArgs.InFile); Exit(2); end;
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
 
@@ -7459,8 +7459,8 @@ begin
 
     if not Found then
     begin
-      Writeln('ERROR: no index contains ', AArgs.InFile);
-      Writeln('Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
+      ReportNotFound(AArgs, 'ERROR: no index contains ' + AArgs.InFile);
+      ReportNotFound(AArgs, 'Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
       Exit(2);
     end;
 
@@ -9491,7 +9491,7 @@ begin
   DbToUse:= FirstProjectDb(AArgs, Dbs); { a project's wiring, never the library's }
   if DbToUse = '' then
   begin
-    Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.');
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), System.SysUtils.Format('ERROR: no drag-lint index found (tried %d resolved path(s)). Pass --db <file.sqlite> or build the index first.', [Length(Dbs)]));
     Exit(2);
   end;
   var RoOk: Boolean;
@@ -9534,8 +9534,8 @@ begin
 
   if AArgs.QName = '' then
   begin
-    Writeln('Usage: drag-lint wiring --qname <Interface> [--db <path>] ' + '[--format text|json]');
-    Writeln('       drag-lint wiring --coverage [--db <path>] [--format text|json]');
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'Usage: drag-lint wiring --qname <Interface> [--db <path>] ' + '[--format text|json]');
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), '       drag-lint wiring --coverage [--db <path>] [--format text|json]');
     Exit   (2                                                                      );
   end;
 
@@ -9584,9 +9584,14 @@ var
   JLevel    : TJSONObject         ;
   JArr      : TJSONArray          ;
 begin
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]'); Exit(2); end;
+  if AArgs.QName = '' then begin ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]'); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'impact') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'ERROR: database not found: ' + AArgs.DbPath);
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
   Depth:= AArgs.Depth;
   if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
   // Use the bare name (last segment) as the target for the CTE ref lookup,
@@ -9874,7 +9879,7 @@ var
 begin
   if AArgs.InFile = '' then
   begin
-    Writeln('Usage: drag-lint outline --in <path.pas> ' + '[--db <path>] [--format text|json]');
+    ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), 'Usage: drag-lint outline --in <path.pas> ' + '[--db <path>] [--format text|json] [--json]');
     Exit(2);
   end;
 
@@ -9921,8 +9926,8 @@ begin
 
   if Store = nil then
   begin
-    Writeln('ERROR: outline: no index that resolves here contains ', AArgs.InFile);
-    Writeln('       Tried ', Length(Dbs), ' database(s). Index the file, or pass --db <file.sqlite>.');
+    ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), 'ERROR: outline: no index that resolves here contains ' + AArgs.InFile);
+    ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), System.SysUtils.Format('       Tried %d database(s). Index the file, or pass --db <file.sqlite>.', [Length(Dbs)]));
     Exit(2);
   end;
   if UsedDb = '' then UsedDb:= Dbs[0];
@@ -9933,7 +9938,7 @@ begin
     are in hand, so children are answered from Syms, not the store. }
   var StubOf: TArray<Integer>:= PairForwardStubs(Syms, HasChildInSet(Syms));
 
-  if SameText(AArgs.Format, 'json') then
+  if (AArgs.AsJson or SameText(AArgs.Format, 'json')) then
   begin
     JArr:= TJSONArray.Create;
     try
@@ -13722,7 +13727,7 @@ begin
     every path check below so the whole `lint` command honours --file, not just
     the fix path. }
   EffPath:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
-  if (EffPath = '') and (AArgs.ProjectPath = '') then begin Writeln('ERROR: lint requires a <path> or --project <file.dproj>'); Exit (2 ); end;
+  if (EffPath = '') and (AArgs.ProjectPath = '') then begin ReportNotFound(AArgs, 'ERROR: lint requires a <path> or --project <file.dproj>'); Exit(2); end;
   { --stand-in-for: analyse the snapshot's TEXT under the REAL file's IDENTITY.
 
     The IDE lints an unsaved buffer by writing %TEMP%\drag-lint-live-<tick>.pas
@@ -14034,7 +14039,7 @@ begin
           InClosure.Free;
         end;
       end
-      else begin Writeln('ERROR: path does not exist: ', EffPath); Exit(2); end;
+      else begin ReportNotFound(AArgs, 'ERROR: path does not exist: ' + EffPath); Exit(2); end;
       if NarrowRule <> '' then
       begin
         var KeptQ: TArray<TLintFinding>:= nil;
@@ -17015,13 +17020,13 @@ begin
 
   if UnitPath = '' then
   begin
-    Writeln('Usage: drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]');
+    ReportNotFoundFor(UseJson, 'Usage: drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]');
     Exit(1);
   end;
 
   if not FileExists(UnitPath) then
   begin
-    Writeln('error: file not found: ' + UnitPath);
+    ReportNotFoundFor(UseJson, 'error: file not found: ' + UnitPath);
     Exit(2);
   end;
 
@@ -17039,7 +17044,7 @@ begin
       for C in ProjName do
         if Ord(C) > 127 then
         begin
-          Writeln('Refusing to write: "' + ProjName + '" is not 7-bit ASCII.');
+          ReportNotFoundFor(UseJson, 'Refusing to write: "' + ProjName + '" is not 7-bit ASCII.');
           Exit(1);
         end;
 
@@ -17053,7 +17058,7 @@ begin
         end;
       if not RoundTripped then
       begin
-        Writeln(Format('Refusing to write: a dl:shared marker on %s would not parse back ' +
+        ReportNotFoundFor(UseJson, Format('Refusing to write: a dl:shared marker on %s would not parse back ' +
           '(the anchor line is inside a block comment or a string literal, so the marker ' +
           'would be invisible). Place the marker by hand on the unit declaration.', [UnitPath]));
         Exit(1);
@@ -18764,7 +18769,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'find-unit') then Exit(2);
   if (AArgs.Name = '') or (AArgs.InFile = '') then
-  begin Writeln('ERROR: find-unit needs --name <Symbol> --in <file>'); Exit(2); end;
+  begin ReportNotFound(AArgs, 'ERROR: find-unit needs --name <Symbol> --in <file>'); Exit(2); end;
 
   { INBOX find-unit-silently-uses-only-the-last-db. This read AArgs.DbPath --
     the LAST `--db` -- and opened exactly one store, while ParseArgs happily
@@ -18823,21 +18828,26 @@ begin
     Exit(2);
   end;
   if NameStore = nil then
-  begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  begin ReportNotFound(AArgs, Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
   { No index contains the target file -- exactly the single-store situation this
     verb was in before, so hand the same store to both halves and let Build
     report what it always did. }
   if UnitStore = nil then UnitStore:= NameStore;
   var IncReason: string;
   Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already, IncReason);
-  if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
-  if ResolvedUnit  = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  if Already then
+  begin
+    ReportNotFound(AArgs, Format('"%s" is already in the uses clause.', [ResolvedUnit]));
+    if AArgs.AsJson then Writeln('[]'); { the --json contract: the edits to apply, none here }
+    Exit(0);
+  end;
+  if ResolvedUnit  = '' then begin ReportNotFound(AArgs, Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
   if (Length(Edits) = 0) and (IncReason <> '') then { N-06 }
   begin
-    Writeln('No edit computed: ', IncReason);
+    ReportNotFound(AArgs, 'No edit computed: ' + IncReason);
     Exit(1);
   end;
-  if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
+  if Length(Edits) = 0 then begin ReportNotFound(AArgs, 'No edit computed.'); Exit(1); end;
   if AArgs.AsJson then
   begin
     var Arr: TJSONArray:= TJSONArray.Create;
@@ -28566,6 +28576,7 @@ var
   RootIds: TArray<Int64> ;
   Depth  : Integer       ;
   Fmt    : string        ;
+  AnyRead: Boolean       ;
   Dir    : string        ;
   Rid    : Int64         ;
   Trees  : TList<TRCallTree>;
@@ -28644,7 +28655,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'reverse-calltree') then Exit(2);
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
+  begin ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), 'Usage: drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
 
@@ -28661,13 +28672,14 @@ begin
   if (Dir <> 'callers') and (Dir <> 'callees') then Dir:= 'callers';
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), 'ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
 
   // Multi-db root resolution: use the FIRST db whose ResolveEndpointIds(qname)
   // is non-empty (mirrors DoHover's multi-db precedent). Exit 1 only if NO db
   // resolves the qname; exit 2 if no --db is even readable.
   Store  := nil;
   RootIds:= nil;
+  AnyRead:= False;
   for Db in Dbs do
   begin
     if not TFile.Exists(Db) then Continue;
@@ -28678,6 +28690,7 @@ begin
       if StaleDbRefusesRun(AArgs, 'reverse-calltree', Db) then Exit(2);
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
+    AnyRead:= True;
     var CandidateIds: TArray<Int64>:= ResolveEndpointIds(CandidateStore, AArgs.QName);
     if Length(CandidateIds) > 0 then
     begin
@@ -28687,8 +28700,15 @@ begin
       Break;
     end;
   end;
-  if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if Length(RootIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  { An index was read but none resolved the qname: that is "not found" (exit 1), as the comment
+    above promises -- not "no readable index" (exit 2), which this used to print for both. }
+  if (Store = nil) and AnyRead then
+  begin
+    ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), Format('symbol not found: %s', [AArgs.QName]));
+    Exit(1);
+  end;
+  if Store = nil then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), 'ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Length(RootIds) = 0 then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Opts.Depth:= Depth;
 
@@ -30644,8 +30664,20 @@ begin
       capture stdout as paths -- so the explanation goes to stderr. }
     if Length(Paths) = 0 then
       Writeln(ErrOutput, Format('NOTE: no index covers %s -- no manifest section includes it or its folder. ' +
-        'Add its project with: drag-lint register-project <file.dproj> --apply', [AArgs.InFile]));
-
+        'Add its project with: drag-lint register-project <file.dproj> --apply', [AArgs.InFile]))
+    else
+    begin
+      { X-10: the config names a root that covers the file, but none of the DB
+        files it resolved to exist yet -- the index was never built (or was
+        deleted). The path is still printed (scripts capture stdout; a later
+        index run creates it); the NOTE says why a query on it will find nothing. }
+      var AnyBuilt: Boolean:= False;
+      for P in Paths do
+        if TFile.Exists(P) then AnyBuilt:= True;
+      if not AnyBuilt then
+        Writeln(ErrOutput, Format('NOTE: the config covers %s but its index is not built: %s does not exist. ' +
+          'Build it with: drag-lint index --all --only <section>', [AArgs.InFile, Paths[0]]));
+    end;
     if AArgs.AsJson then
     begin
       J:= TJSONArray.Create;

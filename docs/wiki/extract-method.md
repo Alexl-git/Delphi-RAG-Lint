@@ -7,10 +7,10 @@ for you rather than by hand.
 ## Running it from the CLI
 
 ```
-drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]
+drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]
 ```
 
-`--file` is the source file; `--from-line`/`--to-line` bound the statement
+`--in` is the source file; `--from-line`/`--to-line` bound the statement
 run to extract; `--name` is the new method's name. The usage line lists
 `--apply` as a flag; whether omitting it produces a dry run is not
 documented in the help text for this verb.
@@ -32,7 +32,7 @@ operates directly on the given file's line range.
 Illustrative:
 
 ```
-drag-lint extract-method --file C:\Projects\MyApp\Unit1.pas --from-line 120 --to-line 135 --name ValidateInput --apply
+drag-lint extract-method --in C:\Projects\MyApp\Unit1.pas --from-line 120 --to-line 135 --name ValidateInput --apply
 ```
 
 This would pull lines 120-135 of `Unit1.pas` into a new method named

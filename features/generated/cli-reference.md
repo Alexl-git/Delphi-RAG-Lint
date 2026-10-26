@@ -1145,7 +1145,7 @@ Described in [migrate-dbs](../../docs/wiki/migrate-dbs.md).
 Prints the file-scoped symbol outline for one Pascal unit.
 
 ```text
-drag-lint outline --in <path.pas> [--db <path>] [--format text|json]
+drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1153,6 +1153,7 @@ drag-lint outline --in <path.pas> [--db <path>] [--format text|json]
 | `--in` | `<path.pas>` |  |  |
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
+| `--json` |  |  |  |
 
 Described in [outline](../../docs/wiki/outline.md).
 

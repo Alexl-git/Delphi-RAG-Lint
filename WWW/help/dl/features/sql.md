@@ -50,10 +50,10 @@ its own documentation, paid per question; this one pays that cost once.
 
 ```text
 drag-lint sql --query "SELECT ..." --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]
-drag-lint sql --file <q.sql>       --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]
+drag-lint sql --in <q.sql>       --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]
 ```
 
-Pass **either** `--query` or `--file`, not both.
+Pass **either** `--query` or `--in`, not both.
 
 ### Reaching it in the IDE
 
@@ -98,7 +98,7 @@ write to `sqlite_master`, because that is the action SQLite authorizes first.
 | Flag | Meaning |
 |---|---|
 | `--query "<sql>"` | the statement to run |
-| `--file <q.sql>` | read the statement from a file instead |
+| `--in <q.sql>` | read the statement from a file instead |
 | `--db <file.sqlite>` | the index to query (required) |
 | `--limit N` | row cap; default 200 |
 | `--timeout-ms N` | wall-clock cap; default 10000. There is no "unlimited" -- pass a bigger number |

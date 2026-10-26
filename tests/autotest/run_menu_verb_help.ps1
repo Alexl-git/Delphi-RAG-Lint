@@ -35,7 +35,28 @@ foreach ($s in $entry.surfaces | Where-Object { $_.type -eq 'cli' }) {
     foreach ($f in $s.flags) { Check "$n mentions $($f.name)" ($r.Text.Contains($f.name)) }
   }
 }
-# X-26: the per-verb text is GENERATED (DRagLint.CLI.HelpText.WriteVerbHelp), never a hard-coded copy in CLI.pas.
+# X-26b (CLI lane 2026-10-26): BYTE check. `verb --help` stdout is exactly the entry's help lines,
+# each CRLF-terminated, nothing before or after -- a Contains() test above passes on a superset.
+function Get-RawStdout([string[]]$A) {
+  $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
+  $null = Start-Process -FilePath $Exe -ArgumentList $A -RedirectStandardOutput $o -RedirectStandardError $e -NoNewWindow -Wait -PassThru
+  $b = [IO.File]::ReadAllBytes($o); [IO.File]::Delete($o); [IO.File]::Delete($e)
+  return $b
+}
+function Test-SameBytes([byte[]]$a, [byte[]]$b) {
+  if ($a.Length -ne $b.Length) { return $false }
+  for ($i = 0; $i -lt $a.Length; $i++) { if ($a[$i] -ne $b[$i]) { return $false } }
+  return $true
+}
+foreach ($s in $entry.surfaces | Where-Object { $_.type -eq 'cli' }) {
+  $want = [Text.Encoding]::ASCII.GetBytes((($s.help | ForEach-Object { "$_`r`n" }) -join ''))
+  $got = Get-RawStdout @($s.verb, '--help')
+  Check "$($s.verb) --help stdout is byte-identical to the registry help lines" (Test-SameBytes $got $want) "got=$($got.Length) want=$($want.Length) bytes"
+  if ($s.verb -eq 'menu-tree') {
+    $planted = [byte[]]($want + [byte]0x20)
+    Check 'control: the byte check rejects one extra byte' (-not (Test-SameBytes $planted $want))
+  }
+}# X-26: the per-verb text is GENERATED (DRagLint.CLI.HelpText.WriteVerbHelp), never a hard-coded copy in CLI.pas.
 function Test-HardCoded([string]$src) {
   $m = [regex]::Match($src, '(?s)procedure PrintMenuVerbHelp\(.*?\r?\nend;')
   return ($m.Success -and ($m.Value -match "Writeln\('\s+drag-lint menu-"))
