@@ -5195,45 +5195,50 @@ function TCallResolver.TypeOfCallChain(const ACallRef: TReference; const AReceiv
 var
   Segs     : TArray<string>;
   HasParen : Boolean;
-  Prefix   : string ;
-  Last     : string ;
-  Name     : string ;
-  Args     : string ;
-  P        : Integer;
+  HasEmpty : Boolean;
   OwnerType: Int64  ;
-  Conf     : string ;
+
+  { The type the LAST segment ASeg yields as a member of AOwner. }
+  function ChainStep(AOwner: Int64; const ASeg: string): Int64;
+  var
+    P   : Integer;
+    Conf: string ;
+  begin
+    Result:= 0;
+    P:= 1;
+    while (P <= Length(ASeg)) and IsIdentPart(ASeg[P]) do Inc(P);
+    if (P = 1) or not IsIdentStart(ASeg[1]) then Exit;
+    var Name: string:= Copy(ASeg, 1, P - 1);
+    var Args: string:= Trim(Copy(ASeg, P, MaxInt));
+    if Args = '' then
+    begin
+      var Member: TSymbol:= LookupMemberOnType(AOwner, Name);
+      if Member.Id > 0 then
+        Exit(DerefPointerAlias(ResolveTypeNameToSymbol(Member.Signature, Member.FileId)));
+    end
+    else if not IsOneParenGroup(Args) then
+      Exit; // `Items[0]`, `F(x)[1]`: a subscript step is not modelled here
+    { A method -- `Mk('a')`, or the parenless `Leaf` -- types to its declared
+      return type. Exactly one candidate on the type's chain ('certain'): an
+      overload set or an override pair may disagree on the return type. }
+    var Target: Int64:= LookupMethodOnType(AOwner, Name, 0, False, Conf);
+    if (Target <= 0) or (Conf <> 'certain') then Exit;
+    var Method: TSymbol:= SymbolById(Target);
+    var RetType: string:= SignatureReturnType(Method.Signature);
+    if RetType <> '' then
+      Result:= DerefPointerAlias(ResolveTypeNameToSymbol(RetType, Method.FileId));
+  end;
+
 begin
   Result  := 0;
   AHandled:= SplitChainSegments(AReceiverExpr, Segs, HasParen) and HasParen and (Length(Segs) >= 2);
-  if not AHandled then Exit;
-  for var Seg: string in Segs do
-    if Seg = '' then Exit; // a line-scan fragment (`.Mk(1).L`): never typed from the enclosing class
-  Prefix:= string.Join('.', Segs, 0, High(Segs));
-  Last  := Segs[High(Segs)];
-  OwnerType:= TypeReceiver(ACallRef, Prefix); // shorter text -> the recursion ends
-  if OwnerType <= 0 then Exit;
-  P:= 1;
-  while (P <= Length(Last)) and IsIdentPart(Last[P]) do Inc(P);
-  if (P = 1) or not IsIdentStart(Last[1]) then Exit;
-  Name:= Copy(Last, 1, P - 1);
-  Args:= Trim(Copy(Last, P, MaxInt));
-  if Args = '' then
-  begin
-    var Member: TSymbol:= LookupMemberOnType(OwnerType, Name);
-    if Member.Id > 0 then
-      Exit(DerefPointerAlias(ResolveTypeNameToSymbol(Member.Signature, Member.FileId)));
-  end
-  else if not IsOneParenGroup(Args) then
-    Exit; // `Items[0]`, `F(x)[1]`: a subscript step is not modelled here
-  { A method -- `Mk('a')`, or the parenless `Leaf` -- types to its declared
-    return type. Exactly one candidate on the type's chain ('certain'): an
-    overload set or an override pair may disagree on the return type. }
-  var Target: Int64:= LookupMethodOnType(OwnerType, Name, 0, False, Conf);
-  if (Target <= 0) or (Conf <> 'certain') then Exit;
-  var Method: TSymbol:= SymbolById(Target);
-  var RetType: string:= SignatureReturnType(Method.Signature);
-  if RetType <> '' then
-    Result:= DerefPointerAlias(ResolveTypeNameToSymbol(RetType, Method.FileId));
+  { An empty segment is a line-scan fragment (`.Mk(1).L`): never typed, and
+    above all never from the enclosing class, which is what '' would mean. }
+  HasEmpty:= False;
+  for var Seg: string in Segs do HasEmpty:= HasEmpty or (Seg = '');
+  if (not AHandled) or HasEmpty then Exit;
+  OwnerType:= TypeReceiver(ACallRef, string.Join('.', Segs, 0, High(Segs))); // shorter text -> the recursion ends
+  if OwnerType > 0 then Result:= ChainStep(OwnerType, Segs[High(Segs)]);
 end;
 
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
