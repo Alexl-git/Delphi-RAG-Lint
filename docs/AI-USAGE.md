@@ -73,6 +73,18 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > Read verbs print `WARNING: could not parse config at <file>: ...` once and
 > carry on.
 >
+> **Output encoding (every verb, stdout and stderr).** The default is 7-bit ASCII:
+> each non-ASCII UTF-16 code unit is written `\uXXXX` (lower-case hex; a character
+> outside the BMP is its surrogate pair), which inside `--json` is the JSON escape
+> itself, so a JSON reader gets the exact string back; in text output it is
+> reversible unless the original held a literal backslash-`u`-four-hex sequence.
+> ASCII output is byte-for-byte what it always was. `--output-encoding utf8` or
+> `utf16` writes UTF-8 / UTF-16LE instead (no BOM); `"outputEncoding": "utf8"` in
+> `.drag-lint.json` sets it when the command line does not; any other value is an
+> argument error (exit 3). Files a verb writes (`--output`) are not affected.
+> Non-ANSI characters in paths are stored in the index intact (they were `?`
+> before 2026-10-26).
+>
 > **The same applies to a `--db` that exists but is at an OLD SCHEMA** (exit 2,
 > reason and both migrate commands on stderr). A stale index cannot answer, so it
 > is refused rather than skipped -- reindex it (`index --project <x.dproj> --db
@@ -913,6 +925,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `shared-unit` | [shared-unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/shared-unit) | Reads or extends the dl:shared marker on a unit, recording which projects share it |  |
 | `shutdown` | [shutdown](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them |  |
 | `slice` | [Symbol Slice](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Symbol-Slice) | Shows the slice of code relevant to one symbol: its declaration, body, and immediate context |  |
+| `sql` | [Output encoding (--output-encoding)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/output-encoding) | Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM |  |
 | `sql` | [sql](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) | Runs one read-only SQL statement against an index database and prints the result set | index |
 | `surface` | [Class Surface](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Class-Surface) | Shows the public surface of a class: its members and signatures, without the method bodies |  |
 | `test-store-freshness` | [test-store-freshness](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Store-freshness probe used by a test runner; it needs --db and does nothing else |  |

@@ -137,6 +137,7 @@
   "lsp-proxy-merge": "lsp-full-rules",
   "migrate-dbs": "migrate-dbs",
   "outline": "outline",
+  "output-encoding": "output-encoding",
   "pp-profile": "pp-profile",
   "preprocess-file": "preprocess-file",
   "proptree": "proptree",
