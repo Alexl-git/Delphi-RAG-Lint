@@ -146,6 +146,10 @@ other bare-word value), where DFM syntax has no `#code`, refuses the unit as a
 `.pas` does (`encoding_refused` naming the `.dfm`; raise the `.dfm`). A binary (TPF0) `.dfm` has no text
 encoding and is never compared or rewritten. `info --json`
 `capabilities.convert_encoding_guard` is `true` when this ships.
+Every `.pas` / `.dfm` convert-apply reads is decoded the way it is written back:
+a UTF-8 or UTF-16 BOM, else valid UTF-8, else ANSI -- so a non-ASCII character
+earlier on a line never shifts an edit's column, and a UTF-8 `.dfm`'s captions
+survive a block re-emit unchanged.
 ### Exit codes
 `0` converted (or nothing to do); `1` the unit was REFUSED (a deliberate
 refusal: nothing written, the reason printed); `2` a write failed or was
