@@ -25,7 +25,7 @@ uses
         ConvRules.BlockFile
   , // dl:unit ConvRules.BlockFile accepted
         ConvRules.BlockOps
-  , ConvRules.TextEncoding
+  , ConvRules.TextEncoding  // dl:unit ConvRules.TextEncoding accepted -- ASK_SAVE_FMT and LOST_CHARS_SHOWN are the save dialog's text and cap; they travel with PreSaveDecision's lost-character list, which the working set's save question presents
   ;
 
 const

@@ -1645,7 +1645,7 @@ function RaiseEncodingArgs(const AFiles: TArray<string>): string;
 begin
   Result:= '';
   for var LFile in AFiles do
-    Result:= Result + Format(' --raise-encoding "%s=utf8-bom"', [LFile]);
+    Result:= Result + Format(' --raise-encoding "%s=utf8-bom"', [LFile]);  // dl:ok concat-in-loop@9fef -- REVIEWED 2026-10-26 one fragment per file the user agreed to raise (a handful), not a hot path
 end;
 
 function ApplyArgs(const AUnitPas, ARulesFile, ADbArgs, AOnlyArgs, ARaiseArgs, ACastLibArgs: string): string;

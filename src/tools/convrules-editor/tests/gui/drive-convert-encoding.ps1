@@ -9,7 +9,7 @@
 #   Yes -> Lower.rules has no BOM and is ASCII, a .bak beside it, the status 'Saved Lower.rules as ASCII-7';
 #   the run then starts and ends.
 # raise.* [needs an ENGINE with convert_encoding_guard; else every raise.* check prints SKIP, tallied apart]:
-#   rules\Raise.rules (UTF-8 with BOM: '#migrate OldName -> New<U+0414>me, FixUnit'; ruling I6: Cyrillic, which
+#   rules\Raise.rules (UTF-8 with BOM: '#use New<U+0414>me' (a unit rule: the engine runs a book with no .dfm and no #convert on unit rules alone); ruling I6: Cyrillic, which
 #   cp1252 cannot hold) is added, Refresh, Check all, Convert -> a row 'refused -- not changed' and a
 #   TMessageForm 'do not fit FixUnit.pas'; Yes -> the re-run row 'converted', FixUnit.pas starts EF BB BF, the
 #   status 'Re-run after raising 1 file', FixUnit.pas.BCK1 exists. No second question after the re-run.
@@ -512,7 +512,7 @@ try {
   } else {
     # Only Raise.rules runs: the lower books leave the folder (a refusal stops a unit's later books).
     [IO.File]::Move($bookY, $bookY + '.off'); [IO.File]::Move($bookZ, $bookZ + '.off')
-    WriteUtf8Bom $bookR ('#migrate OldName -> New' + [char]0x0414 + 'me, FixUnit' + "`r`n")
+    WriteUtf8Bom $bookR ('#use New' + [char]0x0414 + 'me' + "`r`n")
     Click $refresh; Start-Sleep -Seconds 2
     Click $checkAll; Start-Sleep -Milliseconds 500
     Click $conv

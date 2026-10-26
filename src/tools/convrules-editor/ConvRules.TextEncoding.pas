@@ -68,61 +68,102 @@ const
   ASK_SAVE_FMT         = '%d character(s) in %s cannot be saved as %s and would become "?":%s%s%sYes = save the book as %s instead (nothing is lost). Cancel = do not save.';
 
 /// <summary>Rank of a level on the ladder: Ascii7=0, Ascii8=1, Utf8/Utf8Bom=2, Utf16/Utf16Bom=3.</summary>
+/// <param name="ALevel">The level to rank.</param>
+/// <returns>0..3 as described above.</returns>
 function LevelRank(ALevel: TTextLevel): Integer;
 
 /// <summary>Display name: 'ASCII-7' | 'ASCII-8 (ANSI code page N)' | 'UTF-8' | 'UTF-8 with BOM' | 'UTF-16' | 'UTF-16 with BOM'.</summary>
+/// <param name="ALevel">The level to name.</param>
+/// <returns>The display name.</returns>
 function LevelName(ALevel: TTextLevel): string;
 
 /// <summary>Inverse of <see cref="LevelName"/>, case-insensitive; 'ASCII-8' with any suffix.</summary>
 /// <returns>False (ALevel = tlAscii7) when the name is unknown.</returns>
-function LevelFromName(const AName: string; out ALevel: TTextLevel): Boolean;
+/// <param name="AName">A display name as produced by LevelName.</param>
+/// <param name="ALevel">The parsed level; tlAscii7 when the name is unknown.</param>
+function LevelFromName(const AName: string; out ALevel: TTextLevel): Boolean;  // dl:ok unused-public-symbol@8d2e -- REVIEWED 2026-10-26 LevelFromName is pinned by the model test name.roundtrip, which are outside this project's index
 
 /// <summary>Classifies raw file bytes (BOM, ASCII, strict UTF-8, BOM-less UTF-16 probe, else ASCII-8).</summary>
 /// <remarks>Order: empty = tlAscii7; BOM; if any NUL byte occurs in the first UTF16_PROBE_BYTES the UTF-16 probe decides ALONE (tlUtf16 sure / tlAscii8 unsure with Note / tlAscii8 sure); only without a NUL: all bytes below 128 = tlAscii7, strict UTF-8 = tlUtf8, else tlAscii8.</remarks>
+/// <param name="ABytes">Raw file bytes.</param>
+/// <returns>The detected level, sureness and note.</returns>
 function DetectTextLevel(const ABytes: TBytes): TDetectedText;
 
 /// <summary>Decodes bytes at a level; strips the BOM of a BOM level. A UTF-16 BE BOM decodes big-endian.</summary>
+/// <param name="ABytes">Raw file bytes, with the BOM of a BOM level if any.</param>
+/// <param name="ALevel">The level to decode at.</param>
+/// <returns>The decoded text without BOM.</returns>
 function DecodeText(const ABytes: TBytes; ALevel: TTextLevel): string;
 
 /// <summary>Encodes text at a level; Utf8Bom / Utf16Bom prepend the preamble; UTF-16 is little-endian.
 /// Characters the level cannot hold become '?'.</summary>
+/// <param name="AText">The text to encode.</param>
+/// <param name="ALevel">The level to encode at.</param>
+/// <returns>The encoded bytes, preamble first for a BOM level.</returns>
 function EncodeText(const AText: string; ALevel: TTextLevel): TBytes;
 
 /// <summary>True when DecodeText(EncodeText(AText, L), L) = AText.</summary>
+/// <param name="AText">The text to test.</param>
+/// <param name="ALevel">The level to test at.</param>
+/// <returns>True when nothing is lost at ALevel.</returns>
 function RoundTrips(const AText: string; ALevel: TTextLevel): Boolean;
 
 /// <summary>Lowest of tlAscii7, tlAscii8, tlUtf8 that round-trips the text.</summary>
+/// <param name="AText">The text to test.</param>
+/// <returns>The lowest sufficient level.</returns>
 function NeededLevel(const AText: string): TTextLevel;
 
 /// <summary>Distinct characters (by code point, first occurrence) that ALevel cannot hold.</summary>
+/// <param name="AText">The text to scan.</param>
+/// <param name="ALevel">The level that must hold it.</param>
 /// <param name="AMax">At most this many entries are returned.</param>
 /// <param name="ATotal">Number of distinct lost characters (not capped).</param>
+/// <returns>Up to AMax lost characters in order of first occurrence.</returns>
 function LostChars(const AText: string; ALevel: TTextLevel; AMax: Integer; out ATotal: Integer): TArray<TLostChar>;
 
 /// <summary>One 'line N: U+XXXX' per entry, joined with sLineBreak.</summary>
+/// <param name="ALost">Entries as returned by LostChars.</param>
+/// <returns>The joined listing; empty for an empty array.</returns>
 function LostCharsText(const ALost: TArray<TLostChar>): string;
 
 /// <summary>The level a save writes at: tlUtf16 becomes tlUtf16Bom (D-B), others stay.</summary>
+/// <param name="ACurrent">The book's current level.</param>
+/// <returns>The level a save writes at.</returns>
 function SaveLevelFor(ACurrent: TTextLevel): TTextLevel;
 
 /// <summary>The level offered when the current one loses characters: from tlAscii7 / tlAscii8 it is
 /// tlUtf8 (owner default); from a UTF level ACurrent.</summary>
+/// <param name="ACurrent">The level that loses characters.</param>
+/// <param name="ANeeded">The lowest level that holds the text (NeededLevel).</param>
+/// <returns>The level to offer.</returns>
 function RaiseTarget(ACurrent, ANeeded: TTextLevel): TTextLevel;
 
 /// <summary>Offers a lower level for a UTF-16 book: ANeeded (tlAscii7/8/Utf8) when ACurrent is UTF-16
 /// and LevelRank(ANeeded) &lt; 3; else ACurrent (= no offer).</summary>
 /// <remarks>Never offers tlAscii8 (code-page bound; a UTF-16 book was never ASCII-8): ANeeded = tlAscii8 gives tlUtf8.</remarks>
+/// <param name="ACurrent">The book's current level.</param>
+/// <param name="ANeeded">The lowest level that holds the text (NeededLevel).</param>
+/// <returns>The level to offer, or ACurrent when there is no offer.</returns>
 function LowerOffer(ACurrent, ANeeded: TTextLevel): TTextLevel;
 
 /// <summary>Decides a save: write at SaveLevelFor(ACurrent) when it round-trips, else ask to raise.</summary>
+/// <param name="AText">The text about to be saved.</param>
+/// <param name="ACurrent">The book's current level.</param>
+/// <returns>Write silently, or ask with the lost characters.</returns>
 function PreSaveDecision(const AText: string; ACurrent: TTextLevel): TPreSaveDecision;
 
 /// <summary>Reads a file: bytes, detect, decode.</summary>
-/// <exception cref="EInOutError">The file cannot be read.</exception>
+/// <remarks>Raises EInOutError (from TFile.ReadAllBytes) when the file cannot be read.</remarks>
+/// <param name="APath">The file to read.</param>
+/// <param name="ADetected">The detected level of the file.</param>
+/// <returns>The decoded text.</returns>
 function ReadTextDetect(const APath: string; out ADetected: TDetectedText): string;
 
 /// <summary>Writes the text at the level.</summary>
 /// <remarks>The CALLER has checked <see cref="RoundTrips"/>.</remarks>
+/// <param name="APath">The file to write.</param>
+/// <param name="AText">The text to write.</param>
+/// <param name="ALevel">The level to encode at.</param>
 procedure WriteTextAtLevel(const APath, AText: string; ALevel: TTextLevel);
 
 implementation
@@ -206,22 +247,22 @@ begin
       Inc(I);
       Continue;
     end;
-    if (B >= $C2) and (B <= $DF) then
+    if (B >= $C2) and (B <= $DF) then  // dl:ok magic-literal@6617 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
       Need:= 1
-    else if (B >= $E0) and (B <= $EF) then
+    else if (B >= $E0) and (B <= $EF) then  // dl:ok magic-literal@af16 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
       Need:= 2
-    else if (B >= $F0) and (B <= $F4) then
-      Need:= 3
+    else if (B >= $F0) and (B <= $F4) then  // dl:ok magic-literal@cde8 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
+      Need:= 3  // dl:ok magic-literal@4ff7 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
     else
       Exit;
     if I + Need >= N then
       Exit;
     B1:= ABytes[I + 1];
-    if ((B = $E0) and (B1 < $A0)) or ((B = $ED) and (B1 > $9F))
-      or ((B = $F0) and (B1 < $90)) or ((B = $F4) and (B1 > $8F)) then
+    if ((B = $E0) and (B1 < $A0)) or ((B = $ED) and (B1 > $9F))  // dl:ok boolean-expression-complexity@f3ca, magic-literal@f3ca -- REVIEWED 2026-10-26 the RFC 3629 second-byte range table (overlong, surrogate and above-U+10FFFF lead bytes), one clause per row; named predicates would hide the table
+      or ((B = $F0) and (B1 < $90)) or ((B = $F4) and (B1 > $8F)) then  // dl:ok magic-literal@6ec1 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
       Exit;
     for K:= 1 to Need do
-      if (ABytes[I + K] and $C0) <> BYTE_HIGH_BIT then
+      if (ABytes[I + K] and $C0) <> BYTE_HIGH_BIT then  // dl:ok magic-literal@1370 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
         Exit;
     Inc(I, Need + 1);
   end;
@@ -249,7 +290,7 @@ begin
   Result:= Zeros / (N div 2);
 end;
 
-function DetectTextLevel(const ABytes: TBytes): TDetectedText;
+function DetectTextLevel(const ABytes: TBytes): TDetectedText;  // dl:ok too-many-exit-points@0851 -- REVIEWED 2026-10-26 a flat ladder of BOM / format probes: each Exit returns a settled result, merging them would nest the ladder
 var
   N, I: Integer;
   HasZero, HasHigh: Boolean;
@@ -261,12 +302,12 @@ begin
   N:= Length(ABytes);
   if N = 0 then
     Exit;
-  if (N >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF) then
+  if (N >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF) then  // dl:ok magic-literal@ceea -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
   begin
     Result.Level:= tlUtf8Bom;
     Exit;
   end;
-  if (N >= 2) and (((ABytes[0] = $FF) and (ABytes[1] = $FE)) or ((ABytes[0] = $FE) and (ABytes[1] = $FF))) then
+  if (N >= 2) and (((ABytes[0] = $FF) and (ABytes[1] = $FE)) or ((ABytes[0] = $FE) and (ABytes[1] = $FF))) then  // dl:ok magic-literal@9e74 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
   begin
     Result.Level:= tlUtf16Bom;
     Exit;
@@ -318,8 +359,8 @@ begin
       Result:= TEncoding.ANSI.GetString(ABytes);
     tlUtf8, tlUtf8Bom:
     begin
-      if (ALevel = tlUtf8Bom) and (Len >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF) then
-        Start:= 3;
+      if (ALevel = tlUtf8Bom) and (Len >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF) then  // dl:ok magic-literal@7eec -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
+        Start:= 3;  // dl:ok magic-literal@fc77 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
       Result:= TEncoding.UTF8.GetString(ABytes, Start, Len - Start);
     end;
   else
@@ -327,9 +368,9 @@ begin
       Enc:= TEncoding.Unicode;
       if ALevel = tlUtf16Bom then
       begin
-        if (Len >= 2) and (ABytes[0] = $FF) and (ABytes[1] = $FE) then
+        if (Len >= 2) and (ABytes[0] = $FF) and (ABytes[1] = $FE) then  // dl:ok magic-literal@5deb -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
           Start:= 2
-        else if (Len >= 2) and (ABytes[0] = $FE) and (ABytes[1] = $FF) then
+        else if (Len >= 2) and (ABytes[0] = $FE) and (ABytes[1] = $FF) then  // dl:ok magic-literal@d7d6 -- REVIEWED 2026-10-26 RFC 3629 UTF-8 lead/continuation bytes and the Unicode BOM bytes (EF BB BF, FF FE, FE FF); named constants would hide the byte pattern the comment cites
         begin
           Start:= 2;
           Enc:= TEncoding.BigEndianUnicode;
@@ -445,8 +486,8 @@ begin
   for I:= 0 to High(ALost) do
   begin
     if I > 0 then
-      Result:= Result + sLineBreak;
-    Result:= Result + Format('line %d: U+%.4X', [ALost[I].Line, ALost[I].Code]);
+      Result:= Result + sLineBreak;  // dl:ok concat-in-loop@c7fe -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
+    Result:= Result + Format('line %d: U+%.4X', [ALost[I].Line, ALost[I].Code]);  // dl:ok concat-in-loop@7389 -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
   end;
 end;
 

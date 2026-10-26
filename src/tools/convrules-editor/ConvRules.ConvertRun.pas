@@ -1313,7 +1313,7 @@ begin
       Continue;
     try
       LText:= ReadTextDetect(LBook, LDet);
-    except  // dl:ok try-except-swallowed -- REVIEWED 2026-10-25 not swallowed: an unreadable book is only not OFFERED; the run reads it again and reports the error
+    except  // dl:ok bare-except@69ff, try-except-swallowed@69ff -- REVIEWED 2026-10-25 not swallowed: an unreadable book is only not OFFERED; the run reads it again and reports the error
       Continue;
     end; // try
     LCand.Path   := LBook;
