@@ -2042,6 +2042,8 @@ end;
   with TAnc declared outside the cycle -- the leaf gets `TXBase = class(TAnc)`, the class becomes
   `TX = class(TXBase[, I1, ...])` (the interfaces stay on TX: their methods are implemented there). }
 procedure TCyclePlanner.BuildBase(const pF: TPlanFile; var pItem: TMoveItem);
+const
+  CHeritageGroup = 3;  // the header regex's group for the text inside `class(...)`; 1 = indent, 2 = the parentheses
 var
   M       : TMatch;
   Children: TArray<TSymbol>;
@@ -2078,9 +2080,9 @@ begin
   { B4-d: the direct ancestor goes to the base class; the interfaces stay on the class }
   Rest:= '';
   { an unmatched optional group is not in Groups (Count stops at the last group that took part) }
-  if (M.Groups.Count > 3) and (Trim(M.Groups[3].Value) <> '') then
+  if (M.Groups.Count > CHeritageGroup) and (Trim(M.Groups[CHeritageGroup].Value) <> '') then
   begin
-    var Parts:= SplitHeritage(M.Groups[3].Value);
+    var Parts:= SplitHeritage(M.Groups[CHeritageGroup].Value);
     Site:= AncestorRefusal(pF, pItem, Parts[0]);
     if Site <> '' then
     begin
