@@ -228,6 +228,7 @@ type
       procedure ConvertClick(Sender: TObject);
       /// <summary>Asks, once per book and session, to lower each of ABooks LowerCandidates offers
       /// (ASK_LOWER_FMT, Yes / No); a Yes goes to FHost.LowerBook.</summary>
+      /// <param name="ABooks">Paths of the books to check; a book already asked this session is skipped.</param>
       /// <returns>The outcome texts (LOWERED_FMT or the abort status), one per Yes.</returns>
       function OfferLowering(const ABooks: TArray<string>): TArray<string>;
       /// <summary>Starts a built job on the worker thread: numbers it (Inc(FRunId), ruling I2),
@@ -237,6 +238,7 @@ type
       procedure StartRun(const AJob: TConvertJob; const ALead: string);
       /// <summary>After a run: the raise question per encoding-refused unit (ShouldAskRaise
       /// gates it) and, on any Yes, the re-run of those units.</summary>
+      /// <param name="AJob">The finished job whose encoding-refused rows are examined.</param>
       procedure AskRaiseAndRerun(const AJob: TConvertJob);
       procedure CancelClick(Sender: TObject);
       /// <summary>The index into FRunRows of the selected results row.</summary>

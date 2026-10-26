@@ -13,6 +13,7 @@ public static class W {
   [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc p, IntPtr l);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll", EntryPoint="SendMessageW")] public static extern IntPtr Send(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageW")] public static extern IntPtr SendS(IntPtr h, uint m, IntPtr w, string l);
@@ -215,7 +216,24 @@ function SaveDialogTo($procId, $path) {
 function StatusText($main) { (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | ' }
 function WaitStatus($main, $pattern, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { $s = StatusText $main; if ($s -match $pattern) { return $s }; Start-Sleep -Milliseconds 500 }; return '' }
 # The message box's text: every TLabel / Static child (a TMessageForm's message is a TLabel).
-function MsgText($dlg) { ((@([W]::Kids($dlg)) | Where-Object { [W]::Cls($_) -in 'TLabel', 'Static' } | ForEach-Object { [W]::Txt($_) }) -join ' ') }
+# The message box's text: every TLabel / Static child (a TMessageForm's message is a TLabel).
+# A TLabel has no window of its own; when no child answers, the dialog's own Ctrl+C (VCL TMessageForm copies
+# its caption, message and buttons) is read from the clipboard. Needs the editor on the desktop (GUI lock).
+Add-Type -AssemblyName System.Windows.Forms
+function MsgText($dlg) {
+  $t = ((@([W]::Kids($dlg)) | Where-Object { [W]::Cls($_) -in 'TLabel', 'Static' } | ForEach-Object { [W]::Txt($_) }) -join ' ')
+  if ($t.Trim() -ne '') { return $t }
+  Set-Clipboard -Value 'convert-encoding-sentinel'
+  [void][W]::SetForegroundWindow($dlg); Start-Sleep -Milliseconds 300
+  [System.Windows.Forms.SendKeys]::SendWait('^c'); Start-Sleep -Milliseconds 300
+  $c = ''
+  for ($i = 0; $i -lt 10; $i++) { try { $c = [string](Get-Clipboard -Raw -ErrorAction Stop); break } catch { Start-Sleep -Milliseconds 200 } }
+  if ($c -eq 'convert-encoding-sentinel') { return '' }
+  # '---' / caption / '---' / message / '---' / buttons: the message is the block after the second rule.
+  $parts = $c -split '(?m)^-+\s*$'
+  if ($parts.Count -ge 3) { return $parts[2].Trim() -replace '\s*\r?\n\s*', ' ' }
+  return ($c.Trim() -replace '\s*\r?\n\s*', ' ')
+}
 # Yes is captioned 'Yes' or '&Yes' depending on the VCL version.
 function AnswerYes($procId) { $e = Answer $procId 'Yes'; if ($e -match "no 'Yes'") { $e = Answer $procId '&Yes' }; return $e }
 function Bytes($path) { [IO.File]::ReadAllBytes($path) }

@@ -48,7 +48,7 @@ begin
     TFile.WriteAllText(UnitPas, 'unit FixUnit;' + sLineBreak + 'interface' + sLineBreak + 'procedure OldName;' + sLineBreak + 'implementation' + sLineBreak +
       'procedure OldName;' + sLineBreak + 'begin' + sLineBreak + 'end;' + sLineBreak + 'procedure Use;' + sLineBreak + 'begin' + sLineBreak + '  OldName;' + sLineBreak +
       'end;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
-    TFile.WriteAllText(Book, '#migrate OldName -> New' + Chr($0414) + 'me, FixUnit' + sLineBreak, TEncoding.Unicode);
+    TFile.WriteAllText(Book, '#use New' + Chr($0414) + 'me' + sLineBreak, TEncoding.Unicode);
     Eng:= TEngineAdapter.Create(Exe, [Db, LibWin64]);
     try
       Check('enc.live.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);

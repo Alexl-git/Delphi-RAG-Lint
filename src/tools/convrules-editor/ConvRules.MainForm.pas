@@ -56,7 +56,7 @@ uses
   , ConvRules.ConvertTab  // TConvertTab: a field's type
   , ConvRules.WorkListTab // TWorkListTab: a field's type
   , ConvRules.ValidateScope // TValidateJob: a method parameter's type, so INTERFACE-visible
-  , ConvRules.TextEncoding // TTextLevel: a field's type, so INTERFACE-visible
+  , ConvRules.TextEncoding // TTextLevel: a field's type, so INTERFACE-visible; dl:unit ConvRules.TextEncoding accepted -- ASK_SAVE_FMT and LOST_CHARS_SHOWN are the save question's text and cap, they travel with PreSaveDecision's lost-character list
   ;
 
 const
