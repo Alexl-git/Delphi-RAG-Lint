@@ -67,6 +67,15 @@ try {
   if ($runs.Count -eq 1) {
     Check 'the per-run folder holds the bundle' (@(Get-ChildItem $runs[0].FullName -Recurse -File).Count -ge 1) ''
   }
+
+  # E12b: compare --out-root <dir> moves the per-run folder off %TEMP%.
+  [IO.Directory]::Delete($Shared, $true)
+  $Root = Join-Path $Work 'chosen-root'
+  $r = Invoke-Engine @('compare','--old',$Old,'--db',$Db,'--out-root',$Root)
+  Check 'E12b: compare --out-root is accepted and exits 0' ($r.Code -eq 0) "exit=$($r.Code) err=$($r.Err)"
+  $chosen = @(Get-ChildItem $Root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^compare-run-' })
+  Check 'E12b: the per-run folder is made under --out-root' ($chosen.Count -eq 1) "under $Root"
+  Check 'E12b: nothing is written to the shared %TEMP% folder' (-not (Test-Path -LiteralPath $Shared)) ''
 } finally {
   if (Test-Path -LiteralPath $Work) { [IO.Directory]::Delete($Work, $true) }
 }

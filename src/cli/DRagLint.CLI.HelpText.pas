@@ -107,7 +107,7 @@ begin
   Writeln('                               unit outline; backs the IDE Structure form.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
-  Writeln('                               [--format text|json|html] [--output <file>] [--open]');
+  Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
   Writeln('  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page');
   Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
@@ -552,7 +552,7 @@ begin
   begin
     Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
     Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
-    Writeln('                               [--format text|json|html] [--output <file>] [--open]');
+    Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
     Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
     Writeln('  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page');
     Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
