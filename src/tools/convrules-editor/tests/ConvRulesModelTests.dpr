@@ -8938,18 +8938,82 @@ end;
   stand-in engine (a .cmd that sleeps) must give [] within the bound. A second
   stand-in that answers proves the .cmd mechanism reaches CapabilityNames at all --
   without it, a stand-in that never started would pass the timeout check. }
+{ R7: engine pipe output is the system ANSI code page (ACP), not UTF-8. A DBCS character split
+  across two pipe reads must stay whole; on a single-byte code page nothing is held and E9 stays e-acute. }
+procedure TestAnsiChunkDecode;
+const
+  CP1252 = 1252;
+  CP932  = 932;
+var
+  LPending: TBytes;
+  LGot    : string;
+  LBad    : Integer;
+  LSjis   : TBytes;
+begin
+  // cp1252: E9 is U+00E9, whole or at any chunk boundary; nothing is ever held.
+  LPending:= nil;
+  LGot:= DecodeAnsiChunk(LPending, [Byte($61), Byte($E9), Byte($62)], CP1252);
+  Check('ansi.cp1252.e9', (LGot = 'a' + #$00E9 + 'b') and (Length(LPending) = 0));
+  LPending:= nil;
+  LGot:= DecodeAnsiChunk(LPending, [Byte($61)], CP1252) + DecodeAnsiChunk(LPending, [Byte($E9)], CP1252) + DecodeAnsiChunk(LPending, [Byte($62)], CP1252);
+  Check('ansi.cp1252.e9.boundary', (LGot = 'a' + #$00E9 + 'b') and (Length(LPending) = 0));
+  // The regression a UTF-8 decoder would cause: a lone E9 is not a valid UTF-8 sequence.
+  var LUtf8: TEncoding:= TMBCSEncoding.Create(CP_UTF8, 0, 0);
+  try
+    Check('ansi.utf8.would.break.e9', LUtf8.GetString([Byte($E9)]) = #$FFFD);
+  finally
+    LUtf8.Free;
+  end; // try
+  // cp932 (Shift-JIS): 82 A0 = U+3042; 'a' 82 A0 'b' 83 41 (U+30A2). Every 2-way split.
+  LSjis:= [Byte($61), Byte($82), Byte($A0), Byte($62), Byte($83), Byte($41)];
+  LBad:= 0;
+  for var LCut: Integer:= 0 to Length(LSjis) do
+  begin
+    LPending:= nil;
+    LGot:= DecodeAnsiChunk(LPending, Copy(LSjis, 0, LCut), CP932);
+    LGot:= LGot + DecodeAnsiChunk(LPending, Copy(LSjis, LCut, Length(LSjis) - LCut), CP932);
+    LGot:= LGot + FlushAnsiPending(LPending, CP932);
+    if LGot <> 'a' + #$3042 + 'b' + #$30A2 then
+      Inc(LBad);
+  end;
+  Check('ansi.cp932.every.split', LBad = 0, IntToStr(LBad) + ' bad splits');
+  LPending:= nil;
+  DecodeAnsiChunk(LPending, [Byte($82)], CP932);
+  Check('ansi.cp932.holds.lead', Length(LPending) = 1);
+  Check('ansi.cp932.completes', DecodeAnsiChunk(LPending, [Byte($A0)], CP932) = #$3042);
+  // A lead byte with no trail byte at end of stream is flushed, not dropped silently.
+  LPending:= nil;
+  DecodeAnsiChunk(LPending, [Byte($82)], CP932);
+  Check('ansi.flush.truncated', (FlushAnsiPending(LPending, CP932) <> '') and (Length(LPending) = 0));
+end;
+{ R2b round 1: a failed start-up probe is not repeated on every refresh (a hung engine would
+  freeze the UI up to 15 s each time). }
+procedure TestStartupProbeDue;
+const
+  T0 = 100000;
+begin
+  Check('probe.due.first', StartupProbeDue(False, 0, T0, False));
+  Check('probe.due.cached.never', not StartupProbeDue(True, 0, T0, False) and not StartupProbeDue(True, T0, T0 + STARTUP_REPROBE_MS * 2, False));
+  Check('probe.due.failed.waits', not StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS - 1, False));
+  Check('probe.due.failed.after.60s', StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS, False) and (STARTUP_REPROBE_MS = 60000));
+  Check('probe.due.busy.never', not StartupProbeDue(False, 0, T0, True) and not StartupProbeDue(False, T0, T0 + STARTUP_REPROBE_MS * 2, True));
+end;
+
 procedure TestCapabilityProbeTimeout;
 const
   BOUND_MS  = 1500;
   MARGIN_MS = 2500;  // the bound plus process start-up; the stand-in sleeps ~6 s
   SLEEP_CMD = '@ping -n 7 127.0.0.1 >nul' + #13#10;
   ANSWER_CMD = '@echo {"capabilities":{"book_depth":true}}' + #13#10;
+  EXIT_OK   = 0;
 var
   Dir    : string;
   Eng    : TEngineAdapter;
   Caps   : TArray<string>;
   TStart : UInt64;
   Elapsed: UInt64;
+  LParsed: Boolean;
+  LCached: Boolean;
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'caps-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -8959,6 +9023,13 @@ begin
 
     Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'answer.cmd'), []);
     try
+      var LAns: TArray<string>;
+      var LAnsCode: Integer:= Eng.CapabilityProbeTimed(LAns, LParsed);
+      var LAnsNote: string:= StartupProbeVerdict(LAnsCode, LParsed, LCached);
+      Check('caps.startup.answer.cached', (LAnsCode = EXIT_OK) and LCached and (LAnsNote = '') and MatchText(CAPABILITY_BOOK_DEPTH, LAns), IntToStr(LAnsCode));
+      Check('caps.startup.verdict.pure', (StartupProbeVerdict(EXIT_OK, True, LCached) = '') and LCached
+        and (StartupProbeVerdict(ENGINE_OUTCOME_TIMEOUT, False, LCached) <> '') and not LCached
+        and (StartupProbeVerdict(EXIT_OK, False, LCached) <> '') and not LCached);
       Check('caps.info.timeout.default', Eng.InfoTimeoutMs = INFO_TIMEOUT_MS, IntToStr(Eng.InfoTimeoutMs));
       Caps:= Eng.CapabilityNames;
       Check('caps.standin.answers', MatchText(CAPABILITY_BOOK_DEPTH, Caps), string.Join(',', Caps));
@@ -8974,6 +9045,10 @@ begin
       Elapsed:= GetTickCount64 - TStart;
       Check('caps.timeout.is.none', (Length(Caps) = 0) and (Elapsed < BOUND_MS + MARGIN_MS),
         Format('%d caps in %d ms', [Length(Caps), Elapsed]));
+      // R2b: the start-up probe must see the timeout as a failure, not as "no capabilities".
+      var LCode: Integer:= Eng.CapabilityProbeTimed(Caps, LParsed);
+      var LNote: string:= StartupProbeVerdict(LCode, LParsed, LCached);
+      Check('caps.startup.timeout.not.cached', (LCode <> EXIT_OK) and not LCached and (LNote <> ''), IntToStr(LCode));
     finally
       Eng.Free;
     end;
@@ -15858,6 +15933,8 @@ begin
     TestEngineProgress;
     TestEngineArgsAndCaps;
     TestCapabilityProbeTimeout;
+    TestAnsiChunkDecode;
+    TestStartupProbeDue;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
     TestChooseTestEngine;
