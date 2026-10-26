@@ -42,10 +42,10 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 2838 pass / 0 fail / 20 skip** on main after the close-all lanes (2026-10-26). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 2858 pass / 0 fail / 20 skip** on main after the #migrate D5/D6-B merge (2026-10-26). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
-  **2956 pass / 0 fail / 0 skip** (1.35.0-alpha-20261025-125433 pin, 2026-10-26; `enc.live.capability` PASSES). The old 5 "VARINSP fixture" failures were a fixture defect:
+  **2956 pass / 0 fail / 0 skip** (1.35.0-alpha-20261025-125433 pin, 2026-10-26, measured BEFORE the D5/D6-B merge added 20 tests; `enc.live.capability` PASSES). The old 5 "VARINSP fixture" failures were a fixture defect:
   VARINSP is outside Micronite2027's compile closure, so its project DB never holds it; the picker / fill tests now use AssignGroups. A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -68,7 +68,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
   * `drive-save-encoding.ps1` 14 -- Save question, File > Encoding, UTF-16 BOM note
   * `drive-convert-encoding.ps1` 18 -- Convert tab raise / lower questions (raise.* SKIP without `convert_encoding_guard`)
-  * `drive-migrate.ps1` 18 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks (`-ProofNoMigrate` = 12 / 6)
+  * `drive-migrate.ps1` 24 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks; D5 bulk DL_NONE, D6-B opens the row's book (`-ProofNoMigrate` = 13 / 7, `-ProofNoBulk` = 22 / 2)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
 ## Unit map (who owns which decision)
