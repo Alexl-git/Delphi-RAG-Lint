@@ -263,6 +263,24 @@ try {
   $naOut = & $Exe cycles --fix --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | Out-String
   $naCode = $LASTEXITCODE
   Check 'na the dry run (it BUILDS the shadow tree) is exit 0 with no non-ascii-text refusal' (($naCode -eq 0) -and -not $naOut.Contains('non-ascii-text')) ("exit=$naCode " + ($naOut.Trim() -replace "`r?`n", ' '))
+ }
+  if ((Want 'rsv') -and $RsVars) {
+  Write-Host '== (rsv) no-compiler: --rsvars names the Studio build environment the registry / BDS does not' -ForegroundColor Cyan
+  $rsRoot = Join-Path $WorkDir 'rsv-tie'
+  Copy-Tree (Join-Path $Fx 'tiebreak') $rsRoot
+  $rsDb = Join-Path $WorkDir 'rsv.sqlite'
+  $null | & $Exe index --project (Join-Path $rsRoot 'TieBreak.dproj') --db $rsDb *> (Join-Path $WorkDir 'index-rsv.log')
+  $fixArgs = @('cycles', '--fix', '--project', (Join-Path $rsRoot 'TieBreak.dproj'), '--db', $rsDb, '--library-db', 'none', '--format', 'json')
+  $savedBds = $env:BDS
+  try {
+    $env:BDS = Join-Path $WorkDir 'no-studio-here'   # TStudioEnv takes the root from BDS first: a root without rsvars.bat
+    $o0 = & $Exe @fixArgs 2>&1 | Out-String; $c0 = $LASTEXITCODE
+    Check 'rsv-control without --rsvars: refused no-compiler' ($o0.Contains('no-compiler')) "exit=$c0"
+    $o1 = & $Exe @fixArgs --rsvars $RsVars 2>&1 | Out-String; $c1 = $LASTEXITCODE
+    Check 'rsv with --rsvars <real rsvars.bat>: exit 0, built, no no-compiler refusal' (($c1 -eq 0) -and -not $o1.Contains('no-compiler')) "exit=$c1"
+    $o2 = & $Exe @fixArgs --rsvars (Join-Path $WorkDir 'missing\rsvars.bat') 2>&1 | Out-String; $c2 = $LASTEXITCODE
+    Check 'rsv-missing --rsvars <no such file>: exit 2, named' (($c2 -eq 2) -and $o2.Contains('--rsvars: no such file')) "exit=$c2"
+  } finally { $env:BDS = $savedBds }
   }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }

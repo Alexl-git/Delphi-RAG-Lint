@@ -364,6 +364,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--un
 | `--no-reindex` |  |  |  |
 | `--no-compile` |  |  |  |
 | `--shadow-out` | `<dir>` |  |  |
+| `--rsvars` | `<rsvars.bat>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--platform` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
