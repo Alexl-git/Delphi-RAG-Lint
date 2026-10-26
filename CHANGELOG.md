@@ -6,10 +6,29 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Added
- - `cycles --fix` C6 (W6, CYC-C): `end.` followed by a block comment is still the final `end.` (R1 assignment edit), and an R2 class heritage spread over lines is read up to its closing `)` (the interface is appended there); an unbalanced heritage still refuses manual-edit. The same-line / indented `type` header forms of C6 are NOT done (the move planner is column-1 structured). Guard `run_cyclefix_w6_rest.ps1` c6a-c6c; `run_cyclefix_r2.ps1` f12 now uses an unclosed heritage.
- - `cycles --fix` C2 (W6, CYC-C): an R1 leaf that already declares the pointer's names no longer refuses `duplicate-identifier`: identical `T<Routine>Ptr` / `<Routine>Ptr` text is reused (nothing inserted; the assignment is skipped when the declaring unit already makes it), different text gets the lowest free `<Routine>Ptr2`, `Ptr3` ... The R2 interface name and an existing `Get<M>` still refuse. Guard `run_cyclefix_w6_rest.ps1` c2a-c2c; `run_cyclefix_r1.ps1` e1 flipped.
- - `cycles --fix` C4 (W6, CYC-C): an overloaded routine is bound when the overload the index bound admits the argument count of every call, no other overload admits any and none has a default parameter; otherwise `overloaded-routine` stays. Guard `run_cyclefix_w6_rest.ps1` c4a-c4c.
- - `cycles --fix` C7 rest (W6, CYC-C): R1 redirects `B.Foo(...)` (the inverted routine qualified by its unit) and `X := Foo` (an assigned value) to the pointer under the same init-order check; any other `B.X` and `@Foo` / `@B.Foo` still refuse. Not done from C7: type-decl, type-cast, multiple-classes, member-unsupported, type-unresolved, non-ascii-text, --rsvars / --build-timeout. Guard `run_cyclefix_w6_rest.ps1` c7a-c7b.
+- `cycles --fix` C6 (W6, CYC-C): `end.` followed by a block comment is still the final `end.` (R1 assignment edit), and an R2 class heritage spread over lines is read up to its closing `)` (the interface is appended there); an unbalanced heritage still refuses manual-edit. The same-line / indented `type` header forms of C6 are NOT done (the move planner is column-1 structured). Guard `run_cyclefix_w6_rest.ps1` c6a-c6c; `run_cyclefix_r2.ps1` f12 now uses an unclosed heritage.
+- `cycles --fix` C2 (W6, CYC-C): an R1 leaf that already declares the pointer's names no longer refuses `duplicate-identifier`: identical `T<Routine>Ptr` / `<Routine>Ptr` text is reused (nothing inserted; the assignment is skipped when the declaring unit already makes it), different text gets the lowest free `<Routine>Ptr2`, `Ptr3` ... The R2 interface name and an existing `Get<M>` still refuse. Guard `run_cyclefix_w6_rest.ps1` c2a-c2c; `run_cyclefix_r1.ps1` e1 flipped.
+- `cycles --fix` C4 (W6, CYC-C): an overloaded routine is bound when the overload the index bound admits the argument count of every call, no other overload admits any and none has a default parameter; otherwise `overloaded-routine` stays. Guard `run_cyclefix_w6_rest.ps1` c4a-c4c.
+- `cycles --fix` C7 rest (W6, CYC-C): R1 redirects `B.Foo(...)` (the inverted routine qualified by its unit) and `X := Foo` (an assigned value) to the pointer under the same init-order check; any other `B.X` and `@Foo` / `@B.Foo` still refuse. Not done from C7: type-decl, type-cast, multiple-classes, member-unsupported, type-unresolved, non-ascii-text, --rsvars / --build-timeout. Guard `run_cyclefix_w6_rest.ps1` c7a-c7b.
+- T-22 (owner ruling 2026-10-25): **used units that are neither in the project nor in the
+  library** are listed, judged and fixable two ways. `reconcile-project` no longer lists a unit
+  that is in the library -- a registry library path OR (new) a folder the manifest library
+  section (`"source": "registry-libraries"`) lists in `"include"`. Each MISSING unit is judged by
+  the project's own roots (`drag-lint-project.json` `ownRoots`, else the project folder): inside =
+  a missed project unit, outside = third-party. `--json` items gain `owner`, `suggestedFix` and
+  `folder`; the text report marks each line and ends with SUGGESTED FIXES, one command per fix
+  pre-narrowed with `--only`. New `--to project|library`: `--apply --to library` adds the selected
+  units' folders to that library `"include"` (the `--config` manifest, else the exe-dir
+  `drag-lint.json`; `<cfg>.bak` first, unmodelled keys kept via SaveEdits, a dll-win32/dll-win64
+  twin mirrored) and never touches the project files; `--apply` alone is unchanged. A bad `--to`
+  exits 2 before anything is read or written.
+- Rule `unit-not-in-library` (project-wide, warning, ON): the third-party half of the same
+  analysis, run by `lint --project` and `lint-all` (project inferred from the manifest as for
+  `unit-not-in-dpr`, whose third direction keeps the own-roots half). 195 rules (142 built-in +
+  53 `.scm`), 165 on by default, 23 fixable.
+- `index --all`: a library section's `"include"` folders are library roots on every platform the
+  section targets (empty for every existing manifest, so no plan changes until one is written).
+  Guard for all three: `tests\autotest\run_reconcile_project_or_library.ps1`.
 
 ### Fixed
 - autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A

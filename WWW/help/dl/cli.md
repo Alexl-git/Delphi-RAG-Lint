@@ -1326,15 +1326,16 @@ Described in:
 
 ### reconcile-project
 
-Compares a project file's declared member list against what is on disk and in the compile closure.
+Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way.
 
 ```text
-drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>] - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed
+drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>] - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed. MISSING = used units neither listed nor in the library (registry library path or the manifest library section's include); each is judged by the project's own roots: project unit (fix --apply) or third-party (fix --apply --to library, which adds its folder to that include in --config or the exe-dir drag-lint.json, .bak first). --json items carry owner, suggestedFix and folder
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--apply` |  |  |  |
+| `--to` | `project\|library` |  |  |
 | `--only` | `<unit,...>` |  |  |
 | `--db` | `<db>` |  |  |
 | `--full` |  |  |  |

@@ -938,7 +938,7 @@
   {
     "id": "reconcile-project-members-dpr-dproj",
     "title": "Reconcile Project Members (.dpr/.dproj)",
-    "summary": "Compares a project file's declared member list against what is on disk and in the compile closure",
+    "summary": "Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way",
     "group": "refactoring",
     "order": 50009,
     "since": "1.18.0-alpha",

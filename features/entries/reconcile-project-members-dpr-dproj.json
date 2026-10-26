@@ -5,22 +5,26 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.18.0-alpha",
-  "summary": "Compares a project file's declared member list against what is on disk and in the compile closure",
-  "intro": "Read this after moving or adding units by hand. It compares the project file declared members against what is on disk and in the compile closure, and with --apply it syncs the list; without --apply it only reports.",
+  "summary": "Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way",
+  "intro": "Read this after moving or adding units by hand, or when lint reports unit-not-in-dpr or unit-not-in-library. It lists every unit the project compiles that is neither in the .dpr/.dproj nor in the library, judges each by the project's own roots (inside = a missed project unit, outside = third-party), and offers two fixes: --apply adds the unit to the project (the default), --apply --to library adds its folder to the library. Without --apply it only reports.",
   "wikiPage": "Reconcile-Project-Members-dpr-dproj",
   "surfaces": [
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...",
-      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...", "Review the missing and stale entries it reports; nothing is written until you apply", "From a shell: `drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>]`"]
+      "steps": ["Open the project in RAD Studio", "Choose drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...", "Read the MISSING list: each unit is marked [project unit -> --apply] or [third-party -> library: --apply --to library]; units already in the library are not listed", "Copy a command from SUGGESTED FIXES -- each is pre-narrowed with --only to the units its fix suits; nothing is written until you apply", "From a shell: `drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>]`"]
     },
     {
       "type": "cli",
       "verb": "reconcile-project",
-      "usage": "drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>] - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed",
+      "usage": "drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>] - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed. MISSING = used units neither listed nor in the library (registry library path or the manifest library section's include); each is judged by the project's own roots: project unit (fix --apply) or third-party (fix --apply --to library, which adds its folder to that include in --config or the exe-dir drag-lint.json, .bak first). --json items carry owner, suggestedFix and folder",
       "flags": [
         {
           "name": "--apply"
+        },
+        {
+          "name": "--to",
+          "arg": "project|library"
         },
         {
           "name": "--only",
@@ -42,7 +46,7 @@
         }
       ],
       "helpOrder": 98,
-      "help": ["  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed", "                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent"]
+      "help": ["  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed. MISSING = used units neither listed nor in the library (registry library path or the manifest library section's include); each is judged by the project's own roots: project unit (fix --apply) or third-party (fix --apply --to library, which adds its folder to that include in --config or the exe-dir drag-lint.json, .bak first). --json items carry owner, suggestedFix and folder", "                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent"]
     }
   ],
   "audience": "both",
@@ -54,12 +58,24 @@
     {
       "ask": "How do I add the missing units to the project file?",
       "command": "drag-lint reconcile-project <App.dproj> --apply"
+    },
+    {
+      "ask": "Which units does my project use that are neither in the project nor in the library?",
+      "command": "drag-lint reconcile-project <App.dproj> --json"
+    },
+    {
+      "ask": "How do I put a third-party unit's folder in the library instead of the project?",
+      "command": "drag-lint reconcile-project <App.dproj> --only <unit,...> --apply --to library"
+    },
+    {
+      "ask": "Does lint-all report used third-party units that are outside the library?",
+      "command": "drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-library"
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "d83891abec6981107f5bdec31f300f06afffbc168df48f4e5961e9316d4d26a2"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "0f79cbb56d3ddab3a4a6997da0c238d85bd542f6eb8507fee40d2b4ac2814f09"
   }
 }

@@ -915,6 +915,18 @@ function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>
 { Forward: DoLint and DoLintAll both ask which .dproj owns the run for
   ifdef-undefined-symbol; it sits beside ManifestProjectFileForDb, far below. }
 function IfdefProjectFile(const AArgs: TArgs; const ADbPath: string): string; forward;
+
+const
+  { T-22: the third-party half of "used, but neither in the project nor in the
+    library". Shared by DoLint, DoLintAll and LintUnevaluatedRules. }
+  UNIT_NOT_IN_LIBRARY_RULE_ID = 'unit-not-in-library';
+
+{ Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
+  DoReconcileProject, whose analysis it reuses. }
+function UnitNotInLibraryFindings(const AProjectFile: string): TArray<TLintFinding>; forward;
+{ Forward: the reconcile library write mirrors the dll-win32/dll-win64 manifest
+  pair; the pair rule sits beside DoMigrateDbs, below DoReconcileProject. }
+function PairedManifestPath(const ACfgPath: string): string; forward;
 { Forward: the naming autofix's stale-index hint (FinalizeAndOutput) lives
   beside IfdefProjectFile, far below. }
 function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
@@ -13281,7 +13293,7 @@ begin
     (Run gets no opt-in list), except the one --rule names. }
   for var Gated: string in PROJECT_RULES_OPTIN_GATED do
     if not SameText(Gated, AArgs.Rule) then AddAll([Gated]);
-  if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr']);
+  if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr', UNIT_NOT_IN_LIBRARY_RULE_ID]);
   if not AStoreSeen then
   begin
     AddAll(LINT_GATE_PROJECT_RULES);
@@ -13836,6 +13848,10 @@ begin
       end;
       Findings:= Findings + ProjFindings;
     end;
+    { T-22: the same project-level answer lint-all gives, so the rule's guard can
+      drive either verb. }
+    if (NarrowRule = '') or SameText(NarrowRule, UNIT_NOT_IN_LIBRARY_RULE_ID) then
+      Findings:= Findings + UnitNotInLibraryFindings(AArgs.ProjectPath);
   end;
   { ifdef-undefined-symbol: one file, and only with a project. The snapshot of a
     stand-in lives in a temp folder, so the REAL file's folder is passed for its
@@ -20413,6 +20429,16 @@ begin
     var InferredProj: string:= ManifestProjectFileForDb(ProjectDb);
     if (InferredProj <> '') and TFile.Exists(InferredProj) then
       Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
+  end;
+  { T-22: used third-party units that are neither project members nor in the
+    library. Same project inference as unit-not-in-dpr above, and as narrow. }
+  LintPhase(UNIT_NOT_IN_LIBRARY_RULE_ID);
+  if LintRuleWants(Nr, [UNIT_NOT_IN_LIBRARY_RULE_ID]) then
+  begin
+    var LibProj: string:= AArgs.ProjectPath;
+    if LibProj = '' then LibProj:= ManifestProjectFileForDb(ProjectDb);
+    if (LibProj <> '') and TFile.Exists(LibProj) then
+      Findings:= Findings + UnitNotInLibraryFindings(LibProj);
   end;
   { ifdef-undefined-symbol over every scanned unit PLUS the program file, which
     the closure drops by design and which is where a project's own conditional
@@ -31729,6 +31755,253 @@ end; // function
 //         is best-effort: a non-buildable target does not fail reconcile. The
 //         report gains a `coherence:` line (text) / `"coherence"` object (JSON).
 
+{ ---------------------------------------------------------------------------
+  T-22 (owner ruling 2026-10-25): a unit the project USES that is neither in
+  the project nor in the library is judged and fixable two ways.
+    DEFAULT      add the unit to the project (.dpr + .dproj) -- TProjectReconciler.Apply
+    ALTERNATIVE  add its folder to the library: the manifest library section's
+                 "include", which ResolvePlan now walks as library roots
+  Judgement: under the project's own roots (TOwnRoots) = a missed project
+  unit; outside = third-party, the library is where it belongs.
+  --------------------------------------------------------------------------- }
+const
+  RECONCILE_FIX_PROJECT = 'project';
+  RECONCILE_FIX_LIBRARY = 'library';
+  { The Source value that makes a manifest section the platform library. }
+  LIBRARY_SECTION_SOURCE = 'registry-libraries';
+
+/// <summary>The folders a manifest's library section(s) list in "include",
+/// as absolute paths without a trailing delimiter.</summary>
+/// <param name="AManifest">A parsed manifest; Default() yields none.</param>
+/// <returns>One entry per include, in manifest order; relative entries are
+/// resolved against the manifest's RootDir.</returns>
+/// <remarks>The same resolution ResolvePlan applies when it adds these folders
+/// to every library plan item's Roots, so "is in the library" means the same
+/// thing to reconcile, to lint and to `index --all`.</remarks>
+function ManifestLibraryIncludeRoots(const AManifest: TIndexManifest): TArray<string>;
+begin
+  Result:= nil;
+  for var Sec: TIndexSection in AManifest.Sections do
+  begin
+    if not SameText(Sec.Source, LIBRARY_SECTION_SOURCE) then Continue;
+    for var Inc: string in Sec.Include do
+    begin
+      var Abs: string:= if TPath.IsPathRooted(Inc) then Inc else TPath.Combine(AManifest.RootDir, Inc);
+      { An unusable path stays as written; it then matches nothing. }
+      if TPath.HasValidPathChars(Abs, False) then Abs:= TPath.GetFullPath(Abs);
+      Result:= Result + [ExcludeTrailingPathDelimiter(Abs)];
+    end;
+  end;
+end;
+
+/// <summary>Which fix the T-22 judgement recommends for one MISSING item.</summary>
+/// <param name="AOwn">The project's own roots. An unusable declaration (Error
+/// set) recommends the default for every item rather than guessing.</param>
+/// <param name="AItem">A MISSING item from TProjectReconciler.Analyze.</param>
+/// <returns>RECONCILE_FIX_PROJECT for a unit under the own roots,
+/// RECONCILE_FIX_LIBRARY for one outside them.</returns>
+function ReconcileSuggestedFix(const AOwn: TOwnRoots; const AItem: TReconcileItem): string;
+begin
+  if (AOwn.Error = '') and (not AOwn.IsOurs(AItem.FilePath)) then Result:= RECONCILE_FIX_LIBRARY
+  else Result:= RECONCILE_FIX_PROJECT;
+end;
+
+/// <summary>The owner label the report shows for a recommended fix.</summary>
+/// <param name="AFix">A RECONCILE_FIX_* value.</param>
+/// <returns>'third-party' for the library fix, 'project' otherwise.</returns>
+function ReconcileOwnerLabel(const AFix: string): string;
+begin
+  Result:= if AFix = RECONCILE_FIX_LIBRARY then 'third-party' else 'project';
+end;
+
+/// <summary>Prints the two fix commands, each narrowed with --only to the units
+/// the judgement assigns it; prints nothing when MISSING holds no unit.</summary>
+/// <param name="AProjectFile">The project file as the caller named it.</param>
+/// <param name="AOwn">The project's own roots.</param>
+/// <param name="ARR">The analysis; only its .pas MISSING items are named.</param>
+procedure WriteReconcileSuggestedFixes(const AProjectFile: string; const AOwn: TOwnRoots;
+  const ARR: TReconcileResult);
+var
+  ProjUnits: TArray<string>;
+  LibUnits : TArray<string>;
+begin
+  ProjUnits:= nil;
+  LibUnits := nil;
+  for var Item: TReconcileItem in ARR.Missing do
+  begin
+    if not SameText(TPath.GetExtension(Item.FilePath), '.pas') then Continue;
+    if ReconcileSuggestedFix(AOwn, Item) = RECONCILE_FIX_LIBRARY then LibUnits:= LibUnits + [Item.UnitName]
+    else ProjUnits:= ProjUnits + [Item.UnitName];
+  end;
+  if (Length(ProjUnits) = 0) and (Length(LibUnits) = 0) then Exit;
+  Writeln('SUGGESTED FIXES (the judgement: own roots = project unit, outside = third-party):');
+  if Length(ProjUnits) > 0 then
+    Writeln(Format('  project units (%d):     drag-lint reconcile-project "%s" --only %s --apply',
+      [Length(ProjUnits), AProjectFile, string.Join(',', ProjUnits)]));
+  if Length(LibUnits) > 0 then
+    Writeln(Format('  third-party units (%d): drag-lint reconcile-project "%s" --only %s --apply --to library',
+      [Length(LibUnits), AProjectFile, string.Join(',', LibUnits)]));
+end;
+
+/// <summary>The ALTERNATIVE fix: adds the folder of every selected MISSING unit
+/// to the manifest library section's "include" list.</summary>
+/// <param name="AArgs">--config names the manifest to rewrite; without it the
+/// drag-lint.json beside the exe (the DoMigrateDbs rule: never the MERGED
+/// manifest, which would inline one file into the other).</param>
+/// <param name="ARR">The analysis, already narrowed by --only.</param>
+/// <param name="ARes">Receives Applied / Backups / Edited / Refused, with the
+/// meaning TReconcileApplyResult documents.</param>
+/// <param name="AAdded">Receives the folders actually added.</param>
+/// <returns>'' on success (including "nothing to add"); otherwise why nothing
+/// was written -- the caller exits 2.</returns>
+/// <remarks>Only .pas items count; an {$I} include is refused, as the project
+/// fix refuses it. A folder already included (case-insensitive, after
+/// expansion) is not added twice. The file is backed up to &lt;cfg&gt;.bak and
+/// rewritten with TManifestIO.SaveEdits, so every key the parser does not
+/// model survives; a dll-win32 / dll-win64 sibling manifest is mirrored, as
+/// DoMigrateDbs does, and named in Edited. Writes nothing to stdout, so a
+/// --json document stays the only thing there.</remarks>
+function ApplyReconcileToLibrary(const AArgs: TArgs; const ARR: TReconcileResult;
+  var ARes: TReconcileApplyResult; out AAdded: TArray<string>): string;
+var
+  CfgPath : string        ;
+  OrigText: string        ;
+  M       : TIndexManifest;
+  LibIdx  : Integer       ;
+  Have    : TArray<string>;
+begin
+  Result:= '';
+  AAdded:= nil;
+  ARes:= Default(TReconcileApplyResult);
+  CfgPath:= AArgs.WorkspaceConfig;
+  if CfgPath = '' then CfgPath:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.json');
+  CfgPath:= TPath.GetFullPath(CfgPath);
+  if not TFile.Exists(CfgPath) then Exit('manifest not found: ' + CfgPath + ' (pass --config <drag-lint.json>)');
+
+  OrigText:= TFile.ReadAllText(CfgPath);
+  M:= TManifestIO.ParseText(OrigText, ExtractFilePath(CfgPath));
+  LibIdx:= -1;
+  for var I: Integer:= 0 to High(M.Sections) do
+    if SameText(M.Sections[I].Source, LIBRARY_SECTION_SOURCE) then
+    begin
+      LibIdx:= I;
+      Break;
+    end;
+  if LibIdx < 0 then Exit(Format('no library section (source "%s") in %s', [LIBRARY_SECTION_SOURCE, CfgPath]));
+
+  Have:= ManifestLibraryIncludeRoots(M);
+  for var Item: TReconcileItem in ARR.Missing do
+  begin
+    if not SameText(TPath.GetExtension(Item.FilePath), '.pas') then
+    begin
+      ARes.Refused:= ARes.Refused + [Item.FilePath];
+      Continue;
+    end;
+    var Folder: string:= ExcludeTrailingPathDelimiter(TPath.GetFullPath(ExtractFileDir(Item.FilePath)));
+    var Known: Boolean:= False;
+    for var H: string in Have + AAdded do
+      if SameText(H, Folder) then
+      begin
+        Known:= True;
+        Break;
+      end;
+    if Known then Continue;
+    AAdded:= AAdded + [Folder];
+    M.Sections[LibIdx].Include:= M.Sections[LibIdx].Include + [Folder];
+  end;
+  if Length(AAdded) = 0 then Exit;
+
+  TFile.Copy(CfgPath, CfgPath + '.bak', True);
+  ARes.Backups:= [CfgPath + '.bak'];
+  TManifestIO.SaveEdits(OrigText, M, CfgPath);
+  ARes.Edited:= [CfgPath];
+  var Sibling: string:= PairedManifestPath(CfgPath);
+  if (Sibling <> '') and TFile.Exists(Sibling) then
+  begin
+    TFile.Copy(CfgPath, Sibling, True);
+    ARes.Edited:= ARes.Edited + [Sibling];
+  end;
+  ARes.Applied:= True;
+end;
+
+/// <summary>unit-not-in-library: one finding per third-party unit the project
+/// compiles that is neither a project member nor in the library.</summary>
+/// <param name="AProjectFile">The project's .dproj or .dpr.</param>
+/// <returns>Warnings anchored to the program file (line 1), as unit-not-in-dpr
+/// anchors; nil when the closure cannot be resolved or ownership is unusable --
+/// silence beats a wrong answer, the unit-not-in-dpr rule.</returns>
+/// <remarks>The analysis IS reconcile-project's (same closure, same library
+/// roots: registry paths plus the manifest library "include"), so the rule and
+/// the verb cannot disagree. Units under the project's own roots are NOT
+/// reported here -- unit-not-in-dpr's third direction owns them. The manifest
+/// is the engine's (exe-dir drag-lint.json merged with the .drag-lint.json the
+/// working-directory walk finds); --config is the lint configuration in a lint
+/// run, not a manifest.</remarks>
+function UnitNotInLibraryFindings(const AProjectFile: string): TArray<TLintFinding>;
+var
+  Manifest  : TIndexManifest;
+  Own       : TOwnRoots;
+  Resolver  : DRagLint.Project.Resolver.TProjectResolver;
+  LibRoots  : TArray<string>;
+  Reconciler: TProjectReconciler;
+  RR        : TReconcileResult;
+  ProjAbs   : string;
+  Anchor    : string;
+  Finding   : TLintFinding;
+begin
+  Result:= nil;
+  ProjAbs:= TPath.GetFullPath(AProjectFile);
+  if not TFile.Exists(ProjAbs) then Exit;
+  Own:= TOwnRoots.Load(ExtractFilePath(ProjAbs));
+  if Own.Error <> '' then Exit;
+  { Load warns about and records a bad file (LoadError) instead of raising. }
+  Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    LibRoots:= Resolver.ResolveLibraryPaths + ManifestLibraryIncludeRoots(Manifest);
+  finally
+    Resolver.Free;
+  end;
+  Reconciler:= TProjectReconciler.Create(LibRoots, Manifest.GlobalExclude);
+  try
+    try
+      RR:= Reconciler.Analyze(ProjAbs);
+    except
+      on E: Exception do
+      begin
+        { An unresolvable closure must not take lint down: say so, skip the rule. }
+        Writeln(ErrOutput, 'drag-lint: note: unit-not-in-library skipped, closure not resolved: ', E.Message);
+        Exit;
+      end;
+    end;
+  finally
+    Reconciler.Free;
+  end;
+  Anchor:= ChangeFileExt(ProjAbs, '.dpr');
+  if not TFile.Exists(Anchor) then Anchor:= ProjAbs;
+  for var Item: TReconcileItem in RR.Missing do
+  begin
+    if not SameText(TPath.GetExtension(Item.FilePath), '.pas') then Continue;
+    if ReconcileSuggestedFix(Own, Item) <> RECONCILE_FIX_LIBRARY then Continue;
+    Finding:= Default(TLintFinding);
+    Finding.RuleId    := UNIT_NOT_IN_LIBRARY_RULE_ID;
+    Finding.Severity  := 'warning';
+    Finding.SymbolName:= Item.UnitName;
+    Finding.Message   := Format(
+      'Unit "%s" (%s, used by %s) is compiled through the search path but is neither a project ' +
+      'member nor in the library, and it lies outside the project''s own roots (third-party). ' +
+      'Fix: add its folder to the library -- drag-lint reconcile-project "%s" --only %s --apply --to library ' +
+      '-- or list it in the project with --apply alone.',
+      [Item.UnitName, Item.FilePath,
+       (if Item.UsedBy = '' then ExtractFileName(Anchor) else Item.UsedBy),
+       ProjAbs, Item.UnitName]);
+    Finding.FilePath  := Anchor;
+    Finding.StartLine := 1;
+    Finding.StartCol  := 1;
+    Result:= Result + [Finding];
+  end;
+end;
+
 { WHY nothing was written -- one reason per outcome, instead of one hardcoded
   sentence covering three.
 
@@ -31738,10 +32011,12 @@ end; // function
   its units were already listed, when in truth nothing was ever eligible to be
   written. A confidently WRONG reason is worse than a vague one -- it sends the
   reader somewhere there is nothing to find. }
-function ReconcileNothingWrittenReason(const ARes: TReconcileApplyResult): string;
+function ReconcileNothingWrittenReason(const ARes: TReconcileApplyResult; const AApplyTo: string): string;
 var
   Suffix: string;
 begin
+  if AApplyTo = RECONCILE_FIX_LIBRARY then
+    Exit('Applied: nothing to write -- every selected folder is already a library include (or nothing was selected).');
   if Length(ARes.Refused) = 0 then
     Exit('Applied: nothing to write -- every MISSING unit was already listed.');
   if Length(ARes.Refused) = 1 then Suffix:= 'y' else Suffix:= 'ies';
@@ -31793,6 +32068,10 @@ var
     machine caller learns of a typo from the document, not from stderr. nil when
     --only was not passed. }
   Unmatched   : TStringList                               ;
+  { T-22: which fix --apply writes (RECONCILE_FIX_*), and whose units are ours. }
+  ApplyTo     : string                                    ;
+  Own         : TOwnRoots                                 ;
+  LibAdded    : TArray<string>                            ;
 begin
   // Accept either positional arg (AArgs.Path) or explicit --project.
   ProjectFile:= AArgs.Path;
@@ -31800,17 +32079,22 @@ begin
   if ProjectFile = '' then begin Writeln('ERROR: reconcile-project requires a .dpr or .dproj file path'); Exit (2 ); end;
   if not TFile.Exists(ProjectFile) then begin Writeln('ERROR: project file not found: ', ProjectFile); Exit(2); end;
 
-  // Resolve library roots (used to exclude library files from the closure).
-  ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-  try
-    LibRoots:= ProjResolver.ResolveLibraryPaths;
-  finally
-    ProjResolver.Free;
+  { --to picks the fix --apply writes: project (the default) or library. Refused
+    before anything is read or written, so a typo can never fall back to the
+    default and edit the project files the caller meant to leave alone. }
+  ApplyTo:= LowerCase(AArgs.RenameTo);
+  if ApplyTo = '' then ApplyTo:= RECONCILE_FIX_PROJECT;
+  if (ApplyTo <> RECONCILE_FIX_PROJECT) and (ApplyTo <> RECONCILE_FIX_LIBRARY) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: reconcile-project --to must be "%s" or "%s", got "%s"',
+      [RECONCILE_FIX_PROJECT, RECONCILE_FIX_LIBRARY, AArgs.RenameTo]));
+    Exit(2);
   end;
 
   // Load manifest stale globs from indexes.exclude.
   // Use --config if given; else auto-discover (engine dir + cwd walk).
   StaleGlobs:= nil;
+  Manifest:= Default(TIndexManifest);
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
     if AArgs.WorkspaceConfig <> '' then
@@ -31820,16 +32104,35 @@ begin
         var Content:= TFile.ReadAllText(AArgs.WorkspaceConfig);
         var RootDir:= ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig));
         Manifest:= TManifestIO.ParseText(Content, RootDir);
-      end
-      else Manifest:= Default(TIndexManifest);
+      end;
     end
     else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
     StaleGlobs:= Manifest.GlobalExclude;
   except
     // Advisory: if manifest load fails, proceed with built-in globs only.
     StaleGlobs:= nil;
+    Manifest:= Default(TIndexManifest);
   end; // try
 
+  { Library roots exclude library files from the closure: the registry library
+    paths, plus (T-22) every folder the manifest's library section includes --
+    so a folder `--apply --to library` wrote stops being reported at once. }
+  ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    LibRoots:= ProjResolver.ResolveLibraryPaths + ManifestLibraryIncludeRoots(Manifest);
+  finally
+    ProjResolver.Free;
+  end;
+
+  { Whose unit is it? The project's own roots (drag-lint-project.json "ownRoots",
+    else the project folder) make a MISSING unit a missed PROJECT unit; anything
+    outside is third-party and wants the library. An unusable declaration is
+    named and every unit falls back to the default fix rather than a guess. }
+  Own:= TOwnRoots.Load(ExtractFilePath(TPath.GetFullPath(ProjectFile)));
+  if Own.Error <> '' then
+    Writeln(ErrOutput, 'reconcile-project: ownRoots unusable, every MISSING unit is judged a project unit: ', Own.Error);
+
+  Unmatched:= nil; { before the try: Analyze can raise, and the finally frees it }
   Reconciler:= TProjectReconciler.Create(LibRoots, StaleGlobs);
   try
     RR:= Reconciler.Analyze(ProjectFile);
@@ -31840,7 +32143,7 @@ begin
       whenever --only was not passed -- which is every existing caller.
       Measured: an EAccessViolation on `reconcile-project --json`, i.e. the
       common path, from a line that only ever meant to tidy up. }
-    Unmatched:= nil;
+    { Unmatched is nil from before the try (above): see why there. }
 
     { --only <unit,...>: restrict the actionable set to a reviewed selection.
 
@@ -32034,7 +32337,17 @@ begin
       first), so the recompile continues to see the pre-apply project. Only
       the report now trails the write instead of leading it. }
     AppRes:= Default(TReconcileApplyResult);
-    if AArgs.Apply then AppRes:= Reconciler.Apply(ProjectFile, RR);
+    LibAdded:= nil;
+    if AArgs.Apply and (ApplyTo = RECONCILE_FIX_LIBRARY) then
+    begin
+      var LibErr: string:= ApplyReconcileToLibrary(AArgs, RR, AppRes, LibAdded);
+      if LibErr <> '' then
+      begin
+        Writeln(ErrOutput, 'ERROR: reconcile-project --to library: ', LibErr);
+        Exit(2);
+      end;
+    end
+    else if AArgs.Apply then AppRes:= Reconciler.Apply(ProjectFile, RR);
 
     if AArgs.AsJson then
     begin
@@ -32050,9 +32363,22 @@ begin
           JObj.AddPair('file'   , Item.FilePath);
           JObj.AddPair('relPath', Item.RelPath );
           JObj.AddPair('usedBy' , Item.UsedBy  );
+          { T-22: the judgement and the folder the library fix would add. }
+          var Fix: string:= ReconcileSuggestedFix(Own, Item);
+          JObj.AddPair('owner'       , ReconcileOwnerLabel(Fix));
+          JObj.AddPair('suggestedFix', Fix);
+          JObj.AddPair('folder'      , ExtractFileDir(Item.FilePath));
           JMissing.AddElement(JObj);
         end;
         JRoot.AddPair('missing', JMissing);
+
+        { Folders --apply --to library actually added; present only for that run. }
+        if AArgs.Apply and (ApplyTo = RECONCILE_FIX_LIBRARY) then
+        begin
+          var JLib: TJSONArray:= TJSONArray.Create;
+          for var LPath in LibAdded do JLib.Add(LPath);
+          JRoot.AddPair('libraryFolders', JLib);
+        end;
 
         { Closure entries reported as MISSING but refused by the write (today,
           $I includes). Present only when --apply actually refused something,
@@ -32160,8 +32486,10 @@ begin
         stdout stays one JSON object -- the document itself carries
         `applied`, `backups` and `edited`. }
       if AArgs.Apply then
-        if AppRes.Applied then Writeln(ErrOutput, Format('Applied: Missing units added to %d project file(s) (%d .bak backup(s) written).', [Length(AppRes.Edited), Length(AppRes.Backups)]))
-        else                   Writeln(ErrOutput, ReconcileNothingWrittenReason(AppRes));
+        if AppRes.Applied and (ApplyTo = RECONCILE_FIX_LIBRARY) then
+          Writeln(ErrOutput, Format('Applied: %d folder(s) added to the library include of %d manifest file(s) (%d .bak backup(s) written).', [Length(LibAdded), Length(AppRes.Edited), Length(AppRes.Backups)]))
+        else if AppRes.Applied then Writeln(ErrOutput, Format('Applied: Missing units added to %d project file(s) (%d .bak backup(s) written).', [Length(AppRes.Edited), Length(AppRes.Backups)]))
+        else                   Writeln(ErrOutput, ReconcileNothingWrittenReason(AppRes, ApplyTo));
       { Named, not silent. Without this the reported MISSING count and the
         written count differ with no stated reason. }
       if AArgs.Apply and (Length(AppRes.Refused) > 0) then
@@ -32171,7 +32499,7 @@ begin
     else
     begin
       // Text report.
-      Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):', [Length(RR.Missing)]));
+      Writeln(Format('MISSING (%d) - used but neither listed nor in the library (fix: --apply adds to the project, --apply --to library adds the folder to the library):', [Length(RR.Missing)]));
       for Item in RR.Missing do
       begin
         { THIS LIST IS THE REVIEW SURFACE -- it is what a human reads to choose
@@ -32181,7 +32509,11 @@ begin
           would hand to --only and then wonder why nothing happened. }
         var NotAUnit: string:= '';
         if not SameText(TPath.GetExtension(Item.FilePath), '.pas') then
-          NotAUnit:= '   [not a unit -- refused by --apply]';
+          NotAUnit:= '   [not a unit -- refused by --apply]'
+        else if ReconcileSuggestedFix(Own, Item) = RECONCILE_FIX_LIBRARY then
+          NotAUnit:= '   [third-party -> library: --apply --to library]'
+        else
+          NotAUnit:= '   [project unit -> --apply]';
         if Item.UsedBy <> '' then Writeln(Format('  %s -> %s   (used by %s)%s', [Item.UnitName, Item.RelPath, Item.UsedBy, NotAUnit]))
         else Writeln(Format('  %s -> %s%s', [Item.UnitName, Item.RelPath, NotAUnit]));
       end;
@@ -32195,6 +32527,10 @@ begin
         if Item.UsedBy <> '' then Writeln(Format('  %s -> %s   (used by %s)', [Item.UnitName, Item.RelPath, Item.UsedBy]))
         else Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
       end;
+
+      { T-22: the two fixes as commands, each pre-narrowed to the units the
+        judgement assigns it -- what a reviewer copies, not what they retype. }
+      WriteReconcileSuggestedFixes(ProjectFile, Own, RR);
 
       Writeln('Run a full project build to verify after --apply.');
 
@@ -32219,7 +32555,7 @@ begin
       begin
         if AppRes.Applied then
           for var EPath in AppRes.Edited do Writeln('Applied: updated ' + EPath)
-        else Writeln(ReconcileNothingWrittenReason(AppRes));
+        else Writeln(ReconcileNothingWrittenReason(AppRes, ApplyTo));
         { Named, not silent -- see the JSON arm. }
         for var RPath in AppRes.Refused do
           Writeln('Refused: ' + RPath + ' -- an {$I} include is not a unit and cannot be a project member.');

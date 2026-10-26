@@ -85,7 +85,9 @@ type
 /// <returns>Fully populated TIndexPlan.</returns>
 /// <remarks>
 /// Mode classification:
-/// Source='registry-libraries' -> smLibrary (one TPlanSection per platform).
+/// Source='registry-libraries' -> smLibrary (one TPlanSection per platform);
+/// its Roots are the platform's registry library paths PLUS the section's
+/// own Include folders (resolved against RootDir).
 /// Any Include entry ending with .dpr/.dproj (case-insensitive) -> smClosure.
 /// Otherwise -> smFolderTree.
 /// DedupAgainst='*' -> union of ALL other sections' roots.
@@ -339,6 +341,12 @@ begin
           PS.Platform:= Plat;
           PS.DbPath:= ExpandDbPath(DbTemplate, Plat, AManifest.RootDir, AManifest.OutDir);
           LibRoots:= AResolver.ReadPlatformLibraryPaths(Plat);
+          { T-22 (owner 2026-10-25): a library section's "include" folders are
+            library roots too, on every platform the section targets -- the
+            place `reconcile-project --apply --to library` writes a third-party
+            folder that is on no registry library path (DUnitX). Empty for
+            every manifest written before this, so their plans are unchanged. }
+          AppendUnique(LibRoots, ResolveRoots(Sec, AManifest.RootDir, smLibrary));
           PS.Roots:= LibRoots;
           PS.Filter:= BuildFilter(AManifest, Sec);
           // DedupExcludeRoots: computed in pass 2

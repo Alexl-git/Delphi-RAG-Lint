@@ -790,7 +790,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 8 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 31 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 21 (+ 194 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 21 (+ 195 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -906,7 +906,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | `register-project` | Add a NEW project to the manifest so `index --all` and the IDE can index it | `<file.dproj>`, `--name <Section>`, `--apply`, `--json` |
 | [`resolve-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-Resolved-DBs-debug) | Show which DB(s) a project/file/platform resolves to | `--project <dproj>`, `--in <file>`, `--platform` |
 | [`library-drift`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Library-Drift-Check) | Registry library roots with source on disk but not yet in the index | `--platform` |
-| [`reconcile-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reconcile-Project-Members-dpr-dproj) `<App.dpr\|.dproj>` | Sync a project's member list against disk; flag stale used units | `--apply`, `--only <unit,...>` (restrict MISSING, and therefore `--apply`, to a reviewed selection -- a dry run with `--only` previews exactly what `--apply` would write), `--db`, `--full`, `--json` (carries `applied` -- the outcome, not the flag -- plus `backups` and `edited` when applying, and `refused` naming closure entries kept in the report but never written, today the `{$I}` includes) |
+| [`reconcile-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reconcile-Project-Members-dpr-dproj) `<App.dpr\|.dproj>` | Sync a project's member list against disk; flag stale used units. Each MISSING unit is judged: under the project's own roots = a missed project unit (fix: `--apply`), outside = third-party (fix: `--apply --to library` adds its folder to the manifest library section's `include`); units already in the library (registry library path or that `include`) are not reported | `--apply`, `--to project\|library`, `--only <unit,...>` (restrict MISSING, and therefore `--apply`, to a reviewed selection -- a dry run with `--only` previews exactly what `--apply` would write), `--db`, `--full`, `--json` (carries `applied` -- the outcome, not the flag -- plus `backups` and `edited` when applying, and `refused` naming closure entries kept in the report but never written, today the `{$I}` includes) |
 
 Wherever a database is *opened* (`index`, `query`, `lsp`, `serve`) the 32-bit
 build refuses one larger than its size guard, because it would run out of
@@ -951,7 +951,7 @@ Win64 build.
 
 #### Lint
 
-**194 rules across 16 categories -- 141 built-in + 53 external `.scm`, 164
+**195 rules across 16 categories -- 142 built-in + 53 external `.scm`, 165
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -961,7 +961,7 @@ enabled by default, 23 with an auto-fix.**
 | `lint <file> --db <db> --project-rules` | Also runs the per-declaration doc rules (`doc-drift`, `missing-doc`) for that one file. **Off by default on purpose:** they rebuild the expected facts block per declaration at ~16 ms each, so a 53-decl unit costs 0.83 s and a real DataCopy unit reached 8.75 s -- past the IDE plugin's hard 8 s timeout, whose failure branch shows *no* diagnostics at all | |
 | `lint <snapshot> --stand-in-for <realpath>` | Analyse `<snapshot>`'s **text** under `<realpath>`'s **identity**. For editors that lint an unsaved buffer by writing it to a temp file: store membership, file id, `unit-name-matches-file` and the reported path all answer for the real file, so a temp path no longer defeats the index | Used by the IDE plugin's live diagnostics |
 | `lint --file <f> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]` | **Autofix one file.** Without `--apply` it is a dry run: reports what it would change, writes no source file (and no index: a stale owning index is reported `index=stale`, not reindexed; `--apply` may reindex it first). `--fix-line`+`--fix-rule` narrow to one finding; omit both to apply every fixable finding. Only rules with `"fixable": true` are ever applied. `--fix-naming` consents, in a batch run, to the opt-in naming fixes (renamed in every owning project) without an `"autofix"` entry, and prints `rename-local: <N>` (stderr) | This is what the Structure form's right-click **Fix it** / **Fix all in unit** run |
-| `lint --project <dproj>` | One project-scoped rule (e.g. `unit-not-in-dpr`). A plain `lint-all --db <db>` now evaluates that rule too, inferring the project file from the manifest section that owns the DB -- passing `--project` additionally *scopes* the report, which inference deliberately does not | `--rule` |
+| `lint --project <dproj>` | One project-scoped rule (e.g. `unit-not-in-dpr`, or `unit-not-in-library` -- a used third-party unit that is neither a project member nor in the library). A plain `lint-all --db <db>` now evaluates that rule too, inferring the project file from the manifest section that owns the DB -- passing `--project` additionally *scopes* the report, which inference deliberately does not | `--rule` |
 | [`lint-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) `--db <db>` | Project-wide structural rules -- god-class, circular-uses, layering-violation, unused-public-symbol, and more | `--rule <id>`, `--layers <f.json>` |
 | `lint-all --db <db>` | Full project report. Since the per-file verb gained the store-backed project rules, what `lint-all` *uniquely* adds is narrower than it used to be: cross-file duplicate code, `interface-reference-cycle`, exception-class enrichment, and doc-drift/missing-doc across the whole project (`review-marker-unused` and `review-marker-malformed` moved to the per-file verb too, 2026-09-03) | `--project <.dproj>` (report only that project's compile closure), `--rule <id>` (report only that rule, and run only the checkers that can emit it; an OFF-by-default rule named here is opted in for the run, as with `lint`), `--output <file>` (alias `--out`; with `--json` or `--format sarif` it receives the JSON / SARIF document, with a note on stderr and nothing on stdout; `lint <path>` takes it the same way), `--json`, `--quiet` (no per-file progress lines on stderr), `--lint-third-party` (also lint roots outside the project's own -- set by `ownRoots`, minus `excludeRoots`, in `<project>\_D-RAG\drag-lint-project.json`), `--no-preprocess` (lint the raw bytes, including branches the compiler never sees -- the default now resolves conditionals the same way the indexer does) |
 | `lint-all --fix [--apply]` | **Autofix every fixable finding across the whole project.** Dry run without `--apply` -- this is what "Fix all in project" runs; it can rewrite many files at once. `lint-all` refuses `--file`/`--in` (exit 2) -- for one unit use `lint <file> --db <db> --fix` | |
@@ -1176,11 +1176,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (194 rules)
+### Lint rule pack (195 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.20.1-alpha: **194 rules across 16 categories -- 141
-built-in and 53 external `.scm`, 164 enabled by default, and 23 with an
+external `.scm`). As of v1.20.1-alpha: **195 rules across 16 categories -- 142
+built-in and 53 external `.scm`, 165 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

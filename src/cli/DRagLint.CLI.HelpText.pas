@@ -372,7 +372,8 @@ begin
   Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
   Writeln('                               uses, so this is how it is verified without an IDE.');
   Writeln('                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr.');
-  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
+  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed. MISSING = used units neither listed nor in the library (registry library path or the manifest library section''s include); each is judged by the project''s own roots: project unit (fix --apply) or third-party (fix --apply --to library, which adds its folder to that include in --config or the exe-dir drag-lint.json, .bak first)' +
+    '. --json items carry owner, suggestedFix and folder');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)');
   Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
@@ -1115,7 +1116,8 @@ begin
   end;
   if pVerb = 'reconcile-project' then
   begin
-    Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
+    Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed. MISSING = used units neither listed nor in the library (registry library path or the manifest library section''s include); each is judged by the project''s own roots: project unit (fix --apply) or third-party (fix --apply --to library, which adds its folder to that include in --config or the exe-dir drag-lint.json, .bak first)' +
+    '. --json items carry owner, suggestedFix and folder');
     Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
     Exit;
   end;

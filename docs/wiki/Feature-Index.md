@@ -483,6 +483,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [unbalanced-begin-end](rules#unbalanced-begin-end) -- bug-patterns, warning
 * [unit-name-matches-file](rules#unit-name-matches-file) -- naming, info
 * [unit-not-in-dpr](rules#unit-not-in-dpr) -- project-wide, warning
+* [unit-not-in-library](rules#unit-not-in-library) -- project-wide, warning
 * [unit-too-large](rules#unit-too-large) -- complexity, info
 * [unprotected-object-free](rules#unprotected-object-free) -- resource-lifetime, warning
 * [unsafe-shellexecute](rules#unsafe-shellexecute) -- security, error

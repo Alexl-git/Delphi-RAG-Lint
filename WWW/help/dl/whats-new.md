@@ -90,7 +90,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.18.0-alpha
 
-* [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md) -- Compares a project file's declared member list against what is on disk and in the compile closure.
+* [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md) -- Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way.
 
 ## 1.17.0-alpha
 

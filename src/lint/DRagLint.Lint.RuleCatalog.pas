@@ -584,6 +584,10 @@ begin
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
+    { T-22 (owner ruling 2026-10-25): the THIRD-PARTY half of "used, but neither
+      in the project nor in the library". The own-roots half is unit-not-in-dpr's
+      third direction. Fix: `reconcile-project --apply --to library` (or --apply). }
+    B('unit-not-in-library',   'project-wide', 'warning', 'Third-party unit the project compiles via its search path is neither a project member nor in the library');
     B('used-unit-not-resolvable', 'project-wide', 'warning', 'Used unit resolves to no known unit (project/library/alias)');
     { Needs a .dproj: without one the build's defines are unknown, so the rule
       runs only when --project names it or the --db's project is known, and a
