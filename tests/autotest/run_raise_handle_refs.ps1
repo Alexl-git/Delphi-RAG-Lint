@@ -113,6 +113,25 @@ Check 'C. the handler variable E is never a handle row' ($hv.Count -eq 0) ("rows
 $fin = @($rows | Where-Object { $_.name_text -eq 'finally' })
 Check 'C. try..finally emits no handle-all' ($fin.Count -eq 0)
 
+# E. usages buckets (spec 5.2): raise rows -> 'raises', handle rows -> 'handles', never 'calls'
+$uRaw = (& $Exe usages --name EFoo --db $db --json 2>$null) -join "`n"
+$u = $null
+try { $u = $uRaw | ConvertFrom-Json } catch { }
+Check 'E. usages --json parses' ($null -ne $u) $uRaw.Substring(0, [Math]::Min(200, $uRaw.Length))
+if ($null -ne $u) {
+  # @($null).Count is 1 -- a MISSING key must not read as one row.
+  function Count-Of($o, [string]$k) { if ($o.PSObject.Properties.Name -contains $k) { return @($o.$k | Where-Object { $null -ne $_ }).Count } return -1 }
+  $nR = Count-Of $u 'raises'; $nH = Count-Of $u 'handles'
+  Check 'E. usages EFoo: raises = 1 (line 44)' ($nR -eq 1) "raises=$nR"
+  Check 'E. usages EFoo: handles = 3 (lines 73, 109, 134)' ($nH -eq 3) "handles=$nH"
+  $leak = @($u.calls | Where-Object { $_.line -eq 44 -and $_.col -eq 11 })
+  Check 'E. the raise row is not counted as a call' ($leak.Count -eq 0) ("calls=" + ($u.calls | ConvertTo-Json -Compress))
+  $nRd = Count-Of $u 'reads'
+  Check 'E. control: the co-located read rows stay in reads (44, 83)' ($nRd -eq 2) "reads=$nRd"
+}
+$uTxt = (& $Exe usages --name EFoo --db $db 2>$null) -join "`n"
+Check 'E. text usages prints raises/handles counts' ($uTxt -match 'raises: 1\s+handles: 3') $uTxt
+
 # D. zero-diff on the existing kinds (optional)
 if ($BaselineExe -ne '') {
   $BaselineExe = (Resolve-Path $BaselineExe).Path

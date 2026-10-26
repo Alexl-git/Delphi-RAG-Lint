@@ -189,10 +189,13 @@ function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const
 
 /// <summary>The `usages` bucket a reference belongs to.</summary>
 /// <param name="ARef">A reference from UsageRefsForName.</param>
-/// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events'.
-/// A 'member-access' ref goes by its AccessMode (member_accesses.mode): 'read'
-/// -> 'reads', 'write' -> 'writes'; one with no mode, and every unknown kind,
-/// stays in 'calls' as before.</returns>
+/// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events' |
+/// 'raises' | 'handles'. A 'member-access' ref goes by its AccessMode
+/// (member_accesses.mode): 'read' -> 'reads', 'write' -> 'writes'; one with no
+/// mode, and every unknown kind, stays in 'calls' as before. The exception facts
+/// (1.36.0): raise / raise-expr / reraise -> 'raises', handle / handle-all ->
+/// 'handles', so an exception class's raise and handler sites never inflate its
+/// call count. Pinned by run_raise_handle_refs.ps1 (E).</returns>
 /// <remarks>Before 2026-10-19 the kind alone decided, so every qualified field
 /// access (`AJob.Streaming`) was a CALL and `reads` read 0 for a field read
 /// all over the plugin. Pinned by run_usages_field_access.ps1.</remarks>
@@ -386,6 +389,8 @@ begin
   else if ARef.Kind = 'type_use'      then Result:= 'types'
   else if ARef.Kind = 'attribute'     then Result:= 'attributes'
   else if ARef.Kind = 'event-binding' then Result:= 'events'
+  else if (ARef.Kind = REF_KIND_RAISE) or (ARef.Kind = REF_KIND_RAISE_EXPR) or (ARef.Kind = REF_KIND_RERAISE) then Result:= 'raises'
+  else if (ARef.Kind = REF_KIND_HANDLE) or (ARef.Kind = REF_KIND_HANDLE_ALL) then Result:= 'handles'
   else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'read' ) then Result:= 'reads'
   else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'write') then Result:= 'writes'
   else Result:= 'calls'; { call + anything else }

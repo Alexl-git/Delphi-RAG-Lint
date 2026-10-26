@@ -10031,6 +10031,8 @@ var
   JTypes     : TJSONArray    ;
   JAttrs     : TJSONArray    ;
   JEvents    : TJSONArray    ;
+  JRaises    : TJSONArray    ; { 1.36.0 raise / raise-expr / reraise rows }
+  JHandles   : TJSONArray    ; { 1.36.0 handle / handle-all rows }
   JImpact    : TJSONArray    ;
 
   procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
@@ -10053,6 +10055,8 @@ var
     else if Bucket = 'types'      then Result:= JTypes
     else if Bucket = 'attributes' then Result:= JAttrs
     else if Bucket = 'events'     then Result:= JEvents
+    else if Bucket = 'raises'     then Result:= JRaises
+    else if Bucket = 'handles'    then Result:= JHandles
     else Result:= JCalls;
   end;
 
@@ -10079,6 +10083,7 @@ begin
   JWrites:= TJSONArray.Create; JCalls := TJSONArray.Create;
   JTypes := TJSONArray.Create; JAttrs := TJSONArray.Create;
   JEvents:= TJSONArray.Create; JImpact:= TJSONArray.Create;
+  JRaises:= TJSONArray.Create; JHandles:= TJSONArray.Create;
   { Attach the arrays to JRoot BEFORE the loop, not after it, so JRoot owns
     them on every path -- including the stale-db refusal below, which leaves
     the loop early. Attached-then-filled is fine: AddPair keeps the reference
@@ -10093,6 +10098,8 @@ begin
   JRoot.AddPair('types'       , JTypes );
   JRoot.AddPair('attributes'  , JAttrs );
   JRoot.AddPair('events'      , JEvents);
+  JRoot.AddPair('raises'      , JRaises);
+  JRoot.AddPair('handles'     , JHandles);
   JRoot.AddPair('impact'      , JImpact);
   try
     for DbPath in PathsToScan do
@@ -10157,7 +10164,8 @@ begin
       Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
       Writeln(Format('  declarations: %d', [JDecls.Count]));
       Writeln(Format(
-          '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d', [JReads.Count, JWrites.Count, JCalls.Count, JTypes.Count, JAttrs.Count, JEvents.Count]));
+          '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d  raises: %d  handles: %d',
+          [JReads.Count, JWrites.Count, JCalls.Count, JTypes.Count, JAttrs.Count, JEvents.Count, JRaises.Count, JHandles.Count]));
       if JImpact.Count > 0 then Writeln(Format('  impact (transitive): %d', [JImpact.Count]));
     end;
     Result:= 0;
@@ -15516,7 +15524,8 @@ var
         can notice for you -- which is the argument for the enum-derived
         treatment symbols.kind gets below. }
       AValues:= 'attribute,call,di-resolve,di-unresolved,event-binding,'
-              + 'member-access,read,sql_table_ref,type_use,write';
+              + 'handle,handle-all,member-access,raise,raise-expr,read,reraise,'
+              + 'sql_table_ref,type_use,write';
     end
     else if Key = 'symbols.kind' then
     begin
