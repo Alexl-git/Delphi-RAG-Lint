@@ -645,7 +645,7 @@ begin
   Result   := True;
   if not RoundTrips(AText, ACurrent) then
   begin
-    Up  := RaiseTarget(ACurrent);
+    Up  := RaiseTarget(ACurrent, NeededLevel(AText));
     Lost:= LostChars(AText, ACurrent, LOST_CHARS_SHOWN, Total);
     if (not Assigned(AAsk)) or (not AAsk(APath, ACurrent, Up, Lost, Total)) then
       Exit(False);

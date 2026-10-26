@@ -164,6 +164,10 @@ type
     /// = an ordinary run. A raise run is per unit (never batched): the engine binds each file
     /// to the --unit of its own call.</summary>
     RaiseFiles: TArray<string>;
+    /// <summary>True for the re-run after the raise question (ConvertRerun.RerunJob): it never
+    /// asks again. A first run may carry RaiseFiles from the pre-run question
+    /// (ConvRules.ConvertEncoding) and still asks after the run.</summary>
+    Rerun: Boolean;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive

@@ -34,9 +34,29 @@ status line says so once per open book.
 UTF-16 with BOM as radio items; the checked one is what Save and Save As write
 (the question above still applies). There is no plain UTF-16 item.
 
-## The Convert tab
-Two questions. Neither changes a file without your Yes:
+A character that fits only UTF-16 -- a lone surrogate, half of a pair without
+its other half -- cannot be saved as UTF-8 at all. The question then offers
+UTF-16 with BOM, and the listed character says "a lone surrogate: fits UTF-16
+only -- save as UTF-16 or fix the text".
 
+## The Convert tab
+Three questions. None changes a file without your Yes:
+
+* **Rules that do not fit a source** -- asked before the run. A unit is written
+  at the encoding its `.pas` has now. When a checked book's rule text holds a
+  character that encoding cannot hold (for example Cyrillic in an ASCII `.pas`),
+  converting would raise the file's encoding, so the tab asks first, once per
+  unit. The question lists every place: the book, `line:col`, the character
+  (`U+0414` and the character itself), the rule line, and the unit with its encoding.
+  Yes raises that `.pas` to UTF-8 with BOM and converts it; No does not start
+  the run -- change the rule text (or escape the character) and Convert again,
+  the places stay in the results as notes; Cancel cancels the run. Yes is not
+  offered when raising cannot help: a lone surrogate needs UTF-16, and the
+  engine raises a source to UTF-8 with BOM only, so the rule must be fixed; or
+  the engine lacks the `convert_encoding_guard` capability. Comment lines (`//`)
+  are never asked about. Any other line counts, even when its `#convert` would
+  not match that unit. The `.dfm` is not checked here: the engine escapes a
+  `.dfm` string without loss, and the question below covers the rest.
 * **Raise a source** -- asked after the run. When the engine has refused a unit
   because a character the rules write does not fit the `.pas` / `.dfm` encoding
   (the refused unit is left unchanged), the tab asks: Yes raises

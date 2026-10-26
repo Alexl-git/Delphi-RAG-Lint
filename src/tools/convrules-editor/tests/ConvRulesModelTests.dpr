@@ -45,6 +45,7 @@ uses
   , ConvRules.ConvertBatch in '..\ConvRules.ConvertBatch.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.ConvertRerun in '..\ConvRules.ConvertRerun.pas'
+  , ConvRules.ConvertEncoding in '..\ConvRules.ConvertEncoding.pas'
   , ConvRules.QualifyFix in '..\ConvRules.QualifyFix.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
@@ -15773,6 +15774,7 @@ end;
 {$I inc\EncodingEngineTests.inc}
 {$I inc\EncodingApplyTests.inc}
 {$I inc\EncodingTabTests.inc}
+{$I inc\EncodingPreRunTests.inc}
 {$I inc\RunnerDecisionTests.inc}
 {$I inc\MigrateTests.inc}
 
@@ -16033,6 +16035,7 @@ begin
     TestEncodingEngine;
     TestEncodingApply;
     TestEncodingTab;
+    TestEncodingPreRun;
     TestMigrateModel;
     TestMigrateBdeTail;
     TestMigrateBlocks;

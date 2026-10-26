@@ -1094,7 +1094,7 @@
   {
     "id": "convrules-encoding",
     "title": "Rule book and source encoding",
-    "summary": "ConvRulesEditor keeps each rule book's encoding (ASCII-7 to UTF-16 BOM), asks before a lossy save, and raises a refused source to UTF-8 with BOM on a yes",
+    "summary": "ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel)",
     "group": "component-conversion",
     "order": 60007,
     "since": "1.35.0-alpha",

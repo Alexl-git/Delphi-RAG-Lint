@@ -5973,7 +5973,7 @@
       "owner": "CONVERTER",
       "status": "shipped",
       "since": "1.35.0-alpha",
-      "summary": "ConvRulesEditor keeps each rule book's encoding (ASCII-7 to UTF-16 BOM), asks before a lossy save, and raises a refused source to UTF-8 with BOM on a yes",
+      "summary": "ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel)",
       "intro": "Work with non-ASCII captions and names without the editor turning them into question marks.",
       "wikiPage": "convrules-editor-encoding",
       "surfaces": [
@@ -6000,7 +6000,7 @@
           "command": "ConvRulesEditor.exe > File > Save"
         },
         {
-          "ask": "Why does the Convert tab ask to raise a .pas to UTF-8 with BOM?",
+          "ask": "Why does the Convert tab ask before converting, listing book line:col and U+XXXX?",
           "command": "ConvRulesEditor.exe > Convert tab > Convert"
         },
         {
