@@ -81,8 +81,9 @@ drag-lint schema --db <file.sqlite> --format json
 ```
 
 That carries every column plus, where the vocabulary is closed, the enumerated
-values -- `refs.kind` is exactly {`read`, `call`, `member-access`, `write`,
-`type_use`}, and `symbols.section` has three values, one of which is the empty
+values -- `refs.kind` is exactly {`attribute`, `call`, `di-resolve`,
+`di-unresolved`, `event-binding`, `member-access`, `read`, `sql_table_ref`,
+`type_use`, `write`}, and `symbols.section` has three values, one of which is the empty
 string. A query that assumes a value which does not exist returns nothing and
 reads like an answer. When a query does fail, the error names this command.
 

@@ -2,7 +2,9 @@
 
 Opens the call graph rooted at the symbol represented by a Structure-tree
 node. Reach for it when you want to see who calls (or is called by) a
-symbol you are already looking at in the Structure outline.
+symbol you are already looking at in the Structure outline. It opens the
+dock's Call Graph (Butterfly) tab with callers AND callees, depth 3 in each
+direction (the same path as [Call Graph (Butterfly)](Call-Graph-Butterfly)).
 
 ## Reaching it in the IDE
 
@@ -14,7 +16,9 @@ then right-click a node in the tree and choose "Show in Call Graph".
 
 ## Running it from the CLI
 
-The feature map lists the underlying verb as `reverse-calltree`. From the
+The feature map lists the underlying verb as `reverse-calltree`; the IDE runs it
+twice with `--depth 3 --format json` (once plain for callers, once with
+`--direction callees`) and composes the Butterfly tab from both. From the
 usage banner:
 
 ```

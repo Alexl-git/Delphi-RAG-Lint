@@ -64,8 +64,8 @@ drag-lint query type-usage --in src\doc\DRagLint.Doc.GitSince.pas ^
 
 ```
 file: src\doc\DRagLint.Doc.GitSince.pas
-  TStringBuilder                   REFERENCED  read=1 type_use=1 member-access=1   first line 100
-  THandle                          REFERENCED  type_use=2                          first line 93
+  TStringBuilder                   REFERENCED  read=1 type_use=1 member-access=1              first line 102
+  THandle                          REFERENCED  type_use=2                                     first line 95
   TStringList                      -
   TDictionary                      -
 2 of 4 name(s) referenced (name-keyed: a same-named project type is indistinguishable)

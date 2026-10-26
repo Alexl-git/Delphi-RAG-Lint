@@ -6,10 +6,12 @@ circular references, or a project's dependency graph feels tangled.
 
 ## Running it from the CLI
 ```
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
 ```
 `--edges` and `--causes` add detail to the cycle report; `--plan` produces the
-refactoring playbook; `--format` selects `json` or `text` output. `--fix` makes the edits
+refactoring playbook; `--f2047` narrows the report to the interface-only cycles
+the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
+`--format` selects `json` or `text` output. `--fix` makes the edits
 for you -- see [Fix it mechanically](#fix-it-mechanically-cycles---fix) below.
 
 ## What `--plan` gives you
@@ -56,6 +58,7 @@ and proves them with the compiler.
 ```
 drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> [--cycle <n> | --unit <stem>]
                  [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile]
+                 [--shadow-out <dir>] [--rsvars <rsvars.bat>]
                  [--platform win32|win64] [--library-db <lib.sqlite>] [--rules-dir <dir>]
                  [--format json|text]
 ```
@@ -174,10 +177,11 @@ The engine never guesses; every kind it can give:
   `overloaded-routine`, `signature-unknown`, `qualified-ref`, `routine-not-called`,
   `init-order`, `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
   pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
-  reused, a different one gets the lowest free suffix), `unit-leaves-program` (the declaring unit is used only by the
-  consumer and the program's `.dpr` does not list it: after the cut the linker drops it, its
-  initialization never assigns the pointer and the call is a nil call at run time -- add the
-  unit to the `.dpr` uses; a `DCCReference` alone does not link it).
+  reused, a different one gets the lowest free suffix). `unit-leaves-program` is NOT a refusal
+  any more (since 1.34.1): when the declaring unit is used only by the consumer and the
+  program's `.dpr` does not list it, the plan adds the unit to the `.dpr` uses (and a
+  `DCCReference` to the `.dproj` when absent), because after the cut the linker would drop it,
+  its initialization would never assign the pointer and the call would be a nil call at run time.
 * **R2 (member hand-over):** `member-write` (a plain write `F := v` is carried by a read/write
   property with a one-line setter; `Inc` / `Dec(F)`, `F` passed to a var / out parameter and a
   write into a record-typed member are refused), `construction`, `class-method` (an instance
@@ -203,7 +207,8 @@ refusals above name, stay human decisions.
 
 ### Per-file finding
 
-`lint <file> --db <db> --format json` reports `circular-uses` on every unit of a cycle, with
+`lint <file> --db <db> --format json` reports `circular-uses` on every unit of a cycle, at the
+first intra-cycle `uses` entry of that file (implementation section preferred), with
 `"fix_hint": "cycles --fix --project \"<X.dproj>\" --db \"<db>\" --unit <stem>"`; `lint-all`
 keeps one finding per cycle and no hint.
 
@@ -220,11 +225,12 @@ keeps one finding per cycle and no hint.
   `--apply`).
 
 Every IDE-started run passes the IDE's active platform as `--platform`. The IDE gives each
-cycle-fix job a 120 minute limit: above the longest run the engine's own limits allow one
-`--apply` (three builds of up to 30 minutes -- baseline, after, one repair rebuild -- plus a
-re-index and a `cycles` run of up to 10 minutes each), so the engine always times out and
-rolls back first; a kill by the IDE would bypass the rollback. A `--part all` iteration gets
-the same 120 minutes.
+cycle-fix job a 130 minute limit: above the longest run the engine's own limits allow one
+`--apply` (120 minutes: three builds of up to 30 minutes -- baseline, after, one repair
+rebuild -- plus the pre-plan re-index, the re-index and a `cycles` run of up to 10 minutes
+each; the engine bounds each build at 30 minutes), plus 10 minutes of slack, so the engine
+always times out and rolls back first; a kill by the IDE would bypass the rollback. A
+`--part all` iteration gets the same 130 minutes.
 
 ## What it needs
 Required. You must have indexed the project before running this -- cycle
