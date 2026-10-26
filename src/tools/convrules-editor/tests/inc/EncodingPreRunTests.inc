@@ -80,6 +80,9 @@ begin
       Inc(Asked);
       Result:= mrYes;
     end);
+  Check('prerun.plan.yes.keeps.every.place', Length(Plan.Notes) = Length(Places), IntToStr(Length(Plan.Notes)));
+  Check('prerun.plan.yes.note.text', (Length(Plan.Notes) > 0) and PlaceNoteText(Plan.Notes[0]).StartsWith('encoding: cyr.rules ')
+    and PlaceNoteText(Plan.Notes[0]).Contains('U+0414') and PlaceNoteText(Plan.Notes[0]).Contains('a.pas'));
   Check('prerun.plan.yes.raises', (Asked = 2) and not Plan.Stop and (Length(Plan.RaiseFiles) = 2)
     and (Plan.RaiseFiles[0] = 'a.pas') and (Plan.RaiseFiles[1] = 'b.pas'), IntToStr(Asked));
   Asked:= 0;
@@ -91,12 +94,23 @@ begin
     end);
   Check('prerun.plan.no.stops.change.rules', (Asked = 1) and Plan.Stop and Plan.ChangeRules and (Length(Plan.RaiseFiles) = 0)
     and (Length(Plan.Places) = 2));
+  Check('prerun.plan.no.keeps.stopping.places', Length(Plan.Notes) = 2);
   Plan:= PreRunPlan(Places, True,
     function(const AUnitPas, AQuestion: string; ACanRaise: Boolean): Integer
     begin
       Result:= mrCancel;
     end);
   Check('prerun.plan.cancel', Plan.Stop and not Plan.ChangeRules and (Length(Plan.RaiseFiles) = 0));
+  Check('prerun.plan.cancel.adds.no.notes', Length(Plan.Notes) = 0);
+  // Yes on the first unit, Cancel on the second: nothing is kept
+  Asked:= 0;
+  Plan:= PreRunPlan(Places, True,
+    function(const AUnitPas, AQuestion: string; ACanRaise: Boolean): Integer
+    begin
+      Inc(Asked);
+      Result:= if Asked = 1 then mrYes else mrCancel;
+    end);
+  Check('prerun.plan.yes.then.cancel.adds.no.notes', Plan.Stop and (Length(Plan.Notes) = 0) and (Length(Plan.RaiseFiles) = 1));
   // a Yes where raising is not possible counts as No
   Plan:= PreRunPlan(Places, False,
     function(const AUnitPas, AQuestion: string; ACanRaise: Boolean): Integer
