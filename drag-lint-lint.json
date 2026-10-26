@@ -18,6 +18,7 @@
     "already exempts this exact directory for this exact reason."
   ],
   "exclude_paths": [
-    "*\\third_party\\*"
+    "*\\third_party\\*",
+    "*\\src\\cli\\DRagLint.CLI.HelpText.pas"
   ]
 }

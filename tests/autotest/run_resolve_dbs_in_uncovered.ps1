@@ -16,6 +16,9 @@ Arms:
   B  uncovered file --json: stdout is exactly [], stderr NOTE names the file
   C  positive control: a covered file prints its DB and NO note
   D  positive control: a covered file --json is a one-element array, no note
+  E  X-10: config covers the file but its index is not built: the DB path is still printed,
+     stderr NOTE says the index is not built and names the DB (stdout/exit unchanged)
+  F  positive control: once the DB file exists, no "not built" note
 
 Usage: pwsh -NoProfile -File tests\autotest\run_resolve_dbs_in_uncovered.ps1 [-Exe <drag-lint.exe>]
 #>
@@ -83,6 +86,15 @@ try {
   try { $dArr = @($d.Out | ConvertFrom-Json) } catch { $dArr = @() }
   Check 'D: covered --json -- one DB' (($dArr.Count -eq 1) -and ($dArr[0] -like '*App.sqlite')) "stdout='$($d.Out)'"
   Check 'D: covered --json -- no NOTE' ($d.Err -notmatch 'NOTE: no index covers') "stderr='$($d.Err)'"
+  # E/F (X-10): the config itself names the root, but the index was never built.
+  $e = Invoke-In $covered
+  $notBuilt = 'NOTE: the config covers ' + [regex]::Escape($covered) + ' but its index is not built'
+  Check 'E: config root, index not built -- exit 0 and DB still printed' (($e.Exit -eq 0) -and ($e.Out -like '*App.sqlite')) "exit=$($e.Exit) stdout='$($e.Out)'"
+  Check 'E: config root, index not built -- stderr NOTE names file and DB' (($e.Err -match $notBuilt) -and ($e.Err -match 'App\.sqlite')) "stderr='$($e.Err)'"
+  New-Item -ItemType Directory -Path "$WorkDir\cov\_D-RAG" -Force | Out-Null
+  [IO.File]::WriteAllText("$WorkDir\cov\_D-RAG\App.sqlite", 'x', [Text.Encoding]::ASCII)
+  $f2 = Invoke-In $covered
+  Check 'F: index file exists -- no not-built NOTE' ($f2.Err -notmatch 'is not built') "stderr='$($f2.Err)'"
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
