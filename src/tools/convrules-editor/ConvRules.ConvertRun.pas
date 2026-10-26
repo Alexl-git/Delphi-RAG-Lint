@@ -515,7 +515,7 @@ const
   /// <summary>The lower-the-book question (Yes / No): book name, LevelName(Current), LevelName(Offer).</summary>
   ASK_LOWER_FMT = '%s is saved as %s but every character in it fits %s. Lower it before converting (a normal Save with backup)? Yes = lower, No = keep it as it is.';
   /// <summary>The status / note of a lowering that did not happen: book name.</summary>
-  LOWER_ABORTED_FMT = 'Lowering of %s aborted -- the book was not changed.';
+  LOWER_ABORTED_FMT = 'Lowering of %s aborted -- the book may be unchanged (check the file and its backup).';
   /// <summary>The note of a lowering that happened: book name, LevelName(level).</summary>
   LOWERED_FMT = 'Saved %s as %s before converting (the old file kept as a backup).';
 

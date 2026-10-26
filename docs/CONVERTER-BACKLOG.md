@@ -57,6 +57,8 @@ before working on an item.**
     (ConvertTab.pas:669-683, Engine.pas:1659-1667) -- features switch off naming the wrong cause.
   * **R3** (M) Save writes TEncoding.ASCII: non-ASCII in a rule book silently becomes '?'
     (MainForm.pas:7696, WorkingSet.pas:546, Engine.pas:3269); validation passes on the '?'.
+    CLOSED 2026-10-26 (encoding Tasks 2-4): every user-file write goes through WriteTextAtLevel / EncodeText
+    after PreSaveDecision; the only TEncoding.ASCII write left is the editor's own skip list (MainForm).
   * **R4** (M) batch cancel between chunks leaves units with book A but not B, reported "not
     reached" (ConvertRunner.pas:1737-1742) -- breaks the per-unit "never some books" invariant.
   * **R5** (L) the batch per-entry path never reads the 1.33 per-entry `exit_code`

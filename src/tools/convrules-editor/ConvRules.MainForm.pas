@@ -108,6 +108,7 @@ type
       FEngine   : TEngineAdapter;
       FFilePath : string        ;
       FSnapshot : string        ; // FBook.Snapshot at load / New / last successful save
+      FSavedLevel: TTextLevel   ; // FBookLevel at load / New / last successful save (with FSnapshot: BookIsDirty)
       FBookLevel: TTextLevel    ; // the open book's encoding: detected on open, tlAscii7 for a new book; File > Encoding sets it, Save checks against it
       FUtf16BomNoted: Boolean   ; // NOTE_UTF16_BOM_ADDED already shown for this book (D-B: said once)
       FMnuEncoding: array[TTextLevel] of TMenuItem; // File > Encoding radio items; tlUtf16 has none (D-B: never written without a BOM)
@@ -3069,7 +3070,7 @@ end;
 procedure TConvRulesForm.EncodingMenuClick(Sender: TObject);
 begin
   SetBookLevel(TTextLevel((Sender as TMenuItem).Tag));
-  SetStatus(Format('Encoding set to %s -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
+  SetStatus(Format('Encoding set to %s (unsaved) -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
 end;
 
 procedure TConvRulesForm.SetBookLevel(ALevel: TTextLevel);
@@ -4609,6 +4610,7 @@ begin
   LoadText(LText, APath);
   FUtf16BomNoted:= False;
   SetBookLevel(LDetected.Level);
+  FSavedLevel:= FBookLevel; // the freshly opened book is clean
   var LNote: string:= '';
   if not LDetected.Sure then
     LNote:= ' -- ' + LDetected.Note;
@@ -7188,6 +7190,7 @@ begin
       FLblFile.Caption:= NewPath;
       FUtf16BomNoted:= False;
       SetBookLevel(tlAscii7); // a new book, as File > New
+      FSavedLevel:= FBookLevel;
       FActiveHdr:= -1;
       RefreshRulesList;
       RefreshUnitList;
@@ -7714,6 +7717,7 @@ begin
   LoadText('', '');
   FUtf16BomNoted:= False;
   SetBookLevel(tlAscii7);
+  FSavedLevel:= FBookLevel;
   SetStatus('New rule book -- File > Save As... to give it a name.');
 end;
 
@@ -7727,7 +7731,7 @@ var
   LName: string;
 begin
   CommitPendingDepth; // the guard must see a pick still waiting on its timer
-  if FBook.Snapshot = FSnapshot then
+  if not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
     Exit(True);
   if FFilePath <> '' then
     LName:= ExtractFileName(FFilePath)
@@ -7759,7 +7763,7 @@ var
 begin
   var LOpen: Boolean:= (FFilePath <> '') and SameText(ExpandFileName(APath), ExpandFileName(FFilePath));
   CommitPendingDepth; // the dirty check must see a pick still waiting on its timer
-  if LOpen and (FBook.Snapshot = FSnapshot) then
+  if LOpen and not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
   begin
     var LOldLevel: TTextLevel:= FBookLevel;
     SetBookLevel(ALevel);
@@ -7873,13 +7877,9 @@ begin
       LLevelText:= ' as ' + LevelName(LWriteLevel);
       SetBookLevel(LWriteLevel);
     end;
-    var LNoteText: string:= '';
-    if (LDecision.Action = psaWrite) and (LDecision.Note <> '') and not ((LDecision.Note = NOTE_UTF16_BOM_ADDED) and FUtf16BomNoted) then
-      LNoteText:= ' ' + LDecision.Note;
-    if LDecision.Note = NOTE_UTF16_BOM_ADDED then
-      FUtf16BomNoted:= True;
+    var LNoteText: string:= Utf16BomNote(LDecision, FUtf16BomNoted);
 
-    // 3) validate what was saved: the syntax pass over the whole text, plus each
+    // 5) validate what was saved: the syntax pass over the whole text, plus each
     //    block that CHANGED since the last load / save with its OWN From/To pair
     //    (owner ruling 2026-10-05: "The edited saved block should be validated.
     //    Stuff that is unchanged is presumed validated earlier."). One pair for the
@@ -7927,7 +7927,10 @@ begin
     Result:= True; // the file IS on disk; a failed validation is a report, not a failure
   finally
     if LBytesWritten then
-      FSnapshot:= FBook.Snapshot
+    begin
+      FSnapshot:= FBook.Snapshot;
+      FSavedLevel:= FBookLevel;
+    end
     else
     begin
       FFilePath:= LOldPath;

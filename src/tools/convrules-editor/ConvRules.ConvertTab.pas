@@ -1732,6 +1732,9 @@ begin
     var LName: string:= ExtractFileName(LCand.Path);
     if MessageDlg(Format(ASK_LOWER_FMT, [LName, LevelName(LCand.Current), LevelName(LCand.Offer)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
       Continue;
+    // LowerBook may run the editor's SaveBook, which calls RefreshBooks on THIS tab mid-click. Safe: the run's Job.Books
+    // holds path copies, RefreshBooks keeps order and checks by path, and FRunning is still False so it completes;
+    // the status it writes is replaced by StartRun's.
     var LAbort: string:= FHost.LowerBook(LCand.Path, LCand.Offer);
     Result:= Result + [if LAbort = '' then Format(LOWERED_FMT, [LName, LevelName(LCand.Offer)]) else LAbort];
   end;
