@@ -208,6 +208,9 @@ type
     FIndex   : TChartsIndex;
     FReader  : TSourceReader;
     FNonClass: TDictionary<string, Boolean>;
+    FFactsProbed: Boolean;
+    FHasFacts   : Boolean;
+    function FactIndexStats: TExceptionStats;
   public
     /// <summary>Constructor: the helpers over one index.</summary>
     /// <param name="pIndex">The Delphi index; not owned.</param>
@@ -235,6 +238,15 @@ type
     /// <remarks>Port of Get-ExceptionIndexStats (Emit-Common.ps1:2740). The PS per-run cache
     /// is not ported: a caller keeps the result.</remarks>
     function IndexStats: TExceptionStats;
+    /// <summary>Whether this index carries the raise / handle facts (refs.kind raise, raise-expr,
+    /// reraise, handle, handle-all), so a raise or handler site is joined by kind instead of being
+    /// classified from the source text around a read / type_use.</summary>
+    /// <returns>True when refs holds at least one row of the five kinds. Probed once, then cached.</returns>
+    /// <remarks>Keyed on the rows, not on the extractor version: the version that adds them is
+    /// bumped once by the 1.36.0 merge, and a version bump re-parses EVERY file, so a DB is either
+    /// all-facts or none. A post-bump DB with no raise and no handler anywhere reads False and takes
+    /// the source path, which finds nothing either. Spec 2026-10-26-extract-raise-handle-facts 5.1.</remarks>
+    function HasRaiseHandleFacts: Boolean;
   end;
 
 /// <summary>Classifies ONE name-filtered ref by the stripped text around it.</summary>
@@ -260,6 +272,14 @@ function ExceptionSourceRowsIn(const pLines: TArray<string>; pFrom, pTo: Integer
 /// <returns>'(&lt;col&gt; GLOB ''E[A-Z]*[a-z]*'' OR &lt;col&gt; = ''Exception'')'.</returns>
 /// <remarks>Port of Get-ExceptionNameSql (Emit-Common.ps1:2514).</remarks>
 function ExceptionNameSql(const pColumn: string): string;
+
+/// <summary>The five raise / handle fact kinds as a SQL IN-list body.</summary>
+/// <returns>'''raise'',''raise-expr'',''reraise'',''handle'',''handle-all''' -- from the REF_KIND_*
+/// constants of DRagLint.Core.Model, so the extractor and the chart read one declaration.</returns>
+/// <remarks>Every name-filtered candidate query excludes these kinds: a fact row sits on the same
+/// identifier as the read / type_use it describes and must never be counted as a second,
+/// dropped candidate.</remarks>
+function ExceptionFactKindsSql: string;
 
 /// <summary>The try-blocks of one span, from a nesting scan of stripped lines.</summary>
 /// <param name="pLines">Stripped lines.</param>
@@ -312,6 +332,7 @@ uses
   System.RegularExpressions
   , System.Math
   , System.Generics.Defaults
+  , DRagLint.Core.Model
   ;
 
 const
@@ -475,6 +496,12 @@ end;
 function ExceptionNameSql(const pColumn: string): string;
 begin
   Result:= Format('(%0:s GLOB ''E[A-Z]*[a-z]*'' OR %0:s = ''Exception'')', [pColumn]);
+end;
+
+function ExceptionFactKindsSql: string;
+begin
+  Result:= QuotedStr(REF_KIND_RAISE) + ',' + QuotedStr(REF_KIND_RAISE_EXPR) + ',' + QuotedStr(REF_KIND_RERAISE) + ',' +
+    QuotedStr(REF_KIND_HANDLE) + ',' + QuotedStr(REF_KIND_HANDLE_ALL);
 end;
 
 type
@@ -881,15 +908,92 @@ begin
   Result.Rows:= ExceptionSourceRowsIn(FReader.StrippedSourceLines(FReader.ReadPath(pPath)), pFrom, pTo, pSkip);
 end;
 
-function TExceptionIndex.IndexStats: TExceptionStats;
+function TExceptionIndex.HasRaiseHandleFacts: Boolean;
+begin
+  if not FFactsProbed then
+  begin
+    var Rows:= FIndex.Query('SELECT 1 AS x FROM refs WHERE kind IN (' + ExceptionFactKindsSql + ') LIMIT 1');
+    try
+      FHasFacts:= Rows.Count > 0;
+    finally
+      Rows.Free;
+    end;
+    FFactsProbed:= True;
+  end;
+  Result:= FHasFacts;
+end;
+
+{ IndexStats over the facts: a name-filtered candidate is a raise / handle when a raise / handle
+  fact sits on its identifier (same file, line, column), else it is dropped. Raise and handle sites
+  are the exception-named FACT rows, so a qualified `raise U.EFoo.Create` (whose only candidate
+  is the member-access on EFoo) is a raise site. Nothing reads source: Stale stays 0. }
+function TExceptionIndex.FactIndexStats: TExceptionStats;
 begin
   Result:= Default(TExceptionStats);
   var Files:= TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal);
   var RaiseAt:= TDictionary<Integer, Boolean>.Create;
   var HandleAt:= TDictionary<Integer, Boolean>.Create;
+  var FactAt:= TDictionary<string, Boolean>.Create;
+  var Rows:= FIndex.AllRows('SELECT r.id AS id, r.kind AS kind, r.name_text AS name, r.start_line AS line, r.start_col AS col, ' +
+    'r.file_id AS fid, r.enclosing_symbol_id AS encl, f.path AS path FROM refs r JOIN files f ON f.id = r.file_id WHERE ' +
+    ExceptionNameSql('r.name_text') + ' AND r.kind NOT IN (' + QuotedStr(REF_KIND_RAISE_EXPR) + ',' +
+    QuotedStr(REF_KIND_RERAISE) + ',' + QuotedStr(REF_KIND_HANDLE_ALL) + ')', 'r.id');
+  try
+    for var R in Rows do
+    begin
+      var IsRaise:= R.S('kind') = REF_KIND_RAISE;
+      if not (IsRaise or (R.S('kind') = REF_KIND_HANDLE)) or not IsExceptionTypeName(R.S('name')) then
+        Continue;
+      FactAt.AddOrSetValue(Format('%d:%d:%d', [R.I('fid'), R.I('line'), R.I('col')]), True);
+      if IsRaise then
+        Inc(Result.RaiseSites)
+      else
+        Inc(Result.HandleSites);
+      if R.I('encl') = 0 then
+        Continue;
+      if IsRaise then
+        RaiseAt.AddOrSetValue(R.I('encl'), True)
+      else
+        HandleAt.AddOrSetValue(R.I('encl'), True);
+    end;
+    for var R in Rows do
+    begin
+      if (R.S('kind') = REF_KIND_RAISE) or (R.S('kind') = REF_KIND_HANDLE) or not IsExceptionTypeName(R.S('name')) then
+        Continue;
+      Inc(Result.Candidates);
+      var P:= R.S('path');
+      if not Files.ContainsKey(P) then
+        Files.Add(P, FReader.SourceFresh(P));
+      if not FactAt.ContainsKey(Format('%d:%d:%d', [R.I('fid'), R.I('line'), R.I('col')])) then
+        Inc(Result.Dropped);
+    end;
+    Result.RaiseRoutines:= RaiseAt.Count;
+    Result.HandleRoutines:= HandleAt.Count;
+    Result.Files:= Files.Count;
+    for var Fresh in Files.Values do
+      if Fresh then
+        Inc(Result.FreshFiles);
+  finally
+    Rows.Free;
+    FactAt.Free;
+    HandleAt.Free;
+    RaiseAt.Free;
+    Files.Free;
+  end;
+end;
+
+function TExceptionIndex.IndexStats: TExceptionStats;
+begin
+  if HasRaiseHandleFacts then
+    Exit(FactIndexStats);
+  Result:= Default(TExceptionStats);
+  var Files:= TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal);
+  var RaiseAt:= TDictionary<Integer, Boolean>.Create;
+  var HandleAt:= TDictionary<Integer, Boolean>.Create;
+  { the fact kinds are never candidates (ExceptionFactKindsSql); on a pre-facts DB they match nothing }
   var Rows:= FIndex.AllRows('SELECT r.id AS id, r.kind AS kind, r.name_text AS name, r.start_line AS line, r.start_col AS col, ' +
     'r.end_col AS ecol, r.enclosing_symbol_id AS encl, f.path AS path FROM refs r JOIN files f ON f.id = r.file_id WHERE ' +
-    ExceptionNameSql('r.name_text'), 'r.id');
+    ExceptionNameSql('r.name_text') + ' AND r.kind NOT IN (' + ExceptionFactKindsSql + ')', 'r.id');
   try
     for var R in Rows do
     begin

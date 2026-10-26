@@ -132,6 +132,36 @@ if ($null -ne $u) {
 $uTxt = (& $Exe usages --name EFoo --db $db 2>$null) -join "`n"
 Check 'E. text usages prints raises/handles counts' ($uTxt -match 'raises: 1\s+handles: 3') $uTxt
 
+# F. exception-paths reads the facts (spec 5.1): raise/handle sites joined by refs.kind, the five
+#    kinds never counted as dropped candidates. Exact values, worked from the fixture by hand:
+#    QualifiedRaise's `raise System.SysUtils.EArgumentException.Create` is a raise site (the
+#    source heuristic saw only `read System` and missed it), so IndexRaise is 4 and its
+#    member-access is no longer dropped (IndexDropped 9 = 19 candidates - 4 - 6).
+function Get-ChartFields([string]$EngineExe, [string]$Db, [string]$Target, [string]$Tag) {
+  $root = Join-Path $WorkDir "charts-$Tag"
+  $o = & $EngineExe ask exception-paths --target $Target --db $Db --out-root $root --plain 2>&1
+  $meta = Get-ChildItem $root -Recurse -Filter meta.json -ErrorAction SilentlyContinue |
+    Where-Object { $_.DirectoryName -like ('*' + ($Target -replace '\.', '_')) } | Select-Object -First 1
+  if ($null -eq $meta) { Write-Host "    (no meta.json for $Target; ask said: $(($o | Select-Object -First 3) -join ' | '))"; return $null }
+  return (Get-Content $meta.FullName -Raw | ConvertFrom-Json).emitter
+}
+$fx = @{}
+foreach ($t in 'SimpleRaise', 'QualifiedRaise', 'HandlerShapes', 'ReraiseAt') {
+  $fx[$t] = Get-ChartFields $Exe $db "RaiseHandle.$t" "new-$t"
+}
+Check 'F. the chart answered for all four targets' (@($fx.Values | Where-Object { $null -eq $_ }).Count -eq 0)
+if (@($fx.Values | Where-Object { $null -eq $_ }).Count -eq 0) {
+  $q1 = $fx['QualifiedRaise']
+  Check 'F. qualified raise is a raise site (Raises=1, EArgumentException, Dropped=0)' (($q1.Raises -eq 1) -and ($q1.RaiseTypeNames -ceq 'EArgumentException') -and ($q1.Dropped -eq 0)) "Raises=$($q1.Raises) names=$($q1.RaiseTypeNames) Dropped=$($q1.Dropped)"
+  $s1 = $fx['SimpleRaise']
+  Check 'F. SimpleRaise: Raises=3 at 44,46,47, Dropped=0' (($s1.Raises -eq 3) -and ($s1.RaiseLines -ceq '44,46,47') -and ($s1.Dropped -eq 0)) "Raises=$($s1.Raises) lines=$($s1.RaiseLines) Dropped=$($s1.Dropped)"
+  $h1 = $fx['HandlerShapes']
+  Check 'F. HandlerShapes: Handles=4 at 65,67,68,73, Dropped=0 (handle rows are not dropped candidates)' (($h1.Handles -eq 4) -and ($h1.HandleLines -ceq '65,67,68,73') -and ($h1.Dropped -eq 0)) "Handles=$($h1.Handles) lines=$($h1.HandleLines) Dropped=$($h1.Dropped)"
+  $r1 = $fx['ReraiseAt']
+  Check 'F. ReraiseAt: Dropped=2 (E: EFoo, EFoo.Create not raised)' ($r1.Dropped -eq 2) "Dropped=$($r1.Dropped)"
+  Check 'F. index stats: Candidates=19 Raise=4 Handle=6 Dropped=9' (($s1.IndexCandidates -eq 19) -and ($s1.IndexRaise -eq 4) -and ($s1.IndexHandle -eq 6) -and ($s1.IndexDropped -eq 9)) "C=$($s1.IndexCandidates) R=$($s1.IndexRaise) H=$($s1.IndexHandle) D=$($s1.IndexDropped)"
+}
+
 # D. zero-diff on the existing kinds (optional)
 if ($BaselineExe -ne '') {
   $BaselineExe = (Resolve-Path $BaselineExe).Path
@@ -145,6 +175,11 @@ if ($BaselineExe -ne '') {
   $before = @($r0 | ForEach-Object { ($_.PSObject.Properties.Value) -join '|' })
   $after  = @($r1 | ForEach-Object { ($_.PSObject.Properties.Value) -join '|' })
   Check "D. existing kinds identical to the baseline engine ($($before.Count) rows)" (($before.Count -gt 0) -and (Compare-Exact $before $after)) "before=$($before.Count) after=$($after.Count)"
+  # the fallback: -Exe over a pre-facts DB still classifies by source, exactly as before
+  $b1 = Get-ChartFields $Exe $db0 'RaiseHandle.SimpleRaise' 'old-SimpleRaise'
+  $b2 = Get-ChartFields $Exe $db0 'RaiseHandle.QualifiedRaise' 'old-QualifiedRaise'
+  Check 'D. fallback (pre-facts DB): source classification, IndexRaise=3 IndexDropped=10, qualified raise missed' (
+    ($null -ne $b1) -and ($null -ne $b2) -and ($b1.IndexRaise -eq 3) -and ($b1.IndexDropped -eq 10) -and ($b2.Raises -eq 0) -and ($b1.RaiseLines -ceq '44,46,47')) "R=$($b1.IndexRaise) D=$($b1.IndexDropped) qualified=$($b2.Raises)"
 }
 
 if ($script:Failed) { Write-Host 'run_raise_handle_refs: FAIL' -ForegroundColor Red; exit 1 }
