@@ -4,7 +4,7 @@
   "group": "editor-integration",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.4.0-alpha",
   "summary": "What every item in the drag-lint menu does",
   "intro": "Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing.",
   "wikiPage": "IDE-Menu-Reference",
@@ -30,7 +30,7 @@
       "command": "drag-lint --help"
     }
   ],
-  "notes": "seed: since unknown",
+  "notes": "since: the wiki page IDE-Menu-Reference.md first shipped in v1.4.0-alpha (2026-08-17)",
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

@@ -40,12 +40,12 @@
         }
       ],
       "helpOrder": 56,
-      "help": ["  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts", "     --project removes that tag (entries whose set empties go); --rename renames it; --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply"]
+      "help": ["  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts", "     --project removes that tag (entries whose set empties go); --rename <Tag>=<New> renames it and alone is enough (its left side names the tag; if --project is also given it must match); --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply"]
     },
     {
       "type": "ide-menu",
       "path": "drag-lint > Generate & Export > Forget Documentation Project Tag...",
-      "steps": ["Choose drag-lint > Generate & Export > Forget Documentation Project Tag...", "Give the scope and the project tag", "Without applying it is a dry run; confirm to apply"]
+      "steps": ["Choose drag-lint > Generate & Export > Forget Documentation Project Tag...", "Enter the project tag to forget; the scope is the active project's folder and --rename is CLI-only", "Choose whether to apply: without applying it is a dry run (preview only)"]
     },
     {
       "type": "ide-menu",

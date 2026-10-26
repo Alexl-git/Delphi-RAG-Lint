@@ -39,7 +39,7 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."],
+  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership."],
   "questions": [
     {
       "ask": "Where is this symbol declared?",
