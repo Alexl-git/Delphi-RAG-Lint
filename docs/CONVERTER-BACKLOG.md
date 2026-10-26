@@ -31,15 +31,18 @@ before working on an item.**
   capability) or decode the escapes; add a model test with a non-ASCII name before re-pinning.
 * 2026-10-26: L2 #migrate D5 + D6-B merged; ENGINE lane CONV (pre-run encoding question) reviewed +
   merged 45d84771. Its follow-ups (CONVERTER, review a1514a9a, all minor):
-  * **ENC-N1** (M) narrow `ConvertEncoding.BookPlaces` (:172-211) to lines of #convert blocks that apply to
-    the unit (match headers against `Inheritance.AnalyzeUnits` / `ListDfmInstances` / `AncestorChain`;
-    needs the book parsed through Model; decide units without a .dfm). Today any non-comment line
-    counts -> a needless (lossless) raise.
+  * **ENC-N1** DONE (lane N13, branch conv/n13-bookplaces): `EncodingPlacesFor` + `FromTypeApplier`.
+    A #convert block's own lines (header, #link, #default, #ignore, #remove, #migrate, #apply, #tag,
+    #warn, #check-ref) count only for a unit whose text .dfm headers (`ListDfmInstances`), .pas
+    identifiers or C8 verdicts (`InheritanceOf`) name its From type; book-scope lines, unit
+    directives, #mapping, #note, pcre/unknown lines always count. DECISION (units without a .dfm):
+    they get the blocks their .pas / C8 analysis names (runtime creators, code uses); a binary or
+    unreadable .dfm, or an unreadable .pas, = every block applies (needless question, never a missed one).
   * **ENC-N2** (S) Yes path: `PreRunQuestion` (:258-266) shows 20 places + "and N more"; also leave
     every place as note rows on Yes (No/Cancel already do). Cancel adds note rows then says
     "cancelled" -- drop them on Cancel.
-  * **ENC-N3** (S) rule text `Copy(Trim(Line),1,80)` (:202) can cut the offending char off: window
-    the excerpt around the column.
+  * **ENC-N3** DONE (lane N13): `RuleExcerpt` windows 80 chars around the column, '...' on a cut
+    side, never splits a surrogate pair.
   * **ENC-N4** (S, perf) `JobRunsBatched` (ConvertRunner.pas:911/1084) goes per-unit for the whole job
     once any RaiseFiles exist: batch the units without a raise.
 
