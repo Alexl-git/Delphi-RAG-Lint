@@ -496,7 +496,7 @@ begin
     if I > 0 then
       Result:= Result + sLineBreak;  // dl:ok concat-in-loop@c7fe -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
     var LLone: string:= if (ALost[I].Code >= SURROGATE_FIRST) and (ALost[I].Code <= SURROGATE_LOW_LAST) then LONE_SURROGATE_TEXT else '';
-    Result:= Result + Format('line %d: U+%.4X', [ALost[I].Line, ALost[I].Code]) + LLone;  // dl:ok concat-in-loop@7389 -- REVIEWED 2026-10-26 at most LOST_CHARS_SHOWN entries (a dialog listing), not a hot path
+    Result:= Result + Format('line %d: U+%.4X', [ALost[I].Line, ALost[I].Code]) + LLone;
   end;
 end;
 

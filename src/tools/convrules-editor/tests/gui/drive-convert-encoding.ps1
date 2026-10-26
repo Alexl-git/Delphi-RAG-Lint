@@ -518,6 +518,7 @@ try {
     Click $refresh; Start-Sleep -Seconds 2
     Click $checkAll; Start-Sleep -Milliseconds 500
     $before = [IO.File]::ReadAllBytes($pas)
+    $bckBefore = @(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count  # the lower run above already backed it up
     Click $conv
     $dlg = WaitCls $p.Id 'TMessageForm' 120
     $txt = if ($dlg -ne [IntPtr]::Zero) { MsgText $dlg } else { '' }
@@ -528,7 +529,7 @@ try {
     RCheck 'raise.prerun.no.stops' ($st -match 'Convert not started: change the rule text') $st
     RCheck 'raise.prerun.no.notes' (@(@([W]::Column($lv, 7)) | Where-Object { $_ -like 'encoding: Raise.rules 1:9 U+0414*FixUnit.pas (ASCII-7)*' }).Count -eq 1) ((@([W]::Column($lv, 7))) -join ' | ')
     $after = [IO.File]::ReadAllBytes($pas)
-    RCheck 'raise.prerun.no.untouched' (([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after)) -and (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -eq 0)) ("head=" + (Head $pas 4))
+    RCheck 'raise.prerun.no.untouched' (([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after)) -and (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -eq $bckBefore)) ("head=" + (Head $pas 4) + " BCK before=$bckBefore after=" + @(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count)
     # Yes = raise FixUnit.pas, then convert: the first run carries --raise-encoding.
     Click $conv
     $dlg = WaitCls $p.Id 'TMessageForm' 120

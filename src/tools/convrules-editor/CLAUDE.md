@@ -42,7 +42,7 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 2838 pass / 0 fail / 20 skip** on main after the close-all lanes (2026-10-26). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 2867 pass / 0 fail / 20 skip** after lane conv-1026 (pre-run encoding question, 2026-10-26). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
   **2738 pass / 5 fail / 0 skip** (1.35.0-alpha-20261025-125433 pin, 2026-10-26; `enc.live.capability` PASSES) -- the 5 are the VARINSP fixture
@@ -66,8 +66,8 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-convert-request.ps1` 28 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
   * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
-  * `drive-save-encoding.ps1` 14 -- Save question, File > Encoding, UTF-16 BOM note
-  * `drive-convert-encoding.ps1` 18 -- Convert tab raise / lower questions (raise.* SKIP without `convert_encoding_guard`)
+  * `drive-save-encoding.ps1` 15 -- Save question, File > Encoding, UTF-16 BOM note
+  * `drive-convert-encoding.ps1` 20 -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
   * `drive-migrate.ps1` 18 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks (`-ProofNoMigrate` = 12 / 6)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
