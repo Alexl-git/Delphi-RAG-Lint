@@ -352,7 +352,7 @@ begin
     try
       Q.Connection:= AStore.GetConnection;
       Q.SQL.Text:= 'SELECT f.path AS p, s.start_line AS sl FROM symbols s ' + 'JOIN files f ON f.id = s.file_id ' + 'WHERE s.kind = ''class'' AND s.name = :n LIMIT 1';
-      Q.ParamByName('n').AsString:= Cls;
+      Q.ParamByName('n').AsWideString:= Cls;
       Q.Open;
       if Q.IsEmpty then Break;
       Path     := Q.FieldByName('p' ).AsString;
@@ -659,7 +659,7 @@ begin
   try
     Q.Connection:= AStore.GetConnection;
     Q.SQL.Text:= 'SELECT * FROM symbols WHERE kind = ''component'' AND name = :n ' + 'AND file_id = :fid LIMIT 1';
-    Q.ParamByName('n'  ).AsString  := AName;
+    Q.ParamByName('n'  ).AsWideString  := AName;
     Q.ParamByName('fid').AsLargeInt:= ADfmFileId;
     Q.Open;
     if not Q.IsEmpty then Result:= AStore.GetSymbolById(Q.FieldByName('id').AsLargeInt);
@@ -693,7 +693,7 @@ begin
   try
     Q.Connection:= AStore.GetConnection;
     Q.SQL.Text:= 'SELECT start_line FROM refs ' + 'WHERE kind = ''event-binding'' AND name_text = :h AND file_id = :fid ' + 'ORDER BY start_line LIMIT 1';
-    Q.ParamByName('h').AsString:= ARoutine;
+    Q.ParamByName('h').AsWideString:= ARoutine;
     Q.ParamByName('fid').AsLargeInt:= ANode.DfmFileId;
     Q.Open;
     if not Q.IsEmpty then
@@ -784,7 +784,7 @@ begin
           'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
           'FROM refs r JOIN files f ON f.id = r.file_id ' +
           'WHERE r.name_text = :rout AND f.language LIKE ''delphi%''';
-        Q.ParamByName('rout').AsString:= ARoutine;
+        Q.ParamByName('rout').AsWideString:= ARoutine;
         Q.Open;
         while not Q.Eof do
         begin
@@ -958,7 +958,7 @@ begin
         // it was correct only because the value happened to be unchanged.
         'WHERE r.name_text = :h AND ' + CallSiteRefKindSql('r') +
         ' AND f.language LIKE ''delphi%''';
-      Q.ParamByName('h').AsString:= AHookField;
+      Q.ParamByName('h').AsWideString:= AHookField;
       Q.Open;
       while not Q.Eof do
       begin
@@ -1325,7 +1325,7 @@ begin
           'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
           'FROM refs r JOIN files f ON f.id = r.file_id ' +
           'WHERE r.name_text = :cls AND f.language LIKE ''delphi%''';
-        Q.ParamByName('cls').AsString:= Y.FormClass;
+        Q.ParamByName('cls').AsWideString:= Y.FormClass;
         Q.Open;
         while not Q.Eof do
         begin
@@ -1342,7 +1342,7 @@ begin
           'SELECT r.file_id AS fid, r.start_line AS sl, f.path AS p ' +
           'FROM refs r JOIN files f ON f.id = r.file_id ' +
           'WHERE r.name_text = :nm AND f.language LIKE ''delphi%''';
-        Q.ParamByName('nm').AsString:= Y.FormName;
+        Q.ParamByName('nm').AsWideString:= Y.FormName;
         Q.Open;
         while not Q.Eof do
         begin
@@ -1734,8 +1734,8 @@ begin
     Q.SQL.Text:=
       'SELECT s.id AS id FROM symbols s JOIN symbols pa ON pa.id = s.parent_id ' +
       'WHERE pa.kind = ''class'' AND pa.name = :o AND s.name = :n LIMIT 1';
-    Q.ParamByName('o').AsString:= AOwner;
-    Q.ParamByName('n').AsString:= AName;
+    Q.ParamByName('o').AsWideString:= AOwner;
+    Q.ParamByName('n').AsWideString:= AName;
     Q.Open;
     if not Q.IsEmpty then Result:= Routine(AStore, Q.FieldByName('id').AsLargeInt);
   finally
@@ -1785,8 +1785,8 @@ begin
       'SELECT DISTINCT r.enclosing_symbol_id AS e FROM refs r ' +
       'JOIN symbols e ON e.id = r.enclosing_symbol_id JOIN symbols pa ON pa.id = e.parent_id ' +
       'WHERE r.name_text = :a AND pa.kind = ''class'' AND pa.name = :o';
-    Q.ParamByName('a').AsString:= AAction;
-    Q.ParamByName('o').AsString:= AOwner;
+    Q.ParamByName('a').AsWideString:= AAction;
+    Q.ParamByName('o').AsWideString:= AOwner;
     Q.Open;
     Fld:= Q.FieldByName('e');
     while not Q.Eof do
@@ -1848,8 +1848,8 @@ begin
     Q.SQL.Text:=
       'SELECT 1 FROM symbols s JOIN symbols pa ON pa.id = s.parent_id ' +
       'WHERE pa.kind = ''class'' AND pa.name = :c AND s.name = :n AND s.kind = ''field'' LIMIT 1';
-    Q.ParamByName('c').AsString:= AFormClass;
-    Q.ParamByName('n').AsString:= AName;
+    Q.ParamByName('c').AsWideString:= AFormClass;
+    Q.ParamByName('n').AsWideString:= AName;
     Q.Open;
     Result:= not Q.IsEmpty;
   finally
@@ -1899,7 +1899,7 @@ begin
       'WHERE f.path = :p AND s.impl_start_line > 0 AND s.impl_start_line <= :l AND s.impl_end_line >= :l ' +
       'AND s.kind IN (''function'', ''procedure'', ''method'', ''constructor'', ''destructor'') ' +
       'ORDER BY s.impl_end_line - s.impl_start_line LIMIT 1';
-    Q.ParamByName('p').AsString := APath;
+    Q.ParamByName('p').AsWideString := APath;
     Q.ParamByName('l').AsInteger:= ALine;
     Q.Open;
     if not Q.IsEmpty then Result:= Routine(AStore, Q.FieldByName('id').AsLargeInt);
@@ -2352,8 +2352,8 @@ begin
       'FROM refs r JOIN files f ON f.id = r.file_id ' +
       'WHERE r.name_text IN (:cls, :nm) AND r.enclosing_symbol_id IS NOT NULL ' +
       'AND f.language LIKE ''delphi%'' ORDER BY f.path, r.start_line';
-    Q.ParamByName('cls').AsString:= AY.FormClass;
-    Q.ParamByName('nm' ).AsString:= AY.FormName;
+    Q.ParamByName('cls').AsWideString:= AY.FormClass;
+    Q.ParamByName('nm' ).AsWideString:= AY.FormName;
     Q.Open;
     FldE:= Q.FieldByName('e');
     FldL:= Q.FieldByName('sl');
