@@ -48,11 +48,13 @@ caller_line, mode`. Before 2026-09-23 the JSON `line` on every row except a
 callback was the caller's DECLARATION line, and the text form printed no line
 for those rows.
 
-**Two known wrong-bind risks, both on BARE enum reads only.** Inside a `with`
+**One known wrong-bind risk, on BARE enum reads only.** Inside a `with`
 whose target the index cannot type (since resolver 1.8.0-alpha the `with` scope
-is modelled, and wherever the target types a with member wins), and inside a
-`{$SCOPEDENUMS ON}` unit, a bare name can bind to an enum value the compiler
-would not have chosen. Verify such a binding against the declaration.
+is modelled, and wherever the target types a with member wins), a bare name can
+bind to an enum value the compiler would not have chosen. Verify such a binding
+against the declaration. A bare read of a `{$SCOPEDENUMS ON}` value is never
+bound to the value since resolver E14 (1.36.0); lint rule `enum-bare-read-scoped`
+reports it -- a warning when the name binds to another symbol, a hint when unbound.
 Qualified reads (`TEnum.Value`) are unaffected.
 
 ## Reaching it in the IDE

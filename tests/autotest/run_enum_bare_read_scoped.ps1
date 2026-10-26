@@ -17,9 +17,14 @@
        code compiles but silently uses that symbol;
    (b) HINT when it stayed UNBOUND: under SCOPEDENUMS ON it does not compile
        (E2003); write TEnum.Value.
+  Only TYPE-PREFIXED values count (csOne, mtWarning: lower-case prefix, then a
+  capital): an un-prefixed value (FMX TAlignLayout.Left) belongs to an enum built
+  to be qualified, and a property Left colliding with it is by design.
   NOT a finding: the qualified form, a value of a non-scoped enum, a scoped
   enum in a unit the site does not use, a const that ALIASES the scoped value
-  (`X = TEnum.X`, the Vcl.Dialogs compatibility idiom), a site in an inactive
+  (`X = TEnum.X`, the Vcl.Dialogs compatibility idiom), an UNBOUND bare name that another
+  symbol also carries (the resolver declined for its own reason -- an untypable
+  with target -- not E2003), a site in an inactive
   branch (the index has no ref there).
 
   Each positive is located by a {#tag} marker on its line; a precondition pins
@@ -67,7 +72,8 @@ type
   TSePlain = (spAlpha, spBeta);
 {$SCOPEDENUMS ON}
   TSeScoped = (ssAlpha, ssBeta);
-  TSeColor = (csOne, csTwo, csThree, csFour, csFive, csSix, csSeven, csProp, csAlias);
+  TSeColor = (csOne, csTwo, csThree, csFour, csFive, csSix, csSeven, csProp, csAlias, csAliasIn, csAliasHere, csWith);
+  TSeAlign = (Left, Client);
 {$SCOPEDENUMS OFF}
   TSeAfter = (saAlpha, saBeta);
 {$IFDEF X4_NEVER_DEFINED}
@@ -81,6 +87,7 @@ type
   TSeParen = (sxAlpha, sxBeta);
 const
   csAlias = TSeColor.csAlias;
+  csAliasIn = uSeTypes.TSeColor.csAliasIn;
 implementation
 end.
 '@
@@ -101,11 +108,15 @@ Emit 'uSeBase.pas' @'
 unit uSeBase;
 interface
 type
+  TSeRec = record
+    csWith: Integer;
+  end;
   TSeBase = class
   protected
     csThree: Integer;
     FProp: Integer;
     property csProp: Integer read FProp;
+    property Left: Integer read FProp;
   end;
 implementation
 end.
@@ -117,6 +128,7 @@ interface
 uses uSeTypes, uSeBase;
 const
   csOne = 1;
+  csAliasHere = uSeTypes.TSeColor.csAliasHere;
 var
   csTwo: Integer;
 type
@@ -137,7 +149,9 @@ var
   csFive: Integer;
   K: Integer;
   X: TSeColor;
+  XS: set of TSeColor;
 begin
+  XS := [];
   K := csOne; {#A_CONST}
   K := csTwo; {#A_VAR}
   K := csThree; {#A_ANCFIELD}
@@ -148,7 +162,13 @@ begin
   X := csSix; {#B_UNBOUND}
   X := TSeColor.csSeven; {#N_QUAL}
   X := csAlias; {#N_ALIAS}
+  if csAliasIn in XS then Exit; {#N_ALIAS_IN}
+  if csAliasHere in XS then Exit; {#N_ALIAS_HERE}
   K := shOnly; {#N_HIDDEN}
+  K := Left; {#N_UNPREFIXED_BOUND}
+  K := Client; {#N_UNPREFIXED_UNBOUND}
+  with NotDeclaredAnywhere do
+    K := csWith; {#N_UNBOUND_OTHER}
 {$IFDEF X4_NEVER_DEFINED}
   X := csSeven; {#N_INACTIVE}
 {$ENDIF}
@@ -262,6 +282,8 @@ Check 'A_FIELD csFour binds to the own field' ((BindOf (L 'A_FIELD') 'csFour') -
 Check 'A_LOCAL csFive binds to the local' ((BindOf (L 'A_LOCAL') 'csFive') -match '^local_var:') (BindOf (L 'A_LOCAL') 'csFive')
 Check 'B_UNBOUND csSix is NOT bound (E14 decline)' ((BindOf (L 'B_UNBOUND') 'csSix') -eq 'NULL') (BindOf (L 'B_UNBOUND') 'csSix')
 Check 'N_ALIAS csAlias binds to the aliasing const' ((BindOf (L 'N_ALIAS') 'csAlias') -eq 'const:uSeTypes.csAlias') (BindOf (L 'N_ALIAS') 'csAlias')
+Check 'N_UNPREFIXED_BOUND Left binds to the ancestor property' ((BindOf (L 'N_UNPREFIXED_BOUND') 'Left') -eq 'property:uSeBase.TSeBase.Left') (BindOf (L 'N_UNPREFIXED_BOUND') 'Left')
+Check 'N_UNBOUND_OTHER csWith (under an untypable with) is NOT bound' ((BindOf (L 'N_UNBOUND_OTHER') 'csWith') -eq 'NULL') (BindOf (L 'N_UNBOUND_OTHER') 'csWith')
 Check 'N_INACTIVE: the index has no ref in the inactive branch' ((BindOf (L 'N_INACTIVE') 'csSeven') -eq '<no ref>') (BindOf (L 'N_INACTIVE') 'csSeven')
 
 Write-Host ''
@@ -289,6 +311,7 @@ Check 'single-file lint --rule agrees on an (a) and a (b) site' `
 Write-Host ''
 Write-Host 'THE NEGATIVE CONTROLS' -ForegroundColor Cyan
 foreach ($t in @('N_QUAL', 'N_QUAL2', 'N_QUAL3', 'N_QUAL4', 'N_ALIAS', 'N_HIDDEN', 'N_INACTIVE',
+                 'N_UNPREFIXED_BOUND', 'N_UNPREFIXED_UNBOUND', 'N_ALIAS_IN', 'N_ALIAS_HERE', 'N_UNBOUND_OTHER',
                  'N_PLAIN', 'N_AFTEROFF', 'N_IFDEFSWITCH', 'N_COMMENTSWITCH')) {
   Check "$t is SILENT" ((HitAt $onOut $t).Count -eq 0) ''
 }

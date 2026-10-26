@@ -36,4 +36,4 @@ Row cap (default 20).
 
 ## Read it carefully
 
-Needs an index resolved at resolver 1.6.0-alpha or later (`index --all --resolve-only`); an older index has no enum bindings and the trace is empty. A BARE enum read inside a routine containing a `with` block, or in a `{$SCOPEDENUMS ON}` unit, can bind wrongly -- verify those against the declaration.
+Needs an index resolved at resolver 1.6.0-alpha or later (`index --all --resolve-only`); an older index has no enum bindings and the trace is empty. A BARE enum read inside a routine containing a `with` block can bind wrongly -- verify it against the declaration. A bare read of a `{$SCOPEDENUMS ON}` value is never bound to the value (resolver E14, 1.36.0): the trace shows only the qualified `TEnum.Value` reads, and lint rule `enum-bare-read-scoped` reports the bare ones.

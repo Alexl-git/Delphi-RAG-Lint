@@ -535,7 +535,9 @@ type
       /// E14): a BARE read (ref kind 'read', no receiver) whose name is the name
       /// of a value of an enum declared under SCOPEDENUMS ON that is VISIBLE
       /// from the site -- declared in this file or in a unit this file names in
-      /// a uses clause. The compiler admits only TEnum.Value there.</summary>
+      /// a uses clause -- and TYPE-PREFIXED (csOne, mtWarning: a lower-case run,
+      /// then a capital, digit or underscore). The compiler admits only
+      /// TEnum.Value there.</summary>
       /// <param name="AFile">Path reported on each finding; not read.</param>
       /// <param name="AStore">Project symbol store; nil yields no findings.</param>
       /// <param name="AFileId">The file's id in AStore; 0 or less yields no
@@ -546,11 +548,18 @@ type
       /// that symbol; the message names it and the TEnum.Value that may have
       /// been meant. A 'hint' when the ref is unbound (or, on an index parsed
       /// before E14, bound to the scoped value itself): the bare spelling is
-      /// E2003, write TEnum.Value. Empty when there is none.</returns>
+      /// E2003, write TEnum.Value -- only when no other symbol in AStore carries
+      /// the name. Empty when there is none.</returns>
       /// <remarks>Not a finding: a qualified read ('member-access' ref), a
       /// value of a non-scoped enum, a scoped enum in a unit the file does not
       /// use, a const declared as an alias of the scoped value (`X = TEnum.X`,
-      /// the Vcl.Dialogs idiom), a site in an inactive branch (no ref).
+      /// the Vcl.Dialogs idiom), a site in an inactive branch (no ref), an
+      /// un-prefixed value (FMX TAlignLayout.Left: an enum built to be qualified,
+      /// whose name colliding with a property Left is by design), an unbound ref
+      /// whose name another symbol carries (the resolver declined for its own
+      /// reason, e.g. an untypable with target). Measured 2026-10-26 on a 12-unit
+      /// VCL/FMX library slice: 941 findings unfiltered, 70 with the prefix test,
+      /// 0 with both (compiling code).
       /// Reads the extractor fact symbols.directives = 'scopedenums' on the
       /// enum type, so an index built before that fact is silent. Looks only
       /// in AStore: a scoped enum known only to the library index is not seen.
@@ -4724,6 +4733,7 @@ var
   Findings: TList<TLintFinding>;
   ByName  : TDictionary<string, TArray<TScopedVal>>; { lower name -> visible scoped values }
   Scoped  : TDictionary<Int64, TSymbol>;             { enum type id -> the type; Id = 0 when not a scoped enum }
+  HasOther: TDictionary<string, Boolean>;            { lower name -> the store holds a symbol of that name that is NOT a scoped value }
   UsedUnits: TArray<string>;
 
   { True when the enum type AEnum is declared in this file or in a unit the
@@ -4737,22 +4747,41 @@ var
       if StartsText(U + '.', AEnum.QualifiedName) then Exit(True);
   end;
 
-  { The visible values of a SCOPEDENUMS ON enum named exactly AName. Cached. }
+  { True for a value spelled with a lower-case type prefix (csOne, mtWarning,
+    fsBold): the legacy convention of an enum designed to be read BARE, so a
+    bare read of it under SCOPEDENUMS ON is the suspicious habit this rule is
+    for. An un-prefixed value (FMX TAlignLayout.Left, .Client, .Size) belongs
+    to an enum designed to be qualified; its name colliding with a property
+    Left or a parameter Size is by design. Measured 2026-10-26 on a 12-unit
+    VCL/FMX library slice: 941 findings without this test, 70 with it. }
+  function IsTypePrefixed(const AName: string): Boolean;
+  begin
+    var I: Integer:= 1;
+    while (I <= Length(AName)) and CharInSet(AName[I], ['a'..'z']) do Inc(I);
+    Result:= (I > 1) and (I <= Length(AName)) and CharInSet(AName[I], ['A'..'Z', '0'..'9', '_']);
+  end;
+
+  { The visible values of a SCOPEDENUMS ON enum named exactly AName, when
+    AName is type-prefixed (IsTypePrefixed). Cached, and records in HasOther
+    whether any other symbol (any kind, anywhere) carries the name. }
   function ScopedValuesNamed(const AName: string): TArray<TScopedVal>;
   begin
     if ByName.TryGetValue(LowerCase(AName), Result) then Exit;
     Result:= nil;
+    if not IsTypePrefixed(AName) then Exit; { not cached: the test is cheap }
     for var V: TSymbol in AStore.FindSymbolsByExactName(AName) do
     begin
-      if (V.Kind <> skEnumValue) or (V.ParentId <= 0) or not SameText(V.Name, AName) then Continue;
-      var Enm: TSymbol;
-      if not Scoped.TryGetValue(V.ParentId, Enm) then
+      if not SameText(V.Name, AName) then Continue;
+      var Enm: TSymbol:= Default(TSymbol);
+      if (V.Kind = skEnumValue) and (V.ParentId > 0) and not Scoped.TryGetValue(V.ParentId, Enm) then
       begin
         Enm:= AStore.GetSymbolById(V.ParentId);
         if (Enm.Kind <> skEnum) or not ContainsText(Enm.Directives, SCOPED_DIRECTIVE) then
           Enm:= Default(TSymbol);
         Scoped.Add(V.ParentId, Enm);
       end;
+      if Enm.Id <= 0 then
+        HasOther.AddOrSetValue(LowerCase(AName), True);
       if (Enm.Id <= 0) or not Visible(Enm) then Continue;
       var SV: TScopedVal;
       SV.ValId   := V.Id;
@@ -4797,6 +4826,7 @@ begin
   Findings:= TList<TLintFinding>.Create;
   ByName  := TDictionary<string, TArray<TScopedVal>>.Create;
   Scoped  := TDictionary<Int64, TSymbol>.Create;
+  HasOther:= TDictionary<string, Boolean>.Create;
   try
     for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
     begin
@@ -4825,6 +4855,10 @@ begin
           '''%s'' here is %s (%s), not the scoped value %s -- write %s if the enum value was meant',
           [R.NameText, Bound.QualifiedName, Bound.Kind.ToText, Spellings(Vals), Vals[0].Spelling]);
       end
+      else if HasOther.ContainsKey(LowerCase(R.NameText)) then
+        Continue { unbound, but another symbol carries the name: the resolver
+                   declined for its own reason (an untypable with target, an
+                   unindexed ancestor), not E2003 -- not this rule's claim }
       else
       begin
         F.Severity:= 'hint';
@@ -4836,6 +4870,7 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    HasOther.Free;
     Scoped.Free;
     ByName.Free;
     Findings.Free;
