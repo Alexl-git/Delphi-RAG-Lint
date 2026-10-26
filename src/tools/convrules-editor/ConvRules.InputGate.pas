@@ -81,22 +81,24 @@ function GateVerdict(AMsg: Cardinal; ABusy, ATargetInMainForm: Boolean): TGateVe
 
 /// <summary>PURE: whether a window class is a selection or navigation control, where a
 /// left press picks a row or moves a caret and never runs a command (R6).</summary>
-/// <param name="AWndClass">The Win32 class name of the press target (GetClassName); '' = unknown.</param>
-/// <returns>True for the list box, list view, tree view, combo box and edit classes
-/// (case-insensitive); False for anything else, so an unknown target stays a command.</returns>
+/// <param name="AWndClass">The VCL ClassName of the press target's control, else its Win32 class name; '' = unknown.</param>
+/// <returns>True for the Win32 list box, list view, tree view, combo box and edit classes and
+/// the VCL class names of the editor's lists, combo, edits, memo and cx grid/text edit (GetClassName of a
+/// VCL control is the Delphi class name, e.g. 'TListBox') (case-insensitive); False for anything else, so an unknown target stays a command.</returns>
 function IsSelectionClass(const AWndClass: string): Boolean;
 
 /// <summary>PURE: GateVerdict refined by what the press landed on (R6).</summary>
 /// <param name="AMsg">The message number (TMsg.message).</param>
 /// <param name="ABusy">EditorBusy now.</param>
 /// <param name="ATargetInMainForm">As for GateVerdict.</param>
-/// <param name="AWndClass">The Win32 class name of the message's window; '' = unknown.</param>
+/// <param name="AWndClass">As for IsSelectionClass; '' = unknown.</param>
 /// <returns>GateVerdict's answer, except a left press or double-click on a selection
 /// control (IsSelectionClass) is gvDrop, not gvRefuse: swallowed quietly, no red notice.
 /// BM_CLICK and WM_COMMAND stay gvRefuse whatever the class.</returns>
 /// <remarks>Report commands, not selections: a swallowed selection loses nothing the user
 /// must repeat deliberately, and a red error for it reads as a failure.</remarks>
 function GateVerdictFor(AMsg: Cardinal; ABusy, ATargetInMainForm: Boolean; const AWndClass: string): TGateVerdict;
+
 /// <summary>PURE: the name a refused command is reported by.</summary>
 /// <param name="ACaption">The button's or menu item's caption, e.g. '&amp;Add...'.</param>
 /// <returns>The caption without its hotkey ampersands ('&amp;&amp;' stays one '&amp;') and
@@ -135,7 +137,8 @@ uses
 
 const
   ELLIPSIS        = '...';
-  SELECTION_CLASSES: array[0..4] of string = ('ListBox', 'SysListView32', 'SysTreeView32', 'ComboBox', 'Edit');
+  SELECTION_CLASSES: array[0..14] of string = ('ListBox', 'SysListView32', 'SysTreeView32', 'ComboBox', 'Edit',
+    'TListBox', 'TCheckListBox', 'TComboBox', 'TListView', 'TTreeView', 'TEdit', 'TMemo', 'TcxGrid', 'TcxGridSite', 'TcxTextEdit');
   STATUS_JOIN     = ' | '; // ConvertRun's own join, which its implementation keeps private
 
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
@@ -171,6 +174,7 @@ begin
     and IsSelectionClass(AWndClass) then
     Result:= gvDrop;
 end;
+
 function CommandName(const ACaption: string): string;
 begin
   // '&&' is a literal '&': parked on #0 while the hotkey markers go.

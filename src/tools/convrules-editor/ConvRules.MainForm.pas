@@ -2345,6 +2345,12 @@ type
       /// <param name="AMsg">The refused message.</param>
       /// <returns>The raw caption, hotkey marker included (CommandName strips it).</returns>
       function GateTargetCaption(const AMsg: TMsg): string;
+      /// <summary>The class name a press target is judged by (R6): the ClassName of the nearest VCL
+      /// control at or above the window (GetClassName of a VCL control is the Delphi name), else the
+      /// Win32 class name of the window itself.</summary>
+      /// <param name="AWnd">The message's window; 0 = none.</param>
+      /// <returns>The name for IsSelectionClass; '' when AWnd is 0.</returns>
+      function GateTargetClass(AWnd: HWND): string;
       /// <summary>FCbDepth.WindowProc hook: tracks CBN_DROPDOWN .. CBN_CLOSEUP (FDepthDropped) and a
       /// CBN_SELENDCANCEL inside that window (FDepthCancelled), which VCL does not surface, so a
       /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
@@ -6676,8 +6682,7 @@ begin
     Exit;
   var LBusy: Boolean:= EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass);
   var LInMain: Boolean:= (Msg.hwnd <> 0) and (GetAncestor(Msg.hwnd, GA_ROOT) = Handle);
-  var LClass: array[0..63] of Char;
-  var LVerdict: TGateVerdict:= GateVerdictFor(Msg.message, LBusy, LInMain, if (Msg.hwnd <> 0) and (GetClassName(Msg.hwnd, LClass, Length(LClass)) > 0) then string(PChar(@LClass)) else '');
+  var LVerdict: TGateVerdict:= GateVerdictFor(Msg.message, LBusy, LInMain, GateTargetClass(Msg.hwnd));
   if LVerdict = gvPass then
     Exit;
   Handled:= True;
@@ -6687,6 +6692,32 @@ begin
     FLostCommand   := CommandName(GateTargetCaption(Msg));
     FLostClickTitle:= BusyTitleFor(FBusyTitle, FLblStatus.Caption);
     FLostClickTimer.Enabled:= True;
+  end;
+end;
+
+const
+  /// <summary>GetClassName buffer: a Win32 window class name is at most 256 characters.</summary>
+  CLASS_NAME_MAX = 256;
+
+function TConvRulesForm.GateTargetClass(AWnd: HWND): string;
+var
+  LBuf : array[0..CLASS_NAME_MAX - 1] of Char;
+  LCtl : TWinControl;
+  LWnd : HWND;
+begin
+  Result:= '';
+  if AWnd = 0 then
+    Exit;
+  if GetClassName(AWnd, LBuf, Length(LBuf)) > 0 then
+    Result:= string(PChar(@LBuf));
+  // A cx grid's site, a combo's inner edit: the owner is the nearest VCL control above.
+  LWnd:= AWnd;
+  while (LWnd <> 0) and (LWnd <> Handle) do
+  begin
+    LCtl:= FindControl(LWnd);
+    if LCtl <> nil then
+      Exit(LCtl.ClassName);
+    LWnd:= GetParent(LWnd);
   end;
 end;
 

@@ -15369,6 +15369,10 @@ begin
     and (GateVerdictFor(WM_COMMAND, True, True, 'ListBox') = gvRefuse), 'only the press is softened');
   Check('gate.sel.idle.passes', (GateVerdictFor(WM_LBUTTONDOWN, False, True, 'ListBox') = gvPass)
     and (GateVerdictFor(WM_LBUTTONDOWN, True, False, 'ListBox') = gvPass));
+  Check('gate.sel.vcl.names', (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TListBox') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TCheckListBox') = gvDrop)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TComboBox') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TListView') = gvDrop)
+    and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TEdit') = gvDrop) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TcxGrid') = gvDrop), 'GetClassName of a VCL control is the Delphi class name');
+  Check('gate.sel.vcl.button', (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TButton') = gvRefuse) and (GateVerdictFor(WM_LBUTTONDOWN, True, True, 'TcxButton') = gvRefuse));
   Check('gate.sel.class', IsSelectionClass('listbox') and not IsSelectionClass('Button') and not IsSelectionClass(''));
   Check('gate.name.add', CommandName('&Add...') = 'Add', CommandName('&Add...'));
   Check('gate.name.amp', CommandName('Save && close') = 'Save & close', CommandName('Save && close'));
