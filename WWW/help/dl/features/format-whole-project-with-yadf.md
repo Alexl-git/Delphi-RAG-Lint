@@ -7,14 +7,14 @@ group: linting
 order: 30010
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Format Whole Project with YADF
 
 Runs YADF formatting across a project's files, with indexing involved as part of the same action.
 
-Read this when you want a whole project brought to house style in one action instead of file by file. Choose drag-lint > Format Whole Project with YADF...; from the command line there is no single verb, only format per file and index.
+Read this when you want a whole project brought to house style in one action instead of file by file. Choose drag-lint > Format Whole Project with YADF...; save your units first, confirm, and every project unit is rewritten in place by YADF and the index refreshed. drag-lint itself has no format verb.
 
 ## How to run it
 
@@ -65,9 +65,6 @@ drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-
 ```
 No documented flag runs both across a whole project in a single CLI call;
 that orchestration is the IDE menu action itself.
-
-### Reaching it in the IDE
-drag-lint > Format Whole Project with YADF...
 
 ### What it needs
 The feature map marks this row's Index column "no/optional": the

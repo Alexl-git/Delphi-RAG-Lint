@@ -7,7 +7,7 @@ group: indexing
 order: 10008
 since: 0.60.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Show Resolved DBs (debug)
@@ -57,9 +57,6 @@ it exits 2 and names the sections if none or several claim it, rather than
 guessing. `--in <file.pas>` prints the read list the IDE would open for that
 file (the active project's DB first, then the folder-matched DB); omit
 `--project` to model "no project active".
-
-### Reaching it in the IDE
-drag-lint > Index & Maintenance > Show Resolved DBs (debug)...
 
 ### What it needs
 No index required -- this command has no `--db` flag; it only resolves and

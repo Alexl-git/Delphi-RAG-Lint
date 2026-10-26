@@ -7,7 +7,7 @@ group: editor-integration
 order: 110020
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # workspace index
@@ -26,6 +26,10 @@ Full flag list: [workspace in the CLI reference](../cli.md#workspace).
 | --- | --- | --- | --- |
 | `--config` | `<.drag-lint-workspace.json>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Indexes every project registered in a `.drag-lint-workspace.json` workspace
@@ -37,13 +41,6 @@ indexes together, rather than one project at a time.
 ```text
 drag-lint workspace index [--config <.drag-lint-workspace.json>]
 ```
-
-### Reaching it in the IDE
-
-CLI+internal: the plugin calls this internally from
-`DragLint.Plugin.ProjectNotifier.pas:103`. There is no menu item for it --
-it is invoked in-process by the plugin, not exposed as a user-facing
-command.
 
 ### What it needs
 

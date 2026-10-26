@@ -7,7 +7,7 @@ group: search-navigation
 order: 20024
 since: 0.21.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Show Completion
@@ -27,11 +27,6 @@ Read this when you want to know what you can type next at the editor caret: it s
 
 Shows an index-backed completion list at the editor caret. Reach for it to
 see what identifiers are valid to type next.
-
-### Reaching it in the IDE
-drag-lint > Show Completion
-
-Keyboard shortcut: Ctrl+Alt+C.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:

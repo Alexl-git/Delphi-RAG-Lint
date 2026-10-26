@@ -45,9 +45,9 @@
   ],
   "notes": "issued by the plugin from TDragLintStructureForm.EnsureFixableRules (DragLint.Plugin.StructureForm.pas)",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "63b1c165c1f4705c63789ae451d96bb79c0a3a8e6a8d670ea8d1342d6cde958c"
   }
 }

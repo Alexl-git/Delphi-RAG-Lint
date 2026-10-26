@@ -144,8 +144,7 @@ The engine never guesses; every kind it can give:
 * **Run and gate:** `dirty-baseline` (the project does not build before any edit),
   `no-compiler` (rsvars.bat missing; name it with `--rsvars <rsvars.bat>` for a Studio the registry /
   BDS does not name, or use `--no-compile` for a dry run), `compile-error` (the
-  project does not build after the edit; rolled back), `build-timeout` (the build did not
-  finish; rolled back), `build-error` (the build itself failed to run; rolled back, exit 2),
+  project does not build after the edit; rolled back), `build-timeout` (a build exceeded the `--build-timeout <s>` you set; rolled back), `cancelled` (the engine was asked to stand down -- IDE Cancel or `drag-lint shutdown --db <db>`; rolled back, exit 1), `build-error` (the build itself failed to run; rolled back, exit 2),
   `write-failed` (a write failed part-way; rolled back, exit 2), `stale-file` (a file changed
   after it was indexed: a dry run or `--apply --no-reindex` refuses -- reindex and retry;
   `--apply` re-indexes once, re-plans and reports `reindex_before`, and refuses only a file
@@ -188,7 +187,7 @@ The engine never guesses; every kind it can give:
   method the consumer calls inside `with ... as TX do` is carried as an interface method, its
   signature copied verbatim and dispatch to an override unchanged; a class method or a method
   taken as a pointer is refused), `overloaded-routine`, `signature-in-cycle`, `class-ref`,
-  `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
+  `type-decl`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
   member, a `default` array property or a write to an indexed property; a plain indexed property
   is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
   that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the
@@ -224,13 +223,7 @@ keeps one finding per cycle and no hint.
   *Fix this cycle (dry run)...* and *Apply cycle fix...* (a dry run, your confirmation, then
   `--apply`).
 
-Every IDE-started run passes the IDE's active platform as `--platform`. The IDE gives each
-cycle-fix job a 130 minute limit: above the longest run the engine's own limits allow one
-`--apply` (120 minutes: three builds of up to 30 minutes -- baseline, after, one repair
-rebuild -- plus the pre-plan re-index, the re-index and a `cycles` run of up to 10 minutes
-each; the engine bounds each build at 30 minutes), plus 10 minutes of slack, so the engine
-always times out and rolls back first; a kill by the IDE would bypass the rollback. A
-`--part all` iteration gets the same 130 minutes.
+Every IDE-started run passes the IDE's active platform as `--platform`. There is no time limit: `--build-timeout <s>` sets one per build (default 0 = none). Cancel on the status strip asks the engine to stand down: it kills the build, rolls back, exits 1 *cancelled -- rolled back*; only an engine still running after 90 s is killed. `--part all` forwards the request.
 
 ## What it needs
 Required. You must have indexed the project before running this -- cycle

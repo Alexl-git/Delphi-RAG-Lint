@@ -5,9 +5,9 @@ summary: Restores any file left holding unsaved-buffer content after a Compile B
 product: DL
 group: compiler
 order: 90012
-since: 0.0.0
+since: 0.47.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Recover Buffer-Compile Files
@@ -39,9 +39,6 @@ plugin invokes it as:
 ```text
 drag-lint ghost-recover "<project>"
 ```
-
-### Reaching it in the IDE
-drag-lint > Recover Buffer-Compile Files
 
 ### What it needs
 The feature map marks this row's Index column "n/a". It needs the project

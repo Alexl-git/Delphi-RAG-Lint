@@ -7,7 +7,7 @@ group: database
 order: 100001
 since: 0.40.5-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # fb-snapshot
@@ -27,6 +27,10 @@ Full flag list: [fb-snapshot in the CLI reference](../cli.md#fb-snapshot).
 | `--connection` |  |  |  |
 | `--db` | `<sql.sqlite>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -45,10 +49,6 @@ The `--connection` value's exact contents beyond the
 `Database=...;User=...;Password=...;DriverID=FB` shape shown in the usage
 line are not documented here -- supply your own real Firebird connection
 parameters in that form.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

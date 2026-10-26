@@ -5,9 +5,9 @@ summary: Indexes, the manifest, reindexing, and what to do when something looks 
 product: DL
 group: maintenance
 order: 120010
-since: 0.0.0
+since: 1.4.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Maintenance

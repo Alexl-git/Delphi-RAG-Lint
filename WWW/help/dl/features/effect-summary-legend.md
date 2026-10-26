@@ -5,21 +5,21 @@ summary: The purity analysis writes a short token string for every routine it ju
 product: DL
 group: documentation
 order: 40008
-since: 0.0.0
+since: 1.16.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Effect Summary Legend
 
 The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index.
 
-Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields) and `p<k>` (writes through parameter k, counted from 0).
+Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields), p`<k`> (writes through parameter k, counted from 0) and ? (not proven: something could not be bound, which is not an effect).
 
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Help > Effect Summary Legend**
-   1. Choose drag-lint > Help > Effect Summary Legend (wiki)
+   1. Choose drag-lint > Help > Effect Summary Legend
    2. Look up the token (g, h, s, `p<k>`) shown by hover or ask effects
 
 ## Details

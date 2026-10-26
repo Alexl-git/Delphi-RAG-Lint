@@ -7,7 +7,7 @@ group: linting
 order: 30018
 since: 0.31.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Run AST Checks
@@ -32,7 +32,7 @@ Full flag list: [check-ast in the CLI reference](../cli.md#check-ast).
 
 * drag-lint About window, button **Run AST Checks**
    1. Open the file in the editor
-   2. Choose drag-lint > Run AST Checks
+   2. Open the About window (drag-lint > About) and click the Run AST Checks button
    3. From a shell: `drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]`
 
 ## Details
@@ -46,9 +46,6 @@ drag-lint check-ast <file> [--db PATH] [--format text|json]
 ```
 `<file>` is the file to check; `--db` is an index database; `--format`
 selects `text` or `json` output.
-
-### Reaching it in the IDE
-drag-lint > Run AST Checks
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

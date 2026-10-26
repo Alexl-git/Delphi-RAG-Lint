@@ -5,9 +5,9 @@ summary: Opens the main drag-lint dockable tool window inside the IDE
 product: DL
 group: editor-integration
 order: 110005
-since: 0.0.0
+since: 0.42.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # drag-lint Panel (dockable)
@@ -27,14 +27,6 @@ Read this when you want the main drag-lint tool window docked beside your editor
 Opens the main drag-lint dockable tool window inside the IDE. Reach for it
 to keep drag-lint's panel docked alongside your editor instead of a
 separate window.
-
-### Reaching it in the IDE
-drag-lint > drag-lint Panel (dockable)
-
-Also reachable from View > Tool Windows > drag-lint -- the same dockable
-panel under a second menu path; see [drag-lint](drag-lint.md) for that entry.
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:

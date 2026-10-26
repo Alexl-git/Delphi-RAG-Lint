@@ -7,7 +7,7 @@ group: refactoring
 order: 50001
 since: 0.54.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # allow
@@ -34,6 +34,10 @@ Full flag list: [allow in the CLI reference](../cli.md#allow).
 | `--disable` |  |  |  |
 | `--stand-in-for` | `<realpath>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Records a `dl:ok` review of one finding, so it stops being reported without
@@ -49,14 +53,6 @@ drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply]
 `--fix-line` and `--fix-rule` identify the exact finding to allow. Per the
 usage banner, this is a dry run without `--apply`: "record a dl:ok review of
 ONE finding; dry-run without --apply".
-
-### Reaching it in the IDE
-
-Reachable in the IDE through the Structure form's right-click menu -- see
-[Allow this message](allow-this-message.md) for the IDE-side walkthrough
-(drag-lint > Show Structure, then right-click a finding and choose "Allow
-this message"). There is no main-menu item; the feature map's internal call
-site is `DragLint.Plugin.StructureForm.pas:1061`.
 
 ### What it needs
 

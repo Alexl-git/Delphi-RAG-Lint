@@ -1,18 +1,18 @@
 ---
 id: full-compile-sweep
 title: Full Compile Sweep
-summary: Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold
+summary: Recompiles every unit of a project (a forced full build, refresh-findings --full) and refreshes its stored compiler findings
 product: DL
 group: compiler
 order: 90006
 since: 1.2.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Full Compile Sweep
 
-Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold.
+Recompiles every unit of a project (a forced full build, refresh-findings --full) and refreshes its stored compiler findings.
 
 Read this when you want a complete, current set of compiler diagnostics for a project rather than only what went stale. Choose drag-lint > Full Compile Sweep; it recompiles everything and refreshes the stored findings, like refresh-findings --full.
 
@@ -34,7 +34,7 @@ Full flag list: [refresh-findings in the CLI reference](../cli.md#refresh-findin
 * RAD Studio main menu: **drag-lint > Full Compile Sweep**
    1. Open the project in the IDE
    2. drag-lint > Full Compile Sweep
-   3. Stale units are recompiled and the findings refreshed, then the open file is refreshed
+   3. Every unit is recompiled (refresh-findings --full, not only the stale ones) and the stored findings refreshed, then the open file is refreshed
 
 **Needs:** index
 
@@ -54,9 +54,6 @@ index database. Without `--full`, the command only forces a full build once 2
 or more units are stale (otherwise it recompiles just the stale ones).
 This action runs the verb with `--full` set, forcing a full recompile
 every time. `--json` selects JSON output.
-
-### Reaching it in the IDE
-drag-lint > Full Compile Sweep
 
 ### What it needs
 An index IS required. The project's DB lives at

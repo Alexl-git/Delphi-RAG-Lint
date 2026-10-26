@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70014
 since: 1.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Code-built menu tree and registry drift
@@ -46,6 +46,10 @@ Full flag list: [menu-drift in the CLI reference](../cli.md#menu-drift).
 | `--with-dfm` |  |  |  |
 | `--format` | `text\|json` |  |  |
 | `--output` | `<f>` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -198,7 +202,7 @@ unit. `tests\autotest\run_menu_tree_tests.ps1` runs the unit tests, including
 the renamed-helper control (rename `AddItem` to `PutItem` in a copy: the tree
 does not change).
 
-### forms-csv (algorithm v8)
+### forms-csv (algorithm v9)
 
 `forms-csv` runs the same walker and grafts every external root whose
 identifier is a `TMenuItem` of the form's own `.dfm` (and is named in that
@@ -207,8 +211,12 @@ form's `.pas`) under that item: code-added items and submenus then appear in
 launch trace. Separators, headers and dynamic captions are not grafted. A walk
 that cannot run (stale index, setup problem) prints one
 `forms-csv: code-built menu items skipped (..)` line on stderr and the CSV is
-written from the `.dfm` menus alone. Guard: `tests\autotest\run_forms_csv_v8.ps1`
-(fixture `tests\fixtures\formsmap-v8`).
+written from the `.dfm` menus alone. Since v9 a DevExpress bar item built in
+code (a link added to a bar, popup or sub-item) is grafted into the form's `.dfm`
+bar tree the same way. Guards: `tests\autotest\run_forms_csv_v9.ps1` (fixture
+`tests\fixtures\formsmap-v9`) for the bar graft and
+`tests\autotest\run_forms_csv_v8.ps1` (fixture `tests\fixtures\formsmap-v8`) for
+the `TMenuItem` graft.
 
 ### Limits (v1)
 

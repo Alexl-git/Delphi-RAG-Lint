@@ -45,9 +45,9 @@
   ],
   "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; standalone hidden verb (DoResolveUses), separate from check-unit --resolve-uses.; seed: group guessed",
   "verified": {
-    "date": "2026-10-23",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "b7e71d41448879b30e1e12defd0282071cc232bacd941f17f0ea05a91972d486"
   }
 }

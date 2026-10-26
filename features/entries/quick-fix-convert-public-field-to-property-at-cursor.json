@@ -28,9 +28,9 @@
   ],
   "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "4ff8916a3ab17cdaa89d32d6307e282c5a9f702b06734c01bb7e90feae73b9bd"
   }
 }

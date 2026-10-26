@@ -7,7 +7,7 @@ group: editor-integration
 order: 110015
 since: 1.26.1-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Register the MCP server (Claude Code, VS Code)
@@ -46,6 +46,10 @@ Full flag list: [mcp-config in the CLI reference](../cli.md#mcp-config).
 | `--json` |  |  |  |
 | `--home-dir` |  |  |  |
 | `--appdata-dir` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 

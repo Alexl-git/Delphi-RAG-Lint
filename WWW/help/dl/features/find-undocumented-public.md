@@ -7,7 +7,7 @@ group: search-navigation
 order: 20006
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Find Undocumented (public)
@@ -65,9 +65,6 @@ tag content instead of by absence; `--kind` filters by symbol kind.
 `--doc-tag` accepts exactly nine tags: `summary`, `remarks`, `returns`,
 `param`, `exception`, `example`, `seealso`, `since`, `deprecated`. An
 unrecognized tag errors (exit 2) and lists the valid set.
-
-### Reaching it in the IDE
-drag-lint > Code Quality > Find Undocumented (public)...
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

@@ -7,7 +7,7 @@ group: search-navigation
 order: 20029
 since: 0.19.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Type at Cursor
@@ -39,11 +39,6 @@ Full flag list: [typeat in the CLI reference](../cli.md#typeat).
 
 Resolves the static type of the expression under the editor caret. Reach
 for it when you are not sure what type an expression evaluates to.
-
-### Reaching it in the IDE
-drag-lint > Inspect Symbol > Type at Cursor
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 ```text

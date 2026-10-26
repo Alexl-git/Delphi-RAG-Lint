@@ -7,7 +7,7 @@ group: search-navigation
 order: 20021
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query type-usage
@@ -29,6 +29,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--names-file` | `<f>` |  |  |
 | `--db` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -96,8 +100,8 @@ drag-lint query type-usage --in src\doc\DRagLint.Doc.GitSince.pas ^
 
 ```text
 file: src\doc\DRagLint.Doc.GitSince.pas
-  TStringBuilder                   REFERENCED  read=1 type_use=1 member-access=1   first line 100
-  THandle                          REFERENCED  type_use=2                          first line 93
+  TStringBuilder                   REFERENCED  read=1 type_use=1 member-access=1              first line 102
+  THandle                          REFERENCED  type_use=2                                     first line 95
   TStringList                      -
   TDictionary                      -
 2 of 4 name(s) referenced (name-keyed: a same-named project type is indistinguishable)
@@ -106,10 +110,6 @@ file: src\doc\DRagLint.Doc.GitSince.pas
 `--json` emits one object per requested name, with `referenced`, `count`,
 `first_line` and a `kinds` breakdown. The JSON document is the whole of stdout;
 status lines go to stderr, so it can be piped straight into a parser.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ---
 

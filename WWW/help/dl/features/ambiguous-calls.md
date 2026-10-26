@@ -7,7 +7,7 @@ group: maintenance
 order: 120002
 since: 0.91.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # ambiguous-calls
@@ -29,6 +29,10 @@ Full flag list: [ambiguous-calls in the CLI reference](../cli.md#ambiguous-calls
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -48,9 +52,6 @@ output.
 
 This is labeled a "resolver-coverage diagnostic" in the CLI banner -- it is
 a troubleshooting tool, not a daily driver.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required. The project's DB lives at

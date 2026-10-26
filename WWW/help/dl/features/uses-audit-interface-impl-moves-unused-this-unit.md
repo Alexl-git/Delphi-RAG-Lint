@@ -7,7 +7,7 @@ group: refactoring
 order: 50013
 since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Uses Audit -- interface->impl moves + unused (this unit)
@@ -47,9 +47,6 @@ cleaning up a single unit's uses clauses before a rename or refactor.
 ```text
 drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]
 ```
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...
 
 ### What it needs
 Required. You must have indexed the project first -- the audit resolves

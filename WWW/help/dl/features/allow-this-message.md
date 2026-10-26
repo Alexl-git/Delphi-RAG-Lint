@@ -7,7 +7,7 @@ group: refactoring
 order: 50002
 since: 0.54.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Allow this message
@@ -46,19 +46,6 @@ Full flag list: [allow in the CLI reference](../cli.md#allow).
 Records a `dl:ok` review of one finding, so it stops being reported without
 being fixed. Reach for it when a finding is a deliberate, reviewed
 exception rather than something to change.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-**The Structure form's right-click menu is the only place "Allow this
-message" is reachable in the IDE** -- there is no main drag-lint menu item
-for it.
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click the tree node for a finding and choose "Allow this
-message".
 
 ### Running it from the CLI
 

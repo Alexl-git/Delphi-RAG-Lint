@@ -7,14 +7,14 @@ group: editor-integration
 order: 110009
 since: 0.21.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Installation
 
 Getting the CLI, the IDE plugin, or the LSP running.
 
-Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together.
+Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together, including the rules\ folder beside the exe (the .scm and .json rules plus builtin-symbols.txt and enum-persist-sinks.txt).
 
 ## Details
 
@@ -41,8 +41,12 @@ first two.
    tree-sitter-delphi13.dll      } parser DLLs -- MUST sit next to the exe
    tree-sitter-dfm.dll           }
    tree-sitter.dll               }
+   sqlite3.dll                   index storage -- without it a clean machine fails
+                                 with "-314 Cannot load vendor library"
    rules\                        external lint rules (*.scm + *.json)
-     builtin-symbols.txt
+     builtin-symbols.txt         allow-list read by the AST checks
+     enum-persist-sinks.txt      sink list for enum-ordinal-persisted
+     README.md
    ```
 
 3. Optionally add the folder to `PATH`, or call the exe by full path.
@@ -104,7 +108,7 @@ menu is unavailable) and two dockable windows under *View > Tool Windows*.
 
 The plugin does not contain the engine -- it **spawns `drag-lint.exe`**. If the
 menu items fail, check that the exe is reachable and still has `rules\` beside
-it. `drag-lint > Open Plugin Log` shows what the plugin actually invoked.
+it. The Open Plugin Log button in the drag-lint About window shows what the plugin actually invoked.
 
 #### Bitness
 

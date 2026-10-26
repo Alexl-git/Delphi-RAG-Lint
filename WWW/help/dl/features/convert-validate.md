@@ -7,7 +7,7 @@ group: component-conversion
 order: 60004
 since: 1.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # convert-validate
@@ -29,6 +29,10 @@ Full flag list: [convert-validate in the CLI reference](../cli.md#convert-valida
 | `--to` | `<ToType>` |  |  |
 | `--print-parsed` |  |  |  |
 | `--db` | `PATH` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -54,9 +58,6 @@ malformed terms, I or N out of range, two alternatives for one N, and a
 the expression. `line N: warning: ...` lines (a straight `NumGlyphs` carry beside
 a G-link) never change the exit code. `convert-apply` refuses a G-linked book
 until the extraction build lands. Full grammar: `docs\CONVERSION-RULES.md`.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 Optional, per the feature map's Index column.

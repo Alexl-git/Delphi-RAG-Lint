@@ -5,9 +5,9 @@ summary: Check the units that depend on the one being edited now, instead of wai
 product: DL
 group: compiler
 order: 90004
-since: 0.0.0
+since: 1.11.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Compile Dependents

@@ -7,14 +7,14 @@ group: refactoring
 order: 50011
 since: 0.69.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # safe-delete
 
 Deletes a symbol if and only if it has zero references in the index.
 
-Read this when you want to remove dead code without breaking a live caller: safe-delete deletes a symbol only if the index shows zero references to it.
+Read this when you want to remove dead code without breaking a live caller: safe-delete deletes a symbol only if the index shows zero references to it. Without --apply it is a dry run: it prints the deletion and exits 0, writing nothing (--json prints the edit set and also never writes). Exit 0 for a preview or a completed delete, 1 when no edit is computed, 2 when the symbol is still referenced (REFUSED), the arguments are incomplete or the --db is missing.
 
 ## How to run it
 
@@ -55,10 +55,6 @@ drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>
 bracketed in the usage line). The usage line lists `--apply` as a flag;
 whether omitting it produces a dry run is not documented in the help text
 for this verb.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

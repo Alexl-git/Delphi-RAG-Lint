@@ -61,9 +61,9 @@
   ],
   "notes": "issued by the plugin from TDragLintStructureForm.CreateEnumHelperClick (DragLint.Plugin.StructureForm.pas) and InvokeCreateEnumHelper (DragLint.Plugin.Editor.pas)",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "e3001d6f5644dc9545cb7aff184afde45ca697daa8978faaaa79c4a3a47a5b63"
   }
 }

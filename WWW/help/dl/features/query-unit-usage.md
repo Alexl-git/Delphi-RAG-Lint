@@ -1,20 +1,20 @@
 ---
 id: query-unit-usage
 title: query unit-usage
-summary: Answers one question, about one unit and one file
+summary: Shows which files reference a unit, or - with --in - which of its exports one file actually uses
 product: DL
 group: search-navigation
 order: 20023
-since: 0.1.0-alpha
+since: 1.12.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query unit-usage
 
-Answers one question, about one unit and one file.
+Shows which files reference a unit, or - with --in - which of its exports one file actually uses.
 
-Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. It tells you whether one file references anything a given unit exports; an empty answer means the uses entry is a dead import.
+Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. With --in it lists which of the unit's exports that file references (empty means the uses entry is a dead import); without --in it lists the files that reference the unit and the ones that merely import it.
 
 ## How to run it
 
@@ -28,6 +28,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--in` | `<file.pas>` |  |  |
 | `--db` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Pitfalls
 

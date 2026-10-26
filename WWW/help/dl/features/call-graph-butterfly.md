@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70002
 since: 0.96.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Call Graph (Butterfly)
@@ -64,9 +64,6 @@ drag-lint reverse-calltree --qname <X> --db <db> --depth 3 --format json --direc
 
 So `butterfly` is CLI-only: no IDE action invokes it. If you want the chart
 from a script, `butterfly` is the single-command option.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Call Graph (Butterfly)...
 
 ### What it needs
 An index IS required -- both `butterfly` and the two `reverse-calltree`

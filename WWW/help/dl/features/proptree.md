@@ -7,7 +7,7 @@ group: component-conversion
 order: 60013
 since: 1.1.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # proptree
@@ -36,6 +36,10 @@ Full flag list: [proptree in the CLI reference](../cli.md#proptree).
 | `--json` |  |  |  |
 | `--db` | `PATH` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -58,9 +62,6 @@ the index automatically unless `--no-write-back` is given, which forces a
 read-only, non-mutating query. `--min-visibility published|public` filters
 emitted leaves by effective visibility (default: all). `--format text|json`
 selects output format; `--db PATH` may be repeated.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required. The project's DB lives at

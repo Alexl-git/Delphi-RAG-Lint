@@ -7,14 +7,14 @@ group: refactoring
 order: 50005
 since: 0.85.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # extract-method
 
 Pulls a run of statements out of a routine into a new method.
 
-Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; the usage lists --apply and --no-backup for writing the change.
+Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; without --apply it is a dry run (exit 0, nothing written) and --json prints the edit set without writing. Exit 0 on a preview or an applied change, 1 when no edit is computed, 2 when the selection is refused or the arguments are incomplete; every refusal reason goes to stderr.
 
 ## How to run it
 
@@ -36,7 +36,7 @@ Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 
 * RAD Studio main menu: **drag-lint > Extract Method (selection)... (Ctrl+Alt+M)**
    1. Select the statements to extract in the editor
-   2. drag-lint > Extract Method (selection)... or Ctrl+Alt+M
+   2. drag-lint > Extract Method (selection)... (Ctrl+Alt+M)
    3. Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk
 
 ## Details
@@ -55,13 +55,6 @@ drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--
 run to extract; `--name` is the new method's name. The usage line lists
 `--apply` as a flag; whether omitting it produces a dry run is not
 documented in the help text for this verb.
-
-### Reaching it in the IDE
-
-The feature map's internal call site is `DragLint.Plugin.Keyboard.pas:319`
--- a keyboard-bound plugin action, not a menu item. Beyond that call site,
-no menu path or keybinding is documented for this verb, so it is not stated
-here.
 
 ### What it needs
 

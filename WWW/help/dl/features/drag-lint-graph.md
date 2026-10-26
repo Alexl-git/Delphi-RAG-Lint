@@ -5,9 +5,9 @@ summary: "This page documents the \"View > Tool Windows > drag-lint Graph\" menu
 product: DL
 group: editor-integration
 order: 110002
-since: 0.10.0-alpha
+since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # drag-lint Graph
@@ -29,11 +29,6 @@ This page documents the "View > Tool Windows > drag-lint Graph" menu entry
 Windows menu instead of the drag-lint menu. It is the same window as
 [drag-lint Graph (dockable)](drag-lint-graph-dockable.md); see that page for
 the drag-lint-menu path to it.
-
-### Reaching it in the IDE
-View > Tool Windows > drag-lint Graph
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:

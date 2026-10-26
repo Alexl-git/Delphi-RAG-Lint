@@ -7,7 +7,7 @@ group: linting
 order: 30013
 since: 0.48.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # lint-project
@@ -70,10 +70,6 @@ means. It fires when all three hold:
 
 One finding per enum, at its declaration; the message names one boundary site
 and its sink. Fix: pin every value (`kA = 0, kB = 1, ...`).
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
-
 ### What it needs
 
 An index IS required. The project's DB lives at

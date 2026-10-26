@@ -7,14 +7,14 @@ group: search-navigation
 order: 20008
 since: 0.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Find Usages
 
 Lists every reference to the symbol under the editor caret across the indexed project.
 
-Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); it is served by the IDE plugin and has no one-shot command line verb.
+Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); the same list comes from the command line as `drag-lint usages --name <X> --db <db>`.
 
 ## Where to click
 
@@ -28,11 +28,6 @@ Read this before changing or removing a symbol, to see every place it is used. W
 Lists every reference to the symbol under the editor caret across the
 indexed project. Reach for it before changing or removing a symbol, to see
 everywhere it is used.
-
-### Reaching it in the IDE
-drag-lint > Find Usages...
-
-Keyboard shortcut: Ctrl+Alt+F.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this menu item (feature map CliVerb:

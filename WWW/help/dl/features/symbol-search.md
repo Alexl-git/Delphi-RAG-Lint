@@ -7,7 +7,7 @@ group: search-navigation
 order: 20027
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Symbol Search
@@ -40,18 +40,12 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 ## Pitfalls
 
 * a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.
-* STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed.
 
 ## Details
 
 Searches symbols by name across the indexed projects. Reach for it to jump
 to a type, method, or field when you know (or can guess) its name but not
 its file.
-
-### Reaching it in the IDE
-drag-lint > Symbol Search...
-
-Keyboard shortcut: Ctrl+Alt+T.
 
 ### Running it from the CLI
 ```text

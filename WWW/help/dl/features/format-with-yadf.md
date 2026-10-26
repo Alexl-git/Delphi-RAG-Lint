@@ -7,7 +7,7 @@ group: linting
 order: 30011
 since: 0.16.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Format with YADF
@@ -90,14 +90,10 @@ after is treated as corruption.
 
 ### Exit codes
 
-`0` done ; `2` usage, or the target does not exist ; `3` no usable YADF
+`0` done, or YADF declined (it printed `Declined: <file>` -- its content guard
+left the file unchanged; not a failure) ; `2` usage, or the target does not exist ; `3` no usable YADF
 resolved ; `4` YADF below the minimum version, nothing written ; `5` formatting
 changed the declared symbols, file restored ; `1` any other formatter failure.
-
-### Reaching it in the IDE
-
-The plugin's **Format with YADF** menu item calls this verb for the active unit.
-See also [Format Whole Project with YADF](format-whole-project-with-yadf.md).
 
 ### What it needs
 

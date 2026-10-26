@@ -66,9 +66,9 @@
   ],
   "notes": "seed: needs own page",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "cce9d62a0bd3dd03c69c9ef8cd0e9019680b440f770c16985d98dbaae6edb5c6"
   }
 }

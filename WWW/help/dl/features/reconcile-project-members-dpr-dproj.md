@@ -7,7 +7,7 @@ group: refactoring
 order: 50009
 since: 1.18.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Reconcile Project Members (.dpr/.dproj)
@@ -95,13 +95,6 @@ each unit is reported exactly once.
 ```text
 drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-library
 ```
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...
-
-The menu item runs the report, verdicts and SUGGESTED FIXES included. The Uses
-tab's checklist applies the default fix to the units you tick. For the library
-fix, run the suggested command from a shell.
 
 ### What it needs
 Optional. An index is not required to run this command, but pass `--db` to

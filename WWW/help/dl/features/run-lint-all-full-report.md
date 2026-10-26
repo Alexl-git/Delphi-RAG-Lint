@@ -7,7 +7,7 @@ group: linting
 order: 30020
 since: 0.61.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Run Lint All (Full Report)
@@ -75,9 +75,6 @@ named in the skip block like any third-party root. `--disable id,...` turns off 
 The shared Output/CI flags also apply: `--format sarif`, `--fail-on <level>`,
 `--config <file>`, `--enable id1,id2`, `--profile <name>`, `--baseline <file>`,
 `--write-baseline <file>`.
-
-### Reaching it in the IDE
-drag-lint > Code Quality > Run Lint All (Full Report)...
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

@@ -7,14 +7,14 @@ group: refactoring
 order: 50014
 since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Uses Cleanup Preview (compiler-verified, this unit)
 
 The removals a Uses Audit suggests, but verified by actually compiling.
 
-Read this before applying a Uses Audit: it previews the same removals but verifies them by compiling, so a unit needed only by an inline routine or an IF branch is not stripped by mistake.
+Read this before applying a Uses Audit: it previews the same removals but verifies them by compiling, so a unit that is still needed is not stripped by mistake.
 
 ## How to run it
 
@@ -80,9 +80,6 @@ drag-lint uses-fix Unit1.pas --project MyApp.dproj --db MyApp.sqlite --platform 
 
 Each try is a real compile of the unit, so expect seconds to a minute or more
 for a large unit.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...
 
 ### What it needs
 Required. You must have indexed the project first.

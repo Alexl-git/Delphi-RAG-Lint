@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70007
 since: 0.95.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # deps-report
@@ -53,10 +53,6 @@ drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all
 ```
 
 `--db` may be repeated to roll up dependencies across more than one index.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

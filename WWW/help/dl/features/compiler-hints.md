@@ -7,7 +7,7 @@ group: search-navigation
 order: 20003
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Compiler Hints
@@ -48,9 +48,6 @@ review compiler-reported issues without re-running a build.
 drag-lint query hints --db <file.sqlite> [--name <code>] [--rule <severity>]
 ```
 `--name` filters by hint code; `--rule` filters by severity.
-
-### Reaching it in the IDE
-drag-lint > Code Quality > Compiler Hints...
 
 ### What it needs
 An index IS required. The project's DB lives at

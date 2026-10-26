@@ -7,7 +7,7 @@ group: search-navigation
 order: 20025
 since: 0.21.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Show Signature Help
@@ -27,11 +27,6 @@ Read this while writing a call and you need the parameter list and order of the 
 
 Shows parameter help for the call being typed at the editor caret. Reach
 for it to check a routine's parameter list and order while writing a call.
-
-### Reaching it in the IDE
-drag-lint > Show Signature Help
-
-Keyboard shortcut: Ctrl+Alt+S.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:

@@ -32,10 +32,10 @@
   ],
   "notes": "since: the wiki page IDE-Menu-Reference.md first shipped in v1.4.0-alpha (2026-08-17)",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "694ccb28834a28c4550e8393e2dfc654f9a80e30ece04869ceca050471590fec"
+    "build": "1.35.1-alpha",
+    "surfaceHash": "7ec555f4a5fbc823c09d6032057b0c609aa4e55e9f7f078c4019cc0d53b7a42f"
   },
   "homeOrder": 40
 }

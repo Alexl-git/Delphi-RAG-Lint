@@ -198,7 +198,7 @@ Described in [Add Missing Units to uses (whole unit)](features/add-missing-units
 Reruns a saved or pasted report and shows before / delta / after.
 
 ```text
-drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]
+drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>] [--out-root <dir>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -223,7 +223,7 @@ Described in [Compare a report with current code](features/compare.md).
 Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result.
 
 ```text
-drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text] (no --db: caches only into the project's unique manifest owner, else reports uncached)
+drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text] (no --db: caches only into the project's unique manifest owner, else reports uncached; no index is required, the compile and report still run; exit 1 iff an Error finding)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -350,7 +350,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--unit <stem>]] [--format json|text] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <rsvars.bat>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -359,12 +359,11 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--un
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
 | `--plan` |  |  |  |
-| `--f2047` |  |  |  |
-| `--format` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
+| `--f2047` |  |  |  |
+| `--unit` | `<stem>` |  |  |
 | `--fix` |  |  |  |
 | `--cycle` | `<n>` |  |  |
-| `--unit` | `<stem>` |  |  |
 | `--part` |  |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
@@ -372,6 +371,8 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--un
 | `--no-compile` |  |  |  |
 | `--shadow-out` | `<dir>` |  |  |
 | `--rsvars` | `<rsvars.bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--format` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--platform` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
@@ -1348,7 +1349,7 @@ Described in [Reconcile Project Members (.dpr/.dproj)](features/reconcile-projec
 
 ### refresh-findings
 
-Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold.
+Recompiles every unit of a project (a forced full build, refresh-findings --full) and refreshes its stored compiler findings.
 
 ```text
 drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json] (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project's own DB)
@@ -1441,7 +1442,7 @@ Described in:
 
 ### rules
 
-Shows the catalog of lint rules in the context of a specific project.
+Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock.
 
 ```text
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>] - list every lint rule (catalog)

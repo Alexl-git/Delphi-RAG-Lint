@@ -1,20 +1,20 @@
 ---
 id: document-project
 title: Document project
-summary: Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project
+summary: Generates or repairs managed DocInsight comments for every public declaration of the active project, started from the Structure form right-click menu
 product: DL
 group: documentation
 order: 40006
 since: 0.90.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Document project
 
-Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project.
+Generates or repairs managed DocInsight comments for every public declaration of the active project, started from the Structure form right-click menu.
 
-Read this when a whole project needs documentation coverage. Right-click in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration the project owns.
+Read this when a whole project needs documentation coverage. Right-click anywhere in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration of the active project (it runs document --project --apply).
 
 ## How to run it
 
@@ -44,14 +44,6 @@ Generates or repairs managed DocInsight comments for every public
 declaration the project owns, starting from a Structure-tree node's
 project. Reach for it when a whole project needs documentation coverage,
 not just one unit or symbol.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a node in the tree and choose "Document project".
 
 ### Running it from the CLI
 

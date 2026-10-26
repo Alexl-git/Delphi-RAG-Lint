@@ -7,7 +7,7 @@ group: search-navigation
 order: 20015
 since: 0.86.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # outline
@@ -76,12 +76,6 @@ declaration BOTH stay listed, and the stub row is tagged `[forward -> line N]`
 (JSON: `forward_target_line`). Everywhere else a name is looked up -- `query`,
 `hover`, completion, class metrics -- the stub is folded into the real
 declaration. A lone stub with no completion in the unit is still a class.
-
-### Reaching it in the IDE
-No menu item calls this directly. The plugin's structure cache
-(StructureCache.pas:338) shells out to this verb to populate the Structure
-form/tree used by "Show Structure" and the drag-lint Panel (dockable),
-caching the result per file.
 
 ### What it needs
 Optional, per the feature map's Index column.
