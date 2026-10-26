@@ -2216,16 +2216,76 @@ end;
 // own private HarvestStringLiterals.DecodeLiteral (not exported -- this
 // unit already keeps its own small AST-text helpers rather than reaching
 // into another unit for a three-line function; see FieldNodeStr's header
-// comment for the same "keep this unit standalone" precedent). #nn escapes
-// and string continuations are OUT OF SCOPE, exactly like the parser's own
-// decoder -- a SQL literal built with either is rare and this fact is
-// best-effort.
-function DecodeSqlLiteral(const ARaw: string): string;
+// comment for the same "keep this unit standalone" precedent).
+// B-35 D18 residue: a control-character literal (#13#10, #$0A -- a
+// 'literalChar' node, or the #nn parts of a 'SELECT *'#13#10'FROM T' literal)
+// decodes to ONE SPACE per character, which is what the line break means to
+// the SQL scanner; a printable #nn decodes to its character. A Delphi 12
+// ''' multi-line literal keeps the old strip-and-unescape path.
+const
+  // A Delphi 12 multi-line literal opens with three quotes and a line break.
+  MULTILINE_OPEN = '''''''';
+
+// Appends the quoted segment of ARaw that starts at AIndex (on its opening
+// quote) to ASB, unescaping '' to ', and moves AIndex past the closing quote.
+procedure AppendQuotedSegment(const ARaw: string; var AIndex: Integer; ASB: TStringBuilder);
 begin
-  Result:= ARaw;
-  if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
-    Result:= Copy(Result, 2, Length(Result) - 2);
-  Result:= StringReplace(Result, '''''', '''', [rfReplaceAll]);
+  Inc(AIndex);
+  while AIndex <= Length(ARaw) do
+  begin
+    if ARaw[AIndex] <> '''' then
+      ASB.Append(ARaw[AIndex])
+    else if (AIndex < Length(ARaw)) and (ARaw[AIndex + 1] = '''') then
+    begin
+      ASB.Append('''');
+      Inc(AIndex);
+    end
+    else
+      Break;
+    Inc(AIndex);
+  end;
+  Inc(AIndex); // past the closing quote
+end;
+
+// Appends the #nn / #$hh character code that starts at AIndex (on its '#')
+// to ASB -- a control character as ONE SPACE -- and moves AIndex past it.
+procedure AppendCharCode(const ARaw: string; var AIndex: Integer; ASB: TStringBuilder);
+var
+  J, Code: Integer;
+begin
+  J:= AIndex + 1;
+  if (J <= Length(ARaw)) and (ARaw[J] = '$') then Inc(J);
+  while (J <= Length(ARaw)) and CharInSet(ARaw[J], ['0'..'9', 'A'..'F', 'a'..'f']) do Inc(J);
+  if not TryStrToInt(Copy(ARaw, AIndex + 1, J - AIndex - 1), Code) then Code:= Ord(' ');
+  ASB.Append(if Code < Ord(' ') then ' ' else Char(Code));
+  AIndex:= J;
+end;
+
+function DecodeSqlLiteral(const ARaw: string): string;
+var
+  I : Integer;
+  SB: TStringBuilder;
+begin
+  if StartsStr(MULTILINE_OPEN, ARaw) and (Length(ARaw) > Length(MULTILINE_OPEN))
+     and CharInSet(ARaw[Length(MULTILINE_OPEN) + 1], [#13, #10]) then
+  begin
+    Result:= Copy(ARaw, 2, Length(ARaw) - 2);
+    Exit(StringReplace(Result, '''''', '''', [rfReplaceAll]));
+  end;
+  SB:= TStringBuilder.Create;
+  try
+    I:= 1;
+    while I <= Length(ARaw) do
+      if ARaw[I] = '''' then
+        AppendQuotedSegment(ARaw, I, SB)
+      else if ARaw[I] = '#' then
+        AppendCharCode(ARaw, I, SB)
+      else
+        Inc(I); // whitespace between the parts of one literal
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
 end;
 
 // True when N is an 'exprBinary' node whose operator TEXT is literally '+'
@@ -2284,27 +2344,39 @@ end;
 // (WalkSqlLiterals) once ADynamic comes back False.
 procedure CollectConcatRun(const N: TTSNode; const ASrc: TBytes; var AText: string; var ADynamic: Boolean);
 begin
-  if N.IsNull then begin ADynamic:= True; Exit; end;
-  if N.NodeType = 'literalString' then
-  begin
-    AText:= AText + DecodeSqlLiteral(FieldNodeStr(N, ASrc));
-    Exit;
-  end;
-  if N.NodeType = 'exprParens' then
+  if ADynamic then Exit; // B-35 D18 residue: AText stays the STATIC PREFIX before the first dynamic operand
+  if N.IsNull then
+    ADynamic:= True
+  else if (N.NodeType = 'literalString') or (N.NodeType = 'literalChar') then
+    AText:= AText + DecodeSqlLiteral(FieldNodeStr(N, ASrc))
+  else if N.NodeType = 'exprParens' then
   begin
     if N.NamedChildCount >= 1 then
       CollectConcatRun(N.NamedChild(0), ASrc, AText, ADynamic)
     else
       ADynamic:= True;
-    Exit;
-  end;
-  if IsPlusBinary(N, ASrc) then
+  end
+  else if IsPlusBinary(N, ASrc) then
   begin
     CollectConcatRun(N.ChildByField('lhs'), ASrc, AText, ADynamic);
     CollectConcatRun(N.ChildByField('rhs'), ASrc, AText, ADynamic);
-    Exit;
-  end;
-  ADynamic:= True; // an identifier, exprCall, exprDot, a number, a non-'+' exprBinary, ...
+  end
+  else if (N.NodeType = 'identifier') and SameText(FieldNodeStr(N, ASrc), 'sLineBreak') then
+    AText:= AText + ' ' // the RTL line-break constant is whitespace to the SQL scanner
+  else
+    ADynamic:= True; // an identifier, exprCall, exprDot, a number, a non-'+' exprBinary, ...
+end;
+
+// B-35 D18 residue: the part of a dynamic run's static prefix that is safe to
+// scan. A dynamic operand glued to a word ('FROM PFX_' + FTable) completes
+// that word at run time, so the trailing identifier fragment (letters, digits,
+// '_', '.', '$', '"') is cut off; 'FROM PFX_' leaves 'FROM ' and names nothing.
+function StaticSqlPrefix(const APrefix: string): string;
+var L: Integer;
+begin
+  L:= Length(APrefix);
+  while (L > 0) and CharInSet(APrefix[L], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.', '$', '"']) do Dec(L);
+  Result:= Copy(APrefix, 1, L);
 end;
 
 // Walks ABody top-down, finding each maximal string-literal-concatenation
@@ -2347,7 +2419,8 @@ begin
     Text:= '';
     IsDynamic:= False;
     CollectConcatRun(N, ASrc, Text, IsDynamic);
-    if (not IsDynamic) and ClassifySqlText(Text) then
+    if IsDynamic then Text:= StaticSqlPrefix(Text); // B-35 D18 residue: scan the static prefix only
+    if ClassifySqlText(Text) then
       ExtractSqlTables(Text, AReads, AWrites);
     Exit; // never re-descend into an already-consumed run
   end;
@@ -2374,8 +2447,15 @@ end;
 //     comment or compiler directive between two Adds is transparent, and ANY
 //     other statement (Clear, Open, ExecSQL, an if, ...) ends every open run,
 //     so two statements sent one after the other never merge;
-//   * a non-literal argument (CollectConcatRun's IsDynamic) POISONS its run --
-//     'FROM ' + FTable must not let the next word be scanned as a table;
+//   * a non-literal argument (CollectConcatRun's IsDynamic) CLOSES its run:
+//     the static text before it is kept (minus a trailing word the operand
+//     may complete, StaticSqlPrefix) and nothing after it is scanned --
+//     'FROM ' + FTable must not let the next word be scanned as a table
+//     (B-35 D18 residue, 2026-10-26: was "poisons", which lost
+//     SELECT / FROM T / 'WHERE ID = ' + IntToStr(N) whole);
+//   * `with <recv> do ... Add(<arg>)` keys a bare Add by the with receiver
+//     when the RIGHTMOST with entity is a SQL-text property (it shadows the
+//     others); an inner with on anything else hides it again;
 //   * a run of ONE Add is left to WalkSqlLiterals, which already classified it;
 //   * the assembled text (fragments joined by a space, standing in for the
 //     line break TStrings.Add inserts) goes through the SAME ClassifySqlText +
@@ -2396,34 +2476,73 @@ begin
     if SameText(AName, P) then Exit(True);
 end;
 
+// The run key of ARecv (its source text, whitespace dropped, upper-cased) when
+// its LAST segment is a SQL-text property (IsSqlTextPropertyName), else ''.
+function SqlTextReceiverKey(const ARecv: TTSNode; const ASrc: TBytes): string;
+var RecvLast: string;
+begin
+  Result:= '';
+  if ARecv.IsNull then Exit;
+  if ARecv.NodeType = 'identifier' then RecvLast:= FieldNodeStr(ARecv, ASrc)
+  else if ARecv.NodeType = 'exprDot' then RecvLast:= FieldNodeStr(ARecv.ChildByField('rhs'), ASrc)
+  else Exit;
+  if IsSqlTextPropertyName(Trim(RecvLast)) then
+    Result:= UpperCase(StringReplace(StringReplace(StringReplace(FieldNodeStr(ARecv, ASrc),
+      ' ', '', [rfReplaceAll]), #13, '', [rfReplaceAll]), #10, '', [rfReplaceAll]));
+end;
+
 // When AStmt (one named child of a statement list) is `<recv>.Add(<arg>)`
 // with a SQL-text-property receiver, returns the run key (the receiver's source
 // text, whitespace dropped, upper-cased) and sets AArg to the single argument;
 // otherwise returns '' and leaves AArg untouched. Accepts the call either
-// wrapped in a 'statement' node or bare (a last statement with no ';').
-function SqlAddRunKey(const AStmt: TTSNode; const ASrc: TBytes; var AArg: TTSNode): string;
+// wrapped in a 'statement' node or bare (a last statement with no ';'). A bare
+// `Add(<arg>)` is a candidate only inside a SQL-text `with` (AWithKey <> '',
+// see SqlWithKey) and is keyed by it.
+function SqlAddRunKey(const AStmt: TTSNode; const ASrc: TBytes; const AWithKey: string; var AArg: TTSNode): string;
 var
-  Call, Ent, Recv, Args: TTSNode;
-  RecvLast             : string ;
+  Call, Ent, Args: TTSNode;
+  Key            : string ;
 begin
   Result:= '';
   Call:= AStmt;
   if (Call.NodeType = 'statement') and (Call.NamedChildCount = 1) then Call:= Call.NamedChild(0);
   if Call.NodeType <> 'exprCall' then Exit;
-  Ent:= Call.ChildByField('entity');
-  if Ent.IsNull or (Ent.NodeType <> 'exprDot')
-     or not SameText(Trim(FieldNodeStr(Ent.ChildByField('rhs'), ASrc)), 'Add') then Exit;
-  Recv:= Ent.ChildByField('lhs');
-  if Recv.IsNull then RecvLast:= ''
-  else if Recv.NodeType = 'identifier' then RecvLast:= FieldNodeStr(Recv, ASrc)
-  else if Recv.NodeType = 'exprDot' then RecvLast:= FieldNodeStr(Recv.ChildByField('rhs'), ASrc)
-  else RecvLast:= '';
+  Ent := Call.ChildByField('entity');
   Args:= Call.ChildByField('args');
-  if IsSqlTextPropertyName(Trim(RecvLast)) and (not Args.IsNull) and (Args.NamedChildCount = 1) then
+  if Ent.IsNull or Args.IsNull or (Args.NamedChildCount <> 1) then Exit;
+  if Ent.NodeType = 'identifier' then
+    Key:= if SameText(Trim(FieldNodeStr(Ent, ASrc)), 'Add') then AWithKey else '' // bare Add inside a SQL-text with
+  else if (Ent.NodeType = 'exprDot') and SameText(Trim(FieldNodeStr(Ent.ChildByField('rhs'), ASrc)), 'Add') then
+    Key:= SqlTextReceiverKey(Ent.ChildByField('lhs'), ASrc)
+  else
+    Key:= '';
+  if Key <> '' then
   begin
-    AArg:= Args.NamedChild(0);
-    Result:= UpperCase(StringReplace(StringReplace(StringReplace(FieldNodeStr(Recv, ASrc),
-      ' ', '', [rfReplaceAll]), #13, '', [rfReplaceAll]), #10, '', [rfReplaceAll]));
+    AArg  := Args.NamedChild(0);
+    Result:= Key;
+  end;
+end;
+
+// B-35 D18 residue: for a 'with' node, the run key of its RIGHTMOST entity
+// when that entity is a SQL-text receiver (SqlTextReceiverKey), else ''. The
+// rightmost entity shadows the others, so `with Q.SQL, Memo.Lines do Add(..)`
+// adds to the memo and yields ''. The body and keyword children are skipped
+// exactly as DRagLint.Index.CallResolver's with-scope reader skips them.
+function SqlWithKey(const AWith: TTSNode; const ASrc: TBytes): string;
+var
+  Body, C: TTSNode;
+  T      : string ;
+  I      : Integer;
+begin
+  Result:= '';
+  Body:= AWith.ChildByField('body');
+  for I:= 0 to AWith.NamedChildCount - 1 do
+  begin
+    C:= AWith.NamedChild(I);
+    if (not Body.IsNull) and (C.StartByte = Body.StartByte) and (C.EndByte = Body.EndByte) then Continue;
+    T:= C.NodeType;
+    if (T = 'comment') or ((Length(T) > 1) and (T[1] = 'k') and CharInSet(T[2], ['A'..'Z'])) then Continue;
+    Result:= SqlTextReceiverKey(C, ASrc); // the last entity seen wins
   end;
 end;
 
@@ -2435,13 +2554,14 @@ type
     IsDynamic: Boolean;
   end;
 
-// Classifies and extracts every open run of ARuns that holds 2+ literal-only
-// fragments, then empties ARuns. A nil ARuns is a no-op.
+// Classifies and extracts every open run of ARuns that holds 2+ fragments (a
+// dynamic run contributes its static prefix only), then empties ARuns. A nil
+// ARuns is a no-op.
 procedure FlushSqlAddRuns(ARuns: TDictionary<string, TSqlAddRun>; AReads, AWrites: TStringList);
 begin
   if ARuns = nil then Exit;
   for var Run in ARuns.Values do
-    if (Run.Count >= 2) and (not Run.IsDynamic) and ClassifySqlText(Run.Text) then
+    if (Run.Count >= 2) and ClassifySqlText(Run.Text) then
       ExtractSqlTables(Run.Text, AReads, AWrites);
   ARuns.Clear;
 end;
@@ -2451,17 +2571,19 @@ end;
 // above IsSqlTextPropertyName for the full rule. The run dictionary is created
 // only when a candidate statement is actually met, so the walk over ordinary
 // expression nodes allocates nothing.
-procedure WalkSqlAddRuns(const N: TTSNode; const ASrc: TBytes; AReads, AWrites: TStringList);
+procedure WalkSqlAddRuns(const N: TTSNode; const ASrc: TBytes; const AWithKey: string; AReads, AWrites: TStringList);
 var
   Runs     : TDictionary<string, TSqlAddRun>;
   Run      : TSqlAddRun;
   C, Arg   : TTSNode;
   Key, Text: string ;
+  WithKey  : string ;
   IsDynamic: Boolean;
   I        : Integer;
 begin
   if N.IsNull then Exit;
   if N.NodeType = 'defProc' then Exit; // nested routine -- analyzed separately, on its own
+  WithKey:= if N.NodeType = 'with' then SqlWithKey(N, ASrc) else AWithKey;
   Runs:= nil;
   try
     for I:= 0 to N.NamedChildCount - 1 do
@@ -2469,7 +2591,7 @@ begin
       C:= N.NamedChild(I);
       if (C.NodeType = 'comment') or StartsText('pp', C.NodeType) then Continue; // transparent
       Arg:= C;
-      Key:= SqlAddRunKey(C, ASrc, Arg);
+      Key:= SqlAddRunKey(C, ASrc, WithKey, Arg);
       if Key = '' then
       begin
         FlushSqlAddRuns(Runs, AReads, AWrites); // any other statement ends every open run
@@ -2477,12 +2599,16 @@ begin
       end;
       if Runs = nil then Runs:= TDictionary<string, TSqlAddRun>.Create;
       if not Runs.TryGetValue(Key, Run) then Run:= Default(TSqlAddRun);
-      Text     := '';
-      IsDynamic:= False;
-      CollectConcatRun(Arg, ASrc, Text, IsDynamic);
-      Run.Text     := Run.Text + Text + ' ';
-      Run.IsDynamic:= Run.IsDynamic or IsDynamic;
       Inc(Run.Count);
+      if not Run.IsDynamic then // a closed (dynamic) run takes no more text
+      begin
+        Text     := '';
+        IsDynamic:= False;
+        CollectConcatRun(Arg, ASrc, Text, IsDynamic);
+        if IsDynamic then Text:= StaticSqlPrefix(Text);
+        Run.Text     := Run.Text + Text + ' ';
+        Run.IsDynamic:= IsDynamic;
+      end;
       Runs.AddOrSetValue(Key, Run);
     end;
     FlushSqlAddRuns(Runs, AReads, AWrites);
@@ -2490,7 +2616,7 @@ begin
     Runs.Free;
   end;
   for I:= 0 to N.NamedChildCount - 1 do
-    WalkSqlAddRuns(N.NamedChild(I), ASrc, AReads, AWrites);
+    WalkSqlAddRuns(N.NamedChild(I), ASrc, WithKey, AReads, AWrites);
 end;
 
 // ADP2 T7: fills ASqlReadsCsv/ASqlWritesCsv (capped, display-ready CSV
@@ -2524,7 +2650,7 @@ begin
     WriteSet.Sorted:= True; WriteSet.Duplicates:= dupIgnore; WriteSet.CaseSensitive:= False;
 
     WalkSqlLiterals(ABody, ASrc, ReadSet, WriteSet);
-    WalkSqlAddRuns(ABody, ASrc, ReadSet, WriteSet); // D18: SQL.Add lines assembled per receiver
+    WalkSqlAddRuns(ABody, ASrc, '', ReadSet, WriteSet); // D18: SQL.Add lines assembled per receiver
 
     if (ReadSet.Count = 0) and (WriteSet.Count = 0) then Exit;
 

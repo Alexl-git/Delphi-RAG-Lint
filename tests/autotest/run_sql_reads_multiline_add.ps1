@@ -87,6 +87,16 @@ type
     procedure DynamicMiddle(Q: TQry);
     procedure BrokenByExec(Q: TQry);
     procedure MemoLines(M: TMemo);
+    procedure WithSql(Q: TQry);
+    procedure WithMemo(M: TMemo);
+    procedure TextCrLf(Q: TQry);
+    procedure TextLineBreak(Q: TQry);
+    procedure EmbeddedCrLf(Q: TQry);
+    procedure DynTail(Q: TQry; N: Integer);
+    procedure DynTailOne(Q: TQry; N: Integer);
+    procedure TextDynTail(Q: TQry; N: Integer);
+    procedure DynPartialName(Q: TQry);
+    procedure DynThenStatic(Q: TQry);
   end;
 
 implementation
@@ -180,6 +190,74 @@ begin
   M.Lines.Add('from MEMOTAB listing');
 end;
 
+procedure TRunner.WithSql(Q: TQry);
+begin
+  with Q.SQL do
+  begin
+    Clear;
+    Add('SELECT *');
+    Add('FROM WITHSQLTAB');
+  end;
+end;
+
+procedure TRunner.WithMemo(M: TMemo);
+begin
+  with M.Lines do
+  begin
+    Add('SELECT *');
+    Add('FROM WITHMEMOTAB');
+  end;
+end;
+
+procedure TRunner.TextCrLf(Q: TQry);
+begin
+  Q.SQL.Text := 'SELECT *' + #13#10 +
+    'FROM CRLFTAB';
+end;
+
+procedure TRunner.TextLineBreak(Q: TQry);
+begin
+  Q.SQL.Text := 'SELECT *' + sLineBreak +
+    'FROM LBTAB';
+end;
+
+procedure TRunner.EmbeddedCrLf(Q: TQry);
+begin
+  Q.SQL.Text := 'SELECT *'#13#10'FROM EMBEDTAB';
+end;
+
+procedure TRunner.DynTail(Q: TQry; N: Integer);
+begin
+  Q.SQL.Add('SELECT *');
+  Q.SQL.Add('FROM DYNTAILTAB');
+  Q.SQL.Add('WHERE ID = ' + IntToStr(N));
+  Q.Open;
+end;
+
+procedure TRunner.DynTailOne(Q: TQry; N: Integer);
+begin
+  Q.SQL.Add('SELECT * FROM ONETAB WHERE ID = ' + IntToStr(N));
+end;
+
+procedure TRunner.TextDynTail(Q: TQry; N: Integer);
+begin
+  Q.SQL.Text := 'SELECT * ' +
+    'FROM TEXTDYNTAB ' +
+    'WHERE ID = ' + IntToStr(N);
+end;
+
+procedure TRunner.DynPartialName(Q: TQry);
+begin
+  Q.SQL.Text := 'SELECT * FROM PFX_' + FTable;
+end;
+
+procedure TRunner.DynThenStatic(Q: TQry);
+begin
+  Q.SQL.Add('SELECT *');
+  Q.SQL.Add('FROM ' + FTable);
+  Q.SQL.Add('JOIN AFTERDYN ON 1 = 1');
+end;
+
 end.
 '@
 $norm = $unit -replace "`r`n", "`n" -replace "`n", "`r`n"
@@ -219,6 +297,21 @@ try {
   Expect 'DynamicMiddle' ''         ''
   Expect 'BrokenByExec'  'REALREAD' 'TMPROWS'
   Expect 'MemoLines'     ''         ''
+
+  # B-35 D18 residue (2026-10-26): what the 1.19.0 assembly still missed.
+  Write-Host 'D18 RESIDUE -- with-receiver, line-break constants, dynamic tail:' -ForegroundColor Cyan
+  Expect 'WithSql'       'WITHSQLTAB' ''
+  Expect 'TextCrLf'      'CRLFTAB'    ''
+  Expect 'TextLineBreak' 'LBTAB'      ''
+  Expect 'EmbeddedCrLf'  'EMBEDTAB'   ''
+  Expect 'DynTail'       'DYNTAILTAB' ''
+  Expect 'DynTailOne'    'ONETAB'     ''
+  Expect 'TextDynTail'   'TEXTDYNTAB' ''
+
+  Write-Host 'D18 RESIDUE OVER-CAPTURE GUARDS:' -ForegroundColor Cyan
+  Expect 'WithMemo'       '' ''   # with Memo.Lines: not a SQL-text receiver
+  Expect 'DynPartialName' '' ''   # 'FROM PFX_' + X: the partial name is not a table
+  Expect 'DynThenStatic'  '' ''   # text AFTER a dynamic operand is never scanned
 } finally { Pop-Location }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
