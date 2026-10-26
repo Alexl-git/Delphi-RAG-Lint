@@ -163,6 +163,7 @@ uses
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
+  , DRagLint.Project.DefineProfile
   , DRagLint.FormsMap
   , DRagLint.MenuTree
   , DRagLint.MenuTree.Dfm
@@ -24496,7 +24497,10 @@ begin
 end; // function
 
 /// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
-/// [--config Release|Debug] -- diagnostic dump of the define-profile resolver.
+/// [--config Release|Debug] [--in FILE [--db DB]] -- diagnostic dump of the define-profile resolver.
+/// With --in FILE (LSP C10) it first prints dproj= / platform= / config= /
+/// source=builtins|dproj|delphilsp (the .dproj comes first, delphilsp.json only when it has no Config marker) / digest= lines and a blank line, then the symbols of
+/// the profile the FILE's own project's ACTIVE build gives it (built-ins when no .dproj owns it).
 /// With --dproj it resolves ProfileFromDproj (platform built-ins UNION the .dproj
 /// Base + selected-config DCC_Define symbols); without --dproj it dumps
 /// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
@@ -24507,25 +24511,39 @@ end; // function
 /// config.</param>
 /// <returns>0 always (a missing .dproj degrades to built-ins, never an error).</returns>
 function DoPpProfile(const AArgs: TArgs): Integer;
+const
+  SourceNames: array[TDefineSource] of string = ('builtins', 'dproj', 'delphilsp');
 var
   Platform: string        ;
   Config  : string        ;
   Profile : TDefineProfile;
   Defines : TArray<string>;
   Sym     : string        ;
+  Build   : TActiveBuild  ;
 begin
   Platform:= AArgs.CheckPlatform;
   if Platform = '' then Platform:= 'Win64';
   Config:= AArgs.WorkspaceConfig;
   if Config = '' then Config:= 'Release';
 
-  if AArgs.PpDproj <> '' then
-    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config)
-  else
+  Profile.Defines:= PlatformBuiltins(Platform);
+  Profile.NumericDefines:= nil;
+  if AArgs.InFile <> '' then
   begin
-    Profile.Defines:= PlatformBuiltins(Platform);
-    Profile.NumericDefines:= nil;
-  end;
+    { LSP C10: the profile of the file's OWN project's active build. }
+    TProjectProfileCache.Configure(AArgs.DbPaths, AArgs.ProjectPath, AArgs.CheckPlatform,
+      AArgs.WorkspaceConfig, Profile, True);
+    Build:= TProjectProfileCache.BuildForFile(AArgs.InFile);
+    Writeln('dproj=', if Build.Dproj = '' then '-' else Build.Dproj);
+    Writeln('platform=', Build.Platform);
+    Writeln('config=', if Build.Config = '' then '-' else Build.Config);
+    Writeln('source=', SourceNames[Build.Source]);
+    Writeln('digest=', if Build.Digest = '' then '-' else Build.Digest);
+    Writeln('');
+    Profile:= Build.Profile;
+  end
+  else if AArgs.PpDproj <> '' then
+    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config);
 
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);

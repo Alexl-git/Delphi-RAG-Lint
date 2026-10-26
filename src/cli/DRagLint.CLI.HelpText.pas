@@ -349,7 +349,7 @@ begin
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
-  Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
+  Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] [--in <file.pas> [--db <file.sqlite>]]   (diagnostic: print the resolved define profile, one symbol per line; --in prints the profile of the owning project  active build)');
   Writeln('  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
@@ -1083,7 +1083,7 @@ begin
   end;
   if pVerb = 'pp-profile' then
   begin
-    Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
+    Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] [--in <file.pas> [--db <file.sqlite>]]   (diagnostic: print the resolved define profile, one symbol per line; --in prints the profile of the owning project  active build)');
     Exit;
   end;
   if pVerb = 'project-facts' then
