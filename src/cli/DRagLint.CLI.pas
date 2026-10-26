@@ -1630,7 +1630,7 @@ begin
     else if (A = '--rsvars') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.CycleRsVars:= ParamStr(i);
+      Result.CycleRsVars:= ParamStr(i);  // dl:ok duplicate-code@bcfb -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
     end
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
