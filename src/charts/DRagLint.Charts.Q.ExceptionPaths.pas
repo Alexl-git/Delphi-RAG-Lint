@@ -60,7 +60,7 @@ uses
   System.SysUtils, System.Math, System.Generics.Defaults, System.Generics.Collections, System.RegularExpressions,
   DRagLint.Charts.Question, DRagLint.Charts.Index, DRagLint.Charts.Text, DRagLint.Charts.Dot,
   DRagLint.Charts.Source, DRagLint.Charts.Sql, DRagLint.Charts.Exceptions, DRagLint.Charts.PsSort,
-  DRagLint.Core.Model;
+  DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- REVIEWED 2026-10-26 (XT-RAISE): uses Core.Model only for the REF_KIND_* constants, the one declaration the extractor writes and this chart reads
 
 const
   RAISE_BORDER = '#B02A37';

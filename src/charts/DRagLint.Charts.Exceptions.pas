@@ -332,7 +332,7 @@ uses
   System.RegularExpressions
   , System.Math
   , System.Generics.Defaults
-  , DRagLint.Core.Model
+  , DRagLint.Core.Model  // dl:ok uses-global-census@64a5 -- REVIEWED 2026-10-26 (XT-RAISE): uses Core.Model only for the REF_KIND_* constants, the one declaration the extractor writes and this chart reads
   ;
 
 const
