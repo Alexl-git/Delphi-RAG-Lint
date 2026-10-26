@@ -482,6 +482,7 @@ type
     Switches   : TArray<TSwitchLine>;
     Refusal    : string;  // mvBlocked by a recipe gate: its refusal kind (F5: 'base-class'); '' otherwise
     SameLine   : Boolean; // W6 C6: the keyword opens the declaration's own line (`var X: T;`); Header = Sym.StartLine
+    BaseAncestor: string; // B4-d: the ancestor the base class inherits, as the header writes it; '' = TObject
   end;
 
   TConsumer = record
@@ -649,6 +650,9 @@ type
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
+    function AncestorRefusal(const pF: TPlanFile; const pItem: TMoveItem; const pAnc: string): string;
+    function StreamedMemberRefusal(const pF: TPlanFile; const pItem: TMoveItem): string;
+    function ClassParentRefusal(const pItem: TMoveItem): string;
     function ClassTestSiteOk(const pCode: string; pIndex, pLen: Integer; const pItem: TMoveItem): Boolean;
     function FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string;
       const pSlots: TArray<string> = nil): string;
@@ -2034,33 +2038,59 @@ begin
   end;
 end;
 
+{ The F5 base-class plan of a class: `TX = class` or, since B4-d, `TX = class(TAnc[, I1, ...])`
+  with TAnc declared outside the cycle -- the leaf gets `TXBase = class(TAnc)`, the class becomes
+  `TX = class(TXBase[, I1, ...])` (the interfaces stay on TX: their methods are implemented there). }
 procedure TCyclePlanner.BuildBase(const pF: TPlanFile; var pItem: TMoveItem);
 var
   M       : TMatch;
   Children: TArray<TSymbol>;
   Used    : TDictionary<string, Boolean>;
   Comment : string;
+  Rest    : string;
+  Site    : string;
+
+  procedure RefuseSite(const pSite: string);
+  begin
+    pItem.Refusal:= 'base-class';
+    pItem.Reason := 'refused: base-class -- ' + pSite;
+  end;
+
 begin
   pItem.Kind:= mvBlocked;
-  if (pItem.Sym.Heritage <> '') or pItem.Sym.IsHelper or (pItem.Sym.GenericParams <> '') then
+  if pItem.Sym.IsHelper or (pItem.Sym.GenericParams <> '') then
   begin
-    pItem.Reason:= 'it inherits, is generic or is a helper, so a base class cannot be slotted in ' +
-      'mechanically';
+    pItem.Reason:= 'it is generic or is a helper, so a base class cannot be slotted in mechanically';
     Exit;
   end;
-  M:= TRegEx.Match(LineAt(pF.Lines, pItem.Sym.StartLine),
-    '^(\s*)' + pItem.Sym.Name + '\s*=\s*class\s*(//.*)?$', [roIgnoreCase]);
+  var Line:= LineAt(pF.Lines, pItem.Sym.StartLine);
+  var Code:= CodePart(Line);
+  M:= TRegEx.Match(Code, '^(\s*)' + pItem.Sym.Name + '\s*=\s*class\s*(\(([^()]*)\))?\s*$', [roIgnoreCase]);
   if not M.Success then
   begin
-    pItem.Reason:= Format('its header (line %d) is not a plain `%s = class` line',
-      [pItem.Sym.StartLine, pItem.Sym.Name]);
+    pItem.Reason:= Format('its header (line %d) is not a plain `%s = class` or `%s = class(...)` line ' +
+      '(the heritage must close on it)', [pItem.Sym.StartLine, pItem.Sym.Name, pItem.Sym.Name]);
     Exit;
   end;
   pItem.BaseName  := pItem.Sym.Name + CBaseSuffix;
   pItem.BaseIndent:= M.Groups[1].Value;
-  Comment:= '';
-  if M.Groups.Count > 2 then Comment:= M.Groups[2].Value;
-  pItem.HeaderNew:= pItem.BaseIndent + pItem.Sym.Name + ' = class(' + pItem.BaseName + ')' +
+  Comment:= Trim(Copy(Line, Length(Code) + 1, MaxInt));
+  { B4-d: the direct ancestor goes to the base class; the interfaces stay on the class }
+  Rest:= '';
+  { an unmatched optional group is not in Groups (Count stops at the last group that took part) }
+  if (M.Groups.Count > 3) and (Trim(M.Groups[3].Value) <> '') then
+  begin
+    var Parts:= SplitHeritage(M.Groups[3].Value);
+    Site:= AncestorRefusal(pF, pItem, Parts[0]);
+    if Site <> '' then
+    begin
+      RefuseSite(Site);
+      Exit;
+    end;
+    pItem.BaseAncestor:= Parts[0];
+    for var I:= 1 to High(Parts) do Rest:= Rest + ', ' + Parts[I];
+  end;
+  pItem.HeaderNew:= pItem.BaseIndent + pItem.Sym.Name + ' = class(' + pItem.BaseName + Rest + ')' +
     (if Comment <> '' then ' ' + Comment else '');
   Children:= FStore.FindAllChildSymbols(pItem.Sym.Id);
   Used:= UsedMemberNames(Children, pItem.CutFids, pItem.Sym.Name);
@@ -2072,14 +2102,86 @@ begin
   if not BuildSwitches(pItem) then Exit;
   { E18 T7 F5: the base class stands in for the class only where nothing but a
     member read or a nil test happens to it }
-  var Site:= BaseSiteRefusal(pItem);
+  Site:= BaseSiteRefusal(pItem);
+  { B4-d: a form / data module keeps its streamed members; the RTTI parent must not be observed }
+  if Site = '' then Site:= StreamedMemberRefusal(pF, pItem);
+  if Site = '' then Site:= ClassParentRefusal(pItem);
   if Site <> '' then
   begin
-    pItem.Refusal:= 'base-class';
-    pItem.Reason := 'refused: base-class -- ' + Site;
+    RefuseSite(Site);
     Exit;
   end;
   pItem.Kind:= mvBase;
+end;
+
+{ B4-d: '' when the ancestor pAnc of the class is declared outside the cycle -- in a project unit
+  that is no member of the group, or (no project row) in the platform library; else the site. }
+function TCyclePlanner.AncestorRefusal(const pF: TPlanFile; const pItem: TMoveItem; const pAnc: string): string;
+var
+  Owner: TSymbol;
+  Stem : string;
+begin
+  var Site:= Format('`%s:%d`', [ExtractFileName(pF.Path), pItem.Sym.StartLine]);
+  var Bare:= pAnc.Substring(pAnc.LastIndexOf('.') + 1);
+  if BindName(pF.Fid, pItem.Sym.StartLine, Bare, Owner, Stem) then
+  begin
+    if FMembers.ContainsKey(Stem) then
+      Exit(Format('%s: its ancestor `%s` is declared in `%s`, a unit of this cycle -- a base class inheriting ' +
+        'it would carry the cycle into the leaf', [Site, pAnc, ExtractFileName(PathOf(Owner.FileId))]));
+    Exit('');
+  end;
+  if FLibStore <> nil then
+    for var S in FLibStore.FindSymbolsByExactName(Bare) do
+      if S.Kind = skClass then Exit('');
+  Result:= Format('%s: its ancestor `%s` is declared in no index given (the project index has no row for it%s), ' +
+    'so the leaf that would inherit it cannot be checked', [Site, pAnc,
+    (if FLibStore = nil then ' and no platform library was read: pass --library-db' else ', nor has the platform library')]);
+end;
+
+{ B4-d: a unit with a form resource keeps every published (or unlabelled-section) member in the
+  form class -- the designer re-creates component fields there, which would shadow the base's
+  field, and streaming would fill the wrong one. '' when nothing streamed is pulled. }
+function TCyclePlanner.StreamedMemberRefusal(const pF: TPlanFile; const pItem: TMoveItem): string;
+begin
+  Result:= '';
+  var HasRes:= False;
+  for var L in pF.Lines do
+    if TRegEx.IsMatch(L, '\{\$R\s+\*\.(dfm|fmx)\}', [roIgnoreCase]) then HasRes:= True;
+  if not HasRes then Exit;
+  for var B in pItem.BaseMembers do
+    if SameText(Trim(B.Sym.Modifiers), 'published') or not B.Sym.VisExplicit then
+      Exit(Format('`%s:%d`: `%s.%s` is published (or in the unlabelled section) of a unit with a form resource ' +
+        '(`{$R *.dfm}` / `{$R *.fmx}`): the designer re-creates published fields in the form class, which would ' +
+        'shadow the base''s copy, and streaming would fill the wrong one', [ExtractFileName(pF.Path),
+        B.Sym.StartLine, pItem.Sym.Name, B.Sym.Name]));
+end;
+
+{ B4-d: `ClassParent` named in the class's unit or in a unit that uses it -- `TX.ClassParent`
+  would turn into `TXBase`, an observable change. '' when nothing names it. }
+function TCyclePlanner.ClassParentRefusal(const pItem: TMoveItem): string;
+var
+  Fids : TList<Int64>;
+  Users: TList<Int64>;
+begin
+  Result:= '';
+  Fids:= TList<Int64>.Create;
+  try
+    Fids.Add(pItem.Sym.FileId);
+    if FUsersOf.TryGetValue(pItem.Stem, Users) then
+      for var Fid in Users do
+        if not Fids.Contains(Fid) then Fids.Add(Fid);
+    for var Fid in Fids do
+    begin
+      var F:= GetFile(Fid);
+      for var I:= 0 to High(F.Lines) do
+        if TRegEx.IsMatch(CodePart(F.Lines[I]), '\bClassParent\b', [roIgnoreCase]) then
+          Exit(Format('`%s:%d`: `ClassParent` is named here; `%s.ClassParent` would turn from `%s` into `%s`, ' +
+            'an observable change', [ExtractFileName(F.Path), I + 1, pItem.Sym.Name,
+            (if pItem.BaseAncestor <> '' then pItem.BaseAncestor else 'TObject'), pItem.BaseName]));
+    end;
+  finally
+    Fids.Free;
+  end;
 end;
 
 function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>; const pClassName: string): TDictionary<string, Boolean>;
@@ -4004,10 +4106,12 @@ begin
   Lines:= TList<Integer>.Create;
   try
     for var M in pItem.BaseMembers do Names.Add(M.Sym.Name);
-    EmitFmt('   - New class `%s` in `%s` carries exactly what the units below use: %s.',
-      [pItem.BaseName, FLeafName[pItem.Stem], (if Names.Count > 0 then QuoteList(Names.ToArray) else 'nothing (an empty base)')]);
-    EmitFmt('   - `%s` stays in `%s` and becomes `%s = class(%s)`; the members above are deleted from it.',
-      [pItem.Sym.Name, ExtractFileName(PathOf(pItem.Sym.FileId)), pItem.Sym.Name, pItem.BaseName]);
+    EmitFmt('   - New class `%s` in `%s`%s carries exactly what the units below use: %s.',
+      [pItem.BaseName, FLeafName[pItem.Stem],
+       (if pItem.BaseAncestor <> '' then Format(' (inheriting `%s`, which is declared outside this cycle)', [pItem.BaseAncestor]) else ''),
+       (if Names.Count > 0 then QuoteList(Names.ToArray) else 'nothing (an empty base)')]);
+    EmitFmt('   - `%s` stays in `%s` and becomes `%s`; the members above are deleted from it.',
+      [pItem.Sym.Name, ExtractFileName(PathOf(pItem.Sym.FileId)), Trim(CodePart(pItem.HeaderNew))]);
     for var Fid in pItem.CutFids do
     begin
       Lines.Clear;
@@ -4117,7 +4221,7 @@ begin
     L.Add(Ind + '/// <summary>Base class of <c>' + pItem.Sym.Name + '</c>: the members that units');
     L.Add(Ind + '/// outside <c>' + F.UnitName + '</c> use, extracted by drag-lint cycles --plan');
     L.Add(Ind + '/// so those units can depend on this leaf unit instead.</summary>');
-    L.Add(Ind + pItem.BaseName + ' = class');
+    L.Add(Ind + pItem.BaseName + ' = class' + (if pItem.BaseAncestor <> '' then '(' + pItem.BaseAncestor + ')' else ''));
     for var Vis in TArray<string>.Create('protected', 'public', 'published') do
     begin
       Header:= False;

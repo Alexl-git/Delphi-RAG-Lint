@@ -310,6 +310,13 @@ function SignatureTypes(const pSource: IEdgeSurfaceSource; pDeclFid: Int64; pDec
 /// the cycle.</returns>
 function SigTypesOutsideScc(const pTypes: TArray<TSigType>; out pStems: TArray<string>): Boolean;
 
+/// <summary>Splits a heritage list (`TAnc, I1, IList&lt;T&gt;`) into its entries.</summary>
+/// <param name="pText">The text between the parentheses of a class header, or
+/// symbols.heritage.</param>
+/// <returns>Each entry trimmed, in order; a comma inside `&lt;...&gt;` does not split.
+/// Empty for blank text.</returns>
+function SplitHeritage(const pText: string): TArray<string>;
+
 /// <summary>Collects what unit pFromFid takes from unit pToStem.</summary>
 /// <param name="pSource">Index access; must not be nil. Its IsSccStem must answer for
 /// the group the edge belongs to (it fills SigTypes[].InScc).</param>
