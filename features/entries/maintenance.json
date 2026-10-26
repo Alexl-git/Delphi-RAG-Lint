@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.4.0-alpha",
   "summary": "Indexes, the manifest, reindexing, and what to do when something looks wrong",
   "intro": "Read this when drag-lint gives a wrong answer, because that is almost always a stale or mis-scoped index. It explains where indexes live, how to keep them fresh and how to recognise a bad one.",
   "wikiPage": "Maintenance",

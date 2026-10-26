@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.39.0-alpha",
   "summary": "Opens the drag-lint plugin's own log file",
-  "intro": "Read this when you are diagnosing the drag-lint plugin itself: choosing it opens the plugin own log file, which shows what it did, what it ran and any errors it hit.",
+  "intro": "Read this when you are diagnosing the drag-lint plugin itself: the About window button opens the plugin's own log file, which shows what it did, what it ran and any errors it hit.",
   "wikiPage": "Open-Plugin-Log",
   "surfaces": [
     {

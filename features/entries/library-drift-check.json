@@ -4,9 +4,9 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.47.0-alpha",
   "summary": "Flags registered library roots that have source on disk but nothing in the index",
-  "intro": "Read this when a library index may have gone stale or was never built. It checks the registered library roots and flags any that have source on disk but nothing in the index; it exits 2 when it finds drift.",
+  "intro": "Read this when a library index may have gone stale or was never built. The library-drift verb (or Library Drift Check in the IDE) flags every registered library root that has source on disk but nothing in the index, and exits 2 when it finds drift.",
   "wikiPage": "Library-Drift-Check",
   "surfaces": [
     {
