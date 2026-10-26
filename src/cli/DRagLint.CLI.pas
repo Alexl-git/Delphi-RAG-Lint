@@ -2763,6 +2763,27 @@ begin
   if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
 end;
 
+{ Installs the per-file define resolver (LSP C10) for a verb that lints files: the
+  process-wide profile stays the FALLBACK (built-ins, or --project's profile), so a
+  file no .dproj owns is treated exactly as before C10.
+
+  Precedence lives in DRagLint.Project.DefineProfile: an explicit --project
+  (AArgs.ProjectPath) wins over the owning .dproj found through DB membership, then
+  the .dproj's own folder (one .dproj only); the platform is the project's active
+  platform unless --platform was typed. Nothing to Clear: the LSP lint path calls
+  ApplyPreprocess on every run (no memo) and TProjectProfileCache re-stamps the
+  .dproj / .delphilsp.json on every lookup. No-op under --no-preprocess. }
+procedure InstallFileProfileResolver(const AArgs: TArgs; const ADbPaths: TArray<string>; const AFallback: TDefineProfile);
+begin
+  if AArgs.NoPreprocess then Exit;
+  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', AFallback, True);
+  TAstParseCache.SetProfileResolver(
+    function(AFile: string): TDefineProfile
+    begin
+      Result:= TProjectProfileCache.ProfileForFile(AFile);
+    end);
+end;
+
 // v0.45 Task 7: build one plan item into its SQLite database.
 // Creates the Store + Indexer, applies filter + dedup roots, walks per mode,
 // then calls ResolveUnitUseTargets. Writes a one-line summary to stdout.
@@ -13733,6 +13754,7 @@ begin
     the same input, which is the point: two entry points, one decision. }
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  InstallFileProfileResolver(AArgs, AArgs.DbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -19911,6 +19933,7 @@ begin
     its own, linting its closure against the library is "0 file(s) scanned", a
     silent zero -- ProjectDb stays '' and the run refuses below. }
   SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
+  InstallFileProfileResolver(AArgs, Dbs, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -33921,6 +33944,7 @@ begin
         Guard: tests\autotest\run_lsp_preprocess_guard.ps1. }
       TAstParseCache.SetPreprocess(not Args.NoPreprocess,
         ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
+      InstallFileProfileResolver(Args, DbList, ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;
