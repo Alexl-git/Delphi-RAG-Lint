@@ -8775,18 +8775,60 @@ end;
   stand-in engine (a .cmd that sleeps) must give [] within the bound. A second
   stand-in that answers proves the .cmd mechanism reaches CapabilityNames at all --
   without it, a stand-in that never started would pass the timeout check. }
+{ R7: engine stdout is UTF-8; a character split across two pipe reads must stay whole.
+  Every 2-way split point, plus 1-byte feeding, over 1-, 2-, 3- and 4-byte characters. }
+procedure TestUtf8ChunkDecode;
+var
+  LText   : string;
+  LBytes  : TBytes;
+  LPending: TBytes;
+  LGot    : string;
+  LBad    : Integer;
+begin
+  LText:= 'a' + #$00E9 + 'b' + #$20AC + 'c' + #$D83D#$DE00 + 'd';  // a e-acute b euro c U+1F600 d
+  LBytes:= TEncoding.UTF8.GetBytes(LText);
+  LBad:= 0;
+  for var LCut: Integer:= 0 to Length(LBytes) do
+  begin
+    LPending:= nil;
+    LGot:= DecodeUtf8Chunk(LPending, Copy(LBytes, 0, LCut));
+    LGot:= LGot + DecodeUtf8Chunk(LPending, Copy(LBytes, LCut, Length(LBytes) - LCut));
+    LGot:= LGot + FlushUtf8Pending(LPending);
+    if LGot <> LText then
+      Inc(LBad);
+  end;
+  Check('utf8.chunk.every.split.point', LBad = 0, IntToStr(LBad) + ' bad splits');
+  LPending:= nil;
+  LGot:= '';
+  for var LIx: Integer:= 0 to High(LBytes) do
+    LGot:= LGot + DecodeUtf8Chunk(LPending, [LBytes[LIx]]);
+  Check('utf8.chunk.byte.at.a.time', (LGot = LText) and (Length(LPending) = 0));
+  // The old per-chunk ANSI decode: the pending tail of a cut character is held, not emitted.
+  LPending:= nil;
+  LGot:= DecodeUtf8Chunk(LPending, [Byte($C3)]);
+  Check('utf8.chunk.holds.incomplete', (LGot = '') and (Length(LPending) = 1));
+  Check('utf8.chunk.completes', DecodeUtf8Chunk(LPending, [Byte($A9)]) = #$00E9);
+  // A truncated final sequence is flushed (U+FFFD), never dropped silently.
+  LPending:= nil;
+  DecodeUtf8Chunk(LPending, [Byte($E2), Byte($82)]);
+  Check('utf8.flush.truncated', (Length(LPending) = 2) and (FlushUtf8Pending(LPending) <> '') and (Length(LPending) = 0));
+end;
+
 procedure TestCapabilityProbeTimeout;
 const
   BOUND_MS  = 1500;
   MARGIN_MS = 2500;  // the bound plus process start-up; the stand-in sleeps ~6 s
   SLEEP_CMD = '@ping -n 7 127.0.0.1 >nul' + #13#10;
   ANSWER_CMD = '@echo {"capabilities":{"book_depth":true}}' + #13#10;
+  EXIT_OK   = 0;
 var
   Dir    : string;
   Eng    : TEngineAdapter;
   Caps   : TArray<string>;
   TStart : UInt64;
   Elapsed: UInt64;
+  LParsed: Boolean;
+  LCached: Boolean;
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'caps-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -8796,6 +8838,13 @@ begin
 
     Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'answer.cmd'), []);
     try
+      var LAns: TArray<string>;
+      var LAnsCode: Integer:= Eng.CapabilityProbeTimed(LAns, LParsed);
+      var LAnsNote: string:= StartupProbeVerdict(LAnsCode, LParsed, LCached);
+      Check('caps.startup.answer.cached', (LAnsCode = EXIT_OK) and LCached and (LAnsNote = '') and MatchText(CAPABILITY_BOOK_DEPTH, LAns), IntToStr(LAnsCode));
+      Check('caps.startup.verdict.pure', (StartupProbeVerdict(EXIT_OK, True, LCached) = '') and LCached
+        and (StartupProbeVerdict(ENGINE_OUTCOME_TIMEOUT, False, LCached) <> '') and not LCached
+        and (StartupProbeVerdict(EXIT_OK, False, LCached) <> '') and not LCached);
       Check('caps.info.timeout.default', Eng.InfoTimeoutMs = INFO_TIMEOUT_MS, IntToStr(Eng.InfoTimeoutMs));
       Caps:= Eng.CapabilityNames;
       Check('caps.standin.answers', MatchText(CAPABILITY_BOOK_DEPTH, Caps), string.Join(',', Caps));
@@ -8811,6 +8860,10 @@ begin
       Elapsed:= GetTickCount64 - TStart;
       Check('caps.timeout.is.none', (Length(Caps) = 0) and (Elapsed < BOUND_MS + MARGIN_MS),
         Format('%d caps in %d ms', [Length(Caps), Elapsed]));
+      // R2b: the start-up probe must see the timeout as a failure, not as "no capabilities".
+      var LCode: Integer:= Eng.CapabilityProbeTimed(Caps, LParsed);
+      var LNote: string:= StartupProbeVerdict(LCode, LParsed, LCached);
+      Check('caps.startup.timeout.not.cached', (LCode <> EXIT_OK) and not LCached and (LNote <> ''), IntToStr(LCode));
     finally
       Eng.Free;
     end;
@@ -15678,6 +15731,7 @@ begin
     TestEngineProgress;
     TestEngineArgsAndCaps;
     TestCapabilityProbeTimeout;
+    TestUtf8ChunkDecode;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
     TestChooseTestEngine;

@@ -35,6 +35,7 @@ uses
   , Vcl.Themes
   , ConvRules.Model  // dl:unit ConvRules.Model accepted -- TRuleBook types a field; BOOK_DEPTH_MIN/MAX/DEFAULT travel with TRuleBook.Depth so the depth combo's 1..10 range cannot drift from the parser's
   , ConvRules.Casts
+  , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- StartupProbeVerdict is the probe's one decision, shared with the Convert tab
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- TEngineAdapter types a field; CAPABILITY_BOOK_DEPTH/PROGRESS_LINES travel with CapabilityNames, the one call that answers them
   , ConvRules.Platform
   , ConvRules.EngineProgress // TStreamingWork: RunLongCallTracked's signature, so INTERFACE-visible
@@ -210,6 +211,7 @@ type
       FCbDepth      : TComboBox       ; // book #depth, 1..10 (engine 1.20.6 book_depth)
       FLblDepthNote : TLabel          ; // "(default)" / "(from book)" / invalid / duplicate
       FBookDepthOk  : Boolean         ; // engine reports book_depth
+      FStartupProbed: Boolean         ; // R2b: the start-up capability probe was ANSWERED (a failed one is asked again)
       FDepthTimer   : TTimer          ; // debounces wheel / arrow-key steps on FCbDepth: one reload per committed change
       FDepthPending : Boolean         ; // a selection notification arrived on FCbDepth and is not committed yet
       FDepthCancelled: Boolean        ; // CBN_SELENDCANCEL seen WHILE the list was dropped: dismissed (Esc / focus loss), not picked from
@@ -2371,6 +2373,9 @@ type
       function InMenuLoop: Boolean;
       /// <summary>Shows the book's depth, its state note and the capability gate on the depth combo.</summary>
       procedure RefreshDepthControl;
+      /// <summary>R2b: the start-up `info --json` probe behind the depth combo (book_depth) and --progress-interval (progress_lines).</summary>
+      /// <remarks>An answer is cached for the session (FStartupProbed); a failed or timed-out probe is NOT cached, switches both features off for now, says so in the status line, and is asked again by the next RefreshDepthControl. Decision: ConvRules.CapabilityProbe.StartupProbeVerdict.</remarks>
+      procedure ProbeStartupCapabilities;
       /// <summary>Sets the engine's --depth for the next proptree calls: the book's depth, or 0 (omit) on an engine without book_depth.</summary>
       procedure PrepareEngineForTrees;
       /// <summary><!-- drag-lint:auto sum -->Lazy-load the class list the first time a
@@ -2860,10 +2865,8 @@ begin
   // proptree runs behind a cancellable window; FTreeLoads holds depth commits back
   // for every such call, including New Conversion's class checks.
   FEngine.LongCallRunner:= RunLongCallTracked;
-  // One `info --json` call gates both 1.20.6 features for the whole session.
-  var LCaps: TArray<string>:= FEngine.CapabilityNames;
-  FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
-  FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
+  // The `info --json` probe that gates both 1.20.6 features runs in RefreshDepthControl
+  // (ProbeStartupCapabilities), after BuildUI: a failed probe needs the status line.
   FActiveHdr:= -1;
   FSurfaceMinVis:= 'published'; // default target surface = DFM-streamable
   { ParseCastLib, not LoadCastLib: the latter returns only the casts and drops the
@@ -6449,8 +6452,24 @@ begin
     SetStatusAfterCancel('Surface: DFM -- published (DFM-streamable) props only.');
 end; // procedure
 
+procedure TConvRulesForm.ProbeStartupCapabilities;
+begin
+  var LCaps  : TArray<string>;
+  var LParsed: Boolean;
+  var LCode  : Integer:= FEngine.CapabilityProbeTimed(LCaps, LParsed);
+  var LCached: Boolean;
+  var LNote  : string:= StartupProbeVerdict(LCode, LParsed, LCached);
+  FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
+  FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
+  FStartupProbed:= LCached;
+  if LNote <> '' then
+    SetError(LNote);
+end;
+
 procedure TConvRulesForm.RefreshDepthControl;
 begin
+  if not FStartupProbed then
+    ProbeStartupCapabilities;
   // A pending wheel step belongs to the book on screen before this refresh, never the next one.
   FDepthTimer.Enabled:= False;
   FDepthPending:= False;

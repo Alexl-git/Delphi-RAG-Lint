@@ -132,6 +132,14 @@ function WaitQuestionText(ACase: TProbeCase; const AVersionText: string): string
 /// poAnswered otherwise: ''.</returns>
 function ProbeStatusText(AOutcome: TProbeOutcome; ACase: TProbeCase; const AVersionText: string): string;
 
+/// <summary>The start-up probe's verdict (R2b): the status note and whether the answer may stand.</summary>
+/// <param name="AExitCode">The `info --json` exit code (a timeout is ENGINE_OUTCOME_TIMEOUT).</param>
+/// <param name="AParsed">The output held an info object.</param>
+/// <param name="ACached">True only when the engine answered; False means the next check must ask again.</param>
+/// <returns>'' when answered; otherwise the ProbeStatusText of a failed probe (the start-up probe has no wait window, so never "did not finish").</returns>
+/// <remarks>The same decision TConvertTab applies (ProbeOutcomeFor + ProbeIsCached + ProbeStatusText); this is the version-less form for TConvRulesForm.Create.</remarks>
+function StartupProbeVerdict(AExitCode: Integer; AParsed: Boolean; out ACached: Boolean): string;
+
 implementation
 
 uses
@@ -254,6 +262,13 @@ begin
       Format('Engine %s is older than %s, the oldest this editor fully supports: the features it lacks are off.', [AVersionText, REQUIRED_ENGINE_VERSION])
     else '';
   end; // case
+end;
+
+function StartupProbeVerdict(AExitCode: Integer; AParsed: Boolean; out ACached: Boolean): string;
+begin
+  var LOutcome: TProbeOutcome:= ProbeOutcomeFor(AExitCode, AParsed, False);
+  ACached:= ProbeIsCached(LOutcome);
+  Result:= ProbeStatusText(LOutcome, pcVersionUnknown, '');
 end;
 
 end.
