@@ -12,6 +12,8 @@
                                              run_lsp_proxy_*_guard (dcc64)
     src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe
                                              run_lsp_switch_params_guard (msbuild)
+    src\tools\uri-handler\Win64\Debug\drag-lint-open.exe
+                                             run_uri_handler / run_protocol_verb (STAGED copy)
     tests\fixtures\T2..T7 *.exe              run_v021_doctests.bat (dcc64)
     src\cli\_D-RAG\drag-lint.sqlite          self-index several guards query
         = engine `index --project src\cli\drag-lint.dproj` (slow: minutes)
@@ -87,6 +89,13 @@ $sw = Join-Path $root 'src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe'
 Need $sw 'drag-lint-switch.exe' {
   $null = Invoke-Wrapped 'switch' 'msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal src\tools\lsp-switch\drag-lint-switch.dproj'
 }
+
+# --- drag-lint-open.exe (X-06) ---------------------------------------------
+# Staged (copied from the main checkout / dll-win64), never built here; the same helper the
+# run_uri_handler / run_protocol_verb guards use, so a fresh worktree battery starts GREEN on them.
+. (Join-Path $PSScriptRoot 'lib\UriHandlerExe.ps1')
+$openExe = Join-Path $root 'src\tools\uri-handler\Win64\Debug\drag-lint-open.exe'
+Need $openExe 'drag-lint-open.exe' { [void](Initialize-UriHandlerExe -Path $openExe) }
 
 # --- T2..T7 doctest fixtures -----------------------------------------------
 $fx = Join-Path $root 'tests\fixtures'
