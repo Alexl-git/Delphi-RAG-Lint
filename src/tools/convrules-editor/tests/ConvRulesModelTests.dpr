@@ -619,7 +619,11 @@ begin
       OK:= Adapter.ListProjectUnits(Units, Err);
       Check('picker.unit.query.ok', OK, Err);
       Check('picker.unit.nonempty', Length(Units) > 100, Format('only %d units', [Length(Units)]));
-      Check('picker.unit.has.VARINSP', Contains(Units, 'VARINSP'), 'VARINSP not in From-Unit datasource (reindex CLIENT\VARINSP.PAS)');
+      // VARINSP was the fixture here until 2026-10-26: it is NOT in Micronite2027's compile
+      // closure (absent from the .dpr; its only user, SelectData.pas, is not a member either),
+      // so the per-project index correctly leaves it out and this check failed for a fixture
+      // reason. AssignGroups is a .dpr member with a .dfm (the fill test below uses it too).
+      Check('picker.unit.has.AssignGroups', Contains(Units, 'AssignGroups'), 'AssignGroups not in From-Unit datasource (reindex Micronite2027.dproj)');
     finally
       Adapter.Free;
     end;
@@ -633,9 +637,14 @@ end; // procedure
   project unit the user picked, it must return the component TYPES declared in
   that unit's form so they can be pre-filled into the grid's From column. The
   bug: for VARINSP it returned [] (nothing appeared). This drives the real
-  TEngineAdapter method and asserts the actual components come back. Skipped
-  (not failed) when the exe / ORM3 db / VARINSP.DFM are absent. }
+  TEngineAdapter method and asserts the actual components come back. The fixture is
+  AssignGroups (a Micronite2027 .dpr member): VARINSP is outside that project's compile
+  closure, so ResolveUnitFile finds no file for it and the answer is [] by design.
+  Skipped (not failed) when the exe / ORM3 db / AssignGroups.dfm are absent. }
 procedure TestFillFromUnit;
+const
+  // AssignGroups.dfm declares 16 distinct component types (2026-10-26).
+  MIN_FORM_TYPES = 10;
 var
   Exe    : string        ;
   Adapter: TEngineAdapter;
@@ -645,24 +654,26 @@ var
 begin
   Exe:= ResolveExe;
   if (Exe = '') or (not TFile.Exists(ProjectDb))
-     or (not TFile.Exists('C:\Projects\DB\ORM3\CLIENT\VARINSP.DFM'))
+     // ProjectDb is <CLIENT>\_D-RAG\<name>.sqlite: the form sits in <CLIENT>.
+     or (not TFile.Exists(TPath.Combine(TPath.GetDirectoryName(TPath.GetDirectoryName(ProjectDb)), 'AssignGroups.dfm')))
      or (not Orm3Queryable(Exe)) then
   begin
-    Skip('fill.from-unit.varinsp', 'exe / ORM3 db / VARINSP.DFM absent, or ORM3 below the exe schema');
+    Skip('fill.from-unit.assigngroups', 'exe / ORM3 db / AssignGroups.dfm absent, or ORM3 below the exe schema');
     Exit;
   end;
   // The editor passes the FROM db set (both libs + project) as the control set
   // source; ListControlTypesInUnit resolves the unit's file via the adapter DBs.
   Adapter:= TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
   try
-    OK:= Adapter.ListControlTypesInUnit('VARINSP', [], Types, Err);
+    OK:= Adapter.ListControlTypesInUnit('AssignGroups', [], Types, Err);
     Check('fill.from-unit.ok', OK, Err);
     // The button was silent because this came back empty. It must not.
-    Check('fill.from-unit.nonempty', Length(Types) > 10, Format('VARINSP returned only %d types (expected its form components)', [Length(Types)]));
-    // Concrete components the user can see in the VARINSP form / DFM.
-    Check('fill.from-unit.has.TOvcController', Contains(Types, 'TOvcController'));
-    Check('fill.from-unit.has.TPanel'        , Contains(Types, 'TPanel'        ));
-    Check('fill.from-unit.has.TOvcTable'     , Contains(Types, 'TOvcTable'     ));
+    Check('fill.from-unit.nonempty', Length(Types) > MIN_FORM_TYPES, Format('AssignGroups returned only %d types (expected its form components)', [Length(Types)]));
+    // Concrete components in AssignGroups.dfm: a top-level control, a non-visual
+    // component, and a column nested three objects deep.
+    Check('fill.from-unit.has.TPanel'         , Contains(Types, 'TPanel'         ));
+    Check('fill.from-unit.has.TdxBarManager'  , Contains(Types, 'TdxBarManager'  ));
+    Check('fill.from-unit.has.TcxGridDBColumn', Contains(Types, 'TcxGridDBColumn'));
   finally
     Adapter.Free;
   end; // try

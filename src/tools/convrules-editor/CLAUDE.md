@@ -45,8 +45,8 @@ two different builds have reported the same version; compare SHA256 and build st
 * **Model tests (no engine beside the runner, live tests SKIP): 2838 pass / 0 fail / 20 skip** on main after the close-all lanes (2026-10-26). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
-  **2738 pass / 5 fail / 0 skip** (1.35.0-alpha-20261025-125433 pin, 2026-10-26; `enc.live.capability` PASSES) -- the 5 are the VARINSP fixture
-  (`picker.unit.has.VARINSP`, `fill.from-unit.*`). A rebuild of `dll-win64` mid-run
+  **2956 pass / 0 fail / 0 skip** (1.35.0-alpha-20261025-125433 pin, 2026-10-26; `enc.live.capability` PASSES). The old 5 "VARINSP fixture" failures were a fixture defect:
+  VARINSP is outside Micronite2027's compile closure, so its project DB never holds it; the picker / fill tests now use AssignGroups. A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
   <ConvRulesEditor.exe>`, the exe beside a STAGED COPY of a pin (never `dll-win64`)
