@@ -429,6 +429,118 @@ begin
   Check('batch.split.job.one.left.perunit', not JobRunsBatched(LJob));
 end;
 
+{ ENC-N4 follow-up: the two parts of a mixed run read as ONE run (one total, steps and
+  progress continue), a stop or cancel in the batch part keeps the per-unit part from
+  starting, and NotReachedUnits counts rows of both kinds as reached. }
+procedure TestMixedRun;
+var
+  LStep, LOut      : TRunStep;
+  LRows, LRowsOut  : TArray<TConvertRow>;
+  LSteps           : TArray<TRunStep>;
+  LDones, LTotals  : TArray<Integer>;
+  LUnitsRan        : Boolean;
+  LCancelAnswers   : Integer;
+  function RowOf(const AUnit, ABook: string; AStatus: TConvertStatus; AStopped: Boolean): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.UnitPas   := AUnit;
+    Result.Book      := ABook;
+    Result.Status    := AStatus;
+    Result.StoppedRun:= AStopped;
+  end;
+  function PartOf(const ARowsToGive: TArray<TConvertRow>; AStepNo: Integer; APollCancel: Boolean; ARan: TProc): TMixedPartFn;
+  begin
+    Result:= function(const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>
+      var
+        LS: TRunStep;
+        K : Integer;
+      begin
+        ARan();
+        LS:= Default(TRunStep);
+        LS.Phase    := rpApply;
+        LS.UnitNo   := AStepNo;
+        LS.UnitCount:= Length(ARowsToGive);
+        LS.TotalElapsedMs:= 5;
+        if Assigned(AOnStep) then
+          AOnStep(LS);
+        if APollCancel and Assigned(ACancelled) then
+          ACancelled();
+        for K:= 0 to High(ARowsToGive) do
+          if Assigned(AProgress) then
+            AProgress(ARowsToGive[K], K + 1, Length(ARowsToGive));
+        Result:= ARowsToGive;
+      end;
+  end;
+var
+  LBatchRan: Boolean;
+begin
+  // ContinuedStep: unit numbers shift by the earlier part, the run-level 0 stays 0.
+  LStep:= Default(TRunStep);
+  LStep.UnitNo:= 1;
+  LStep.UnitCount:= 2;
+  LStep.TotalElapsedMs:= 7;
+  LOut:= ContinuedStep(LStep, 3, 5, 100);
+  Check('mixed.step.shifted', (LOut.UnitNo = 4) and (LOut.UnitCount = 5) and (LOut.TotalElapsedMs = 107));
+  LStep.UnitNo:= 0;
+  Check('mixed.step.runlevel.zero', ContinuedStep(LStep, 3, 5, 0).UnitNo = 0);
+
+  // PerUnitPartMayStart
+  LRows:= [RowOf('A.pas', 'b', csConverted, False)];
+  Check('mixed.mayStart.clean', PerUnitPartMayStart(LRows, False));
+  Check('mixed.mayStart.cancel.seen', not PerUnitPartMayStart(LRows, True));
+  LRows:= [RowOf('A.pas', 'b', csConfigError, True), RowOf('B.pas', 'b', csConfigError, False)];
+  Check('mixed.mayStart.stopped', not PerUnitPartMayStart(LRows, False));
+
+  // RunMixedParts: 2 batched units x 1 book, then 1 per-unit x 1 book: one total of 3, steps 1..3.
+  LSteps:= nil; LDones:= nil; LTotals:= nil; LUnitsRan:= False; LBatchRan:= False;
+  LRowsOut:= RunMixedParts(2, 1, 1,
+    procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+    begin
+      LDones := LDones + [ADone];
+      LTotals:= LTotals + [ATotal];
+    end, nil,
+    procedure(const AStep: TRunStep)
+    begin
+      LSteps:= LSteps + [AStep];
+    end,
+    PartOf([RowOf('A.pas', 'b', csConverted, False), RowOf('C.pas', 'b', csConverted, False)], 2, False, procedure begin LBatchRan:= True end),
+    PartOf([RowOf('B.pas', 'b', csConverted, False)], 1, False, procedure begin LUnitsRan:= True end));
+  Check('mixed.run.rows.concatenated', (Length(LRowsOut) = 3) and (LRowsOut[2].UnitPas = 'B.pas'));
+  Check('mixed.run.progress.continues', (Length(LDones) = 3) and (LDones[0] = 1) and (LDones[1] = 2) and (LDones[2] = 3));
+  Check('mixed.run.one.total', (Length(LTotals) = 3) and (LTotals[0] = 3) and (LTotals[1] = 3) and (LTotals[2] = 3));
+  Check('mixed.run.steps.continue', (Length(LSteps) = 2) and (LSteps[0].UnitNo = 2) and (LSteps[1].UnitNo = 3)
+    and (LSteps[0].UnitCount = 3) and (LSteps[1].UnitCount = 3));
+
+  // A config stop in the batch part: the per-unit part never starts.
+  LUnitsRan:= False; LBatchRan:= False;
+  LRowsOut:= RunMixedParts(2, 1, 1, nil, nil, nil,
+    PartOf([RowOf('A.pas', 'b', csConfigError, True), RowOf('C.pas', 'b', csConfigError, False)], 1, False, procedure begin LBatchRan:= True end),
+    PartOf([RowOf('B.pas', 'b', csConverted, False)], 1, False, procedure begin LUnitsRan:= True end));
+  Check('mixed.stop.perunit.not.started', LBatchRan and not LUnitsRan and (Length(LRowsOut) = 2));
+  Check('mixed.stop.perunit.notreached', string.Join(',', NotReachedUnits(LRowsOut, ['A.pas', 'B.pas', 'C.pas'], ['b'])) = 'B.pas');
+
+  // A cancel seen in the batch part: the per-unit part never starts.
+  LUnitsRan:= False; LBatchRan:= False; LCancelAnswers:= 0;
+  LRowsOut:= RunMixedParts(2, 1, 1, nil,
+    function: Boolean
+    begin
+      Inc(LCancelAnswers);
+      Result:= True;
+    end, nil,
+    PartOf([RowOf('A.pas', 'b', csConverted, False)], 1, True, procedure begin LBatchRan:= True end),
+    PartOf([RowOf('B.pas', 'b', csConverted, False)], 1, False, procedure begin LUnitsRan:= True end));
+  Check('mixed.cancel.perunit.not.started', LBatchRan and not LUnitsRan and (LCancelAnswers = 1));
+
+  // NotReachedUnits on a complete mixed run: batch rows and per-unit rows both count as reached.
+  LRows:= [RowOf('A.pas', 'b1', csConverted, False), RowOf('A.pas', 'b2', csConverted, False),
+    RowOf('C.pas', 'b1', csConverted, False), RowOf('C.pas', 'b2', csOutOfScope, False),
+    RowOf('B.pas', 'b1', csConverted, False), RowOf('B.pas', 'b2', csConverted, False)];
+  Check('mixed.notreached.none', Length(NotReachedUnits(LRows, ['A.pas', 'B.pas', 'C.pas'], ['b1', 'b2'])) = 0);
+  // ... and when the raised unit's rows are missing it is the one not reached.
+  SetLength(LRows, 4);
+  Check('mixed.notreached.raised.only', string.Join(',', NotReachedUnits(LRows, ['A.pas', 'B.pas', 'C.pas'], ['b1', 'b2'])) = 'B.pas');
+end;
+
 { proptree/2 (engine schema v17): per-leaf is_writable / visibility / member_kind,
   with proptree/1 back-compat defaults (absent is_writable => True; absent
   member_kind => 'property'; absent visibility => ''). }
@@ -15958,6 +16070,7 @@ begin
     TestRestorePoint;
     TestJobRunsBatched;
     TestBatchSplit;
+    TestMixedRun;
     TestReindexProject;
     TestConvertRunnerLive;
     TestInheritanceScan;

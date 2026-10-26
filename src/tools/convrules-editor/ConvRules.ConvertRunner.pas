@@ -576,6 +576,43 @@ function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TAr
 /// them. [] when every unit finished.</returns>
 function NotReachedUnits(const ARows: TArray<TConvertRow>; const AUnits, ABooks: TArray<string>): TArray<string>;
 
+type
+  /// <summary>One part of a mixed run (ENC-N4): the batch part or the per-unit part, run with
+  /// the progress, cancel and step callbacks RunMixedParts hands it.</summary>
+  TMixedPartFn = reference to function(const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>;
+
+/// <summary>PURE: re-bases one step of a part of a mixed run so the run reads as one
+/// (steps 1..N of one total).</summary>
+/// <param name="AStep">The step the part emitted: its UnitNo counts within the part.</param>
+/// <param name="AUnitOffset">Units run by the earlier part.</param>
+/// <param name="AUnitTotal">Units in the whole job.</param>
+/// <param name="AElapsedOffsetMs">Milliseconds the earlier part took.</param>
+/// <returns>AStep with UnitNo + AUnitOffset (only when UnitNo is above 0: the run-level
+/// steps keep 0), UnitCount = AUnitTotal and TotalElapsedMs + AElapsedOffsetMs.</returns>
+function ContinuedStep(const AStep: TRunStep; AUnitOffset, AUnitTotal: Integer; AElapsedOffsetMs: Int64): TRunStep;
+
+/// <summary>PURE: whether the per-unit part of a mixed run may start after the batch part.</summary>
+/// <param name="ABatchRows">The rows of the batch part.</param>
+/// <param name="ACancelSeen">True when the cancel callback answered True during the batch part.</param>
+/// <returns>False when a batch row has StoppedRun (config/abort exit) or a cancel was seen:
+/// the raised units are then reported as not reached, never run.</returns>
+function PerUnitPartMayStart(const ABatchRows: TArray<TConvertRow>; ACancelSeen: Boolean): Boolean;
+
+/// <summary>Runs the batch part, then the per-unit part, of one mixed job as ONE run
+/// (ENC-N4).</summary>
+/// <param name="ABatchedCount">Units in the batch part.</param>
+/// <param name="APerUnitCount">Units in the per-unit part.</param>
+/// <param name="ABookCount">Books in the job.</param>
+/// <param name="AProgress">The run's progress callback; the second part's ADone continues
+/// after the first part's rows and ATotal is the whole run's. May be nil.</param>
+/// <param name="ACancelled">May be nil; polled by the parts; a True answer is remembered.</param>
+/// <param name="AOnStep">May be nil; both parts' steps go through ContinuedStep.</param>
+/// <param name="ARunBatch">Runs the batch part.</param>
+/// <param name="ARunUnits">Runs the per-unit part; not called when PerUnitPartMayStart is
+/// False.</param>
+/// <returns>The batch part's rows followed by the per-unit part's rows.</returns>
+function RunMixedParts(ABatchedCount, APerUnitCount, ABookCount: Integer; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; const ARunBatch, ARunUnits: TMixedPartFn): TArray<TConvertRow>;
+
 /// <summary>PURE: True when RunConversion takes AJob through the batch path -- the one
 /// decision the Convert tab asks too, so its start status and its not-reached rows follow
 /// the path the runner really takes.</summary>
@@ -914,6 +951,72 @@ begin
   Result:= Length(LBatched) > 0;
 end;
 
+function ContinuedStep(const AStep: TRunStep; AUnitOffset, AUnitTotal: Integer; AElapsedOffsetMs: Int64): TRunStep;
+begin
+  Result:= AStep;
+  if Result.UnitNo > 0 then
+    Inc(Result.UnitNo, AUnitOffset);
+  Result.UnitCount:= AUnitTotal;
+  Inc(Result.TotalElapsedMs, AElapsedOffsetMs);
+end;
+
+function PerUnitPartMayStart(const ABatchRows: TArray<TConvertRow>; ACancelSeen: Boolean): Boolean;
+begin
+  Result:= not ACancelSeen;
+  for var LRow: TConvertRow in ABatchRows do
+    if LRow.StoppedRun then
+      Exit(False);
+end;
+
+function RunMixedParts(ABatchedCount, APerUnitCount, ABookCount: Integer; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; const ARunBatch, ARunUnits: TMixedPartFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@8ece -- REVIEWED 2026-10-26 the one orchestration of a mixed run: three run-level inputs (counts, books), three callbacks the parts share, and the two parts themselves; a record would be used only here
+var
+  LBatchRows : TArray<TConvertRow>;
+  LCancelSeen: Boolean;
+  LWatch     : TStopwatch;
+  LTotalUnits: Integer;
+  LRowOffset : Integer;
+  LElapsed   : Int64;
+  LCancel    : TFunc<Boolean>;
+  LStep      : TRunStepFn;
+begin
+  LCancelSeen:= False;
+  LTotalUnits:= ABatchedCount + APerUnitCount;
+  LCancel:= function: Boolean
+    begin
+      Result:= Assigned(ACancelled) and ACancelled();
+      LCancelSeen:= LCancelSeen or Result;
+    end;
+  LWatch:= TStopwatch.StartNew;
+  LStep:= nil;
+  if Assigned(AOnStep) then
+    LStep:= procedure(const AStep: TRunStep)
+      begin
+        AOnStep(ContinuedStep(AStep, 0, LTotalUnits, 0));
+      end;
+  LBatchRows:= ARunBatch(
+    procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+    begin
+      if Assigned(AProgress) then
+        AProgress(ARow, ADone, LTotalUnits * ABookCount);
+    end, LCancel, LStep);
+  if not PerUnitPartMayStart(LBatchRows, LCancelSeen) then
+    Exit(LBatchRows);
+  LRowOffset:= Length(LBatchRows);
+  LElapsed  := LWatch.ElapsedMilliseconds;
+  LStep:= nil;
+  if Assigned(AOnStep) then
+    LStep:= procedure(const AStep: TRunStep)
+      begin
+        AOnStep(ContinuedStep(AStep, ABatchedCount, LTotalUnits, LElapsed));
+      end;
+  Result:= LBatchRows + ARunUnits(
+    procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+    begin
+      if Assigned(AProgress) then
+        AProgress(ARow, ADone + LRowOffset, LTotalUnits * ABookCount);
+    end, LCancel, LStep);
+end;
+
 function RaiseFilesOf(const AAll: TArray<string>; const AUnitPas: string): TArray<string>;
 var
   LDfm: string;
@@ -1081,51 +1184,53 @@ var
   LEngine: TEngineAdapter;
   LScope : TScopeFn;
   LBatched, LPerUnit: TArray<string>; // ENC-N4: units without a raise are batched, raised ones per-unit
-  LBatchRows: TArray<TConvertRow>;
 begin
   LJob   := AJob;
   LEngine:= AEngine;
   BatchSplit(AUnits, LJob.RaiseFiles, LJob.BatchSupported, LJob.Scope.Kind = skWholeUnit, LJob.BatchOverride, LBatched, LPerUnit);
-  LBatchRows:= nil;
-  if Length(LBatched) > 0 then
-  begin
-    LBatchRows:= RunBatchLoop(LBatched, ABooks,
-      function(const AChunk: TArray<string>; const ARulesFile: string; out AJson: string): Integer
-      begin
-        Result:= LEngine.ApplyConversionBatch(AChunk, ARulesFile, LJob.Dbs, BatchTimeoutMs(CONVERT_TIMEOUT_MS, Length(AChunk)), AJson);
-      end,
-      function(out AOutput: string): Integer
-      begin
-        Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
-      end,
-      AProgress, ACancelled, AOnStep, LJob.InheritedSupported, LJob.RetypeSupported, BATCH_MAX_UNITS, LJob.ApplyFeatures);
-    if Length(LPerUnit) = 0 then
-      Exit(LBatchRows);
-  end;
   // The book is read on the worker thread; an unreadable one is out of scope.
   LScope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
     begin
       Result:= ScopedNamesForBookFile(LJob.Scope, AUnitPas, ABook, ANames);
     end;
-  Result:= LBatchRows + RunUnitLoop(LPerUnit, ABooks,
-    function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+  Result:= RunMixedParts(Length(LBatched), Length(LPerUnit), Length(ABooks), AProgress, ACancelled, AOnStep,
+    function(const AProg: TConvertProgress; const ACancel: TFunc<Boolean>; const AStep: TRunStepFn): TArray<TConvertRow>
     begin
-      var LRaise: TArray<string>:= RaiseFilesOf(LJob.RaiseFiles, AUnitPas);
-      if Length(LRaise) > 0 then
-        Result:= LEngine.ApplyConversionRaising(AUnitPas, ARulesFile, LJob.Dbs, AOnly, LRaise, AJson)
-      else
-        Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
+      Result:= nil;
+      if Length(LBatched) > 0 then
+        Result:= RunBatchLoop(LBatched, ABooks,
+          function(const AChunk: TArray<string>; const ARulesFile: string; out AJson: string): Integer
+          begin
+            Result:= LEngine.ApplyConversionBatch(AChunk, ARulesFile, LJob.Dbs, BatchTimeoutMs(CONVERT_TIMEOUT_MS, Length(AChunk)), AJson);
+          end,
+          function(out AOutput: string): Integer
+          begin
+            Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
+          end,
+          AProg, ACancel, AStep, LJob.InheritedSupported, LJob.RetypeSupported, BATCH_MAX_UNITS, LJob.ApplyFeatures);
     end,
-    function(out AOutput: string): Integer
+    function(const AProg: TConvertProgress; const ACancel: TFunc<Boolean>; const AStep: TRunStepFn): TArray<TConvertRow>
     begin
-      Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
-    end,
-    LScope, AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported,
-    // No "re-send it" when every --only name is inherited/inline (fix wave Minor 2).
-    function(const AOnly: TArray<string>): string
-    begin
-      Result:= UnmatchedOnlyHintFor(LJob.Scope, AOnly);
-    end, AOnStep, LJob.ApplyFeatures);
+      Result:= RunUnitLoop(LPerUnit, ABooks,
+        function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+        begin
+          var LRaise: TArray<string>:= RaiseFilesOf(LJob.RaiseFiles, AUnitPas);
+          if Length(LRaise) > 0 then
+            Result:= LEngine.ApplyConversionRaising(AUnitPas, ARulesFile, LJob.Dbs, AOnly, LRaise, AJson)
+          else
+            Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
+        end,
+        function(out AOutput: string): Integer
+        begin
+          Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
+        end,
+        LScope, AProg, ACancel, LJob.InheritedSupported, LJob.RetypeSupported,
+        // No "re-send it" when every --only name is inherited/inline (fix wave Minor 2).
+        function(const AOnly: TArray<string>): string
+        begin
+          Result:= UnmatchedOnlyHintFor(LJob.Scope, AOnly);
+        end, AStep, LJob.ApplyFeatures);
+    end);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
