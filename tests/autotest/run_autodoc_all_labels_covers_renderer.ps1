@@ -84,7 +84,10 @@ $Exempt = @('abstract', 'virtual', 'constructor')
 # 'Effect-free (proven)' from symbol_facts.effect_free) but survives as a PARSE
 # label, because ALL_LABELS also bounds facts inside blocks written before the
 # rename. Asserted two-way by E4 below, exactly like $Exempt.
-$Legacy = @('Pure')
+# 'Used in classes:' (X-24, 2026-10-25) is the same shape for a different reason:
+# a STORED-ONLY label the writer keeps (TSharedFacts.KeepUsedInClasses) and the
+# renderer never emits; registered so it bounds the 'Used in units:' fact before it.
+$Legacy = @('Pure', 'Used in classes:')
 
 # The emit sites, and only those: AppendFact(...) / Lines.Add(...) in the two
 # renderers, the RefVerb:= pair that feeds AppendFact for the inbound verb, and

@@ -3,6 +3,20 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+- autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
+  stored entry the index resolves as a class / interface / record (and not as a unit) is no
+  longer carried forever as a "foreign" unit: doc-drift reports the block (fixable) and the
+  writer moves the name to a new stored-only `<para>Used in classes: ...</para>` line after
+  `Used in units:`. The engine never renders that line; it keeps it on every regeneration and
+  doc-drift never calls it stale. Root cause of the residue: the v23 slicing defect
+  ('Implemented by:' missing from the fact-label list, fixed 2026-09-17) let IParser's
+  implementor names into its unit list, and the reconciler then preserved them as unvouchable.
+  IParser's `TDFMParser` / `TFirebirdSqlParser` are restored on that line. Guard:
+  `tests\autotest\run_doc_used_in_classes.ps1`. No extractor change, no re-parse.
+
 ## v1.35.0-alpha -- 2026-10-25
 
 The X batch on top of v1.34.1-alpha: five lanes (X1, X2, X4, X5, X6) on ONE extractor bump

@@ -1247,6 +1247,12 @@ begin
     no-change test for a block that differs in nothing else. }
   Merged:= TSharedFacts.KeepLegacyPure(Merged, Existing.Remarks);
 
+  { X-24 (owner ruling 3, 2026-10-25): the stored-only `Used in classes:` line
+    survives every regeneration, and a class name the stored `Used in units:`
+    list held is moved onto it -- MergeInboundFacts no longer keeps it in the
+    unit list. BlockDrifted ignores the line, so the two agree. }
+  Merged:= TSharedFacts.KeepUsedInClasses(Merged, Existing.Remarks, AStore);
+
   { v(2026-08-14) THE STALE-ANCHOR ROOT CAUSE. One line, and it is the cause of
     INBOX-autodoc-not-idempotent-on-yadf, INBOX-document-qname-second-apply-nests-
     block-on-stale-anchor, and the "unexplained" block duplication -- all three.
