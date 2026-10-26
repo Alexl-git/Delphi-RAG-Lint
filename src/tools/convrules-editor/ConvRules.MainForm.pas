@@ -35,7 +35,7 @@ uses
   , Vcl.Themes
   , ConvRules.Model  // dl:unit ConvRules.Model accepted -- TRuleBook types a field; BOOK_DEPTH_MIN/MAX/DEFAULT travel with TRuleBook.Depth so the depth combo's 1..10 range cannot drift from the parser's
   , ConvRules.Casts
-  , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- StartupProbeVerdict is the probe's one decision, shared with the Convert tab
+  , ConvRules.CapabilityProbe  // StartupProbeVerdict: the probe's one decision, shared with the Convert tab
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- TEngineAdapter types a field; CAPABILITY_BOOK_DEPTH/PROGRESS_LINES travel with CapabilityNames, the one call that answers them
   , ConvRules.Platform
   , ConvRules.EngineProgress // TStreamingWork: RunLongCallTracked's signature, so INTERFACE-visible
@@ -2779,9 +2779,9 @@ uses
   , ConvRules.GlyphForm // C10: the glyph-expression dialog
   , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
   , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
-  , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText
+  , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText; dl:unit ConvRules.ConvertRun accepted -- LOWER_ABORTED_FMT is the one "lowering aborted" note: an open book's failed Save writes the same text as LowerBookFile
   , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
-  , ConvRules.MigrateRules   // A4: CAPABILITY_MIGRATE_MEMBERS
+  , ConvRules.MigrateRules   // A4: dl:unit ConvRules.MigrateRules accepted -- CAPABILITY_MIGRATE_MEMBERS is the engine capability name the #migrate commands are gated on
   , ConvRules.Migrate        // A4: the member-migration decisions the Members list and the Work list run
   , ConvRules.MigrateForm    // A4: the Migrate dialog
   , ConvRules.ConvertRunner  // A4: TConvertRow, the MigrateChecksReady parameter
@@ -3468,7 +3468,7 @@ begin
   LeftPanel:= TPanel.Create(Self);
   LeftPanel.Parent:= Self;
   LeftPanel.Align:= alLeft;
-  LeftPanel.Width:= 380;  // dl:ok magic-literal@0f57, large-magic-number@0f57 -- Task 13; same unnamed-coordinate idiom as every other control in BuildUI
+  LeftPanel.Width:= 380;  // dl:ok large-magic-number@0f57 -- Task 13; same unnamed-coordinate idiom as every other control in BuildUI
   LeftPanel.BevelOuter:= bvNone;
 
   FTabs:= TPageControl.Create(Self);
