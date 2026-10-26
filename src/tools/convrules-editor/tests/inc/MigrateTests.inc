@@ -154,8 +154,8 @@ begin
     LNew:= AddMigrate(B, B.Nodes.IndexOf(LHdr), 'Click', 'Press');
     Check('migrate.add.depth.shift', HeaderIndexOfNode(B, LNew) = B.Nodes.IndexOf(LHdr), B.SaveToString);
     LNew:= AddMigrate(B, LStale, 'Hint', 'Tip');
-    // Positive control: the stale index names the PREVIOUS header's block (index 2 is now '#link X <- Y').
-    Check('migrate.add.depth.stale', (LNew = nil) or (HeaderIndexOfNode(B, LNew) <> B.Nodes.IndexOf(LHdr)), B.SaveToString);
+    // Positive control: the stale index 2 is now '#link X <- Y', no header -- nothing is written.
+    Check('migrate.add.depth.stale', LNew = nil, B.SaveToString);
   finally
     B.Free;
   end;
@@ -493,4 +493,77 @@ begin
   Check('migrate.handoff.booknotes', (Length(LNotes) = 1) and (LNotes[0] = 'Fix.rules: 1 member #migrate line(s) -- this engine does not apply them (needs migrate_members)'),
     string.Join('|', LNotes));
   Check('migrate.handoff.booknotes.gated', Length(MigrateBookNotes(LEntries, [afMigrateMembers], LReader)) = 0);
+end;
+procedure TestMigrateReviewMinors;
+const
+  LINES: array[0..4] of string = (#9'#migrate'#9'Click -> Press', '#migrate  Click  ->  Press', '#MIGRATE Click -> Press', '#migrate Click',
+    '#migrate Click -> Press // why');
+  CANONICAL: array[0..4] of string = ('#migrate Click -> Press', '#migrate Click -> Press', '#migrate Click -> Press', '#migrate Click -> ',
+    '#migrate Click -> Press // why');
+var
+  B    : TRuleBook;
+  LText: string;
+  LOk  : Boolean;
+  LRows: TArray<TConvertRow>;
+  LRow : TConvertRow;
+begin
+  LText:= '';
+  for var LLine: string in LINES do
+    LText:= LText + LLine + sLineBreak;
+  B:= TRuleBook.Create;
+  try
+    B.LoadFromString(LText);
+    Check('migrate.rt.untouched', B.SaveToString = LText, B.SaveToString);
+    LOk:= B.Nodes.Count = Length(LINES);
+    for var N: TRuleNode in B.Nodes do
+      LOk:= LOk and (N.Kind = rnkMigrate) and (N.MigOld = 'Click');
+    Check('migrate.rt.kinds', LOk, Format('nodes=%d', [B.Nodes.Count]));
+    Check('migrate.rt.fields', (B.Nodes[0].MigNew = 'Press') and (B.Nodes[1].MigNew = 'Press') and (B.Nodes[2].MigNew = 'Press')
+      and (B.Nodes[3].MigNew = '') and (MigrateRefusal(B.Nodes[3]) = MIGRATE_REFUSAL_NO_NEW)
+      // The engine strips no trailing '//' on a #migrate line: the comment is part of New, a template refusal.
+      and (B.Nodes[4].MigNew = 'Press // why') and (MigrateRefusal(B.Nodes[4]) = MIGRATE_REFUSAL_TEMPLATE),
+      B.Nodes[0].MigNew + '|' + B.Nodes[1].MigNew + '|' + B.Nodes[2].MigNew + '|' + B.Nodes[3].MigNew + '|' + B.Nodes[4].MigNew);
+    LOk:= True;
+    for var I: Integer:= 0 to B.Nodes.Count - 1 do
+    begin
+      B.Nodes[I].Dirty:= True;
+      LOk:= LOk and (B.Nodes[I].Emit = CANONICAL[I]);
+    end;
+    Check('migrate.rt.dirty.canonical', LOk, B.Nodes[0].Emit + '|' + B.Nodes[3].Emit + '|' + B.Nodes[4].Emit);
+  finally
+    B.Free;
+  end;
+
+  // SetMigrateNew with the same New is no edit: not Dirty, marks kept.
+  B:= MigBook(['#convert TA -> TB', '#migrate Click -> Press']);
+  try
+    var LMark: TRuleMark:= Default(TRuleMark);
+    LMark.Text:= 'm';
+    B.Nodes[1].Marks:= [LMark];
+    SetMigrateNew(B.Nodes[1], 'Press');
+    Check('migrate.setnew.same', (not B.Nodes[1].Dirty) and (Length(B.Nodes[1].Marks) = 1));
+    SetMigrateNew(B.Nodes[1], 'press');
+    Check('migrate.setnew.case', B.Nodes[1].Dirty and (B.Nodes[1].Emit = '#migrate Click -> press'), 'a case change is an edit');
+  finally
+    B.Free;
+  end;
+
+  // The open book's path is matched as a FILE, not as a string.
+  LRow:= Default(TConvertRow);
+  LRow.Status:= csConverted;
+  LRow.Book  := 'C:\b\rules\Fix.rules';
+  LRow.Apply := MigrateApply('apply-MigForm-legacy-1350.json', [afMigrateMembers]);
+  LRows:= [LRow];
+  Check('migrate.handoff.samefile', (Length(MigrateChecksForBook(LRows, 'c:/b/x/../RULES/fix.rules')) = 5)
+    and (Length(MigrateChecksForBook(LRows, 'C:\b\Fix.rules')) = 0));
+
+  // G8 (engine 1.35.0): a deliberate break no longer reports DL_NONE as an unresolved uses name.
+  var LDl: TApplyRow:= MigrateApply('apply-DlForm-dlnone-1350.json', APPLY_FEATURES_ALL);
+  LOk:= Length(LDl.DeliberateBreaks) = 2;
+  for var LName: string in LDl.UsesUnresolved do
+    LOk:= LOk and not ContainsText(LName, 'DL_NONE');
+  for var LLine: string in LDl.Remainder do
+    LOk:= LOk and not ContainsText(LLine, 'declaring "DL_NONE"');
+  Check('migrate.g8.no.dlnone.noise', LOk and not ContainsText(MigrateFixture('apply-DlForm-dlnone-1350.json'), 'uses-unit-unresolved'),
+    Format('breaks=%d unresolved=%s', [Length(LDl.DeliberateBreaks), string.Join(',', LDl.UsesUnresolved)]));
 end;

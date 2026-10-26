@@ -16017,6 +16017,7 @@ begin
     TestMigrateWorkList;
     TestMigrateDecisions;
     TestMigrateTabHandoff;
+    TestMigrateReviewMinors;
 
     FreeAndNil(GParseBook);
 

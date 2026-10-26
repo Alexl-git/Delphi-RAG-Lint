@@ -100,7 +100,7 @@ function FindMigrateInBlock(ABook: TRuleBook; AHeaderIdx: Integer; const AOld: s
 function AddMigrate(ABook: TRuleBook; AHeaderIdx: Integer; const AOld, ANew: string): TRuleNode;
 
 /// <summary>Changes the New of a '#migrate' node in place: Dirty, and its own Marks cleared
-/// (a mark on another node is left alone).</summary>
+/// (a mark on another node is left alone). The same New (exact case) changes nothing.</summary>
 /// <param name="ANode">A rnkMigrate node; any other node is left untouched.</param>
 /// <param name="ANew">The new replacement.</param>
 procedure SetMigrateNew(ANode: TRuleNode; const ANew: string);
@@ -195,7 +195,8 @@ end;
 
 procedure SetMigrateNew(ANode: TRuleNode; const ANew: string);
 begin
-  if (ANode = nil) or (ANode.Kind <> rnkMigrate) then
+  // The same New (exact case) is no edit: the line stays clean and keeps its marks.
+  if (ANode = nil) or (ANode.Kind <> rnkMigrate) or (ANode.MigNew = ANew) then
     Exit;
   ANode.MigNew:= ANew;
   ANode.Dirty := True;

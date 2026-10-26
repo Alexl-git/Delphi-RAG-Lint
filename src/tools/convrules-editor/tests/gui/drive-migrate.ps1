@@ -532,8 +532,9 @@ try {
   $notes = @(Find $main 'TListView' $null | ForEach-Object { @([W]::Column($_, 7)) } | Where-Object { $_ -like '*; migrate: *' })
   Check 'migrate.rerun.note' (($notes -join ' | ') -like '*; migrate: 1 renamed, 1 deliberate break(s)*') ($notes -join ' | ')
   $after = [IO.File]::ReadAllText($pas)
-  Check 'migrate.pas.break' ($after -match 'DL_NONE\(Label1\.Layout\)') ''
-  Check 'migrate.pas.rename' ($after -match 'Label1\.AutoSize') ''
+  $found = @($after -split "`r?`n" | Where-Object { $_ -match 'Layout|AutoSize|WordWrap' } | ForEach-Object { $_.Trim() }) -join ' / '
+  Check 'migrate.pas.break' ($after -match 'DL_NONE\(Label1\.Layout\)') "expected DL_NONE(Label1.Layout); found: $found"
+  Check 'migrate.pas.rename' ($after -match 'Label1\.AutoSize') "expected Label1.AutoSize; found: $found"
 
   # --- 6. Work list after the second run: both members are mapped now (the default filter hides them) ---
   [void][W]::InvokeMenu($main, 'View|Work list')

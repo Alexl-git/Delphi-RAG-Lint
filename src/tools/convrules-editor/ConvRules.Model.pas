@@ -1028,7 +1028,7 @@ begin
   if T.StartsWith('#') then
   begin
     // directive: split the leading '#word' from the rest
-    P:= Pos(' ', T);
+    P:= T.IndexOfAny([' ', #9]) + 1; // a space OR a tab ends the directive, as the engine's Directive()
     if P = 0 then
       P:= Length(T) + 1;
     var Dir: string:= LowerCase(Copy(T, 1, P - 1));
