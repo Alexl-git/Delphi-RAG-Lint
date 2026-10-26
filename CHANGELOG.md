@@ -52,13 +52,16 @@ breaking changes** until v1.0.
   input-file flag (`outline --in`, `sql --in <q.sql>`, ...), since the `ask` parser accepts only it.
 - `--help` names `--json` on `schema`, `butterfly`, `compare --show`, `menu-tree` and `menu-drift`, and
   `--output` on `check-ast` (the parts of lane 909fc131 that fit the policy).
+- Under `--json` or `--format json`, `surface`, `slice`, `hover`, `context` and `proptree` print their
+  "no symbol matched" / "class not found" line on stderr, and `butterfly` / `context` honour
+  `--format json` for it too; stdout stays empty or parseable (X-26 audit).
 - `run_flag_verb_map.ps1`: the alias table equals the parser's alias groups (two-way); no `--help` line
   outside the alias rows names an alias; aliases fold to their canonical flag before the per-verb gap
   is counted (planted controls: an undocumented non-alias flag is still counted); `--apply` / `--fix`
   are refusal-only pre-dispatch reads, no longer cross-verb. Baseline 110/27 -> 108/24.
 - `featuregen check` (A): the alias table is well-formed and no registry cli surface or question
   names an alias. `run_docs_sync_guard.ps1` retires exemption class (b) and fails if an alias is
-  exempted.
+  exempted. `run_json_error_stdout.ps1` covers the five readers above.
 
 ## v1.35.0-alpha -- 2026-10-25
 

@@ -18,7 +18,7 @@ function WriteVerbHelp(const pVerb: string): Boolean;
 
 implementation
 
-procedure WriteVerbReference;  // dl:ok method-too-long@c473 -- GENERATED: one Writeln per registry help line; the length follows the verb count
+procedure WriteVerbReference;  // dl:ok method-too-long@1e0d -- GENERATED: one Writeln per registry help line; the length follows the verb count
 begin
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
@@ -429,7 +429,7 @@ begin
   Writeln('');
 end;
 
-function WriteVerbHelp(const pVerb: string): Boolean;  // dl:ok method-too-long@4716 -- GENERATED: one Writeln per registry help line
+function WriteVerbHelp(const pVerb: string): Boolean;  // dl:ok method-too-long@44f1 -- GENERATED: one Writeln per registry help line
 begin
   Result := True;
   if pVerb = 'index' then
