@@ -12395,7 +12395,7 @@ begin
       no rows at all. Census at the time of writing -- 20 such aliases on ORM3
       CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
-                 'WHERE kind IN (''class'',''interface'',''type'') AND heritage IS NOT NULL AND heritage <> ''''';
+                 'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
     FConn.StartTransaction;
     try
       FConn.ExecSQL('DELETE FROM type_ancestors');

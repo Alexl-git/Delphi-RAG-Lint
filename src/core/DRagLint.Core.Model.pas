@@ -343,7 +343,12 @@ type
     skInitialization, skFinalization,
     // v14 (D5): typed local vars + params, emitted so call-site receivers
     // can be resolved to a concrete type. Populated starting Task 2.
-    skLocalVar, skParam);
+    skLocalVar, skParam,
+    // 1.25.0 extractor (E1, spec 2026-10-26-extract-polymorphic-form-launches):
+    // `X = class of Y` -- a class REFERENCE. Signature 'class of Y', heritage
+    // 'Y' (one ordinal-0 type_ancestors row). Was skTypeAlias with no heritage.
+    // Appended LAST so no stored ordinal or array[TSymbolKind] order shifts.
+    skClassRef);
 
   TSymbolKindHelper = record helper for TSymbolKind
     /// <returns><!-- drag-lint:auto -->string -- Observed: KindText[Self].</returns>
@@ -2594,7 +2599,8 @@ const
     'unit', 'program', 'package', 'class', 'interface', 'record', 'enum', 'enum_value', 'procedure', 'function', 'method', 'constructor', 'destructor', 'property', 'field', 'var',
     'const', 'type', 'form', 'component', 'sql_table', 'sql_column', 'sql_index', 'sql_trigger', 'sql_generator', 'sql_procedure', 'sql_view', 'sql_exception', 'sql_domain',
     'sql_constraint', 'initialization', 'finalization',
-    'local_var', 'param');   // v14 (D5)
+    'local_var', 'param',    // v14 (D5)
+    'classref');             // 1.25.0 extractor (E1)
 
 function TSymbolKindHelper.ToText: string;
 begin

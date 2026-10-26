@@ -1536,6 +1536,24 @@ end; // function
 // step later. For `TAliasStr = string` it is a strict improvement:
 // ResolveTypeCategory can now chase it to its intrinsic, which it previously
 // could not do at all.
+const
+  CLASSREF_PREFIX = 'class of ';
+
+// E1: the class named by a whitespace-collapsed `class of X` type text when X
+// is a BARE identifier, else ''. Bare only, the same v1 bound TryWalkAlias
+// puts on alias heritage: ResolveAncestry's name lookup was never exercised on
+// a qualified or generic target, and a wrong heritage becomes a wrong ancestor
+// row. A dotted target still yields kind classref, with empty heritage.
+function ClassRefTargetOf(const ATarget: string): string;
+begin
+  Result:= '';
+  if not StartsText(CLASSREF_PREFIX, ATarget) then Exit;
+  Result:= Trim(Copy(ATarget, Length(CLASSREF_PREFIX) + 1, MaxInt));
+  if (Result = '') or not CharInSet(Result[1], ['A'..'Z', 'a'..'z', '_']) then Exit('');
+  for var ci:= 2 to Length(Result) do
+    if not CharInSet(Result[ci], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit('');
+end; // function
+
 function TryWalkOtherTypeDecl(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
 var
   i           : Integer;
@@ -1567,7 +1585,17 @@ begin
   if Target = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
+  { E1 (1.25.0 extractor, spec 2026-10-26-extract-polymorphic-form-launches):
+    `TFormClass = class of TForm` reaches THIS walker (no earlier one claims a
+    class reference) and used to be emitted as a plain alias with no heritage,
+    so nothing could tell a class-reference parameter from any other type
+    without re-parsing the signature text. It is now kind 'classref' with the
+    target class in HERITAGE, which ResolveAncestry turns into one ordinal-0
+    type_ancestors row. Signature keeps the full 'class of X' text. }
+  if StartsText(CLASSREF_PREFIX, Target) then
+    AState.Emit(skClassRef, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', ClassRefTargetOf(Target), False, False, '', '', True, GenParams)
+  else
+    AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
   Result:= True;
 end; // function
 
