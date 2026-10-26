@@ -13457,7 +13457,7 @@ begin
           parenthesised call still produces exactly one edge. }
     Q.SQL.Text:=
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
-      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE ' +
+      '  end_line, end_col, enclosing_symbol_id, receiver_text FROM refs WHERE ' +
       '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
     { The scoped pass narrows the SAME universe rather than defining its own:
       widen the kind test above and the scoped path follows automatically. }
@@ -13594,6 +13594,10 @@ begin
         Ref.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
         if not Q.FieldByName('enclosing_symbol_id').IsNull then
           Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
+        { T-11: the receiver the PARSER recorded (or a previous resolve wrote);
+          ResolveOne prefers it over re-reading the source line. NULL -> ''. }
+        if not Q.FieldByName('receiver_text').IsNull then
+          Ref.ReceiverText:= Q.FieldByName('receiver_text').AsString;
 
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UnitValuesBefore:= Resolver.UnitValueBound;
