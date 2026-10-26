@@ -270,6 +270,9 @@ type
     /// <summary>R1 (W6 C2): True when the declaring unit already assigns `PtrVar := Routine;` -- the
     /// plan adds no second assignment.</summary>
     AssignExists: Boolean;
+    /// <summary>R2 (W6 C2): the getters the class already declared (`Get&lt;Member&gt;`) and the interface
+    /// reuses as they are; empty when every getter is new.</summary>
+    KeptGetters: TArray<string>;
   end;
 
 const
@@ -309,6 +312,13 @@ function SignatureTypes(const pSource: IEdgeSurfaceSource; pDeclFid: Int64; pDec
 /// event type for the routine could then be declared in pStems without touching
 /// the cycle.</returns>
 function SigTypesOutsideScc(const pTypes: TArray<TSigType>; out pStems: TArray<string>): Boolean;
+
+/// <summary>Splits a heritage list (`TAnc, I1, IList&lt;T&gt;`) into its entries.</summary>
+/// <param name="pText">The text between the parentheses of a class header, or
+/// symbols.heritage.</param>
+/// <returns>Each entry trimmed, in order; a comma inside `&lt;...&gt;` does not split.
+/// Empty for blank text.</returns>
+function SplitHeritage(const pText: string): TArray<string>;
 
 /// <summary>Collects what unit pFromFid takes from unit pToStem.</summary>
 /// <param name="pSource">Index access; must not be nil. Its IsSccStem must answer for
@@ -353,10 +363,11 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// A's initialization section, or that section -- from `initialization` to `end.` --
 /// names the enclosing routine as a whole word: the variable is still nil there),
 /// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).
-/// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses two more after this one:
+/// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses one more after this one:
 /// `duplicate-identifier` (the leaf declares the pointer's names differently and every suffix up to 99 is taken --
-/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...) and `unit-leaves-program` (the
-/// declaring unit would drop out of the program after the cut, so its initialization never runs).</para>
+/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...). A declaring
+/// unit that would drop out of the program after the cut (so its initialization never ran) is no refusal since A2:
+/// the planner adds it to the program's uses clause instead (RegisterDecl).</para>
 /// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
 /// winapi) is carried into the procedural type; inline, overload, external, forward and the
 /// hint directives do not change it and are skipped.</para>
@@ -640,6 +651,7 @@ type
     function TakeReceiverRef(const pR: TReference): Boolean;
     procedure TakeClassMemberAccess(const pR: TReference);
     procedure TakeBareRef(const pR: TReference);
+    procedure TakeCastMembers(const pR: TReference; const pCls: TSymbol);
     procedure Finish;
     procedure Collect;
   public
@@ -647,6 +659,8 @@ type
     destructor Destroy; override;
     function Run: TEdgeSurface;
   end;
+
+function PlainCode(const pLine: string): string; forward;
 
 constructor TSurfaceBuilder.Create(const pSource: IEdgeSurfaceSource; pFromFid: Int64; const pToStem: string);
 begin
@@ -827,8 +841,13 @@ begin
   Kind:= erOther;
   if SameText(pR.Kind, 'call') then
   begin
-    Kind:= erCall;
-    Inc(FSurface.CallCount);
+    { C7: the index records a hard cast `TX(Y)` as a call of TX }
+    if (Owner.Kind = skClass) and SameText(pR.NameText, Owner.Name) then Kind:= erTypeCast
+    else
+    begin
+      Kind:= erCall;
+      Inc(FSurface.CallCount);
+    end;
   end
   else if SameText(pR.Kind, 'type_use') then
   begin
@@ -842,6 +861,35 @@ begin
   end
   else if SameText(pR.Kind, 'read') and (Owner.Kind = skClass) then FClassUses.Add(pR);
   AddRef(pR, Kind, Owner.Id);
+  if Kind = erTypeCast then TakeCastMembers(pR, Owner);
+end;
+
+{ C7: the index records no member access after a hard cast, so `TX(Y).M` and `TX(Y).M := v` get
+  their member read / write from the line: one ref per field or property of TX named that way
+  (a member TX does not declare itself is left to RefRefusal, which refuses the cast). }
+procedure TSurfaceBuilder.TakeCastMembers(const pR: TReference; const pCls: TSymbol);
+var
+  R: TReference;
+begin
+  var C:= TRegEx.Escape(pCls.Name);
+  for var M in TRegEx.Matches(PlainCode(LineText(pR.StartLine)),
+    '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)(\s*:=)?', [roIgnoreCase]) do
+  begin
+    var Child:= FStore.FindChildSymbolByName(pCls.Id, M.Groups[1].Value);
+    if (Child.Id <= 0) or not (Child.Kind in [skField, skProperty]) then Continue;
+    R:= pR;
+    R.NameText:= Child.Name;
+    if (M.Groups.Count > 2) and (M.Groups[2].Value <> '') then
+    begin
+      FSurface.HasWrite:= True;
+      AddRef(R, erMemberWrite, Child.Id);
+    end
+    else
+    begin
+      FMembers.Add(Child.Name);
+      AddRef(R, erMemberRead, Child.Id);
+    end;
+  end;
 end;
 
 procedure TSurfaceBuilder.Finish;
@@ -2274,6 +2322,8 @@ type
     function Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
     function Stored(const pSym: TSymbol): TStoredType;
     function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+    function HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
+    function GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
     function CheckShape: Boolean;
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
@@ -2409,14 +2459,17 @@ begin
       end;
     erTypeCast:
       begin
+        { C7: `TX(Y).M` with M a field / property of TX is carried; any other cast stays }
+        pWhat:= HardCastWhat(pR, S);
+        if pWhat = '' then Exit(False);
         pKind:= 'type-cast';
-        pWhat:= Format('casts to `%s`, which would still need its unit', [pR.Name]);
       end;
     erCall:
       if (S.Kind = skClass) and SameText(pR.Name, S.Name) then
       begin
+        pWhat:= HardCastWhat(pR, S);
+        if pWhat = '' then Exit(False);
         pKind:= 'type-cast';
-        pWhat:= Format('casts to `%s`, which would still need its unit', [pR.Name]);
       end
       else if (S.Kind = skClass) or ((S.ParentId > 0) and (FStore.GetSymbolById(S.ParentId).Kind in [skClass, skRecord])) then
       begin
@@ -2441,6 +2494,28 @@ begin
     end;
   end;
   Result:= True;
+end;
+
+{ C7: '' when every hard cast `TX(...)` of the line is `TX(name).M` with M a field or property TX
+  declares itself (the surface synthesised that member's read / write; RewriteLine turns the cast
+  into `(name as ISurface).M`); else why the cast cannot be carried. }
+function TMemberPlan.HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
+begin
+  var C    := TRegEx.Escape(pCls.Name);
+  var Code := PlainCode(pR.LineText);
+  var Casts:= TRegEx.Matches(Code, '(?<![\w.])' + C + '\s*\(', [roIgnoreCase]).Count;
+  var Shaped:= 0;
+  for var M in TRegEx.Matches(Code, '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+  begin
+    var Child:= FStore.FindChildSymbolByName(pCls.Id, M.Groups[1].Value);
+    if (Child.Id <= 0) or not (Child.Kind in [skField, skProperty]) then
+      Exit(Format('casts to `%s` and reads `%s` through the cast, which is not a field or property `%s` ' +
+        'declares itself', [pCls.Name, M.Groups[1].Value, pCls.Name]));
+    Inc(Shaped);
+  end;
+  if Shaped < Casts then
+    Exit(Format('casts to `%s` other than as `%s(name).member`, which would still need its unit', [pCls.Name, pCls.Name]));
+  Result:= '';
 end;
 
 { Every ref is an `is` / `as` operand or a member read, on one class; no `B.X` in A. }
@@ -2865,6 +2940,18 @@ begin
   Result:= MemberTypeInChain(FIdx, Stored(Cur), pX, pType) and TRegEx.IsMatch(pType, '^[A-Za-z_][\w.]*$');
 end;
 
+{ C1: whether an `X is TX` test on the same receiver text precedes line pLine inside the same
+  routine (the guard logic of CheckCastExceptions): a cast reached only when X IS a TX may go
+  through the IInterface ancestor although X's static type is unknown. }
+function TMemberPlan.GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
+begin
+  Result:= False;
+  var C:= TRegEx.Escape(FCls.Name);
+  for var G in FSurface.Refs do
+    if (G.Kind = erTypeIs) and (G.EnclosingId = pEnclosing) and (G.Line < pLine) and
+      TRegEx.IsMatch(G.LineText, '(?<![\w.])' + TRegEx.Escape(pX) + '\s+is\s+' + C + '\b', [roIgnoreCase]) then Exit(True);
+end;
+
 { One consumer line with every `X is TClass` / `X as TClass` rewritten to the interface. }
 function TMemberPlan.RewriteLine(pLine: Integer; pEnclosing: Int64; out pText: string): Boolean;
 var
@@ -2881,13 +2968,36 @@ begin
     var M:= TRegEx.Match(pText, '(?<![\w.)\]])([A-Za-z_]\w*)\s+as\s+' + C + '\b', [roIgnoreCase]);
     if not M.Success then Break;
     var X:= M.Groups[1].Value;
-    if not ReceiverType(X, pEnclosing, Ty) then
+    var Known:= ReceiverType(X, pEnclosing, Ty);
+    { C1: an `X is TX` guard earlier in the same routine proves X a TX there -- the ancestor cast is safe }
+    if not Known and ((FCastAnc = '') or not GuardedBefore(X, pEnclosing, pLine)) then
       Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s as %s` ' +
-        'is not that of Self, a parameter, a local, or a field or property of the class', [pLine, X, X, FCls.Name])));
+        'is not that of Self, a parameter, a local, or a field or property of the class, and no `%s is %s` guards ' +
+        'it earlier in the same routine', [pLine, X, X, FCls.Name, X, FCls.Name])));
     var Repl:= X + ' as ' + FIface;
-    if not ImplementsIInterface(FIdx, Ty) then
+    if not Known or not ImplementsIInterface(FIdx, Ty) then
     begin
       Repl     := Format('%s(%s) as %s', [FCastAnc, X, FIface]);
+      FCastUsed:= True;
+    end;
+    pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
+  end;
+  { C7: a hard cast followed by a member, `TX(X).M` -> `(X as I).M`, through the IInterface ancestor
+    when X's static type lacks it; a wrong cast now raises EIntfCastError instead of reading garbage }
+  while True do
+  begin
+    var M:= TRegEx.Match(pText, '(?<![\w.])' + C + '\s*\(\s*([A-Za-z_]\w*)\s*\)\s*(?=\.)', [roIgnoreCase]);
+    if not M.Success then Break;
+    var X:= M.Groups[1].Value;
+    var Known:= ReceiverType(X, pEnclosing, Ty);
+    if not Known and ((FCastAnc = '') or not GuardedBefore(X, pEnclosing, pLine)) then
+      Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s(%s)` ' +
+        'is not that of Self, a parameter, a local, or a field or property of the class, and no `%s is %s` guards ' +
+        'it earlier in the same routine', [pLine, X, FCls.Name, X, X, FCls.Name])));
+    var Repl:= '(' + X + ' as ' + FIface + ')';
+    if not Known or not ImplementsIInterface(FIdx, Ty) then
+    begin
+      Repl     := Format('(%s(%s) as %s)', [FCastAnc, X, FIface]);
       FCastUsed:= True;
     end;
     pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
@@ -2907,7 +3017,7 @@ begin
   try
     for var R in FSurface.Refs do
     begin
-      if not (R.Kind in [erTypeIs, erTypeAs]) or Done.Contains(R.Line) then Continue;
+      if not (R.Kind in [erTypeIs, erTypeAs, erTypeCast]) or Done.Contains(R.Line) then Continue;
       Done.Add(R.Line);
       if not RewriteLine(R.Line, R.EnclosingId, Text) then Exit(False);
       AddEdit(FFromFid, R.Line, True, [Text]);
@@ -3344,6 +3454,7 @@ begin
   for var M in FMembers do Result.MemberSigs:= Result.MemberSigs + [M.Name + ': ' + Trim(M.Signature)];
   for var St in FSetters do if St <> '' then Result.Setters:= Result.Setters + [St];
   for var M in FMethods do Result.MethodSigs:= Result.MethodSigs + [M.Name + Trim(M.Signature)];
+  Result.KeptGetters  := FKeptGetters.ToArray;
 end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;

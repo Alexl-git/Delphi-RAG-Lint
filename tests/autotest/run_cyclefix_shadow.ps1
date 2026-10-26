@@ -299,6 +299,15 @@ try {
   Check 'e1: the new unit is staged with the UTF-8 BOM' ($nb.Length -gt 3 -and $nb[0] -eq 0xEF -and $nb[1] -eq 0xBB -and $nb[2] -eq 0xBF) "units=$($nu.Count)"
   Check 'e1: the copied text survives as UTF-8 (S e-acute v ...)' (([Text.Encoding]::UTF8.GetString($nb)).Contains('S' + [char]0xE9 + 'v' + [char]0xE9 + 'rit' + [char]0xE9)) ''
 
+  Write-Host '== e1b (C6): a cp1252 char in a line the recipe REPLACES in an existing ANSI file (representable: no refusal)' -ForegroundColor Cyan
+  # 0xE9 in the trailing comment of DemoConfig.pas's `DemoLogger;` uses entry, which Part A rewrites to `DemoLogger.Untangle;`.
+  $r = Run-Patched 'e1b' { param($p) Patch-Bytes (Join-Path $p 'DemoConfig.pas') 'DemoLogger;' ([byte[]](0x44,0x65,0x6D,0x6F,0x4C,0x6F,0x67,0x67,0x65,0x72,0x3B,0x20,0x2F,0x2F,0x20,0x63,0x61,0x66,0xE9)) }
+  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  Check 'e1b: exit 0, mechanical (no non-ascii-text refusal: cp1252 represents e-acute)' ($r.Exit -eq 0 -and $r.Json -and $r.Json.cycles[0].verdict -eq 'mechanical' -and -not ($kinds -contains 'non-ascii-text')) $r.Out
+  $cb = if (Test-Path (Join-Path $r.Shadow 'DemoConfig.pas')) { [IO.File]::ReadAllBytes((Join-Path $r.Shadow 'DemoConfig.pas')) } else { [byte[]]@() }
+  Check 'e1b: the staged DemoConfig.pas stays ANSI (no BOM) and keeps the 0xE9 byte on the rewritten uses line' ($cb.Length -gt 3 -and -not ($cb[0] -eq 0xEF -and $cb[1] -eq 0xBB) -and ([Text.Encoding]::GetEncoding(28591).GetString($cb)).Contains('DemoLogger.Untangle; // caf' + [char]0xE9)) "bytes=$($cb.Length)"
+  # No positive control for the refusal itself: every byte of an ANSI file round-trips through its code page, so the
+  # non-ascii-text gate is reachable only for text copied from a UTF-8 file into an ANSI one (none of the recipes does that today).
   Write-Host '== e2: a UTF-8 BOM file keeps its BOM and bytes outside the edits' -ForegroundColor Cyan
   $r = Run-Patched 'e2' { param($p)
     $f = Join-Path $p 'DemoLogger.pas'
