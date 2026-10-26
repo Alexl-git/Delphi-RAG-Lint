@@ -1,0 +1,13 @@
+plain:
+line 3: warning: #migrate TUpdateKind -> TFDUpdateRequest is not applied by convert-apply -- uses units after a member #migrate are not added by convert-apply
+line 4: warning: #migrate Click -> Press is not applied by convert-apply -- a scoped #migrate (Class: / obj.) is not applied yet
+line 8: warning: #migrate Count -> Items.Count is not applied by convert-apply -- only a member rename or DL_NONE is applied; replacement templates are not applied yet
+line 9: warning: #migrate Foo ->  is not applied by convert-apply -- it names no replacement
+OK
+NOTE: --from and --to not both given -- the book was PARSED only; #link/#default paths were not checked (convert-apply validates every block)
+scoped:
+line 3: warning: #migrate TUpdateKind -> TFDUpdateRequest is not applied by convert-apply -- uses units after a member #migrate are not added by convert-apply
+line 4: warning: #migrate Click -> Press is not applied by convert-apply -- a scoped #migrate (Class: / obj.) is not applied yet
+line 8: warning: #migrate Count -> Items.Count is not applied by convert-apply -- only a member rename or DL_NONE is applied; replacement templates are not applied yet
+line 9: warning: #migrate Foo ->  is not applied by convert-apply -- it names no replacement
+OK

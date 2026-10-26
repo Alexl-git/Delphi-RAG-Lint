@@ -1,0 +1,3 @@
+#migrate Click -> Press
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption

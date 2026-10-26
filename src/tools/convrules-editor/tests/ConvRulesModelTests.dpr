@@ -50,6 +50,8 @@ uses
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
   , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
+  , ConvRules.MigrateRules in '..\ConvRules.MigrateRules.pas'  // dl:unit ConvRules.MigrateRules accepted -- the tests read MIGRATE_REFUSAL_* to pin the engine's own sentences, so the consts travel with the unit under test
+  , ConvRules.Migrate in '..\ConvRules.Migrate.pas'  // dl:unit ConvRules.Migrate accepted -- the tests read REPORT_STATUS_* / MIGRATE_GLOBAL_TEXT to pin the unit's own texts
   , ConvRules.CapabilityProbe in '..\ConvRules.CapabilityProbe.pas'  // dl:unit ConvRules.CapabilityProbe accepted -- the tests read REQUIRED_ENGINE_VERSION / REDUCED_FEATURES_TEXT to pin the probe's own contract, so the consts travel with the unit under test
   ;
 
@@ -15494,6 +15496,7 @@ end;
 {$I inc\EncodingEngineTests.inc}
 {$I inc\EncodingApplyTests.inc}
 {$I inc\EncodingTabTests.inc}
+{$I inc\MigrateTests.inc}
 
 begin
   try
@@ -15748,6 +15751,13 @@ begin
     TestEncodingEngine;
     TestEncodingApply;
     TestEncodingTab;
+    TestMigrateModel;
+    TestMigrateBdeTail;
+    TestMigrateBlocks;
+    TestMigrateApply;
+    TestMigrateNotes;
+    TestMigrateWorkList;
+    TestMigrateDecisions;
 
     FreeAndNil(GParseBook);
 

@@ -164,8 +164,22 @@ type
       SwapOld: string        ; // the Old unit being replaced
       SwapNew: TArray<string>; // one-or-more New units
 
-      // rnkMigrate / rnkPcre / rnkNote / rnkComment keep their content in Raw only
-      // (Migrate/PCRE are rarely grid-edited; the directive tabs edit Raw text).
+      // rnkMigrate '#migrate [<Class>:][<obj>.]Old -> New[, Unit ...]', split exactly as the
+      // engine's ParseConversionRules does (DRagLint.Convert.Rules: the FIRST ' -> ' of the
+      // body + ' ', SplitMigrateLhs on the left, SplitHeadAndUnits on the right).
+      /// <summary>rnkMigrate: the LHS up to and including its last ':' or '.', verbatim ('' = the
+      /// plain member form the engine applies). The engine whitespace-normalises it ('TFoo: btn.');
+      /// only its emptiness is a decision.</summary>
+      MigScope: string;  // dl:ok public-field@65a1 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>rnkMigrate: the member or identifier being replaced.</summary>
+      MigOld  : string;  // dl:ok public-field@dc59 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>rnkMigrate: the replacement head; '' for a From-only line ('#migrate Foo -> ').</summary>
+      MigNew  : string;  // dl:ok public-field@f11b -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>rnkMigrate: the trailing ', Unit' list, comma-joined ('A, B'); '' when none.</summary>
+      MigUnits: string;  // dl:ok public-field@a79b -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+
+      // rnkPcre / rnkNote / rnkComment keep their content in Raw only
+      // (PCRE is rarely grid-edited; the directive tabs edit Raw text).
       NoteText: string; // rnkNote payload (after '#note ')
 
       // rnkMapping -- ONE node per physical line; a #mapping with three clauses is
@@ -840,8 +854,14 @@ begin
       Result:= if WarnValid then Format('#warn %s "%s"', [WarnPath, WarnText]) else Raw;
     rnkCheckRef:
       Result:= if CheckRefValid then Format('#check-ref %s %s', [CheckRefPath, string.Join(', ', CheckRefTargets)]) else Raw;
+    rnkMigrate:
+    begin
+      Result:= Format('#migrate %s%s -> %s', [MigScope, MigOld, MigNew]);
+      if MigUnits <> '' then
+        Result:= Result + ', ' + MigUnits;
+    end;
     else
-      // rnkMigrate, rnkPcre, rnkComment, rnkBlank, rnkUnknown: edited via Raw.
+      // rnkPcre, rnkComment, rnkBlank, rnkUnknown: edited via Raw.
       Result:= Raw;
   end; // case
 end; // function
@@ -869,6 +889,55 @@ function TRuleBook.Add(ANode: TRuleNode): TRuleNode;
 begin
   FNodes.Add(ANode);
   Result:= ANode;
+end;
+
+{ Sets ANode.Kind to rnkMigrate and fills ANode's MigScope / MigOld / MigNew / MigUnits from a '#migrate' body, as the
+  engine's ParseConversionRules does: the FIRST ' -> ' of ABody + ' ' (so a From-only
+  '#migrate Foo -> ' reads Old 'Foo', R27); the LHS scope is everything up to and
+  including its last ':' and then its last '.' (SplitMigrateLhs); the RHS splits on
+  EVERY comma, head first, empty unit names dropped (SplitHeadAndUnits). }
+procedure ParseMigrateBody(ANode: TRuleNode; const ABody: string);
+var
+  LArrow: Integer;
+  LLhs  : string;
+  LRhs  : string;
+  LCut  : Integer;
+  LParts: TArray<string>;
+  LUnits: TArray<string>;
+begin
+  ANode.Kind:= rnkMigrate;
+  LArrow:= Pos(ARROW_MIGRATE, ABody + ' ');
+  if LArrow > 0 then
+  begin
+    LLhs:= Trim(Copy(ABody, 1, LArrow - 1));
+    LRhs:= Trim(Copy(ABody + ' ', LArrow + Length(ARROW_MIGRATE), MaxInt));
+  end
+  else
+  begin
+    LLhs:= Trim(ABody);
+    LRhs:= '';
+  end;
+  ANode.MigScope:= '';
+  LCut:= LLhs.LastIndexOf(':') + 1;
+  if LCut > 0 then
+  begin
+    ANode.MigScope:= Copy(LLhs, 1, LCut);
+    LLhs:= Copy(LLhs, LCut + 1, MaxInt);
+  end;
+  LCut:= LLhs.LastIndexOf('.') + 1;
+  if LCut > 0 then
+  begin
+    ANode.MigScope:= ANode.MigScope + Copy(LLhs, 1, LCut);
+    LLhs:= Copy(LLhs, LCut + 1, MaxInt);
+  end;
+  ANode.MigOld:= Trim(LLhs);
+  LParts:= LRhs.Split([',']);
+  ANode.MigNew:= if Length(LParts) > 0 then Trim(LParts[0]) else '';
+  LUnits:= nil;
+  for var I: Integer:= 1 to High(LParts) do
+    if Trim(LParts[I]) <> '' then
+      LUnits:= LUnits + [Trim(LParts[I])];
+  ANode.MigUnits:= string.Join(', ', LUnits);
 end;
 
 function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@0046, too-many-exit-points@b53b, cyclomatic-complexity@fb8b, cognitive-complexity@5462 -- (re-read after the C10 G-expression split moved it to 255 lines; first reviewed 2026-09-30): a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth, with its engine-identical digits-only check, took it to 257 lines / 20 exits / cyclomatic 44 / cognitive 103, and #warn + #check-ref (B9, re-read 2026-10-20) to 295 lines / 22 exits / cyclomatic 52 / cognitive 123 -- and splitting the arms apart is a refactor outside this change
@@ -1131,7 +1200,7 @@ begin
 
     if Dir = '#migrate' then
     begin
-      N.Kind:= rnkMigrate; // content edited via Raw
+      ParseMigrateBody(N, Body); // sets Kind
       Exit(N);
     end;
 

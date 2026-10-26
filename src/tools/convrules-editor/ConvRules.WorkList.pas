@@ -101,6 +101,10 @@ type
     /// <summary>candidates -- the units that could declare the From class (ambiguous);
     /// string entries only, others skipped; [] when absent.</summary>
     Candidates   : TArray<string>;
+    /// <summary>migrate_to (engine 1.35.0+) -- the replacement a member-form #migrate wrote
+    /// for the member, DL_NONE for a deliberate break (the engine's status stays 'mapped');
+    /// '' when none or not sent.</summary>
+    MigrateTo    : string;
   end;
 
   /// <summary>What the Work list shows. An empty field means "all".</summary>
@@ -420,6 +424,7 @@ begin
       LRow.Count:= Length(LRow.Lines);
     LRow.Resolution   := JStr(LObj, 'resolution');
     LRow.Candidates   := JStrings(LObj, 'candidates');
+    LRow.MigrateTo    := JStr(LObj, 'migrate_to');
     Result:= Result + [LRow];
   end;
 end;

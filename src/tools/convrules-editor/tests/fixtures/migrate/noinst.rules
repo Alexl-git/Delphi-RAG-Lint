@@ -1,0 +1,5 @@
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption
+#convert TDstBtn -> TSrcBtn
+#migrate Press -> Click
+#migrate Foo:Bar -> Baz

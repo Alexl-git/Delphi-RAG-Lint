@@ -1,0 +1,9 @@
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption
+#migrate TUpdateKind -> TFDUpdateRequest, FireDAC.Phys.Intf
+#migrate TSrcBtn:Click -> Press
+#migrate Click -> Press
+#migrate Click -> Tap
+#migrate Hint -> Hint
+#migrate Count -> Items.Count
+#migrate Foo -> 
