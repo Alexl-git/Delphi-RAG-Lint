@@ -17,20 +17,29 @@ interface
 
 const
   /// <summary>Time limit, in ms, for every IDE-started `cycles --fix` run (the
-  /// tab's Dry run and Apply, and the menu's dry run): 130 minutes.</summary>
-  /// <remarks>Deliberately ABOVE the longest run the engine's own limits allow
-  /// one --apply: three builds of up to 30 minutes each (baseline, after, one
-  /// repair rebuild) plus the pre-plan re-index, the re-index and a `cycles`
-  /// of up to 10 minutes each, 120 minutes (CApplyWorstMs in
-  /// DRagLint.CLI.CycleFix), plus 10 minutes of slack. At the plugin's limit ProcRun kills the whole process tree (engine +
-  /// msbuild/dcc); a kill in the middle of an --apply bypasses the engine's
-  /// atomic rollback and can leave half-edited files. With the plugin's limit
-  /// higher, an engine limit always fires first and the engine rolls back
-  /// itself. tests\autotest\run_cyclefix_timeouts.ps1 pins the inequality
-  /// against the engine's constants. The job is asynchronous, so the IDE stays
-  /// usable while it waits. The other Uses &amp; Deps sections keep their own
-  /// 180 s limit.</remarks>
-  CYCLE_FIX_TIMEOUT_MS = 130 * 60 * 1000;
+  /// tab's Dry run and Apply, and the menu's dry run): 0 = NONE.</summary>
+  /// <remarks>Owner ruling 2026-10-26 (lane X-BT): an IDE run has no time
+  /// limit -- the IDE shows progress and has Cancel, and a slow machine must not
+  /// abort a result the user waits for. (It was 130 minutes, above the engine's
+  /// own 120-minute worst case; a plugin kill in the middle of an --apply
+  /// bypassed the engine's rollback.) ProcRun reads &lt;= 0 as "no deadline".
+  /// The engine runs these without --build-timeout, so its builds are unbounded
+  /// too. Stopping a run is Cancel's job: see CYCLE_FIX_CANCEL_GRACE_MS.
+  /// tests\autotest\run_cyclefix_timeouts.ps1 pins this value. The other Uses
+  /// &amp; Deps sections keep their own 180 s limit.</remarks>
+  CYCLE_FIX_TIMEOUT_MS = 0;
+
+  /// <summary>How long, in ms, a cancelled `cycles --fix` job gives the engine
+  /// to stand down before its process tree is killed: 90 seconds.</summary>
+  /// <remarks>Cancel (the status strip's button, JobQueue.CancelRunning) never
+  /// hard-kills the engine mid-apply: it sends the maintenance control
+  /// channel's `shutdown` (ProcRun's AStandDownGraceMs), the engine kills the
+  /// build it waits on, rolls every written file back and exits 1 with
+  /// "cancelled -- rolled back". Only an engine still running after this grace
+  /// is killed. ABOVE the engine's own CChildStandDownMs (60 s, what a --part
+  /// all parent gives its child to roll back), so a forwarded stand-down
+  /// finishes first; run_cyclefix_timeouts.ps1 pins the inequality.</remarks>
+  CYCLE_FIX_CANCEL_GRACE_MS = 90 * 1000;
 
 type
   /// <summary>One strongly connected component of the project's uses graph, as

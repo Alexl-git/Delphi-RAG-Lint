@@ -97,7 +97,7 @@ function Run-Case([string]$Tag, [string[]]$Select, [string]$LibArg) {
   & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
   Check "${Tag}: demo indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $hashBefore = Get-TreeHash $proj
-  $out = (& $Exe cycles --fix --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
+  $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
     --no-compile --library-db $LibArg --shadow-out $shadow --format json 2>$null | Out-String)
   $code = $LASTEXITCODE
   $j = try { $out | ConvertFrom-Json } catch { $null }
@@ -190,7 +190,7 @@ try {
   $fake2 = 'planted' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
   $pl2 = Join-Path $ProductRoot "draglint_cyclefix_$fake2"; New-Item -ItemType Directory -Force $pl2 | Out-Null; [IO.File]::WriteAllText((Join-Path $pl2 'marker.txt'), 'keep me')
   $env:DRAGLINT_TEST_SCRATCH_PID = $fake2
-  try { $null = (& $Exe cycles --fix --db $ddb --library-db none 2>$null | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
+  try { $null = (& $Exe cycles --fix --build-timeout 1800 --db $ddb --library-db none 2>$null | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
   Check 'c6: a --fix run that fails validation (no --project: exit 2) leaves the planted dir alone' ($code4 -eq 2 -and (Test-Path (Join-Path $pl2 'marker.txt'))) "exit=$code4"
   if (Test-Path $pl2) { [IO.Directory]::Delete($pl2, $true) }
   $own = Join-Path $WorkDir 'c4-own-shadow'
@@ -208,7 +208,7 @@ try {
     $env:DRAGLINT_TEST_SCRATCH_PID = $fk
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
     try {
-      $o = (& $Exe cycles --fix --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf | Out-String)
+      $o = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf | Out-String)
       $code = $LASTEXITCODE
     } finally {
       $env:DRAGLINT_TEST_SCRATCH_PID = $null
@@ -270,7 +270,7 @@ try {
     $errf = Join-Path $WorkDir "$Tag-stderr.txt"
     foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
     try {
-      $out = (& $Exe cycles --fix --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
+      $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
         --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>$errf | Out-String)
       $code = $LASTEXITCODE
       $err = [IO.File]::ReadAllText($errf)

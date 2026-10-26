@@ -130,6 +130,7 @@
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.GhostText.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.ControlChannel.pas"/>
         <DCCReference Include="DragLint.Plugin.JobQueue.pas"/>
         <DCCReference Include="DragLint.Plugin.QueueText.pas"/>
         <DCCReference Include="DragLint.Plugin.StatusBar.pas"/>
