@@ -4,10 +4,10 @@ title: workspace index
 summary: Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass
 product: DL
 group: editor-integration
-order: 110020
+order: 110021
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # workspace index

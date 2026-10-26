@@ -97,6 +97,7 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Core.CliError
+  , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
@@ -845,6 +846,12 @@ begin
   Writeln('         A "db" in .drag-lint.json counts as an explicit --db.');
   Writeln('         Destructive purge-locals always needs an explicit --db');
   Writeln('         (on the command line or a .drag-lint.json "db").');
+  Writeln('');
+  Writeln('Output encoding (every verb; stdout and stderr):');
+  Writeln('  --output-encoding ascii|utf8|utf16   default ascii, or "outputEncoding" in .drag-lint.json.');
+  Writeln('  ascii: 7-bit only; each non-ASCII UTF-16 code unit is written \uXXXX (lower-case hex,');
+  Writeln('         a surrogate pair outside the BMP) -- the JSON escape, so --json decodes exactly.');
+  Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) are not affected.');
 end; // procedure
 
 const
@@ -952,8 +959,9 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
 procedure LoadConfigDefaults(var AArgs: TArgs);
 const
   { every key read below -- the set a convert verb names when it ignores the file }
-  DefaultsKeys: array[0..5] of string = ('db', 'project', 'path', 'rule', 'watch', 'docs');
+  DefaultsKeys: array[0..6] of string = ('db', 'project', 'path', 'rule', 'watch', 'docs', OUTPUT_ENCODING_CONFIG_KEY);
 var
+  OutEnc   : TOutputEncoding;
   Dir      : string     ;
   Candidate: string     ;
   Content  : string     ;
@@ -1062,6 +1070,14 @@ begin
             'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
             [V.Value, Candidate, AArgs.Command, V.Value]));
       end;
+      { "outputEncoding" (2026-10-26): the stdout/stderr encoding when the
+        command line names none. Applied here, so the banner below is already
+        written in it. A bad value is named and the default kept. }
+      V:= J.GetValue(OUTPUT_ENCODING_CONFIG_KEY);
+      if (V <> nil) and not HasSwitch(OUTPUT_ENCODING_SWITCH) then
+        if TryParseOutputEncoding(V.Value, OutEnc) then InstallOutputEncoding(OutEnc)
+        else Writeln(ErrOutput, Format('drag-lint: note: ignoring "%s": "%s" in %s -- expected %s.',
+          [OUTPUT_ENCODING_CONFIG_KEY, V.Value, Candidate, OUTPUT_ENCODING_VALUES]));
       V:= J.GetValue('watch');
       if V is TJSONObject then
       begin
@@ -1443,6 +1459,13 @@ begin
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--diff' then Result.ShowDiff:= True
     else if A = '--quiet'   then Result.Quiet := True
+    else if A = '--output-encoding' then { = OUTPUT_ENCODING_SWITCH; spelled out for the docs-sync flag scan }
+    begin
+      var OutEnc: TOutputEncoding;
+      if (i = ParamCount) or not TryParseOutputEncoding(ParamStr(i + 1), OutEnc) then
+        raise Exception.CreateFmt('%s: expected %s', [OUTPUT_ENCODING_SWITCH, OUTPUT_ENCODING_VALUES]);  // dl:ok raise-bare-exception@755b -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. --delphi-lsp-bits)
+      Inc(i); { the value was applied by Run, before ParseArgs }
+    end
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if A = '--document-third-party' then Result.DocumentThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -4500,6 +4523,9 @@ begin
       if AArgs.ResolveOnly  then ChildCmdLine:= ChildCmdLine + ' --resolve-only';
       if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
       if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
+      { The child writes to the SAME stdout/stderr, so it must write the same bytes. }
+      if CurrentOutputEncoding <> oeAscii then
+        ChildCmdLine:= ChildCmdLine + ' ' + OUTPUT_ENCODING_SWITCH + ' ' + OutputEncodingName(CurrentOutputEncoding);
 
       SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
       Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
@@ -8705,7 +8731,7 @@ begin
 
             // Referenced by other units.
             QRefs.Close;
-            QRefs.ParamByName('u').AsString:= UnitName;
+            QRefs.ParamByName('u').AsWideString:= UnitName;
             QRefs.Open;
             if not QRefs.IsEmpty then
             begin
@@ -8922,20 +8948,20 @@ begin
 
         FileId:= 0;
         FileQ.Close;
-        FileQ.ParamByName('p').AsString:= RawPath;
-        FileQ.ParamByName('p2').AsString:= '%' + ExtractFileName(RawPath);
+        FileQ.ParamByName('p').AsWideString:= RawPath;
+        FileQ.ParamByName('p2').AsWideString:= '%' + ExtractFileName(RawPath);
         FileQ.Open;
         if not FileQ.IsEmpty then begin FileId:= FileQ.FieldByName('id').AsLargeInt; Inc(MatchedFile); end;
         FileQ.Close;
 
         if FileId > 0 then Q.ParamByName('fid').AsLargeInt:= FileId
         else Q.ParamByName('fid').Clear;
-        Q.ParamByName('rp').AsString:= RawPath;
-        Q.ParamByName('code').AsString:= Code.ToUpper;
-        Q.ParamByName('sev').AsString  := Severity;
+        Q.ParamByName('rp').AsWideString:= RawPath;
+        Q.ParamByName('code').AsWideString:= Code.ToUpper;
+        Q.ParamByName('sev').AsWideString  := Severity;
         Q.ParamByName('ln' ).AsInteger := LineNo;
         Q.ParamByName('cn' ).AsInteger := ColNo;
-        Q.ParamByName('msg').AsString  := Msg;
+        Q.ParamByName('msg').AsWideString  := Msg;
         Q.ParamByName('t'  ).AsLargeInt:= ImportedAt;
         Q.ExecSQL;
         Inc(Count);
@@ -24518,7 +24544,7 @@ begin
     for Pfx in APrefixes do
     begin
       Q.Close;
-      Q.ParamByName('p').AsString:= Pfx + '%';
+      Q.ParamByName('p').AsWideString:= Pfx + '%';
       Q.Open;
       var FldPath: TField:= Q.FieldByName('path');
       var FldUnit: TField:= Q.FieldByName('unit_name');
@@ -29700,7 +29726,7 @@ begin
         PathPrefix:= IncludeTrailingPathDelimiter(AbsProjPath);
         Q.Close;
         Q.Sql.Text:= 'SELECT COUNT(*) AS cnt FROM files WHERE path LIKE :prefix';
-        Q.ParamByName('prefix').AsString:= PathPrefix + '%';
+        Q.ParamByName('prefix').AsWideString:= PathPrefix + '%';
         Q.Open;
         FileCount:= 0;
         if not Q.IsEmpty then FileCount:= Q.FieldByName('cnt').AsInteger;
@@ -33600,7 +33626,14 @@ const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
 var
   Args: TArgs;
+  OutEnc: TOutputEncoding;
+  OutEncText: string;
 begin
+  { --output-encoding FIRST, before anything is written: the config banner and
+    every ParseArgs note go out in it. Default ascii (owner ruling 2026-10-26);
+    a bad value leaves ascii here and ParseArgs refuses it (exit 3). }
+  OutputEncodingOnCommandLine(OutEnc, OutEncText);
+  InstallOutputEncoding(OutEnc);
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(SELFTEST_SCHEMA_DB_ARG)));
   try

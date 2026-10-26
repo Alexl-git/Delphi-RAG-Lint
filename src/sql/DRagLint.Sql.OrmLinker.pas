@@ -231,8 +231,8 @@ var
     QIns.ParamByName('sid').AsLargeInt:= ASql   .Id;
     QIns.ParamByName('sdx').AsInteger := ASql   .DbIndex;
     QIns.ParamByName('conf').AsFloat   := AConfidence;
-    QIns.ParamByName('lk'  ).AsString  := ALinkKind;
-    QIns.ParamByName('ev'  ).AsString  := AEvidence;
+    QIns.ParamByName('lk'  ).AsWideString  := ALinkKind;
+    QIns.ParamByName('ev'  ).AsWideString  := AEvidence;
     QIns.ParamByName('ca'  ).AsLargeInt:= ComputedAt;
     QIns.ExecSQL;
   end;

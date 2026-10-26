@@ -221,6 +221,18 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > the project; `compile-check` caches only into an explicit `--db` or the
 > project's unique manifest section. A `"db"` in `.drag-lint.json` counts as an
 > explicit `--db`.
+>
+> **Output encoding (every verb, stdout and stderr).** The default is 7-bit ASCII:
+> each non-ASCII UTF-16 code unit is written `\uXXXX` (lower-case hex; a character
+> outside the BMP is its surrogate pair), which inside `--json` is the JSON escape
+> itself, so a JSON reader gets the exact string back; in text output it is
+> reversible unless the original held a literal backslash-`u`-four-hex sequence.
+> ASCII output is byte-for-byte what it always was. `--output-encoding utf8` or
+> `utf16` writes UTF-8 / UTF-16LE instead (no BOM); `"outputEncoding": "utf8"` in
+> `.drag-lint.json` sets it when the command line does not; any other value is an
+> argument error (exit 3). Files a verb writes (`--output`) are not affected.
+> Non-ANSI characters in paths are stored in the index intact (they were `?`
+> before 2026-10-26).
 
 
 **The traps, because each one turns a correct command into a silent zero:**
@@ -798,7 +810,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
-| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
+| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
 | [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 <!-- dl:registry:end feature-summary -->
 
