@@ -3,6 +3,26 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Added
+ - `cycles --fix` C6 (W6, CYC-C): `end.` followed by a block comment is still the final `end.` (R1 assignment edit), and an R2 class heritage spread over lines is read up to its closing `)` (the interface is appended there); an unbalanced heritage still refuses manual-edit. The same-line / indented `type` header forms of C6 are NOT done (the move planner is column-1 structured). Guard `run_cyclefix_w6_rest.ps1` c6a-c6c; `run_cyclefix_r2.ps1` f12 now uses an unclosed heritage.
+ - `cycles --fix` C2 (W6, CYC-C): an R1 leaf that already declares the pointer's names no longer refuses `duplicate-identifier`: identical `T<Routine>Ptr` / `<Routine>Ptr` text is reused (nothing inserted; the assignment is skipped when the declaring unit already makes it), different text gets the lowest free `<Routine>Ptr2`, `Ptr3` ... The R2 interface name and an existing `Get<M>` still refuse. Guard `run_cyclefix_w6_rest.ps1` c2a-c2c; `run_cyclefix_r1.ps1` e1 flipped.
+ - `cycles --fix` C4 (W6, CYC-C): an overloaded routine is bound when the overload the index bound admits the argument count of every call, no other overload admits any and none has a default parameter; otherwise `overloaded-routine` stays. Guard `run_cyclefix_w6_rest.ps1` c4a-c4c.
+ - `cycles --fix` C7 rest (W6, CYC-C): R1 redirects `B.Foo(...)` (the inverted routine qualified by its unit) and `X := Foo` (an assigned value) to the pointer under the same init-order check; any other `B.X` and `@Foo` / `@B.Foo` still refuse. Not done from C7: type-decl, type-cast, multiple-classes, member-unsupported, type-unresolved, non-ascii-text, --rsvars / --build-timeout. Guard `run_cyclefix_w6_rest.ps1` c7a-c7b.
+
+### Fixed
+- autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
+  stored entry the index resolves as a class / interface / record (and not as a unit) is no
+  longer carried forever as a "foreign" unit: doc-drift reports the block (fixable) and the
+  writer moves the name to a new stored-only `<para>Used in classes: ...</para>` line after
+  `Used in units:`. The engine never renders that line; it keeps it on every regeneration and
+  doc-drift never calls it stale. Root cause of the residue: the v23 slicing defect
+  ('Implemented by:' missing from the fact-label list, fixed 2026-09-17) let IParser's
+  implementor names into its unit list, and the reconciler then preserved them as unvouchable.
+  IParser's `TDFMParser` / `TFirebirdSqlParser` are restored on that line. Guard:
+  `tests\autotest\run_doc_used_in_classes.ps1`. No extractor change, no re-parse.
+
 ## v1.35.0-alpha -- 2026-10-25
 
 The X batch on top of v1.34.1-alpha: five lanes (X1, X2, X4, X5, X6) on ONE extractor bump

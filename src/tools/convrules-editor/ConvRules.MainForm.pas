@@ -35,6 +35,7 @@ uses
   , Vcl.Themes
   , ConvRules.Model  // dl:unit ConvRules.Model accepted -- TRuleBook types a field; BOOK_DEPTH_MIN/MAX/DEFAULT travel with TRuleBook.Depth so the depth combo's 1..10 range cannot drift from the parser's
   , ConvRules.Casts
+  , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- StartupProbeVerdict is the probe's one decision, shared with the Convert tab
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- TEngineAdapter types a field; CAPABILITY_BOOK_DEPTH/PROGRESS_LINES travel with CapabilityNames, the one call that answers them
   , ConvRules.Platform
   , ConvRules.EngineProgress // TStreamingWork: RunLongCallTracked's signature, so INTERFACE-visible
@@ -109,6 +110,7 @@ type
       FEngine   : TEngineAdapter;
       FFilePath : string        ;
       FSnapshot : string        ; // FBook.Snapshot at load / New / last successful save
+      FSavedLevel: TTextLevel   ; // FBookLevel at load / New / last successful save (with FSnapshot: BookIsDirty)
       FBookLevel: TTextLevel    ; // the open book's encoding: detected on open, tlAscii7 for a new book; File > Encoding sets it, Save checks against it
       FUtf16BomNoted: Boolean   ; // NOTE_UTF16_BOM_ADDED already shown for this book (D-B: said once)
       FMnuEncoding: array[TTextLevel] of TMenuItem; // File > Encoding radio items; tlUtf16 has none (D-B: never written without a BOM)
@@ -213,6 +215,8 @@ type
       FCbDepth      : TComboBox       ; // book #depth, 1..10 (engine 1.20.6 book_depth)
       FLblDepthNote : TLabel          ; // "(default)" / "(from book)" / invalid / duplicate
       FBookDepthOk  : Boolean         ; // engine reports book_depth
+      FStartupProbed: Boolean         ; // R2b: the start-up capability probe was ANSWERED (a failed one is asked again)
+      FProbeFailedAt: UInt64          ; // GetTickCount64 of the last failed start-up probe; 0 = none (StartupProbeDue)
       FDepthTimer   : TTimer          ; // debounces wheel / arrow-key steps on FCbDepth: one reload per committed change
       FDepthPending : Boolean         ; // a selection notification arrived on FCbDepth and is not committed yet
       FDepthCancelled: Boolean        ; // CBN_SELENDCANCEL seen WHILE the list was dropped: dismissed (Esc / focus loss), not picked from
@@ -585,6 +589,8 @@ type
       function RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string): string;
       // A4: the views a #migrate edit changes (rule tree, raw text, Members list, Work list Rule cells).
       procedure RefreshMigrateViews;
+      // A4: applies FMigrateOk (set by ProbeStartupCapabilities) to the Members list and the Work list.
+      procedure ApplyMigrateCapability;
       procedure MembersAdd;
       procedure MembersEdit(ANode: TRuleNode);
       procedure MembersDelete(ANode: TRuleNode);
@@ -2355,6 +2361,12 @@ type
       /// <param name="AMsg">The refused message.</param>
       /// <returns>The raw caption, hotkey marker included (CommandName strips it).</returns>
       function GateTargetCaption(const AMsg: TMsg): string;
+      /// <summary>The class name a press target is judged by (R6): the ClassName of the nearest VCL
+      /// control at or above the window (GetClassName of a VCL control is the Delphi name), else the
+      /// Win32 class name of the window itself.</summary>
+      /// <param name="AWnd">The message's window; 0 = none.</param>
+      /// <returns>The name for IsSelectionClass; '' when AWnd is 0.</returns>
+      function GateTargetClass(AWnd: HWND): string;
       /// <summary>FCbDepth.WindowProc hook: tracks CBN_DROPDOWN .. CBN_CLOSEUP (FDepthDropped) and a
       /// CBN_SELENDCANCEL inside that window (FDepthCancelled), which VCL does not surface, so a
       /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
@@ -2381,6 +2393,9 @@ type
       function InMenuLoop: Boolean;
       /// <summary>Shows the book's depth, its state note and the capability gate on the depth combo.</summary>
       procedure RefreshDepthControl;
+      /// <summary>R2b: the start-up `info --json` probe behind the depth combo (book_depth) and --progress-interval (progress_lines).</summary>
+      /// <remarks>An answer is cached for the session (FStartupProbed); a failed or timed-out probe is NOT cached, switches both features off for now, says so in the status line, and is asked again by a later RefreshDepthControl -- but not within STARTUP_REPROBE_MS of the failure and never while an engine wait is open (StartupProbeDue). Decision: ConvRules.CapabilityProbe.StartupProbeVerdict.</remarks>
+      procedure ProbeStartupCapabilities;
       /// <summary>Sets the engine's --depth for the next proptree calls: the book's depth, or 0 (omit) on an engine without book_depth.</summary>
       procedure PrepareEngineForTrees;
       /// <summary><!-- drag-lint:auto sum -->Lazy-load the class list the first time a
@@ -2879,11 +2894,8 @@ begin
   // proptree runs behind a cancellable window; FTreeLoads holds depth commits back
   // for every such call, including New Conversion's class checks.
   FEngine.LongCallRunner:= RunLongCallTracked;
-  // One `info --json` call gates both 1.20.6 features for the whole session.
-  var LCaps: TArray<string>:= FEngine.CapabilityNames;
-  FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
-  FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
-  FMigrateOk           := MatchText(CAPABILITY_MIGRATE_MEMBERS, LCaps);
+  // The `info --json` probe that gates both 1.20.6 features runs in RefreshDepthControl
+  // (ProbeStartupCapabilities), after BuildUI: a failed probe needs the status line.
   FActiveHdr:= -1;
   FSurfaceMinVis:= 'published'; // default target surface = DFM-streamable
   { ParseCastLib, not LoadCastLib: the latter returns only the casts and drops the
@@ -3089,7 +3101,7 @@ end;
 procedure TConvRulesForm.EncodingMenuClick(Sender: TObject);
 begin
   SetBookLevel(TTextLevel((Sender as TMenuItem).Tag));
-  SetStatus(Format('Encoding set to %s -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
+  SetStatus(Format('Encoding set to %s (unsaved) -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
 end;
 
 procedure TConvRulesForm.SetBookLevel(ALevel: TTextLevel);
@@ -3796,28 +3808,6 @@ begin
     end);
   FWorkListTab.Parent:= FTabWorkList;
   FWorkListTab.Align := alClient;
-  // A4: the Migrate... button (hidden without migrate_members, D4 = A) and the Rule cells.
-  if FMigrateOk then
-    FWorkListTab.SetMigrateHost(
-      function(ARow: TPasUseRow): Boolean
-      begin
-        Result:= ARow.Instance <> '';
-      end,
-      function(ARow: TPasUseRow): string
-      begin
-        Result:= RunMigrateDialog(ARow.FromType, ARow.ToType, ARow.Member,
-          Format('%s.%s  (%s, %s, %s)', [ARow.Instance, ARow.Member, ARow.Kind, ARow.Visibility, ARow.DeclaredIn]), False, '');
-      end,
-      function(ARow: TPasUseRow): string
-      begin
-        Result:= RuleForRow(FBook, ARow);
-      end)
-  else
-    FWorkListTab.SetMigrateHost(nil, nil,
-      function(ARow: TPasUseRow): string
-      begin
-        Result:= RuleForRow(FBook, ARow);
-      end);
   FTabWorkList.OnShow:= WorkListTabShow;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
@@ -4658,6 +4648,7 @@ begin
   LoadText(LText, APath);
   FUtf16BomNoted:= False;
   SetBookLevel(LDetected.Level);
+  FSavedLevel:= FBookLevel; // the freshly opened book is clean
   var LNote: string:= '';
   if not LDetected.Sure then
     LNote:= ' -- ' + LDetected.Note;
@@ -6499,8 +6490,30 @@ begin
     SetStatusAfterCancel('Surface: DFM -- published (DFM-streamable) props only.');
 end; // procedure
 
+procedure TConvRulesForm.ProbeStartupCapabilities;
+begin
+  var LCaps  : TArray<string>;
+  var LParsed: Boolean;
+  var LCode  : Integer:= FEngine.CapabilityProbeTimed(LCaps, LParsed);
+  var LCached: Boolean;
+  var LNote  : string:= StartupProbeVerdict(LCode, LParsed, LCached);
+  FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
+  FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
+  FMigrateOk           := MatchText(CAPABILITY_MIGRATE_MEMBERS, LCaps);
+  ApplyMigrateCapability;
+  FStartupProbed:= LCached;
+  if LCached then
+    FProbeFailedAt:= 0
+  else
+    FProbeFailedAt:= GetTickCount64;
+  if LNote <> '' then
+    SetError(LNote + ' Capabilities are re-checked on the next engine action.');
+end;
+
 procedure TConvRulesForm.RefreshDepthControl;
 begin
+  if StartupProbeDue(FStartupProbed, FProbeFailedAt, GetTickCount64, (FTreeLoads > 0) or EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass)) then
+    ProbeStartupCapabilities;
   // A pending wheel step belongs to the book on screen before this refresh, never the next one.
   FDepthTimer.Enabled:= False;
   FDepthPending:= False;
@@ -6726,7 +6739,7 @@ begin
     Exit;
   var LBusy: Boolean:= EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass);
   var LInMain: Boolean:= (Msg.hwnd <> 0) and (GetAncestor(Msg.hwnd, GA_ROOT) = Handle);
-  var LVerdict: TGateVerdict:= GateVerdict(Msg.message, LBusy, LInMain);
+  var LVerdict: TGateVerdict:= GateVerdictFor(Msg.message, LBusy, LInMain, GateTargetClass(Msg.hwnd));
   if LVerdict = gvPass then
     Exit;
   Handled:= True;
@@ -6736,6 +6749,32 @@ begin
     FLostCommand   := CommandName(GateTargetCaption(Msg));
     FLostClickTitle:= BusyTitleFor(FBusyTitle, FLblStatus.Caption);
     FLostClickTimer.Enabled:= True;
+  end;
+end;
+
+const
+  /// <summary>GetClassName buffer: a Win32 window class name is at most 256 characters.</summary>
+  CLASS_NAME_MAX = 256;
+
+function TConvRulesForm.GateTargetClass(AWnd: HWND): string;
+var
+  LBuf : array[0..CLASS_NAME_MAX - 1] of Char;
+  LCtl : TWinControl;
+  LWnd : HWND;
+begin
+  Result:= '';
+  if AWnd = 0 then
+    Exit;
+  if GetClassName(AWnd, LBuf, Length(LBuf)) > 0 then
+    Result:= string(PChar(@LBuf));
+  // A cx grid's site, a combo's inner edit: the owner is the nearest VCL control above.
+  LWnd:= AWnd;
+  while (LWnd <> 0) and (LWnd <> Handle) do
+  begin
+    LCtl:= FindControl(LWnd);
+    if LCtl <> nil then
+      Exit(LCtl.ClassName);
+    LWnd:= GetParent(LWnd);
   end;
 end;
 
@@ -7238,6 +7277,7 @@ begin
       FLblFile.Caption:= NewPath;
       FUtf16BomNoted:= False;
       SetBookLevel(tlAscii7); // a new book, as File > New
+      FSavedLevel:= FBookLevel;
       FActiveHdr:= -1;
       RefreshRulesList;
       RefreshUnitList;
@@ -7665,6 +7705,37 @@ begin
   end;
 end; // procedure
 
+{ A4: the Members list's Add / Edit and the Work list's Migrate... button follow the latest
+  capability probe (D4 = A: the button is hidden without migrate_members). }
+procedure TConvRulesForm.ApplyMigrateCapability;
+begin
+  if (FMembersPanel = nil) or (FWorkListTab = nil) then
+    Exit; // the probe ran before BuildUI made them
+  FMembersPanel.SetEngineOk(FMigrateOk);
+  // A4: the Migrate... button (hidden without migrate_members, D4 = A) and the Rule cells.
+  if FMigrateOk then
+    FWorkListTab.SetMigrateHost(
+      function(ARow: TPasUseRow): Boolean
+      begin
+        Result:= ARow.Instance <> '';
+      end,
+      function(ARow: TPasUseRow): string
+      begin
+        Result:= RunMigrateDialog(ARow.FromType, ARow.ToType, ARow.Member,
+          Format('%s.%s  (%s, %s, %s)', [ARow.Instance, ARow.Member, ARow.Kind, ARow.Visibility, ARow.DeclaredIn]), False, '');
+      end,
+      function(ARow: TPasUseRow): string
+      begin
+        Result:= RuleForRow(FBook, ARow);
+      end)
+  else
+    FWorkListTab.SetMigrateHost(nil, nil,
+      function(ARow: TPasUseRow): string
+      begin
+        Result:= RuleForRow(FBook, ARow);
+      end);
+end;
+
 function TConvRulesForm.RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string): string;
 var
   LBlock    : TMigrateBlock;
@@ -7840,6 +7911,7 @@ begin
   LoadText('', '');
   FUtf16BomNoted:= False;
   SetBookLevel(tlAscii7);
+  FSavedLevel:= FBookLevel;
   SetStatus('New rule book -- File > Save As... to give it a name.');
 end;
 
@@ -7853,7 +7925,7 @@ var
   LName: string;
 begin
   CommitPendingDepth; // the guard must see a pick still waiting on its timer
-  if FBook.Snapshot = FSnapshot then
+  if not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
     Exit(True);
   if FFilePath <> '' then
     LName:= ExtractFileName(FFilePath)
@@ -7885,7 +7957,7 @@ var
 begin
   var LOpen: Boolean:= (FFilePath <> '') and SameText(ExpandFileName(APath), ExpandFileName(FFilePath));
   CommitPendingDepth; // the dirty check must see a pick still waiting on its timer
-  if LOpen and (FBook.Snapshot = FSnapshot) then
+  if LOpen and not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
   begin
     var LOldLevel: TTextLevel:= FBookLevel;
     SetBookLevel(ALevel);
@@ -7999,13 +8071,9 @@ begin
       LLevelText:= ' as ' + LevelName(LWriteLevel);
       SetBookLevel(LWriteLevel);
     end;
-    var LNoteText: string:= '';
-    if (LDecision.Action = psaWrite) and (LDecision.Note <> '') and not ((LDecision.Note = NOTE_UTF16_BOM_ADDED) and FUtf16BomNoted) then
-      LNoteText:= ' ' + LDecision.Note;
-    if LDecision.Note = NOTE_UTF16_BOM_ADDED then
-      FUtf16BomNoted:= True;
+    var LNoteText: string:= Utf16BomNote(LDecision, FUtf16BomNoted);
 
-    // 3) validate what was saved: the syntax pass over the whole text, plus each
+    // 5) validate what was saved: the syntax pass over the whole text, plus each
     //    block that CHANGED since the last load / save with its OWN From/To pair
     //    (owner ruling 2026-10-05: "The edited saved block should be validated.
     //    Stuff that is unchanged is presumed validated earlier."). One pair for the
@@ -8053,7 +8121,10 @@ begin
     Result:= True; // the file IS on disk; a failed validation is a report, not a failure
   finally
     if LBytesWritten then
-      FSnapshot:= FBook.Snapshot
+    begin
+      FSnapshot:= FBook.Snapshot;
+      FSavedLevel:= FBookLevel;
+    end
     else
     begin
       FFilePath:= LOldPath;

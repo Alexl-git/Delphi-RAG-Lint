@@ -132,6 +132,27 @@ function WaitQuestionText(ACase: TProbeCase; const AVersionText: string): string
 /// poAnswered otherwise: ''.</returns>
 function ProbeStatusText(AOutcome: TProbeOutcome; ACase: TProbeCase; const AVersionText: string): string;
 
+const
+  /// <summary>How long after a FAILED start-up probe the editor leaves the engine alone (ms).</summary>
+  STARTUP_REPROBE_MS = 60000;
+
+/// <summary>PURE: may the start-up capability probe run now?</summary>
+/// <param name="AProbed">The probe was answered earlier (cached for the session).</param>
+/// <param name="ALastFailMs">GetTickCount64 of the last failed probe; 0 = none failed yet.</param>
+/// <param name="ANowMs">GetTickCount64 now.</param>
+/// <param name="ABusy">An engine wait is open (FTreeLoads &gt; 0) or EditorBusy.</param>
+/// <returns>False when answered, busy, or the last failure is younger than STARTUP_REPROBE_MS; else True.</returns>
+/// <remarks>The start-up probe has no wait window and blocks the UI thread for up to INFO_TIMEOUT_MS, so a hung engine must not be asked on every refresh.</remarks>
+function StartupProbeDue(AProbed: Boolean; ALastFailMs, ANowMs: UInt64; ABusy: Boolean): Boolean;
+
+/// <summary>The start-up probe's verdict (R2b): the status note and whether the answer may stand.</summary>
+/// <param name="AExitCode">The `info --json` exit code (a timeout is ENGINE_OUTCOME_TIMEOUT).</param>
+/// <param name="AParsed">The output held an info object.</param>
+/// <param name="ACached">True only when the engine answered; False means the next check must ask again.</param>
+/// <returns>'' when answered; otherwise the ProbeStatusText of a failed probe (the start-up probe has no wait window, so never "did not finish").</returns>
+/// <remarks>The same decision TConvertTab applies (ProbeOutcomeFor + ProbeIsCached + ProbeStatusText); this is the version-less form for TConvRulesForm.Create.</remarks>
+function StartupProbeVerdict(AExitCode: Integer; AParsed: Boolean; out ACached: Boolean): string;
+
 implementation
 
 uses
@@ -254,6 +275,18 @@ begin
       Format('Engine %s is older than %s, the oldest this editor fully supports: the features it lacks are off.', [AVersionText, REQUIRED_ENGINE_VERSION])
     else '';
   end; // case
+end;
+
+function StartupProbeDue(AProbed: Boolean; ALastFailMs, ANowMs: UInt64; ABusy: Boolean): Boolean;
+begin
+  Result:= not AProbed and not ABusy and ((ALastFailMs = 0) or (ANowMs - ALastFailMs >= STARTUP_REPROBE_MS));
+end;
+
+function StartupProbeVerdict(AExitCode: Integer; AParsed: Boolean; out ACached: Boolean): string;
+begin
+  var LOutcome: TProbeOutcome:= ProbeOutcomeFor(AExitCode, AParsed, False);
+  ACached:= ProbeIsCached(LOutcome);
+  Result:= ProbeStatusText(LOutcome, pcVersionUnknown, '');
 end;
 
 end.

@@ -17,6 +17,7 @@ uses
   System.SysUtils
   , System.Classes
   , System.Generics.Collections
+  , ConvRules.TextEncoding  // dl:unit ConvRules.TextEncoding accepted -- TTextLevel / TPreSaveDecision type BookIsDirty and Utf16BomNote; NOTE_UTF16_BOM_ADDED travels with the BOM-note decision
   ;
 
 const
@@ -651,7 +652,35 @@ const
 /// <returns>True when an expression was split off.</returns>
 function SplitGlyphExprOff(var APath: string; out AExpr: string): Boolean;
 
+/// <summary>PURE: whether the open book has unsaved changes -- its rule text OR its encoding differs from what was last loaded / saved.</summary>
+/// <param name="ASnapshot">The book's TRuleBook.Snapshot now.</param>
+/// <param name="ASavedSnapshot">The snapshot taken at load / New / the last successful save.</param>
+/// <param name="ALevel">The encoding the next Save would write (File &gt; Encoding).</param>
+/// <param name="ASavedLevel">The encoding at load / New / the last successful save.</param>
+/// <returns>True when closing or New would lose something. An encoding-only change counts: File &gt; Encoding alters no rule text, so the snapshot alone cannot see it.</returns>
+function BookIsDirty(const ASnapshot, ASavedSnapshot: string; ALevel, ASavedLevel: TTextLevel): Boolean;
+
+/// <summary>PURE: the status-line suffix for the note a Save decision carries, saying the UTF-16 BOM note only once per open book.</summary>
+/// <param name="ADecision">The PreSaveDecision for this Save.</param>
+/// <param name="pBomNoted">In/out: True once NOTE_UTF16_BOM_ADDED has been shown for this book; set True here when the decision carries that note. Caller resets it on open / New.</param>
+/// <returns>' ' + the note when the Save writes (psaWrite) and the note is due, else ''.</returns>
+/// <remarks>Any note other than NOTE_UTF16_BOM_ADDED is returned every time. The flag is set whenever the decision carries the BOM note, whatever its action.</remarks>
+function Utf16BomNote(const ADecision: TPreSaveDecision; var pBomNoted: Boolean): string;
 implementation
+
+function BookIsDirty(const ASnapshot, ASavedSnapshot: string; ALevel, ASavedLevel: TTextLevel): Boolean;
+begin
+  Result:= (ASnapshot <> ASavedSnapshot) or (ALevel <> ASavedLevel);
+end;
+
+function Utf16BomNote(const ADecision: TPreSaveDecision; var pBomNoted: Boolean): string;
+begin
+  Result:= '';
+  if (ADecision.Action = psaWrite) and (ADecision.Note <> '') and not ((ADecision.Note = NOTE_UTF16_BOM_ADDED) and pBomNoted) then
+    Result:= ' ' + ADecision.Note;
+  if ADecision.Note = NOTE_UTF16_BOM_ADDED then
+    pBomNoted:= True;
+end;
 
 function PropCellText(const APath, ATypeName: string): string;
 begin

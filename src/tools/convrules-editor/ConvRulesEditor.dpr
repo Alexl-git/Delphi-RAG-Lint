@@ -48,6 +48,7 @@ uses
   , ConvRules.ConvertRequest in 'ConvRules.ConvertRequest.pas'
   , ConvRules.ConvertBatch in 'ConvRules.ConvertBatch.pas'
   , ConvRules.ConvertRunner in 'ConvRules.ConvertRunner.pas'
+  , ConvRules.ConvertRerun in 'ConvRules.ConvertRerun.pas'
   , ConvRules.Inheritance in 'ConvRules.Inheritance.pas'
   , ConvRules.InheritanceEngine in 'ConvRules.InheritanceEngine.pas'
   , ConvRules.InputGate in 'ConvRules.InputGate.pas'

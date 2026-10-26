@@ -222,7 +222,7 @@ function Bytes($path) { [IO.File]::ReadAllBytes($path) }
 function Hex($b) { ($b | ForEach-Object { $_.ToString('X2') }) -join ' ' }
 function HasSeq($b, $x, $y) { for ($i = 0; $i -lt $b.Length - 1; $i++) { if ($b[$i] -eq $x -and $b[$i + 1] -eq $y) { return $true } }; return $false }
 function AllAscii($b) { foreach ($x in $b) { if ($x -ge 0x80) { return $false } }; return $true }
-function Squash($s) { $s -replace '\s+', '' }
+function BytesEqual($a, $b) { if ($a.Length -ne $b.Length) { return $false }; for ($i = 0; $i -lt $a.Length; $i++) { if ($a[$i] -ne $b[$i]) { return $false } }; return $true }
 function OpenDialogTo($procId, $path) {
   $dlg = WaitCls $procId '#32770' 20
   if ($dlg -eq [IntPtr]::Zero) { return "no open dialog (forms: $(TopsNow $procId))" }
@@ -258,9 +258,10 @@ try {
   $before = Stamp $book
   [void][W]::InvokeMenu($main, 'File|Save')
   $asked = (WaitCls $p.Id 'TMessageForm' 3) -ne [IntPtr]::Zero
-  [void](WaitWrite $book $before 30)
+  $wrote = WaitWrite $book $before 30
+  Check 'save.ascii.wrote' $wrote ('LastWriteTime unchanged: ' + (Stamp $book))
   $b = Bytes $book
-  Check 'save.ascii.silent' ((-not $asked) -and (AllAscii $b) -and ((Squash ([Text.Encoding]::ASCII.GetString($b))) -eq (Squash $fixture))) ("asked=$asked bytes=" + (Hex $b[0..15]))
+  Check 'save.ascii.silent' ((-not $asked) -and (AllAscii $b) -and (BytesEqual $b ([Text.Encoding]::ASCII.GetBytes($fixture)))) ("asked=$asked len=$($b.Length) bytes=" + (Hex $b[0..15]))
   Start-Sleep -Seconds 1
 
   # Bring in a non-ASCII character. The Raw DSL memo has no apply path (it is a

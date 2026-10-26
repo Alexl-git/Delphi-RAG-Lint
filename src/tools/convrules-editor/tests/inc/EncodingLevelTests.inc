@@ -130,6 +130,29 @@ begin
   end;
 end;
 
+procedure TestEncodingBookState;
+var
+  D: TPreSaveDecision;
+  Noted: Boolean;
+begin
+  // BookIsDirty: text OR encoding differing from the last load / save
+  Check('dirty.clean', not BookIsDirty('a', 'a', tlUtf8, tlUtf8));
+  Check('dirty.text', BookIsDirty('a', 'b', tlUtf8, tlUtf8));
+  Check('dirty.level.only', BookIsDirty('a', 'a', tlUtf16Bom, tlUtf8));
+  Check('dirty.both', BookIsDirty('a', 'b', tlAscii7, tlUtf8));
+  // Utf16BomNote: the BOM note once per open book, any other note every time
+  D:= PreSaveDecision('abc', tlUtf16);
+  Noted:= False;
+  Check('bomnote.first', (Utf16BomNote(D, Noted) = ' ' + NOTE_UTF16_BOM_ADDED) and Noted);
+  Check('bomnote.second.silent', (Utf16BomNote(D, Noted) = '') and Noted);
+  Noted:= False;
+  D:= PreSaveDecision('x'#$0413, tlUtf8);
+  Check('bomnote.other.always', (Utf16BomNote(D, Noted) = ' ' + Format(NOTE_FITS_AFTER_ALL, ['UTF-8'])) and (not Noted)
+    and (Utf16BomNote(D, Noted) <> ''));
+  D:= PreSaveDecision('#use A', tlAscii7);
+  Check('bomnote.none', (Utf16BomNote(D, Noted) = '') and (not Noted));
+end;
+
 procedure TestEncodingLevels;
 begin
   TestEncodingLevelBasics;
@@ -138,4 +161,5 @@ begin
   TestEncodingLost;
   TestEncodingPreSave;
   TestEncodingFile;
+  TestEncodingBookState;
 end;
