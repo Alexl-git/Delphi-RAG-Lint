@@ -6,7 +6,7 @@
   "status": "internal",
   "since": "1.33.0-alpha",
   "summary": "Diagnostic dump of what the Delphi parser reports for one file's uses clauses and implementation line, without an index",
-  "intro": "Read this only when debugging uses-clause extraction: dump-parse-uses --file PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database.",
+  "intro": "Read this only when debugging uses-clause extraction: dump-parse-uses --in PATH prints implementation_line and one line per uses entry (section, unit, line) straight from the parser -- no preprocess, no database.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {

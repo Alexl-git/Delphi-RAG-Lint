@@ -117,16 +117,16 @@ autofix: <N> fixable finding(s), <K> skipped (stale index) -- reindex: drag-lint
 Single finding (all or nothing), preview then apply:
 
 ```
-drag-lint lint --file C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db>
-drag-lint lint --file C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db> --apply
+drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db>
+drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db> --apply
 ```
 
 Batch, with explicit consent to the naming fixes (`--fix-naming`; without it a
 batch renames only rules listed in `"autofix": [...]` in `drag-lint-lint.json`):
 
 ```
-drag-lint lint --file <f> --fix --fix-naming --db <db>            (preview)
-drag-lint lint --file <f> --fix --fix-naming --db <db> --apply
+drag-lint lint --in <f> --fix --fix-naming --db <db>            (preview)
+drag-lint lint --in <f> --fix --fix-naming --db <db> --apply
 ```
 
 For a unit with two or more owners (or when ownership is unknown) the output

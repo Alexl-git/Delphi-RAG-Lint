@@ -56,7 +56,7 @@ The menu item runs `lint` with the autofix flags, unscoped -- no
 `--fix-line`/`--fix-rule`, so every fixable finding in the file is applied:
 
 ```
-drag-lint lint --file <path.pas> --fix --apply [--db <project.sqlite>]
+drag-lint lint --in <path.pas> --fix --apply [--db <project.sqlite>]
 ```
 
 The IDE passes the project's `--db`: the naming fixes need the index to find
@@ -65,8 +65,8 @@ With a naming finding in the unit it also passes `--fix-naming` -- on the
 preview AND on the apply; only the apply waits for your confirm:
 
 ```
-drag-lint lint --file <path.pas> --fix --fix-naming --db <project.sqlite>           (preview)
-drag-lint lint --file <path.pas> --fix --fix-naming --apply --db <project.sqlite>   (after Yes)
+drag-lint lint --in <path.pas> --fix --fix-naming --db <project.sqlite>           (preview)
+drag-lint lint --in <path.pas> --fix --fix-naming --apply --db <project.sqlite>   (after Yes)
 ```
 
 Without `--fix-naming` (and without an `"autofix": [...]` entry in
@@ -82,13 +82,13 @@ Only rules marked fixable are applied; 23 of the 195 rules are fixable
 
 ## What it needs
 
-No index required -- `lint --file` works on a single file.
+No index required -- `lint --in` works on a single file.
 
 ## Example
 
 Dry run:
 ```
-drag-lint lint --file C:\Projects\MyApp\Unit1.pas --fix
+drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix
 ```
 Typical output when nothing is fixable:
 ```
@@ -96,5 +96,5 @@ autofix: no fixable findings (of 13 finding(s))
 ```
 Apply for real:
 ```
-drag-lint lint --file C:\Projects\MyApp\Unit1.pas --fix --apply
+drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix --apply
 ```

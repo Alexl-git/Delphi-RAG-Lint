@@ -73,7 +73,7 @@ then right-click the tree node for a finding and choose "Fix it".
 The menu item runs `lint` with the autofix flags:
 
 ```text
-drag-lint lint --file <path.pas> --fix --fix-line <L> --fix-rule <rule-id> --apply
+drag-lint lint --in <path.pas> --fix --fix-line <L> --fix-rule <rule-id> --apply
 ```
 
 `--fix-line` and `--fix-rule` narrow the fix to the ONE finding you
@@ -137,14 +137,14 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 
 ### What it needs
 
-No index required -- `lint --file` works on a single file. (An index is
+No index required -- `lint --in` works on a single file. (An index is
 still needed for the Structure form itself to populate.)
 
 ### Example
 
 Dry run first, to see what would change:
 ```text
-drag-lint lint --file C:\Projects\MyApp\Unit1.pas --fix
+drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix
 ```
 Typical output when nothing is fixable:
 ```text
@@ -152,7 +152,7 @@ autofix: no fixable findings (of 13 finding(s))
 ```
 Then apply one specific finding:
 ```text
-drag-lint lint --file C:\Projects\MyApp\Unit1.pas --fix --fix-line 42 --fix-rule bare-except --apply
+drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix --fix-line 42 --fix-rule bare-except --apply
 ```
 
 ---
