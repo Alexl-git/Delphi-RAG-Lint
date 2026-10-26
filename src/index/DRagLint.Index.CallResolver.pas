@@ -995,6 +995,22 @@ type
     /// call or cast inside the chain, a subscript on a non-array such as an
     /// indexed property or a string, an untypable head).</returns>
     function TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    /// <summary>T-11 kind 12: types a receiver whose chain holds a CALL or a
+    /// parenthesised segment -- `O.Mk('a').Leaf`, `(O as TInner).Leaf`,
+    /// `SB.Append(x)` -- by typing everything left of the LAST top-level dot
+    /// through the full ladder (TypeReceiver, so the head may be any receiver
+    /// the ladder reads) and then stepping the last segment as a member of
+    /// that type: a field / property to its declared type, a method (with or
+    /// without an argument list) to its declared return type.</summary>
+    /// <param name="ACallRef">The ref whose receiver is typed (scope, file).</param>
+    /// <param name="AReceiverExpr">The receiver text.</param>
+    /// <param name="AHandled">True when the receiver has that shape -- the
+    /// answer is then final, 0 included; False leaves it to the other rungs.</param>
+    /// <returns>The receiver type id, or 0 when any step cannot be typed: an
+    /// untyped prefix, an empty segment (a line-scan fragment such as
+    /// `.Mk(1).L`), a method that is overloaded or missing, a procedure, a
+    /// subscript segment. Never a guess.</returns>
+    function TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string; out AHandled: Boolean): Int64;
     /// <summary>R3(a): True when the enclosing routine, or any routine on its
     /// lexical chain, declares a local, parameter, const, var or nested routine
     /// spelled AName -- i.e. something NEARER than the enum's unit scope.</summary>
@@ -4706,7 +4722,9 @@ begin
     Result:= 'unreadable'
   else
   begin
-    AReceiver:= ExtractReceiverExpr(ALines[ARef.StartLine - 1], ARef.StartCol);
+    { T-11: the parse fact first (N-05 `Self`), the line scan only without it. }
+    AReceiver:= if ARef.ReceiverText <> '' then ARef.ReceiverText
+                else ExtractReceiverExpr(ALines[ARef.StartLine - 1], ARef.StartCol);
     if (AReceiver <> '') and not SameText(AReceiver, 'Self') then Result:= 'qualified';
   end;
 end;
@@ -5100,6 +5118,124 @@ begin
   end;
   Result:= if Ok then CurrentTypeId else 0;
 end;
+
+{ T-11: split a receiver at its TOP-LEVEL dots -- outside ( ) and [ ] groups
+  and '...' literals, so `O.Mk('a.b').Leaf` is `O`, `Mk('a.b')`, `Leaf`.
+  AHasParen: some segment holds a '(' outside any group (a call, a cast, a
+  parenthesised head). False when the groups or literals do not balance. }
+function SplitChainSegments(const AText: string; out ASegs: TArray<string>; out AHasParen: Boolean): Boolean;
+var
+  Parts: TList<string>;
+  Depth: Integer;
+  Start: Integer;
+  InLit: Boolean;
+  i    : Integer;
+begin
+  AHasParen:= False;
+  Parts:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    InLit:= False;
+    for i:= 1 to Length(AText) do
+    begin
+      if AText[i] = '''' then InLit:= not InLit
+      else if InLit then Continue
+      else if CharInSet(AText[i], ['(', '[']) then
+      begin
+        if (AText[i] = '(') and (Depth = 0) then AHasParen:= True;
+        Inc(Depth);
+      end
+      else if CharInSet(AText[i], [')', ']']) then Dec(Depth)
+      else if (AText[i] = '.') and (Depth = 0) then
+      begin
+        Parts.Add(Trim(Copy(AText, Start, i - Start)));
+        Start:= i + 1;
+      end;
+    end;
+    Parts.Add(Trim(Copy(AText, Start, MaxInt)));
+    ASegs := Parts.ToArray;
+    Result:= (Depth = 0) and not InLit;
+  finally
+    Parts.Free;
+  end;
+end;
+
+{ T-11: True when AText is exactly ONE balanced `( .. )` group (literals
+  skipped) -- the argument list of a call segment. }
+function IsOneParenGroup(const AText: string): Boolean;
+var
+  Depth: Integer;
+  InLit: Boolean;
+  i    : Integer;
+begin
+  Result:= (AText <> '') and (AText[1] = '(');
+  Depth := 0;
+  InLit := False;
+  i     := 1;
+  while Result and (i <= Length(AText)) do
+  begin
+    if AText[i] = '''' then InLit:= not InLit
+    else if not InLit then
+    begin
+      if AText[i] = '(' then Inc(Depth)
+      else if AText[i] = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Exit(i = Length(AText));
+      end;
+    end;
+    Inc(i);
+  end;
+  Result:= False;
+end;
+
+function TCallResolver.TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string;
+  out AHandled: Boolean): Int64;
+var
+  Segs     : TArray<string>;
+  HasParen : Boolean;
+  Prefix   : string ;
+  Last     : string ;
+  Name     : string ;
+  Args     : string ;
+  P        : Integer;
+  OwnerType: Int64  ;
+  Conf     : string ;
+begin
+  Result  := 0;
+  AHandled:= SplitChainSegments(AReceiverExpr, Segs, HasParen) and HasParen and (Length(Segs) >= 2);
+  if not AHandled then Exit;
+  for var Seg: string in Segs do
+    if Seg = '' then Exit; // a line-scan fragment (`.Mk(1).L`): never typed from the enclosing class
+  Prefix:= string.Join('.', Segs, 0, High(Segs));
+  Last  := Segs[High(Segs)];
+  OwnerType:= TypeReceiver(ACallRef, Prefix); // shorter text -> the recursion ends
+  if OwnerType <= 0 then Exit;
+  P:= 1;
+  while (P <= Length(Last)) and IsIdentPart(Last[P]) do Inc(P);
+  if (P = 1) or not IsIdentStart(Last[1]) then Exit;
+  Name:= Copy(Last, 1, P - 1);
+  Args:= Trim(Copy(Last, P, MaxInt));
+  if Args = '' then
+  begin
+    var Member: TSymbol:= LookupMemberOnType(OwnerType, Name);
+    if Member.Id > 0 then
+      Exit(DerefPointerAlias(ResolveTypeNameToSymbol(Member.Signature, Member.FileId)));
+  end
+  else if not IsOneParenGroup(Args) then
+    Exit; // `Items[0]`, `F(x)[1]`: a subscript step is not modelled here
+  { A method -- `Mk('a')`, or the parenless `Leaf` -- types to its declared
+    return type. Exactly one candidate on the type's chain ('certain'): an
+    overload set or an override pair may disagree on the return type. }
+  var Target: Int64:= LookupMethodOnType(OwnerType, Name, 0, False, Conf);
+  if (Target <= 0) or (Conf <> 'certain') then Exit;
+  var Method: TSymbol:= SymbolById(Target);
+  var RetType: string:= SignatureReturnType(Method.Signature);
+  if RetType <> '' then
+    Result:= DerefPointerAlias(ResolveTypeNameToSymbol(RetType, Method.FileId));
+end;
+
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
 begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr));
@@ -5146,13 +5282,29 @@ begin
   // --- Kind 6: cast '(X as TBar).M' / 'TBar(X).M' -> the cast target type.
   //     Kind 11 (X2, resolver 1.14.0-alpha): 'F(...)' / 'F()' whose F is not a
   //     type is a CALL -- typed from F's declared return type.
+  var ChainHandled: Boolean;
   if TryParseCastTarget(AReceiverExpr, CastType) then
   begin
     Result:= ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
     if (Result = 0) and AReceiverExpr.StartsWith(CastType + '(', True) and IsIdentChain([CastType]) then
       Result:= TypeOfFunctionResult(ACallRef, CastType);
+    { T-11: `O.Mk('a')` also reads as a cast to `O.Mk`; when that names no type
+      and no function, kind 12 below types it as a call on O. }
+    if Result > 0 then Exit;
+    Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled);
     Exit;
   end;
+
+  // --- Kind 12 (T-11, resolver 1.15.0): a chain with a CALL or parenthesised
+  //     segment -- `O.Mk('a').Mk('b').Leaf`, `(O as TInner).Leaf`,
+  //     `SB.Append(x)`. The receiver text is a parse fact now, so a fluent
+  //     chain continued over several lines arrives whole; no rung below typed a
+  //     `Name(...)` segment in chain position. The prefix goes through this
+  //     ladder again, the last segment is a member / method lookup on its type;
+  //     any untyped step answers 0. Pinned by
+  //     tests\callresolve\run_receiver_cst_capture.ps1.
+  Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled);
+  if ChainHandled then Exit;
 
   // --- Kind 11 (X1, 2026-10-25): a receiver with SELECTORS -- an array element
   //     or a pointer dereference: `A[0].K`, `R.Arr[1].K`, `pM[X].Sev`, `P^.K`.
@@ -5955,7 +6107,8 @@ begin
     AReason:= 'unreadable'
   else if SameText(ARef.NameText, 'Result') then
     AReason:= 'result'
-  else if SameText(ExtractReceiverExpr(Lines[ARef.StartLine - 1], ARef.StartCol), 'Self') then
+  else if SameText(if ARef.ReceiverText <> '' then ARef.ReceiverText    { T-11: parse fact first }
+                   else ExtractReceiverExpr(Lines[ARef.StartLine - 1], ARef.StartCol), 'Self') then
   begin
     { `Self.X := v` (2026-09-28): the explicit qualifier names the member of the
       enclosing class whatever a local or a `with` target declares -- the rule
@@ -6458,11 +6611,14 @@ begin
 
   if ACallRef.NameText = '' then Exit;
 
-  // 1. read the source line and extract the receiver expression left of '.M'.
-  Line := '';
-  Rcv  := '';
+  // 1. the receiver expression left of '.M'. T-11 (extractor 1.25.0): the
+  // parser records it from the CST in refs.receiver_text, which is the FACT --
+  // whole across line breaks and true for the parse even when the file has
+  // changed since. Only a row without it (a bare call, a pre-1.25 parse) falls
+  // back to reading the source line.
+  Rcv  := ACallRef.ReceiverText;
   Lines:= LinesOf(ACallRef.FileId);
-  if (Lines <> nil) and (ACallRef.StartLine >= 1) and (ACallRef.StartLine <= Lines.Count) then
+  if (Rcv = '') and (Lines <> nil) and (ACallRef.StartLine >= 1) and (ACallRef.StartLine <= Lines.Count) then
   begin
     Line:= Lines[ACallRef.StartLine - 1];
     Rcv := ExtractReceiverExpr(Line, ACallRef.StartCol);
@@ -6478,7 +6634,7 @@ begin
     stored value -- computed against the source that actually produced the ref --
     survives. Resolution below still runs: a name-based rung can be right even
     when the source line is unusable. }
-  Result.ReceiverUnknown:= FileIsStale(ACallRef.FileId);
+  Result.ReceiverUnknown:= (ACallRef.ReceiverText = '') and FileIsStale(ACallRef.FileId); { T-11: a parse fact is never a guess }
 
   // 1b. B1: count the arguments at this site, from the same cached lines. Unlike
   // the receiver scan -- which reads LEFT and cannot leave the line -- an

@@ -30,7 +30,8 @@
     no fixture receiver starts with '.' or spans a line break
     idempotency: --resolve-only twice -> receivers and edges identical
     stale control: a line inserted at the TOP after indexing, re-resolved ->
-      every receiver keeps its text (a line-scan engine shifts or blanks them)
+      every receiver keeps its text (a line-scan engine shifts or blanks them);
+      edges are not compared there -- a stale file declines, as before
   Two classes declare K (TLeaf, TOther): any edge on N1-N3 is a fabrication.
 
   Usage: pwsh -File tests\callresolve\run_receiver_cst_capture.ps1 [-Exe <drag-lint.exe>]
@@ -93,9 +94,10 @@ function BoundOf([int]$Line, [string]$Name) {
             "JOIN symbols s ON s.id = ce.target_symbol_id WHERE r.start_line = $Line AND r.name_text = '$Name'")
   return ((@($r | ForEach-Object { "$($_.q)" }) | Sort-Object) -join ';')
 }
-function Snapshot {
+function Snapshot([switch]$NoEdges) {
+  $tail = if ($NoEdges) { "''" } else { "COALESCE(s.qualified_name,'')" }
   $r = Sql ("SELECT r.kind || ':' || r.name_text || ':' || r.start_col || ':' || COALESCE(r.receiver_text,'<null>') " +
-            "|| '->' || COALESCE(s.qualified_name,'') AS k FROM refs r LEFT JOIN call_edges ce ON ce.ref_id = r.id " +
+            "|| '->' || $tail AS k FROM refs r LEFT JOIN call_edges ce ON ce.ref_id = r.id " +
             "LEFT JOIN symbols s ON s.id = ce.target_symbol_id WHERE r.kind IN ('call','member-access') " +
             "ORDER BY r.start_line, r.start_col, r.kind")
   return ((@($r | ForEach-Object { "$($_.k)" })) -join "`n")
@@ -147,6 +149,7 @@ $bad = Sql ("SELECT name_text || '@' || start_line || ' [' || receiver_text || '
 Check 'no receiver starts with . or spans a line break' ($bad.Count -eq 0) ((@($bad | ForEach-Object { $_.b })) -join ', ')
 
 $snap1 = Snapshot
+$text1 = Snapshot -NoEdges
 $null = & $exePath index $scratch --db $db --resolve-only 2>&1 | Out-String
 $snap2 = Snapshot
 Check 'idempotency: a second resolve changes no receiver or edge' ($snap1 -eq $snap2)
@@ -155,10 +158,11 @@ Check 'idempotency: a second resolve changes no receiver or edge' ($snap1 -eq $s
 $src = [System.IO.File]::ReadAllText($pas)
 [System.IO.File]::WriteAllText($pas, "{ shifted }`r`n" + $src, [System.Text.Encoding]::ASCII)
 $null = & $exePath index $scratch --db $db --resolve-only 2>&1 | Out-String
-$snap3 = Snapshot
-Check 'stale control: receivers and edges survive a shifted source' ($snap1 -eq $snap3)
-if ($snap1 -ne $snap3) {
-  $a = $snap1 -split "`n"; $b = $snap3 -split "`n"
+# Edges in a stale file are the existing decline-not-guess policy (1.35.1 drops them too); the TEXT is the fact.
+$snap3 = Snapshot -NoEdges
+Check 'stale control: every receiver keeps its text in a shifted source' ($text1 -eq $snap3)
+if ($text1 -ne $snap3) {
+  $a = $text1 -split "`n"; $b = $snap3 -split "`n"
   Compare-Object $a $b | Select-Object -First 8 | ForEach-Object { Write-Host ("   {0} {1}" -f $_.SideIndicator, $_.InputObject) }
 }
 
