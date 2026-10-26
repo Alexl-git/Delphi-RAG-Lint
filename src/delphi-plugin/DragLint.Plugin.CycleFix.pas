@@ -17,12 +17,12 @@ interface
 
 const
   /// <summary>Time limit, in ms, for every IDE-started `cycles --fix` run (the
-  /// tab's Dry run and Apply, and the menu's dry run): 120 minutes.</summary>
+  /// tab's Dry run and Apply, and the menu's dry run): 130 minutes.</summary>
   /// <remarks>Deliberately ABOVE the longest run the engine's own limits allow
   /// one --apply: three builds of up to 30 minutes each (baseline, after, one
-  /// repair rebuild) plus a re-index and a `cycles` of up to 10 minutes each,
-  /// 110 minutes (CApplyWorstMs in DRagLint.CLI.CycleFix), plus 10 minutes of
-  /// slack. At the plugin's limit ProcRun kills the whole process tree (engine +
+  /// repair rebuild) plus the pre-plan re-index, the re-index and a `cycles`
+  /// of up to 10 minutes each, 120 minutes (CApplyWorstMs in
+  /// DRagLint.CLI.CycleFix), plus 10 minutes of slack. At the plugin's limit ProcRun kills the whole process tree (engine +
   /// msbuild/dcc); a kill in the middle of an --apply bypasses the engine's
   /// atomic rollback and can leave half-edited files. With the plugin's limit
   /// higher, an engine limit always fires first and the engine rolls back
@@ -30,7 +30,7 @@ const
   /// against the engine's constants. The job is asynchronous, so the IDE stays
   /// usable while it waits. The other Uses &amp; Deps sections keep their own
   /// 180 s limit.</remarks>
-  CYCLE_FIX_TIMEOUT_MS = 120 * 60 * 1000;
+  CYCLE_FIX_TIMEOUT_MS = 130 * 60 * 1000;
 
 type
   /// <summary>One strongly connected component of the project's uses graph, as
