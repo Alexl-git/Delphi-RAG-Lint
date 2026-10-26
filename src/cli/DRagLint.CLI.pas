@@ -460,6 +460,7 @@ type
     FixPart        : string ; // --part a|b|all (cycles --fix)
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
     ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
+    CycleRsVars    : string ; // --rsvars <rsvars.bat> (cycles --fix: the Studio build environment, for a Studio the registry does not name)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
@@ -1625,6 +1626,11 @@ begin
     begin
       Inc(i);
       Result.ShadowOut:= ParamStr(i);  // dl:ok duplicate-code@6921 -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+    end
+    else if (A = '--rsvars') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CycleRsVars:= ParamStr(i);  // dl:ok duplicate-code@bcfb -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
     end
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
@@ -22711,6 +22717,7 @@ begin
         FixOpts.NoReindex:= AArgs.NoReindex;
         FixOpts.NoCompile:= AArgs.NoCompile;
         FixOpts.ShadowOut:= AArgs.ShadowOut;
+    FixOpts.RsVars   := AArgs.CycleRsVars;
         FixOpts.CycleIndex:= AArgs.FixCycle;
         FixOpts.CycleGiven:= AArgs.FixCycleGiven;
         FixOpts.UnitStem := AArgs.GhostUnit;

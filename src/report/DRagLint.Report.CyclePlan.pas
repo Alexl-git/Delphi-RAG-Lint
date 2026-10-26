@@ -481,6 +481,7 @@ type
     HeaderNew  : string;
     Switches   : TArray<TSwitchLine>;
     Refusal    : string;  // mvBlocked by a recipe gate: its refusal kind (F5: 'base-class'); '' otherwise
+    SameLine   : Boolean; // W6 C6: the keyword opens the declaration's own line (`var X: T;`); Header = Sym.StartLine
   end;
 
   TConsumer = record
@@ -521,6 +522,7 @@ type
     Recipe  : TCutRecipe;    // the recipe that applies to this edge (E18 T7 R3); crNone = none applies
     Refusal : string;        // the refusal kind when a recipe was tried and refused
     Steps   : TRecipeSteps;  // crRoutineInversion: the R1 steps
+    ViaBase : Boolean;       // B4-f: crMoveGlobals through a base class of a class need (the consumer's fid is its cut)
   end;
 
   TPredGroup = record
@@ -642,11 +644,12 @@ type
     procedure ClassifyStructured(const pF: TPlanFile; var pItem: TMoveItem);
     procedure SetHeader(const pF: TPlanFile; var pItem: TMoveItem);
     procedure BuildBase(const pF: TPlanFile; var pItem: TMoveItem);
-    function UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>): TDictionary<string, Boolean>;
+    function UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>; const pClassName: string = ''): TDictionary<string, Boolean>;
     function PullMembers(const pF: TPlanFile; var pItem: TMoveItem; const pChildren: TArray<TSymbol>;
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
+    function ClassTestSiteOk(const pCode: string; pIndex, pLen: Integer; const pItem: TMoveItem): Boolean;
     function FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string;
       const pSlots: TArray<string> = nil): string;
     function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string;
@@ -701,7 +704,9 @@ type
     function Targets(pEdges: TObjectDictionary<string, TList<string>>; const pFrom: string): TArray<string>;
     function ExpectedOutput(pSelf: Integer): TArray<string>;
     function GroupHasIntf(const pComp: TArray<string>): Boolean;
-    function EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
+    function EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>; pViaBase: Boolean = False): TEdgeEval;
+    procedure PlanBaseHandOver(pEvals: TList<TEdgeEval>);
+    function BaseCut(const pSym: TSymbol; const pFrom: string; pViaBase: Boolean): TArray<Int64>;
     procedure RenderEdgeChoices(const pEvals: TArray<TEdgeEval>);
     function RemainingNeeds(const pFrom, pTo: string; pAll: Boolean): TArray<TNeed>;
     // rendering
@@ -744,6 +749,8 @@ type
     function ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
+      var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
     procedure RenderMemberHandOver(pStep: Integer);
     procedure EmitMemberWrites;
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
@@ -944,25 +951,63 @@ begin
   Result:= MatchText(Trim(CodePart(pText)), CBlockWords);
 end;
 
-/// The `type` / `var` / `const` line that opens the block holding pFirst, or 0.
+/// Count of leading blanks / tabs of pLine.
+function IndentOf(const pLine: string): Integer;
+begin
+  Result:= 0;
+  while (Result < Length(pLine)) and CharInSet(pLine[Result + 1], [' ', #9]) do Inc(Result);
+end;
+
+/// The `type` / `var` / `const` line that opens the block holding pFirst, or 0: the nearest
+/// column-1 block word above, or (W6 C6) an indented one indented LESS than pFirst -- a nested
+/// class section (`  var` inside a class body) sits at or beyond the declaration's indent.
 function HeaderOf(const pLines: TArray<string>; pFirst: Integer): Integer;
 var
   L: Integer;
 begin
+  var Depth:= IndentOf(LineAt(pLines, pFirst));
   L:= pFirst - 1;
-  while (L >= 1) and (IsIndented(LineAt(pLines, L)) or IsCommentOnly(LineAt(pLines, L))) do Dec(L);
+  while L >= 1 do
+  begin
+    var S:= LineAt(pLines, L);
+    if not IsCommentOnly(S) then
+    begin
+      if not IsIndented(S) then Break;
+      if (IndentOf(S) < Depth) and IsBlockWord(S) then Exit(L);
+    end;
+    Dec(L);
+  end;
   if (L >= 1) and IsBlockWord(LineAt(pLines, L)) then Result:= L
   else Result:= 0;
 end;
 
-/// First line after pHeader that starts a new column-1 construct.
+/// First line after pHeader that is indented no deeper than pHeader (a column-1 header: the
+/// first column-1 construct).
 function BlockEnd(const pLines: TArray<string>; pHeader: Integer): Integer;
 var
   L: Integer;
 begin
+  var Depth:= IndentOf(LineAt(pLines, pHeader));
   L:= pHeader + 1;
-  while (L <= Length(pLines)) and (IsIndented(LineAt(pLines, L)) or IsCommentOnly(LineAt(pLines, L))) do Inc(L);
+  while (L <= Length(pLines)) and (IsCommentOnly(LineAt(pLines, L)) or
+    (IsIndented(LineAt(pLines, L)) and (IndentOf(LineAt(pLines, L)) > Depth))) do Inc(L);
   Result:= L;
+end;
+
+/// W6 C6: the keyword of a declaration that opens its own line (`var GX: Integer = 2;`,
+/// `type TR = record`), or ''. A one-line declaration must end the line: `var A: T; B: T;`
+/// would carry B along, so it answers ''.
+function SameLineKeyword(const pLine, pName: string; pOneLine: Boolean): string;
+begin
+  var Code:= Trim(CodePart(pLine));
+  var M   := TRegEx.Match(Code, '^(type|var|const)\s+' + pName + '\b', [roIgnoreCase]);
+  if not M.Success then Exit('');
+  if pOneLine then
+  begin
+    var Bare:= TRegEx.Replace(Code, '''[^'']*''', '');
+    if Pos(';', Bare) <> Length(Bare) then Exit('');
+  end;
+  Result:= LowerCase(M.Groups[1].Value);
 end;
 
 function RangeText(const pRanges: TArray<TLineRange>): string;
@@ -1509,6 +1554,12 @@ begin
   end;
 end;
 
+{ B4-f: a base-class move ranks after R2 (it moves fields out of the class; an interface moves nothing). }
+function EvalRank(const pEv: TEdgeEval): Integer;
+begin
+  Result:= if pEv.ViaBase then RecipeRank(crMemberInterface) + 1 else RecipeRank(pEv.Recipe);
+end;
+
 { E18 T7 R3: pEv is a better cut than pBest -- the preferred recipe, then the
   fewest surface members, then the fewest surface refs, then the lower recipe
   cost; an empty pBest loses to any edge a recipe applies to. }
@@ -1516,7 +1567,7 @@ function BetterCut(const pEv, pBest: TEdgeEval): Boolean;
 begin
   if pEv.Recipe = crNone then Exit(False);
   if pBest.FromStem = '' then Exit(True);
-  if RecipeRank(pEv.Recipe) <> RecipeRank(pBest.Recipe) then Exit(RecipeRank(pEv.Recipe) < RecipeRank(pBest.Recipe));
+  if EvalRank(pEv) <> EvalRank(pBest) then Exit(EvalRank(pEv) < EvalRank(pBest));
   if Length(pEv.Surface.Members) <> Length(pBest.Surface.Members) then
     Exit(Length(pEv.Surface.Members) < Length(pBest.Surface.Members));
   if Length(pEv.Surface.Refs) <> Length(pBest.Surface.Refs) then
@@ -1902,6 +1953,15 @@ end;
 
 procedure TCyclePlanner.SetHeader(const pF: TPlanFile; var pItem: TMoveItem);
 begin
+  var KW:= SameLineKeyword(LineAt(pF.Lines, pItem.Sym.StartLine), pItem.Sym.Name, pItem.Sym.StartLine = pItem.Sym.EndLine);
+  if KW <> '' then
+  begin
+    { W6 C6: `var GX: T;` -- the keyword stays on the line, the declaration moves }
+    pItem.Header  := pItem.Sym.StartLine;
+    pItem.Keyword := KW;
+    pItem.SameLine:= True;
+    Exit;
+  end;
   pItem.Header:= HeaderOf(pF.Lines, pItem.Decl.First);
   if pItem.Header = 0 then
   begin
@@ -2003,7 +2063,7 @@ begin
   pItem.HeaderNew:= pItem.BaseIndent + pItem.Sym.Name + ' = class(' + pItem.BaseName + ')' +
     (if Comment <> '' then ' ' + Comment else '');
   Children:= FStore.FindAllChildSymbols(pItem.Sym.Id);
-  Used:= UsedMemberNames(Children, pItem.CutFids);
+  Used:= UsedMemberNames(Children, pItem.CutFids, pItem.Sym.Name);
   try
     if not PullMembers(pF, pItem, Children, Used) then Exit;
   finally
@@ -2022,7 +2082,7 @@ begin
   pItem.Kind:= mvBase;
 end;
 
-function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>): TDictionary<string, Boolean>;
+function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>; const pClassName: string): TDictionary<string, Boolean>;
 var
   Ids  : TDictionary<Int64, Boolean>;
   Names: TDictionary<string, Boolean>;
@@ -2044,6 +2104,12 @@ begin
         if (R.SymbolId > 0) and not Ids.ContainsKey(R.SymbolId) then Continue;
         if Names.ContainsKey(LowerCase(R.NameText)) then Result.AddOrSetValue(LowerCase(R.NameText), True);
       end;
+    { B4-f: `(X as TX).M` -- the index records no member access after a parenthesised cast }
+    if pClassName <> '' then
+      for var Fid in pCut do
+        for var Line in GetFile(Fid).Lines do
+          for var M in TRegEx.Matches(CodePart(Line), '\(\s*[A-Za-z_][\w.]*\s+as\s+' + pClassName + '\s*\)\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+            if Names.ContainsKey(LowerCase(M.Groups[1].Value)) then Result.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
   finally
     Names.Free;
     Ids.Free;
@@ -2247,6 +2313,21 @@ begin
   Result:= (Length(pFields) > 0) and TRegEx.IsMatch(pCode, '^\s*(Self\s*\.\s*)?(' + string.Join('|', pFields) +
     ')\s*:=\s*T(Object)?List\s*<\s*' + pTypeName + '\s*>\s*\.\s*Create\b', [roIgnoreCase]);
 end;
+{ B4-f: a class test the base class answers the same: `X is TX` (only TX derives from the new TXBase, so
+  `is TXBase` holds exactly when `is TX` did), and `(X as TX).M` with M a member pulled into the base,
+  read or called, never assigned (`(X as TX).M :=`). }
+function TCyclePlanner.ClassTestSiteOk(const pCode: string; pIndex, pLen: Integer; const pItem: TMoveItem): Boolean;
+begin
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
+  if TRegEx.IsMatch(Before, '[\w)\]]\s+is\s+$', [roIgnoreCase]) then Exit(True);
+  if not TRegEx.IsMatch(Before, '\(\s*[A-Za-z_][\w.]*\s+as\s+$', [roIgnoreCase]) then Exit(False);
+  var R:= TRegEx.Match(Rest, '^\s*\)\s*\.\s*([A-Za-z_]\w*)\b(?!\s*:=)', [roIgnoreCase]);
+  if not R.Success then Exit(False);
+  for var BM in pItem.BaseMembers do
+    if SameText(BM.Sym.Name, R.Groups[1].Value) then Exit(True);
+  Result:= False;
+end;
 { E18 T7 F5: '' when every switched site of pItem is a const or value parameter
   whose routine body only reads members of it, compares it with nil or stores it
   into a switchable field (`F[..] := p`), or is such a field (FieldSiteRefusal);
@@ -2305,6 +2386,7 @@ begin
             var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field, SlotNames(Slots, -1));
             if (Field = '') and ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Why:= ObjSlotRefusal(pItem, Slot, Fields, Slots)
             else if (Field = '') and IsListCreation(CodePart(LineAt(F.Lines, S.Line)), pItem.Sym.Name, Fields) then Continue
+            else if (Field = '') and ClassTestSiteOk(CodePart(LineAt(F.Lines, S.Line)), M.Index, M.Length, pItem) then Continue
             else if Field = '' then
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
@@ -2782,6 +2864,13 @@ begin
     if Item.Kind <> mvBase then
     begin
       for var R in MovedRanges(Item) do MarkDeleted(Fid, R);
+      if Item.SameLine then
+      begin
+        { W6 C6: the keyword line stays (DeleteEmptyHeaders drops it with an emptied block) }
+        var Line:= LineAt(GetFile(Fid).Lines, Item.Header);
+        FDeleted.Remove(LineKey(Fid, Item.Header));
+        MarkReplaced(Fid, Item.Header, Copy(Line, 1, IndentOf(Line)) + Item.Keyword);
+      end;
       Continue;
     end;
     var F:= GetFile(Fid);
@@ -2809,7 +2898,11 @@ begin
     var Empty:= True;
     for var L:= Item.Header + 1 to BlockEnd(F.Lines, Item.Header) - 1 do
       if not (IsDeleted(F.Fid, L) or IsCommentOnly(LineAt(F.Lines, L))) then Empty:= False;
-    if Empty then MarkDeleted(F.Fid, OneRange(Item.Header, Item.Header));
+    if Empty then
+    begin
+      FReplaced.Remove(LineKey(F.Fid, Item.Header));
+      MarkDeleted(F.Fid, OneRange(Item.Header, Item.Header));
+    end;
   end;
 end;
 
@@ -3655,7 +3748,7 @@ begin
   end;
 end;
 
-function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
+function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>; pViaBase: Boolean): TEdgeEval;
 var
   Snap : Integer;
   Why  : string;
@@ -3666,11 +3759,12 @@ begin
   Result.ToStem  := pTo;
   Result.Needs   := pNeeds;
   Result.Surface := BuildEdgeSurface(Self, FidOfStem(pFrom), pTo);
+  Result.ViaBase := pViaBase;
   Result.Movable := Length(pNeeds) > 0;
   if not Result.Movable then Result.Why:= 'the index resolved no symbol for this edge';
   Snap:= FOrder.Count;
   for var N in pNeeds do
-    if not TryAdd(N.Owner, nil, Why) then
+    if not TryAdd(N.Owner, BaseCut(N.Owner, pFrom, pViaBase), Why) then
     begin
       Result.Movable:= False;
       Result.Why    := Format('`%s` (%s): %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
@@ -3687,6 +3781,40 @@ begin
   Rollback(Snap);
 end;
 
+{ B4-f: the cut a class need of an implementation edge is judged against -- the consumer's file, so
+  BuildBase runs (F5 / B4 site rules over that unit); nil for any other need, or without pViaBase. }
+function TCyclePlanner.BaseCut(const pSym: TSymbol; const pFrom: string; pViaBase: Boolean): TArray<Int64>;
+begin
+  Result:= if pViaBase and (pSym.Kind = skClass) then [FidOfStem(pFrom)] else nil;
+end;
+
+{ B4-f: every implementation edge no recipe cut, whose needs include a class, is evaluated again with the
+  class handed over through a base class (BuildBase, cut = the consumer). Movable -> crMoveGlobals,
+  ViaBase (ranked after R2 by EvalRank); else the edge keeps its earlier reason, and the base-class
+  refusal is appended when it names a site. }
+procedure TCyclePlanner.PlanBaseHandOver(pEvals: TList<TEdgeEval>);
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    if Ev.Recipe <> crNone then Continue;
+    var HasClass:= False;
+    for var N in Ev.Needs do
+      if N.Owner.Kind = skClass then HasClass:= True;
+    if not HasClass then Continue;
+    var Base:= EvaluateEdge(Ev.FromStem, Ev.ToStem, Ev.Needs, True);
+    if Base.Movable then
+    begin
+      Base.Recipe:= crMoveGlobals;
+      pEvals[I]  := Base;
+    end
+    else if ContainsStr(Base.Why, 'base-class') then
+    begin
+      Ev.Why:= Ev.Why + '; through a base class: ' + Base.Why;
+      pEvals[I]:= Ev;
+    end;
+  end;
+end;
 { ---------------------------------------------------------------------------
   rendering
   --------------------------------------------------------------------------- }
@@ -4082,6 +4210,14 @@ begin
       if KW <> Keyword then L.Add(KW);
       Keyword:= KW;
       if Item.Kind = mvBase then L.AddRange(BaseClassText(Item))
+      else if Item.SameLine then
+      begin
+        { W6 C6: the leaf's own keyword line opens the block; the declaration loses the keyword }
+        var Slice:= SliceLines(P.Lines, Item.Decl);
+        var K    := Item.Sym.StartLine - Item.Decl.First;
+        Slice[K]:= '  ' + TrimLeft(Copy(TrimLeft(Slice[K]), Length(Item.Keyword) + 1, MaxInt));
+        L.AddRange(Slice);
+      end
       else L.AddRange(SliceLines(P.Lines, Item.Decl));
       if Item.Kind = mvWithBodies then pBodies.AddRange(Item.Bodies);
     end;
@@ -4664,6 +4800,7 @@ begin
       and the best by BetterCut is the one cut of this run }
     PlanInversion(Evals);
     PlanMemberHandOver(Evals);
+    PlanBaseHandOver(Evals);
     for var Ev in Evals do
       if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
     if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then FInversion:= FCutEdge.Steps;
@@ -4679,7 +4816,7 @@ begin
     MaterializeInversion;
     Exit;
   end;
-  for var N in FCutEdge.Needs do TryAdd(N.Owner, nil, Why);
+  for var N in FCutEdge.Needs do TryAdd(N.Owner, BaseCut(N.Owner, FCutEdge.FromStem, FCutEdge.ViaBase), Why);
   Materialize;
 end;
 
@@ -4695,6 +4832,41 @@ begin
   Result:= Trim(TRegEx.Replace(Trim(TRegEx.Replace(Result, '\s+', ' ')), '^(type|var)\s+', '', [roIgnoreCase]));
 end;
 
+{ W6 C2: R2 into an existing leaf that already declares I<Class>Surface. The same code text (comments
+  aside; the GUID is derived from leaf + name, so a repeated plan matches) is reused: nothing is
+  inserted. A different declaration: the lowest free suffix (`I<Class>Surface2` ...) names the
+  interface and the steps are planned again with it. No free suffix below 100: `duplicate-identifier`. }
+procedure TCyclePlanner.SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf;
+  const pUnitScopes: TArray<string>; var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
+var
+  Clash: TSymbol;
+begin
+  var F:= GetFile(pLeaf.Fid);
+  Clash:= Default(TSymbol);
+  for var S in F.Syms do
+    if SameText(S.Name, pSteps.IfaceName) then Clash:= S;
+  if Clash.Id = 0 then Exit;
+  var Mine:= '';
+  for var T in pSteps.IfaceDecl do Mine:= Mine + ' ' + CodePart(T);
+  if SameText(DeclarationText(F.Lines, Clash), Trim(TRegEx.Replace(Mine, '\s+', ' '))) then
+  begin
+    pSteps.ReuseDecl:= True;
+    Exit;
+  end;
+  for var N:= 2 to CMaxPtrSuffix do
+  begin
+    var Name := Clash.Name + IntToStr(N);
+    var Taken:= False;
+    for var S in F.Syms do
+      if SameText(S.Name, Name) then Taken:= True;
+    if Taken then Continue;
+    pSteps:= PlanMemberInterface(Self, FLibStore, pSurface, pLeaf.UnitName, pUnitScopes, pRefusal, Name);
+    Exit;
+  end;
+  pRefusal.Kind  := 'duplicate-identifier';
+  pRefusal.Reason:= Format('`%s` already declares `%s` (line %d) differently, and every suffix up to %d is taken',
+    [pLeaf.UnitName, Clash.Name, Clash.StartLine, CMaxPtrSuffix]);
+end;
 { W6 C2: R1 into an existing leaf that already declares the pointer's names. The same type and variable
   declarations (text equal) are reused: nothing is inserted, and the assignment is added only when the
   declaring unit does not make it already. Different declarations: the lowest free suffix (`FooPtr2`,
@@ -4791,9 +4963,15 @@ begin
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
-      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [(if Ev.Surface.RoutineName <> '' then Ev.Surface.RoutineName
-        else Refusal.Symbol), (if Length(Ev.Needs) > 0 then Ev.Needs[0].Owner.Kind.ToText else 'routine'), Refusal.Kind,
-        Refusal.Reason]);
+      { the label is the kind of the symbol named, never of the edge's first need (a var read before the call) }
+      var Shown:= if Ev.Surface.RoutineName <> '' then Ev.Surface.RoutineName else Refusal.Symbol;
+      var Kind := 'routine';
+      for var N in Ev.Needs do
+        if SameText(N.Owner.Name, Shown) then Kind:= N.Owner.Kind.ToText;
+      if (Kind = 'routine') and (Ev.Surface.RoutineName = '') then
+        for var S in GetFile(FidOfStem(Ev.Surface.ToStem)).Syms do
+          if SameText(S.Name, Shown) and not (S.Kind in [skParam, skLocalVar]) and (Kind = 'routine') then Kind:= S.Kind.ToText;
+      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Shown, Kind, Refusal.Kind, Refusal.Reason]);
       pEvals[I]:= Ev;
       Continue;
     end;
@@ -4897,14 +5075,7 @@ begin
     if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
     var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
-    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then
-      for var S in GetFile(Leaf.Fid).Syms do
-        if SameText(S.Name, Steps.IfaceName) then
-        begin
-          Refusal.Kind  := 'duplicate-identifier';
-          Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
-          Break;
-        end;
+    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Ev.Surface, Leaf, UnitScopes, Steps, Refusal);
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
@@ -5186,9 +5357,14 @@ begin
     var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
     EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
       'units outside this cycle keep using it as before.', [FInversion.ClassTypeName, Decl]);
-    EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
-      [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
-       string.Join(', ', FInversion.MemberSigs)]);
+    if FInversion.ReuseDecl then
+      EmitFmt('- `%s` already declares the interface `%s` (GUID `%s`) with exactly this text: it is reused, nothing ' +
+        'is inserted there. Its properties are the members `%s` reads: %s.', [FLeafName[FInversion.DeclStem],
+        FInversion.IfaceName, FInversion.IfaceGuid, Consumer, string.Join(', ', FInversion.MemberSigs)])
+    else
+      EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
+        [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
+         string.Join(', ', FInversion.MemberSigs)]);
     EmitMemberWrites;
     if Length(FInversion.MethodSigs) > 0 then
       EmitFmt('- The interface also declares each method `%s` calls on it, the signature copied verbatim: %s. `%s` ' +

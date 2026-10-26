@@ -54,6 +54,8 @@ type
     Json: Boolean;
     /// <summary>--shadow-out (debug): the directory the shadow tree is staged in; '' = DefaultShadowDir.</summary>
     ShadowOut: string;
+    /// <summary>--rsvars: the rsvars.bat the compile gate calls; '' = the Studio the registry / BDS names. Passed on to the --part all child runs.</summary>
+    RsVars: string;
   end;
 
   /// <summary>The outcome of one msbuild run of a whole project (RunMsBuild).</summary>
@@ -453,6 +455,7 @@ end;
 var
   GShadowPick: string; // the default shadow dir this process picked (never one that existed); '' = not asked yet
   GBuildPick : string; // the same for the compile gate's _build dir
+  GRsVars    : string; // W6 C7: --rsvars, expanded; '' = TStudioEnv
   GScratchCited: Boolean; // a message of this run names a file in its scratch: DeleteDefaultScratch keeps it
 
 // The text a message uses to cite pPath, a file in this run's scratch: Format(pFmt, [pPath]) when the file
@@ -696,13 +699,11 @@ begin
         Refs.Add(AnchorRefusal(N.Path, 'the new unit''s file already exists', 0));
         Continue;
       end;
-      if HasNonAscii(N.Text) then
-      begin
-        Refs.Add(MakeRefusal('non-ascii-text', '', N.Path, 'the new unit would hold a non-ASCII character copied from the sources; move it by hand', 0));
-        Continue;
-      end;
       Item.Path := ShadowPathOf(pShadowDir, pProjectDir, N.Path);
-      Item.Bytes:= TEncoding.ASCII.GetBytes(string.Join(#13#10, N.Text) + #13#10);
+      { W6 C7: a new unit holding text that is not ASCII (copied from the sources, decoded) is written as
+        UTF-8 with a BOM -- dcc reads it, and it carries every character; ASCII text stays ASCII }
+      Item.Bytes:= EncodeSource(string.Join(#13#10, N.Text) + #13#10,
+        if HasNonAscii(N.Text) then TEncoding.UTF8 else TEncoding.ASCII);
       Staged.Add(Item);
     end;
     if Refs.Count = 0 then
@@ -804,6 +805,7 @@ end;
   run_studio_root_guard); '' when no root resolves. }
 function BuildEnvBat: string;
 begin
+  if GRsVars <> '' then Exit(GRsVars);  { W6 C7: --rsvars }
   Result:= if TStudioEnv.RootOrEmpty = '' then '' else TStudioEnv.RsvarsBat;
 end;
 
@@ -1891,7 +1893,10 @@ begin
   else if SameText(pOpts.Part, CPartAll) and pOpts.NoReindex then
     Result:= 'cycles --fix --part all cannot use --no-reindex: every iteration re-plans on the re-indexed project'
   else if pOpts.CycleGiven and (pOpts.CycleIndex < 1) then
-    Result:= 'cycles --fix --cycle needs a group number of 1 or more (see `drag-lint cycles` for the groups)';
+    Result:= 'cycles --fix --cycle needs a group number of 1 or more (see `drag-lint cycles` for the groups)'
+  else if (pOpts.RsVars <> '') and not FileExists(ExpandFileName(pOpts.RsVars)) then
+    Result:= 'cycles --fix --rsvars: no such file: ' + ExpandFileName(pOpts.RsVars);
+  if Result = '' then GRsVars:= if pOpts.RsVars <> '' then ExpandFileName(pOpts.RsVars) else '';
   if Result <> '' then Exit;
   if (pOpts.ShadowOut <> '') and TDirectory.Exists(ExpandFileName(pOpts.ShadowOut)) and
      (Length(TDirectory.GetFileSystemEntries(ExpandFileName(pOpts.ShadowOut))) > 0) then
@@ -2259,6 +2264,7 @@ begin
   if pOpts.Platform <> '' then Result:= Result + ' --platform ' + Quoted(pOpts.Platform);
   for var Lib in pOpts.LibraryDbs do Result:= Result + ' --library-db ' + Quoted(Lib);
   if pOpts.RulesDir <> '' then Result:= Result + ' --rules-dir ' + Quoted(pOpts.RulesDir);
+  if pOpts.RsVars <> '' then Result:= Result + ' --rsvars ' + Quoted(pOpts.RsVars);
   if pOpts.NoBackup then Result:= Result + ' --no-backup';
 end;
 

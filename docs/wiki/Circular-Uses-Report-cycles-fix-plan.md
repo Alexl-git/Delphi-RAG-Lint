@@ -139,7 +139,8 @@ A refused group prints `Verdict: refused` and one `  - <kind>: <reason>` line pe
 The engine never guesses; every kind it can give:
 
 * **Run and gate:** `dirty-baseline` (the project does not build before any edit),
-  `no-compiler` (rsvars.bat missing; use `--no-compile` for a dry run), `compile-error` (the
+  `no-compiler` (rsvars.bat missing; name it with `--rsvars <rsvars.bat>` for a Studio the registry /
+  BDS does not name, or use `--no-compile` for a dry run), `compile-error` (the
   project does not build after the edit; rolled back), `build-timeout` (the build did not
   finish; rolled back), `build-error` (the build itself failed to run; rolled back, exit 2),
   `write-failed` (a write failed part-way; rolled back, exit 2), `stale-file` (a file changed
@@ -147,15 +148,19 @@ The engine never guesses; every kind it can give:
   `--apply` re-indexes once, re-plans and reports `reindex_before`, and refuses only a file
   still stale after that), `anchor-mismatch` (a line the plan edits is not
   what the planner saw), `non-ascii-text` (an inserted line holds a non-ASCII character and
-  the file is ANSI), `outside-roots` (the plan would edit a file outside the project's own
+  the file is ANSI; a NEW unit holding such text is written UTF-8 with a BOM instead), `outside-roots` (the plan would edit a file outside the project's own
   roots).
 * **Plan:** `base-class` (a class whose bodies use the cycle would need a base class
   extracted -- a manual step; the base class stands in for the class at a const / value
   parameter, a private `TArray<TX>` field, and -- plan B4 -- a local, a plain field `F: TX`, a
   `TList<TX>` / `TObjectList<TX>` field and a property read through a method accessor, each only
-  when every use is on a closed whitelist; the refusal names the first site that is not),
+  when every use is on a closed whitelist; the refusal names the first site that is not. Plan B4-f:
+  an IMPLEMENTATION edge that no other recipe cuts is tried with the base class too (ranked after
+  R2), and there `X is TX` and `(X as TX).M` -- M pulled into the base, never assigned -- switch to
+  the base class as well; a hard cast `TX(X)` stays refused, the refusal naming its line),
   `blocked-symbol` (a declaration the move needs cannot move: a
-  routine, a class whose method bodies use the cycle, an unrecognised declaration block),
+  routine, a class whose method bodies use the cycle, an unrecognised declaration block -- an
+  indented `type` / `var` / `const` header and the same-line form `var GX: T = v;` are recognised),
   `directive` (a conditional compiler directive inside an edited region; `{$REGION}`,
   `{$ENDREGION}`, `{$WARN}`, `{$HINTS}` and `{$MESSAGE}` inside a uses clause are kept byte for
   byte), `unresolved-edge` (the index could not resolve what one unit of the group uses from
@@ -168,7 +173,8 @@ The engine never guesses; every kind it can give:
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
   `overloaded-routine`, `signature-unknown`, `qualified-ref`, `routine-not-called`,
   `init-order`, `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
-  pointer type or variable), `unit-leaves-program` (the declaring unit is used only by the
+  pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
+  reused, a different one gets the lowest free suffix), `unit-leaves-program` (the declaring unit is used only by the
   consumer and the program's `.dpr` does not list it: after the cut the linker drops it, its
   initialization never assigns the pointer and the call is a nil call at run time -- add the
   unit to the `.dpr` uses; a `DCCReference` alone does not link it).
@@ -178,8 +184,12 @@ The engine never guesses; every kind it can give:
   method the consumer calls inside `with ... as TX do` is carried as an interface method, its
   signature copied verbatim and dispatch to an override unchanged; a class method or a method
   taken as a pointer is refused), `overloaded-routine`, `signature-in-cycle`, `class-ref`,
-  `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported`,
-  `duplicate-identifier`, `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`
+  `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
+  member, a `default` array property or a write to an indexed property; a plain indexed property
+  is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
+  that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the
+  leaf declares `I<Class>Surface` differently with every suffix taken; an identical interface is
+  reused, a different one gets the lowest free suffix), `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`
   (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
