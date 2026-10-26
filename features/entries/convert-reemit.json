@@ -6,13 +6,49 @@
   "status": "internal",
   "since": "1.10.0-alpha",
   "summary": "The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners",
+  "intro": "Test-runner verb that re-emits one DFM object block under a conversion-rules book and prints the report; use convert-apply for real work.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
       "type": "cli",
-      "verb": "convert-reemit"
+      "verb": "convert-reemit",
+      "usage": "drag-lint convert-reemit --from-block <file.dfm> --rules <file> --from <FromType> --to <ToType> --db PATH (hidden test verb: re-emit one DFM object block under a rules book and print the report)",
+      "flags": [
+        {
+          "name": "--from-block",
+          "arg": "FILE"
+        },
+        {
+          "name": "--rules",
+          "arg": "FILE"
+        },
+        {
+          "name": "--from",
+          "arg": "TYPE"
+        },
+        {
+          "name": "--to",
+          "arg": "TYPE"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "agent",
-  "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\."
+  "questions": [
+    {
+      "ask": "Re-emit one DFM block under a rules book (test runners)",
+      "command": "drag-lint convert-reemit --from-block <file.dfm> --rules <book.rules> --from <FromType> --to <ToType> --db <file.sqlite>"
+    }
+  ],
+  "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\.",
+  "verified": {
+    "date": "2026-10-26",
+    "by": "CONVERTER",
+    "build": "1.35.1-alpha",
+    "surfaceHash": "da1fc5e5287650a452eb20c25fff64509455cf311fd24c9e1f1ffdbd08ea7722"
+  }
 }

@@ -21,9 +21,30 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Rename a member the converted code still uses, or mark it DL_NONE",
+      "command": "ConvRulesEditor.exe > Work list tab > Migrate..."
+    },
+    {
+      "ask": "Add a #migrate line from a block's Members list",
+      "command": "ConvRulesEditor.exe > Classes tab > Members list > Add..."
+    }
+  ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-26",
+    "by": "CONVERTER"
+  },
   "lastVerified": {
     "date": "2026-10-26",
     "by": "alexanderl",
     "build": "1.35.0-alpha"
+  },
+  "verified": {
+    "date": "2026-10-26",
+    "by": "CONVERTER",
+    "build": "1.35.1-alpha",
+    "surfaceHash": "da998cdf4aebfcbc925f889b6b31eb06e391ad5f8b6c67c11510b43ba8dfa568"
   }
 }
