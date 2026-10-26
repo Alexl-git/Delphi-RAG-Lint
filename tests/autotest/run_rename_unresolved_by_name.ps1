@@ -168,6 +168,8 @@ Check 'J json exits 0' ($e.Exit -eq 0) "exit=$($e.Exit)"
 $exp = @('Unit1.pas:13', 'Unit1.pas:8', 'Unit3.pas:16')
 Check 'J edit set is exact (no Unit3.pas:17, no Unit2)' (($e.Got -join ',') -ceq (($exp | Sort-Object) -join ',')) "got=$($e.Got -join ',')"
 
+Check 'J note names the candidate (E5, wired in CLI)' ($e.Out -cmatch 'drag-lint: note: .*Unit3\.pas:17:\d+: unresolved reference to "Process" not renamed') "out=$($e.Out)"
+
 Write-Host 'Fixture A: --apply leaves the candidate and Unit2 alone' -ForegroundColor Cyan
 $a = New-Fixture 'A'
 $h2 = FileHash $a 'Unit2.pas'
@@ -183,6 +185,7 @@ $p = New-Fixture 'P' @('Unit2.pas')
 $e = Edit-Set $p
 $exp = @('Unit1.pas:13', 'Unit1.pas:8', 'Unit3.pas:16', 'Unit3.pas:17')
 Check 'P edit set includes the unbound ref' (($e.Got -join ',') -ceq (($exp | Sort-Object) -join ',')) "got=$($e.Got -join ',')"
+Check 'P no candidate note when nothing else carries the name' ($e.Out -cnotmatch 'unresolved reference') "out=$($e.Out)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

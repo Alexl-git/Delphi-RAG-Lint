@@ -154,7 +154,7 @@ type
       /// <summary>Non-empty human reason when the short name of AQName occurs as an
       /// identifier token in an .inc file the index holds; '' otherwise. A rename
       /// must then be refused: the index records no references inside {$I}
-      /// included text (until extractor 1.22), so Build would rewrite the
+      /// included text (indexer limit, not yet lifted), so Build would rewrite the
       /// declaration and leave every use inside the include stale.</summary>
       /// <param name="AStore">Open index; its `files` rows are the project closure
       /// that is scanned. Must not be nil.</param>
@@ -1204,7 +1204,7 @@ begin
     if Hits.Count = 0 then Exit;
     Hits.Sort;
     Result:= Format('"%s" is used in include file(s) %s -- the index records no ' +
-      'references inside {$I} included text yet (extractor 1.22), so those uses ' +
+      'references inside {$I} included text yet, so those uses ' +
       'would be left stale. Rename them by hand together with the declaration.',
       [ShortName, string.Join(', ', Hits.ToStringArray)]);
   finally
