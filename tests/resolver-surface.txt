@@ -32,6 +32,11 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveAncestry
 src/storage/DRagLint.Storage.SQLite.pas::ResolveHelpers
 src/storage/DRagLint.Storage.SQLite.pas::ResolveCallTargets
 src/storage/DRagLint.Storage.SQLite.pas::ResetResolveScope
+src/storage/DRagLint.Storage.SQLite.pas::ResolveDispatch
+
+# 2026-10-26 (polymorphic form launches): dispatch_edges + classref_args.
+# ResolveDispatch is the writer; the resolver unit is all derive logic.
+src/index/DRagLint.Index.DispatchResolver.pas::*
 
 # What ResolveCallTargets calls (autodoc facts, not inference).
 src/storage/DRagLint.Storage.SQLite.pas::UpsertCallEdge

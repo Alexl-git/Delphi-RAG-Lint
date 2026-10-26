@@ -1187,6 +1187,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore> = nil);
+    /// <summary>Rebuilds dispatch_edges (base method -> override / implementing
+    /// method) and classref_args (call site -> class passed to a `class of`
+    /// parameter) from the stored parse and call_edges. Run right after
+    /// ResolveCallTargets.</summary>
+    /// <param name="AExtraStores">Library stores, consulted only to recognise a
+    /// library class-reference type (Vcl.Forms.TFormClass); may be nil.</param>
+    /// <remarks>Wipes both tables and writes them in one transaction; logs one
+    /// `dispatch:` ResolveLog line with the row and decline counts. Spec
+    /// docs\superpowers\specs\2026-10-26-extract-polymorphic-form-launches.md.</remarks>
+    procedure ResolveDispatch(const AExtraStores: TArray<ISymbolStore> = nil);
     /// <summary>True when call_edges holds no rows although the index does hold
     /// call-site refs -- i.e. the edge set is missing rather than genuinely
     /// empty.</summary>

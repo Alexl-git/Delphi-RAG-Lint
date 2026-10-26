@@ -193,6 +193,7 @@ uses
   DRagLint.Doc.SymbolFacts in '..\doc\DRagLint.Doc.SymbolFacts.pas',
   DRagLint.Doc.Wiki in '..\doc\DRagLint.Doc.Wiki.pas',
   DRagLint.Index.CallResolver in '..\index\DRagLint.Index.CallResolver.pas',
+  DRagLint.Index.DispatchResolver in '..\index\DRagLint.Index.DispatchResolver.pas',
   DRagLint.Lint.DocRules in '..\lint\DRagLint.Lint.DocRules.pas',
   DRagLint.Preprocess.Expr in '..\preprocess\DRagLint.Preprocess.Expr.pas',
   DRagLint.Preprocess.Lexer in '..\preprocess\DRagLint.Preprocess.Lexer.pas',

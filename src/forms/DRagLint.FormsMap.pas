@@ -195,7 +195,7 @@ const
   // v6: index-first edges (refs + call_edges) with the text scan as fallback, a
   // .dfm-tree location per control (menu / bar / ribbon / tab path), and the
   // tester columns (Click, Handler, Opened by, Modal, Confidence ...).
-  FORMS_CSV_ALGORITHM = '9'; // bump when the edge or path algorithm, or a cell's meaning, changes
+  FORMS_CSV_ALGORITHM = '10'; // bump when the edge or path algorithm, or a cell's meaning, changes
 
   POPUP_FORMS_KEY  = 'popupForms'; // R1: key in <project>\_D-RAG\drag-lint-project.json
   POPUP_NOTE_DEFAULT = 'opened as a popup (declared in drag-lint-project.json)';
@@ -1508,6 +1508,14 @@ type
     Line     : Integer;      // 1-based line of that Create/Show
     Modal    : string;
     ModalNote: string;
+    StartId  : Int64;        // v10: the routine the upward walk starts from when it is not Info
+                             // (a classref_args site: Info is the callee, StartId the caller); 0 = Info.Id
+  end;
+
+  /// <summary>v10: a routine reached through dispatch_edges, and the hop that reached it.</summary>
+  TDispatchCaller = record
+    Id  : Int64;
+    Note: string; // 'via <base qualified name> (virtual|interface dispatch)'
   end;
 
   /// <summary>v6 edge builder: index-first (refs + call_edges + the .dfm tree),
@@ -1529,6 +1537,8 @@ type
     function Routine(AStore: TSQLiteSymbolStore; AId: Int64): TRoutineInfo;
     function FindMethod(AStore: TSQLiteSymbolStore; const AOwner, AName: string): TRoutineInfo;
     function CallerIds(AStore: TSQLiteSymbolStore; AId: Int64): TArray<Int64>;
+    function DispatchCallers(AStore: TSQLiteSymbolStore; AId: Int64): TArray<TDispatchCaller>;
+    procedure ClassRefSitesFor(AStore: TSQLiteSymbolStore; const AY: TFormNode; ASites: TList<TLaunchSite>);
     function ActionInvokerIds(AStore: TSQLiteSymbolStore; const AOwner, AAction: string): TArray<Int64>;
     function Body(const AInfo: TRoutineInfo): TArray<string>;
     function BodyModal(const AInfo: TRoutineInfo): string;
@@ -1766,6 +1776,81 @@ begin
     end;
   finally
     Q.Free;
+  end;
+end;
+
+/// <summary>v10 (spec 2026-10-26-extract-polymorphic-form-launches): callers
+/// that reach AId only through dynamic dispatch. Climbs dispatch_edges from AId
+/// to every base it overrides or implements (transitively, bounded) and returns
+/// the direct callers of each base, tagged with that base. Empty on a database
+/// without the dispatch tables.</summary>
+function TNavBuilder.DispatchCallers(AStore: TSQLiteSymbolStore; AId: Int64): TArray<TDispatchCaller>;
+const
+  MAX_BASE_HOPS = 8;
+var
+  QB   : TFDQuery;
+  QC   : TFDQuery;
+  Todo : TQueue<Int64>;
+  Seen : TDictionary<Int64, Boolean>;
+  Cur  : Int64;
+  Item : TDispatchCaller;
+  Hops : Integer;
+  FldB, FldK, FldQ, FldE: TField;
+begin
+  Result:= [];
+  if not AStore.HasDispatchEdges then Exit;
+  QB  := TFDQuery.Create(nil);
+  QC  := TFDQuery.Create(nil);
+  Todo:= TQueue<Int64>.Create;
+  Seen:= TDictionary<Int64, Boolean>.Create;
+  try
+    QB.Connection:= AStore.GetConnection;
+    QB.SQL.Text  := 'SELECT d.base_symbol_id AS b, d.kind AS k, s.qualified_name AS q FROM dispatch_edges d ' +
+                    'JOIN symbols s ON s.id = d.base_symbol_id WHERE d.impl_symbol_id = :i';
+    QC.Connection:= AStore.GetConnection;
+    QC.SQL.Text  := 'SELECT DISTINCT r.enclosing_symbol_id AS e FROM call_edges ce JOIN refs r ON r.id = ce.ref_id ' +
+                    'WHERE ce.target_symbol_id = :t AND r.enclosing_symbol_id IS NOT NULL';
+    Todo.Enqueue(AId);
+    Seen.Add(AId, True);
+    Hops:= 0;
+    while (Todo.Count > 0) and (Hops < MAX_BASE_HOPS) do
+    begin
+      Inc(Hops);
+      Cur:= Todo.Dequeue;
+      QB.ParamByName('i').AsLargeInt:= Cur;
+      QB.Open;
+      FldB:= QB.FieldByName('b'); // dl:ok field-by-name-in-loop@da4d -- once per Open: the query is re-opened per base, and Open rebuilds its fields
+      FldK:= QB.FieldByName('k');
+      FldQ:= QB.FieldByName('q');
+      while not QB.Eof do
+      begin
+        var B:= FldB.AsLargeInt;
+        if not Seen.ContainsKey(B) then
+        begin
+          Seen.Add(B, True);
+          Todo.Enqueue(B);
+          Item.Note:= 'via ' + FldQ.AsString +
+            (if FldK.AsString = 'implements' then ' (interface dispatch)' else ' (virtual dispatch)');
+          QC.ParamByName('t').AsLargeInt:= B;
+          QC.Open;
+          FldE:= QC.FieldByName('e');
+          while not QC.Eof do
+          begin
+            Item.Id:= FldE.AsLargeInt;
+            Result := Result + [Item];
+            QC.Next;
+          end;
+          QC.Close;
+        end;
+        QB.Next;
+      end;
+      QB.Close;
+    end;
+  finally
+    Seen.Free;
+    Todo.Free;
+    QC.Free;
+    QB.Free;
   end;
 end;
 
@@ -2242,10 +2327,14 @@ var
   Ways     : TArray<TNavWay>;
   E        : TNavEdge;
   C        : Int64;
+  DC       : TDispatchCaller;
+  ViaNote  : TDictionary<Int64, string>; // v10: routine id -> the dispatch hop on its path ('' = none)
+  StartId  : Int64;
 
   function MakeEdge(const AH: TRoutineInfo; const AWays: TArray<TNavWay>): TNavEdge;
   begin
     Result:= Default(TNavEdge);
+    if not ViaNote.TryGetValue(AH.Id, Result.Note) then Result.Note:= '';
     Result.FromClass:= AH.Owner;
     Result.ToClass  := AY.FormClass;
     Result.Handler  := AH.Name;
@@ -2260,15 +2349,18 @@ var
 begin
   Queue  := TQueue<TItem>.Create;
   Visited:= TDictionary<Int64, string>.Create;
+  ViaNote:= TDictionary<Int64, string>.Create;
   try
     HaveCand:= False;
     Traced  := False;
     Cand    := Default(TRoutineInfo);
     CandWays:= [];
-    Cur.Id:= ASite.Info.Id;
+    StartId := if ASite.StartId <> 0 then ASite.StartId else ASite.Info.Id;
+    Cur.Id:= StartId;
     Cur.Depth:= 0;
     Queue.Enqueue(Cur);
-    Visited.Add(ASite.Info.Id, '');
+    // v10: a classref site starts at the CALLER, whose body calls the launcher next.
+    Visited.Add(StartId, if ASite.StartId <> 0 then ASite.Info.Name else '');
     while Queue.Count > 0 do
     begin
       Cur:= Queue.Dequeue;
@@ -2306,7 +2398,18 @@ begin
         if not Visited.ContainsKey(C) then
         begin
           Visited.Add(C, S.Name);
+          if ViaNote.ContainsKey(Cur.Id) then ViaNote.Add(C, ViaNote[Cur.Id]);
           Nxt.Id   := C;
+          Nxt.Depth:= Cur.Depth + 1;
+          Queue.Enqueue(Nxt);
+        end;
+      // v10: callers that bind a BASE this routine overrides or implements.
+      for DC in DispatchCallers(AStore, Cur.Id) do
+        if not Visited.ContainsKey(DC.Id) then
+        begin
+          Visited.Add(DC.Id, S.Name);
+          ViaNote.Add(DC.Id, DC.Note);
+          Nxt.Id   := DC.Id;
           Nxt.Depth:= Cur.Depth + 1;
           Queue.Enqueue(Nxt);
         end;
@@ -2315,12 +2418,72 @@ begin
     begin
       E:= MakeEdge(Cand, CandWays);
       if Length(CandWays) = 0 then
-        E.Note:= Cand.Name + ' is not bound to any control in ' + ExtractFileName(TPath.ChangeExtension(Cand.Path, '.dfm')) + ' (assigned in code?)';
+        E.Note:= Cand.Name + ' is not bound to any control in ' + ExtractFileName(TPath.ChangeExtension(Cand.Path, '.dfm')) + ' (assigned in code?)' +
+          (if E.Note <> '' then '; ' + E.Note else '');
       AddEdge(E);
     end;
   finally
+    ViaNote.Free;
     Visited.Free;
     Queue.Free;
+  end;
+end;
+
+/// <summary>v10: launch sites of AY found through classref_args -- a call that
+/// passes AY's class to a `class of` parameter of a routine whose body does
+/// `Param.Create`. Info is that callee (it holds the Create/Show line); the
+/// walk starts at the call site's enclosing routine (StartId), so a launcher
+/// shared by many forms is attributed per call site, never to all its callers.</summary>
+procedure TNavBuilder.ClassRefSitesFor(AStore: TSQLiteSymbolStore; const AY: TFormNode; ASites: TList<TLaunchSite>);
+var
+  Q    : TFDQuery;
+  Seen : TDictionary<Int64, Boolean>;
+  Site : TLaunchSite;
+  Callee: TRoutineInfo;
+  Lines: TArray<string>;
+  FldE, FldP, FldT: TField;
+begin
+  if not AStore.HasDispatchEdges then Exit;
+  Q   := TFDQuery.Create(nil);
+  Seen:= TDictionary<Int64, Boolean>.Create;
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text  :=
+      'SELECT DISTINCT r.enclosing_symbol_id AS e, ce.target_symbol_id AS t, p.name AS pn ' +
+      'FROM classref_args ca JOIN refs r ON r.id = ca.ref_id JOIN call_edges ce ON ce.ref_id = ca.ref_id ' +
+      'JOIN symbols p ON p.id = ca.param_symbol_id JOIN symbols k ON k.id = ca.class_symbol_id ' +
+      'WHERE k.name = :cls COLLATE NOCASE AND r.enclosing_symbol_id IS NOT NULL';
+    Q.ParamByName('cls').AsWideString:= AY.FormClass;
+    Q.Open;
+    FldE:= Q.FieldByName('e');
+    FldP:= Q.FieldByName('pn');
+    FldT:= Q.FieldByName('t');
+    while not Q.Eof do
+    begin
+      var StartId:= FldE.AsLargeInt;
+      var Param  := FldP.AsString;
+      Callee:= Routine(AStore, FldT.AsLargeInt);
+      Q.Next;
+      if (Callee.Id = 0) or (Callee.ImplStart < 1) or Seen.ContainsKey(StartId) then Continue;
+      Lines:= Body(Callee);
+      Site:= Default(TLaunchSite);
+      for var I:= 0 to High(Lines) do
+        if TRegEx.IsMatch(Lines[I], '\b' + TRegEx.Escape(Param) + '\s*\.\s*Create\b', [roIgnoreCase]) then
+        begin
+          Site.Line:= Callee.ImplStart + I;
+          Break;
+        end;
+      if Site.Line = 0 then Continue; // the callee does not create the class it is passed
+      Seen.Add(StartId, True);
+      Site.Info   := Callee;
+      Site.StartId:= StartId;
+      Site.Modal  := BodyModal(Callee);
+      if Site.Modal = '?' then Site.Modal:= DfmModal(AY, Site.ModalNote);
+      ASites.Add(Site);
+    end;
+  finally
+    Seen.Free;
+    Q.Free;
   end;
 end;
 
@@ -2392,6 +2555,7 @@ begin
   finally
     Q.Free;
   end;
+  ClassRefSitesFor(AStore, AY, Sites); // v10
   try
     for Site in Sites do TraceLaunch(AStore, AY, Site);
   finally

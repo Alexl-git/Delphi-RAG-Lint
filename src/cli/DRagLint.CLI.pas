@@ -3845,7 +3845,10 @@ begin
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
        Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
     if RanCalls then
-      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
+    begin
+      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end); { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch; end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
+    end
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
@@ -6113,7 +6116,10 @@ begin
     var RanCalls: Boolean:= CorpusMoved or (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or
        ResolverStale or AArgs.ResolveOnly;
     if RanCalls then
-      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
+    begin
+      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end); { v14 (D5) + v21 cross-DB }
+      Stage('', 'dispatch', procedure begin Store.ResolveDispatch(OpenLibraryStores(AArgs)); end); { 2026-10-26: libraries only recognise a library `class of` param type }
+    end
     else
       Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
@@ -6261,7 +6267,10 @@ begin
     can open a database whose edges were dropped just as the other two can. }
   var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild;
   if RanCalls then
-    Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
+  begin
+    Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end); { v14 (D5): resolve call sites to target symbols }
+    Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch; end); { 2026-10-26: overrides / implements / classref args }
+  end
   else
     Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
   { Purity v2 -- same gate as the DoIndex site: after the edges, or when a
@@ -32399,6 +32408,7 @@ begin
           begin
             RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
+            Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
             Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
           end;
 
