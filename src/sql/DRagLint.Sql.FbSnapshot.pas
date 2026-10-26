@@ -106,7 +106,7 @@ begin
   try
     Q.Connection:= AConn;
     Q.Sql.Text:= 'SELECT FIRST 1 1 FROM RDB$RELATIONS WHERE UPPER(RDB$RELATION_NAME) = :n';
-    Q.ParamByName('n').AsString:= UpperCase(AName);
+    Q.ParamByName('n').AsWideString:= UpperCase(AName);
     Q.Open;
     Result:= not Q.IsEmpty;
   except
@@ -219,10 +219,10 @@ begin
         while not QSrc.Eof do
         begin
           RelName:= QSrc.FieldByName('NAME').AsString;
-          QIns.ParamByName('n').AsString:= RelName;
-          QIns.ParamByName('o' ).AsString := QSrc.FieldByName('OWNER_NAME' ).AsString;
+          QIns.ParamByName('n').AsWideString:= RelName;
+          QIns.ParamByName('o' ).AsWideString := QSrc.FieldByName('OWNER_NAME' ).AsString;
           QIns.ParamByName('sf').AsInteger:= QSrc.FieldByName('SYSTEM_FLAG').AsInteger;
-          QIns.ParamByName('d' ).AsString := QSrc.FieldByName('DESCR'      ).AsString;
+          QIns.ParamByName('d' ).AsWideString := QSrc.FieldByName('DESCR'      ).AsString;
           QIns.ParamByName('sa').AsLargeInt:= SnapshotAt;
           QIns.ExecSQL;
           RelId:= SQLite.GetLastAutoGenValue('');
@@ -271,16 +271,16 @@ begin
             Continue;
           end;
           QIns.ParamByName('rid').AsLargeInt:= RelId;
-          QIns.ParamByName('n'  ).AsString := QSrc.FieldByName('NM'    ).AsString;
+          QIns.ParamByName('n'  ).AsWideString := QSrc.FieldByName('NM'    ).AsString;
           QIns.ParamByName('p'  ).AsInteger:= QSrc.FieldByName('POS'   ).AsInteger;
-          QIns.ParamByName('src').AsString := QSrc.FieldByName('SRC'   ).AsString;
+          QIns.ParamByName('src').AsWideString := QSrc.FieldByName('SRC'   ).AsString;
           QIns.ParamByName('ft' ).AsInteger:= QSrc.FieldByName('FT'    ).AsInteger;
           QIns.ParamByName('fl' ).AsInteger:= QSrc.FieldByName('FL'    ).AsInteger;
           QIns.ParamByName('fsc').AsInteger:= QSrc.FieldByName('FSC'   ).AsInteger;
           QIns.ParamByName('fpr').AsInteger:= QSrc.FieldByName('FPR'   ).AsInteger;
           QIns.ParamByName('nul').AsInteger:= QSrc.FieldByName('NULLFL').AsInteger;
-          QIns.ParamByName('def').AsString := QSrc.FieldByName('DEFV'  ).AsString;
-          QIns.ParamByName('d'  ).AsString := QSrc.FieldByName('DESCR' ).AsString;
+          QIns.ParamByName('def').AsWideString := QSrc.FieldByName('DEFV'  ).AsString;
+          QIns.ParamByName('d'  ).AsWideString := QSrc.FieldByName('DESCR' ).AsString;
           QIns.ParamByName('sa').AsLargeInt:= SnapshotAt;
           QIns.ExecSQL;
           Inc(Result.Columns);
@@ -321,11 +321,11 @@ begin
           QIns.Prepare;
           while not QSrc.Eof do
           begin
-            QIns.ParamByName('fn').AsString:= QSrc.FieldByName('FN'            ).AsString;
-            QIns.ParamByName('tn').AsString:= QSrc.FieldByName('TN'            ).AsString;
-            QIns.ParamByName('dl').AsString:= QSrc.FieldByName('DISPLAY_LABEL' ).AsString;
-            QIns.ParamByName('df').AsString:= QSrc.FieldByName('DISPLAY_FORMAT').AsString;
-            QIns.ParamByName('ef').AsString:= QSrc.FieldByName('EDIT_FORMAT'   ).AsString;
+            QIns.ParamByName('fn').AsWideString:= QSrc.FieldByName('FN'            ).AsString;
+            QIns.ParamByName('tn').AsWideString:= QSrc.FieldByName('TN'            ).AsString;
+            QIns.ParamByName('dl').AsWideString:= QSrc.FieldByName('DISPLAY_LABEL' ).AsString;
+            QIns.ParamByName('df').AsWideString:= QSrc.FieldByName('DISPLAY_FORMAT').AsString;
+            QIns.ParamByName('ef').AsWideString:= QSrc.FieldByName('EDIT_FORMAT'   ).AsString;
             { D_BOOLEAN is CHAR(1) 'T'/'F' in Micronite v6; map to 0/1. }
             QIns.ParamByName('v' ).AsInteger:= Ord(UpCase(string(QSrc.FieldByName('VISIBLE'  ).AsString + ' ')[1]) = 'T');
             QIns.ParamByName('tr').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('TRIGGERED').AsString + ' ')[1]) = 'T');
@@ -374,17 +374,17 @@ begin
           while not QSrc.Eof do
           begin
             QIns.ParamByName('dsid').AsInteger:= QSrc.FieldByName('DS_ID'            ).AsInteger;
-            QIns.ParamByName('desc').AsString := QSrc.FieldByName('DESCRIPTION'      ).AsString;
-            QIns.ParamByName('ss'  ).AsString := QSrc.FieldByName('SELECT_SQL'       ).AsString;
-            QIns.ParamByName('us'  ).AsString := QSrc.FieldByName('UPDATE_SQL'       ).AsString;
-            QIns.ParamByName('is_' ).AsString := QSrc.FieldByName('INSERT_SQL'       ).AsString;
-            QIns.ParamByName('ds'  ).AsString := QSrc.FieldByName('DELETE_SQL'       ).AsString;
-            QIns.ParamByName('rs'  ).AsString := QSrc.FieldByName('REFRESH_SQL'      ).AsString;
-            QIns.ParamByName('ng'  ).AsString := QSrc.FieldByName('NAME_GENERATOR'   ).AsString;
-            QIns.ParamByName('kf'  ).AsString := QSrc.FieldByName('KEY_FIELD'        ).AsString;
-            QIns.ParamByName('utn' ).AsString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
+            QIns.ParamByName('desc').AsWideString := QSrc.FieldByName('DESCRIPTION'      ).AsString;
+            QIns.ParamByName('ss'  ).AsWideString := QSrc.FieldByName('SELECT_SQL'       ).AsString;
+            QIns.ParamByName('us'  ).AsWideString := QSrc.FieldByName('UPDATE_SQL'       ).AsString;
+            QIns.ParamByName('is_' ).AsWideString := QSrc.FieldByName('INSERT_SQL'       ).AsString;
+            QIns.ParamByName('ds'  ).AsWideString := QSrc.FieldByName('DELETE_SQL'       ).AsString;
+            QIns.ParamByName('rs'  ).AsWideString := QSrc.FieldByName('REFRESH_SQL'      ).AsString;
+            QIns.ParamByName('ng'  ).AsWideString := QSrc.FieldByName('NAME_GENERATOR'   ).AsString;
+            QIns.ParamByName('kf'  ).AsWideString := QSrc.FieldByName('KEY_FIELD'        ).AsString;
+            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
             QIns.ParamByName('uomf').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');
-            QIns.ParamByName('c'  ).AsString := QSrc.FieldByName('CONDITIONS' ).AsString;
+            QIns.ParamByName('c'  ).AsWideString := QSrc.FieldByName('CONDITIONS' ).AsString;
             QIns.ParamByName('ver').AsInteger:= QSrc.FieldByName('FIB$VERSION').AsInteger;
             QIns.ParamByName('sa').AsLargeInt:= SnapshotAt;
             QIns.ExecSQL;
@@ -423,9 +423,9 @@ begin
           QIns.Prepare;
           while not QSrc.Eof do
           begin
-            QIns.ParamByName('en').AsString:= QSrc.FieldByName('ENUMTYPE').AsString;
-            QIns.ParamByName('vc').AsString:= QSrc.FieldByName('EVALUE'  ).AsString;
-            QIns.ParamByName('vl').AsString:= QSrc.FieldByName('ESTRING' ).AsString;
+            QIns.ParamByName('en').AsWideString:= QSrc.FieldByName('ENUMTYPE').AsString;
+            QIns.ParamByName('vc').AsWideString:= QSrc.FieldByName('EVALUE'  ).AsString;
+            QIns.ParamByName('vl').AsWideString:= QSrc.FieldByName('ESTRING' ).AsString;
             QIns.ParamByName('sa').AsLargeInt:= SnapshotAt;
             QIns.ExecSQL;
             Inc(Result.EnumValues);
