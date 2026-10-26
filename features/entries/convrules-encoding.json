@@ -40,6 +40,11 @@
       "command": "ConvRulesEditor.exe > File > Encoding"
     }
   ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-26",
+    "by": "CONVERTER"
+  },
   "lastVerified": {
     "date": "2026-10-26",
     "by": "CONVERTER",
@@ -48,7 +53,7 @@
   "verified": {
     "date": "2026-10-26",
     "by": "CONVERTER",
-    "build": "1.35.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "e307c21a37217ea3f4dc7b8b4dc62d13e21d90e4075f967e1b734f58770de358"
   }
 }
