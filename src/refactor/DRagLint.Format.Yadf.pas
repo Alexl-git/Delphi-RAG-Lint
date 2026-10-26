@@ -129,7 +129,6 @@ type
       /// <param name="AMode">Apply, dry-run or diff. Only fmApply writes.</param>
       /// <returns>The outcome; see TFormatResult.ExitCode for the reason
       /// codes.</returns>
-      /// <exception cref="Exception">AFile does not exist.</exception>
       /// <exception cref="EYadfFormatError"><!-- drag-lint:auto exc -->File not found: %s; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreatePipe failed; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreateProcessW failed: %d</exception>
       /// <remarks>
       /// <para>In fmApply the file is backed up, formatted, then RE-PARSED and

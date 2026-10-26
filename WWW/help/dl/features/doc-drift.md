@@ -7,7 +7,7 @@ group: documentation
 order: 40002
 since: 0.93.0-alpha
 status: shipped
-updated: 1.34.1-alpha
+updated: 1.35.0-alpha
 ---
 
 # doc-drift
@@ -53,6 +53,14 @@ breadth-first and cycle-safe, capped at 256 visited symbols
 `src\doc\DRagLint.Doc.Drift.pas`) so a hub routine cannot walk the whole call
 graph. A raise beyond three hops, or past the cap, is still reported. It used
 to be one hop.
+
+### `Used in units:` holds units only
+A class name found in a stored `Used in units:` list (one this index resolves
+as a class, interface or record and not as a unit) is drift: the fix moves it
+to its own `<para>Used in classes: ...</para>` line, written directly after
+`Used in units:`. The engine never renders that line itself; it keeps it on
+every regeneration, and doc-drift never calls it out of date. A name the index
+cannot see stays in `Used in units:`. (Backlog X-24, owner ruling 2026-10-25.)
 
 ### Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.

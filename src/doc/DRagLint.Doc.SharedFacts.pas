@@ -218,6 +218,33 @@ type
     /// </remarks>
     class function KeepLegacyPure(const ADocText, AStoredRemarks: string): string;
 
+    /// <summary>Writes the stored-only `Used in classes:` fact into a regenerated
+    /// comment: the stored line's entries plus every class name the stored
+    /// `Used in units:` list held.</summary>
+    /// <param name="ADocText">The whole comment MergeComment just produced and
+    /// MergeInboundFacts merged, `///`-prefixed, holding the managed fence.</param>
+    /// <param name="AStoredRemarks">The existing parsed remarks, holding the old
+    /// block.</param>
+    /// <param name="AStore">The current project's index; decides which unit-list
+    /// entries are class names. Not owned. Nil keeps only the stored line.</param>
+    /// <returns>ADocText with `<para>Used in classes: A, B</para>` (sorted,
+    /// case-insensitively unique) inserted directly after the fence's
+    /// `Used in units:` fact, or at the slot the stored block held it when the
+    /// render has no unit list. ADocText unchanged when there is nothing to keep,
+    /// when ADocText already carries the line, or when it has no fence.</returns>
+    /// <remarks>
+    /// X-24, owner ruling 3 (2026-10-25): `Used in units:` holds UNITS only. A
+    /// class name there (IParser's TDFMParser / TFirebirdSqlParser, left by the
+    /// v23 'Implemented by:' slicing defect) is moved, not deleted -- the owner
+    /// keeps the information although nothing tracks it. ReconcileContent no
+    /// longer carries such an entry in the unit list, and BlockDrifted takes the
+    /// stored line out before comparing, so checker and fixer agree. A class
+    /// name is decided by IsClassEntry, on evidence from AStore only; a name the
+    /// index cannot see stays where it is.
+    /// </remarks>
+    class function KeepUsedInClasses(const ADocText, AStoredRemarks: string;
+      const AStore: ISymbolStore): string;
+
     /// <summary>True when the stored block holds inbound entries this project
     /// cannot see, so deleting or replacing it would destroy another project's
     /// contribution.</summary>
@@ -475,6 +502,7 @@ uses
   , DRagLint.Doc.Regions // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   , DRagLint.Doc.ProjectTags { SplitEntries, the [A,B]entry tag grammar, INBOUND_LABELS }
   , DRagLint.Lint.SharedUnit
+  , DRagLint.Core.Model { TSymbol, TSymbolKind -- IsClassEntry }
   ;
 
 const
@@ -565,8 +593,17 @@ const
     tests\autotest\run_autodoc_all_labels_covers_renderer.ps1 holds that split
     two-way -- 'Pure' must be registered and NOT emitted, 'Effect-free
     (proven)' must be both -- so neither half can rot silently. }
-  ALL_LABELS: array[0..30] of string = (
+  { X-24 (owner ruling 3, 2026-10-25): 'Used in classes:' is the second
+    STORED-ONLY label, registered and never emitted, like 'Pure'. It holds the
+    class names that the v23 defect above left in 'Used in units:' lists
+    (IParser's TDFMParser / TFirebirdSqlParser): the owner ruled the unit list
+    holds UNITS only and the class names are kept, untracked, on their own line.
+    KeepUsedInClasses writes and keeps it; BlockDrifted takes it out of the
+    stored side (WithoutUsedInClasses). Registered so an unwrapped inbound fact
+    before it is bounded. }
+  ALL_LABELS: array[0..31] of string = (
     'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
+    'Used in classes:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
     'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure',
@@ -574,6 +611,10 @@ const
     'Directives:', 'Implemented by:', 'Extended by:',
     'Deprecated:', 'Deprecated.', 'Overrides:', 'Overridden by:', 'Implements:',
     'Overload ');
+
+  { The unit list and the stored-only class list that takes its non-units. }
+  USED_IN_UNITS   = 'Used in units:';
+  USED_IN_CLASSES = 'Used in classes:';
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';
@@ -1096,6 +1137,33 @@ end;
 function UnitVouchable(const AStore: ISymbolStore; const AEntry: string): Boolean; forward;
 function ParaLabelCount(const AText, ALabel: string): Integer; forward;
 
+{ Is AEntry -- a `Used in units:` entry -- a CLASS name rather than a unit?
+  X-24: True only on EVIDENCE from this index: an untagged bare identifier (no
+  dot, no `(file.pas)` part) that names no unit this index can vouch for, has no
+  unit row of that name, and DOES name a class, interface or record here. A name
+  this index cannot see at all answers False and stays a foreign unit entry --
+  the fail-safe direction of this unit (a wrong True would move a real unit out
+  of the list). A tagged entry is another project's and is never judged here. }
+function IsClassEntry(const AStore: ISymbolStore; const AEntry: string): Boolean;
+var
+  Tags: TArray<string>;
+  Bare: string;
+  Syms: TArray<TSymbol>;
+  S   : TSymbol;
+begin
+  Result:= False;
+  if AStore = nil then Exit;
+  SplitTagged(Trim(AEntry), Tags, Bare);
+  if Length(Tags) > 0 then Exit;
+  Bare:= WithoutConfidence(Bare);
+  if (not IsValidIdent(Bare)) or UnitVouchable(AStore, Bare) then Exit;
+  Syms:= AStore.FindSymbolsByExactName(Bare);
+  for S in Syms do
+    if S.Kind = skUnit then Exit(False);
+  for S in Syms do
+    if S.Kind in [skClass, skInterface, skRecord] then Exit(True);
+end;
+
 { Does the stored block carry anything this index cannot vouch for -- an inbound
   entry naming a unit it does not hold, or a whole label it cannot produce? }
 function BlockHoldsUnvouchable(const AStore: ISymbolStore; const ABlock: string): Boolean;
@@ -1271,8 +1339,10 @@ begin
         if Length(Tags) = 0 then Continue;
         X:= FormatTagged(Tags, Bare);
       end
+      { X-24: a class name is not a unit -- KeepUsedInClasses moves it to its
+        own line, so it is neither kept here nor counted as dropped. }
       else if PlausibleEntry(Bare) and (not UnitVouchable(AStore, Bare)) and
-              (not IsUncertainEntry(Bare)) then X:= Bare
+              (not IsUncertainEntry(Bare)) and (not IsClassEntry(AStore, Bare)) then X:= Bare
       else Continue;
       Lazy.Add(X);
       Eager.Add(X);
@@ -1305,6 +1375,52 @@ begin
   if TSharedFacts.MigrateLegacyPure or (Pos(LEGACY_PURE_PARA, AStored) = 0) then Exit;
   AStored:= StringReplace(AStored, LEGACY_PURE_PARA, '', [rfReplaceAll]);
   AFresh := StringReplace(AFresh,  EFFECT_FREE_PARA, '', [rfReplaceAll]);
+end;
+
+{ X-24: the stored text with its `<para>Used in classes: ...</para>` element
+  taken out. The renderer never emits the line (it is stored-only, see
+  ALL_LABELS), so leaving it in would make every block that carries it drift on
+  the residual compare; the writer re-inserts it (KeepUsedInClasses), so the
+  checker and the fixer agree. An UNWRAPPED line is left in: it reads as
+  residual drift, the fail-safe direction, and the fix writes it wrapped. }
+procedure WithoutUsedInClasses(var AStored: string);
+var
+  P, E: Integer;
+begin
+  P:= Pos(PARA_OPEN + USED_IN_CLASSES, AStored);
+  while P > 0 do
+  begin
+    E:= PosEx(PARA_CLOSE, AStored, P);
+    if E = 0 then Exit;
+    Delete(AStored, P, E + Length(PARA_CLOSE) - P);
+    P:= PosEx(PARA_OPEN + USED_IN_CLASSES, AStored, P);
+  end;
+end;
+
+{ Both stored-only exemptions BlockDrifted applies before comparing: the
+  legacy purity line and the `Used in classes:` line. One call there, so
+  TSharedFacts' response set stays inside the high-response limit. }
+procedure WithoutStoredOnlyFacts(var AStored, AFresh: string);
+begin
+  WithoutLegacyPure(AStored, AFresh);
+  WithoutUsedInClasses(AStored);
+end;
+
+{ X-24: the entries of the stored `Used in classes:` line (flattened block
+  body), or none. Bounded like any fact: FactContentEnd stops a wrapped fact at
+  its '</para>' and an unwrapped one at the next registered label. }
+function StoredUsedInClasses(const ABody: string): TArray<string>;
+var
+  Flat   : string;
+  P, Stop: Integer;
+begin
+  Result:= nil;
+  Flat:= CollapseWs(ABody);
+  P:= Pos(USED_IN_CLASSES, Flat);
+  if P = 0 then Exit;
+  Inc(P, Length(USED_IN_CLASSES));
+  Stop:= FactContentEnd(Flat, P);
+  Result:= SplitEntries(Trim(Copy(Flat, P, Stop - P)));
 end;
 
 { Would the writer change this participating label? A stored window always
@@ -1413,7 +1529,8 @@ begin
     blocks this calls current. `document --migrate-pure` turns both off. }
   StoredCmp:= AStored;
   FreshCmp := AFresh;
-  WithoutLegacyPure(StoredCmp, FreshCmp);
+  { X-24: so is the stored-only `Used in classes:` line (WithoutStoredOnlyFacts). }
+  WithoutStoredOnlyFacts(StoredCmp, FreshCmp);
 
   { A DUPLICATED INBOUND LABEL CANNOT BE SET-COMPARED, so it keeps the byte
     compare -- the fail-safe direction this unit's header requires ("if a block
@@ -1860,6 +1977,82 @@ begin
   end;
 end;
 
+{ X-24: the line index directly after the fence's `Used in units:` fact (its
+  last physical line), or -1 when the fence has none. }
+function AfterUsedInUnits(const ALines: TStrings; ABeginAt, AEndAt: Integer): Integer;
+var
+  Arr    : TArray<string>;
+  I, Last: Integer;
+begin
+  Result:= -1;
+  if AEndAt < 0 then AEndAt:= ALines.Count;
+  Arr:= ALines.ToStringArray;
+  for I:= ABeginAt + 1 to AEndAt - 1 do
+    if Pos(PARA_OPEN + USED_IN_UNITS, ALines[I]) > 0 then
+    begin
+      TDocRegions.FoldFactLine(Arr, I, Last);
+      Exit(Last + 1);
+    end;
+end;
+
+{ The body of TSharedFacts.KeepUsedInClasses, same contract. Unit-level so
+  TSharedFacts' response set stays inside the high-response limit, as
+  MergedFactLine / MergeFactLines do for MergeInboundFacts. }
+function KeepUsedInClassesText(const ADocText, AStoredRemarks: string;
+  const AStore: ISymbolStore): string;
+var
+  Body, SC, SRes: string;
+  SIn    : TFactMap;
+  Names  : TStringList;
+  E      : string;
+  Lines  : TStringList;
+  BeginAt: Integer;
+  EndAt  : Integer;
+  At     : Integer;
+begin
+  Result:= ADocText;
+  Body:= StoredBlockBody(AStoredRemarks);
+  if (Body = '') or (Pos(PARA_OPEN + USED_IN_CLASSES, ADocText) > 0) then Exit;
+  Names:= TStringList.Create;
+  try
+    Names.Sorted       := True;
+    Names.Duplicates   := dupIgnore;
+    Names.CaseSensitive:= False;
+    for E in StoredUsedInClasses(Body) do Names.Add(Trim(E));
+    ParseBlock(Body, SIn, SRes);
+    try
+      if SIn.TryGetValue(USED_IN_UNITS, SC) then
+        for E in SplitEntries(WithoutMoreSuffix(SC)) do
+          if IsClassEntry(AStore, E) then Names.Add(WithoutConfidence(BareEntry(E)));
+    finally
+      SIn.Free;
+    end;
+    if Names.Count = 0 then Exit;
+
+    Lines:= TStringList.Create;
+    try
+      Lines.Text:= ADocText;   { round-trips the trailing EOL state, as MergeInboundFacts }
+      FenceBounds(Lines, BeginAt, EndAt);
+      if BeginAt < 0 then Exit;
+      At:= AfterUsedInUnits(Lines, BeginAt, EndAt);
+      if At < 0 then At:= ReinsertAt(Lines, Body, USED_IN_CLASSES);
+      InsertFactLines(Lines, At, Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1),
+        PARA_OPEN + USED_IN_CLASSES + ' ' + string.Join(', ', Names.ToStringArray) + PARA_CLOSE);
+      Result:= Lines.Text;
+    finally
+      Lines.Free;
+    end;
+  finally
+    Names.Free;
+  end;
+end;
+
+class function TSharedFacts.KeepUsedInClasses(const ADocText, AStoredRemarks: string;
+  const AStore: ISymbolStore): string;
+begin
+  Result:= KeepUsedInClassesText(ADocText, AStoredRemarks, AStore);
+end;
+
 { Can this index VOUCH for the unit an entry names -- i.e. does it hold that
   unit, so that the entry's absence from a fresh render is a fact rather than a
   blind spot?
@@ -2037,7 +2230,9 @@ begin
         for E in SplitEntries(WithoutMoreSuffix(SC)) do
         begin
           SplitTagged(E, Tags, Bare);
-          if (Length(Tags) > 0) or Kept.ContainsKey(EntryKey(Bare)) then Continue;
+          { X-24: a class name leaves the unit list for `Used in classes:` --
+            moved, not dropped. }
+          if (Length(Tags) > 0) or Kept.ContainsKey(EntryKey(Bare)) or IsClassEntry(AStore, Bare) then Continue;
           if not UnitVouchable(AStore, Bare) then Exit(True);
         end;
       end;

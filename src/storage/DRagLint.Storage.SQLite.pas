@@ -858,6 +858,8 @@ type
       /// </remarks>
       function Fts5TableExists: Boolean;
       /// <summary>True when sqlite_master has a table named <paramref name="pName"/>.</summary>
+      /// <param name="pName">The table name to look up in sqlite_master.</param>
+      /// <returns>True when a table of that name exists in this database.</returns>
       function TableExists(const pName: string): Boolean;
       /// <summary>True when this DB carries the member_accesses table (2026-09-16).
       /// Probed once per store; a not-yet-migrated read-only DB answers False and
@@ -3242,6 +3244,9 @@ type
       /// already has a later same-name twin in its file, so the extra query is rare.
       /// Runs AFTER the prepared lookup datasets are closed: FindAllChildSymbols
       /// opens its own dataset on the same connection.</summary>
+      /// <param name="ARows">The by-name result set to fold; not modified.</param>
+      /// <returns>ARows with each forward stub that has a later same-name twin in its
+      /// file removed.</returns>
       function FoldStubs(const ARows: TArray<TSymbol>): TArray<TSymbol>;
       /// <summary>Task 3c: the GUI framework (exactly 'Vcl' or 'FMX') that the
       /// classes declared in AFileId demonstrably inherit FROM, or '' when the

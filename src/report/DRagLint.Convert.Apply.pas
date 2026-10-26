@@ -1259,6 +1259,9 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// removal would strand was left out by it, the removal is SKIPPED (C13 N4):
 /// the unit stays in uses, Report.UsesChanges gets an Action 'skipped' row and
 /// Report.Warnings / Items a unit-rule-skipped line.</param>
+/// <param name="AReconcile">True reconciles the uses against the .dfm as it stands
+/// (see remarks, C9); False (default) is the 1.26.6 behaviour with the R26
+/// refusal.</param>
 /// <returns>Ok=True with the uses-clause edits in Edits and one row per
 /// change in Report.UsesChanges (both empty when the book changes nothing
 /// here); every other report array empty. Ok=False with Error when the unit

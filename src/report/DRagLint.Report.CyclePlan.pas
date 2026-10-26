@@ -752,6 +752,8 @@ type
     procedure MaterializeInversion;
     function IsInversionStem(const pStem: string): Boolean;
     function InversionDeclLines(const pStem: string): TArray<string>;
+    procedure SettleInversionNames(const pEv: TEdgeEval; const pLeaf: TUntangleLeaf; var pSteps: TRecipeSteps;
+      var pRefusal: TRecipeRefusal);
     procedure RenderInversion(pStep: Integer);
     function InversionStillUsed: string;
     function InversionNames: string;
@@ -3226,6 +3228,7 @@ begin
       Lines.Clear;
       Lines.AddRange(MergeLeafUses(F, scIntf, At, LeafEntries(Stem, scIntf)));
       Lines.AddRange(Decls);
+      if Lines.Count = 0 then Continue;  { W6 C2: a reused pointer declaration inserts nothing }
       E:= Default(TFileEdit);
       E.Kind    := ekInsertAfter;
       E.First   := At;
@@ -4688,6 +4691,73 @@ begin
   Materialize;
 end;
 
+const
+  CMaxPtrSuffix = 99;  { W6 C2: the highest `FooPtr<N>` suffix tried }
+
+{ The declaration at pSym as comparable text: comments dropped, white space collapsed, a leading
+  `type` / `var` keyword dropped. }
+function DeclarationText(const pLines: TArray<string>; const pSym: TSymbol): string;
+begin
+  Result:= '';
+  for var L:= pSym.StartLine to Max(pSym.StartLine, pSym.EndLine) do Result:= Result + ' ' + CodePart(LineAt(pLines, L));
+  Result:= Trim(TRegEx.Replace(Trim(TRegEx.Replace(Result, '\s+', ' ')), '^(type|var)\s+', '', [roIgnoreCase]));
+end;
+
+{ W6 C2: R1 into an existing leaf that already declares the pointer's names. The same type and variable
+  declarations (text equal) are reused: nothing is inserted, and the assignment is added only when the
+  declaring unit does not make it already. Different declarations: the lowest free suffix (`FooPtr2`,
+  `FooPtr3` ...) names the pointer, and the steps are planned again with it. No free suffix below 100:
+  `duplicate-identifier`. }
+procedure TCyclePlanner.SettleInversionNames(const pEv: TEdgeEval; const pLeaf: TUntangleLeaf; var pSteps: TRecipeSteps;
+  var pRefusal: TRecipeRefusal);
+var
+  TypeSym, VarSym, Clash: TSymbol;
+  HasType, HasVar       : Boolean;
+begin
+  var F:= GetFile(pLeaf.Fid);
+  HasType:= False;
+  HasVar := False;
+  for var S in F.Syms do
+    if SameText(S.Name, pSteps.PtrType) then
+    begin
+      TypeSym:= S;
+      HasType:= True;
+    end
+    else if SameText(S.Name, pSteps.PtrVar) then
+    begin
+      VarSym:= S;
+      HasVar:= True;
+    end;
+  if not (HasType or HasVar) then Exit;
+  if HasType and HasVar and SameText(DeclarationText(F.Lines, TypeSym), Trim(TRegEx.Replace(pSteps.TypeDecl, '\s+', ' '))) and
+    SameText(DeclarationText(F.Lines, VarSym), Trim(TRegEx.Replace(pSteps.VarDecl, '\s+', ' '))) then
+  begin
+    pSteps.ReuseDecl   := True;
+    pSteps.AssignExists:= TRegEx.IsMatch(string.Join(#10, GetFile(FidOfStem(pSteps.DeclStem)).Lines),
+      '(?im)^\s*' + TRegEx.Escape(pSteps.PtrVar) + '\s*:=\s*' + TRegEx.Escape(pSteps.RoutineName) + '\s*;');
+    if pSteps.AssignExists then SetLength(pSteps.Edits, Length(pSteps.Edits) - 1);  { the assignment edit is the last one }
+    Exit;
+  end;
+  Clash:= if HasType then TypeSym else VarSym;
+  for var N:= 2 to CMaxPtrSuffix do
+  begin
+    var NewVar := pSteps.RoutineName + 'Ptr' + IntToStr(N);
+    var NewType:= 'T' + NewVar;
+    var Taken  := False;
+    for var S in F.Syms do
+      if SameText(S.Name, NewVar) or SameText(S.Name, NewType) then Taken:= True;
+    if Taken then Continue;
+    var Again: TRecipeRefusal;
+    var Steps2:= PlanRoutineInversion(Self, pEv.Surface, Again, N);
+    if Again.Kind <> '' then pRefusal:= Again
+    else pSteps:= Steps2;
+    Exit;
+  end;
+  pRefusal.Kind  := 'duplicate-identifier';
+  pRefusal.Reason:= Format('`%s` already declares `%s` (line %d) and every suffix up to 99 of it', [pLeaf.UnitName,
+    Clash.Name, Clash.StartLine]);
+end;
+
 { R1 on every edge that cannot move and whose surface binds at least one routine (B3: N
   routines, mixed with movable globals): a refusal is recorded on the edge (its Why is
   what the playbook prints), an applicable edge gets Recipe crRoutineInversion, its Steps
@@ -4709,17 +4779,19 @@ begin
     Steps.MoveIds:= MoveIds;
     if Refusal.Kind = '' then
     begin
-      { the leaf must not declare the pointers' names already }
+      { W6 C2 (one routine, nothing moved): the leaf may declare the pointer's names already -- reuse an
+        identical declaration, else a free suffix. B3 (several routines or moves): any such name refuses. }
       var Leaf:= InversionLeaf(Steps);
-      if Leaf.Decision = udExtend then
+      if (Leaf.Decision = udExtend) and (Length(Steps.Routines) <= 1) and (Length(MoveIds) = 0) then
+        SettleInversionNames(Ev, Leaf, Steps, Refusal)
+      else if Leaf.Decision = udExtend then
         for var S in GetFile(Leaf.Fid).Syms do
           for var R in Steps.Routines do
             if SameText(S.Name, R.PtrType) or SameText(S.Name, R.PtrVar) then
             begin
               Refusal.Kind  := 'duplicate-identifier';
               Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
-            end;
-    end;
+            end;    end;
     { A2: the old refusal unit-leaves-program named its own fix -- the declaring unit joins the program's uses }
     if Refusal.Kind = '' then Steps.RegisterDecl:= LeavesProgramReason(Steps) <> '';
     if Refusal.Kind <> '' then
@@ -4965,6 +5037,7 @@ function TCyclePlanner.InversionDeclLines(const pStem: string): TArray<string>;
 var
   L: TList<string>;
 begin
+  if FInversion.ReuseDecl then Exit(nil);  { W6 C2: the leaf declares the pointer identically already }
   var Leaf  := FLeafInfo[pStem];
   var InType:= False;
   if (Leaf.Decision = udExtend) and (Leaf.InsertAfterLine > 0) then
@@ -5058,11 +5131,19 @@ begin
         if (E.Fid = FInversion.ConsumerFid) and (Length(E.NewLines) > 0) and
           TRegEx.IsMatch(E.NewLines[0], '(?<![\w.])' + TRegEx.Escape(R.PtrVar) + '\b', [roIgnoreCase]) then
           Calls.Add(IntToStr(E.Line));
-      EmitFmt('- `%s` gets the procedural type `%s` -- the routine''s own signature, copied verbatim (keep ' +
-        'every `const` and parameter name) -- and the variable `%s`.', [FLeafName[FInversion.DeclStem],
-        R.PtrType, R.PtrVar]);
-      EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
-        [Decl, R.PtrVar, R.Name]);
+      if FInversion.ReuseDecl then
+        EmitFmt('- `%s` already declares the procedural type `%s` and the variable `%s` with exactly this text: they ' +
+          'are reused, nothing is inserted there.', [FLeafName[FInversion.DeclStem], R.PtrType, R.PtrVar])
+      else
+        EmitFmt('- `%s` gets the procedural type `%s` -- the routine''s own signature, copied verbatim (keep ' +
+          'every `const` and parameter name) -- and the variable `%s`.', [FLeafName[FInversion.DeclStem],
+          R.PtrType, R.PtrVar]);
+      if FInversion.AssignExists then
+        EmitFmt('- `%s` already assigns `%s := %s;` in its initialization section: no second assignment is added.',
+          [Decl, R.PtrVar, R.Name])
+      else
+        EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
+          [Decl, R.PtrVar, R.Name]);
       EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
         'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
         'initialization section of another unit that reaches them through a call chain.',

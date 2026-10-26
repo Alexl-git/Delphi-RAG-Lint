@@ -4,13 +4,15 @@
   first and the engine rolls back itself (a caller's kill bypasses the rollback).
 
   One --apply may legitimately take: the baseline build, the after build and its one repair
-  rebuild ((1 + CSecondBuild) * CBuildTimeoutMs), then the child re-index and the child `cycles`
-  (2 * CReindexTimeoutMs) -- src\cli\DRagLint.CLI.CycleFix.pas. This guard recomputes that sum
+  rebuild ((1 + CSecondBuild) * CBuildTimeoutMs), then the A1 pre-plan re-index, the child re-index
+  and the child `cycles` (3 * CReindexTimeoutMs) -- src\cli\DRagLint.CLI.CycleFix.pas. This guard recomputes that sum
   from the engine's constants itself (it does not trust CApplyWorstMs) and checks:
     T1 the engine constants parse;
     T2 CAllIterationMs (the --part all child limit) is above the sum;
     T3 the plugin's CYCLE_FIX_TIMEOUT_MS (src\delphi-plugin\DragLint.Plugin.CycleFix.pas) is above it;
-    T4 POSITIVE CONTROL: a limit equal to the sum is reported as NOT above it.
+    T4 POSITIVE CONTROL: a limit equal to the sum is reported as NOT above it;
+    T5 the engine's own CApplyWorstMs equals this sum (a step added to or dropped from --apply
+       without updating this guard fails here instead of passing vacuously).
   Source only; needs no engine. -Root points at another source tree (the RED run used the
   038c6b75 sources, where both limits were below the sum).
 #>
@@ -51,11 +53,13 @@ $names = 'CBuildTimeoutMs', 'CReindexTimeoutMs', 'CSecondBuild', 'CAllIterationM
 $parsed = @($names | Where-Object { -not $e.ContainsKey($_) }).Count -eq 0
 Check 'T1 the engine constants parse' ($parsed -and $p.ContainsKey('CYCLE_FIX_TIMEOUT_MS')) ("missing: " + (($names | Where-Object { -not $e.ContainsKey($_) }) -join ', '))
 if ($parsed -and $p.ContainsKey('CYCLE_FIX_TIMEOUT_MS')) {
-  $worst = (1 + $e['CSecondBuild']) * $e['CBuildTimeoutMs'] + 2 * $e['CReindexTimeoutMs']
-  Write-Host ("  one --apply may run {0} min (3 builds x {1} min + 2 x {2} min)" -f ($worst / 60000), ($e['CBuildTimeoutMs'] / 60000), ($e['CReindexTimeoutMs'] / 60000))
+  $reindexSteps = 3   # A1 pre-plan re-index, child re-index, child `cycles`
+  $worst = (1 + $e['CSecondBuild']) * $e['CBuildTimeoutMs'] + $reindexSteps * $e['CReindexTimeoutMs']
+  Write-Host ("  one --apply may run {0} min (3 builds x {1} min + 3 x {2} min)" -f ($worst / 60000), ($e['CBuildTimeoutMs'] / 60000), ($e['CReindexTimeoutMs'] / 60000))
   Check 'T2 CAllIterationMs (--part all child limit) is above one --apply' (Test-Above $e['CAllIterationMs'] $worst) ("{0} min vs {1} min" -f ($e['CAllIterationMs'] / 60000), ($worst / 60000))
   Check 'T3 the plugin CYCLE_FIX_TIMEOUT_MS is above one --apply' (Test-Above $p['CYCLE_FIX_TIMEOUT_MS'] $worst) ("{0} min vs {1} min" -f ($p['CYCLE_FIX_TIMEOUT_MS'] / 60000), ($worst / 60000))
   Check 'T4 positive control: a limit equal to the worst case is NOT above it' (-not (Test-Above $worst $worst)) ''
+  Check 'T5 the engine CApplyWorstMs equals the recomputed sum' ($e.ContainsKey('CApplyWorstMs') -and $e['CApplyWorstMs'] -eq $worst) ("{0} min vs {1} min" -f ($e['CApplyWorstMs'] / 60000), ($worst / 60000))
 }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

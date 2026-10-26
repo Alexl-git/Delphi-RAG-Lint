@@ -108,6 +108,7 @@ type
       FEngine   : TEngineAdapter;
       FFilePath : string        ;
       FSnapshot : string        ; // FBook.Snapshot at load / New / last successful save
+      FSavedLevel: TTextLevel   ; // FBookLevel at load / New / last successful save (with FSnapshot: BookIsDirty)
       FBookLevel: TTextLevel    ; // the open book's encoding: detected on open, tlAscii7 for a new book; File > Encoding sets it, Save checks against it
       FUtf16BomNoted: Boolean   ; // NOTE_UTF16_BOM_ADDED already shown for this book (D-B: said once)
       FMnuEncoding: array[TTextLevel] of TMenuItem; // File > Encoding radio items; tlUtf16 has none (D-B: never written without a BOM)
@@ -2345,6 +2346,12 @@ type
       /// <param name="AMsg">The refused message.</param>
       /// <returns>The raw caption, hotkey marker included (CommandName strips it).</returns>
       function GateTargetCaption(const AMsg: TMsg): string;
+      /// <summary>The class name a press target is judged by (R6): the ClassName of the nearest VCL
+      /// control at or above the window (GetClassName of a VCL control is the Delphi name), else the
+      /// Win32 class name of the window itself.</summary>
+      /// <param name="AWnd">The message's window; 0 = none.</param>
+      /// <returns>The name for IsSelectionClass; '' when AWnd is 0.</returns>
+      function GateTargetClass(AWnd: HWND): string;
       /// <summary>FCbDepth.WindowProc hook: tracks CBN_DROPDOWN .. CBN_CLOSEUP (FDepthDropped) and a
       /// CBN_SELENDCANCEL inside that window (FDepthCancelled), which VCL does not surface, so a
       /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
@@ -3069,7 +3076,7 @@ end;
 procedure TConvRulesForm.EncodingMenuClick(Sender: TObject);
 begin
   SetBookLevel(TTextLevel((Sender as TMenuItem).Tag));
-  SetStatus(Format('Encoding set to %s -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
+  SetStatus(Format('Encoding set to %s (unsaved) -- the next Save writes it (and asks first if a character would be lost).', [LevelName(FBookLevel)]));
 end;
 
 procedure TConvRulesForm.SetBookLevel(ALevel: TTextLevel);
@@ -4609,6 +4616,7 @@ begin
   LoadText(LText, APath);
   FUtf16BomNoted:= False;
   SetBookLevel(LDetected.Level);
+  FSavedLevel:= FBookLevel; // the freshly opened book is clean
   var LNote: string:= '';
   if not LDetected.Sure then
     LNote:= ' -- ' + LDetected.Note;
@@ -6676,7 +6684,7 @@ begin
     Exit;
   var LBusy: Boolean:= EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass);
   var LInMain: Boolean:= (Msg.hwnd <> 0) and (GetAncestor(Msg.hwnd, GA_ROOT) = Handle);
-  var LVerdict: TGateVerdict:= GateVerdict(Msg.message, LBusy, LInMain);
+  var LVerdict: TGateVerdict:= GateVerdictFor(Msg.message, LBusy, LInMain, GateTargetClass(Msg.hwnd));
   if LVerdict = gvPass then
     Exit;
   Handled:= True;
@@ -6686,6 +6694,32 @@ begin
     FLostCommand   := CommandName(GateTargetCaption(Msg));
     FLostClickTitle:= BusyTitleFor(FBusyTitle, FLblStatus.Caption);
     FLostClickTimer.Enabled:= True;
+  end;
+end;
+
+const
+  /// <summary>GetClassName buffer: a Win32 window class name is at most 256 characters.</summary>
+  CLASS_NAME_MAX = 256;
+
+function TConvRulesForm.GateTargetClass(AWnd: HWND): string;
+var
+  LBuf : array[0..CLASS_NAME_MAX - 1] of Char;
+  LCtl : TWinControl;
+  LWnd : HWND;
+begin
+  Result:= '';
+  if AWnd = 0 then
+    Exit;
+  if GetClassName(AWnd, LBuf, Length(LBuf)) > 0 then
+    Result:= string(PChar(@LBuf));
+  // A cx grid's site, a combo's inner edit: the owner is the nearest VCL control above.
+  LWnd:= AWnd;
+  while (LWnd <> 0) and (LWnd <> Handle) do
+  begin
+    LCtl:= FindControl(LWnd);
+    if LCtl <> nil then
+      Exit(LCtl.ClassName);
+    LWnd:= GetParent(LWnd);
   end;
 end;
 
@@ -7188,6 +7222,7 @@ begin
       FLblFile.Caption:= NewPath;
       FUtf16BomNoted:= False;
       SetBookLevel(tlAscii7); // a new book, as File > New
+      FSavedLevel:= FBookLevel;
       FActiveHdr:= -1;
       RefreshRulesList;
       RefreshUnitList;
@@ -7714,6 +7749,7 @@ begin
   LoadText('', '');
   FUtf16BomNoted:= False;
   SetBookLevel(tlAscii7);
+  FSavedLevel:= FBookLevel;
   SetStatus('New rule book -- File > Save As... to give it a name.');
 end;
 
@@ -7727,7 +7763,7 @@ var
   LName: string;
 begin
   CommitPendingDepth; // the guard must see a pick still waiting on its timer
-  if FBook.Snapshot = FSnapshot then
+  if not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
     Exit(True);
   if FFilePath <> '' then
     LName:= ExtractFileName(FFilePath)
@@ -7759,7 +7795,7 @@ var
 begin
   var LOpen: Boolean:= (FFilePath <> '') and SameText(ExpandFileName(APath), ExpandFileName(FFilePath));
   CommitPendingDepth; // the dirty check must see a pick still waiting on its timer
-  if LOpen and (FBook.Snapshot = FSnapshot) then
+  if LOpen and not BookIsDirty(FBook.Snapshot, FSnapshot, FBookLevel, FSavedLevel) then
   begin
     var LOldLevel: TTextLevel:= FBookLevel;
     SetBookLevel(ALevel);
@@ -7873,13 +7909,9 @@ begin
       LLevelText:= ' as ' + LevelName(LWriteLevel);
       SetBookLevel(LWriteLevel);
     end;
-    var LNoteText: string:= '';
-    if (LDecision.Action = psaWrite) and (LDecision.Note <> '') and not ((LDecision.Note = NOTE_UTF16_BOM_ADDED) and FUtf16BomNoted) then
-      LNoteText:= ' ' + LDecision.Note;
-    if LDecision.Note = NOTE_UTF16_BOM_ADDED then
-      FUtf16BomNoted:= True;
+    var LNoteText: string:= Utf16BomNote(LDecision, FUtf16BomNoted);
 
-    // 3) validate what was saved: the syntax pass over the whole text, plus each
+    // 5) validate what was saved: the syntax pass over the whole text, plus each
     //    block that CHANGED since the last load / save with its OWN From/To pair
     //    (owner ruling 2026-10-05: "The edited saved block should be validated.
     //    Stuff that is unchanged is presumed validated earlier."). One pair for the
@@ -7927,7 +7959,10 @@ begin
     Result:= True; // the file IS on disk; a failed validation is a report, not a failure
   finally
     if LBytesWritten then
-      FSnapshot:= FBook.Snapshot
+    begin
+      FSnapshot:= FBook.Snapshot;
+      FSavedLevel:= FBookLevel;
+    end
     else
     begin
       FFilePath:= LOldPath;

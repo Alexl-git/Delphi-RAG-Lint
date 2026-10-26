@@ -20,16 +20,14 @@
       R1Title.Untangle: it is EXTENDED (insert after its last interface declaration, no repeated
       `type`, System.SysUtils merged into a new interface uses clause); followed + re-indexed, no
       cycle remains.
-  (e) POSITIVE CONTROL for (d): that leaf already declaring `TR1TitleOfPtr` -- `refused:
-      duplicate-identifier`, nothing inserted.
+  (e) that leaf already declaring a DIFFERENT `TR1TitleOfPtr`: since W6 C2 the pointer is named `TR1TitleOfPtr2` (was `refused: duplicate-identifier`).
   (f) r1extend without R1Title.Untangle: the leaf is CREATED and registered; followed + re-indexed,
       no cycle remains.
   Fix round 1 (each refusal check was RED with its refusal disabled):
   (g) tests\fixtures\cyclefix\r1stdcall: the pointer type carries `stdcall;`.
   (h) `overload;` on a single routine is a neutral directive: still mechanical, nothing carried.
   (i) `cdecl; varargs;` -- `refused: unsupported-directive`.
-  (j) a second, unit-qualified call `R1Title.R1TitleOf(...)` -- `refused: qualified-ref` (the cut would
-      remove the uses entry that call needs).
+  (j) a second, unit-qualified call `R1Title.R1TitleOf(...)`: since W6 C7 it is redirected to the pointer (was `refused: qualified-ref`).
   (k) a second overload in R1Title -- `refused: overloaded-routine` (the index binds an overload's
       call by name; the pointer type could mirror the wrong signature -- E2010 seen).
   Fix round 2 (RED on the round-1 engine / with the refusal disabled):
@@ -294,9 +292,8 @@ try {
   Check 'e0 control copy indexed' ((Invoke-Index (Join-Path $rd 'R1Extend.dproj') $dbD 'e') -eq 0)
   $pd = Get-Cycles $dbD 'e' @('--plan')
   $txD = (Get-CycleBlock $pd.Out 1) -join "`n"
-  Check 'e1 refused: duplicate-identifier, nothing inserted' `
-    ($txD.Contains('refused: duplicate-identifier -- `R1Title.Untangle` already declares `TR1TitleOfPtr`') -and -not $txD.Contains('### Step 4') -and
-     (($pd.Dump[1].refusals -split ',') -contains 'duplicate-identifier')) ''
+  Check 'e1 W6 C2: a DIFFERENT TR1TitleOfPtr is not refused -- the lowest free suffix names the pointer (TR1TitleOfPtr2); identical text is reused (run_cyclefix_w6_rest.ps1 c2)' `
+    (-not $txD.Contains('refused: duplicate-identifier') -and $txD.Contains('  TR1TitleOfPtr2 = function') -and ($pd.Dump[1].verdict -eq 'mechanical')) "[$($pd.Dump[1].verdict) / $($pd.Dump[1].refusals)]"
 
   # --- (f) no leaf yet: R1Title.Untangle is created --------------------------------------------
   Write-Host '== (f) r1extend without R1Title.Untangle: the leaf is created' -ForegroundColor Cyan
@@ -363,9 +360,9 @@ try {
   Write-Host '== (j) a second, unit-qualified call' -ForegroundColor Cyan
   $vj = Get-Variant 'r1qualified' 'R1Form.pas' "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));" `
     ("  Writeln(Format('[form] %s', [R1TitleOf(pId)]));`r`n  Writeln(R1Title.R1TitleOf(pId + 1));")
-  Check 'j1 refused: qualified-ref, naming the qualified line (its uses entry must stay)' `
-    ($vj.Ok -and $vj.Text.Contains('refused: qualified-ref -- line 27 names `R1TitleOf` qualified') -and
-     (($vj.Dump.refusals -split ',') -contains 'qualified-ref')) "[$($vj.Dump.verdict) / $($vj.Dump.refusals)]"
+  Check 'j1 W6 C7: the unit-qualified call of the inverted routine is redirected to the pointer, not refused (run_cyclefix_w6_rest.ps1 c7a holds the controls)' `
+    ($vj.Ok -and -not $vj.Text.Contains('refused: qualified-ref') -and ($vj.Dump.verdict -eq 'mechanical') -and
+     $vj.Text.Contains('R1TitleOfPtr(pId + 1)')) "[$($vj.Dump.verdict) / $($vj.Dump.refusals)]"
   Write-Host '== (k) an overloaded routine' -ForegroundColor Cyan
   $vk = Get-Variant 'r1overload' 'R1Title.pas' "/// <summary>Title of one item.</summary>" `
     ("function R1TitleOf(const pName: string): string; overload;`r`n`r`n/// <summary>Title of one item.</summary>")
@@ -422,7 +419,18 @@ try {
   $vq3 = Get-Variant 'r1dprojonly' 'R1Extend.dpr' $dprLine ''
   Check 'q3 a DCCReference alone does not link it: the .dpr line is added, no second DCCReference' `
     ($vq3.Ok -and ($vq3.Dump.verdict -eq 'mechanical') -and $vq3.Text.Contains("R1Title in 'R1Title.pas'") -and
-     (([regex]::Matches($vq3.Text, 'DCCReference Include="R1Title.pas"')).Count -eq 0)) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"} finally {
+     (([regex]::Matches($vq3.Text, 'DCCReference Include="R1Title.pas"')).Count -eq 0)) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"
+  # q4 POSITIVE CONTROL (A2): a package (.dpk, FProjectFid = 0) decides nothing -- no refusal, no program edit.
+  $dq4 = Join-Path $WorkDir 'r1pkg'
+  Copy-Tree (Join-Path $Fx 'r1extend') $dq4
+  [IO.File]::Delete((Join-Path $dq4 'R1Extend.dpr')); [IO.File]::Delete((Join-Path $dq4 'R1Extend.dproj'))
+  Set-Text (Join-Path $dq4 'R1Pkg.dpk') ("package R1Pkg;`r`n`r`ncontains`r`n  R1Title in 'R1Title.pas',`r`n  R1Title.Untangle in 'R1Title.Untangle.pas',`r`n  R1Form in 'R1Form.pas',`r`n  R1Nav in 'R1Nav.pas';`r`n`r`nend.`r`n")
+  $dbq4 = Join-Path $WorkDir 'r1pkg.sqlite'
+  $okq4 = (Invoke-Index (Join-Path $dq4 'R1Pkg.dpk') $dbq4 'r1pkg') -eq 0
+  $pq4 = Get-Cycles $dbq4 'r1pkg' @('--plan')
+  $txq4 = (Get-CycleBlock $pq4.Out 1) -join "`n"
+  Check 'q4 package .dpk copy: neither the unit-leaves-program refusal nor a program edit' `
+    ($okq4 -and -not $txq4.Contains('unit-leaves-program') -and -not $txq4.Contains("R1Title in 'R1Title.pas'") -and -not $txq4.Contains('joins the program''s uses')) "[$okq4 / $($pq4.Dump[1].verdict) / $($pq4.Dump[1].refusals)]"} finally {
   $env:DRAGLINT_TEST_DUMP_PLAN = $null
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
