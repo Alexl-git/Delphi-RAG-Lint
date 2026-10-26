@@ -445,7 +445,7 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// through the class or an instance, e.g. in a `with` body), `class-ref`, `type-decl`,
 /// `type-cast`, `other-ref` (a routine or variable of B); then `multiple-classes`,
 /// `qualified-ref` (`B.X` anywhere in A).</para>
-/// <para>Members: each must be a field or a non-indexed property declared in the class itself
+/// <para>Members: each must be a field or a property declared in the class itself (an indexed property is carried for reading, its index list verbatim -- W6 C7; a `default` one or a write refuses)
 /// (`member-unsupported`; a method is `class-method`); `duplicate-identifier` when the class
 /// already has `Get&lt;M&gt;` -- unless it is exactly `function Get&lt;M&gt;: &lt;T&gt;;` and the property M
 /// reads through it: then that getter is reused, nothing is added for M (W6 C2). Class: its heritage on its declaration line and its `end;` line
@@ -2263,7 +2263,10 @@ type
     FMethods : TList<TSymbol>;  // B2: instance methods carried as interface methods
     FMethodDecls: TList<string>;  // B2: their interface declarations
     FKeptGetters: TList<string>;  // W6 C2: `Get<M>` the class declares already, reused as the getter
+    FIndexed : TDictionary<Int64, string>;  // W6 C7: member id -> its index parameter list (indexed property)
     function GetterReusable(const pM, pDup: TSymbol): Boolean;
+    function IndexedPropertyOk(const pM: TSymbol; const pR: TEdgeRef): Boolean;
+    function IndexList(pI: Integer; const pOpen, pClose: string): string;
     function CarriedMethodOf(const pR: TEdgeRef; const pS: TSymbol): TSymbol;
     function CheckMethod(const pR: TEdgeRef; const pM: TSymbol): Boolean;
     function CheckMethods: Boolean;
@@ -2330,10 +2333,12 @@ begin
   FMethods    := TList<TSymbol>.Create;
   FMethodDecls:= TList<string>.Create;
   FKeptGetters:= TList<string>.Create;
+  FIndexed    := TDictionary<Int64, string>.Create;
 end;
 
 destructor TMemberPlan.Destroy;
 begin
+  FIndexed.Free;
   FKeptGetters.Free;
   FMethodDecls.Free;
   FMethods.Free;
@@ -2478,6 +2483,21 @@ begin
   Result:= True;
 end;
 
+{ W6 C7: the argument list that passes an index parameter list on (const pRow, pCol: Integer;
+  pName: string -> pRow, pCol, pName). }
+function IndexArgs(const pParams: string): string;
+begin
+  Result:= '';
+  for var Group in pParams.Split([';']) do
+  begin
+    var Colon:= Group.IndexOf(':');
+    var Names:= if Colon >= 0 then Group.Substring(0, Colon) else Group;
+    Names:= Trim(TRegEx.Replace(Names, '^\s*(const|var|out|constref)\s+', '', [roIgnoreCase]));
+    for var N in Names.Split([',']) do
+      if Trim(N) <> '' then Result:= Result + (if Result <> '' then ', ' else '') + Trim(N);
+  end;
+end;
+
 { Each member read is a field or a non-indexed property of the class itself, and the class
   has no `Get<Member>` yet. Members are kept in declaration order. }
 function TMemberPlan.CheckMembers: Boolean;
@@ -2501,12 +2521,13 @@ begin
         { an indexed property keeps only its element type in symbols.signature: read the declaration }
         var Indexed:= (M.Kind = skProperty) and TRegEx.IsMatch(BareCode(LineOf(FClsLines, M.StartLine)),
           '\bproperty\s+' + TRegEx.Escape(M.Name) + '\s*\[', [roIgnoreCase]);
-        if not (M.Kind in [skField, skProperty]) or Indexed or (Sig = '') or
+        if Indexed and not IndexedPropertyOk(M, R) then Exit(False);
+        if not (M.Kind in [skField, skProperty]) or (Sig = '') or
           (Sig.IndexOfAny(['[', ']', ':', '(', ')', ';']) >= 0) then
           Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('`%s.%s` is not a field or a ' +
-            'non-indexed property with a stored type', [FCls.Name, M.Name])));
+            'property with a stored type', [FCls.Name, M.Name])));
         var Dup:= FStore.FindChildSymbolByName(FCls.Id, 'Get' + M.Name);
-        if (Dup.Id > 0) and not GetterReusable(M, Dup) then
+        if (Dup.Id > 0) and (Indexed or not GetterReusable(M, Dup)) then
           Exit(Refuse('duplicate-identifier', Dup.Name, FClsFid, Dup.StartLine, Format('`%s` already declares ' +
             '`%s` (line %d), the getter the interface needs, and it is not `function %s: %s;` read by the property ' +
             '`%s` (only that one can serve as the interface getter unchanged)', [FCls.Name, Dup.Name, Dup.StartLine,
@@ -2533,8 +2554,29 @@ begin
       var RM:= TRegEx.Match(string.Join(' ', Parts), '\bread\s+([A-Za-z_][\w.]*)', [roIgnoreCase]);
       if RM.Success then Read:= RM.Groups[1].Value;
     end;
+    if FIndexed.ContainsKey(M.Id) then Read:= M.Name + '[' + IndexArgs(FIndexed[M.Id]) + ']';  { W6 C7 }
     FReads.Add(Read);
   end;
+  Result:= True;
+end;
+
+{ W6 C7: an indexed property read through the interface. Its index parameter list is taken from
+  the declaration verbatim (FIndexed); the getter becomes `function Get<M>(<params>): <T>` and the
+  interface property `property <M>[<params>]: <T> read Get<M>`. A `default` array property
+  (the consumer may index the object itself) and a write refuse `member-unsupported`. }
+function TMemberPlan.IndexedPropertyOk(const pM: TSymbol; const pR: TEdgeRef): Boolean;
+begin
+  var Decl:= '';
+  for var L:= pM.StartLine to Max(pM.StartLine, pM.EndLine) do Decl:= Decl + ' ' + BareCode(LineOf(FClsLines, L));
+  var Head:= TRegEx.Match(Decl, '\bproperty\s+' + TRegEx.Escape(pM.Name) + '\s*\[([^\]]+)\]', [roIgnoreCase]);
+  if not Head.Success or TRegEx.IsMatch(Decl, ';\s*default\s*;', [roIgnoreCase]) then
+    Exit(Refuse('member-unsupported', pM.Name, FFromFid, pR.Line, Format('`%s.%s` is an indexed property this ' +
+      'plan cannot carry (a `default` array property, or its index list is not on its declaration)', [FCls.Name, pM.Name])));
+  for var R in FSurface.Refs do
+    if (R.Kind = erMemberWrite) and (MemberOf(R).Id = pM.Id) then
+      Exit(Refuse('member-unsupported', pM.Name, FFromFid, R.Line, Format('line %d writes `%s`, an indexed property ' +
+        'of `%s`; the interface carries indexed properties for reading only', [R.Line, pM.Name, FCls.Name])));
+  FIndexed.AddOrSetValue(pM.Id, Trim(TRegEx.Replace(Head.Groups[1].Value, '\s+', ' ')));
   Result:= True;
 end;
 
@@ -3163,9 +3205,25 @@ end;
 function TMemberPlan.CollectLeafUses: Boolean;
 begin
   for var M in FMembers do
+  begin
     for var T in TRegEx.Matches(M.Signature, '[A-Za-z_][A-Za-z0-9_.]*') do
       if not AddLeafUse(M, T.Value, T.Value) then Exit(False);
+    if FIndexed.ContainsKey(M.Id) then  { W6 C7: the index parameter types }
+      for var Group in FIndexed[M.Id].Split([';']) do
+      begin
+        var Colon:= Group.IndexOf(':');
+        if Colon < 0 then Continue;
+        for var T in TRegEx.Matches(Group.Substring(Colon + 1), '[A-Za-z_][A-Za-z0-9_.]*') do
+          if not AddLeafUse(M, T.Value, T.Value) then Exit(False);
+      end;
+  end;
   Result:= True;
+end;
+
+{ W6 C7: member pI's index parameter list wrapped in pOpen / pClose; '' for a non-indexed member. }
+function TMemberPlan.IndexList(pI: Integer; const pOpen, pClose: string): string;
+begin
+  Result:= if FIndexed.ContainsKey(FMembers[pI].Id) then pOpen + FIndexed[FMembers[pI].Id] + pClose else '';
 end;
 
 procedure TMemberPlan.AddEdit(pFid: Int64; pLine: Integer; pReplace: Boolean; const pLines: TArray<string>);
@@ -3208,9 +3266,9 @@ begin
       end;
       Decls.Add(Format('%s/// <summary>%s: returns %s (cycles --plan, member hand-over).</summary>', [Indent, FIface,
         FMembers[I].Name]));
-      Decls.Add(Format('%sfunction %s: %s;', [Indent, FGetters[I], Ty]));
+      Decls.Add(Format('%sfunction %s%s: %s;', [Indent, FGetters[I], IndexList(I, '(', ')'), Ty]));
       Bodies.Add('');
-      Bodies.Add(Format('function %s.%s: %s;', [FCls.Name, FGetters[I], Ty]));
+      Bodies.Add(Format('function %s.%s%s: %s;', [FCls.Name, FGetters[I], IndexList(I, '(', ')'), Ty]));
       Bodies.Add('begin');
       Bodies.Add(Format('  Result := %s;', [FReads[I]]));
       Bodies.Add('end;');
@@ -3238,11 +3296,11 @@ begin
     L.Add(Format('  %s = interface', [FIface]));
     L.Add(Format('    [''%s'']', [SurfaceGuid(pLeafUnit + '.' + FIface)]));
     for var I:= 0 to FMembers.Count - 1 do
-      L.Add(Format('    function %s: %s;', [FGetters[I], Trim(FMembers[I].Signature)]));
+      L.Add(Format('    function %s%s: %s;', [FGetters[I], IndexList(I, '(', ')'), Trim(FMembers[I].Signature)]));
     AddIfaceSetters(L);
     L.AddRange(FMethodDecls);
     for var I:= 0 to FMembers.Count - 1 do
-      L.Add(Format('    property %s: %s read %s%s;', [FMembers[I].Name, Trim(FMembers[I].Signature), FGetters[I],
+      L.Add(Format('    property %s%s: %s read %s%s;', [FMembers[I].Name, IndexList(I, '[', ']'), Trim(FMembers[I].Signature), FGetters[I],
         WriteClause(I)]));
     L.Add('  end;');
     Result:= L.ToArray;

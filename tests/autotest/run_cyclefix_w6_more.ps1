@@ -22,8 +22,10 @@
 param(
   [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-w6m-$PID",
-  [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
+  [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
+  [string]$Only      = ''   # a regex over the section tags (c6, c2, c7i ...); '' = every section
 )
+function Want([string]$Tag) { return ($Only -eq '') -or ($Tag -match $Only) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -143,6 +145,7 @@ try {
           param($m) $m.Groups[1].Value + ' ' + ($Lead -f $m.Groups[2].Value) + $m.Groups[2].Value })
       Set-Text $f $t } }
 
+  if (Want 'c6') {
   Write-Host '== (c6d) an indented type / var header' -ForegroundColor Cyan
   $c6d = Get-Plan 'tiebreak' 'TieBreak.dproj' 'c6d-indent' { param($r) & $indentAll $r '  ' '  ' }
   Test-Accepted 'c6d-indent' $c6d 'manual-edit'
@@ -167,7 +170,9 @@ try {
   Check 'c6e-keep a keyword line stays above the global that remains' ($kept -match '(?m)^var\r?\n(\s*\r?\n)?  /// <summary>Stays.</summary>') ''
   $c6eBad = Get-Plan 'tiebreak' 'TieBreak.dproj' 'c6e-two' { param($r) & $sameLineAll $r '{0}X: Integer; ' }
   Check 'c6e-two (two declarations on the keyword line) still refused' ($c6eBad.Verdict -ne 'mechanical' -and $c6eBad.Text.Contains('was not recognised')) "[$($c6eBad.Verdict) / $($c6eBad.Refusals)]"
-Write-Host '== (c2d) R2: the leaf already declares the very interface the plan emits' -ForegroundColor Cyan
+  }
+  if (Want 'c2') {
+  Write-Host '== (c2d) R2: the leaf already declares the very interface the plan emits' -ForegroundColor Cyan
   $clean = Get-Plan 'r2extend' 'R2Extend.dproj' 'c2-clean' $null
   $iface = [regex]::Match($clean.Text, '(?ms)^  IDemoGagePortSurface = interface\r?\n.*?^  end;').Value
   Check 'c2-clean the plan emits IDemoGagePortSurface (the text c2d copies)' ($iface -ne '') ''
@@ -204,6 +209,30 @@ Write-Host '== (c2d) R2: the leaf already declares the very interface the plan e
   Test-Refused 'c2g-notread (the property reads FLog, not GetLog)' $c2g 'duplicate-identifier'
   $c2h = Get-Plan 'r2extend' 'R2Extend.dproj' 'c2h-sig' { param($r) & $getLog $r 'function GetLog(pIndex: Integer = 0): TStrings;' 'FLog' }
   Test-Refused 'c2h-sig (another signature)' $c2h 'duplicate-identifier'
+  }
+  if (Want 'c7i') {
+  Write-Host '== (c7i) member-unsupported: an indexed property read through the interface' -ForegroundColor Cyan
+  $indexed = { param($r, [string]$PropTail, [string]$Use)
+    $g = Join-Path $r 'DemoGagePort.pas'
+    Edit-File $g '    FLastGage: Integer;' "    FLastGage: Integer;`n    function GetLine(pIndex: Integer): string;"
+    Edit-File $g '    property LastGage: Integer read FLastGage;' "    property LastGage: Integer read FLastGage;`n    /// <summary>One log line.</summary>`n    property Lines[pIndex: Integer]: string read GetLine$PropTail;"
+    Edit-File $g "constructor TDemoGagePort.Create(pOwner: TComponent);" "function TDemoGagePort.GetLine(pIndex: Integer): string;`nbegin`n  Result := FLog[pIndex];`nend;`n`nconstructor TDemoGagePort.Create(pOwner: TComponent);"
+    Edit-File (Join-Path $r 'DemoUIConnect.pas') "    Log.Add(Format('gage now %d', [LastGage]));" "    Log.Add(Format('gage now %d', [LastGage]));`n$Use" }
+  $c7i = Get-Plan 'r2extend' 'R2Extend.dproj' 'c7i-indexed' { param($r) & $indexed $r '' "    Log.Add('first ' + Lines[0]);" }
+  Test-Accepted 'c7i-indexed' $c7i 'member-unsupported'
+  Check 'c7i-indexed the interface declares the indexed property and its getter verbatim' ($c7i.Text.Contains('    function GetLines(pIndex: Integer): string;') -and
+    $c7i.Text.Contains('    property Lines[pIndex: Integer]: string read GetLines;') -and $c7i.Text.Contains('  Result := Lines[pIndex];')) ''
+  $c7iDef = Get-Plan 'r2extend' 'R2Extend.dproj' 'c7i-default' { param($r) & $indexed $r '; default' "    Log.Add('first ' + Lines[0]);" }
+  Test-Refused 'c7i-default (a default array property)' $c7iDef 'member-unsupported'
+  $c7iW = Get-Plan 'r2extend' 'R2Extend.dproj' 'c7i-write' { param($r)
+    & $indexed $r '' "    Log.Add('first ' + Lines[0]);"
+    $g = Join-Path $r 'DemoGagePort.pas'
+    Edit-File $g "    function GetLine(pIndex: Integer): string;" "    function GetLine(pIndex: Integer): string;`n    procedure SetLine(pIndex: Integer; const pValue: string);"
+    Edit-File $g "string read GetLine;" "string read GetLine write SetLine;"
+    Edit-File $g "constructor TDemoGagePort.Create(pOwner: TComponent);" "procedure TDemoGagePort.SetLine(pIndex: Integer; const pValue: string);`nbegin`n  FLog[pIndex] := pValue;`nend;`n`nconstructor TDemoGagePort.Create(pOwner: TComponent);"
+    Edit-File (Join-Path $r 'DemoUIConnect.pas') "    Log.Add('first ' + Lines[0]);" "    Lines[0] := 'x';" }
+  Check 'c7i-write (a write to the indexed property) is never mechanical' ($c7iW.Verdict -ne 'mechanical') "[$($c7iW.Verdict) / $($c7iW.Refusals)]"
+  }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
