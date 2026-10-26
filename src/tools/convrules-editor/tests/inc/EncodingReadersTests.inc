@@ -117,6 +117,26 @@ begin
   end;
 end;
 
+procedure TestEncodingAddTextAt;
+var
+  WS: TWorkingSet;
+  P: string;
+begin
+  WS:= TWorkingSet.Create;
+  try
+    P:= 'C:\x\direct.rules';
+    WS.AddTextAt(P, ENC_BOOK_HDR, tlUtf16Bom);
+    WS.AddTextAt(P + '2', ENC_BOOK_HDR, tlAscii7);
+    Check('addtextat.count', WS.Count = 2);
+    Check('addtextat.level.kept.not.needed', (WS.LevelOf(0) = tlUtf16Bom) and (WS.LevelOf(1) = tlAscii7));
+    WS.AddText(P + '3', ENC_BOOK_HDR + '// ' + ENC_CYR);
+    Check('addtext.level.needed', (WS.LevelOf(2) = NeededLevel(ENC_BOOK_HDR + '// ' + ENC_CYR)) and (WS.LevelOf(2) <> tlAscii7));
+    Check('backupnote.some', BackupNote('C:\x\a.rules.bak') = ' (backup a.rules.bak)');
+    Check('backupnote.none', BackupNote('') = '');
+  finally
+    WS.Free;
+  end;
+end;
 procedure TestEncodingReaders;
 var
   Dir, P, B, Msg: string;
@@ -264,4 +284,5 @@ begin
     TDirectory.Delete(Dir, True);
   end;
   TestEncodingAsk;
+  TestEncodingAddTextAt;
 end;

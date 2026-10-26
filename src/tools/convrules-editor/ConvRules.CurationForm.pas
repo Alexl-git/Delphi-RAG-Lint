@@ -1376,7 +1376,7 @@ begin
     end;
   end; // try
   FStatus.SimpleText:= Format(
-    'Composed %d file(s) into %s -- %d collision(s) ' + 'resolved by precedence, %d block(s) appended', [FSet.Count, ExtractFileName(Target), Rep.ResolvedCount, Rep.AppendedCount]
+    'Composed %d file(s) into %s -- %d collision(s) ' + 'resolved by precedence, %d block(s) appended%s', [FSet.Count, ExtractFileName(Target), Rep.ResolvedCount, Rep.AppendedCount, BackupNote(Bak)]
   );
   SetLength(Head, 1);
   Head[0]:= Format('%d collision(s) resolved by precedence, %d block(s) appended.' + ' Pass this file to --rules.', [Rep.ResolvedCount, Rep.AppendedCount]);
