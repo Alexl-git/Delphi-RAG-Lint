@@ -33847,6 +33847,16 @@ begin
         end;
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
+      { PREPROCESS THE LSP'S LINT, exactly as `lint` does (the SetPreprocess call
+        in the lint verb above): didOpen/didSave lint through TAstParseCache, and
+        without this call it linted the RAW bytes, so every routine with
+        $IFDEF MSWINDOWS / $IFDEF POSIX alternative bodies published a false
+        parser-error on its second `end;` (79 on the RTL's System.IOUtils.pas,
+        where `lint` reports 0). The server is not bound to one .dproj, so the
+        profile is the platform built-ins unless --project names one.
+        Guard: tests\autotest\run_lsp_preprocess_guard.ps1. }
+      TAstParseCache.SetPreprocess(not Args.NoPreprocess,
+        ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;
