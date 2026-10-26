@@ -381,7 +381,7 @@ Tick each box in order. Do not skip the compile.
 ### Part B (optional): remove the implementation-only cycle too
 After Part A these units still use each other through these edges (predicted):
 - `demologger -> demosession`: `GDemoSessionCount (var)`, `GDemoActiveSession (var)` -- not mechanical: `GDemoActiveSession` (var): it needs `TDemoSession` (class), which cannot move: `TDemoSession` itself stays in its unit -- only its base class moves
-- `democonfig -> demologger`: `GDemoMinLevel (var)`, `DemoLog (procedure)`, `DemoLogLevelName (function)`, `GDemoLogCount (var)` -- not mechanical: `DemoLog` (procedure): it is a routine: its body would have to move together with everything it uses, or be handed over as a parameter / event instead of being called by name
+- `democonfig -> demologger`: `GDemoMinLevel (var)`, `DemoLog (procedure)`, `DemoLogLevelName (function)`, `GDemoLogCount (var)` -- mechanical: recipe: routine-call inversion
 - `demoaudit -> democonfig`: `GDemoSettings (var)` -- mechanical: these can move into a new leaf unit
 - `demosession -> demoaudit`: `GDemoAuditCount (var)`, `GDemoAuditTrail (var)` -- not mechanical: `GDemoAuditTrail` (var): it needs `TDemoAuditTrail` (class), which cannot move: its method bodies use `GDemoSettings`, which live in units of this cycle -- they would have to move with it
 

@@ -6,9 +6,9 @@ produces for a file, without running a full compile.
 
 ## Running it from the CLI
 ```
-drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]
+drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]
 ```
-`--file PATH` is the source file to preprocess. `--define SYM` may be given
+`--in PATH` is the source file to preprocess. `--define SYM` may be given
 multiple times to set boolean defines. `--numeric K=V` may be given
 multiple times to set numeric defines. `--include-mode off|defines-only`
 controls `{$I}` include handling. `--no-near-search` and `--tolerances` are
@@ -28,7 +28,7 @@ directly on the given file and defines.
 ## Example
 Illustrative only:
 ```
-drag-lint preprocess-file --file C:\Projects\MyApp\CustomerOrder.pas --define DEBUG --numeric APIVERSION=2
+drag-lint preprocess-file --in C:\Projects\MyApp\CustomerOrder.pas --define DEBUG --numeric APIVERSION=2
 ```
 This would print `CustomerOrder.pas` with `{$IFDEF DEBUG}` blocks resolved
 and `APIVERSION` set to 2.

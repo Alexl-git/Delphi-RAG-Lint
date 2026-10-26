@@ -6,9 +6,9 @@ feeds the Structure tree.
 
 ## Running it from the CLI
 ```
-drag-lint outline --file <path.pas> [--db <path>] [--format text|json]
+drag-lint outline --in <path.pas> [--db <path>] [--format text|json]
 ```
-`--file <path.pas>` is the unit to outline. `--db <path>` is optional;
+`--in <path.pas>` is the unit to outline. `--db <path>` is optional;
 without it the database is resolved **from the file being read**. `--format`
 selects `text` or `json`.
 
@@ -51,7 +51,7 @@ Optional, per the feature map's Index column.
 ## Example
 Illustrative only:
 ```
-drag-lint outline --file C:\Projects\MyApp\frmOrders.pas --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite --format json
+drag-lint outline --in C:\Projects\MyApp\frmOrders.pas --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite --format json
 ```
 This would print the symbol outline of `frmOrders.pas` as JSON -- the same
 data the Structure form displays as a tree.

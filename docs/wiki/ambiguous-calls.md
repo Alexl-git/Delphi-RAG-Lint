@@ -7,9 +7,9 @@ edges because the resolver gave up on some call sites.
 
 ## Running it from the CLI
 ```
-drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]
+drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]
 ```
-Scope the scan to one routine with `--qname`, or to one file with `--file`;
+Scope the scan to one routine with `--qname`, or to one file with `--in`;
 omit both to scan the whole database. `--json` emits machine-readable
 output.
 

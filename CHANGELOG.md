@@ -5,6 +5,9 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed
+- `cycles --plan` Part B (CYCDEMO): a routine edge whose signature names a type Part A already moves (circular-demo `democonfig -> demologger`, `TDemoLogLevel`) was predicted `refused: signature-in-cycle`, labelled with the wrong kind (`TDemoLogLevel` (var)); the re-run after Part A cuts it by routine-call inversion, and Part B now predicts that. Regression from CYC-B B3 (37ec566d): `ProbeInversionMoves` only counted types the probe itself added. Guard `run_cycle_plan_split_identity.ps1` (new Part B check); oracle `demo-plan.txt` and `circular-demo\CYCLE-REPORT.md` regenerated (one line).
+
 ### Added
 - `cycles --fix` C6 (W6, CYC-C): `end.` followed by a block comment is still the final `end.` (R1 assignment edit), and an R2 class heritage spread over lines is read up to its closing `)` (the interface is appended there); an unbalanced heritage still refuses manual-edit. The same-line / indented `type` header forms of C6 are NOT done (the move planner is column-1 structured). Guard `run_cyclefix_w6_rest.ps1` c6a-c6c; `run_cyclefix_r2.ps1` f12 now uses an unclosed heritage.
 - `cycles --fix` C2 (W6, CYC-C): an R1 leaf that already declares the pointer's names no longer refuses `duplicate-identifier`: identical `T<Routine>Ptr` / `<Routine>Ptr` text is reused (nothing inserted; the assignment is skipped when the declaring unit already makes it), different text gets the lowest free `<Routine>Ptr2`, `Ptr3` ... The R2 interface name and an existing `Get<M>` still refuse. Guard `run_cyclefix_w6_rest.ps1` c2a-c2c; `run_cyclefix_r1.ps1` e1 flipped.
@@ -53,6 +56,7 @@ breaking changes** until v1.0.
 ### Fixed
 - INBOX-conv-enc-nonansi-identifiers-lossy item 1 (storage; re-parse via the extractor bump at merge): an identifier with non-ANSI letters (e.g. `TDst` + Cyrillic) was stored as `TDst???` -- every text parameter of the index store was bound with FireDAC `AsString` (`ftString`, an ANSI string). `DRagLint.Storage.SQLite`, `DRagLint.Storage.FileMembership` and `DRagLint.FormsMap` now bind text as `AsWideString`, so names, qualified names, signatures, paths and form/component names are stored and looked up as UTF-8; `query --name` finds such a symbol by its real spelling. Still open: the CLI writes stdout in the ANSI code page, so the name PRINTS as `?`. Guard `run_index_nonansi_identifiers.ps1`.
 - B-35 D18 residue (extractor; NEEDS the extractor bump at merge): `symbol_facts.sql_reads` now also covers SQL built through `with Q.SQL do Add(..)` (the rightmost with entity, when a SQL-text property, keys the bare `Add`), joined with `#13#10` / `#$0A` / `sLineBreak` (decoded to a space, also inside one `'a'#13#10'b'` literal), and a run that ends in a dynamic operand (`'WHERE ID = ' + IntToStr(N)`): its static prefix is scanned, minus a trailing word the operand may complete; nothing after the operand is. Guard `run_sql_reads_multiline_add.ps1` (+10 cases).
+- X-26 remainder (CLI lane): under the verb's own JSON flag, usage / error / "nothing to do" lines of `query unit-usage`, `impact`, `wiring`, `reverse-calltree`, `outline`, `find-unit`, `lint`, `shared-unit` and `query type-usage` go to stderr, so stdout is empty or parseable JSON; without the flag they stay on stdout. `reverse-calltree` on an unresolved qname over a readable index now says `symbol not found` and exits 1 (it printed "no readable drag-lint index" and exited 2). `find-unit --json` when the unit is already used prints `[]` (exit 0). `outline` accepts `--json` as the same request as `--format json`. Restores the `Flag aliases:` --help section and featuregen's `FlagAliasesMarkdown`, lost by the MISC merge 5a9d8291 (keeps its X-13 change). `menu-tree`/`menu-drift --help` are byte-checked against the registry (`run_menu_verb_help.ps1`).
 - autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
   stored entry the index resolves as a class / interface / record (and not as a unit) is no
   longer carried forever as a "foreign" unit: doc-drift reports the block (fixable) and the
@@ -68,6 +72,7 @@ breaking changes** until v1.0.
   (`run_cyclefix_untangle_catalog.ps1` case e, fixture `partbselfuse`; RED on a mutant without the fix).
 
 ### Changed
+- `--in` is the canonical input-file flag (owner ruling 2026-10-26); `--file` stays a silent alias on every verb. README, AI-USAGE, the wiki pages and four registry entries now write `--in` in examples (CLI lane).
 - **Flag aliases are uniform** (owner ruling 2026-10-25; policy `docs\CLI-FLAG-ALIASES.md`). One table,
   `features\flag-aliases.json`, lists every alias group the parser accepts: `--force-reparse` /
   `--no-skip`, `--help` / `-h` / `-?`, `--in` / `--file`, `--output` / `--out`, `--scan-libraries-win` /
@@ -87,6 +92,10 @@ breaking changes** until v1.0.
 - `featuregen check` (A): the alias table is well-formed and no registry cli surface or question
   names an alias. `run_docs_sync_guard.ps1` retires exemption class (b) and fails if an alias is
   exempted. `run_json_error_stdout.ps1` covers the five readers above.
+
+### Fixed
+- X-10: resolve-dbs --in <file> prints a stderr NOTE when the config covers the file but none of the resolved index files exists yet (index not built); stdout and exit code unchanged.
+- X-13: the generated DRagLint.CLI.HelpText.pas no longer carries length-bound dl:ok method-too-long@hash markers (they went stale on every regeneration); the file is excluded in drag-lint-lint.json.
 
 ## v1.35.0-alpha -- 2026-10-25
 
