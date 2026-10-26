@@ -878,11 +878,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasMemberAccesses: Boolean;
-      /// <summary>True when this database has the dispatch_edges / classref_args
-      /// tables (created by Migrate since 2026-10-26). Readers answer as before
-      /// without them.</summary>
-      /// <returns>True when dispatch_edges exists.</returns>
-      function HasDispatchEdges: Boolean;
+
       /// <summary>Purity v2: True when symbol_facts carries the three effect
       /// columns. They are Migrate ALTERs with NO schema bump, and a READ-ONLY
       /// open never runs Migrate, so every schema-23 DB indexed before this
@@ -2432,6 +2428,11 @@ type
       /// <remarks>Logs `dispatch: overrides=N implements=N classref-args=N` plus the
       /// decline counts. A read-only store or a DB without the tables does nothing.</remarks>
       procedure ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
+      /// <summary>True when this database has the dispatch_edges / classref_args
+      /// tables (created by Migrate since 2026-10-26). Readers answer as before
+      /// without them.</summary>
+      /// <returns>True when dispatch_edges exists.</returns>
+      function HasDispatchEdges: Boolean;
       /// <summary>Implements ISymbolStore.CallEdgesNeedRebuild -- two LIMIT 1 probes.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (not ProbeExists('SELECT 1
       /// FROM call_edges LIMIT 1')); True.</returns>

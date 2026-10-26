@@ -114,7 +114,9 @@ function Row4([string]$Form) { $data4 | Where-Object { $_.Form -ceq $Form } | Se
 # These two chains cross an interface dispatch and a proc-var hook that
 # call_edges cannot follow, so they are the text-scan FALLBACK's job in v6.
 # Layer 1: interface-dispatch bridge (APlan.EditThing -> TDirectPlan4.EditThing -> frmDirect4)
-Check 'v4: frmDirect4 via interface dispatch' ((Row4 'frmDirect4').'How to open' -eq 'Plan' -and (Row4 'frmDirect4').Notes -eq 'found by: text scan')
+# v10 (2026-10-26, dispatch_edges): the INDEX now follows the interface hop and says which one;
+# the text scan stays the fallback for the proc-var hook below.
+Check 'v4: frmDirect4 via interface dispatch' ((Row4 'frmDirect4').'How to open' -eq 'Plan' -and (Row4 'frmDirect4').Notes -eq 'found by: index; via uPlanIntf4.IThingPlan4.EditThing (interface dispatch)')
 # Layer 1 + Layer 2: interface-dispatch + proc-var hook (APlan.EditThing -> THookPlan4.EditThing -> ThingHook() -> ShowThing4 -> frmHooked4)
 Check 'v4: frmHooked4 via interface dispatch + hook' ((Row4 'frmHooked4').'How to open' -eq 'Plan' -and (Row4 'frmHooked4').'Opened by' -eq 'uHookReg4.ShowThing4')
 

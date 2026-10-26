@@ -183,7 +183,8 @@ Cell $r 'Handler'          'TfrmMain6.btnImportClick'     'frmImport6'
 Cell $r 'Opened by'        'TImportVM6.OpenImport'        'frmImport6'
 Cell $r 'Modal'            'Yes'                          'frmImport6'
 Cell $r 'Before you start' 'frmMain6: it refuses with "Connect to a source first" until that is set up' 'frmImport6'
-Cell $r 'Notes'            'found by: text scan'          'frmImport6'
+# v10 (2026-10-26): dispatch_edges lets the INDEX follow the interface hop the text scan used to cover.
+Cell $r 'Notes'            'found by: index; via uImportVM6.IImportVM6.OpenImport (interface dispatch)' 'frmImport6'
 
 # R1 Modal cause B: an MDI child is shown on creation and cannot be modal.
 $r = RowOf 'frmMdi6'
