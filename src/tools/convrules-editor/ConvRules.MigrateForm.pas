@@ -20,7 +20,7 @@ uses
 type
   /// <summary>The Migrate dialog.</summary>
   /// <remarks>Controls carry stable names for the GUI driver: LblMember, EdOld, RbRename, EdNew,
-  /// RbBreak, LblPreview, LblCheck, LblBlock, BtnApply, BtnCancel. Escape = Cancel.</remarks>
+  /// RbBreak, CbAllSelected, LblPreview, LblCheck, LblBlock, BtnApply, BtnCancel. Escape = Cancel.</remarks>
   TMigrateForm = class(TForm)
     private
       FCheck     : TFunc<TMigratePick, string>;
@@ -29,10 +29,11 @@ type
       FEdNew     : TEdit;
       FRbRename  : TRadioButton;
       FRbBreak   : TRadioButton;
+      FCbAll     : TCheckBox;
       FLblPreview: TLabel;
       FLblCheck  : TLabel;
       FBtnApply  : TButton;
-      procedure Build(const AMember, ADetail, ABlockText: string; AOldEditable: Boolean);
+      procedure Build(const AMember, ADetail, ABlockText: string; AOldEditable: Boolean; ASelectedCount: Integer);
       function NewLabel(const AName, ACaption: string; ATop: Integer): TLabel;
       function NewButton(const AName, ACaption: string; ALeft: Integer): TButton;
       function Pick: TMigratePick;
@@ -46,12 +47,15 @@ type
       /// a text starting 'no #convert' or 'two #convert' disables Apply.</param>
       /// <param name="AOldEditable">True for Add (Old typed); False from a Work list row or for Edit.</param>
       /// <param name="ANew">The New to start with ('' for a new line); DL_NONE starts on the break choice.</param>
+      /// <param name="ASelectedCount">The distinct members a bulk DL_NONE would cover
+      /// (TMigrateBookTarget.OfferCount); 2 or more shows 'DL_NONE for all N selected rows'
+      /// (owner ruling D5 = B), which forces the break choice and sets APick.AllSelected.</param>
       /// <param name="ACheck">The host's pre-check of a pick (MigrateCheck on the target block); may be nil.</param>
       /// <param name="APick">Out: the pick; Default when cancelled.</param>
       /// <returns>True when the user pressed Apply.</returns>
       /// <remarks>Never touches a book. Call from the UI thread.</remarks>
       class function Run(AOwner: TComponent; const AMember, ADetail, ABlockText: string; AOldEditable: Boolean; const ANew: string;
-        const ACheck: TFunc<TMigratePick, string>; out APick: TMigratePick): Boolean;
+        ASelectedCount: Integer; const ACheck: TFunc<TMigratePick, string>; out APick: TMigratePick): Boolean;
   end;
 
 implementation
@@ -77,6 +81,7 @@ const
   PREVIEW_TOP = 140;
   CHECK_TOP   = 166;
   BLOCK_TOP   = 192;
+  ALL_TOP     = 218;
   BTN_W       = 90;
   BTN_TOP     = 250;
   BTN_GAP     = 10;
@@ -85,9 +90,11 @@ const
   BLOCK_NONE_PREFIX      = 'no #convert';
   BLOCK_AMBIGUOUS_PREFIX = 'two #convert';
   BREAK_CAPTION = 'DL_NONE -- deliberate break (the unit will not compile at these sites until converted by hand)';
+  ALL_CAPTION_FMT = 'DL_NONE for all %d selected rows';
+  BULK_MIN    = 2;
 
-class function TMigrateForm.Run(AOwner: TComponent; const AMember, ADetail, ABlockText: string; AOldEditable: Boolean; const ANew: string;  // dl:ok too-many-parameters@ef96 -- the dialog contract of spec section 6 (member, detail, block text, editability, start value, check closure, out pick); a record would only rename them
-  const ACheck: TFunc<TMigratePick, string>; out APick: TMigratePick): Boolean;
+class function TMigrateForm.Run(AOwner: TComponent; const AMember, ADetail, ABlockText: string; AOldEditable: Boolean; const ANew: string;  // dl:ok too-many-parameters@d138 -- the dialog contract of spec section 6 (member, detail, block text, editability, start value, bulk count, check closure, out pick); a record would only rename them
+  ASelectedCount: Integer; const ACheck: TFunc<TMigratePick, string>; out APick: TMigratePick): Boolean;
 var
   LForm: TMigrateForm;
 begin
@@ -95,7 +102,7 @@ begin
   LForm:= TMigrateForm.CreateNew(AOwner);
   try
     LForm.FCheck:= ACheck;
-    LForm.Build(AMember, ADetail, ABlockText, AOldEditable);
+    LForm.Build(AMember, ADetail, ABlockText, AOldEditable, ASelectedCount);
     if SameText(ANew, MIGRATE_DL_NONE) then
       LForm.FRbBreak.Checked:= True
     else
@@ -133,7 +140,7 @@ begin
   Result.Top    := BTN_TOP;
 end;
 
-procedure TMigrateForm.Build(const AMember, ADetail, ABlockText: string; AOldEditable: Boolean);
+procedure TMigrateForm.Build(const AMember, ADetail, ABlockText: string; AOldEditable: Boolean; ASelectedCount: Integer);
 var
   LLbl: TLabel;
 begin
@@ -185,6 +192,17 @@ begin
   FRbBreak.Height := ROW_H;
   FRbBreak.OnClick:= Changed;
 
+  // D5 = B: one click writes DL_NONE for every selected row (the host loops, ApplyBreakToRows).
+  FCbAll:= TCheckBox.Create(Self);
+  FCbAll.Parent := Self;
+  FCbAll.Name   := 'CbAllSelected';
+  FCbAll.Caption:= Format(ALL_CAPTION_FMT, [ASelectedCount]);
+  FCbAll.Left   := MARGIN;
+  FCbAll.Top    := ALL_TOP;
+  FCbAll.Width  := INNER_W;
+  FCbAll.Visible:= ASelectedCount >= BULK_MIN;
+  FCbAll.OnClick:= Changed;
+
   FLblPreview:= NewLabel('LblPreview', '', PREVIEW_TOP);
   FLblCheck  := NewLabel('LblCheck', '', CHECK_TOP);
   NewLabel('LblBlock', ABlockText, BLOCK_TOP);
@@ -202,7 +220,8 @@ function TMigrateForm.Pick: TMigratePick;
 begin
   Result:= Default(TMigratePick);
   Result.Old  := Trim(FEdOld.Text);
-  Result.Break:= FRbBreak.Checked;
+  Result.AllSelected:= FCbAll.Visible and FCbAll.Checked;
+  Result.Break:= FRbBreak.Checked or Result.AllSelected;
   Result.New  := if Result.Break then MIGRATE_DL_NONE else Trim(FEdNew.Text);
 end;
 
@@ -212,6 +231,9 @@ var
   LCheck: string;
 begin
   LPick:= Pick;
+  if LPick.AllSelected and not FRbBreak.Checked then
+    FRbBreak.Checked:= True; // re-enters Changed once with the break choice set
+  FRbRename.Enabled:= not LPick.AllSelected;
   FEdNew.Enabled:= not LPick.Break;
   FLblPreview.Caption:= MigrateLineText(LPick.Old, LPick.New);
   LCheck:= if Assigned(FCheck) then FCheck(LPick) else '';

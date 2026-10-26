@@ -1,6 +1,6 @@
 # Driven GUI check for member migration (A4 #migrate slice 1, D9 = A; spec
 # docs\superpowers\specs\2026-10-23-converter-migrate-slice1-design.md sections 5-9).
-# Usage: pwsh -NoProfile -File drive-migrate.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoMigrate]
+# Usage: pwsh -NoProfile -File drive-migrate.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoMigrate] [-ProofNoBulk]
 #        A FROZEN drag-lint.exe that reports migrate_members (1.35.0-alpha pin or later) must sit beside the exe
 #        (a staged copy of a pin, never dll-win64); its Win64 library index must answer (TLabel / TStaticText).
 # Fixture: drive-work-list.ps1's (Fix.dpr / FixUnit.pas with Label1.Layout and Label1.WordWrap, which TStaticText
@@ -13,7 +13,18 @@
 #   migrate.layout.status, migrate.layout.rule, migrate.saved.disk, migrate.rerun.note, migrate.pas.break
 #   and migrate.worklist.after (Layout stays unmapped).
 #   Measured 2026-10-26 on the 1.35.0-alpha pin: 18 pass / 0 fail in ~60 s; -ProofNoMigrate 12 pass / 6 fail (the six above).
-param([string]$Exe, [switch]$ProofNoMigrate)
+# Follow-ups (spec 12a, D5 = B / D6 = B):
+#   D6: before the first Migrate the editor is switched to Other.rules (no TLabel block); Migrate... on a row must
+#     open Fix.rules -- the book that converted it, pas_uses[].rules_file -- and write there (migrate.d6.opened).
+#   D5: after the two single edits, BOTH rows are selected; the dialog offers 'DL_NONE for all 2 selected rows'
+#     (migrate.d5.offer); with it ticked, Apply writes DL_NONE for both (migrate.d5.status: 1 changed, 1 already
+#     DL_NONE; migrate.d5.rule: WordWrap's Rule cell); WordWrap is then renamed back to AutoSize (migrate.d5.restore).
+#   -ProofNoBulk leaves the box unticked: migrate.d5.status and migrate.d5.rule must FAIL (2). -ProofNoMigrate skips
+#   the D5 section and also FAILS migrate.d6.opened (7).
+#   A pre-follow-up exe (main before feat/conv-migrate-followups) must FAIL migrate.d6.opened and the d5 checks.
+#   Measured 2026-10-26 on a staged copy of the 1.35.0-alpha pin (100 % CPU from other lanes): 24 pass / 0 fail in
+#   ~150 s; -ProofNoBulk 22 / 2; -ProofNoMigrate 13 / 7; main's exe (9:24) 9 / 15.
+param([string]$Exe, [switch]$ProofNoMigrate, [switch]$ProofNoBulk)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -116,6 +127,14 @@ public static class W {
     IntPtr hp = OpenProcess(0x0438, false, pid);
     IntPtr mem = VirtualAllocEx(hp, IntPtr.Zero, (UIntPtr)256, 0x3000, 0x04);
     try { SetState(hp, mem, lv, -1, 0); if (idx >= 0) SetState(hp, mem, lv, idx, 3); }
+    finally { VirtualFreeEx(hp, mem, UIntPtr.Zero, 0x8000); CloseHandle(hp); }
+  }
+  /* Row IDX ALSO selected (not focused), as a Ctrl+click leaves it: D5 multi-select. */
+  public static void AddSelected(IntPtr lv, int idx) {
+    uint pid; GetWindowThreadProcessId(lv, out pid);
+    IntPtr hp = OpenProcess(0x0438, false, pid);
+    IntPtr mem = VirtualAllocEx(hp, IntPtr.Zero, (UIntPtr)256, 0x3000, 0x04);
+    try { SetState(hp, mem, lv, idx, 2); }
     finally { VirtualFreeEx(hp, mem, UIntPtr.Zero, 0x8000); CloseHandle(hp); }
   }
   /* WM_CONTEXTMENU lParam for the middle of row IDX, in SCREEN coordinates. */
@@ -350,6 +369,7 @@ $rulesDir = Join-Path $tmp 'rules'; $dragDir = Join-Path $tmp '_D-RAG'
 $dproj = Join-Path $tmp 'Fix.dproj'; $db = Join-Path $dragDir 'Fix.sqlite'
 $pas = Join-Path $tmp 'FixUnit.pas'; $dfm = Join-Path $tmp 'FixUnit.dfm'
 $book = Join-Path $rulesDir 'Fix.rules'
+$other = Join-Path $tmp 'Other.rules'
 # drive-convert-tab.ps1's Fix.dproj (the IDE's Base / Base_Win64 group shape), MainSource Fix.dpr.
 WriteAscii $dproj @'
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
@@ -439,6 +459,10 @@ WriteAscii $book @'
 #link Left <- Left
 #link Top <- Top
 '@
+WriteAscii $other @'
+#convert Vcl.StdCtrls.TButton -> Vcl.StdCtrls.TBitBtn, Vcl.StdCtrls
+#link Caption <- Caption
+'@
 
 function MigrateDialog($procId) { WaitCls $procId 'TMigrateForm' 15 }
 function DoMigrate($main, $lv, $member, $break, $newName, $cancel) {
@@ -463,20 +487,63 @@ function DoMigrate($main, $lv, $member, $break, $newName, $cancel) {
     Start-Sleep -Milliseconds 400
     Click (@(Find $dlg 'TButton' 'Apply')[0])
   }
-  $t0 = Get-Date; while ((WaitCls $p.Id 'TMigrateForm' 0) -ne [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 10) { Start-Sleep -Milliseconds 250 }
+  return (CloseMigrate)
+}
+# The Migrate dialog now up, or $null. (WaitCls with 0 s never looks -- its loop runs while elapsed < 0 -- so the
+# pre-follow-up 'wait for the dialog to close' loop never waited.)
+function MigrateUp { @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TMigrateForm' })[0] }
+# Waits for the dialog to close; one still up after 10 s (Apply disabled) is cancelled and reported.
+function CloseMigrate {
+  $t0 = Get-Date; while ((MigrateUp) -and ((Get-Date) - $t0).TotalSeconds -lt 10) { Start-Sleep -Milliseconds 250 }
+  $left = MigrateUp
+  if ($left) {
+    $lbl = (@([W]::Kids($left) | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ -like 'no #convert*' }) -join ' ')
+    Click (@(Find $left 'TButton' 'Cancel')[0])
+    # Gone before the next step: a dialog still up would be found by the next MigrateDialog (seen under load).
+    $t0 = Get-Date; while ((MigrateUp) -and ((Get-Date) - $t0).TotalSeconds -lt 10) { Start-Sleep -Milliseconds 250 }
+    Start-Sleep -Milliseconds 500
+    return "dialog stayed open after Apply, cancelled $lbl"
+  }
   Start-Sleep -Milliseconds 500
   return ''
 }
+# D5: selects every row in $members (the first focused), opens Migrate..., reads the bulk box, ticks it unless
+# -ProofNoBulk, Applies. Returns the box caption ('' when absent) and an error text.
+function DoBulk($main, $lv, [string[]]$members) {
+  $shown = @([W]::Column($lv, 3)); $first = $true
+  foreach ($m in $members) {
+    $idx = [Array]::IndexOf($shown, $m)
+    if ($idx -lt 0) { return @('', "row $m not shown") }
+    if ($first) { [W]::SelectRow($lv, $idx); $first = $false } else { [W]::AddSelected($lv, $idx) }
+  }
+  Start-Sleep -Milliseconds 400
+  Click (@(Find $main 'TButton' 'Migrate...')[0])
+  $dlg = MigrateDialog $p.Id
+  if ($dlg -eq [IntPtr]::Zero) { return @('', "no Migrate dialog (forms: $(TopsNow $p.Id))") }
+  Start-Sleep -Milliseconds 500
+  $cb = @(Find $dlg 'TCheckBox' $null | Where-Object { [W]::IsWindowVisible($_) })
+  $cap = if ($cb.Count -eq 1) { [W]::Txt($cb[0]) } else { '' }
+  if ($cb.Count -eq 1 -and -not $ProofNoBulk) { Click $cb[0]; Start-Sleep -Milliseconds 400 }
+  elseif ($cb.Count -ne 1) { Click (@(Find $dlg 'TRadioButton' $null | Where-Object { [W]::Txt($_) -like 'DL_NONE*' })[0]); Start-Sleep -Milliseconds 400 }
+  Click (@(Find $dlg 'TButton' 'Apply')[0])
+  return @($cap, (CloseMigrate))
+}
 function RunConvert($main) {
+  # Idle BEFORE the menu too: 'Conversion|Convert...' during the C8 check after Add... is refused, and that
+  # '[!] ... Convert was NOT started' line would otherwise be read below as this run's result (2026-10-26,
+  # loaded machine: convert.first failed on main's exe and driver alike).
+  [void](WaitIdle $p.Id $main 90)
   [void][W]::InvokeMenu($main, 'Conversion|Convert...')
   Start-Sleep -Seconds 2
   $conv = @(Find $main 'TButton' 'Convert' | Where-Object { [W]::IsWindowVisible($_) -and @(Find ([CT]::Parent($_)) 'TProgressBar' $null).Count -eq 1 })[0]
   [void](WaitIdle $p.Id $main 90)
+  $pre = Status $main
   Click $conv
   $t0 = Get-Date; $st = ''
   while (((Get-Date) - $t0).TotalSeconds -lt 600) {
     Start-Sleep -Milliseconds 500
     $st = Status $main
+    if ($st -eq $pre) { continue } # the line from before the click is not this run's answer
     if ($st -like 'Converted *' -or $st -like 'Convert stopped*' -or $st -like 'RESTORE FAILED*' -or $st -like '`[!`] *' -or $st -like 'Convert refused*') { break }
     if (@(Forms $p.Id | Where-Object { [W]::Cls($_) -in 'TMessageForm', '#32770' }).Count -gt 0) { $script:dlg = TopsNow $p.Id; break }
   }
@@ -528,12 +595,25 @@ try {
   $btn = @(Find $main 'TButton' 'Migrate...')
   Check 'migrate.button.visible' (($btn.Count -eq 1) -and [W]::IsWindowVisible($btn[0])) "buttons: $($btn.Count)"
 
+  # --- 1b. D6: switch the editor to Other.rules (no TLabel block); the row names Fix.rules ---
+  [void][W]::InvokeMenu($main, 'File|Open...')
+  $od = WaitCls $p.Id '#32770' 20
+  if ($od -ne [IntPtr]::Zero) {
+    Start-Sleep -Milliseconds 700
+    [void][W]::SendS(@([W]::Kids($od) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $other)
+    Click (@(Find $od 'Button' '&Open')[0])
+  }
+  $st = WaitLike $main 'Loaded Other.rules*' 15
+  Check 'migrate.d6.other.open' ($st -like 'Loaded Other.rules*') $st
+
   # --- 2. Layout -> DL_NONE (the proof cancels here) ---
   $before = Status $main
   $e = DoMigrate $main $lv 'Layout' $true '' ([bool]$ProofNoMigrate)
   Check 'migrate.dialog' ($e -eq '') $e
   $st = WaitStatus $main $before 10
-  Check 'migrate.layout.status' ($st -like 'Wrote #migrate Layout -> DL_NONE into #convert *(line * of Fix.rules) -- not saved: File > Save, then Convert again*') $st
+  # D6: the editor opened the row's book first, so the status starts with the Opened prefix.
+  Check 'migrate.d6.opened' ($st -like 'Opened Fix.rules (it converted the row) -- Wrote #migrate Layout*') $st
+  Check 'migrate.layout.status' ($st -like '*Wrote #migrate Layout -> DL_NONE into #convert *(line * of Fix.rules) -- not saved: File > Save, then Convert again*') $st
   $members = @([W]::Column($lv, 3)); $rules = @([W]::Column($lv, 8))
   $ri = [Array]::IndexOf($members, 'Layout')
   Check 'migrate.layout.rule' (($ri -ge 0) -and ($rules[$ri] -like '#migrate Layout -> DL_NONE (line *, unsaved)')) "rule cells: $($rules -join ' | ')"
@@ -543,6 +623,24 @@ try {
   $e = DoMigrate $main $lv 'WordWrap' $false 'AutoSize' $false
   $st = WaitStatus $main $before 10
   Check 'migrate.wordwrap.status' ($st -like 'Wrote #migrate WordWrap -> AutoSize into #convert *') "$e $st"
+
+  # --- 3b. D5 (skipped under -ProofNoMigrate: its bulk DL_NONE would write Layout and hide the six) ---
+  if ($ProofNoMigrate) { "NOTE  -ProofNoMigrate: D5 section skipped" }
+  else {
+    $before = Status $main
+    $r = DoBulk $main $lv @('Layout', 'WordWrap')
+    Check 'migrate.d5.offer' ($r[0] -eq 'DL_NONE for all 2 selected rows') "caption '$($r[0])' $($r[1])"
+    $st = WaitStatus $main $before 10
+    Check 'migrate.d5.status' ($st -like 'DL_NONE for 2 member(s) in Fix.rules: 1 changed, 1 already DL_NONE -- not saved: File > Save, then Convert again*') $st
+    $members = @([W]::Column($lv, 3)); $rules = @([W]::Column($lv, 8))
+    $ri = [Array]::IndexOf($members, 'WordWrap')
+    Check 'migrate.d5.rule' (($ri -ge 0) -and ($rules[$ri] -like '#migrate WordWrap -> DL_NONE (line *, unsaved)')) "rule cells: $($rules -join ' | ')"
+    # Back to the rename, so the rest of the flow (Save, second Convert) measures what it always did.
+    $before = Status $main
+    $e = DoMigrate $main $lv 'WordWrap' $false 'AutoSize' $false
+    $st = WaitStatus $main $before 10
+    Check 'migrate.d5.restore' ($st -like 'Changed #migrate WordWrap -> AutoSize *') "$e $st"
+  }
 
   # --- 4. File > Save: the lines reach the disk ---
   [void][W]::InvokeMenu($main, 'File|Save')

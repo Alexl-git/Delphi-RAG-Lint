@@ -16042,6 +16042,7 @@ begin
     TestMigrateDecisions;
     TestMigrateTabHandoff;
     TestMigrateReviewMinors;
+    TestMigrateFollowups;
 
     FreeAndNil(GParseBook);
 

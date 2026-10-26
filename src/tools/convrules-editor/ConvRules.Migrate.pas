@@ -29,6 +29,9 @@ const
   /// <summary>Pre-check text for a pick that lands before the first #convert (editor text;
   /// the engine stays silent there, contract G2c).</summary>
   MIGRATE_GLOBAL_TEXT = 'a #migrate before the first #convert is not a member migration (globals: slice 3)';
+  /// <summary>Appended to the dialog's member line when the selected Work list rows name several
+  /// books (TMigrateBookTarget.Mixed): only the focused row is migrated.</summary>
+  MIGRATE_MIXED_TEXT = ' -- the selected rows were converted by several books: only this row';
 
 type
   /// <summary>What the Migrate dialog returns: one member and its replacement.</summary>
@@ -39,6 +42,9 @@ type
     New  : string;
     /// <summary>True = write DL_NONE, a deliberate break.</summary>
     Break: Boolean;
+    /// <summary>True = DL_NONE for EVERY selected Work list row (owner ruling D5 = B), not
+    /// only Old; the host applies it with ApplyBreakToRows. Implies Break.</summary>
+    AllSelected: Boolean;
   end;
 
   /// <summary>How the open book answers a row's From -&gt; To pair.</summary>
@@ -76,6 +82,47 @@ type
     Warning : string;
     /// <summary>Why nothing was written; '' when applied.</summary>
     Reason  : string;
+  end;
+
+  /// <summary>Which book a Work list Migrate writes into (owner ruling D6 = B).</summary>
+  TMigrateBookAction = (
+    /// <summary>The open book: the rows name it, or name no book (an engine without rules_file).</summary>
+    mbaOpenBook,
+    /// <summary>The rows name another book that is on disk: the host opens it first.</summary>
+    mbaSwitch,
+    /// <summary>The rows name a book that is not on disk: the open book is used, Reason says so.</summary>
+    mbaMissing);
+
+  /// <summary>MigrateTargetForRows' answer.</summary>
+  TMigrateBookTarget = record
+    /// <summary>What the host does before the dialog.</summary>
+    Action    : TMigrateBookAction;
+    /// <summary>The book to write into: the row's book for mbaSwitch, else the open book.</summary>
+    Book      : string;
+    /// <summary>'' unless mbaMissing: the book named and not found.</summary>
+    Reason    : string;
+    /// <summary>How many rows the dialog's 'DL_NONE for all selected rows' covers: the
+    /// distinct instance members of the selection when they all name one book and there
+    /// are two or more; 1 otherwise (no bulk choice).</summary>
+    OfferCount: Integer;
+    /// <summary>True when the selected rows name several books: only the first row is
+    /// targeted and no bulk choice is offered.</summary>
+    Mixed     : Boolean;
+  end;
+
+  /// <summary>What ApplyBreakToRows did to the book.</summary>
+  TMigrateBulkOutcome = record
+    /// <summary>Distinct members asked (instance rows; a member is asked once per From -&gt; To pair).</summary>
+    Asked    : Integer;
+    /// <summary>New '#migrate Old -&gt; DL_NONE' lines appended.</summary>
+    Written  : Integer;
+    /// <summary>Existing member-form lines whose New became DL_NONE.</summary>
+    Changed  : Integer;
+    /// <summary>Lines already DL_NONE: left untouched (not dirtied).</summary>
+    Unchanged: Integer;
+    /// <summary>'Old: reason' per member nothing was written for (no block, ambiguous block,
+    /// a global row, an engine refusal).</summary>
+    Skipped  : TArray<string>;
   end;
 
 /// <summary>Finds the #convert header of ABook whose From and To match AFrom / ATo by bare
@@ -189,10 +236,47 @@ function MigrateBookNote(const ABookName, ABookText: string): string;
 /// <returns>One note per book with member-form lines; [] with afMigrateMembers.</returns>
 function MigrateBookNotes(const AEntries: TArray<TBookEntry>; AFeatures: TApplyFeatures; const AReadText: TFunc<string, string>): TArray<string>;
 
+/// <summary>The book a Work list Migrate of ARows writes into (owner ruling D6 = B: the book
+/// that converted the row, pas_uses[].rules_file, engine contract G7) and how many rows the
+/// dialog's 'DL_NONE for all selected rows' covers (D5 = B).</summary>
+/// <param name="AOpenBook">The open book's path; '' for an unsaved new book.</param>
+/// <param name="ARows">The selected rows, the focused row first; a row with RulesFile '' names
+/// the open book.</param>
+/// <param name="AExists">True when a book path is on disk; nil = every path exists.</param>
+/// <returns>Book paths are compared as files (ExpandFileName, '/' as '\', SameFileName).
+/// Rows naming several books: the first row's target, OfferCount 1, Mixed. [] = mbaOpenBook,
+/// OfferCount 0.</returns>
+function MigrateTargetForRows(const AOpenBook: string; const ARows: TArray<TPasUseRow>; const AExists: TFunc<string, Boolean>): TMigrateBookTarget;
+
+/// <summary>The status prefix after the host opened the row's book: 'Opened B (it converted
+/// the row) -- '.</summary>
+/// <param name="ABookPath">The opened book; only its file name is shown.</param>
+/// <returns>The prefix; the host appends MigrateStatusText / BulkMigrateStatusText.</returns>
+function MigrateOpenedText(const ABookPath: string): string;
+
+/// <summary>Writes '#migrate Member -&gt; DL_NONE' for every instance row of ARows into its
+/// From -&gt; To block of ABook (owner ruling D5 = B): appends, or changes the block's
+/// member-form line for the member in place; a line already DL_NONE is left untouched.</summary>
+/// <param name="ABook">The book; owns any new node. The edits are Dirty and unsaved.</param>
+/// <param name="ARows">The selected rows; a member is written once per From -&gt; To pair
+/// (case-insensitive, bare type names), whatever the number of units that use it.</param>
+/// <param name="ABookName">The book's file name, for the skip reasons.</param>
+/// <returns>See TMigrateBulkOutcome. A row nothing can be written for is skipped, never fatal.</returns>
+function ApplyBreakToRows(ABook: TRuleBook; const ARows: TArray<TPasUseRow>; const ABookName: string): TMigrateBulkOutcome;
+
+/// <summary>The status bar sentence after ApplyBreakToRows.</summary>
+/// <param name="ABookPath">The book's path; only its file name is shown.</param>
+/// <param name="AOutcome">ApplyBreakToRows' answer.</param>
+/// <returns>'DL_NONE for N member(s) in B: W written, C changed, U already DL_NONE -- not
+/// saved: File > Save, then Convert again', zero counts dropped, + '; skipped K: Old: reason; ...'
+/// when any; 'Nothing written to B: ...' when nothing was written or changed.</returns>
+function BulkMigrateStatusText(const ABookPath: string; const AOutcome: TMigrateBulkOutcome): string;
+
 implementation
 
 uses
   System.Classes  // EFileStreamError: an unreadable book in MigrateBookNotes
+  , System.StrUtils  // MatchText: the bulk member keys
   , ConvRules.MigrateRules  // dl:unit ConvRules.MigrateRules accepted -- the APPLY_KIND_* migrate kinds and MIGRATE_DL_NONE are the classifier's own contract the decisions read
   ;
 
@@ -220,6 +304,17 @@ const
   REPORT_APPLIED_FMT  = '%s:%d %s.%s -> %s (#migrate line %d)';
   REPORT_BREAK_FMT    = '%s:%d DL_NONE(%s) (#migrate line %d)';
   BOOK_NOTE_FMT       = '%s: %d member #migrate line(s) -- this engine does not apply them (needs migrate_members)';
+  BOOK_MISSING_FMT    = '%s (the book that converted the row) is not on disk; the open book is used';
+  OPENED_FMT          = 'Opened %s (it converted the row) -- ';
+  MEMBER_KEY_SEP      = '|';
+  SKIP_FMT            = '%s: %s';
+  SKIP_GLOBAL         = 'a global, not a member of an instance (slice 3)';
+  BULK_FMT            = 'DL_NONE for %d member(s) in %s: %s';
+  BULK_PART_SEP       = ', ';
+  BULK_WRITTEN_FMT    = '%d written';
+  BULK_CHANGED_FMT    = '%d changed';
+  BULK_UNCHANGED_FMT  = '%d already DL_NONE';
+  BULK_SKIPPED_FMT    = 'skipped %d: %s';
 
 // The type name after its last dot ('Vcl.X.TSrcBtn' -> 'TSrcBtn').
 function BareName(const AType: string): string;
@@ -583,4 +678,139 @@ begin
   end;
 end;
 
+// A book path as a comparable file name: expanded, '/' as '\'; '' stays ''.
+function BookKey(const APath: string): string;
+begin
+  Result:= if APath = '' then '' else ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll]));
+end;
+
+// The book a row names: its rules_file, else the open book.
+function RowBook(const AOpenBook: string; const ARow: TPasUseRow): string;
+begin
+  Result:= if ARow.RulesFile <> '' then ARow.RulesFile else AOpenBook;
+end;
+
+// The dedupe key of a row's member: bare From, bare To and the member, case-insensitive.
+function MemberKey(const ARow: TPasUseRow): string;
+begin
+  Result:= UpperCase(BareName(ARow.FromType) + MEMBER_KEY_SEP + BareName(ARow.ToType) + MEMBER_KEY_SEP + ARow.Member);
+end;
+
+// The distinct instance members of ARows.
+function DistinctInstanceRows(const ARows: TArray<TPasUseRow>): TArray<TPasUseRow>;
+var
+  LKeys: TArray<string>;
+begin
+  Result:= nil;
+  LKeys:= nil;
+  for var LRow: TPasUseRow in ARows do
+    if (LRow.Instance <> '') and not MatchText(MemberKey(LRow), LKeys) then
+    begin
+      LKeys:= LKeys + [MemberKey(LRow)];
+      Result:= Result + [LRow];
+    end;
+end;
+
+function MigrateTargetForRows(const AOpenBook: string; const ARows: TArray<TPasUseRow>; const AExists: TFunc<string, Boolean>): TMigrateBookTarget;
+var
+  LBook: string;
+begin
+  Result:= Default(TMigrateBookTarget);
+  Result.Action:= mbaOpenBook;
+  Result.Book  := AOpenBook;
+  if Length(ARows) = 0 then
+    Exit;
+  LBook:= RowBook(AOpenBook, ARows[0]);
+  for var LRow: TPasUseRow in ARows do
+    if not SameFileName(BookKey(RowBook(AOpenBook, LRow)), BookKey(LBook)) then
+      Result.Mixed:= True;
+  Result.OfferCount:= if Result.Mixed then 1 else Length(DistinctInstanceRows(ARows));
+  if Result.OfferCount < 1 then
+    Result.OfferCount:= 1;
+  if SameFileName(BookKey(LBook), BookKey(AOpenBook)) then
+    Exit;
+  if Assigned(AExists) and not AExists(LBook) then
+  begin
+    Result.Action:= mbaMissing;
+    Result.Reason:= Format(BOOK_MISSING_FMT, [LBook]);
+    Exit;
+  end;
+  Result.Action:= mbaSwitch;
+  Result.Book  := LBook;
+end;
+
+function MigrateOpenedText(const ABookPath: string): string;
+begin
+  Result:= Format(OPENED_FMT, [ExtractFileName(ABookPath)]);
+end;
+
+function ApplyBreakToRows(ABook: TRuleBook; const ARows: TArray<TPasUseRow>; const ABookName: string): TMigrateBulkOutcome;
+var
+  LKeys : TArray<string>;
+  LBlock: TMigrateBlock;
+  LNode : TRuleNode;
+  LPick : TMigratePick;
+  LOut  : TMigrateOutcome;
+begin
+  Result:= Default(TMigrateBulkOutcome);
+  LKeys:= nil;
+  for var LRow: TPasUseRow in ARows do
+  begin
+    if MatchText(MemberKey(LRow), LKeys) then
+      Continue;
+    LKeys:= LKeys + [MemberKey(LRow)];
+    Inc(Result.Asked);
+    if LRow.Instance = '' then
+    begin
+      Result.Skipped:= Result.Skipped + [Format(SKIP_FMT, [LRow.Member, SKIP_GLOBAL])];
+      Continue;
+    end;
+    LBlock:= FindMigrateBlock(ABook, LRow.FromType, LRow.ToType, ABookName);
+    if LBlock.State = mbFound then
+    begin
+      LNode:= FindMigrateInBlock(ABook, LBlock.NodeIndex, LRow.Member);
+      if (LNode <> nil) and IsDeliberateBreak(LNode) then
+      begin
+        Inc(Result.Unchanged);
+        Continue;
+      end;
+    end;
+    LPick:= Default(TMigratePick);
+    LPick.Old  := LRow.Member;
+    LPick.Break:= True;
+    LOut:= ApplyMigratePick(ABook, LBlock, LPick);
+    if not LOut.Applied then
+      Result.Skipped:= Result.Skipped + [Format(SKIP_FMT, [LRow.Member, LOut.Reason])]
+    else if LOut.Replaced then
+      Inc(Result.Changed)
+    else
+      Inc(Result.Written);
+  end;
+end;
+
+function BulkMigrateStatusText(const ABookPath: string; const AOutcome: TMigrateBulkOutcome): string;
+var
+  LParts: TArray<string>;
+  LBook : string;
+  LSkip : string;
+begin
+  LBook:= ExtractFileName(ABookPath);
+  LParts:= nil;
+  if AOutcome.Written > 0 then
+    LParts:= LParts + [Format(BULK_WRITTEN_FMT, [AOutcome.Written])];
+  if AOutcome.Changed > 0 then
+    LParts:= LParts + [Format(BULK_CHANGED_FMT, [AOutcome.Changed])];
+  if AOutcome.Unchanged > 0 then
+    LParts:= LParts + [Format(BULK_UNCHANGED_FMT, [AOutcome.Unchanged])];
+  LSkip:= if Length(AOutcome.Skipped) > 0 then Format(BULK_SKIPPED_FMT, [Length(AOutcome.Skipped), string.Join(NOTE_SEPARATOR, AOutcome.Skipped)]) else '';
+  if AOutcome.Written + AOutcome.Changed = 0 then
+  begin
+    if LSkip <> '' then
+      LParts:= LParts + [LSkip];
+    Exit(Format(NOTHING_FMT, [LBook, string.Join(NOTE_SEPARATOR, LParts)]));
+  end;
+  Result:= Format(BULK_FMT, [AOutcome.Asked, LBook, string.Join(BULK_PART_SEP, LParts)]) + NOT_SAVED;
+  if LSkip <> '' then
+    Result:= Result + NOTE_SEPARATOR + LSkip;
+end;
 end.

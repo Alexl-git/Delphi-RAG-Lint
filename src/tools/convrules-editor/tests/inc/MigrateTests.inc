@@ -567,3 +567,104 @@ begin
   Check('migrate.g8.no.dlnone.noise', LOk and not ContainsText(MigrateFixture('apply-DlForm-dlnone-1350.json'), 'uses-unit-unresolved'),
     Format('breaks=%d unresolved=%s', [Length(LDl.DeliberateBreaks), string.Join(',', LDl.UsesUnresolved)]));
 end;
+
+{ #migrate follow-ups (spec section 12a): D5 = B -- 'DL_NONE for all selected rows' in the
+  Migrate dialog (ApplyBreakToRows); D6 = B -- the dialog targets the book that converted the
+  row, pas_uses[].rules_file (engine contract G7, in the 1.35.0-alpha capture). }
+
+function MigRow(const AInstance, AFrom, ATo, AMember, ARulesFile: string): TPasUseRow;
+begin
+  Result:= Default(TPasUseRow);
+  Result.Instance := AInstance;
+  Result.FromType := AFrom;
+  Result.ToType   := ATo;
+  Result.Member   := AMember;
+  Result.RulesFile:= ARulesFile;
+end;
+
+procedure TestMigrateFollowups;
+const
+  OPEN_BOOK  = 'C:\books\Fix.rules';
+  OTHER_BOOK = 'C:\books\Other.rules';
+var
+  LDl    : TApplyRow;
+  LOld   : TApplyRow;
+  LT     : TMigrateBookTarget;
+  LAll   : TFunc<string, Boolean>;
+  LNone  : TFunc<string, Boolean>;
+  B      : TRuleBook;
+  LOut   : TMigrateBulkOutcome;
+  LRows  : TArray<TPasUseRow>;
+  LStatus: string;
+begin
+  // D6: the real 1.35.0-alpha capture carries rules_file on every pas_uses[] row (G7) ...
+  LDl:= MigrateApply('apply-DlForm-dlnone-1350.json', APPLY_FEATURES_ALL);
+  var LNamed: Boolean:= Length(LDl.PasUses) > 0;
+  for var R: TPasUseRow in LDl.PasUses do
+    LNamed:= LNamed and EndsText('\dlnone.rules', R.RulesFile);
+  Check('migrate.d6.rules_file.parsed', LNamed, IntToStr(Length(LDl.PasUses)) + ' rows');
+  // ... and an engine before it sends none: RulesFile stays '' (positive control).
+  LOld:= ParseApplyJson(TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\apply-pas-uses-1270.json'))), APPLY_FEATURES_ALL);
+  Check('migrate.d6.rules_file.absent', (Length(LOld.PasUses) > 0) and (LOld.PasUses[0].RulesFile = ''), IntToStr(Length(LOld.PasUses)));
+
+  LAll:= function(APath: string): Boolean
+    begin
+      Result:= True;
+    end;
+  LNone:= function(APath: string): Boolean
+    begin
+      Result:= False;
+    end;
+  LT:= MigrateTargetForRows(OPEN_BOOK, [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', 'c:/books/FIX.rules')], LAll);
+  Check('migrate.d6.target.open', (LT.Action = mbaOpenBook) and (LT.Book = OPEN_BOOK) and (LT.OfferCount = 1) and not LT.Mixed, LT.Book);
+  LT:= MigrateTargetForRows(OPEN_BOOK, [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', '')], LAll);
+  Check('migrate.d6.target.unnamed', (LT.Action = mbaOpenBook) and (LT.Book = OPEN_BOOK), 'an engine without rules_file keeps v1: the open book');
+  LT:= MigrateTargetForRows(OPEN_BOOK, [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', OTHER_BOOK)], LAll);
+  Check('migrate.d6.target.switch', (LT.Action = mbaSwitch) and (LT.Book = OTHER_BOOK) and (LT.Reason = ''), LT.Book);
+  LT:= MigrateTargetForRows(OPEN_BOOK, [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', OTHER_BOOK)], nil);
+  Check('migrate.d6.target.switch.nilexists', LT.Action = mbaSwitch);
+  LT:= MigrateTargetForRows(OPEN_BOOK, [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', OTHER_BOOK)], LNone);
+  Check('migrate.d6.target.missing', (LT.Action = mbaMissing) and (LT.Book = OPEN_BOOK) and ContainsText(LT.Reason, 'Other.rules') and ContainsText(LT.Reason, 'not on disk'), LT.Reason);
+  LT:= MigrateTargetForRows('', [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', '')], LAll);
+  Check('migrate.d6.target.untitled', (LT.Action = mbaOpenBook) and (LT.Book = ''), LT.Book);
+  LT:= MigrateTargetForRows(OPEN_BOOK, [], LAll);
+  Check('migrate.d6.target.empty', (LT.Action = mbaOpenBook) and (LT.OfferCount = 0));
+  Check('migrate.d6.opened.text', MigrateOpenedText(OTHER_BOOK) = 'Opened Other.rules (it converted the row) -- ', MigrateOpenedText(OTHER_BOOK));
+
+  // D5: the bulk choice covers the DISTINCT instance members of one book.
+  LRows:= [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', OTHER_BOOK), MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Click', OTHER_BOOK),
+    MigRow('btnLow', 'TSrcBtn', 'TDstBtn', 'count', OTHER_BOOK), MigRow('', '', '', 'Beep', OTHER_BOOK)];
+  LT:= MigrateTargetForRows(OPEN_BOOK, LRows, LAll);
+  Check('migrate.d5.offer.distinct', (LT.Action = mbaSwitch) and (LT.OfferCount = 2) and not LT.Mixed, Format('offer=%d', [LT.OfferCount]));
+  LT:= MigrateTargetForRows(OPEN_BOOK, [LRows[0], LRows[2]], LAll);
+  Check('migrate.d5.offer.samemember', LT.OfferCount = 1, Format('offer=%d -- one member, one line', [LT.OfferCount]));
+  LT:= MigrateTargetForRows(OPEN_BOOK, [LRows[0], MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Click', OPEN_BOOK)], LAll);
+  Check('migrate.d5.offer.mixed', LT.Mixed and (LT.OfferCount = 1) and (LT.Action = mbaSwitch) and (LT.Book = OTHER_BOOK), Format('offer=%d', [LT.OfferCount]));
+
+  B:= MigBook(['#convert Vcl.X.TSrcBtn -> TDstBtn', '#link Caption <- Caption', '#migrate Click -> Press', '#migrate Tag -> DL_NONE', '#convert TA -> TB', '#link P <- P']);
+  try
+    LRows:= [MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Count', ''), MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Click', ''),
+      MigRow('btnTop', 'TSrcBtn', 'TDstBtn', 'Tag', ''), MigRow('btnLow', 'TSrcBtn', 'TDstBtn', 'COUNT', ''),
+      MigRow('edA', 'TX', 'TY', 'Foo', ''), MigRow('', '', '', 'Beep', '')];
+    LOut:= ApplyBreakToRows(B, LRows, 'Fix.rules');
+    Check('migrate.d5.bulk.counts', (LOut.Asked = 5) and (LOut.Written = 1) and (LOut.Changed = 1) and (LOut.Unchanged = 1) and (Length(LOut.Skipped) = 2),
+      Format('asked=%d written=%d changed=%d unchanged=%d skipped=%d', [LOut.Asked, LOut.Written, LOut.Changed, LOut.Unchanged, Length(LOut.Skipped)]));
+    Check('migrate.d5.bulk.lines', (B.Nodes.Count = 7) and (B.Nodes[2].Emit = '#migrate Click -> DL_NONE') and (B.Nodes[4].Emit = '#migrate Count -> DL_NONE')
+      and (B.Nodes[5].Kind = rnkConvert), B.Nodes[4].Emit);
+    Check('migrate.d5.bulk.untouched', (B.Nodes[3].Emit = '#migrate Tag -> DL_NONE') and not B.Nodes[3].Dirty, 'an existing DL_NONE line is not dirtied');
+    Check('migrate.d5.bulk.skipped', (Length(LOut.Skipped) = 2) and StartsText('Foo: no #convert TX -> TY block in Fix.rules', LOut.Skipped[0])
+      and StartsText('Beep: ', LOut.Skipped[1]), string.Join(' | ', LOut.Skipped));
+    LStatus:= BulkMigrateStatusText(OPEN_BOOK, LOut);
+    Check('migrate.d5.status', StartsText('DL_NONE for 5 member(s) in Fix.rules: 1 written, 1 changed, 1 already DL_NONE -- not saved: File > Save, then Convert again; skipped 2: Foo: ', LStatus), LStatus);
+    // Again: everything is DL_NONE now -- nothing is dirtied and the status says nothing was written.
+    for var N: TRuleNode in B.Nodes do
+      N.Dirty:= False;
+    LOut:= ApplyBreakToRows(B, [LRows[0], LRows[1]], 'Fix.rules');
+    Check('migrate.d5.bulk.again', (LOut.Unchanged = 2) and (LOut.Written + LOut.Changed = 0) and not B.Nodes[2].Dirty and not B.Nodes[4].Dirty,
+      Format('unchanged=%d', [LOut.Unchanged]));
+    LStatus:= BulkMigrateStatusText(OPEN_BOOK, LOut);
+    Check('migrate.d5.status.nothing', LStatus = 'Nothing written to Fix.rules: 2 already DL_NONE', LStatus);
+  finally
+    B.Free;
+  end;
+end;
