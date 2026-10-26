@@ -2035,6 +2035,25 @@ const
   /// see the block comment above.</para></summary>
   REF_KIND_CALL = 'call';
 
+  /// <summary>Exception facts written at extraction (spec
+  /// 2026-10-26-extract-raise-handle-facts). Each is an ADDED row: the read /
+  /// type_use / call rows at the same site are kept. None is resolved to a
+  /// call target. RAISE: `raise T.Create*(..)`, name = T, receiver = its
+  /// qualifier. RAISE_EXPR: any other `raise X` (root identifier).
+  /// RERAISE: bare `raise;`. HANDLE: `on [E:] T do`, name = T.
+  /// HANDLE_ALL: an `except` with no handler (name 'except') and the `else`
+  /// after handlers (name 'else').</summary>
+  /// <remarks>Emitted only by a deep (usage-ref) parse, like 'read'.</remarks>
+  REF_KIND_RAISE      = 'raise';
+  /// <summary>See REF_KIND_RAISE.</summary>
+  REF_KIND_RAISE_EXPR = 'raise-expr';
+  /// <summary>See REF_KIND_RAISE.</summary>
+  REF_KIND_RERAISE    = 'reraise';
+  /// <summary>See REF_KIND_RAISE.</summary>
+  REF_KIND_HANDLE     = 'handle';
+  /// <summary>See REF_KIND_RAISE.</summary>
+  REF_KIND_HANDLE_ALL = 'handle-all';
+
 /// <summary>The SQL predicate selecting call-site refs, for the queries that
 /// build their WHERE clause as text.</summary>
 /// <param name="ARefAlias">Table alias (or table name) the predicate should
