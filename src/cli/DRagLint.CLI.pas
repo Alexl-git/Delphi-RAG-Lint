@@ -27362,9 +27362,10 @@ end;
 
 { 1.34.1 (CONV-ENC E1'/E3): the encoding guard for one unit's plan, run on the dry run and
   --apply alike, nothing written. The .pas is checked before the .dfm. A file named by
-  --raise-encoding is skipped (UTF-8 holds every character). A TEXT .dfm never refuses:
-  its edits' string literals get Delphi #codes for what its encoding cannot hold (AEdits is
-  rewritten). A binary .dfm is never compared (one line appended to AWarnings). For a .pas
+  --raise-encoding is skipped (UTF-8 holds every character). A TEXT .dfm: its edits' string
+  literals get Delphi #codes for what its encoding cannot hold (AEdits is rewritten); a
+  character it cannot hold OUTSIDE a literal (an identifier: class, property, enum value),
+  where DFM syntax has no #code, refuses like a .pas (lane H, 2026-10-26). A binary .dfm is never compared (one line appended to AWarnings). For a .pas
   whose encoding cannot hold a value, ACtx gets the refusal (RefusalKind and Enc*) and the
   reason text is returned; '' means the unit may proceed. }
 function EncodingGuardReason(const AArgs: TArgs; const AUnitPas, ADfm: string;
@@ -27398,11 +27399,17 @@ begin
     if IsRaisedFile(AArgs.RaiseEncoding, Path) then Continue;
     var Fmt: TTextFileFormat:= TTextFileFormat.Decode(Bytes, OldText);
     if Fmt.Encoding <> TEncoding.ANSI then Continue;
+    var Where: string:= '';
     if IsDfm then
     begin
+      Values:= nil;
       for var I: Integer:= 0 to High(AEdits) do
-        if SameText(AEdits[I].FilePath, Path) then AEdits[I].Text:= EscapeUnfitForDfm(AEdits[I].Text, Fmt.Encoding);
-      Continue;
+        if SameText(AEdits[I].FilePath, Path) then
+        begin
+          AEdits[I].Text:= EscapeUnfitForDfm(AEdits[I].Text, Fmt.Encoding);
+          Values:= Values + [AEdits[I].Text];
+        end;
+      Where:= ' outside a string literal, where a #code is not allowed,';
     end;
     var Codes: TArray<Integer>:= UnfitCodePoints(Fmt, Values);
     if Length(Codes) = 0 then Continue;
@@ -27422,8 +27429,8 @@ begin
     ACtx.EncFile    := Path;
     ACtx.EncName    := TextFileEncodingName(Fmt);
     ACtx.EncTotal   := Length(Codes);
-    Exit(Format('encoding: %d character(s) do not fit %s (%s): %s -- raise the file to UTF-8 with BOM, or skip the unit',
-      [Length(Codes), Path, ACtx.EncName, String.Join(', ', Parts)]));
+    Exit(Format('encoding: %d character(s)%s do not fit %s (%s): %s -- raise the file to UTF-8 with BOM, or skip the unit',
+      [Length(Codes), Where, Path, ACtx.EncName, String.Join(', ', Parts)]));
   end;
 end;
 

@@ -10,8 +10,11 @@
   E2.  --raise-encoding "<path>=utf8-bom" (repeatable) writes that file as UTF-8 + BOM in the same
        transaction and the edits apply; a path that is not a file of the run, a level other than
        utf8-bom, or an entry without '=' is exit 2 with nothing written.
-  E3.  A TEXT .dfm gets Delphi #codes for what its encoding cannot hold and never refuses; a
-       BINARY (TPF0) .dfm is never compared (one warnings[] line).
+  E3.  A TEXT .dfm gets Delphi #codes for what its encoding cannot hold inside string literals and
+       never refuses for them; a BINARY (TPF0) .dfm is never compared (one warnings[] line).
+       E3e/E3f (lane H): an unfit character OUTSIDE a literal (identifier) has no #code: refused
+       like a .pas; --raise-encoding on the .dfm writes it raw.
+  U1.  (lane H) A UTF-8 + BOM .pas with a #use rule is a unit (was refused "not a unit").
   Capability: info --json capabilities.convert_encoding_guard is JSON true.
 
   Fixtures are GENERATED here (bytes written with explicit encodings), in a $PID scratch folder.
@@ -161,6 +164,27 @@ $d = NewCase 'g2_dfmfits' $Ansi $Ansi 'TDstBtn' "#default Hint = '$Eac'`r`n"
 $r = Apply $d @('--apply')
 $t = $Ansi.GetString((Bytes "$d\Form1.dfm"))
 Check 'E3b negative control: a value the ANSI .dfm holds (e-acute) is written as is, no #code' (($r.Code -eq 0) -and ($t -match "Hint = '$Eac'") -and ($t -notmatch '#233')) ($t)
+
+# ---- E3 identifiers: a #code is legal only inside a string literal (lane H, item 3) --------
+$d = NewCase 'g3_dfmident' $Ansi $Ansi 'TDstBtn' "#default Hint = ab$CyD`r`n"
+$before = Snap $d
+$r = Apply $d @('--apply'); $j = Json $r.Out
+$ec = if ($j) { $j.encoding_refused } else { $null }
+Check 'E3e ANSI text .dfm, bare IDENTIFIER value ab+U+0414 (no #code possible): exit 1, refused, encoding_refused names the .dfm, chars_total 1, nothing written (was: silently written as ab?)' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refusal_kind -eq 'encoding_refused') -and ($null -ne $ec) -and ($ec.file -eq "$d\Form1.dfm") -and `
+   ($ec.file_encoding -eq 'ansi') -and ($ec.chars_total -eq 1) -and ($ec.chars[0].code -eq 1044) -and ([string]$j.reason -match 'outside a string literal') -and ((Snap $d) -eq $before)) $r.Out
+$d = NewCase 'g4_dfmident_raise' $Ansi $Ansi 'TDstBtn' "#default Hint = ab$CyD`r`n"
+$r = Apply $d @('--apply','--raise-encoding',"$d\Form1.dfm=utf8-bom"); $j = Json $r.Out
+Check 'E3f the same identifier with --raise-encoding on the .dfm: exit 0, .dfm UTF-8 + BOM, raw identifier written' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and (HasBom "$d\Form1.dfm") -and ($Utf8.GetString((Bytes "$d\Form1.dfm")) -match "Hint = ab$CyD")) $r.Out
+
+# ---- lane H item 2: a UTF-8 + BOM .pas with a #use rule is a unit -------------------
+$d = NewCase 'i_bom_use' $Utf8B $Utf8B 'TDstBtn' "#use UnitBom`r`n"
+$r = Apply $d @('--apply'); $j = Json $r.Out
+$b = Bytes "$d\Form1.pas"
+Check 'U1 UTF-8 + BOM .pas + #use: exit 0, applied (was: refused "not a unit"), UnitBom in the uses, exactly one BOM' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.ok -eq $true) -and ($Utf8.GetString($b) -match 'UnitBom') -and (HasBom "$d\Form1.pas") -and `
+   -not (($b[3] -eq 0xEF) -and ($b[4] -eq 0xBB) -and ($b[5] -eq 0xBF))) $r.Out
 
 # ---- E3 binary .dfm: never compared, one warnings[] line ----------------------------
 function PStr([string]$s) { return ,([byte[]]@([byte]$s.Length) + [Text.Encoding]::ASCII.GetBytes($s)) }

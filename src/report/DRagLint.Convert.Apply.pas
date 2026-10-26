@@ -4044,6 +4044,15 @@ type
     PlannerNeeded   : Boolean;             { unit rules or a C13 move: the planner owns every edit }
   end;
 
+{ Lane H (2026-10-26): a unit's text for the uses planner, decoded as the writer decodes it
+  (TTextFileFormat.ReadFile): a UTF-8 / UTF-16 BOM is stripped and its encoding honoured. The
+  old ANSI read kept a UTF-8 BOM as three characters in front of 'unit', so a UTF-8 + BOM unit
+  with any #use rule was refused as "not a unit". }
+function ReadUnitText(const APath: string): string;
+begin
+  TTextFileFormat.ReadFile(APath, Result);
+end;
+
 const
   { C18: the '#migrate Old -> DL_NONE' replacement -- a deliberate break. A
     marker, never a unit symbol: the uses reconciliation skips it (G8). }
@@ -4081,7 +4090,7 @@ begin
   Result:= Default(TReconcileOutcome);
   UnitIn:= Default(TUsesReconcileInput);
   UnitIn.UnitPas     := UnitPas;
-  UnitIn.OrigPas     := TEncoding.ANSI.GetString(TFile.ReadAllBytes(UnitPas));
+  UnitIn.OrigPas     := ReadUnitText(UnitPas);
   UnitIn.ConvPas     := TTextEditApplier.ApplyToText(UnitPas, UnitIn.OrigPas, AArgs.Edits);
   UnitIn.Rules       := Rules;
   UnitIn.ExtraAdds   := Adds;
@@ -6700,7 +6709,7 @@ var
           for E in Pending do Edits.Add(E);
       end
       else if UnitRules or MoveNeeded then
-        AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
+        AUses:= PlanUnitRules(AUnitPas, ReadUnitText(AUnitPas), ABook.Rules,
           AAdds, AIntfAdds)
       else
         for E in Pending do Edits.Add(E);
@@ -7059,7 +7068,7 @@ begin
       skipped, not refused -- re-plan keeping those units, then report each }
     if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then
     begin
-      UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
+      UsesPlan:= PlanUnitRules(AUnitPas, ReadUnitText(AUnitPas), ABook.Rules,
         UnitAdds + SkippedUnits(Skips), UnitIntfAdds);
       if UsesPlan.Ok then
       begin
@@ -7162,7 +7171,7 @@ begin
       end;
     Exit;
   end;
-  UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, nil);
+  UsesPlan:= PlanUnitRules(AUnitPas, ReadUnitText(AUnitPas), ARules, nil);
   { R26: every #convert instance of the .dfm stays unconverted here (--only
     left them all out), so no removal may take away a unit they need }
   Leaves:= '';
@@ -7173,7 +7182,7 @@ begin
   { C13 N4: every instance was left out by --only -- skip, do not refuse }
   if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then
   begin
-    UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, SkippedUnits(Skips));
+    UsesPlan:= PlanUnitRules(AUnitPas, ReadUnitText(AUnitPas), ARules, SkippedUnits(Skips));
     if UsesPlan.Ok then
     begin
       UsesPlan.Changes:= UsesPlan.Changes + Skips;
