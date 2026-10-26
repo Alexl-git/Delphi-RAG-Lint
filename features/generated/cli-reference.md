@@ -1551,7 +1551,7 @@ Described in [Symbol Slice](../../docs/wiki/Symbol-Slice.md).
 
 ### sql
 
-Runs one read-only SQL statement against an index database and prints the result set.
+Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM.
 
 ```text
 drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)
@@ -1568,7 +1568,10 @@ drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format t
 | `--timeout-ms` | `N` |  |  |
 | `--output` | `<file>` |  |  |
 
-Described in [sql](../../docs/wiki/sql.md).
+Described in:
+
+* [Output encoding (--output-encoding)](../../docs/wiki/output-encoding.md)
+* [sql](../../docs/wiki/sql.md)
 
 ### surface
 

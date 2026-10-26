@@ -9246,6 +9246,50 @@
       }
     },
     {
+      "id": "output-encoding",
+      "title": "Output encoding (--output-encoding)",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.35.0-alpha",
+      "summary": "Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \\uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM",
+      "intro": "Read this when a tool reads drag-lint output through a pipe and a path or message holds non-ASCII text. The default is 7-bit ASCII -- the JSON escape inside --json, so a JSON reader gets the exact string back; --output-encoding utf8|utf16 (or outputEncoding in .drag-lint.json) writes raw Unicode instead.",
+      "wikiPage": "output-encoding",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "sql",
+          "example": "drag-lint sql --query <select> --db <db> --json --output-encoding utf8"
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I get UTF-8 instead of escaped ASCII from the engine?",
+          "command": "drag-lint sql --query <select> --db <db> --json --output-encoding utf8"
+        },
+        {
+          "ask": "How do I make UTF-8 the default for every run in a folder?",
+          "command": "put {\"outputEncoding\": \"utf8\"} in .drag-lint.json"
+        },
+        {
+          "ask": "Why does my output show \\u00e9 instead of the character?",
+          "command": "drag-lint <verb> ... --output-encoding utf8"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-26",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-26",
+        "by": "ENGINE",
+        "build": "1.35.0-alpha",
+        "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
+      }
+    },
+    {
       "id": "mcp-config-writer",
       "title": "Register the MCP server (Claude Code, VS Code)",
       "group": "editor-integration",

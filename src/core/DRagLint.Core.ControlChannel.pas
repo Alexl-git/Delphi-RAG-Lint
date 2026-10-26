@@ -432,6 +432,7 @@ implementation
 uses
   System.IOUtils
   , System.DateUtils
+  , DRagLint.Core.OutputEncoding { EncodeForOutput: these lines bypass ErrOutput }
   ;
 
 type
@@ -683,7 +684,8 @@ begin
 end;
 
 { ONE WriteFile per line, straight to the stderr handle: the listener runs on
-  its own thread and Delphi's ErrOutput text file is not thread-safe. }
+  its own thread and Delphi's ErrOutput text file is not thread-safe. Encoded
+  like ErrOutput (default ascii), not always UTF-8 as it was. }
 procedure StderrLine(const S: string);
 var
   B      : TBytes;
@@ -692,7 +694,7 @@ var
 begin
   H:= GetStdHandle(STD_ERROR_HANDLE);
   if (H = 0) or (H = INVALID_HANDLE_VALUE) then Exit;
-  B:= TEncoding.UTF8.GetBytes(S + sLineBreak);
+  B:= EncodeForOutput(S + sLineBreak); { the --output-encoding bytes ErrOutput writes (2026-10-26) }
   WriteFile(H, B[0], Length(B), Written, nil);
 end;
 
