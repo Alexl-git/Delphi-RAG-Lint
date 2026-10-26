@@ -233,6 +233,12 @@ try {
     Edit-File (Join-Path $r 'DemoUIConnect.pas') "    Log.Add('first ' + Lines[0]);" "    Lines[0] := 'x';" }
   Check 'c7i-write (a write to the indexed property) is never mechanical' ($c7iW.Verdict -ne 'mechanical') "[$($c7iW.Verdict) / $($c7iW.Refusals)]"
   }
+  if (Want 'lbl') {
+  Write-Host '== (lbl) a refusal is labelled with the kind of the symbol it names, not of the first need' -ForegroundColor Cyan
+  $lbl = Get-Plan 'sigincyclelabel' 'R1Extend.dproj' 'lbl-record' $null
+  Test-Refused 'lbl-record' $lbl 'signature-in-cycle'
+  Check 'lbl-record the refusal names `TR1TitleKind` (record), not (var)' ($lbl.Text.Contains('`TR1TitleKind` (record): refused: signature-in-cycle') -and
+    -not $lbl.Text.Contains('`TR1TitleKind` (var)')) ([regex]::Match($lbl.Text, '(?m)^.*refused: signature-in-cycle.*$').Value)  }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

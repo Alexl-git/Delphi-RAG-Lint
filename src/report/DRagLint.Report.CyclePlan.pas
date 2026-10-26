@@ -4895,9 +4895,15 @@ begin
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
-      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [(if Ev.Surface.RoutineName <> '' then Ev.Surface.RoutineName
-        else Refusal.Symbol), (if Length(Ev.Needs) > 0 then Ev.Needs[0].Owner.Kind.ToText else 'routine'), Refusal.Kind,
-        Refusal.Reason]);
+      { the label is the kind of the symbol named, never of the edge's first need (a var read before the call) }
+      var Shown:= if Ev.Surface.RoutineName <> '' then Ev.Surface.RoutineName else Refusal.Symbol;
+      var Kind := 'routine';
+      for var N in Ev.Needs do
+        if SameText(N.Owner.Name, Shown) then Kind:= N.Owner.Kind.ToText;
+      if (Kind = 'routine') and (Ev.Surface.RoutineName = '') then
+        for var S in GetFile(FidOfStem(Ev.Surface.ToStem)).Syms do
+          if SameText(S.Name, Shown) and not (S.Kind in [skParam, skLocalVar]) and (Kind = 'routine') then Kind:= S.Kind.ToText;
+      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Shown, Kind, Refusal.Kind, Refusal.Reason]);
       pEvals[I]:= Ev;
       Continue;
     end;
