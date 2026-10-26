@@ -641,7 +641,7 @@ uses
   , System.Diagnostics
   , ConvRules.Glyph
   , ConvRules.UnitStatus  // TFileProbe (FileProbe's return type) is declared here
-  , ConvRules.Migrate  // A4: MigrateNote / MigrateReportNote and the REPORT_STATUS_* migrate columns
+  , ConvRules.Migrate  // dl:unit ConvRules.Migrate accepted -- A4: the REPORT_STATUS_* migrate columns travel with MigrateNote / MigrateReportNote, the report lines' own contract
   , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- the batch loop executes these pure batch decisions; BATCH_MAX_UNITS and BATCH_REINDEX_FAILED_FMT are part of that contract
   ;
 

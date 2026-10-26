@@ -28,7 +28,7 @@ type
   /// a new run REPLACES the list (MergeRun keyed by run id), never mixes with it.
   /// A double-click copies '&lt;file&gt;(&lt;line&gt;)' to the clipboard and says so on
   /// the status line (WorkGoTo); it opens nothing.</remarks>
-  TWorkListTab = class(TPanel)
+  TWorkListTab = class(TPanel)  // dl:ok high-response@19e1 -- A4 added the Migrate button and the Rule cell; the tab stays one panel by design (forms render, ConvRules.WorkList / ConvRules.Migrate decide)
   private
     FSetStatus: TProc<string, Boolean>;
     FRun      : TWorkRun;
@@ -38,7 +38,15 @@ type
     FText     : TEdit;
     FSummary  : TLabel;
     FGrid     : TListView;
+    FBtnMigrate : TButton;
+    FCanMigrate : TFunc<TPasUseRow, Boolean>;
+    FMigrate    : TFunc<TPasUseRow, string>;
+    FRuleText   : TFunc<TPasUseRow, string>;
     procedure BuildFilters;
+    procedure MigrateClick(Sender: TObject);
+    procedure GridSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+    procedure UpdateMigrateButton;
+    function SelectedRow(out ARow: TPasUseRow): Boolean;
     procedure BuildGrid;
     procedure FilterChanged(Sender: TObject);
     procedure GridDblClick(Sender: TObject);
@@ -68,6 +76,16 @@ type
     /// row count when the filter hides rows.</summary>
     /// <returns>The text the tab's summary label shows.</returns>
     function SummaryText: string;
+    /// <summary>A4: wires member migration. The Migrate... button shows only when AMigrate is
+    /// assigned; it is enabled when ACanMigrate answers True for the selected row.</summary>
+    /// <param name="ACanMigrate">True when the row can take a #migrate (an instance row, an
+    /// engine with migrate_members); nil = never.</param>
+    /// <param name="AMigrate">Runs the dialog and writes the pick into the open book; returns the
+    /// status text (MigrateStatusText); '' = cancelled. nil = feature off.</param>
+    /// <param name="ARuleText">The Rule cell of a row (RuleForRow); nil = ''.</param>
+    procedure SetMigrateHost(const ACanMigrate: TFunc<TPasUseRow, Boolean>; const AMigrate, ARuleText: TFunc<TPasUseRow, string>);
+    /// <summary>Repaints the rows (the Rule cells) after the open book changed.</summary>
+    procedure RefreshRules;
   end;
 
 implementation
@@ -89,6 +107,10 @@ const
   UNIT_ALL        = '(all units)';
   SHOWN_FMT       = '%s; %d shown';
   COL_WIDTHS: array[0..7] of Integer = (120, 100, 170, 140, 70, 110, 80, 200);
+  RULE_COL_W      = 260;
+  RULE_COL_CAPTION = 'Rule';
+  MIGRATE_CAPTION = 'Migrate...';
+  MIGRATE_BTN_W   = 90;
 
 constructor TWorkListTab.Create(AOwner: TComponent; const ASetStatus: TProc<string, Boolean>);
 begin
@@ -148,6 +170,18 @@ begin
   FText.Width           := TEXT_EDIT_W;
   FText.OnChange        := FilterChanged;
 
+  FBtnMigrate:= TButton.Create(Self);
+  FBtnMigrate.Parent          := LRow;
+  FBtnMigrate.Name            := 'BtnMigrate';
+  FBtnMigrate.Left            := High(Word);
+  FBtnMigrate.Align           := alLeft;
+  FBtnMigrate.AlignWithMargins:= True;
+  FBtnMigrate.Width           := MIGRATE_BTN_W;
+  FBtnMigrate.Caption         := MIGRATE_CAPTION;
+  FBtnMigrate.Visible         := False;
+  FBtnMigrate.Enabled         := False;
+  FBtnMigrate.OnClick         := MigrateClick;
+
   FSummary:= TLabel.Create(Self);
   FSummary.Parent          := Self;
   FSummary.Name            := 'LblWorkSummary';
@@ -189,6 +223,10 @@ begin
     LCol.Caption:= LCaptions[I];
     LCol.Width  := COL_WIDTHS[I];
   end;
+  var LRule: TListColumn:= FGrid.Columns.Add;
+  LRule.Caption:= RULE_COL_CAPTION;
+  LRule.Width  := RULE_COL_W;
+  FGrid.OnSelectItem    := GridSelectItem;
   FGrid.OnDblClick      := GridDblClick;
   FGrid.OnCustomDrawItem:= GridCustomDrawItem;
 end;
@@ -243,11 +281,62 @@ begin
       LItem.Caption:= LCells[0];
       for var I: Integer:= 1 to High(LCells) do
         LItem.SubItems.Add(LCells[I]);
+      LItem.SubItems.Add(if Assigned(FRuleText) then FRuleText(LRow) else '');
     end;
   finally
     FGrid.Items.EndUpdate;
   end; // try
   FSummary.Caption:= SummaryText;
+  UpdateMigrateButton;
+end;
+
+procedure TWorkListTab.SetMigrateHost(const ACanMigrate: TFunc<TPasUseRow, Boolean>; const AMigrate, ARuleText: TFunc<TPasUseRow, string>);
+begin
+  FCanMigrate:= ACanMigrate;
+  FMigrate   := AMigrate;
+  FRuleText  := ARuleText;
+  FBtnMigrate.Visible:= Assigned(FMigrate);
+  RefreshGrid;
+end;
+
+procedure TWorkListTab.RefreshRules;
+begin
+  RefreshGrid;
+end;
+
+function TWorkListTab.SelectedRow(out ARow: TPasUseRow): Boolean;
+begin
+  Result:= (FGrid.Selected <> nil) and (FGrid.Selected.Index <= High(FShown));
+  ARow:= if Result then FShown[FGrid.Selected.Index] else Default(TPasUseRow);
+end;
+
+procedure TWorkListTab.UpdateMigrateButton;
+var
+  LRow: TPasUseRow;
+begin
+  FBtnMigrate.Enabled:= Assigned(FMigrate) and Assigned(FCanMigrate) and SelectedRow(LRow) and FCanMigrate(LRow);
+end;
+
+procedure TWorkListTab.GridSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+begin
+  UpdateMigrateButton;
+end;
+
+procedure TWorkListTab.MigrateClick(Sender: TObject);
+var
+  LRow   : TPasUseRow;
+  LStatus: string;
+  LIndex : Integer;
+begin
+  if not (Assigned(FMigrate) and SelectedRow(LRow)) then
+    Exit;
+  LIndex:= FGrid.Selected.Index;
+  LStatus:= FMigrate(LRow);
+  RefreshGrid;
+  if (LIndex >= 0) and (LIndex < FGrid.Items.Count) then
+    FGrid.Items[LIndex].Selected:= True;
+  if LStatus <> '' then
+    FSetStatus(LStatus, StartsText('Nothing written', LStatus));
 end;
 
 function TWorkListTab.SummaryText: string;

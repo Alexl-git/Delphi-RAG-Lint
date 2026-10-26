@@ -145,7 +145,7 @@ function StaticMigrateMarks(ABook: TRuleBook): Integer;
 /// <param name="ABook">The open book; must be the book the run used.</param>
 /// <param name="AChecks">TApplyRow.MigrateChecks of the run's rows for that book.</param>
 /// <returns>The number of marks added; per-site items and repeats add none.</returns>
-function AddMigrateCheckMarks(ABook: TRuleBook; const AChecks: TArray<TApplyItem>): Integer;
+function AddMigrateCheckMarks(ABook: TRuleBook; const AChecks: TArray<TApplyItem>): Integer;  // dl:ok unused-public-symbol@652d -- A4 D8 post-run marks: its caller is the Convert tab result hand-off (ConvRules.ConvertTab, lane D), a named follow-up; pinned by migrate.postrun.marks
 
 /// <summary>The rule tree marker suffix of a block: '; N migrate' (N member-form lines).</summary>
 /// <param name="ABook">The book; not owned.</param>
@@ -177,13 +177,13 @@ function MigrateReportNote(const AItem: TApplyItem): string;
 /// <param name="ABookText">The book's text.</param>
 /// <returns>'B: N member #migrate line(s) -- this engine does not apply them (needs
 /// migrate_members)', counting member-form lines after the first header; '' when 0.</returns>
-function MigrateBookNote(const ABookName, ABookText: string): string;
+function MigrateBookNote(const ABookName, ABookText: string): string;  // dl:ok unused-public-symbol@9864 -- A4 D4 Preflight note: its caller is ConvRules.ConvertTab Preflight (lane D), a named follow-up; pinned by migrate.booknote
 
 implementation
 
 uses
   System.SysUtils
-  , ConvRules.MigrateRules
+  , ConvRules.MigrateRules  // dl:unit ConvRules.MigrateRules accepted -- the APPLY_KIND_* migrate kinds and MIGRATE_DL_NONE are the classifier's own contract the decisions read
   ;
 
 const
