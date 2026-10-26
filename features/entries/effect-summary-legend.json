@@ -4,9 +4,9 @@
   "group": "documentation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.16.0-alpha",
   "summary": "The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index",
-  "intro": "Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields) and `p<k>` (writes through parameter k, counted from 0).",
+  "intro": "Read this when hover or ask effects shows a short effect string and you need to decode it. Tokens include g (touches global or external state, including SQL), h (frees heap it did not allocate), s (writes its own instance fields), p<k> (writes through parameter k, counted from 0) and ? (not proven: something could not be bound, which is not an effect).",
   "wikiPage": "Effect-Summary-Legend",
   "surfaces": [
     {
@@ -26,7 +26,6 @@
       "command": "drag-lint > Help > Effect Summary Legend (wiki)"
     }
   ],
-  "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",

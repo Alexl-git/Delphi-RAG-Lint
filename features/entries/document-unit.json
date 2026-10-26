@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.90.0-alpha",
-  "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
-  "intro": "Read this when a whole unit needs documentation, not just one symbol. Right-click the unit in the Structure form and choose Document unit to generate or repair managed DocInsight comments for its public declarations.",
+  "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only)",
+  "intro": "Read this when the file you are editing needs documentation, not just one symbol. Right-click in the Structure form and choose Document unit to generate or repair managed DocInsight comments for every public declaration in the active editor file; the node you clicked does not matter.",
   "wikiPage": "Document-unit",
   "surfaces": [
     {

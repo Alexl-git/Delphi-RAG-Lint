@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.33.0-alpha",
   "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
-  "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); it is served by the IDE plugin and has no one-shot command line verb.",
+  "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); the same list comes from the command line as drag-lint usages --name <X> --db <db>.",
   "wikiPage": "Find-Usages",
   "surfaces": [
     {
