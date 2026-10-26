@@ -422,7 +422,18 @@ try {
   $vq3 = Get-Variant 'r1dprojonly' 'R1Extend.dpr' $dprLine ''
   Check 'q3 a DCCReference alone does not link it: the .dpr line is added, no second DCCReference' `
     ($vq3.Ok -and ($vq3.Dump.verdict -eq 'mechanical') -and $vq3.Text.Contains("R1Title in 'R1Title.pas'") -and
-     (([regex]::Matches($vq3.Text, 'DCCReference Include="R1Title.pas"')).Count -eq 0)) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"} finally {
+     (([regex]::Matches($vq3.Text, 'DCCReference Include="R1Title.pas"')).Count -eq 0)) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"
+  # q4 POSITIVE CONTROL (A2): a package (.dpk, FProjectFid = 0) decides nothing -- no refusal, no program edit.
+  $dq4 = Join-Path $WorkDir 'r1pkg'
+  Copy-Tree (Join-Path $Fx 'r1extend') $dq4
+  [IO.File]::Delete((Join-Path $dq4 'R1Extend.dpr')); [IO.File]::Delete((Join-Path $dq4 'R1Extend.dproj'))
+  Set-Text (Join-Path $dq4 'R1Pkg.dpk') ("package R1Pkg;`r`n`r`ncontains`r`n  R1Title in 'R1Title.pas',`r`n  R1Title.Untangle in 'R1Title.Untangle.pas',`r`n  R1Form in 'R1Form.pas',`r`n  R1Nav in 'R1Nav.pas';`r`n`r`nend.`r`n")
+  $dbq4 = Join-Path $WorkDir 'r1pkg.sqlite'
+  $okq4 = (Invoke-Index (Join-Path $dq4 'R1Pkg.dpk') $dbq4 'r1pkg') -eq 0
+  $pq4 = Get-Cycles $dbq4 'r1pkg' @('--plan')
+  $txq4 = (Get-CycleBlock $pq4.Out 1) -join "`n"
+  Check 'q4 package .dpk copy: neither the unit-leaves-program refusal nor a program edit' `
+    ($okq4 -and -not $txq4.Contains('unit-leaves-program') -and -not $txq4.Contains("R1Title in 'R1Title.pas'") -and -not $txq4.Contains('joins the program''s uses')) "[$okq4 / $($pq4.Dump[1].verdict) / $($pq4.Dump[1].refusals)]"} finally {
   $env:DRAGLINT_TEST_DUMP_PLAN = $null
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
