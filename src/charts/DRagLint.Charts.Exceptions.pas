@@ -912,7 +912,7 @@ function TExceptionIndex.HasRaiseHandleFacts: Boolean;
 begin
   if not FFactsProbed then
   begin
-    var Rows:= FIndex.Query('SELECT 1 AS x FROM refs WHERE kind IN (' + ExceptionFactKindsSql + ') LIMIT 1');
+    var Rows:= FIndex.Query('SELECT 1 AS x FROM refs WHERE kind IN (' + ExceptionFactKindsSql + ') LIMIT 1'); // dl:ok sql-injection-concat@dc36 -- REVIEWED 2026-10-26 (XT-RAISE): read-only probe; the only splice is ExceptionFactKindsSql, a constant list
     try
       FHasFacts:= Rows.Count > 0;
     finally

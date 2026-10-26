@@ -686,7 +686,7 @@ begin
     if not pHandlersOnly then
     begin
       var Ok:= FIndex.AllRows(Format(
-        'SELECT r.id AS id, r.name_text AS name, r.start_line AS line, r.start_col AS col FROM refs r' + sLineBreak +  // dl:ok sql-injection-concat@3ec4 -- REVIEWED 2026-10-14: read-only index query; every value spliced in is an Integer (ids, lines) or a constant
+        'SELECT r.id AS id, r.name_text AS name, r.start_line AS line, r.start_col AS col FROM refs r' + sLineBreak +  // dl:ok sql-injection-concat@8740 -- REVIEWED 2026-10-26 (XT-RAISE): read-only index query; every value spliced in is an Integer (ids, lines) or a constant list (ExceptionFactKindsSql, ExceptionNameSql)
         ' WHERE r.enclosing_symbol_id = %d AND r.kind NOT IN (''read'',''type_use'',%s)' + sLineBreak +
         '   AND %s', [pRt.Id, ExceptionFactKindsSql, ExceptionNameSql('r.name_text')]), 'r.id');
       try

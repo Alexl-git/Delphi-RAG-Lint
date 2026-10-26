@@ -10083,7 +10083,8 @@ begin
   JWrites:= TJSONArray.Create; JCalls := TJSONArray.Create;
   JTypes := TJSONArray.Create; JAttrs := TJSONArray.Create;
   JEvents:= TJSONArray.Create; JImpact:= TJSONArray.Create;
-  JRaises:= TJSONArray.Create; JHandles:= TJSONArray.Create;
+  JRaises := TJSONArray.Create;
+  JHandles:= TJSONArray.Create;
   { Attach the arrays to JRoot BEFORE the loop, not after it, so JRoot owns
     them on every path -- including the stale-db refusal below, which leaves
     the loop early. Attached-then-filled is fine: AddPair keeps the reference

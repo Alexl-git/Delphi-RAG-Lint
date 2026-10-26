@@ -580,12 +580,15 @@ end; // procedure
   `Make(..).X` -> Make. Null when the root is not an identifier (a literal, a
   parenthesised cast). }
 function RootIdentifierOf(const AExpr: TTSNode): TTSNode;
+const
+  { a bound on a malformed tree only: real receiver chains stay in single digits }
+  MAX_ROOT_DEPTH = 32;
 var
   N    : TTSNode;
   Guard: Integer;
 begin
   N:= AExpr;
-  for Guard:= 0 to 31 do
+  for Guard:= 1 to MAX_ROOT_DEPTH do
   begin
     if N.IsNull or (N.NodeType = 'identifier') then Exit(N);
     if N.NodeType = 'exprDot' then N:= N.ChildByField('lhs')
