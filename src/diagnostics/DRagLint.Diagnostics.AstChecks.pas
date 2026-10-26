@@ -531,22 +531,30 @@ type
       /// </remarks>
       class function CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
         const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
-      /// <summary>X4 rule 'enum-bare-read-scoped': a BARE read (ref kind
-      /// 'read', no receiver) that the project index bound to a value of an
-      /// enum declared under the SCOPEDENUMS ON switch. The compiler admits
-      /// only the qualified spelling TEnum.Value there, so the bare name is
-      /// either another symbol of the same name or code that does not compile
-      /// -- the index's binding is wrong either way.</summary>
+      /// <summary>Rule 'enum-bare-read-scoped' (X4, retargeted 2026-10-26 after
+      /// E14): a BARE read (ref kind 'read', no receiver) whose name is the name
+      /// of a value of an enum declared under SCOPEDENUMS ON that is VISIBLE
+      /// from the site -- declared in this file or in a unit this file names in
+      /// a uses clause. The compiler admits only TEnum.Value there.</summary>
       /// <param name="AFile">Path reported on each finding; not read.</param>
       /// <param name="AStore">Project symbol store; nil yields no findings.</param>
       /// <param name="AFileId">The file's id in AStore; 0 or less yields no
       /// findings (the evidence is this file's refs).</param>
-      /// <returns>One 'warning' finding per such ref, anchored at the ref, naming
-      /// the scoped enum value; empty when there is none.</returns>
-      /// <remarks>Reads the extractor fact symbols.directives = 'scopedenums'
-      /// on the parent enum type, so an index built before that fact existed
-      /// is silent ("not computed"), never wrong. A qualified read is a
-      /// 'member-access' ref and never fires. Does not catch store errors.</remarks>
+      /// <returns>Per such ref, anchored at the ref: a 'warning' when the index
+      /// bound the name to ANOTHER symbol (const, var, field or property of the
+      /// class or an ancestor, local) -- the code compiles but silently uses
+      /// that symbol; the message names it and the TEnum.Value that may have
+      /// been meant. A 'hint' when the ref is unbound (or, on an index parsed
+      /// before E14, bound to the scoped value itself): the bare spelling is
+      /// E2003, write TEnum.Value. Empty when there is none.</returns>
+      /// <remarks>Not a finding: a qualified read ('member-access' ref), a
+      /// value of a non-scoped enum, a scoped enum in a unit the file does not
+      /// use, a const declared as an alias of the scoped value (`X = TEnum.X`,
+      /// the Vcl.Dialogs idiom), a site in an inactive branch (no ref).
+      /// Reads the extractor fact symbols.directives = 'scopedenums' on the
+      /// enum type, so an index built before that fact is silent. Looks only
+      /// in AStore: a scoped enum known only to the library index is not seen.
+      /// Does not catch store errors.</remarks>
       class function CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
         AFileId: Int64): TArray<TLintFinding>;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
@@ -4701,49 +4709,135 @@ type
   own control is a record, and `with Rec do` is where the collision lives. }
 class function TAstChecker.CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
   AFileId: Int64): TArray<TLintFinding>;
+type
+  { One visible scoped value of the name under test: its symbol id and the
+    type-qualified spelling the compiler wants (TEnum.Value). }
+  TScopedVal = record
+    ValId   : Int64;
+    EnumName: string;
+    Spelling: string;
+  end;
 const
   SCOPED_DIRECTIVE = 'scopedenums';
+  RULE_ID          = 'enum-bare-read-scoped';
 var
   Findings: TList<TLintFinding>;
-  Scoped  : TDictionary<Int64, Boolean>; { enum type id -> declared scoped }
+  ByName  : TDictionary<string, TArray<TScopedVal>>; { lower name -> visible scoped values }
+  Scoped  : TDictionary<Int64, TSymbol>;             { enum type id -> the type; Id = 0 when not a scoped enum }
+  UsedUnits: TArray<string>;
+
+  { True when the enum type AEnum is declared in this file or in a unit the
+    file names in a uses clause (prefix match on the qualified name, so a
+    dotted unit name works and a nested enum TFoo.TKind counts too). }
+  function Visible(const AEnum: TSymbol): Boolean;
+  begin
+    Result:= AEnum.FileId = AFileId;
+    if Result then Exit;
+    for var U: string in UsedUnits do
+      if StartsText(U + '.', AEnum.QualifiedName) then Exit(True);
+  end;
+
+  { The visible values of a SCOPEDENUMS ON enum named exactly AName. Cached. }
+  function ScopedValuesNamed(const AName: string): TArray<TScopedVal>;
+  begin
+    if ByName.TryGetValue(LowerCase(AName), Result) then Exit;
+    Result:= nil;
+    for var V: TSymbol in AStore.FindSymbolsByExactName(AName) do
+    begin
+      if (V.Kind <> skEnumValue) or (V.ParentId <= 0) or not SameText(V.Name, AName) then Continue;
+      var Enm: TSymbol;
+      if not Scoped.TryGetValue(V.ParentId, Enm) then
+      begin
+        Enm:= AStore.GetSymbolById(V.ParentId);
+        if (Enm.Kind <> skEnum) or not ContainsText(Enm.Directives, SCOPED_DIRECTIVE) then
+          Enm:= Default(TSymbol);
+        Scoped.Add(V.ParentId, Enm);
+      end;
+      if (Enm.Id <= 0) or not Visible(Enm) then Continue;
+      var SV: TScopedVal;
+      SV.ValId   := V.Id;
+      SV.EnumName:= Enm.Name;
+      SV.Spelling:= Enm.Name + '.' + V.Name;
+      Result:= Result + [SV];
+    end;
+    ByName.Add(LowerCase(AName), Result);
+  end;
+
+  function Spellings(const AVals: TArray<TScopedVal>): string;
+  begin
+    Result:= '';
+    for var SV: TScopedVal in AVals do
+      Result:= Result + IfThen(Result = '', '', ' or ') + SV.Spelling;
+  end;
+
+  function EnumNames(const AVals: TArray<TScopedVal>): string;
+  begin
+    Result:= '';
+    for var SV: TScopedVal in AVals do
+      Result:= Result + IfThen(Result = '', '', ' or ') + SV.EnumName;
+  end;
+
+  { A const declared as `X = TEnum.X` (the Vcl.Dialogs compatibility idiom)
+    IS the scoped value under another name: binding to it is what was meant. }
+  function IsAliasOf(const ABound: TSymbol; const AVals: TArray<TScopedVal>): Boolean;
+  begin
+    Result:= False;
+    if ABound.Kind <> skConstDecl then Exit;
+    var Sig: string:= Trim(ABound.Signature);
+    for var SV: TScopedVal in AVals do
+      if EndsText(SV.Spelling, Sig) then Exit(True);
+  end;
+
 begin
   Result:= nil;
   if (AStore = nil) or (AFileId <= 0) then Exit;
+  UsedUnits:= nil;
+  for var U: TUnitUse in AStore.GetUnitUsesForFile(AFileId) do
+    UsedUnits:= UsedUnits + [U.UnitName];
   Findings:= TList<TLintFinding>.Create;
-  Scoped  := TDictionary<Int64, Boolean>.Create;
+  ByName  := TDictionary<string, TArray<TScopedVal>>.Create;
+  Scoped  := TDictionary<Int64, TSymbol>.Create;
   try
     for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
     begin
-      if (R.SymbolId <= 0) or (R.ReceiverText <> '') or not SameText(R.Kind, 'read') then Continue;
-      var Val: TSymbol:= AStore.GetSymbolById(R.SymbolId);
-      if (Val.Kind <> skEnumValue) or (Val.ParentId <= 0) then Continue;
-      var IsScoped: Boolean;
-      if not Scoped.TryGetValue(Val.ParentId, IsScoped) then
-      begin
-        var Enm: TSymbol:= AStore.GetSymbolById(Val.ParentId);
-        IsScoped:= (Enm.Kind = skEnum) and ContainsText(Enm.Directives, SCOPED_DIRECTIVE);
-        Scoped.Add(Val.ParentId, IsScoped);
-      end;
-      if not IsScoped then Continue;
+      if (R.ReceiverText <> '') or not SameText(R.Kind, 'read') or (R.NameText = '') then Continue;
+      var Vals: TArray<TScopedVal>:= ScopedValuesNamed(R.NameText);
+      if Vals = nil then Continue;
+      var Bound: TSymbol:= Default(TSymbol);
+      if R.SymbolId > 0 then Bound:= AStore.GetSymbolById(R.SymbolId);
+      { An index parsed before E14 may still bind the bare name to the scoped
+        value itself: the compiler would not, so that is the unbound case. }
+      for var SV: TScopedVal in Vals do
+        if Bound.Id = SV.ValId then Bound:= Default(TSymbol);
+      if (Bound.Id > 0) and IsAliasOf(Bound, Vals) then Continue;
       var F: TLintFinding:= Default(TLintFinding);
-      F.RuleId    := 'enum-bare-read-scoped';
-      F.Severity  := 'warning';
+      F.RuleId    := RULE_ID;
       F.FilePath  := AFile;
       F.StartLine := R.StartLine;
       F.StartCol  := R.StartCol;
       F.EndLine   := R.EndLine;
       F.EndCol    := R.EndCol;
       F.SymbolName:= R.NameText;
-      F.Message   := Format(
-        'Bare ''%s'' is bound to %s, a value of an enum declared under SCOPEDENUMS ON -- ' +
-        'the compiler admits only the qualified form there, so this name is another symbol ' +
-        'or does not compile. Verify the binding; write it qualified if the enum value is meant.',
-        [R.NameText, Val.QualifiedName]);
+      if Bound.Id > 0 then
+      begin
+        F.Severity:= 'warning';
+        F.Message := Format(
+          '''%s'' here is %s (%s), not the scoped value %s -- write %s if the enum value was meant',
+          [R.NameText, Bound.QualifiedName, Bound.Kind.ToText, Spellings(Vals), Vals[0].Spelling]);
+      end
+      else
+      begin
+        F.Severity:= 'hint';
+        F.Message := Format(
+          '''%s'' is a value of scoped enum %s; under {$SCOPEDENUMS ON} write %s (else E2003)',
+          [R.NameText, EnumNames(Vals), Spellings(Vals)]);
+      end;
       Findings.Add(F);
     end;
     Result:= Findings.ToArray;
   finally
     Scoped.Free;
+    ByName.Free;
     Findings.Free;
   end;
 end; // function
