@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.21.0-alpha",
   "summary": "Getting the CLI, the IDE plugin, or the LSP running",
-  "intro": "Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together.",
+  "intro": "Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together, including the rules\\ folder beside the exe (the .scm and .json rules plus builtin-symbols.txt and enum-persist-sinks.txt).",
   "wikiPage": "Installation",
   "surfaces": [
     {
