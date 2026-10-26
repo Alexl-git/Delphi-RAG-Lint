@@ -696,13 +696,11 @@ begin
         Refs.Add(AnchorRefusal(N.Path, 'the new unit''s file already exists', 0));
         Continue;
       end;
-      if HasNonAscii(N.Text) then
-      begin
-        Refs.Add(MakeRefusal('non-ascii-text', '', N.Path, 'the new unit would hold a non-ASCII character copied from the sources; move it by hand', 0));
-        Continue;
-      end;
       Item.Path := ShadowPathOf(pShadowDir, pProjectDir, N.Path);
-      Item.Bytes:= TEncoding.ASCII.GetBytes(string.Join(#13#10, N.Text) + #13#10);
+      { W6 C7: a new unit holding text that is not ASCII (copied from the sources, decoded) is written as
+        UTF-8 with a BOM -- dcc reads it, and it carries every character; ASCII text stays ASCII }
+      Item.Bytes:= EncodeSource(string.Join(#13#10, N.Text) + #13#10,
+        if HasNonAscii(N.Text) then TEncoding.UTF8 else TEncoding.ASCII);
       Staged.Add(Item);
     end;
     if Refs.Count = 0 then

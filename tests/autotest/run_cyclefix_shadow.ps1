@@ -288,12 +288,16 @@ try {
     [IO.File]::WriteAllBytes($Path, $nb)
   }
 
-  Write-Host '== e1: a non-ASCII char in a line the recipe copies into a new unit' -ForegroundColor Cyan
+  Write-Host '== e1: a non-ASCII char in a line the recipe copies into a new unit (staged UTF-8 + BOM)' -ForegroundColor Cyan
   # 0xE9 (e-acute, cp1252) in the doc comment of TDemoLogLevel, which Part A moves into a new unit.
   $r = Run-Patched 'e1' { param($p) Patch-Bytes (Join-Path $p 'DemoLogger.pas') 'Severity of a log line' ([byte[]](0x53,0xE9,0x76,0xE9,0x72,0x69,0x74,0xE9)) }
   $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
-  Check 'e1: exit 1, refusal non-ascii-text' ($r.Exit -eq 1 -and $kinds -contains 'non-ascii-text') $r.Out
-  Check 'e1: nothing staged (shadow empty or absent)' ($r.ShadowFiles -eq 0) "files=$($r.ShadowFiles)"
+  # W6 C7 (lane CYCC): was refused non-ascii-text; the new unit is now staged as UTF-8 with a BOM.
+  Check 'e1: exit 0, mechanical (no non-ascii-text refusal)' ($r.Exit -eq 0 -and -not ($kinds -contains 'non-ascii-text')) $r.Out
+  $nu = @(Get-ChildItem $r.Shadow -Recurse -File -Filter 'DemoLogger.Untangle.pas' -ErrorAction SilentlyContinue)
+  $nb = if ($nu.Count -gt 0) { [IO.File]::ReadAllBytes($nu[0].FullName) } else { [byte[]]@() }
+  Check 'e1: the new unit is staged with the UTF-8 BOM' ($nb.Length -gt 3 -and $nb[0] -eq 0xEF -and $nb[1] -eq 0xBB -and $nb[2] -eq 0xBF) "units=$($nu.Count)"
+  Check 'e1: the copied text survives as UTF-8 (S e-acute v ...)' (([Text.Encoding]::UTF8.GetString($nb)).Contains('S' + [char]0xE9 + 'v' + [char]0xE9 + 'rit' + [char]0xE9)) ''
 
   Write-Host '== e2: a UTF-8 BOM file keeps its BOM and bytes outside the edits' -ForegroundColor Cyan
   $r = Run-Patched 'e2' { param($p)

@@ -249,6 +249,20 @@ try {
     Edit-File (Join-Path $r 'BfCanvas.pas') "    Writeln('paint ', (pShape as TBfShape).Name, ' style ', pStyle);" "    Writeln('paint ', TBfShape(pShape).Name, ' style ', pStyle);" }
   Check 'b4f-cast (a hard cast) refused, naming the site BfCanvas.pas:31' (($b4fCast.Verdict -ne 'mechanical') -and
     $b4fCast.Text.Contains('through a base class: `TBfShape` (class): refused: base-class -- `BfCanvas.pas:31`')) "[$($b4fCast.Verdict) / $($b4fCast.Refusals)]"
+ }
+  if (Want 'na') {
+  Write-Host '== (na) non-ascii-text: a new unit holding cp1252 text copied from the sources compiles (UTF-8 + BOM)' -ForegroundColor Cyan
+  $naRoot = Join-Path $WorkDir 'na-tie'
+  Copy-Tree (Join-Path $Fx 'tiebreak') $naRoot
+  foreach ($u in 'TieA.pas', 'TieB.pas', 'TieC.pas') {
+    $f = Join-Path $naRoot $u
+    $b = [IO.File]::ReadAllBytes($f); $s = [Text.Encoding]::GetEncoding(28591).GetString($b)
+    [IO.File]::WriteAllBytes($f, [Text.Encoding]::GetEncoding(28591).GetBytes($s.Replace('<summary>Read', "<summary>Gr$([char]0xF6)$([char]0xDF)e: read"))) }
+  $naDb = Join-Path $WorkDir 'na.sqlite'
+  $null | & $Exe index --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb *> (Join-Path $WorkDir 'index-na.log')
+  $naOut = & $Exe cycles --fix --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | Out-String
+  $naCode = $LASTEXITCODE
+  Check 'na the dry run (it BUILDS the shadow tree) is exit 0 with no non-ascii-text refusal' (($naCode -eq 0) -and -not $naOut.Contains('non-ascii-text')) ("exit=$naCode " + ($naOut.Trim() -replace "`r?`n", ' '))
   }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
