@@ -718,6 +718,7 @@ type
     CompareShow   : string ; // --show <report|csv|bundle> (F4)
     UpdateDoc     : Boolean; // --update-doc (with --in/--line)
     SnapshotDir   : string ; // --snapshot-dir <dir>
+    CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
   end; // record
 
 procedure PrintHelp;  // dl:ok method-too-long@21f1 -- (483 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines + the protocol / mcp-config lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
@@ -1862,6 +1863,7 @@ begin
       Inc(i);
       Result.SnapshotDir:= ParamStr(i);
     end
+    else if (A = '--out-root') and (i < ParamCount) then begin Inc(i); Result.CompareOutRoot:= ParamStr(i); end // dl:ok multiple-statements-per-line -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
@@ -33365,14 +33367,14 @@ begin
 end;
 
 { Option set common to every rerun: the running exe is the engine; --db pins the new run's index.
-  The new run's bundle goes to a PER-RUN folder under %TEMP%\drag-lint-reports: the bundle name is
+  The new run's bundle goes to a PER-RUN folder under --out-root, default %TEMP%\drag-lint-reports: the bundle name is
   question + target only, so two runs in the shared folder overwrote each other's chart (INBOX
   compare item 3). }
 function CompareProduceOptions(const AArgs: TArgs): TProduceOptions;
 begin
   Result:= DefaultProduceOptions;
   Result.EnginePath:= ParamStr(0);
-  Result.OutRoot:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+  Result.OutRoot:= TPath.Combine(if AArgs.CompareOutRoot <> '' then AArgs.CompareOutRoot else TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
     Format('compare-run-%s-%d', [FormatDateTime(COMPARE_RUN_STAMP, Now), GetCurrentProcessId]));
   if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
 end;
