@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "internal",
-  "since": "0.0.0",
+  "since": "0.95.0-alpha",
   "summary": "Self-test for the hover contrast computation, driven by a test runner",
   "intro": "Maintenance self-test for the hover contrast computation, run by a test runner. You will not need it for normal work.",
   "wikiPage": "Maintenance",

@@ -4,7 +4,7 @@
   "group": "compiler",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.26.0-alpha",
   "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
   "intro": "Read this when you want compiler errors and warnings for the current file or project inside the IDE. It compiles the project or unit and folds the compiler messages into drag-lint findings.",
   "wikiPage": "Compile-Diagnose",
