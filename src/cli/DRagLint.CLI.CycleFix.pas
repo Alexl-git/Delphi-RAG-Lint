@@ -626,18 +626,38 @@ begin
     pContent:= StringReplace(pContent, Spec[1], Spec[2], []);
 end;
 
-// Refusals for text the file's encoding cannot carry faithfully: for an ANSI file anything non-ASCII
-// that the edits insert (it may come from a file in another code page).
+// C6: the first character of pLines that pEnc does not represent (its round trip through pEnc changes
+// the text), as U+XXXX; '' when the encoding carries every line faithfully.
+function UnrepresentableChar(const pLines: TArray<string>; pEnc: TEncoding): string;
+begin
+  Result:= '';
+  for var Ln in pLines do
+  begin
+    var Back:= pEnc.GetString(pEnc.GetBytes(Ln));
+    if Back = Ln then Continue;
+    for var I:= 1 to Length(Ln) do
+      if (I > Length(Back)) or (Back[I] <> Ln[I]) then Exit(Format('U+%.4X', [Ord(Ln[I])]));
+    Exit('U+FFFD');
+  end;
+end;
+
+// Refusals for text the file's encoding cannot carry faithfully: for an ANSI file a character the
+// edits insert that its code page does not represent (text copied from a file in another code page);
+// C6: a character the code page does represent (cp1252 -acute into a cp1252 file) is no refusal.
 procedure CheckInsertedText(const pPath: string; const pView: TCyclePlanView; pEnc: TEncoding; pOut: TList<TRefusal>);
 begin
   if pEnc = TEncoding.UTF8 then Exit;
   for var E in pView.Edits do
-    if SameText(E.FilePath, pPath) and HasNonAscii(E.NewLines) then
+  begin
+    if not SameText(E.FilePath, pPath) then Continue;
+    var Ch:= UnrepresentableChar(E.NewLines, pEnc);
+    if Ch <> '' then
     begin
-      pOut.Add(MakeRefusal('non-ascii-text', '', pPath,
-        'an inserted line holds a non-ASCII character and the file is ANSI; edit this file by hand', E.First));
+      pOut.Add(MakeRefusal('non-ascii-text', '', pPath, Format('an inserted line holds %s, which the ANSI code ' +
+        'page of this file does not represent; edit this file by hand', [Ch]), E.First));
       Exit;
     end;
+  end;
 end;
 
 function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string;
