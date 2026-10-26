@@ -437,7 +437,7 @@ begin
       if not FromOverlay then Source:= EnsureUtf8Bytes(Source); // overlay bytes are UTF-8 already (see IdentifierAtPosition)
       var Map: TByteMap;
       Map.Build(Source);
-      var Tree: TTSTree:= ParseDelphiUtf8(Source);
+      var Tree: TTSTree:= ParseDelphiUtf8(Source, Path);
       try
         if Tree <> nil then WalkSyntax(Tree.RootNode, Source, Map, Toks);
       finally
