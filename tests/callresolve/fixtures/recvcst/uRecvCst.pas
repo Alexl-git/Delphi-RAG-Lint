@@ -69,6 +69,7 @@ begin
   O.L.K;
   O.Mk('d').L.K;
   (O as TInner) { note } .Leaf.K;
+  (O.Mk('e') as TInner).L.K;
   M.Run;
   X:= (O as TInner).L;
   Undeclared.Mk('x').K;

@@ -476,13 +476,15 @@ const
   RECEIVER_TEXT_MAX = 512;
 
 { T-11: ARaw (a receiver's source slice) with comments dropped, every run of
-  whitespace / comments folded to ONE blank, and no blank kept next to
-  . ( ) [ ] , ^ -- so `O.Mk('a')<NL>    .Mk('b')` reads `O.Mk('a').Mk('b')`
+  whitespace / comments folded to ONE blank, and no blank kept before
+  . ( ) [ ] , ^ or after . ( [ , -- so `O.Mk('a')<NL>    .Mk('b')` reads `O.Mk('a').Mk('b')`
   and a single-line tight receiver is returned byte-identical. String literals
-  are copied verbatim. }
+  are copied verbatim. A blank AFTER ) ] ^ stays: (A[0] as T) and
+  (F(x) + Y) must keep it, or the cast rung no longer sees ' as '. }
 function NormaliseReceiverText(const ARaw: string): string;
 const
-  TIGHT = ['.', '(', ')', '[', ']', ',', '^'];
+  TIGHT_BEFORE = ['.', '(', ')', '[', ']', ',', '^'];
+  TIGHT_AFTER  = ['.', '(', '[', ','];
 var
   SB : TStringBuilder;
   I  : Integer;
@@ -491,7 +493,8 @@ var
 
   procedure Put(C: Char);
   begin
-    if Gap and (SB.Length > 0) and not CharInSet(SB.Chars[SB.Length - 1], TIGHT) and not CharInSet(C, TIGHT) then
+    if Gap and (SB.Length > 0) and not CharInSet(SB.Chars[SB.Length - 1], TIGHT_AFTER)
+       and not CharInSet(C, TIGHT_BEFORE) then
       SB.Append(' ');
     Gap:= False;
     SB.Append(C);

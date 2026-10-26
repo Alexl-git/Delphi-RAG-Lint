@@ -22,6 +22,7 @@
     P2  O. NL Mk('c')                   receiver `O`, edge -> TInner.Mk
     P3  O.Mk('d').L.K                   K -> TLeaf.K (call segment, then property)
     P4  (O as TInner) { note } .Leaf.K  comment dropped; K -> TLeaf.K
+    P6  (O.Mk('e') as TInner).L.K       the blank after ')' survives: K -> TLeaf.K
     P5  M.Run                           interface head -> ICopy.Run
     R5  X:= (O as TInner).L             member-access L, receiver `(O as TInner)` -> TInner.L
     N1  Undeclared.Mk('x').K            untyped head -> NO binding for Mk or K
@@ -109,10 +110,11 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0)
 $p1 = LineOf ".Mk('b').Leaf.K;";  $p2 = LineOf "Mk('c');"
 $pc = LineOf 'O.L.K;';            $p3 = LineOf "O.Mk('d').L.K;"
 $p4 = LineOf '(O as TInner) { note } .Leaf.K;'
+$p6 = LineOf "(O.Mk('e') as TInner).L.K;"
 $p5 = LineOf 'M.Run;';            $r5 = LineOf 'X:= (O as TInner).L;'
 $n1 = LineOf "Undeclared.Mk('x').K;"; $n2 = LineOf "O.Missing('x').K;"
 $n3 = LineOf 'K;'
-Check 'fixture statements located' (@($p1,$p2,$pc,$p3,$p4,$p5,$r5,$n1,$n2,$n3) -notcontains -1)
+Check 'fixture statements located' (@($p1,$p2,$pc,$p3,$p4,$p6,$p5,$r5,$n1,$n2,$n3) -notcontains -1)
 
 $v = RcvOf $pc 'K' 'call';  Check 'positive control: O.L.K receiver' ($v -eq 'O.L') $v
 $v = BoundOf $pc 'K';       Check 'positive control: O.L.K -> TLeaf.K' ($v -eq 'uRecvCst.TLeaf.K') $v
@@ -130,6 +132,9 @@ $v = BoundOf $p3 'K';       Check 'P3 call segment then property: K -> TLeaf.K' 
 
 $v = RcvOf $p4 'K' 'call';  Check 'P4 comment dropped: receiver (O as TInner).Leaf' ($v -eq '(O as TInner).Leaf') $v
 $v = BoundOf $p4 'K';       Check 'P4 K -> TLeaf.K' ($v -eq 'uRecvCst.TLeaf.K') $v
+
+$v = RcvOf $p6 'K' 'call';  Check "P6 receiver keeps the blank after ')': (O.Mk('e') as TInner).L" ($v -eq "(O.Mk('e') as TInner).L") $v
+$v = BoundOf $p6 'K';       Check 'P6 K -> TLeaf.K' ($v -eq 'uRecvCst.TLeaf.K') $v
 
 $v = RcvOf $p5 'Run' 'call'; Check 'P5 receiver M' ($v -eq 'M') $v
 $v = BoundOf $p5 'Run';      Check 'P5 interface head -> ICopy.Run' ($v -eq 'uRecvCst.ICopy.Run') $v
