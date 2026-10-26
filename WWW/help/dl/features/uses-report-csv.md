@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70021
 since: 0.40.5-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Uses Report (CSV)
@@ -50,9 +50,6 @@ drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-exter
 `--output` is where the CSV is written; `--depth` bounds how far the report
 follows dependencies; `--include-external` adds units outside the project;
 `--all-sources` and `--name <pattern>` broaden or filter the scope.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Uses Report (CSV)...
 
 ### What it needs
 Optional. An index is not required per the feature map, but the report is

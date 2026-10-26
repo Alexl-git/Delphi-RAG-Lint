@@ -7,14 +7,14 @@ group: compiler
 order: 90009
 since: 0.8.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Import Build Log
 
 Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings.
 
-Read this when a build ran outside drag-lint, for example on a CI server, and you want its dcc or msbuild errors and warnings to show up as findings in your index. Point it at the log file and the project index.
+Read this when a build ran outside drag-lint, for example on a CI server, and you want its dcc or msbuild errors and warnings to show up as findings in your index. Run drag-lint import-log with the log file and the project index, or use Import Build Log in the About window.
 
 ## How to run it
 
@@ -48,9 +48,6 @@ drag-lint import-log <logfile> --db <file.sqlite>
 ```
 `<logfile>` is the dcc/msbuild log to parse; `--db` is the index database
 to write the findings into.
-
-### Reaching it in the IDE
-drag-lint > Import Build Log...
 
 ### What it needs
 An index IS required. The project's DB lives at

@@ -7,7 +7,7 @@ group: compiler
 order: 90007
 since: 1.8.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # ghost-check
@@ -57,11 +57,6 @@ drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <m
 `--unit <real.pas> --buffer <buf>` pair, or an `--overlays <manifest>` file
 listing multiple real-path/buffer-path pairs. `--platform` selects `win32`
 or `win64`. `--format` selects `json` or `text`.
-
-### Reaching it in the IDE
-No menu item calls this directly. The plugin's editor code (Editor.pas:2489)
-shells out to this verb to compile the active project against unsaved buffer
-content, backing "Compile Buffer (unsaved)" and feeding "Compile & Diagnose".
 
 ### What it needs
 Not needed, per the feature map's Index column.

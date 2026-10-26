@@ -7,14 +7,14 @@ group: editor-integration
 order: 110008
 since: 1.13.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # ide-release
 
 Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request.
 
-Read this when an engine build fails to copy drag-lint.exe because the Delphi IDE is open. ide-release writes a hold (default 120 s) so the plugin stops respawning the engine; --resume clears it and --status reports it. It frees nothing by itself.
+Read this when an engine build fails to copy drag-lint.exe because the Delphi IDE is open. ide-release writes a hold (--seconds N, 1 to 3600; 0, a negative number or no flag gives the default 120 s, and anything above 3600 is cut to 3600) so the plugin stops respawning the engine; --resume clears it and --status reports it. It frees nothing by itself.
 
 ## How to run it
 
@@ -28,6 +28,10 @@ Full flag list: [ide-release in the CLI reference](../cli.md#ide-release).
 | `--resume` |  |  |  |
 | `--status` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -63,12 +67,6 @@ drag-lint ide-release --status [--json]          # report, change nothing
 ```
 
 Needs no index and no `--db`.
-
-### Reaching it in the IDE
-
-No IDE surface. It is a message *to* the IDE, not an action in it. While a hold
-is active the plugin shows `drag-lint: engine released for a rebuild (Ns left)`
-on its status strip, so a temporarily quiet IDE is never a mystery.
 
 ### Writing the hold does not itself free the file
 
@@ -107,7 +105,7 @@ copy race twice to short-lived engines started by other sessions.
 
 | Flag | Meaning |
 |---|---|
-| `--seconds N` | hold length; default 120, clamped to 1..3600 |
+| `--seconds N` | hold length; default 120; a value below 1 (or not a number) means 120, a value above 3600 is capped at 3600 |
 | `--resume` | clear the hold immediately |
 | `--status` | report whether a hold is active; changes nothing |
 | `--json` | emit the stable `ide-release/1` document |

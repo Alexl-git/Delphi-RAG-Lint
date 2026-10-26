@@ -7,14 +7,14 @@ group: graphs-reports
 order: 70003
 since: 0.91.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # callgraph
 
 Prints an N-deep resolved call tree for a symbol, in either direction.
 
-Read this when you want to know who calls a routine, or what it calls, several levels deep. callgraph prints an N-deep resolved call tree for a symbol in either direction, guarded against cycles.
+Read this when you want to know who calls a routine, or what it calls, several levels deep. callgraph prints an N-deep resolved call tree for a symbol in either direction, guarded against cycles. The IDE menu item always walks 3 levels; the CLI takes --depth.
 
 ## How to run it
 
@@ -33,9 +33,9 @@ Full flag list: [callgraph in the CLI reference](../cli.md#callgraph).
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...**
-   1. Put the caret on the routine in the editor
+   1. Put the caret on the routine in the editor (the name box is prefilled from the caret)
    2. Choose drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)...
-   3. Pick the direction and depth; the call tree is shown
+   3. Confirm the qualified name, then answer Yes for callers or No for callees; the depth is fixed at 3 in the IDE (use the CLI --depth for other depths) and the call tree opens as a report
 
 **Needs:** index
 
@@ -53,9 +53,6 @@ drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db P
 `callers` or `callees` (which one is the default is not documented in the
 usage line). `--depth N` bounds how deep the tree walks; the tree is
 cycle-guarded. `--json` emits machine-readable output.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required. The project's DB lives at

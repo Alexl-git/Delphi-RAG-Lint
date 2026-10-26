@@ -93,6 +93,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [project-facts](features/project-facts.md) -- Report what the build does: defines that are on and what sets each, imports, output paths and packages.
 
+## 1.19.1-alpha
+
+* [query --kind --all](features/query-kind-all.md) -- Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap.
+
 ## 1.18.0-alpha
 
 * [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md) -- Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way.
@@ -100,6 +104,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.17.0-alpha
 
 * [doc-forget](features/doc-forget.md) -- Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply.
+
+## 1.16.0-alpha
+
+* [Effect Summary Legend](features/effect-summary-legend.md) -- The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index.
 
 ## 1.15.0-alpha
 
@@ -109,8 +117,14 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [ide-release](features/ide-release.md) -- Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request.
 
+## 1.12.0-alpha
+
+* [query unit-usage](features/query-unit-usage.md) -- Shows which files reference a unit, or - with --in - which of its exports one file actually uses.
+* [Uses & Deps Tab](features/uses-deps-tab.md) -- Open the Uses & Deps tab to review uses-clause fixes and apply them.
+
 ## 1.11.0-alpha
 
+* [Compile Dependents](features/compile-dependents.md) -- Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3).
 * [lint-tree](features/lint-tree.md) -- Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?
 
 ## 1.10.0-alpha
@@ -121,20 +135,33 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [exceptions-sync](features/exceptions-sync.md) -- Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites.
 * [ghost-check](features/ghost-check.md) -- Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged.
+* [query --name-like](features/query-name-like.md) -- Case-insensitive substring search over symbol names.
 
 ## 1.7.0-alpha
 
 * [wiki](features/wiki.md) -- Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it.
 * [dl:wiki concept blocks](features/wiki-blocks-authoring.md) -- The format of a dl:wiki block -- the concept notes the wiki verb reads.
 
+## 1.4.0-alpha
+
+* [Circular Dependency Report (worked example)](features/circular-dependency-report.md) -- A worked example: a real four-unit uses cycle, and the report drag-lint produces for it.
+* [IDE Menu Reference](features/ide-menu-reference.md) -- What every item in the drag-lint menu does.
+* [Maintenance](features/maintenance.md) -- Indexes, the manifest, reindexing, and what to do when something looks wrong.
+
 ## 1.3.0-alpha
 
 * [migrate-dbs](features/migrate-dbs.md) -- Moves project index databases into each project's own D-RAG folder, matching the current index layout.
 
+## 1.2.2-alpha
+
+* [query descendants](features/query-descendants.md) -- The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases.
+
 ## 1.2.0-alpha
 
 * [convert-apply](features/convert-apply.md) -- Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add.
-* [Full Compile Sweep](features/full-compile-sweep.md) -- Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold.
+* [Full Compile Sweep](features/full-compile-sweep.md) -- Recompiles every unit of a project (a forced full build, refresh-findings --full) and refreshes its stored compiler findings.
+* [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) -- The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope.
+* [Quick-Fix: Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md) -- Rewrites a public field under the caret as a property.
 
 ## 1.1.0-alpha
 
@@ -146,10 +173,13 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [butterfly](features/butterfly.md) -- Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command.
 
+## 0.98.0-alpha
+
+* [Reverse Call Tree (clickable, Messages window)](features/reverse-call-tree-clickable-messages-window.md) -- The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller.
+
 ## 0.96.0-alpha
 
 * [Call Graph (Butterfly)](features/call-graph-butterfly.md) -- Shows callers and callees of one symbol together in a single "butterfly" view.
-* [Reverse Call Tree (clickable, Messages window)](features/reverse-call-tree-clickable-messages-window.md) -- The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller.
 * [Reverse Call Tree (who calls this, N-deep)](features/reverse-call-tree-who-calls-this-n-deep.md) -- Builds the tree of callers of a chosen symbol, transitively, to a chosen depth.
 * [Show in Call Graph](features/show-in-call-graph.md) -- Opens the call graph rooted at the symbol represented by a Structure-tree node.
 
@@ -157,6 +187,8 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [deps-report](features/deps-report.md) -- Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on.
 * [drag-lint Options](features/drag-lint-options.md) -- The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog.
+* [drag-lint: Project Rules](features/drag-lint-project-rules.md) -- Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock.
+* [schema](features/schema.md) -- Prints the live schema of an index database: schemaversion, every table and column, and row counts.
 
 ## 0.94.0-alpha
 
@@ -186,8 +218,8 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 0.90.0-alpha
 
 * [Document it](features/document-it.md) -- Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node.
-* [Document project](features/document-project.md) -- Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project.
-* [Document unit](features/document-unit.md) -- Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only).
+* [Document project](features/document-project.md) -- Generates or repairs managed DocInsight comments for every public declaration of the active project, started from the Structure form right-click menu.
+* [Document unit](features/document-unit.md) -- Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only).
 
 ## 0.86.0-alpha
 
@@ -205,6 +237,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [find-unit](features/find-unit.md) -- Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause.
 * [safe-delete](features/safe-delete.md) -- Deletes a symbol if and only if it has zero references in the index.
+
+## 0.66.0-alpha
+
+* [query typecat](features/query-typecat.md) -- Resolves a type's category -- float, string, class, interface, and so on.
 
 ## 0.64.1-alpha
 
@@ -228,6 +264,14 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [lint-project](features/lint-project.md) -- Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol.
 
+## 0.47.0-alpha
+
+* [Compile Buffer (unsaved)](features/compile-buffer-unsaved.md) -- Compiles a project with the current editor buffer's unsaved content in place of its file on disk, from a temporary shadow folder, without writing any real file.
+* [Go to Definition](features/go-to-definition.md) -- Jumps the editor caret to the declaration of the symbol under the cursor.
+* [Library Drift Check](features/library-drift-check.md) -- Flags registered library roots that have source on disk but nothing in the index.
+* [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) -- Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause.
+* [Recover Buffer-Compile Files](features/recover-buffer-compile-files.md) -- Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash).
+
 ## 0.44.0-alpha
 
 * [Forms for testers (CSV)](features/generate-test-helper-csv.md) -- A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form.
@@ -236,9 +280,17 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [Add Missing Units to uses (whole unit)](features/add-missing-units-to-uses-whole-unit.md) -- The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them.
 * [Circular Uses Report (cycles + fix plan)](features/circular-uses-report-cycles-fix-plan.md) -- Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
+* [drag-lint Graph](features/drag-lint-graph.md) -- This page documents the "View > Tool Windows > drag-lint Graph" menu entry -- the drag-lint graph viewer.
+* [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) -- Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure.
+* [Go to Declaration](features/go-to-declaration.md) -- Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node.
 * [Go to Implementation](features/go-to-implementation.md) -- Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node.
 * [Uses Audit -- interface->impl moves + unused (this unit)](features/uses-audit-interface-impl-moves-unused-this-unit.md) -- For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely.
 * [Uses Cleanup Preview (compiler-verified, this unit)](features/uses-cleanup-preview-compiler-verified-this-unit.md) -- The removals a Uses Audit suggests, but verified by actually compiling.
+
+## 0.42.0-alpha
+
+* [drag-lint](features/drag-lint.md) -- This page documents the "View > Tool Windows > drag-lint" menu entry -- the main drag-lint dockable tool window.
+* [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) -- Opens the main drag-lint dockable tool window inside the IDE.
 
 ## 0.40.5-alpha
 
@@ -272,6 +324,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 0.26.0-alpha
 
 * [compile-check](features/compile-check.md) -- Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result.
+* [Compile & Diagnose](features/compile-diagnose.md) -- Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings.
 
 ## 0.25.0-alpha
 
@@ -281,6 +334,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 0.24.0-alpha
 
 * [Rename Symbol](features/rename-symbol.md) -- Renames a symbol across the whole indexed project.
+
+## 0.22.0-alpha
+
+* [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification.
 
 ## 0.21.0-alpha
 
@@ -319,10 +376,6 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [Scan TODOs / FIXMEs](features/scan-todos-fixmes.md) -- Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers.
 
-## 0.10.0-alpha
-
-* [drag-lint Graph](features/drag-lint-graph.md) -- This page documents the "View > Tool Windows > drag-lint Graph" menu entry -- the drag-lint graph viewer.
-
 ## 0.8.0-alpha
 
 * [Import Build Log](features/import-build-log.md) -- Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings.
@@ -349,15 +402,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 15 tools.
 * [serve](features/serve.md) -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index.
 
-## 0.3.0-alpha
-
-* [schema](features/schema.md) -- Prints the live schema of an index database: schemaversion, every table and column, and row counts.
-
 ## 0.2.0-alpha
 
-* [drag-lint](features/drag-lint.md) -- This page documents the "View > Tool Windows > drag-lint" menu entry -- the main drag-lint dockable tool window.
-* [drag-lint: Project Rules](features/drag-lint-project-rules.md) -- Shows the catalog of lint rules in the context of a specific project.
 * [Lint rules](features/lint-rules.md) -- Every lint rule the engine ships, imported from rules --json.
+* [Rebuild Index for This Project](features/rebuild-index-for-this-project.md) -- Walks a project's .dproj compile closure and (re)builds its index.
 
 ## 0.1.0-alpha
 
@@ -372,35 +420,11 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) -- Runs YADF formatting across a project's files, with indexing involved as part of the same action.
 * [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md) -- Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first.
 * [query ancestors](features/query-ancestors.md) -- Resolves the transitive class/interface hierarchy of a type.
-* [query descendants](features/query-descendants.md) -- The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases.
 * [query find-callers](features/query-find-callers.md) -- Lists callers of a routine by name, with an option to restrict results to precise, resolved callers.
-* [query --kind --all](features/query-kind-all.md) -- Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap.
-* [query --name-like](features/query-name-like.md) -- Case-insensitive substring search over symbol names.
 * [query type-usage](features/query-type-usage.md) -- Answers one question, of a list of type names, about one file.
-* [query typecat](features/query-typecat.md) -- Resolves a type's category -- float, string, class, interface, and so on.
-* [query unit-usage](features/query-unit-usage.md) -- Answers one question, about one unit and one file.
-* [Rebuild Index for This Project](features/rebuild-index-for-this-project.md) -- Walks a project's .dproj compile closure and (re)builds its index.
 * [Symbol Search](features/symbol-search.md) -- Searches symbols by name across the indexed projects.
 
 ## 0.0.0
 
-* [Circular Dependency Report (worked example)](features/circular-dependency-report.md) -- A worked example: a real four-unit uses cycle, and the report drag-lint produces for it.
-* [Compile Buffer (unsaved)](features/compile-buffer-unsaved.md) -- Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged.
-* [Compile Dependents](features/compile-dependents.md) -- Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3).
-* [Compile & Diagnose](features/compile-diagnose.md) -- Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings.
 * [ConvRulesEditor](features/convrules-editor.md) -- Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27).
-* [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) -- Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure.
-* [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) -- Opens the main drag-lint dockable tool window inside the IDE.
-* [Effect Summary Legend](features/effect-summary-legend.md) -- The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index.
-* [Go to Declaration](features/go-to-declaration.md) -- Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node.
-* [Go to Definition](features/go-to-definition.md) -- Jumps the editor caret to the declaration of the symbol under the cursor.
-* [IDE Menu Reference](features/ide-menu-reference.md) -- What every item in the drag-lint menu does.
-* [Library Drift Check](features/library-drift-check.md) -- Flags registered library roots that have source on disk but nothing in the index.
-* [Maintenance](features/maintenance.md) -- Indexes, the manifest, reindexing, and what to do when something looks wrong.
-* [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) -- The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope.
-* [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) -- Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause.
-* [Quick-Fix: Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md) -- Rewrites a public field under the caret as a property.
-* [Recover Buffer-Compile Files](features/recover-buffer-compile-files.md) -- Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash).
-* [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification.
-* [Uses & Deps Tab](features/uses-deps-tab.md) -- Open the Uses & Deps tab to review uses-clause fixes and apply them.
 

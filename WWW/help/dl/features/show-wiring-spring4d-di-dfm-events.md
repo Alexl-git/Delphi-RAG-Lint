@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70019
 since: 0.21.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Show Wiring (Spring4D DI + DFM events)
@@ -51,9 +51,6 @@ A separate coverage mode is also documented:
 drag-lint wiring --coverage [--db <file.sqlite>] [--format text|json]
 ```
 which reports DI registrations not yet resolved to an interface-to-type pairing.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...
 
 ### What it needs
 Optional. An index is not marked required, but the wiring data comes from

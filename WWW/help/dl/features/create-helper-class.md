@@ -7,7 +7,7 @@ group: refactoring
 order: 50004
 since: 0.94.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Create helper class
@@ -45,15 +45,6 @@ Generates a Byte-family record helper for an enum type represented by a
 Structure-tree node. Reach for it when you have an enum and want the usual
 ToByte/FromByte/ToInteger/FromInteger/ToString/FromString helper methods
 without writing them by hand.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click an enum type's node in the tree and choose "Create helper
-class".
 
 ### Running it from the CLI
 

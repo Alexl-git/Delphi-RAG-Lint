@@ -5,6 +5,23 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Added
+- `cycles --fix`: no build time limit by default; `--build-timeout <s>` sets one (forwarded to every `--part all` iteration). Cancel: the run listens on the control channel; a stand-down rolls back and exits 1 'cancelled -- rolled back'. IDE: the 130-minute job limit is removed; the status-strip Cancel stops a running cycle-fix job and kills it only after 90 s (lane X-BT).
+- `cycles --plan` / `--fix` (lane X-CYC): B4-d -- the F5 base class accepts an inheriting class (`TX = class(TAnc[, I1..])`, ancestor outside the cycle); C7 type-cast -- R2 carries a hard cast followed by a member, `TX(Y).M` -> `(Y as ISurface).M`; C6 -- an ANSI target accepts inserted text its code page represents, `non-ascii-text` names the character it cannot carry; C1 -- a receiver-unknown behind an `is` guard; C9 plan-text defects.
+- `compare --out-root <dir>` moves the per-run bundle folder off `%TEMP%` (lane X-CLI, E12b).
+- featuregen (H-SYS): help-audit prose checks G-1/G-2/G-3 and G-4/G-6; the site leaf derives "Where to click" from the surfaces; backlog / shipped / stale read the `verified` stamp; `update --set` keeps quotes and inner `;;`. `featuregen add` writes `verified` (H-ENG-D); the ENGINE entries pass the full check (101 -> 1 findings, the remainder CHARTS).
+- Help audit (lanes F5-1..5, H-ENG-A/B/C/D, W-WIKI): about 120 feature entries and 18 hand-written wiki pages corrected against the code (intros, real `since`, usage / flags, exit codes, rule counts 195/165, `refs.kind` list).
+
+### Fixed
+- `rename`: an unresolved by-name ref that another indexed symbol carries is a candidate, not an edit; the candidates are reported (CLI stderr note, MCP `unresolved_candidates`) (lane X-RES / X-FOLLOW, E5).
+- `glyph-vacuum` decodes a text `.dfm` with `TTextFileFormat` (BOM / UTF-8 / ANSI), not `TEncoding.Default` (lane X-ENC).
+- Four test suites default their engine to the worktree build (`src\cli\Win64\Debug`), not the deployed `dll-win64`; three rename/bind suites likewise (lane X-TEST).
+- `doc-drift`: `ddExceptionNotRaised` accepts a re-raise in a catching handler and a bodyless callee's cref contract; a stale engine-written `(auto exc)` tag is FIXABLE (lane X-LINT, E17).
+- Lint performance: a platform-library unit gets no project-rules pass and skips the flow checker -- `lint System.IOUtils.pas` against `library-*` 17.5 s -> 7.2 s (lane X-PERF E29; LSP C11), so `lsp --full-rules` didOpen no longer times out.
+- LSP: the LSP's lint preprocesses like `lint` does (no false `parser-error` on `{$IFDEF}` alternative bodies); semantic tokens and inlay hints parse the preprocessed text (C9).
+- Lint CFG (B-30): a swallowing `try..except` handler sees the pre-try state, so `function-result-not-set` fires (cherry-pick of XT-GRAM).
+- Converter: ENC-N1..N4 pre-run encoding places, notes and per-unit batching (lane N13).
+
 ## v1.35.1-alpha -- 2026-10-26
 
 ### Fixed

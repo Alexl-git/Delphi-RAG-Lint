@@ -7,7 +7,7 @@ group: search-navigation
 order: 20031
 since: 1.7.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # wiki
@@ -29,6 +29,10 @@ Full flag list: [wiki in the CLI reference](../cli.md#wiki).
 | `--check` |  |  |  |
 | `--json` |  |  |  |
 | `--db` | `<file.sqlite>` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -56,22 +60,6 @@ drag-lint wiki --check           [--json] [--db <file.sqlite>]
 ```
 
 Exactly one of `--term` / `--list` / `--check`.
-
-### Reaching it in the IDE
-
-There is no menu item. What the IDE does show is an **indicator**: hover a
-symbol whose doc block carries a topic and the popup adds one line,
-
-```text
-- Wiki: Delta Streaming -> Micronite.Delta.Pipe - line 3
-```
-
-which is clickable and jumps to the `dl:wiki` header itself. The **body is
-never rendered in the popup** -- a concept body is paragraphs and a hover is a
-glance; putting one inside the other makes the popup useless for its actual
-job. Ordinary hand-written `<remarks>` prose around the block is untouched.
-
-Read the body with `wiki --term`, or let `context --task` include it.
 
 ### What it needs
 

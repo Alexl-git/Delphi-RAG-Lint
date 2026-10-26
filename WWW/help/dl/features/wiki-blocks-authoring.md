@@ -7,14 +7,14 @@ group: documentation
 order: 40010
 since: 1.7.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # dl:wiki concept blocks
 
 The format of a dl:wiki block -- the concept notes the wiki verb reads.
 
-Read this when you want your team own words for a concept to find the right code: it describes how to write a dl:wiki block inside a DocInsight comment so the wiki verb can read it.
+Read this when you want your team's own words for a concept to find the right code: it describes how to write a dl:wiki block inside a DocInsight comment so the wiki verb can read it.
 
 ## How to run it
 
@@ -33,6 +33,10 @@ Full flag list: [wiki in the CLI reference](../cli.md#wiki).
 | `--check` |  |  |  |
 | `--json` |  |  |  |
 | `--db` | `<file.sqlite>` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 

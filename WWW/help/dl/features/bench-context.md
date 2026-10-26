@@ -7,7 +7,7 @@ group: maintenance
 order: 120003
 since: 0.18.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # bench-context
@@ -27,6 +27,10 @@ Full flag list: [bench-context in the CLI reference](../cli.md#bench-context).
 | `--db` | `<file.sqlite>` |  |  |
 | `--n` | `N` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Benchmarks the `context` command by building context bundles for a sample
@@ -39,9 +43,6 @@ drag-lint bench-context [--db <file.sqlite>] [--n N]
 ```
 `--n N` sets how many symbols the benchmark samples; `--db` selects the
 index. Neither flag's default is documented in the usage line.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

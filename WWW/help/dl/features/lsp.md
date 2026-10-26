@@ -7,7 +7,7 @@ group: editor-integration
 order: 110010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # lsp
@@ -37,6 +37,10 @@ Full flag list: [lsp in the CLI reference](../cli.md#lsp).
 | `--merge-budget-ms` | `<n>` |  |  |
 | `--full-rules` |  |  |  |
 | `--delphi-lsp-bits` | `32\|64` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -106,6 +110,11 @@ store's compiler findings. **OFF by default**: it costs one `lint` run per save.
 The measured cost is written to stderr on every save:
 `drag-lint lsp: full-rules <file> <ms> ms <n> findings`. On a timeout, a failed
 run or invalid JSON the server falls back to the subset and says so on stderr.
+A **platform-library unit** (one whose covering index is a `library-*.sqlite`,
+e.g. an RTL file opened from the IDE) gets neither the project rules nor the
+flow rules (`used-before-assignment`, `write-only-local`, ...): you cannot edit
+it, and the flow pass alone took `System.IOUtils.pas` past the 8 s budget
+(17.5 s -> 7.2 s). Guard: `tests\autotest\run_lsp_library_flow_timeout_guard.ps1`.
 Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
 second process start) is deliberately NOT built; it can follow if the measured
 cost justifies it.
@@ -172,13 +181,6 @@ How the diagnostics merge behaves:
 `lsp` answers `textDocument/inlayHint` with parameter-name hints: for every call in the requested range of a tree-sitter parse of the live buffer (else the file on disk), the callee is looked up by exact name across the file's stores, and only when that name means exactly ONE routine (one qualified name, one parameter list -- an overload set is silent) whose parameter count, read from the indexed signature, equals the argument count does each argument get a `<paramName>:` hint (kind 2 Parameter, `paddingRight: true`) at its start. Capability `inlayHintProvider: true`; an unknown file answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.InlayHint`); guard: `tests\autotest\run_lsp_inlay_hint_guard.ps1`.
 
 `lsp` answers `workspace/executeCommand` for `draglint.showCallers` -- the command the codeLens `<n> callers` runs -- with arguments `[uri, line]` (0-based): `[{uri, line, character}]`, every distinct (file, line) call site of the routine(s) declared on that line, across every `--db` store, ordered by file then line, so the row count equals the lens count. An unknown command answers `-32601`, bad arguments `-32602`. Capability `executeCommandProvider: {commands: ["draglint.showCallers"]}`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ExecuteCommand`); guard: `tests\autotest\run_lsp_execute_command_guard.ps1`.
-
-### Reaching it in the IDE
-
-CLI+internal: the plugin starts this process itself, from
-`DragLint.Plugin.LspClient.pas:297`. There is no menu item -- the IDE
-launches the `lsp` server automatically as a background stdio process, not
-via a user-facing command.
 
 ### What it needs
 

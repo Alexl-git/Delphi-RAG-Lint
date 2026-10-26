@@ -7,7 +7,7 @@ group: indexing
 order: 10006
 since: 1.20.4-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # register-project
@@ -31,6 +31,10 @@ Full flag list: [register-project in the CLI reference](../cli.md#register-proje
 | `--name` | `<Section>` |  |  |
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ---
 

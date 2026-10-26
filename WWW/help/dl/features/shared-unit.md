@@ -7,7 +7,7 @@ group: documentation
 order: 40009
 since: 1.10.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # shared-unit
@@ -29,6 +29,10 @@ Full flag list: [shared-unit in the CLI reference](../cli.md#shared-unit).
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Reads or extends the `dl:shared` marker on a unit, recording which projects
@@ -44,10 +48,6 @@ drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]
 `--in` is the unit file. `--add-project <name>` adds a project name to the
 marker. Per the usage banner, this is a dry run without `--apply`:
 "read/extend the dl:shared marker; dry-run without --apply".
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

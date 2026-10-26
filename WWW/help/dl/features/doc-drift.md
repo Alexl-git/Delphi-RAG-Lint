@@ -7,7 +7,7 @@ group: documentation
 order: 40002
 since: 0.93.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # doc-drift
@@ -27,6 +27,10 @@ Full flag list: [doc-drift in the CLI reference](../cli.md#doc-drift).
 | `--qname` | `X` |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -61,9 +65,6 @@ to its own `<para>Used in classes: ...</para>` line, written directly after
 `Used in units:`. The engine never renders that line itself; it keeps it on
 every regeneration, and doc-drift never calls it out of date. A name the index
 cannot see stays in `Used in units:`. (Backlog X-24, owner ruling 2026-10-25.)
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required. The project's DB lives at

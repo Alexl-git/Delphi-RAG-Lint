@@ -7,14 +7,14 @@ group: linting
 order: 30007
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Fix all in unit
 
 Applies autofixes for every fixable finding in the current unit, starting from the Structure form.
 
-Read this when one unit has several auto-fixable findings and you want them all fixed at once. Open the Structure form, right-click a node and choose Fix all in unit; the caption shows how many fixes are available.
+Read this when one unit has several auto-fixable findings and you want them all fixed at once. In the Structure form right-click the Diagnostics root or a finding and choose Fix all in unit; the caption shows how many fixes are available, and the item is disabled when there are none.
 
 ## How to run it
 
@@ -46,18 +46,6 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 Applies autofixes for every fixable finding in the current unit, starting
 from the Structure form. Reach for it when a unit has several fixable
 findings and you want them all resolved in one action.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-**The Structure form's right-click menu is the only place autofix
-("Fix it", "Fix all in unit", "Fix all in project") is reachable in the
-IDE** -- there is no main drag-lint menu item for it.
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a tree node and choose "Fix all in unit".
 
 ### What you see while it runs
 

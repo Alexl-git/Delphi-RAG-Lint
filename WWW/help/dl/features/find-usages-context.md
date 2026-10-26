@@ -7,7 +7,7 @@ group: search-navigation
 order: 20009
 since: 0.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Find Usages
@@ -44,14 +44,6 @@ Lists references to the symbol represented by a Structure-tree node. Reach
 for it when you are browsing the Structure outline and want the usages of a
 symbol without first navigating to it in the editor and using the main
 "Find Usages..." menu item (a separate, in-process feature-map row).
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a node in the tree and choose "Find Usages".
 
 ### Running it from the CLI
 

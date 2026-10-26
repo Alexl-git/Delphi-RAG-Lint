@@ -7,14 +7,14 @@ group: editor-integration
 order: 110021
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # workspace status
 
 Reports the status of every project registered in a .drag-lint-workspace.json workspace config.
 
-Read this when you want to see at a glance which projects of a workspace are indexed, stale or missing.
+Read this when you want to see at a glance how many files of each workspace project are in the shared index; a project with 0 files is not indexed yet.
 
 ## How to run it
 
@@ -25,6 +25,10 @@ Full flag list: [workspace in the CLI reference](../cli.md#workspace).
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--config` | `<.drag-lint-workspace.json>` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -37,10 +41,6 @@ glance, which workspace projects are indexed, stale, or missing.
 ```text
 drag-lint workspace status [--config <.drag-lint-workspace.json>]
 ```
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

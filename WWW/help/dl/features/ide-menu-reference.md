@@ -5,9 +5,9 @@ summary: What every item in the drag-lint menu does
 product: DL
 group: editor-integration
 order: 110007
-since: 0.0.0
+since: 1.4.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # IDE Menu Reference
@@ -19,7 +19,7 @@ Read this when you wonder what an item in the drag-lint menu of RAD Studio does.
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Help > IDE Menu Reference**
-   1. drag-lint > Help > IDE Menu Reference (wiki)
+   1. drag-lint > Help > IDE Menu Reference
    2. The page opens in the browser
 
 ## Details
@@ -123,7 +123,7 @@ What a click does:
    so Auto Doc leaves it alone.
 
 If the question is refused (exit 1) or the indexes cannot be resolved (exit 2)
-you see the script's reason. If an index is **stale** (exit 3) you see the
+you see the engine's reason. If an index is **stale** (exit 3) you see the
 reindex command and are offered to run it as the background incremental index
 job; ask again when it finishes.
 

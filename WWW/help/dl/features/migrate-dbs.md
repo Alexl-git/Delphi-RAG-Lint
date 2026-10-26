@@ -7,7 +7,7 @@ group: indexing
 order: 10002
 since: 1.3.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # migrate-dbs
@@ -49,10 +49,6 @@ drag-lint migrate-dbs [--config <drag-lint.json>] [--apply]
 
 Without `--apply` this is a dry run -- it reports what it would move
 without moving anything.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

@@ -5,9 +5,9 @@ summary: "The reverse of query ancestors: lists every class that descends from a
 product: DL
 group: search-navigation
 order: 20017
-since: 0.1.0-alpha
+since: 1.2.2-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query descendants
@@ -76,11 +76,6 @@ it is the answer) ; `2` usage error, or a stale/unusable `--db`.
 
 The exit-1 case is load-bearing: an unconditional `0` would destroy the only
 signal a caller has for "no such ancestor".
-
-### Reaching it in the IDE
-
-No IDE surface -- CLI only. The conversion rules editor consumes it through the
-engine adapter.
 
 ### What it needs
 

@@ -7,7 +7,7 @@ group: linting
 order: 30017
 since: 1.28.3-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Rescan this unit
@@ -69,17 +69,6 @@ wait or auto-reindex is switched off.
   the reindex, and a finding sits on the line the unit occupies in the buffer.
 * **The panel refreshes when the findings change**, not only when their number
   does.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-Open the Structure form (drag-lint > Show Structure), right-click any node and
-choose "Rescan this unit" -- or press the **Refresh** button beside **Diag**,
-which re-reads the panel and then does the same rescan. It runs in the background on the drag-lint job
-queue; the dock's status strip shows it while it works, and the panel updates
-when the re-lint lands.
 
 ### Running it from the CLI
 

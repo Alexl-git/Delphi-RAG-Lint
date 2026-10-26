@@ -7,7 +7,7 @@ group: compiler
 order: 90010
 since: 0.92.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # preprocess-file
@@ -32,6 +32,10 @@ Full flag list: [preprocess-file in the CLI reference](../cli.md#preprocess-file
 | `--tolerances` |  |  |  |
 | `--include-sites` |  |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Diagnostic that prints a file's `{$IFDEF}`-resolved source to stdout under a
@@ -40,20 +44,20 @@ produces for a file, without running a full compile.
 
 ### Running it from the CLI
 ```text
-drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]
+drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]
 ```
 `--in PATH` is the source file to preprocess. `--define SYM` may be given
 multiple times to set boolean defines. `--numeric K=V` may be given
 multiple times to set numeric defines. `--include-mode off|defines-only`
-controls `{$I}` include handling. `--no-near-search` and `--tolerances` are
+controls `{$I}` include handling. `--include-sites` prints the active include
+sites instead of the source: one tab-separated line per resolved `{$I}` site
+(`site`, depth, line, column, resolved byte count, MD5 of the resolved bytes,
+absolute path). `--no-near-search` and `--tolerances` are
 present in the usage line but their behaviour is not documented beyond the
-flag name.
+flag name. The verb has no `--json` form.
 
 This is labeled a "diagnostic" in the CLI banner -- it is a troubleshooting
 tool, not a daily driver.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 No index required -- `preprocess-file` takes no `--db` flag; it operates

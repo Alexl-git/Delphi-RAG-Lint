@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70013
 since: 0.17.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Impact / Blast Radius (symbol)
@@ -47,9 +47,6 @@ drag-lint impact --qname <Foo.Bar> [--db <file.sqlite>] [--depth N] [--format te
 ```
 `--qname` is the fully qualified symbol; `--depth` bounds how far impact is
 traced; `--format` selects `text` or `json`.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...
 
 ### What it needs
 Optional. An index is not marked required, but the impact trace is read from

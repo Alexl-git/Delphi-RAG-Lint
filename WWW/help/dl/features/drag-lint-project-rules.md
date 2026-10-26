@@ -1,20 +1,20 @@
 ---
 id: drag-lint-project-rules
 title: "drag-lint: Project Rules"
-summary: Shows the catalog of lint rules in the context of a specific project
+summary: Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock
 product: DL
 group: linting
 order: 30004
-since: 0.2.0-alpha
+since: 0.95.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # drag-lint: Project Rules
 
-Shows the catalog of lint rules in the context of a specific project.
+Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock.
 
-Read this when you want the lint rule catalog starting from the Project Manager: right-click a project and choose drag-lint: Project Rules.... From the command line the same list comes from drag-lint rules, and no index is needed.
+Read this when you want to review or change the lint rules of one project: in the Project Manager right-click the project and choose drag-lint: Project Rules..., which activates it and opens its Lint Options tab in the drag-lint dock. From the command line, drag-lint rules lists the whole rule catalog (not per project) and needs no index.
 
 ## How to run it
 
@@ -40,15 +40,6 @@ Full flag list: [rules in the CLI reference](../cli.md#rules).
 Shows the catalog of lint rules in the context of a specific project. Reach
 for it when you want to see which rules exist (and their categories)
 starting from the Project Manager rather than the drag-lint main menu.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Project
-Manager (right-click a project)".
-
-Unlike the other IDE-context rows on this wiki, this one is NOT reached
-through the Structure form. To reach it: in RAD Studio's Project Manager,
-right-click a project and choose "drag-lint: Project Rules...".
 
 ### Running it from the CLI
 

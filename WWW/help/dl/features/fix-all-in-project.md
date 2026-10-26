@@ -7,14 +7,14 @@ group: linting
 order: 30006
 since: 0.61.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Fix all in project
 
 Applies autofixes for every fixable finding across the whole project, starting from the Structure form.
 
-Read this when you want every auto-fixable finding in the whole project resolved in one action. Open the Structure form, right-click a node and choose Fix all in project; it is not on the main menu and runs lint-all with the fix flags.
+Read this when you want every auto-fixable finding in the whole project resolved in one action. In the Structure form right-click the Diagnostics root and choose Fix all in project; it is not on the main menu and runs lint-all --fix --apply, so it can rewrite many files.
 
 ## How to run it
 
@@ -54,18 +54,6 @@ Applies autofixes for every fixable finding across the whole project,
 starting from the Structure form. Reach for it when you want a
 project-wide sweep of autofixes in one action instead of fixing unit by
 unit.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-**The Structure form's right-click menu is the only place autofix
-("Fix it", "Fix all in unit", "Fix all in project") is reachable in the
-IDE** -- there is no main drag-lint menu item for it.
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a tree node and choose "Fix all in project".
 
 ### Running it from the CLI
 

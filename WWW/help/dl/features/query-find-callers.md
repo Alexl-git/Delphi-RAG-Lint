@@ -7,7 +7,7 @@ group: search-navigation
 order: 20018
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query find-callers
@@ -97,12 +97,6 @@ is modelled, and wherever the target types a with member wins), and inside a
 `{$SCOPEDENUMS ON}` unit, a bare name can bind to an enum value the compiler
 would not have chosen. Verify such a binding against the declaration.
 Qualified reads (`TEnum.Value`) are unaffected.
-
-### Reaching it in the IDE
-
-Not reachable through a main-menu item. The plugin's CodeLens cache
-(`DragLint.Plugin.CodeLensCache.pas`) runs it to power the inline
-caller-count annotations in the editor.
 
 ### What it needs
 

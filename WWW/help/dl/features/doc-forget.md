@@ -7,7 +7,7 @@ group: documentation
 order: 40003
 since: 1.17.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # doc-forget
@@ -40,8 +40,8 @@ Full flag list: [doc-forget in the CLI reference](../cli.md#doc-forget).
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Forget Documentation Project Tag...**
    1. Choose drag-lint > Generate & Export > Forget Documentation Project Tag...
-   2. Give the scope and the project tag
-   3. Without applying it is a dry run; confirm to apply
+   2. Enter the project tag to forget; the scope is the active project's folder and --rename is CLI-only
+   3. Choose whether to apply: without applying it is a dry run (preview only)
 * RAD Studio main menu: **drag-lint > Generate & Export > List Documentation Project Tags**
    1. Choose drag-lint > Generate & Export > List Documentation Project Tags
    2. The project tags on inbound documentation facts are listed

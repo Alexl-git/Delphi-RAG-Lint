@@ -7,7 +7,7 @@ group: linting
 order: 30015
 since: 1.11.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # lint-tree
@@ -34,6 +34,10 @@ Full flag list: [lint-tree in the CLI reference](../cli.md#lint-tree).
 | `--with-rules` |  |  |  |
 | `--compile` |  |  |  |
 | `--format` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Pitfalls
 
@@ -93,12 +97,6 @@ An index, resolved at `DRAGLINT_RESOLVER_VERSION` 1.6.0-alpha or later for the
 enum-member findings (`index --all --resolve-only` on an older one). On an
 older index enum reads are unbound and `lint-tree` reports nothing for them --
 exactly as before.
-
-### Reaching it in the IDE
-
-The IDE plugin runs it for an edit episode on the active unit, capturing the
-baseline when the episode starts. From the CLI, capture the baseline yourself
-before editing.
 
 ### Example
 

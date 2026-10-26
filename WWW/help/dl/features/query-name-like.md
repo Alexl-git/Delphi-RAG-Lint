@@ -5,9 +5,9 @@ summary: Case-insensitive substring search over symbol names
 product: DL
 group: search-navigation
 order: 20020
-since: 0.1.0-alpha
+since: 1.8.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query --name-like
@@ -29,6 +29,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--json` |  |  |  |
 | `--case-sensitive` |  |  |  |
 | `--exact` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -73,10 +77,6 @@ class        TdxSVGBrush                    dxSVGCore.TdxSVGBrush
 ```text
 drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>
 ```
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

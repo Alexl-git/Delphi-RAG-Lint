@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70020
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Top Symbols (fan-in)
@@ -49,9 +49,6 @@ drag-lint top --db <file.sqlite> [--by fanin] [--limit N] [--json]
 ```
 `--by fanin` selects the ranking metric (the only value shown in the usage
 banner); `--limit` caps how many rows are returned; `--json` emits JSON.
-
-### Reaching it in the IDE
-drag-lint > Code Quality > Top Symbols (fan-in)...
 
 ### What it needs
 An index IS required. The project's DB lives at

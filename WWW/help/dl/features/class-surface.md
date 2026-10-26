@@ -7,7 +7,7 @@ group: search-navigation
 order: 20002
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Class Surface
@@ -46,11 +46,6 @@ Full flag list: [surface in the CLI reference](../cli.md#surface).
 Shows the public surface of a class: its members and signatures, without
 the method bodies. Reach for it to see what a class exposes without
 reading the whole unit.
-
-### Reaching it in the IDE
-drag-lint > Inspect Symbol > Class Surface...
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 ```text

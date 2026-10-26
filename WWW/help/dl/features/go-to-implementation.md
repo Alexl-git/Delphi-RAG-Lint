@@ -7,7 +7,7 @@ group: search-navigation
 order: 20012
 since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Go to Implementation
@@ -29,14 +29,6 @@ Jumps the editor caret to the implementation of the symbol represented by a
 Structure-tree node. Reach for it when the tree node you are on is a
 declaration (for example an interface method or a forward-declared routine)
 and you want the actual implementation body instead.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a node in the tree and choose "Go to Implementation".
 
 ### Running it from the CLI
 

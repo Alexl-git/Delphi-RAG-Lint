@@ -7,7 +7,7 @@ group: linting
 order: 30014
 since: 0.2.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Lint rules
@@ -28,6 +28,10 @@ Full flag list: [rules in the CLI reference](../cli.md#rules).
 | `--category` | `<name>` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Lists the full lint rule catalog: every rule drag-lint can check, with its
@@ -43,15 +47,6 @@ external `.scm` rule files.
 ```text
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ```
-
-### Reaching it in the IDE
-
-CLI+internal: the IDE's Options dialog loads this catalog by running
-`rules --json` internally, from `DragLint.Plugin.LintOptionsFrame.pas:88`.
-There is also a menu item that surfaces the catalog for one specific
-project: right-click a project in the Project Manager and choose
-"drag-lint: Project Rules..." -- see
-[drag-lint: Project Rules...](drag-lint-project-rules.md).
 
 ### What it needs
 

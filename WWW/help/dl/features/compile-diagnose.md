@@ -5,9 +5,9 @@ summary: Compiles a project or unit and folds the compiler's errors and warnings
 product: DL
 group: compiler
 order: 90005
-since: 0.0.0
+since: 0.26.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Compile & Diagnose
@@ -37,9 +37,6 @@ drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]
 ```
 `<target.dproj|.pas>` is the project or unit to compile; `--db` is an
 index database; `--format` selects `json` or `text` output.
-
-### Reaching it in the IDE
-drag-lint > Compile & Diagnose
 
 ### What it needs
 The feature map marks this row's Index column "n/a". It needs an active

@@ -7,7 +7,7 @@ group: search-navigation
 order: 20013
 since: 0.94.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # helpers-of
@@ -50,13 +50,6 @@ drag-lint helpers-of <T> [--json] --db <db>
 
 `<T>` is the target type name. `--db` is required (not bracketed in the
 usage line). This verb has no `--apply` flag -- it is a read-only listing.
-
-### Reaching it in the IDE
-
-Reachable in the IDE only through the Structure form's right-click menu, not
-the main menu. The feature map's internal call site is
-`DragLint.Plugin.StructureForm.pas:1179`; the feature map does not name a
-specific menu-item label for it beyond that.
 
 ### What it needs
 

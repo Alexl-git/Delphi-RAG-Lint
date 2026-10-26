@@ -7,7 +7,7 @@ group: linting
 order: 30009
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Fix it
@@ -55,18 +55,6 @@ Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 Applies the autofix for the single lint finding represented by a
 Structure-tree node. Reach for it when you are looking at one finding and
 want it fixed without touching anything else in the unit.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-**The Structure form's right-click menu is the only place autofix
-("Fix it", "Fix all in unit", "Fix all in project") is reachable in the
-IDE** -- there is no main drag-lint menu item for it.
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click the tree node for a finding and choose "Fix it".
 
 ### Running it from the CLI
 
@@ -137,8 +125,10 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 
 ### What it needs
 
-No index required -- `lint --in` works on a single file. (An index is
-still needed for the Structure form itself to populate.)
+A plain fixable rule needs no index -- `lint --in` works on a single file.
+A NAMING fix (it renames every use) and `unused-unit-in-uses` (the
+compiler-verified `uses-fix`) DO need the project index, as described above.
+(An index is also needed for the Structure form itself to populate.)
 
 ### Example
 
@@ -152,7 +142,7 @@ autofix: no fixable findings (of 13 finding(s))
 ```
 Then apply one specific finding:
 ```text
-drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix --fix-line 42 --fix-rule bare-except --apply
+drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix --fix-line 42 --fix-rule self-assignment --apply
 ```
 
 ---

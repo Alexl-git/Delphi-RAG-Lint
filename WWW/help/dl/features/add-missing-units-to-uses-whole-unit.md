@@ -7,7 +7,7 @@ group: compiler
 order: 90001
 since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Add Missing Units to uses (whole unit)
@@ -50,9 +50,6 @@ drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--
 ```
 `--resolve-uses` is what drives the add-missing-units behaviour; `--project`
 and `--platform` scope the check; `--shadow <dir>` and `--format` are also available.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...
 
 ### What it needs
 Optional. An index is not marked required, but resolving names to their

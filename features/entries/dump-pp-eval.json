@@ -38,9 +38,9 @@
   ],
   "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
   "verified": {
-    "date": "2026-10-25",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.34.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
   }
 }

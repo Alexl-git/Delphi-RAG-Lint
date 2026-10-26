@@ -1,20 +1,20 @@
 ---
 id: document-unit
 title: Document unit
-summary: Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)
+summary: Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only)
 product: DL
 group: documentation
 order: 40007
 since: 0.90.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Document unit
 
-Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only).
+Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only).
 
-Read this when a whole unit needs documentation, not just one symbol. Right-click the unit in the Structure form and choose Document unit to generate or repair managed DocInsight comments for its public declarations.
+Read this when the file you are editing needs documentation, not just one symbol. Right-click in the Structure form and choose Document unit to generate or repair managed DocInsight comments for every public declaration in the active editor file; the node you clicked does not matter.
 
 ## How to run it
 
@@ -43,14 +43,6 @@ Full flag list: [document in the CLI reference](../cli.md#document).
 Generates or repairs managed DocInsight comments for every public
 declaration in the unit represented by a Structure-tree node (facts-only).
 Reach for it when a whole unit needs documentation, not just one symbol.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a node in the tree and choose "Document unit".
 
 ### Running it from the CLI
 

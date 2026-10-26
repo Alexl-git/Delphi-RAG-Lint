@@ -7,14 +7,14 @@ group: search-navigation
 order: 20030
 since: 0.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # usages
 
 Finds usage sites of a named symbol, with a choice of report width.
 
-Read this when you want every place a symbol is used, outside the IDE: usages lists the usage sites of a named symbol, with a narrow, wide or very-wide report width.
+Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites of a named symbol, with a narrow, wide or very-wide report width.
 
 ## How to run it
 
@@ -52,12 +52,6 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 (`narrow`, `wide`, or `very-wide`). `--depth N` is in the usage line with no
 further description -- not documented. `--format json` is the only format the
 usage line lists.
-
-### Reaching it in the IDE
-No main-menu item calls this directly. The "Symbol Search..." dialog
-(drag-lint > Symbol Search...) has a "Kind" dropdown with Symbol, Text, and
-Usages options; choosing "Usages" and running a search shells out to this
-verb (source: SearchForm.pas:155).
 
 ### What it needs
 Optional, per the feature map's Index column.

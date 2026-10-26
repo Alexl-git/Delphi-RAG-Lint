@@ -7,7 +7,7 @@ group: search-navigation
 order: 20004
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # context
@@ -32,6 +32,10 @@ Full flag list: [context in the CLI reference](../cli.md#context).
 | `--max-callers` | `N` |  |  |
 | `--context` | `N` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Pitfalls
 
 * ~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.
@@ -53,11 +57,6 @@ Foo.Bar"`). `--format` selects `md`, `json`, or `raw`. `--max-callers N`
 caps how many callers are included. `--context N` is present in the usage
 line; its effect is not documented beyond the flag name. `--no-docs` omits
 doc comments from the bundle.
-
-### Reaching it in the IDE
-No menu item calls this directly. The plugin uses it internally from
-`DragLint.Plugin.Editor.pas:633`; there is no menu item for it. The MCP
-`get_context_bundle` tool wraps this same engine.
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

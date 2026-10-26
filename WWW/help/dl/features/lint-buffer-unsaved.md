@@ -7,7 +7,7 @@ group: linting
 order: 30012
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Lint Buffer (Unsaved)
@@ -55,9 +55,6 @@ file on disk:
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]
 ```
-
-### Reaching it in the IDE
-drag-lint > Lint Buffer (Unsaved)
 
 ### What it needs
 No index needed. This action lints the buffer's content directly; the

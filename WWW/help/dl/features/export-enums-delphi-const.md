@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70008
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Export Enums (Delphi const)
@@ -48,9 +48,6 @@ drag-lint export enums --db <file.sqlite> [--format firebird-sql|csv|json|delphi
 ```
 `--format` selects the output flavor: `firebird-sql`, `csv`, `json`, or
 `delphi-const`.
-
-### Reaching it in the IDE
-drag-lint > Generate & Export > Export Enums (Delphi const)...
 
 ### What it needs
 An index IS required. The project's DB lives at

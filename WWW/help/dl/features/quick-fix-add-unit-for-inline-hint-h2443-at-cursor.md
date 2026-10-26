@@ -5,16 +5,16 @@ summary: The same idea as the undeclared-identifier quick-fix, but for compiler 
 product: DL
 group: refactoring
 order: 50006
-since: 0.0.0
+since: 1.2.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor
 
 The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope.
 
-Read this when the compiler raises hint H2443 because an inline routine comes from a unit that is not in scope. With the caret on it, this adds the missing unit to the uses clause.
+Read this when the compiler raises hint H2443 because an inline routine comes from a unit that is not in scope. With the caret on the flagged line, this adds the missing unit to the implementation uses clause; the H2443 finding must already be cached by a compile-check run.
 
 ## Where to click
 
@@ -32,9 +32,6 @@ when the compiler flags an inline expansion that needs another unit.
 
 ### Running it from the CLI
 No CLI equivalent - this action is in-process only.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor
 
 ### What it needs
 n/a. This action runs in-process against the open editor buffer; the feature

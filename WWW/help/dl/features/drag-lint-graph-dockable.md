@@ -5,9 +5,9 @@ summary: Opens the drag-lint graph viewer as a dockable window inside the IDE, s
 product: DL
 group: editor-integration
 order: 110003
-since: 0.0.0
+since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # drag-lint Graph (dockable)
@@ -27,15 +27,6 @@ Read this when you want the graph viewer to stay docked in the IDE, for example 
 Opens the drag-lint graph viewer as a dockable window inside the IDE, so it
 can sit beside Structure. Reach for it to keep the graph viewer docked
 instead of a separate window.
-
-### Reaching it in the IDE
-drag-lint > drag-lint Graph (dockable)
-
-Also reachable from View > Tool Windows > drag-lint Graph -- the same
-dockable window under a second menu path; see
-[drag-lint Graph](drag-lint-graph.md) for that entry.
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:

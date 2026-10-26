@@ -7,7 +7,7 @@ group: linting
 order: 30002
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Copy Diagnostics (Current File)
@@ -38,7 +38,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 
 * drag-lint About window, button **Copy Diagnostics (Current File)**
    1. Open the file in the editor
-   2. Choose drag-lint > Copy Diagnostics (Current File), or click the button of the same name in drag-lint > About
+   2. Open the About window (drag-lint > About) and click the Copy Diagnostics (Current File) button
    3. The file's lint findings are on the clipboard
 
 ## Details
@@ -54,9 +54,6 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 This runs the lint pass on a file and prints its findings. The
 clipboard-copy behavior is an IDE-side convenience on top of this verb;
 the CLI itself only prints.
-
-### Reaching it in the IDE
-drag-lint > Copy Diagnostics (Current File)
 
 ### What it needs
 No index needed. `lint <path>` lints the given file directly, without

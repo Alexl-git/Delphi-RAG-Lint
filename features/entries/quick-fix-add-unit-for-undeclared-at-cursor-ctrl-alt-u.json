@@ -28,9 +28,9 @@
   ],
   "notes": "seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "d7a0b613f44087b5121cf9ff996cf7190407e8670f7b2e02052981aad8d3fa2d"
   }
 }

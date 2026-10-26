@@ -7,7 +7,7 @@ group: maintenance
 order: 120008
 since: 0.19.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # info
@@ -26,6 +26,10 @@ Full flag list: [info in the CLI reference](../cli.md#info).
 | --- | --- | --- | --- |
 | `--json` |  |  |  |
 | `--db` | `<file.sqlite>` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -51,12 +55,6 @@ index was built or resolved by a NEWER engine than this one -- reads work, but
 the remedy is to use a newer engine), `missing` or `unreadable`. Versions are
 compared semantically (`1.10.0` is newer than `1.9.0`); an absent stamp is
 stale, never newer.
-
-### Reaching it in the IDE
-
-CLI+internal: the plugin calls this internally from
-`DragLint.Plugin.About.pas:217` (the About dialog). There is no menu item
-for it beyond that internal call site.
 
 ### What it needs
 

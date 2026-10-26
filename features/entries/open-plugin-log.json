@@ -24,9 +24,9 @@
   ],
   "notes": "seed: group guessed",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "0b00ecdb1d821ab35463d3bab7d64bb3749f7cac8abb0285ab0f7ba244578614"
   }
 }

@@ -7,7 +7,7 @@ group: indexing
 order: 10004
 since: 0.91.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # purge-locals
@@ -51,10 +51,6 @@ index.
 ```text
 drag-lint purge-locals --db PATH [--json]
 ```
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 
