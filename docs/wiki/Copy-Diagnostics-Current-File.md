@@ -13,7 +13,7 @@ clipboard-copy behavior is an IDE-side convenience on top of this verb;
 the CLI itself only prints.
 
 ## Reaching it in the IDE
-drag-lint > Copy Diagnostics (Current File)
+Open the About window (drag-lint > About) and click the Copy Diagnostics (Current File) button.
 
 ## What it needs
 No index needed. `lint <path>` lints the given file directly, without

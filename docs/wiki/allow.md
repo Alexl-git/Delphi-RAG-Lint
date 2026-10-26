@@ -20,7 +20,7 @@ Reachable in the IDE through the Structure form's right-click menu -- see
 [Allow this message](Allow-this-message) for the IDE-side walkthrough
 (drag-lint > Show Structure, then right-click a finding and choose "Allow
 this message"). There is no main-menu item; the feature map's internal call
-site is `DragLint.Plugin.StructureForm.pas:1061`.
+site is `TDragLintStructureForm.ShowInButterflyClick (DragLint.Plugin.StructureForm.pas)`.
 
 ## What it needs
 

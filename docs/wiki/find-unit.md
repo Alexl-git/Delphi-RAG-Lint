@@ -16,9 +16,8 @@ line lists `--apply` as a flag; whether omitting it produces a dry run is
 not documented in the help text for this verb.
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature. It is NOT the same as the
-IDE's [Quick-Fix: Add Unit for Undeclared at Cursor](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) (Ctrl+Alt+U).
+In the IDE choose drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)...
+It is NOT the same as the IDE's [Quick-Fix: Add Unit for Undeclared at Cursor](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) (Ctrl+Alt+U).
 The quick-fix parses a COMPILER DIAGNOSTIC, so it needs a prior build and a
 message that already names the unit. `find-unit --name <Symbol>` answers
 straight from the index instead, with no prior compile and no existing

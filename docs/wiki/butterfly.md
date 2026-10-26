@@ -16,12 +16,11 @@ far each wing walks. `--format` selects `dot` (the default), `mermaid`,
 stdout. `--db PATH` may be repeated.
 
 ## Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature. The IDE's "Call Graph
-(Butterfly)..." menu item does NOT call this verb: it runs
-`reverse-calltree` twice instead (once plain for callers, once with
-`--direction callees`) and composes the two results itself into the dock's
-Call Graph tab. See [Call Graph (Butterfly)](Call-Graph-Butterfly) for that
-path.
+In the IDE choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...
+That menu item does NOT call this verb: it runs `reverse-calltree` twice
+instead (once plain for callers, once with `--direction callees`) and
+composes the two results itself into the dock's Call Graph tab. See
+[Call Graph (Butterfly)](Call-Graph-Butterfly) for that path.
 
 ## What it needs
 An index IS required. The project's DB lives at

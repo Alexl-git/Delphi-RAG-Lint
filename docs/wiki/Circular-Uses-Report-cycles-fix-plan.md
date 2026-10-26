@@ -217,7 +217,7 @@ keeps one finding per cycle and no hint.
 * drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)... -- a dry
   run only (the engine picks the group; no `--apply` from a menu click). Save first: the
   engine plans and compiles from the files on disk.
-* View > Tool Windows > drag-lint > Uses & Deps tab, section *This project -- Circular uses
+* The drag-lint tool window (View > Tool Windows), Uses & Deps tab, section *This project -- Circular uses
   (cycles --fix)*: one row per group, Dry run / Apply buttons. Apply asks first (Yes / No,
   default No), like the Structure tree.
 * drag-lint Structure window, Diagnostics tree, right-click a `circular-uses` finding:

@@ -2657,6 +2657,8 @@ begin
   Check('Cmd.AddWritesCanonical.surfaceOrder', Pos('"type": "cli",'#13#10'      "verb": "zz-verb",'#13#10'      "sub": "sub",'#13#10'      "example": "zz-verb sub --x"', lRaw) > 0, lRaw);
   Check('Cmd.AddWritesCanonical.defaults', (Pos('"status": "shipped"', lRaw) > 0) and (Pos('"audience": "both"', lRaw) > 0)
     and (Pos('"by": "tester"', lRaw) > 0) and (Pos('"notes"', lRaw) = 0), lRaw);
+  // Defect (H-ENG-D): add stamped the legacy lastVerified; it must write verified (the shipped-entry stamp).
+  Check('Cmd.AddWritesVerifiedNotLegacy', (Pos('"verified": {', lRaw) > 0) and (Pos('"lastVerified"', lRaw) = 0), lRaw);
   lReg := TRegistry.Create;
   try
     lReg.Load(lCopy);

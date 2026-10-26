@@ -46,7 +46,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)",
-      "steps": ["Select the statements to extract in the editor", "drag-lint > Extract Method (selection)... or Ctrl+Alt+M", "Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk"]
+      "steps": ["Select the statements to extract in the editor", "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)", "Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk"]
     }
   ],
   "audience": "both",

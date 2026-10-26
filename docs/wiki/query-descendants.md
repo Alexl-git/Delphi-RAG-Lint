@@ -41,9 +41,8 @@ The exit-1 case is load-bearing: an unconditional `0` would destroy the only
 signal a caller has for "no such ancestor".
 
 ## Reaching it in the IDE
-
-No IDE surface -- CLI only. The conversion rules editor consumes it through the
-engine adapter.
+In the IDE choose drag-lint > Inspect Symbol > Descendants of Class... with the caret on a class.
+The conversion rules editor also consumes the verb, through the engine adapter.
 
 ## What it needs
 

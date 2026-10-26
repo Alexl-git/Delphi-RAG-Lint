@@ -24,8 +24,7 @@ the compile closure restricted to that project's own roots (declared in
 `_D-RAG\drag-lint-project.json`).
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Generate & Export > Auto-Document Every Indexed Unit...
 
 ## What it needs
 

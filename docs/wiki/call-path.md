@@ -13,7 +13,7 @@ bounds the search. Exit code 1 means no path was found. `--json` emits
 machine-readable output.
 
 ## Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Uses & Dependencies > Call Path Between Two Routines... with the caret on the first routine.
 
 ## What it needs
 An index IS required. The project's DB lives at

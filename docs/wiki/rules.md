@@ -17,7 +17,7 @@ drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ## Reaching it in the IDE
 
 CLI+internal: the IDE's Options dialog loads this catalog by running
-`rules --json` internally, from `DragLint.Plugin.LintOptionsFrame.pas:88`.
+`rules --json` internally, from `ReloadCatalogAndConfig (DragLint.Plugin.LintOptionsFrame.pas)`.
 There is also a menu item that surfaces the catalog for one specific
 project: right-click a project in the Project Manager and choose
 "drag-lint: Project Rules..." -- see

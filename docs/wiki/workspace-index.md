@@ -13,7 +13,7 @@ drag-lint workspace index [--config <.drag-lint-workspace.json>]
 ## Reaching it in the IDE
 
 CLI+internal: the plugin calls this internally from
-`DragLint.Plugin.ProjectNotifier.pas:103`. There is no menu item for it --
+`TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas)`. There is no menu item for it --
 it is invoked in-process by the plugin, not exposed as a user-facing
 command.
 

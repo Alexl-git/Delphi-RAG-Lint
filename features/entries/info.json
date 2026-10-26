@@ -37,7 +37,7 @@
       "command": "drag-lint info --json --db <file.sqlite>"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.About.pas:217",
+  "notes": "issued by the plugin from StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas)",
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

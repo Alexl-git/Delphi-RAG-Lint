@@ -139,7 +139,7 @@ How the diagnostics merge behaves:
 ## Reaching it in the IDE
 
 CLI+internal: the plugin starts this process itself, from
-`DragLint.Plugin.LspClient.pas:297`. There is no menu item -- the IDE
+`TDragLintLspClient.StateText (DragLint.Plugin.LspClient.pas)`. There is no menu item -- the IDE
 launches the `lsp` server automatically as a background stdio process, not
 via a user-facing command.
 

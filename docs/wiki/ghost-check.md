@@ -15,9 +15,10 @@ listing multiple real-path/buffer-path pairs. `--platform` selects `win32`
 or `win64`. `--format` selects `json` or `text`.
 
 ## Reaching it in the IDE
-No menu item calls this directly. The plugin's editor code (Editor.pas:2489)
-shells out to this verb to compile the active project against unsaved buffer
-content, backing "Compile Buffer (unsaved)" and feeding "Compile & Diagnose".
+In the IDE choose drag-lint > Compile Buffer (unsaved). The plugin's editor code
+(RunGhostCheckAsync, DragLint.Plugin.Editor.pas) shells out to this verb to
+compile the active project against unsaved buffer content; the same call also
+feeds "Compile & Diagnose".
 
 ## What it needs
 Not needed, per the feature map's Index column.

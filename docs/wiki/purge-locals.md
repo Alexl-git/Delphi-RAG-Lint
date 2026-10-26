@@ -16,8 +16,7 @@ drag-lint purge-locals --db PATH [--json]
 ```
 
 ## Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
+In the IDE choose drag-lint > Index & Maintenance > Shrink Index (purge locals)...
 
 ## What it needs
 

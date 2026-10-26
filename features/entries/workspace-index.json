@@ -31,7 +31,7 @@
       "command": "drag-lint workspace index --config <.drag-lint-workspace.json>"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.ProjectNotifier.pas:103",
+  "notes": "issued by the plugin from TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas)",
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",

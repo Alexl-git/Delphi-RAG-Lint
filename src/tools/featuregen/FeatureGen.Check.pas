@@ -162,7 +162,7 @@ function NearestCandidates(const pValue: string; const pCandidates: TArray<strin
 function FlagAliasProblems(const pAliases: TArray<TFlagAlias>; const pEntries: TArray<TFeatureEntry>): TArray<string>;
 
 /// <summary>The entry's verification stamp: verified (canonical, written by featuregen verify) when present, else the
-/// legacy lastVerified (written by featuregen add and by family definitions).</summary>
+/// legacy lastVerified (still carried by family definitions; featuregen add now writes verified too).</summary>
 /// <param name="pEntry">An entry or family definition object; not modified.</param>
 /// <returns>The stamp object, owned by pEntry; nil when the entry has neither key.</returns>
 /// <remarks>Every reader that asks "was this entry verified, and when" goes through here, so the seed backlog, the

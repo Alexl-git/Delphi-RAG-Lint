@@ -19,7 +19,7 @@ type
   /// <summary>Receives one output line (no line ending).</summary>
   TCmdOut = reference to procedure(const pLine: string);
 
-/// <summary>Stamps the verified block of one entry (the only writer of verified).</summary>
+/// <summary>Stamps the verified block of one entry (featuregen add also seeds a verified block for a new entry).</summary>
 /// <param name="pRepo">Repo root.</param>
 /// <param name="pId">Entry id.</param>
 /// <param name="pBy">Who verified; must not be empty.</param>
@@ -815,7 +815,7 @@ begin
       lLv.AddPair('date', FormatDateTime('yyyy-mm-dd', Now));
       lLv.AddPair('by', lBy);
       lLv.AddPair('build', lBuild);
-      lEntry.AddPair('lastVerified', lLv);
+      lEntry.AddPair('verified', lLv);
       AddTrusted(lCtx, lEntry);
       lProblems := CheckEntry(lEntry, lCtx, lId);
       RefuseOnProblems('add', lId, 'is not valid; nothing written', lProblems);

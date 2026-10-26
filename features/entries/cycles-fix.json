@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.33.0-alpha",
   "summary": "Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output",
-  "intro": "cycles --fix makes the edits a --plan playbook describes: a dry run that builds the project and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (30 minutes per build; IDE-started runs stop at 130 minutes) and a re-indexed verify. It moves shared types and globals into a leaf unit, inverts a routine call through a pointer, or extracts an interface or base class for member access. A cycle it cannot cut mechanically is refused with one line per reason and the line to edit by hand, never half-written. --rsvars names the Studio build environment for the compile gate.",
+  "intro": "cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (30 minutes; IDE runs stop at 130) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.",
   "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
   "surfaces": [
     {
