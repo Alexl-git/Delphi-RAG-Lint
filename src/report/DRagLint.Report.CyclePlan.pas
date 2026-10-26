@@ -454,6 +454,16 @@ type
     NewText: string;
   end;
 
+  { B4: a plain field `F: TX;` (B4-b), a local `L: TX` (B4-a) or a parameter of type TX that the F5
+    base class may stand in for; RoutineId 0 = a field (its scope is the unit). }
+  TObjSlot = record
+    Name     : string;
+    IsField  : Boolean;
+    Fid      : Int64;
+    Line     : Integer;
+    RoutineId: Int64;
+  end;
+
   TMoveItem = record
     Sym        : TSymbol;
     Stem       : string;
@@ -637,9 +647,13 @@ type
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
-    function FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string): string;
+    function FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string;
+      const pSlots: TArray<string> = nil): string;
     function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string;
-      const pFields: TArray<string>): string;
+      const pFields: TArray<string>; const pSlots: TArray<string> = nil): string;
+    function ObjSlotAt(const pItem: TMoveItem; pFid: Int64; pLine, pCol: Integer; out pSlot: TObjSlot): Boolean;
+    function ObjSlotRefusal(const pItem: TMoveItem; const pSlot: TObjSlot; const pFields: TArray<string>;
+      const pSlots: TArray<TObjSlot>): string;
     function TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
     function AddDependencies(const pItem: TMoveItem; out pWhy: string): Boolean;
     function AddCompanions(const pItem: TMoveItem; out pWhy: string): Boolean;
@@ -727,6 +741,8 @@ type
     procedure PlanIntfCycle;
     function PlanImplCycle: TArray<TEdgeEval>;
     procedure PlanInversion(pEvals: TList<TEdgeEval>);
+    function ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
+      out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
     procedure RenderMemberHandOver(pStep: Integer);
     procedure EmitMemberWrites;
@@ -738,6 +754,7 @@ type
     function InversionDeclLines(const pStem: string): TArray<string>;
     procedure RenderInversion(pStep: Integer);
     function InversionStillUsed: string;
+    function InversionNames: string;
     procedure CapturePlan(var pPlan: TCycleFixPlan);
     function BuildView(const pPlan: TCycleFixPlan): TCyclePlanView;
     procedure CaptureRefusals(var pPlan: TCycleFixPlan);
@@ -1470,6 +1487,14 @@ begin
     TRegEx.IsMatch(Before, '\bnil\s*(=|<>)\s*$', [roIgnoreCase]);
 end;
 
+{ Whether pIds holds pId. }
+function HasId(pId: Int64; const pIds: TArray<Int64>): Boolean;
+begin
+  for var Id in pIds do
+    if Id = pId then Exit(True);
+  Result:= False;
+end;
+
 { E18 T7 R3: the order the recipes are preferred in (lower first). }
 function RecipeRank(pRecipe: TCutRecipe): Integer;
 begin
@@ -2060,7 +2085,20 @@ var
     var Text:= string.Join(' ', SliceLines(pF.Lines, OneRange(pProp.StartLine, pProp.EndLine)));
     for var M in TRegEx.Matches(CodePart(Text), '\b(read|write)\s+([A-Za-z_]\w*)', [roIgnoreCase]) do
     begin
-      if not FieldNamed(M.Groups[2].Value, Fld) then
+      if not FieldNamed(M.Groups[2].Value, Fld) and (Fld.Kind in [skMethod, skFunction, skProcedure]) then
+      begin
+        { B4-e: a method accessor is pulled too -- the base class declares it `virtual; abstract;` and the
+          class overrides it, so its body, and every member that body names, stays in the class }
+        if Fld.Directives <> '' then
+        begin
+          Why:= Format('property `%s` is read or written through method `%s`, which already carries directives (%s)',
+            [pProp.Name, Fld.Name, Fld.Directives]);
+          Exit(False);
+        end;
+        Pull(Fld);
+        Continue;
+      end;
+      if Fld.Kind <> skField then
       begin
         Why:= Format('property `%s` is read or written through `%s`, which is not a field',
           [pProp.Name, M.Groups[2].Value]);
@@ -2143,6 +2181,70 @@ begin
   end;
 end;
 
+{ B4: the routine whose implementation (header to `end`) holds line pLine of pF, else the routine whose
+  declaration holds it (a parameter in a class or interface section); Id 0 for none. }
+function RoutineAt(const pF: TPlanFile; pLine: Integer): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  for var S in pF.Syms do
+    if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
+      (S.ImplStartLine > 0) and (S.ImplStartLine <= pLine) and (pLine <= S.ImplEndLine) and
+      (S.ImplStartLine > Result.ImplStartLine) then Result:= S;
+  if Result.Id = 0 then
+    for var S in pF.Syms do
+      if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
+        (S.StartLine <= pLine) and (pLine <= S.EndLine) then Result:= S;
+end;
+
+{ B4: the names of the slots visible in routine pRoutineId -- the fields and that routine's
+  locals and parameters; pRoutineId -1 = every slot. }
+function SlotNames(const pSlots: TArray<TObjSlot>; pRoutineId: Int64): TArray<string>;
+begin
+  Result:= nil;
+  for var S in pSlots do
+    if (pRoutineId = -1) or S.IsField or (S.RoutineId = pRoutineId) then Result:= Result + [S.Name];
+end;
+
+{ B4-c: the occurrence (pIndex, pLen) in pCode is the whole last argument of Add / Insert / Remove /
+  IndexOf / Contains called on one of the fields pFields (a list that switches): `F.Add(p)`,
+  `F.Insert(i, p)`. }
+function IsListArg(const pCode: string; pIndex, pLen: Integer; const pFields: TArray<string>): Boolean;
+begin
+  Result:= (Length(pFields) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\b(Self\s*\.\s*)?(' +
+    string.Join('|', pFields) + ')\s*\.\s*(Add|Insert|Remove|IndexOf|Contains)\s*\(([^()]*,)?\s*$', [roIgnoreCase]) and
+    TRegEx.IsMatch(Copy(pCode, pIndex + pLen, MaxInt), '^\s*\)');
+end;
+{ B4: one occurrence (pIndex, pLen) of a slot's name in pCode that survives the switch of the
+  slot's type to the base class, the names in pSlots / pArrays switching too: a receiver or a nil
+  test; `Assigned(X)` / `FreeAndNil(X)`; `X := nil | S | A[..]`; `S := X` / `A[..] := X` as a whole
+  statement; `for [var] X [: T] in A do`; the argument of `A.Add(X)` and its kin (IsListArg) -- S a slot,
+  A a switching array or list field. }
+function IsSlotUse(const pCode: string; pIndex, pLen: Integer; const pSlots, pArrays: TArray<string>): Boolean;
+begin
+  if IsReceiverOrNilTest(pCode, pIndex, pLen) or IsListArg(pCode, pIndex, pLen, pArrays) then Exit(True);
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
+  var SlotRx := if Length(pSlots) > 0 then '(' + string.Join('|', pSlots) + ')' else '(?!)';
+  var ArrayRx:= if Length(pArrays) > 0 then '(' + string.Join('|', pArrays) + ')' else '(?!)';
+  var StmtEnd:= '\s*(;|$|end\b|else\b)';
+  if TRegEx.IsMatch(Before, '\b(Assigned|FreeAndNil)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
+    Exit(True);
+  if TRegEx.IsMatch(Before, '(^|[;\s])(Self\s*\.\s*)?$', [roIgnoreCase]) and
+    TRegEx.IsMatch(Rest, '^\s*:=\s*(nil|(Self\s*\.\s*)?' + SlotRx + '|(Self\s*\.\s*)?' + ArrayRx + '\s*\[[^;]*\])' + StmtEnd,
+    [roIgnoreCase]) then Exit(True);
+  if TRegEx.IsMatch(Before, '(^|[;\s])(Self\s*\.\s*)?(' + SlotRx + '|' + ArrayRx + '\s*\[[^;]*\])\s*:=\s*$', [roIgnoreCase]) and
+    TRegEx.IsMatch(Rest, '^' + StmtEnd, [roIgnoreCase]) then Exit(True);
+  Result:= TRegEx.IsMatch(Before, '\bfor\s+(var\s+)?$', [roIgnoreCase]) and
+    TRegEx.IsMatch(Rest, '^\s*(:\s*[\w.<>]+\s*)?in\s+(Self\s*\.\s*)?' + ArrayRx + '\s+do\b', [roIgnoreCase]);
+end;
+
+{ B4-c: pCode is `F := TList<TX>.Create...` (TObjectList too) with F one of the list fields pFields that
+  switch (its uses, this one included, are judged by IsListFieldUse). }
+function IsListCreation(const pCode, pTypeName: string; const pFields: TArray<string>): Boolean;
+begin
+  Result:= (Length(pFields) > 0) and TRegEx.IsMatch(pCode, '^\s*(Self\s*\.\s*)?(' + string.Join('|', pFields) +
+    ')\s*:=\s*T(Object)?List\s*<\s*' + pTypeName + '\s*>\s*\.\s*Create\b', [roIgnoreCase]);
+end;
 { E18 T7 F5: '' when every switched site of pItem is a const or value parameter
   whose routine body only reads members of it, compares it with nil or stores it
   into a switchable field (`F[..] := p`), or is such a field (FieldSiteRefusal);
@@ -2152,12 +2254,42 @@ var
   Param : string;
   Field : string;
   Fields: TArray<string>;
+  Slots : TArray<TObjSlot>;
+  Slot  : TObjSlot;
 begin
-  { D1: the fields that switch, first -- a parameter stored into one may be
-    declared before it }
+  { D1: the array fields that switch; B4: the plain fields, locals and parameters -- all
+    named first, so a store into one is judged against every slot whatever its order }
   Fields:= nil;
+  Slots := nil;
   for var S in pItem.Switches do
-    if (FieldSiteRefusal(pItem, S.Fid, S.Line, Field) = '') and (Field <> '') then Fields:= Fields + [Field];
+  begin
+    var F:= GetFile(S.Fid);
+    FieldSiteRefusal(pItem, S.Fid, S.Line, Field);
+    if Field <> '' then
+    begin
+      Fields:= Fields + [Field];
+      Continue;
+    end;
+    for var M in TRegEx.Matches(CodePart(LineAt(F.Lines, S.Line)), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
+      case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
+        tsOther: if ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Slots:= Slots + [Slot];
+        tsParam:
+          begin
+            var Group:= Trim(TRegEx.Replace(Param, '^\[\s*ref\s*\]', '', [roIgnoreCase]));
+            var Modifier:= LowerCase(Copy(Group, 1, Pos(' ', Group + ' ') - 1));
+            if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
+            for var Name in Group.Split([',']) do
+            begin
+              Slot          := Default(TObjSlot);
+              Slot.Name     := Trim(Name);
+              Slot.Fid      := S.Fid;
+              Slot.Line     := S.Line;
+              Slot.RoutineId:= RoutineAt(F, S.Line).Id;
+              Slots:= Slots + [Slot];
+            end;
+          end;
+      end;
+  end;
   for var S in pItem.Switches do
   begin
     var F   := GetFile(S.Fid);
@@ -2168,8 +2300,10 @@ begin
         tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
         tsOther :
           begin
-            var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field);
-            if Field = '' then
+            var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field, SlotNames(Slots, -1));
+            if (Field = '') and ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Why:= ObjSlotRefusal(pItem, Slot, Fields, Slots)
+            else if (Field = '') and IsListCreation(CodePart(LineAt(F.Lines, S.Line)), pItem.Sym.Name, Fields) then Continue
+            else if Field = '' then
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
             if Why <> '' then Exit(Why);
@@ -2184,7 +2318,7 @@ begin
       if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
       for var Name in Group.Split([',']) do
       begin
-        var Why:= ParamBodyRefusal(S.Fid, S.Line, Trim(Name), Fields);
+        var Why:= ParamBodyRefusal(S.Fid, S.Line, Trim(Name), Fields, SlotNames(Slots, RoutineAt(F, S.Line).Id));
         if Why <> '' then Exit(Format('%s: parameter `%s` -- %s', [Site, Trim(Name), Why]));
       end;
     end;
@@ -2192,20 +2326,114 @@ begin
   Result:= '';
 end;
 
+{ B4: whether the switch site at (pLine, pCol) of pFid declares a plain field `F: TX;` (B4-b) or a
+  local `L: TX` -- in a routine's `var` section, an inline `var L: TX`, or `for var L: TX in` (B4-a). }
+function TCyclePlanner.ObjSlotAt(const pItem: TMoveItem; pFid: Int64; pLine, pCol: Integer; out pSlot: TObjSlot): Boolean;
+begin
+  pSlot:= Default(TObjSlot);
+  var F   := GetFile(pFid);
+  var Code:= CodePart(LineAt(F.Lines, pLine));
+  var Head:= TRegEx.Match(Copy(Code, 1, pCol - 1), '(^|\bvar\s+|\bfor\s+var\s+)\s*([A-Za-z_]\w*)\s*:\s*$', [roIgnoreCase]);
+  if not Head.Success or not TRegEx.IsMatch(Copy(Code, pCol + Length(pItem.Sym.Name), MaxInt), '^\s*(;|:=|in\b)',
+    [roIgnoreCase]) then Exit(False);
+  pSlot.Name:= Head.Groups[2].Value;
+  pSlot.Fid := pFid;
+  pSlot.Line:= pLine;
+  var R:= RoutineAt(F, pLine);
+  if R.Id > 0 then
+  begin
+    pSlot.RoutineId:= R.Id;
+    Exit(True);
+  end;
+  for var S in F.Syms do
+    if (S.Kind = skField) and (S.StartLine = pLine) and SameText(S.Name, pSlot.Name) then
+    begin
+      pSlot.IsField:= True;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
+{ B4: '' when the slot pSlot switches -- a field is not published (nor unlabelled, $M+), has no
+  ref outside its unit; every use of its name in its scope (the unit for a field, the routine
+  body for a local) passes IsSlotUse; a member reached through it is read, or is `Free` called;
+  otherwise the first offending site, as "`<file>:<line>`: <what>". }
+function TCyclePlanner.ObjSlotRefusal(const pItem: TMoveItem; const pSlot: TObjSlot; const pFields: TArray<string>;
+  const pSlots: TArray<TObjSlot>): string;
+var
+  MA     : TCallEdge;
+  Fld    : TSymbol;
+  BodyAt : Integer;
+  BodyCol: Integer;
+begin
+  Result:= '';
+  var F   := GetFile(pSlot.Fid);
+  var What:= Format('%s `%s` (type `%s`) can switch to the base class only when it is read through, compared ' +
+    'with nil, freed, or assigned to / from another slot that switches', [(if pSlot.IsField then 'field' else 'local'),
+    pSlot.Name, pItem.Sym.Name]);
+  var First:= 1;
+  var Last := Length(F.Lines);
+  if pSlot.IsField then
+  begin
+    Fld:= Default(TSymbol);
+    for var S in F.Syms do
+      if (S.Kind = skField) and (S.StartLine = pSlot.Line) and SameText(S.Name, pSlot.Name) then Fld:= S;
+    if ContainsText(Fld.Modifiers, 'published') or not Fld.VisExplicit then
+      Exit(Format('`%s:%d`: %s; it is published (or in an unlabelled section, published under {$M+}), so RTTI ' +
+        'and streaming see its declared type', [ExtractFileName(F.Path), pSlot.Line, What]));
+    for var R in FStore.FindReferencesTo(Fld.Id) do
+      if R.FileId <> pSlot.Fid then
+        Exit(Format('`%s:%d`: %s; it is referred to here, outside its unit', [ExtractFileName(PathOf(R.FileId)),
+          R.StartLine, What]));
+  end
+  else
+  begin
+    var R:= Default(TSymbol);
+    for var S in F.Syms do
+      if S.Id = pSlot.RoutineId then R:= S;
+    if not HeaderEnd(F.Lines, R.ImplStartLine, R.ImplEndLine, BodyAt, BodyCol) then
+      Exit(Format('`%s:%d`: the header of `%s` could not be read', [ExtractFileName(F.Path), R.ImplStartLine, R.Name]));
+    First:= BodyAt;
+    Last := R.ImplEndLine;
+  end;
+  for var L:= First to Last do
+  begin
+    if L = pSlot.Line then Continue;
+    var Code:= CodePart(LineAt(F.Lines, L));
+    var Names:= SlotNames(pSlots, if pSlot.IsField then RoutineAt(F, L).Id else pSlot.RoutineId);
+    for var U in TRegEx.Matches(Code, '\b' + pSlot.Name + '\b', [roIgnoreCase]) do
+      if not IsSlotUse(Code, U.Index, U.Length, Names, pFields) then
+        Exit(Format('`%s:%d`: %s', [ExtractFileName(F.Path), L, What]));
+  end;
+  for var R in F.Refs do
+  begin
+    if (R.StartLine < First) or (R.StartLine > Last) or not SameText(R.ReceiverText, pSlot.Name) then Continue;
+    var IsRead:= SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read');
+    if not IsRead and not SameText(R.NameText, 'Free') then
+      Exit(Format('`%s:%d`: %s; `%s.%s` is not a read of a member', [ExtractFileName(F.Path), R.StartLine, What,
+        pSlot.Name, R.NameText]));
+  end;
+end;
+
 { D1 (owner ruling 2026-10-25, option a+): one use of the field pName at pIndex in
   pCode that survives the switch of its element type to the base class:
   `SetLength(F, ..)`, `Length(F)` / `High(F)` / `Low(F)`, a store `F[..] := x`, or
   a read `F[..].M` of a member in pPulled (not followed by `:=`). The brackets
   must close on the same line. }
-function IsSwitchableFieldUse(const pCode: string; pIndex, pLen: Integer; const pPulled: TArray<string>): Boolean;
+function IsSwitchableFieldUse(const pCode: string; pIndex, pLen: Integer; const pPulled: TArray<string>;
+  const pSlots: TArray<string> = nil): Boolean;
 var
   Depth: Integer;
   Close: Integer;
 begin
   var Before:= Copy(pCode, 1, pIndex - 1);
   var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
-  if TRegEx.IsMatch(Before, '\bSetLength\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*,') then Exit(True);
-  if TRegEx.IsMatch(Before, '\b(Length|High|Low)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
+  var SetLen:= TRegEx.IsMatch(Before, '\bSetLength\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*,');
+  if SetLen or (TRegEx.IsMatch(Before, '\b(Length|High|Low)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)')) then
+    Exit(True);
+  { B4: `for [var] S in F do` with S a slot that switches }
+  if (Length(pSlots) > 0) and TRegEx.IsMatch(Before, '\bfor\s+(var\s+)?(' + string.Join('|', pSlots) +
+    ')\s*(:\s*[\w.<>]+\s*)?in\s+(Self\s*\.\s*)?$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s+do\b', [roIgnoreCase]) then
     Exit(True);
   var Open:= TRegEx.Match(Rest, '^\s*\[');
   if not Open.Success then Exit(False);
@@ -2226,22 +2454,48 @@ begin
   end;
   if Close = 0 then Exit(False);
   var After:= Copy(Rest, Close + 1, MaxInt);
-  if TRegEx.IsMatch(After, '^\s*:=') then Exit(True);
+  { B4: `S := F[..]` as a whole statement, S a slot that switches }
+  var IntoSlot:= (Length(pSlots) > 0) and TRegEx.IsMatch(After, '^\s*(;|$|end\b|else\b)', [roIgnoreCase]) and
+    TRegEx.IsMatch(Before, '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*(Self\s*\.\s*)?$', [roIgnoreCase]);
+  if IntoSlot or TRegEx.IsMatch(After, '^\s*:=') then Exit(True);
   var Member:= TRegEx.Match(After, '^\s*\.\s*([A-Za-z_]\w*)');
   Result:= Member.Success and MatchText(Member.Groups[1].Value, pPulled) and
     not TRegEx.IsMatch(Copy(After, Member.Length + 1, MaxInt), '^\s*:=');
 end;
 
+{ B4-c: one use of the TList<TX> / TObjectList<TX> field named at pIndex in pCode that survives the
+  switch of its element type to the base class (pTypeName = TX): a use IsSwitchableFieldUse admits
+  (`F[..] := x`, `F[..].M`, `S := F[..]`, `for S in F do`), the same through `.Items[..]`, a call or read
+  of Add / Insert / Remove / IndexOf / Contains / Delete / Clear / Count / Free, a nil test,
+  `Assigned(F)` / `FreeAndNil(F)`, or `F := TList<TX>.Create` (TObjectList too) -- the creation is
+  switched with the field. Extract, First, Last, ToArray and every other use refuse. }
+function IsListFieldUse(const pCode: string; pIndex, pLen: Integer; const pTypeName: string; const pPulled,
+  pSlots: TArray<string>): Boolean;
+begin
+  if IsSwitchableFieldUse(pCode, pIndex, pLen, pPulled, pSlots) then Exit(True);
+  var Rest:= Copy(pCode, pIndex + pLen, MaxInt);
+  var Items:= TRegEx.Match(Rest, '^\s*\.\s*Items\b', [roIgnoreCase]);
+  if Items.Success and IsSwitchableFieldUse(Copy(pCode, 1, pIndex + pLen - 1) + Copy(Rest, Items.Length + 1, MaxInt),
+    pIndex, pLen, pPulled, pSlots) then Exit(True);
+  if TRegEx.IsMatch(Rest, '^\s*\.\s*(Add|Insert|Remove|IndexOf|Contains|Delete|Clear|Count|Free)\b', [roIgnoreCase]) then
+    Exit(True);
+  if TRegEx.IsMatch(Rest, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) then Exit(True);
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  if TRegEx.IsMatch(Before, '\b(Assigned|FreeAndNil)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
+    Exit(True);
+  Result:= TRegEx.IsMatch(Rest, '^\s*:=\s*T(Object)?List\s*<\s*' + pTypeName + '\s*>\s*\.\s*Create\b', [roIgnoreCase]);
+end;
 { D1 (owner ruling 2026-10-25, option a+): whether the switched line pLine of
   pFid declares a FIELD `F: TArray<TX>` / `F: array of TX` (TX = pItem's class)
-  that may become `TArray<TXBase>`. pField is '' when the line is not such a
+  that may become `TArray<TXBase>` -- B4-c: or `TList<TX>` / `TObjectList<TX>`, judged by IsListFieldUse. pField is '' when the line is not such a
   field declaration (the caller keeps its general refusal), else the field's
   name. Returns '' when the field switches: it is not published (nor in an
   unlabelled section, which $M+ publishes), the index shows no reference to it
   outside its unit, and every use of its name in its unit passes
   IsSwitchableFieldUse; otherwise the first offending site, as
   "`<file>:<line>`: <what>". }
-function TCyclePlanner.FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string): string;
+function TCyclePlanner.FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string;
+  const pSlots: TArray<string>): string;
 var
   Fld   : TSymbol;
   Pulled: TArray<string>;
@@ -2250,15 +2504,20 @@ begin
   Result:= '';
   var F:= GetFile(pFid);
   var M:= TRegEx.Match(CodePart(LineAt(F.Lines, pLine)), '^\s*([A-Za-z_]\w*)\s*:\s*(TArray\s*<\s*' + pItem.Sym.Name +
-    '\s*>|array\s+of\s+' + pItem.Sym.Name + ')\s*;\s*$', [roIgnoreCase]);
+    '\s*>|array\s+of\s+' + pItem.Sym.Name + '|(?:TList|TObjectList)\s*<\s*' + pItem.Sym.Name + '\s*>)\s*;\s*$', [roIgnoreCase]);
   if not M.Success then Exit;
+  var IsList:= StartsText('TList', Trim(M.Groups[2].Value)) or StartsText('TObjectList', Trim(M.Groups[2].Value));
   Fld:= Default(TSymbol);
   for var S in F.Syms do
     if (S.Kind = skField) and (S.StartLine = pLine) and SameText(S.Name, M.Groups[1].Value) then Fld:= S;
   if Fld.Id = 0 then Exit;
   pField:= Fld.Name;
   var Site:= Format('`%s:%d`', [ExtractFileName(F.Path), pLine]);
-  var Head:= Format('field `%s` (`%s`) can switch to the base class only when every use is SetLength, ' +
+  var Head:= if IsList then Format('field `%s` (`%s`) can switch to the base class only when every use is on the ' +
+    'list whitelist (Create, Add, Insert, Remove, IndexOf, Contains, Delete, Clear, Count, Free, a store `%s[..] := x`, ' +
+    'a read `%s[..].M` of a member the base class gets, `for S in %s`)', [Fld.Name, Trim(M.Groups[2].Value), Fld.Name,
+    Fld.Name, Fld.Name])
+  else Format('field `%s` (`%s`) can switch to the base class only when every use is SetLength, ' +
     'Length, High, Low, a store `%s[..] := x` or a read `%s[..].M` of a member the base class gets',
     [Fld.Name, Trim(M.Groups[2].Value), Fld.Name, Fld.Name]);
   if ContainsText(Fld.Modifiers, 'published') or not Fld.VisExplicit then
@@ -2275,7 +2534,8 @@ begin
     if L = pLine then Continue;
     var Code:= CodePart(LineAt(F.Lines, L));
     for var U in TRegEx.Matches(Code, '\b' + Fld.Name + '\b', [roIgnoreCase]) do
-      if not IsSwitchableFieldUse(Code, U.Index, U.Length, Pulled) then
+      if not (if IsList then IsListFieldUse(Code, U.Index, U.Length, pItem.Sym.Name, Pulled, pSlots)
+        else IsSwitchableFieldUse(Code, U.Index, U.Length, Pulled, pSlots)) then
         Exit(Format('`%s:%d`: %s', [ExtractFileName(F.Path), L, Head]));
   end;
 end;
@@ -2291,9 +2551,10 @@ end;
   followed by `.` (a receiver: the member ref must be a read) or by `= nil` /
   `<> nil` (or preceded by `nil =` / `nil <>`), or -- D1 -- as the whole right
   side of a store `F[..] := p` into one of pFields (fields that switch to
-  the base class too); anything else refuses. }
+  the base class too); B4: the argument of `F.Add(p)` and its kin (IsListArg), or the whole
+  right side of `S := p` into one of pSlots (plain fields / locals that switch); anything else refuses. }
 function TCyclePlanner.ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string;
-  const pFields: TArray<string>): string;
+  const pFields: TArray<string>; const pSlots: TArray<string>): string;
 var
   Routine: TSymbol;
   MA     : TCallEdge;
@@ -2321,6 +2582,13 @@ begin
     begin
       if (L = BodyAt) and (M.Index <= BodyCol) then Continue;
       if IsReceiverOrNilTest(Code, M.Index, M.Length) then Continue;
+      if IsListArg(Code, M.Index, M.Length, pFields) then Continue;
+      { B4: stored whole into a plain field or local that switches (`S := p`) }
+      if (Length(pSlots) > 0) and
+        TRegEx.IsMatch(Copy(Code, 1, M.Index - 1), '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*$',
+          [roIgnoreCase]) and
+        TRegEx.IsMatch(Copy(Code, M.Index + M.Length, MaxInt), '^\s*(;|$|end\b|else\b)', [roIgnoreCase]) then
+        Continue;
       if (Length(pFields) > 0) and
         TRegEx.IsMatch(Copy(Code, 1, M.Index - 1), '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pFields) +
           ')\s*\[[^;]*\]\s*:=\s*$', [roIgnoreCase]) and
@@ -2424,8 +2692,9 @@ var
   Item: TMoveItem;
 begin
   { R1: the consumer's calls of the inverted routine go through the pointer }
-  if (FInversion.Recipe = crRoutineInversion) and (pOwner.Id = FInversion.RoutineId) and
-    (pFid = FInversion.ConsumerFid) then Exit(True);
+  if (FInversion.Recipe = crRoutineInversion) and (pFid = FInversion.ConsumerFid) then
+    for var R in FInversion.Routines do
+      if pOwner.Id = R.Id then Exit(True);
   { R2: the consumer names the interface instead of the class }
   if (FInversion.Recipe = crMemberInterface) and (pOwner.Id = FInversion.ClassId) and
     (pFid = FInversion.ConsumerFid) then Exit(True);
@@ -3899,7 +4168,7 @@ begin
     else if IsInversionStem(Stem) then
       EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the procedural ' +
         'type and variable of `%s`. Do not create it again; the edit step lists the insert.',
-        [FLeafName[Stem], FLeafPath[Stem], FInversion.RoutineName])
+        [FLeafName[Stem], FLeafPath[Stem], InversionNames])
     else
     EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: what moves out of `%s` goes ' +
       'into it. Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
@@ -4410,6 +4679,8 @@ begin
   if FCutEdge.FromStem = '' then Exit;
   if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then
   begin
+    { B3: what moves with the routines goes into the same leaf (ProbeInversionMoves proved it can) }
+    for var Id in FInversion.MoveIds do TryAdd(FStore.GetSymbolById(Id), nil, Why);
     MaterializeInversion;
     Exit;
   end;
@@ -4417,46 +4688,117 @@ begin
   Materialize;
 end;
 
-{ R1 on every edge that cannot move and whose surface is exactly one routine: a
-  refusal is recorded on the edge (its Why is what the playbook prints), an
-  applicable edge gets Recipe crRoutineInversion, its Steps and Cost = its calls.
-  PlanImplCycle picks the cut (R3). }
+{ R1 on every edge that cannot move and whose surface binds at least one routine (B3: N
+  routines, mixed with movable globals): a refusal is recorded on the edge (its Why is
+  what the playbook prints), an applicable edge gets Recipe crRoutineInversion, its Steps
+  and Cost = its calls + the declarations that move. PlanImplCycle picks the cut (R3). }
 procedure TCyclePlanner.PlanInversion(pEvals: TList<TEdgeEval>);
 var
   Refusal: TRecipeRefusal;
+  Moved  : TArray<string>;
+  MoveIds: TArray<Int64>;
 begin
   for var I:= 0 to pEvals.Count - 1 do
   begin
     var Ev:= pEvals[I];
-    if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName = '') then Continue;
-    var Steps:= PlanRoutineInversion(Self, Ev.Surface, Refusal);
+    if (Ev.Recipe <> crNone) or (Length(Ev.Surface.RoutineIds) = 0) then Continue;
+    { B3: a non-routine on the edge must move; an edge with something that cannot keeps its Why }
+    var MoveCount:= 0;
+    if not ProbeInversionMoves(Ev, Moved, MoveIds, MoveCount) then Continue;
+    var Steps:= PlanRoutinesInversion(Self, Ev.Surface, Moved, Refusal);
+    Steps.MoveIds:= MoveIds;
     if Refusal.Kind = '' then
     begin
-      { the leaf must not declare the pointer's names already }
+      { the leaf must not declare the pointers' names already }
       var Leaf:= InversionLeaf(Steps);
       if Leaf.Decision = udExtend then
         for var S in GetFile(Leaf.Fid).Syms do
-          if SameText(S.Name, Steps.PtrType) or SameText(S.Name, Steps.PtrVar) then
-          begin
-            Refusal.Kind  := 'duplicate-identifier';
-            Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
-            Break;
-          end;
+          for var R in Steps.Routines do
+            if SameText(S.Name, R.PtrType) or SameText(S.Name, R.PtrVar) then
+            begin
+              Refusal.Kind  := 'duplicate-identifier';
+              Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
+            end;
     end;
     { A2: the old refusal unit-leaves-program named its own fix -- the declaring unit joins the program's uses }
     if Refusal.Kind = '' then Steps.RegisterDecl:= LeavesProgramReason(Steps) <> '';
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
-      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Ev.Surface.RoutineName,
-        (if Length(Ev.Needs) > 0 then Ev.Needs[0].Owner.Kind.ToText else 'routine'), Refusal.Kind, Refusal.Reason]);
+      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [(if Ev.Surface.RoutineName <> '' then Ev.Surface.RoutineName
+        else Refusal.Symbol), (if Length(Ev.Needs) > 0 then Ev.Needs[0].Owner.Kind.ToText else 'routine'), Refusal.Kind,
+        Refusal.Reason]);
       pEvals[I]:= Ev;
       Continue;
     end;
     Ev.Recipe:= crRoutineInversion;
     Ev.Steps := Steps;
-    Ev.Cost  := Ev.Surface.CallCount;
+    Ev.Cost  := Ev.Surface.CallCount + MoveCount;
     pEvals[I]:= Ev;
+  end;
+end;
+
+{ B3: probes what moves with the routines of one edge -- every need that is not one of
+  them (TryAdd must succeed), and every signature type of the declaring unit that is a
+  plain declaration (mvDecl: an enum, a record or alias without bodies). A type that
+  cannot move stays a signature-in-cycle refusal; a need that cannot move, or a routine a
+  move would pull along, leaves the edge as EvaluateEdge judged it (False). pMoved gets
+  the names of the moved declarations of the declaring unit, pMoveIds the ids to TryAdd
+  again at materialisation, pCount the number of declarations moved. Nothing stays added. }
+function TCyclePlanner.ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>;
+  out pMoveIds: TArray<Int64>; out pCount: Integer): Boolean;
+var
+  Why  : string;
+  Roots: TList<Int64>;
+  Owner: TSymbol;
+  Stem : string;
+begin
+  pMoved  := nil;
+  pMoveIds:= nil;
+  pCount  := 0;
+  var Snap:= FOrder.Count;
+  Roots:= TList<Int64>.Create;
+  try
+    Result:= True;
+    for var N in pEv.Needs do
+      if not HasId(N.Owner.Id, pEv.Surface.RoutineIds) then
+      begin
+        if (N.Owner.Kind in [skProcedure, skFunction]) or not TryAdd(N.Owner, nil, Why) then Exit(False);
+        Roots.Add(N.Owner.Id);
+      end;
+    var DeclFid:= FidOfStem(pEv.ToStem);
+    for var Id in pEv.Surface.RoutineIds do
+    begin
+      var R:= FStore.GetSymbolById(Id);
+      for var T in SignatureTypes(Self, DeclFid, R.StartLine, R.Signature) do
+      begin
+        if not T.InScc or (T.DeclStem <> pEv.ToStem) or
+          not BindName(DeclFid, R.StartLine, T.Name.Substring(T.Name.LastIndexOf('.') + 1), Owner, Stem) then Continue;
+        var Item: TMoveItem;
+        var Before:= FOrder.Count;
+        if not TryAdd(Owner, nil, Why) or not FItems.TryGetValue(Owner.Id, Item) or (Item.Kind <> mvDecl) then
+        begin
+          Rollback(Before);
+          Continue;
+        end;
+        if not Roots.Contains(Owner.Id) then Roots.Add(Owner.Id);
+      end;
+    end;
+    for var Id in pEv.Surface.RoutineIds do
+      if FItems.ContainsKey(Id) then Exit(False);
+    pCount:= FOrder.Count - Snap;
+    var Names:= TList<string>.Create;
+    try
+      for var K:= Snap to FOrder.Count - 1 do
+        if FItems[FOrder[K]].Stem = pEv.ToStem then Names.Add(FItems[FOrder[K]].Sym.Name);
+      pMoved:= Names.ToArray;
+    finally
+      Names.Free;
+    end;
+    pMoveIds:= Roots.ToArray;
+  finally
+    Rollback(Snap);
+    Roots.Free;
   end;
 end;
 
@@ -4641,21 +4983,39 @@ begin
       L.AddRange(FInversion.IfaceDecl);
       Exit(L.ToArray);
     end;
-    L.Add(Format('  /// <summary>Signature of %s (%s), copied verbatim.</summary>',
-      [FInversion.RoutineName, UnitNameOfStem(pStem)]));
-    L.Add('  ' + FInversion.TypeDecl);
+    for var R in FInversion.Routines do
+    begin
+      L.Add(Format('  /// <summary>Signature of %s (%s), copied verbatim.</summary>', [R.Name, UnitNameOfStem(pStem)]));
+      L.Add('  ' + R.TypeDecl);
+    end;
     L.Add('');
     L.Add('var');
-    L.Add(Format('  /// <summary>Holds %s, assigned by %s in its initialization section; the units of ' +
-      'its former cycle call it instead of naming the routine.</summary>', [FInversion.RoutineName,
-      UnitNameOfStem(pStem)]));
-    L.Add('  ' + FInversion.VarDecl);
+    for var R in FInversion.Routines do
+    begin
+      L.Add(Format('  /// <summary>Holds %s, assigned by %s in its initialization section; the units of ' +
+        'its former cycle call it instead of naming the routine.</summary>', [R.Name, UnitNameOfStem(pStem)]));
+      L.Add('  ' + R.VarDecl);
+    end;
     Result:= L.ToArray;
   finally
     L.Free;
   end;
 end;
 
+{ The names of the routines R1 inverts, joined as `a`, `b` (the caller supplies the outer backticks). }
+function TCyclePlanner.InversionNames: string;
+var
+  L: TList<string>;
+begin
+  L:= TList<string>.Create;
+  try
+    for var R in FInversion.Routines do L.Add(R.Name);
+    if L.Count = 0 then L.Add(FInversion.RoutineName);
+    Result:= string.Join('`, `', L.ToArray);
+  finally
+    L.Free;
+  end;
+end;
 { Why the R1 consumer keeps the declaring unit's uses entry (its section still
   uses another name the planner binds to that unit), or '' when it drops it. }
 function TCyclePlanner.InversionStillUsed: string;
@@ -4675,21 +5035,39 @@ begin
   EmitFmt('### Step %d: what moves where', [pStep]);
   Calls:= TList<string>.Create;
   try
-    for var R in FInversion.Edits do
-      if R.Fid = FInversion.ConsumerFid then Calls.Add(IntToStr(R.Line));
     var Decl:= UnitNameOfStem(FInversion.DeclStem);
-    EmitFmt('Nothing moves. Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside ' +
-      'this cycle keep calling it by name.', [FInversion.RoutineName, Decl]);
-    EmitFmt('- `%s` gets the procedural type `%s` -- the routine''s own signature, copied verbatim (keep ' +
-      'every `const` and parameter name) -- and the variable `%s`.', [FLeafName[FInversion.DeclStem],
-      FInversion.PtrType, FInversion.PtrVar]);
-    EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
-      [Decl, FInversion.PtrVar, FInversion.RoutineName]);
-    EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
-      'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
-      'initialization section of another unit that reaches them through a call chain.',
-      [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.RoutineName,
-       string.Join(', ', Calls.ToArray)]);
+    if Length(FInversion.MoveIds) = 0 then
+      EmitFmt('Nothing moves. Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside ' +
+        'this cycle keep calling it by name.', [InversionNames, Decl])
+    else
+    begin
+      { B3: the declarations that move with the routines, then the pointers }
+      EmitFmt('Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside this cycle keep calling ' +
+        'it by name. These declarations move into `%s` first:', [InversionNames, Decl, FLeafName[FInversion.DeclStem]]);
+      var No:= 0;
+      for var Id in FOrder do
+      begin
+        Inc(No);
+        RenderOneMove(No, FItems[Id]);
+      end;
+    end;
+    for var R in FInversion.Routines do
+    begin
+      Calls.Clear;
+      for var E in FInversion.Edits do
+        if (E.Fid = FInversion.ConsumerFid) and (Length(E.NewLines) > 0) and
+          TRegEx.IsMatch(E.NewLines[0], '(?<![\w.])' + TRegEx.Escape(R.PtrVar) + '\b', [roIgnoreCase]) then
+          Calls.Add(IntToStr(E.Line));
+      EmitFmt('- `%s` gets the procedural type `%s` -- the routine''s own signature, copied verbatim (keep ' +
+        'every `const` and parameter name) -- and the variable `%s`.', [FLeafName[FInversion.DeclStem],
+        R.PtrType, R.PtrVar]);
+      EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
+        [Decl, R.PtrVar, R.Name]);
+      EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
+        'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
+        'initialization section of another unit that reaches them through a call chain.',
+        [ExtractFileName(PathOf(FInversion.ConsumerFid)), R.PtrVar, R.Name, string.Join(', ', Calls.ToArray)]);
+    end;
     if FInversion.RegisterDecl then
       EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`: ' +
         'after the cut only `%s` used it, and the program did not list it.', [Decl, ExtractFileName(PathOf(FProjectFid)),
@@ -4771,6 +5149,15 @@ begin
   end;
   if pPlan.CutEdge.Recipe = crRoutineInversion then
   begin
+    if (Length(FInversion.Routines) > 1) or (Length(FInversion.MoveIds) > 0) then
+      { B3: several routines, or routines and declarations that move }
+      EmitFmt('Cut the edge `%s -> %s` by **routine-call inversion**: `%s` takes from `%s` the routines `%s`%s; every ' +
+      'type of their signatures is declared outside this cycle or moves too. `%s` calls them through procedural ' +
+      'variables declared in `%s` instead. No edge of this cycle can be cut by moving declarations alone.',
+      [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, InversionNames,
+      (if Length(FInversion.MoveIds) > 0 then Format(' and declarations that move into `%s`',
+      [FLeafName[FInversion.DeclStem]]) else ''), pPlan.CutEdge.FromStem, FLeafName[FInversion.DeclStem]])
+    else
     EmitFmt('Cut the edge `%s -> %s` by **routine-call inversion**: `%s` takes only the routine `%s` from ' +
       '`%s`, and every type of its signature is declared outside this cycle. `%s` calls it through a ' +
       'procedural variable declared in `%s` instead. No edge of this cycle can be cut by moving ' +

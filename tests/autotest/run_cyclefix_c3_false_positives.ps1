@@ -11,8 +11,8 @@
       its inherited class method R1Note; the unit routine R1Title.R1Note of the same name is NOT what it
       calls, so the edge is cut (mechanical, no `edge-still-used`).
       POSITIVE CONTROL: the same copy with TR1Form no longer deriving from TR1Base (R1Note is not in the class
-      chain): the bare name binds to the unit routine, two routines are on the edge, and the plan stays
-      refused (manual-edit). The plan's edge-still-used wording cannot be reached by this variant: the index
+      chain): the bare name binds to the unit routine, two routines are on the edge, and (plan B3) both are
+      inverted -- the plan assigns R1NotePtr; the inherited case must not. The plan's edge-still-used wording cannot be reached by this variant: the index
       already binds an inherited R1Note to TR1Base, so only the name-based need list was wrong.
 #>
 [CmdletBinding()]
@@ -104,14 +104,17 @@ try {
   Test-Refused 'comment-then-call' (Get-Plan 'initorder' 'InitOrder.dproj' 'comment-then-call' (New-InitEdit "  { Show is called below }`r`n  (* and again *)" $false)) 'init-order'
 
   Write-Host '== (b) edge-still-used: an inherited class member is not the unit routine' -ForegroundColor Cyan
-  Test-Mechanical 'inherited' (Get-Plan 'r1stillused' 'R1StillUsed.dproj' 'inherited' $null) 'edge-still-used'
+  $inh = Get-Plan 'r1stillused' 'R1StillUsed.dproj' 'inherited' $null
+  Test-Mechanical 'inherited' $inh 'edge-still-used'
+  Check 'inherited m3 the inherited R1Note is not inverted (no R1NotePtr)' (-not $inh.Text.Contains('R1NotePtr')) ''
   $unlink = {
     param($r)
     Edit-File (Join-Path $r 'R1Form.pas') 'TR1Form = class(TR1Base)' 'TR1Form = class'
   }
   $nc = Get-Plan 'r1stillused' 'R1StillUsed.dproj' 'not-in-chain' $unlink
   Check 'not-in-chain r0 planned (exit 0)' ($nc.Exit -eq 0) ''
-  Check 'not-in-chain r1 still refused (R1Note binds to the unit routine: two routines on the edge)' (($nc.Verdict -eq 'refused') -and ($nc.Refusals -ne '')) "[$($nc.Verdict) / $($nc.Refusals)]"
+  # since plan B3 two routines on one edge are inverted together: R1Note binding to the unit routine shows as R1NotePtr
+  Check 'not-in-chain r1 R1Note binds to the unit routine: it is inverted with R1TitleOf (R1NotePtr := R1Note)' $nc.Text.Contains('  R1NotePtr := R1Note;') "[$($nc.Verdict) / $($nc.Refusals)]"
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

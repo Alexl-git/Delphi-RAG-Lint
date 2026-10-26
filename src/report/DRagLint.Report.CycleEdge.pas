@@ -99,6 +99,9 @@ type
     SigTypes: TArray<TSigType>;
     /// <summary>Number of call refs of A bound to B.</summary>
     CallCount: Integer;
+    /// <summary>Plan B3: symbols.id of every top-level routine of B the edge binds, in the order of
+    /// its first reference; empty when it binds none. Set whatever else the edge binds.</summary>
+    RoutineIds: TArray<Int64>;
   end;
 
   /// <summary>The index access BuildEdgeSurface needs from the cycle planner.</summary>
@@ -171,6 +174,23 @@ type
     Reason: string;
   end;
 
+  /// <summary>One routine recipe R1 calls through a procedural variable (plan B3: an edge
+  /// can carry several).</summary>
+  TInvertedRoutine = record
+    /// <summary>symbols.id of the routine.</summary>
+    Id: Int64;
+    /// <summary>The routine's name, as declared.</summary>
+    Name: string;
+    /// <summary>`T&lt;Routine&gt;Ptr`.</summary>
+    PtrType: string;
+    /// <summary>`&lt;Routine&gt;Ptr`.</summary>
+    PtrVar: string;
+    /// <summary>The procedural type declaration (see TRecipeSteps.TypeDecl).</summary>
+    TypeDecl: string;
+    /// <summary>The variable declaration (see TRecipeSteps.VarDecl).</summary>
+    VarDecl: string;
+  end;
+
   /// <summary>What recipe R1 (routine-call inversion) or R2 (member hand-over) does to
   /// one edge, as data the planner maps onto its leaf machinery and file edits.</summary>
   /// <remarks>The leaf's new unit, its .dpr / .dproj registration and every uses-clause
@@ -236,6 +256,13 @@ type
     /// consumer used it and the .dpr does not list it); the plan then adds it to the .dpr uses
     /// (and a DCCReference to the .dproj when absent) instead of refusing unit-leaves-program.</summary>
     RegisterDecl: Boolean;
+    /// <summary>R1 (plan B3): every routine inverted, in first-call order; one entry for a single
+    /// routine, which then repeats RoutineId .. VarDecl. The singular fields always name the first.</summary>
+    Routines: TArray<TInvertedRoutine>;
+    /// <summary>R1 (plan B3): symbols.id of each declaration of B that moves into the leaf before the
+    /// pointers (a movable global on the edge, a plain type a signature names); filled by the planner,
+    /// empty when nothing moves.</summary>
+    MoveIds: TArray<Int64>;
   end;
 
 const
@@ -330,6 +357,26 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// </remarks>
 function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
   out pRefusal: TRecipeRefusal): TRecipeSteps;
+
+/// <summary>Recipe R1 for EVERY routine on one edge (plan B3): each routine of
+/// pSurface.RoutineIds is planned by PlanRoutineInversion on its own slice of the surface, and
+/// the results are merged into one recipe.</summary>
+/// <param name="pSource">Index access; must not be nil; IsSccStem answers for the edge's group.</param>
+/// <param name="pSurface">The edge's surface (BuildEdgeSurface); RoutineIds must not be empty.
+/// Refs bound to anything but these routines are ignored here: the planner moves them.</param>
+/// <param name="pMovedTypes">Names of declarations of the edge's ToStem that move into its leaf
+/// before the pointers; a signature type of that unit named here counts as OUTSIDE the cycle.</param>
+/// <param name="pRefusal">Receives the first routine's refusal (PlanRoutineInversion's kinds, naming
+/// that routine); Kind '' when every routine qualifies.</param>
+/// <returns>The merged steps; Recipe = crNone when refused. The singular fields name the first
+/// routine, Routines lists all of them.</returns>
+/// <remarks>The consumer line that calls several of the routines is rewritten ONCE with every
+/// pointer; B gets ONE initialization edit holding the N assignments in Routines order. J2 (an
+/// existing leaf) applies only when every routine picks the same one and pMovedTypes is empty;
+/// otherwise LeafStem is '' (B's Untangle leaf, which receives the moved declarations too).
+/// With one routine and nothing moved the result equals PlanRoutineInversion's.</remarks>
+function PlanRoutinesInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
+  const pMovedTypes: TArray<string>; out pRefusal: TRecipeRefusal): TRecipeSteps;
 
 /// <summary>The deterministic GUID of an extracted interface (R2).</summary>
 /// <param name="pText">`&lt;LeafUnit&gt;.&lt;Interface&gt;`, e.g. `DemoGagePort.Untangle.IDemoGagePortSurface`.</param>
@@ -791,6 +838,18 @@ begin
   FSurface.Refs      := FRefs.ToArray;
   FSurface.ClassNames:= FClasses.ToStringArray;
   FSurface.Members   := FMembers.ToStringArray;
+  { B3: the routines among the owners, in first-reference order (a top-level routine's ref
+    carries the routine's own id) }
+  var Ids:= TList<Int64>.Create;
+  try
+    for var R in FRefs do
+      if FOwners.TryGetValue(R.SymbolId, Owner) and (Owner.Kind in [skProcedure, skFunction]) and
+        not Ids.Contains(R.SymbolId) then Ids.Add(R.SymbolId);
+    FSurface.RoutineIds:= Ids.ToArray;
+  finally
+    Ids.Free;
+  end;
+  Owner:= Default(TSymbol);
   if FOwners.Count <> 1 then Exit;
   for var O in FOwners.Values do Owner:= O;
   if not (Owner.Kind in [skProcedure, skFunction]) then Exit;
@@ -1012,9 +1071,9 @@ begin
         '`%s`: it may run before the variable is assigned', [Encl, pRef.Line, L, pUnit]));
 end;
 
-{ The declaring unit's edit: the assignment as the first statement of its
-  initialization section, creating the section when there is none. }
-function AssignmentEdit(const pLines: TArray<string>; pFid: Int64; const pAssign: string; out pEdit: TRecipeEdit): Boolean;
+{ The declaring unit's edit: the assignments (B3: one per inverted routine) as the first
+  statements of its initialization section, creating the section when there is none. }
+function AssignmentEdit(const pLines: TArray<string>; pFid: Int64; const pAssigns: TArray<string>; out pEdit: TRecipeEdit): Boolean;
 begin
   pEdit    := Default(TRecipeEdit);
   pEdit.Fid:= pFid;
@@ -1024,18 +1083,18 @@ begin
   if Init > 0 then
   begin
     pEdit.Line    := Init;
-    pEdit.NewLines:= [pAssign];
+    pEdit.NewLines:= pAssigns;
   end
   else if Fin > 0 then
   begin
     pEdit.Line    := Fin - 1;
-    pEdit.NewLines:= ['initialization', pAssign, ''];
+    pEdit.NewLines:= ['initialization'] + pAssigns + [''];
   end
   else if Stop > 0 then
   begin
     pEdit.Line    := Stop;
     pEdit.Replace := True;
-    pEdit.NewLines:= ['initialization', pAssign, '', LineOf(pLines, Stop)];
+    pEdit.NewLines:= ['initialization'] + pAssigns + ['', LineOf(pLines, Stop)];
   end;
   Result:= pEdit.Line > 0;
 end;
@@ -1274,7 +1333,7 @@ begin
         Result.PtrVar, [roIgnoreCase])];
       Edits.Add(E);
     end;
-    if not AssignmentEdit(pSource.FileLines(DeclFid), DeclFid, Format('  %s := %s;', [Result.PtrVar, Name]), E) then
+    if not AssignmentEdit(pSource.FileLines(DeclFid), DeclFid, [Format('  %s := %s;', [Result.PtrVar, Name])], E) then
     begin
       pRefusal:= MakeRefusal('manual-edit', Name, DeclFid, 0, 'the declaring unit has no final `end.`');
       Exit(Default(TRecipeSteps));
@@ -1284,6 +1343,117 @@ begin
   finally
     Done.Free;
     Edits.Free;
+  end;
+  var One:= Default(TInvertedRoutine);
+  One.Id      := Result.RoutineId;
+  One.Name    := Name;
+  One.PtrType := Result.PtrType;
+  One.PtrVar  := Result.PtrVar;
+  One.TypeDecl:= Result.TypeDecl;
+  One.VarDecl := Result.VarDecl;
+  Result.Routines:= [One];
+end;
+
+{ B3: the slice of pSurface that is the one routine pRoutineId -- its refs, its signature, and
+  its signature types with a type of the declaring unit named in pMovedTypes counted as
+  outside the cycle (it moves into the leaf, where the pointer type can name it). }
+function RoutineSlice(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pRoutineId: Int64;
+  const pMovedTypes: TArray<string>): TEdgeSurface;
+var
+  Refs: TList<TEdgeRef>;
+begin
+  Result:= pSurface;
+  var Routine:= pSource.Store.GetSymbolById(pRoutineId);
+  Refs:= TList<TEdgeRef>.Create;
+  try
+    Result.CallCount:= 0;
+    for var R in pSurface.Refs do
+      if R.SymbolId = pRoutineId then
+      begin
+        Refs.Add(R);
+        if R.Kind = erCall then Inc(Result.CallCount);
+      end;
+    Result.Refs:= Refs.ToArray;
+  finally
+    Refs.Free;
+  end;
+  Result.RoutineIds := [pRoutineId];
+  Result.RoutineName:= Routine.Name;
+  Result.RoutineSig := Routine.Signature;
+  Result.SigTypes   := SignatureTypes(pSource, Routine.FileId, Routine.StartLine, Routine.Signature);
+  for var I:= 0 to High(Result.SigTypes) do
+  begin
+    var T:= Result.SigTypes[I];
+    if T.InScc and (T.DeclStem = pSurface.ToStem) and
+      MatchText(T.Name.Substring(T.Name.LastIndexOf('.') + 1), pMovedTypes) then
+    begin
+      T.InScc   := False;
+      T.DeclStem:= '';  { no J2 leaf can declare it: it moves into B's Untangle leaf }
+      Result.SigTypes[I]:= T;
+    end;
+  end;
+end;
+
+function PlanRoutinesInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
+  const pMovedTypes: TArray<string>; out pRefusal: TRecipeRefusal): TRecipeSteps;
+var
+  Parts  : TList<TRecipeSteps>;
+  Lines  : TList<Integer>;
+  Assigns: TList<string>;
+  Edits  : TList<TRecipeEdit>;
+  E      : TRecipeEdit;
+begin
+  Result  := Default(TRecipeSteps);
+  pRefusal:= Default(TRecipeRefusal);
+  if Length(pSurface.RoutineIds) = 0 then
+    Exit(PlanRoutineInversion(pSource, pSurface, pRefusal));
+  Parts  := TList<TRecipeSteps>.Create;
+  Lines  := TList<Integer>.Create;
+  Assigns:= TList<string>.Create;
+  Edits  := TList<TRecipeEdit>.Create;
+  try
+    for var Id in pSurface.RoutineIds do
+    begin
+      var Steps:= PlanRoutineInversion(pSource, RoutineSlice(pSource, pSurface, Id, pMovedTypes), pRefusal);
+      if pRefusal.Kind <> '' then Exit(Default(TRecipeSteps));
+      Parts.Add(Steps);
+    end;
+    if (Parts.Count = 1) and (Length(pMovedTypes) = 0) then Exit(Parts[0]);
+    Result:= Parts[0];
+    Result.Routines:= nil;
+    for var P in Parts do
+    begin
+      Result.Routines:= Result.Routines + P.Routines;
+      if (P.LeafStem <> Result.LeafStem) or (Length(pMovedTypes) > 0) then Result.LeafStem:= '';
+      for var R in P.Edits do
+        if (R.Fid = Result.ConsumerFid) and not Lines.Contains(R.Line) then Lines.Add(R.Line);
+    end;
+    { every call line once, with every routine's name replaced by its pointer }
+    var FromLines:= pSource.FileLines(Result.ConsumerFid);
+    Lines.Sort;
+    for var L in Lines do
+    begin
+      var Text:= LineOf(FromLines, L);
+      for var R in Result.Routines do
+        Text:= TRegEx.Replace(Text, '(?<![\w.])' + TRegEx.Escape(R.Name) + '\b', R.PtrVar, [roIgnoreCase]);
+      E:= Default(TRecipeEdit);
+      E.Fid     := Result.ConsumerFid;
+      E.Line    := L;
+      E.Replace := True;
+      E.NewLines:= [Text];
+      Edits.Add(E);
+    end;
+    for var R in Result.Routines do Assigns.Add(Format('  %s := %s;', [R.PtrVar, R.Name]));
+    var DeclFid:= pSource.FidOfStem(pSurface.ToStem);
+    { PlanRoutineInversion already made one such edit per routine, so this cannot fail }
+    AssignmentEdit(pSource.FileLines(DeclFid), DeclFid, Assigns.ToArray, E);
+    Edits.Add(E);
+    Result.Edits:= Edits.ToArray;
+  finally
+    Edits.Free;
+    Assigns.Free;
+    Lines.Free;
+    Parts.Free;
   end;
 end;
 

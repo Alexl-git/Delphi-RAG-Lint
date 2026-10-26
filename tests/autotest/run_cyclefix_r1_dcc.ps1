@@ -5,7 +5,8 @@
   For each tree -- circular-demo (cycle 3, leaf DemoBlueprint.Interfaces), tests\fixtures\cyclefix\
   r1extend (existing R1Title.Untangle extended), r1stdcall (the same with a stdcall routine: the
   pointer type must carry the calling convention) and r1extend without that leaf (R1Title.Untangle
-  created) -- the runner builds the untouched copy (msbuild, Win64 Debug) and keeps its stdout,
+  created), and the plan B3 trees r1two / r1mixed / sigincycleenum (N routines, a routine + a const, an enum of
+  the cycle in the signature) -- the runner builds the untouched copy (msbuild, Win64 Debug) and keeps its stdout,
   plans `cycles --plan` on a second copy, applies the cycle with tools\follow-cycle-plan.ps1,
   builds it (BUILD_EXITCODE=0, no `error E` / `fatal F` line), runs it and compares stdout
   BYTE-FOR-BYTE with the untouched build's.
@@ -115,6 +116,10 @@ try {
     Set-Text $dpj ([IO.File]::ReadAllText($dpj).Replace("        <DCCReference Include=`"R1Title.Untangle.pas`"/>`r`n", ''))
   }
   $null = Test-Tree 'r1create' (Join-Path $Fx 'r1extend') 'R1Extend.dproj' 1 $dropLeaf
+  # plan B3 (run_cyclefix_b3.ps1): two routines on one edge; a routine + a const; a routine whose signature names an enum of the cycle
+  $null = Test-Tree 'r1two' (Join-Path $Fx 'r1two') 'R1Extend.dproj' 1 $null
+  $null = Test-Tree 'r1mixed' (Join-Path $Fx 'r1mixed') 'R1Extend.dproj' 1 $null
+  $null = Test-Tree 'sigincycleenum' (Join-Path $Fx 'sigincycleenum') 'R1Extend.dproj' 1 $null
 
   Write-Host '== positive control: the followed demo without the initialization assignment' -ForegroundColor Cyan
   $vm = Join-Path $demo.Edit 'DemoBlueprint.ViewModel.pas'
