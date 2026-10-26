@@ -621,6 +621,38 @@ function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, 
 /// its change was restored away.</returns>
 function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
 
+type
+  /// <summary>One unit's restore point for a run: the .pas and its .dfm copied to a shared
+  /// .BCK&lt;N&gt; (SharedBackupPaths).</summary>
+  /// <remarks>BakPas / BakDfm are set only once their copy has been made, so a failed Take
+  /// leaves them naming exactly the backups Drop must remove. Not thread-safe; one run owns it.</remarks>
+  TRestorePoint = record
+    /// <summary>The unit's .pas, as given to Take.</summary>
+    UnitPas: string;
+    /// <summary>The unit's .dfm path (the .pas with extension .dfm); it need not exist.</summary>
+    Dfm    : string;
+    /// <summary>The .pas backup made by Take; '' until made.</summary>
+    BakPas : string;
+    /// <summary>The .dfm backup made by Take; '' when the unit has no .dfm.</summary>
+    BakDfm : string;
+    /// <summary>Copies the unit (and its .dfm, when it exists) to the next free .BCK&lt;N&gt;.</summary>
+    /// <param name="AUnitPas">The unit's .pas.</param>
+    /// <param name="AError">'' on success, else the exception text.</param>
+    /// <returns>True when every needed copy was made.</returns>
+    function Take(const AUnitPas: string; out AError: string): Boolean;
+    /// <summary>Copies the backups back over the unit and its .dfm.</summary>
+    /// <param name="AError">'' on success, else the exception text.</param>
+    /// <returns>True when every restore copy was made.</returns>
+    function Restore(out AError: string): Boolean;
+    /// <summary>Deletes the backups this run made.</summary>
+    /// <returns>'' when every backup is gone; else a note naming what was kept.</returns>
+    function Drop: string;
+    /// <summary>The unit's backups for a note: both when it has a .dfm.</summary>
+    /// <param name="AFullPaths">True for full paths; False for file names only.</param>
+    /// <returns>The text, e.g. 'A.pas.BCK1 and A.dfm.BCK1'.</returns>
+    function Names(AFullPaths: Boolean): string;
+  end;
+
 implementation
 
 uses
@@ -941,24 +973,6 @@ begin
     end;
 end;
 
-type
-  // One unit's restore point for a run: the .pas and its .dfm copied to a shared .BCK<N>
-  // (SharedBackupPaths). BakPas / BakDfm are set only once their copy has been made, so a
-  // failed Take leaves them naming exactly the backups Drop must remove.
-  TRestorePoint = record
-    UnitPas: string;
-    Dfm    : string;
-    BakPas : string;
-    BakDfm : string;
-    // Copies the unit (and its .dfm, when it exists) to the next free .BCK<N>.
-    function Take(const AUnitPas: string; out AError: string): Boolean;
-    // Copies the backups back over the unit and its .dfm.
-    function Restore(out AError: string): Boolean;
-    // '' when every backup this run made for the unit is gone; else what was kept.
-    function Drop: string;
-    // The unit's backups for a Note: both when it has a .dfm; file names only unless AFullPaths.
-    function Names(AFullPaths: Boolean): string;
-  end;
 // '' when ABak ('' = none made) is gone; else a note that it was kept.
 function DropBackupFile(const ABak: string): string;
 begin

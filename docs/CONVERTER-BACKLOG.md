@@ -67,20 +67,13 @@ before working on an item.**
     unit's = the process exit code (CLI.pas:27758, 27783-27790). Read it per entry.
   * **R6** (L) InputGate reports a swallowed SELECTION click as a red error (InputGate.pas:132/136).
   * **R7** (L) engine output decoded ANSI per 4 KB chunk (Engine.pas:1752) then written as UTF-8.
-  * Test-kit gaps: exit-6 mixed case, BatchDistrust partial rule_errors, non-ASCII Save round
-    trip, probe-failure decision lives in the form, TRestorePoint has no direct test.
-  * ~~**FG-O**~~ (medium) `Live.HarvestEveryKindNonEmpty` (FeatureGenTests.dpr ~1914) crashes with an
-    AV (EmptyLiveKinds(nil)) instead of failing cleanly when the harvest raises -- e.g. on a stale
-    plugin DB, where menu-tree exits 3. Make it report a FAIL.
-  * **FG-P** (low) run_feature_registry_guard.ps1 needs pwsh 7.3; under Windows PowerShell 5.1 it
-    errors. Say so in its header or make it 5.1-safe.
+  * ~~Test-kit gaps~~ CLOSED 2026-10-26 (lane E): exit-6 mixed (lane A: `batch.exit6.*`, `config.stop.*`), probe-failure decision (lane B: `probe.*`, `StartupProbeDue`), BatchDistrust partial rule_errors (`batch.untrusted.partial.rule.errors`), non-ASCII Save round trip byte-exact (`save.bytes.exact.*`), `TRestorePoint` direct (`restorepoint.*`, type now public in ConvertRunner).
+  * ~~**ENC-a**~~ CLOSED 2026-10-26 (lane E): Task 1 minors -- detect branches, surrogate Col, FF FE sniffing, lone surrogate pinned by tests (`detect.*`, `lost.col.after.surrogate`, `presave.lone.surrogate.*`); dead `RaiseTarget` clause removed. Open: a lone surrogate in a UTF-8 book still offers RaiseTo = the current level (no level above UTF-8 helps short of UTF-16).
   * **Re-pin** after ENGINE's "re-parse done" (engine 1.34.0-alpha, sha 7EF273E2...), full
     baseline, then **A4** slice 1.
   * **FG-M** featuregen: Harvest via `menu-tree --format json`, path-based checks B/C, caption-key
     parity vector, drop 14 stale exemptions (in flight, branch feat/conv-fgm-menu-tree).
-  * B4 left 44 findings (magic numbers, `C:\fix` fixture paths) on its lines in
-    ConvRulesModelTests.dpr (file total 509, outside the editor DB) -- fold into the D-list test debt.
-  * `GlyphForm.pas:60` unused `dl:ok` marker (review-marker-unused).
+  * ~~`GlyphForm.pas:60` unused `dl:ok` marker~~ CLOSED 2026-10-26 (lane E): line 60 is a `dl:unit` accepted marker; `review-marker-unused` does not flag it (lint-all, 0 hits in GlyphForm.pas).
 * E3 + this run's worktrees `C:\Projects\Delphi-RAG-lint-wt\conv-*`: owner removes (approval).
 
 ## State at the rewrite
