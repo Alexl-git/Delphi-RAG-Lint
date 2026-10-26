@@ -2804,6 +2804,18 @@ var
     Check('batch.untrusted.unparseable', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
       Pos(PREFIX, RowAt(0).Note) = 1, Pos('engine died', RowAt(0).Note) > 0, Untouched(S1), Untouched(S2)]), Describe);
 
+    // --- rule_errors on SOME units only (1 of 3): not trusted, the whole chunk restored ---
+    Reset;
+    LShort:= BatchTestDoc([BatchTestEntry(S1, 'o', ''), BatchTestEntry(S2, 'e', ''), BatchTestEntry(S3, 'o', '')], 'oeo', LExit);
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LShort;
+      end;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    LAll:= Length(Rows) = UNITS_3;
+    for var LRow: TConvertRow in Rows do
+      LAll:= LAll and (LRow.Status = csFailedRestored) and LRow.Note.StartsWith(PREFIX + 'rule_errors on 1 of 3 unit(s) only');
+    Check('batch.untrusted.partial.rule.errors', LAll and Untouched(S1) and Untouched(S2) and Untouched(S3), Describe);
     // --- exit 0 with failed_count 1: the exit contract is broken ---
     Reset;
     ExitOver:= 0;
@@ -15894,6 +15906,7 @@ begin
     TestBatchStepText;
     TestBatchRunner;
     TestRunnerDecisions;
+    TestRestorePoint;
     TestJobRunsBatched;
     TestReindexProject;
     TestConvertRunnerLive;

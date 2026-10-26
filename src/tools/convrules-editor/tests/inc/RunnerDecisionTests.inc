@@ -12,6 +12,43 @@ begin
   Result.Apply.EncodingRefusal.FileName:= AFile;
 end;
 
+{ Lane E (TK): TRestorePoint directly -- Take / Restore / Names / Drop, with and without a .dfm. }
+procedure TestRestorePoint;
+var
+  Dir, U, F, Err: string;
+  RP, RP2, RP3: TRestorePoint;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'restorepoint-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    U:= TPath.Combine(Dir, 'U1.pas');
+    F:= TPath.Combine(Dir, 'U1.dfm');
+    TFile.WriteAllText(U, 'PAS-ORIG', TEncoding.ASCII);
+    TFile.WriteAllText(F, 'DFM-ORIG', TEncoding.ASCII);
+    Check('restorepoint.take', RP.Take(U, Err) and (Err = '') and (ExtractFileName(RP.BakPas) = 'U1.pas.BCK1')
+      and (ExtractFileName(RP.BakDfm) = 'U1.dfm.BCK1') and (TFile.ReadAllText(RP.BakPas) = 'PAS-ORIG') and (TFile.ReadAllText(RP.BakDfm) = 'DFM-ORIG'), Err);
+    Check('restorepoint.names', (RP.Names(False) = 'U1.pas.BCK1 and U1.dfm.BCK1') and (RP.Names(True) = RP.BakPas + ' and ' + RP.BakDfm));
+    TFile.WriteAllText(U, 'PAS-CHANGED', TEncoding.ASCII);
+    TFile.WriteAllText(F, 'DFM-CHANGED', TEncoding.ASCII);
+    Check('restorepoint.restore', RP.Restore(Err) and (Err = '') and (TFile.ReadAllText(U) = 'PAS-ORIG') and (TFile.ReadAllText(F) = 'DFM-ORIG'), Err);
+    // a second point on the same unit takes the NEXT number; the first stays
+    Check('restorepoint.next.number', RP2.Take(U, Err) and (ExtractFileName(RP2.BakPas) = 'U1.pas.BCK2') and (ExtractFileName(RP2.BakDfm) = 'U1.dfm.BCK2'), Err);
+    Check('restorepoint.drop.removes', (RP2.Drop = '') and (not TFile.Exists(RP2.BakPas)) and (not TFile.Exists(RP2.BakDfm)) and TFile.Exists(RP.BakPas));
+    Check('restorepoint.drop.first', (RP.Drop = '') and (Length(TDirectory.GetFiles(Dir, '*.BCK*')) = 0));
+    // no .dfm: only the .pas is backed up, Names names one file
+    TFile.Delete(F);
+    Check('restorepoint.nodfm', RP3.Take(U, Err) and (RP3.BakDfm = '') and (RP3.Names(False) = 'U1.pas.BCK1') and (Length(TDirectory.GetFiles(Dir, '*.dfm*')) = 0), Err);
+    TFile.WriteAllText(U, 'PAS-CHANGED', TEncoding.ASCII);
+    Check('restorepoint.nodfm.restore', RP3.Restore(Err) and (TFile.ReadAllText(U) = 'PAS-ORIG') and (not TFile.Exists(F)), Err);
+    Check('restorepoint.nodfm.drop', (RP3.Drop = '') and (Length(TDirectory.GetFiles(Dir, '*.BCK*')) = 0));
+    // a unit that does not exist: Take fails with the exception text and names no backup
+    Check('restorepoint.take.missing', (not RP.Take(TPath.Combine(Dir, 'Nope.pas'), Err)) and (Err <> '') and (RP.BakPas = '') and (RP.BakDfm = ''));
+    Check('restorepoint.drop.nothing', RP.Drop = '');
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 procedure TestRunnerDecisions;
 const
   ROWS_3 = 3;
