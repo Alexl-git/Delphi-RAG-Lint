@@ -113,7 +113,7 @@ Check 'E1 the distinct edits[].file of the dry run' ($kv['edited.dry'] -eq "$dry
 Check 'E2 unreadable -> none' ($kv['edited.garbage'] -eq '0') "got: $($kv['edited.garbage'])"
 
 Write-Host '-- the cycle-fix jobs use the ONE plugin time limit (fix round 1)' -ForegroundColor Cyan
-# CYCLE_FIX_TIMEOUT_MS (DragLint.Plugin.CycleFix, 120 min) is above the longest --apply the engine's
+# CYCLE_FIX_TIMEOUT_MS (DragLint.Plugin.CycleFix, 130 min) is above the longest --apply the engine's
 # own limits allow (run_cyclefix_timeouts.ps1), so the engine's own rollback fires before the job queue kills an --apply mid-write.
 $sf = [IO.File]::ReadAllText((Join-Path $PluginDir 'DragLint.Plugin.StructureForm.pas'))
 $a  = $sf.IndexOf('procedure EnqueueCycleFixApply')
