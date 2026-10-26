@@ -105,6 +105,9 @@ type
     /// for the member, DL_NONE for a deliberate break (the engine's status stays 'mapped');
     /// '' when none or not sent.</summary>
     MigrateTo    : string;
+    /// <summary>rules_file (engine 1.35.0+, contract G7) -- the book that converted the unit;
+    /// '' when not sent (an older engine). The Migrate dialog targets this book (owner ruling D6 = B).</summary>
+    RulesFile    : string;
   end;
 
   /// <summary>What the Work list shows. An empty field means "all".</summary>
@@ -425,6 +428,7 @@ begin
     LRow.Resolution   := JStr(LObj, 'resolution');
     LRow.Candidates   := JStrings(LObj, 'candidates');
     LRow.MigrateTo    := JStr(LObj, 'migrate_to');
+    LRow.RulesFile    := JStr(LObj, 'rules_file');
     Result:= Result + [LRow];
   end;
 end;

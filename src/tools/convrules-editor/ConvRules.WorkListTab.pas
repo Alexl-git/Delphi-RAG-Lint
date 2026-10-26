@@ -40,13 +40,14 @@ type
     FGrid     : TListView;
     FBtnMigrate : TButton;
     FCanMigrate : TFunc<TPasUseRow, Boolean>;
-    FMigrate    : TFunc<TPasUseRow, string>;
+    FMigrate    : TFunc<TArray<TPasUseRow>, string>;
     FRuleText   : TFunc<TPasUseRow, string>;
     procedure BuildFilters;
     procedure MigrateClick(Sender: TObject);
     procedure GridSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
     procedure UpdateMigrateButton;
     function SelectedRow(out ARow: TPasUseRow): Boolean;
+    function SelectedRows: TArray<TPasUseRow>;
     procedure BuildGrid;
     procedure FilterChanged(Sender: TObject);
     procedure GridDblClick(Sender: TObject);
@@ -77,13 +78,15 @@ type
     /// <returns>The text the tab's summary label shows.</returns>
     function SummaryText: string;
     /// <summary>A4: wires member migration. The Migrate... button shows only when AMigrate is
-    /// assigned; it is enabled when ACanMigrate answers True for the selected row.</summary>
+    /// assigned; it is enabled when ACanMigrate answers True for the focused selected row.</summary>
     /// <param name="ACanMigrate">True when the row can take a #migrate (an instance row, an
     /// engine with migrate_members); nil = never.</param>
-    /// <param name="AMigrate">Runs the dialog and writes the pick into the open book; returns the
-    /// status text (MigrateStatusText); '' = cancelled. nil = feature off.</param>
+    /// <param name="AMigrate">Runs the dialog for the SELECTED rows (the grid is multi-select;
+    /// the focused row first, then the others in grid order -- owner ruling D5 = B) and writes
+    /// the pick into the row's book; returns the status text (MigrateStatusText /
+    /// BulkMigrateStatusText); '' = cancelled. nil = feature off.</param>
     /// <param name="ARuleText">The Rule cell of a row (RuleForRow); nil = ''.</param>
-    procedure SetMigrateHost(const ACanMigrate: TFunc<TPasUseRow, Boolean>; const AMigrate, ARuleText: TFunc<TPasUseRow, string>);
+    procedure SetMigrateHost(const ACanMigrate: TFunc<TPasUseRow, Boolean>; const AMigrate: TFunc<TArray<TPasUseRow>, string>; const ARuleText: TFunc<TPasUseRow, string>);
     /// <summary>Repaints the rows (the Rule cells) after the open book changed.</summary>
     procedure RefreshRules;
   end;
@@ -216,6 +219,7 @@ begin
   FGrid.ReadOnly        := True;
   FGrid.RowSelect       := True;
   FGrid.HideSelection   := False;
+  FGrid.MultiSelect     := True; // D5 = B: 'DL_NONE for all selected rows'
   LCaptions:= WorkColumns;
   for var I: Integer:= 0 to High(LCaptions) do
   begin
@@ -290,7 +294,7 @@ begin
   UpdateMigrateButton;
 end;
 
-procedure TWorkListTab.SetMigrateHost(const ACanMigrate: TFunc<TPasUseRow, Boolean>; const AMigrate, ARuleText: TFunc<TPasUseRow, string>);
+procedure TWorkListTab.SetMigrateHost(const ACanMigrate: TFunc<TPasUseRow, Boolean>; const AMigrate: TFunc<TArray<TPasUseRow>, string>; const ARuleText: TFunc<TPasUseRow, string>);
 begin
   FCanMigrate:= ACanMigrate;
   FMigrate   := AMigrate;
@@ -304,10 +308,30 @@ begin
   RefreshGrid;
 end;
 
+// The focused row when it is selected, else the first selected one.
 function TWorkListTab.SelectedRow(out ARow: TPasUseRow): Boolean;
+var
+  LItem: TListItem;
 begin
-  Result:= (FGrid.Selected <> nil) and (FGrid.Selected.Index <= High(FShown));
-  ARow:= if Result then FShown[FGrid.Selected.Index] else Default(TPasUseRow);
+  LItem:= if (FGrid.ItemFocused <> nil) and FGrid.ItemFocused.Selected then FGrid.ItemFocused else FGrid.Selected;
+  Result:= (LItem <> nil) and (LItem.Index <= High(FShown));
+  ARow:= if Result then FShown[LItem.Index] else Default(TPasUseRow);
+end;
+
+// SelectedRow first, then every other selected row in grid order.
+function TWorkListTab.SelectedRows: TArray<TPasUseRow>;
+var
+  LFirst: TPasUseRow;
+  LSkip : Integer;
+begin
+  Result:= nil;
+  if not SelectedRow(LFirst) then
+    Exit;
+  Result:= [LFirst];
+  LSkip:= if (FGrid.ItemFocused <> nil) and FGrid.ItemFocused.Selected then FGrid.ItemFocused.Index else FGrid.Selected.Index;
+  for var I: Integer:= 0 to FGrid.Items.Count - 1 do
+    if FGrid.Items[I].Selected and (I <> LSkip) and (I <= High(FShown)) then
+      Result:= Result + [FShown[I]];
 end;
 
 procedure TWorkListTab.UpdateMigrateButton;
@@ -331,12 +355,12 @@ begin
   if not (Assigned(FMigrate) and SelectedRow(LRow)) then
     Exit;
   LIndex:= FGrid.Selected.Index;
-  LStatus:= FMigrate(LRow);
+  LStatus:= FMigrate(SelectedRows);
   RefreshGrid;
   if (LIndex >= 0) and (LIndex < FGrid.Items.Count) then
     FGrid.Items[LIndex].Selected:= True;
   if LStatus <> '' then
-    FSetStatus(LStatus, StartsText('Nothing written', LStatus));
+    FSetStatus(LStatus, ContainsText(LStatus, 'Nothing written to ')); // also after an 'Opened <book>' prefix (D6)
 end;
 
 function TWorkListTab.SummaryText: string;

@@ -7,8 +7,8 @@ slice 1 of member replacement (C18).
 ## What it does
 
 The Work list shows each FROM member that a converted unit's `.pas` still uses. Pick a row
-and press **Migrate...**. The editor then writes one line into the open book's
-`#convert <From> -> <To>` block for that row:
+and press **Migrate...**. The editor then writes one line into the `#convert <From> -> <To>`
+block for that row, in the book that converted the row (see **Which book** below):
 
 * `#migrate Old -> New` renames every site of the member on a converted instance.
 * `#migrate Old -> DL_NONE` is a *deliberate break*. Each site becomes
@@ -20,9 +20,17 @@ each item, with the status `migrate`, `deliberate break` or `migrate check`.
 
 ## Where
 
-* **Work list tab > Migrate...** works on the selected instance row. The button is hidden when
+* **Work list tab > Migrate...** works on the focused instance row. The button is hidden when
   the engine lacks `migrate_members`. The new **Rule** column shows the open book's line for
   the row, for example `#migrate Count -> DL_NONE (line 5, unsaved)`.
+* **Several rows at once.** The Work list takes a multiple selection (Ctrl+click,
+  Shift+click). When two or more distinct members of one book are selected, the dialog
+  offers **DL_NONE for all N selected rows**. Tick it and Apply writes
+  `#migrate <member> -> DL_NONE` for every selected member into its own block. A line that
+  is already DL_NONE is left as it is; a member whose pair has no block is skipped and named.
+  The status bar says `DL_NONE for 2 member(s) in Fix.rules: 1 written, 1 changed, 1 already
+  DL_NONE -- not saved: ...`, then `skipped K: ...` when any. A member that several units
+  use is written once.
 * **Classes tab > Members list** sits under the `#link` grid and lists every `#migrate`
   line of the active block in the columns Old | New | Kind (`rename`, `DL_NONE`,
   `legacy`) | Note. The Note column holds the engine's reason when a line is not
@@ -61,18 +69,25 @@ line sits before the first `#convert`. These warnings become marks on the line a
 
 * Engine 1.32.0-alpha or later, which reports `migrate_members` in `info --json`. The pin
   1.35.0-alpha also sends `pas_uses[].migrate_to`.
-* A book open in the editor with a `#convert` block for the row's From -> To pair. The
-  editor matches the bare type names. If the book has no such block, the dialog says so and
-  Apply is disabled. Open the right book with File > Open.
+* A `#convert` block for the row's From -> To pair in the target book. The editor matches
+  the bare type names. If the book has no such block, the dialog says so and Apply is
+  disabled.
+
+## Which book
+
+Each Work list row carries the book that converted it (`pas_uses[].rules_file`, engine
+1.35.0-alpha and later). When that book is not the open one, **Migrate...** opens it first,
+with the usual unsaved-changes question, and the status bar starts with
+`Opened Fix.rules (it converted the row) -- `. If the row names a book that is no longer on
+disk, the open book is used and the status says so. An engine that does not send
+`rules_file` keeps the old behaviour: the open book. When the selected rows come from
+several books, only the focused row is migrated and the bulk choice is not offered.
 
 ## Limits
 
 * Slice 1 covers a rename and DL_NONE only. Templates and user code are slice 2; globals
   are slice 3.
-* The dialog takes one row at a time. Bulk DL_NONE over several selected rows (D5 B) is a
-  follow-up.
-* The editor writes into the open book only. Opening the book that converted the row
-  through `pas_uses[].rules_file` (D6 B) is a follow-up.
+* A rename is one row at a time. Only DL_NONE applies to several rows at once.
 * A deliberate break keeps the engine status `mapped`, with `migrate_to` = DL_NONE. The
   Work list's default filter therefore hides such a row. The row note and the report still
   count it.

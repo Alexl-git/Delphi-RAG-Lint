@@ -34,6 +34,7 @@ uses
   , Vcl.Graphics
   , Vcl.Themes
   , ConvRules.Model  // dl:unit ConvRules.Model accepted -- TRuleBook types a field; BOOK_DEPTH_MIN/MAX/DEFAULT travel with TRuleBook.Depth so the depth combo's 1..10 range cannot drift from the parser's
+  , ConvRules.WorkList  // TPasUseRow types the Work list Migrate host (MigrateWorkRows); TWorkRun, the Convert host's WorkListReady parameter
   , ConvRules.Casts
   , ConvRules.CapabilityProbe  // StartupProbeVerdict: the probe's one decision, shared with the Convert tab
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- TEngineAdapter types a field; CAPABILITY_BOOK_DEPTH/PROGRESS_LINES travel with CapabilityNames, the one call that answers them
@@ -586,7 +587,12 @@ type
       /// in place (no rebuild, so the selection and the loaded grid stay).</summary>
       procedure RefreshRuleMarks;
       // A4: the Migrate dialog for a pair + member; writes the pick, returns the status text ('' = cancelled).
-      function RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string): string;
+      // ASelectedCount >= 2 offers 'DL_NONE for all selected rows' over ABulkRows (D5 = B).
+      function RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string;
+        ASelectedCount: Integer; const ABulkRows: TArray<TPasUseRow>): string;
+      // D6 = B: the Work list's Migrate... -- opens the book that converted the rows (rules_file) when it
+      // is not the open one, then RunMigrateDialog; returns the status text ('' = cancelled).
+      function MigrateWorkRows(const ARows: TArray<TPasUseRow>): string;
       // A4: the views a #migrate edit changes (rule tree, raw text, Members list, Work list Rule cells).
       procedure RefreshMigrateViews;
       // A4: applies FMigrateOk (set by ProbeStartupCapabilities) to the Members list and the Work list.
@@ -2780,7 +2786,7 @@ uses
   , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
   , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
   , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText; dl:unit ConvRules.ConvertRun accepted -- LOWER_ABORTED_FMT is the one "lowering aborted" note: an open book's failed Save writes the same text as LowerBookFile
-  , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
+
   , ConvRules.MigrateRules   // A4: dl:unit ConvRules.MigrateRules accepted -- CAPABILITY_MIGRATE_MEMBERS is the engine capability name the #migrate commands are gated on
   , ConvRules.Migrate        // A4: the member-migration decisions the Members list and the Work list run
   , ConvRules.MigrateForm    // A4: the Migrate dialog
@@ -2795,6 +2801,7 @@ const
   // A4: the Members list height and the Migrate texts.
   MEMBERS_PANEL_H     = 150;
   MIGRATE_INTO_FMT    = 'into %s (line %d of %s)';
+  MIGRATE_PREFIX_SEP  = ' -- ';
   MIGRATE_DELETED_FMT = 'Deleted %s from %s -- not saved: File > Save, then Convert again';
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -7730,10 +7737,9 @@ begin
       begin
         Result:= ARow.Instance <> '';
       end,
-      function(ARow: TPasUseRow): string
+      function(ARows: TArray<TPasUseRow>): string
       begin
-        Result:= RunMigrateDialog(ARow.FromType, ARow.ToType, ARow.Member,
-          Format('%s.%s  (%s, %s, %s)', [ARow.Instance, ARow.Member, ARow.Kind, ARow.Visibility, ARow.DeclaredIn]), False, '');
+        Result:= MigrateWorkRows(ARows);
       end,
       function(ARow: TPasUseRow): string
       begin
@@ -7747,17 +7753,19 @@ begin
       end);
 end;
 
-function TConvRulesForm.RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string): string;
+function TConvRulesForm.RunMigrateDialog(const AFrom, ATo, AMember, ADetail: string; AOldEditable: Boolean; const ANew: string;  // dl:ok too-many-parameters@3df8 -- the dialog's contract (TMigrateForm.Run) plus the bulk rows of D5 = B
+  ASelectedCount: Integer; const ABulkRows: TArray<TPasUseRow>): string;
 var
   LBlock    : TMigrateBlock;
   LBlockText: string;
   LPick     : TMigratePick;
   LActive   : TRuleNode;
   LOut      : TMigrateOutcome;
+  LBulk     : TMigrateBulkOutcome;
 begin
   LBlock:= FindMigrateBlock(FBook, AFrom, ATo, ExtractFileName(FFilePath));
   LBlockText:= if LBlock.State = mbFound then Format(MIGRATE_INTO_FMT, [LBlock.HeaderText, LBlock.NodeIndex + 1, ExtractFileName(FFilePath)]) else LBlock.Reason;
-  if not TMigrateForm.Run(Self, AMember, ADetail, LBlockText, AOldEditable, ANew,
+  if not TMigrateForm.Run(Self, AMember, ADetail, LBlockText, AOldEditable, ANew, ASelectedCount,
     function(APick: TMigratePick): string
     begin
       Result:= MigrateCheck(FBook, FBook.Nodes.IndexOf(LBlock.Header), APick);
@@ -7765,11 +7773,50 @@ begin
     Exit('');
   // The active header is held by NODE across the insert and re-found after it.
   LActive:= if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then FBook.Nodes[FActiveHdr] else nil;
-  LOut:= ApplyMigratePick(FBook, LBlock, LPick);
+  LOut := Default(TMigrateOutcome);
+  LBulk:= Default(TMigrateBulkOutcome);
+  if LPick.AllSelected then
+    LBulk:= ApplyBreakToRows(FBook, ABulkRows, ExtractFileName(FFilePath))
+  else
+    LOut:= ApplyMigratePick(FBook, LBlock, LPick);
   if LActive <> nil then
     FActiveHdr:= FBook.Nodes.IndexOf(LActive);
   RefreshMigrateViews;
-  Result:= MigrateStatusText(FFilePath, LBlock, LOut);
+  Result:= if LPick.AllSelected then BulkMigrateStatusText(FFilePath, LBulk) else MigrateStatusText(FFilePath, LBlock, LOut);
+end;
+
+function TConvRulesForm.MigrateWorkRows(const ARows: TArray<TPasUseRow>): string;
+var
+  LTarget: TMigrateBookTarget;
+  LPrefix: string;
+  LRow   : TPasUseRow;
+begin
+  if Length(ARows) = 0 then
+    Exit('');
+  LTarget:= MigrateTargetForRows(FFilePath, ARows,
+    function(APath: string): Boolean
+    begin
+      Result:= TFile.Exists(APath);
+    end);
+  LPrefix:= '';
+  if LTarget.Action = mbaSwitch then
+  begin
+    // The QualifyBook shape: the unsaved-changes guard, then the row's book.
+    if not ConfirmDiscard then
+      Exit('');
+    LoadFile(LTarget.Book);
+    if not SameFileName(ExpandFileName(FFilePath), ExpandFileName(LTarget.Book)) then
+      Exit(''); // LoadFile said why on the status line
+    LPrefix:= MigrateOpenedText(FFilePath);
+  end
+  else if LTarget.Action = mbaMissing then
+    LPrefix:= LTarget.Reason + MIGRATE_PREFIX_SEP;
+  LRow:= ARows[0];
+  Result:= RunMigrateDialog(LRow.FromType, LRow.ToType, LRow.Member,
+    Format('%s.%s  (%s, %s, %s)', [LRow.Instance, LRow.Member, LRow.Kind, LRow.Visibility, LRow.DeclaredIn])
+    + (if LTarget.Mixed then MIGRATE_MIXED_TEXT else ''), False, '', LTarget.OfferCount, ARows);
+  if Result <> '' then
+    Result:= LPrefix + Result;
 end;
 
 procedure TConvRulesForm.RefreshMigrateViews;
@@ -7786,7 +7833,7 @@ var
 begin
   if (FActiveHdr < 0) or (FActiveHdr >= FBook.Nodes.Count) then
     Exit;
-  LText:= RunMigrateDialog(FBook.Nodes[FActiveHdr].FromType, FBook.Nodes[FActiveHdr].ToType, '', '', True, '');
+  LText:= RunMigrateDialog(FBook.Nodes[FActiveHdr].FromType, FBook.Nodes[FActiveHdr].ToType, '', '', True, '', 1, nil);
   if LText <> '' then
     SetStatus(LText);
 end;
@@ -7797,7 +7844,7 @@ var
 begin
   if (ANode = nil) or (FActiveHdr < 0) or (FActiveHdr >= FBook.Nodes.Count) then
     Exit;
-  LText:= RunMigrateDialog(FBook.Nodes[FActiveHdr].FromType, FBook.Nodes[FActiveHdr].ToType, ANode.MigOld, '', False, ANode.MigNew);
+  LText:= RunMigrateDialog(FBook.Nodes[FActiveHdr].FromType, FBook.Nodes[FActiveHdr].ToType, ANode.MigOld, '', False, ANode.MigNew, 1, nil);
   if LText <> '' then
     SetStatus(LText);
 end;
