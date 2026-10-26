@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "internal",
-  "since": "0.0.0",
+  "since": "1.2.2-alpha",
   "summary": "Self-test for the doc-facts renderer, driven by test runners",
   "intro": "Maintenance self-test for the doc-facts renderer, run by test runners. You will not need it for normal work.",
   "wikiPage": "Maintenance",

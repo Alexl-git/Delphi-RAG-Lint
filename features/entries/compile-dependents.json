@@ -4,7 +4,7 @@
   "group": "compiler",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.11.0-alpha",
   "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
   "intro": "Read this when you have changed a unit and want to check the units that depend on it right away. It runs that check now instead of waiting for the automatic quiet-period pass.",
   "wikiPage": "Features",
