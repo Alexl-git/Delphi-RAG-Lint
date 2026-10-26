@@ -51,6 +51,7 @@ breaking changes** until v1.0.
   `run_cyclefix_b4_dcc.ps1` (each accepted tree followed, built and run: stdout byte-identical).
 
 ### Fixed
+- B-35 D18 residue (extractor; NEEDS the extractor bump at merge): `symbol_facts.sql_reads` now also covers SQL built through `with Q.SQL do Add(..)` (the rightmost with entity, when a SQL-text property, keys the bare `Add`), joined with `#13#10` / `#$0A` / `sLineBreak` (decoded to a space, also inside one `'a'#13#10'b'` literal), and a run that ends in a dynamic operand (`'WHERE ID = ' + IntToStr(N)`): its static prefix is scanned, minus a trailing word the operand may complete; nothing after the operand is. Guard `run_sql_reads_multiline_add.ps1` (+10 cases).
 - autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
   stored entry the index resolves as a class / interface / record (and not as a unit) is no
   longer carried forever as a "foreign" unit: doc-drift reports the block (fixable) and the
