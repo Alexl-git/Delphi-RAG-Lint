@@ -643,7 +643,7 @@ end;
 
 // Refusals for text the file's encoding cannot carry faithfully: for an ANSI file a character the
 // edits insert that its code page does not represent (text copied from a file in another code page);
-// C6: a character the code page does represent (cp1252 -acute into a cp1252 file) is no refusal.
+// C6: a character the code page does represent (cp1252 e-acute into a cp1252 file) is no refusal.
 procedure CheckInsertedText(const pPath: string; const pView: TCyclePlanView; pEnc: TEncoding; pOut: TList<TRefusal>);
 begin
   if pEnc = TEncoding.UTF8 then Exit;
