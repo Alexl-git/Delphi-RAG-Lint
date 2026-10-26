@@ -57,7 +57,7 @@ function New-Proj([string]$Tag, [scriptblock]$Patch = $null) {
   return @{ Root = $root; Dproj = (Join-Path $root 'F2047Clause.dproj'); Db = $db }
 }
 function Run-Fix($P, [string[]]$Extra, [bool]$Json = $true) {
-  $a = @('cycles', '--fix', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none') + $Extra
+  $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none') + $Extra
   if ($Json) { $a += @('--format', 'json') }
   Push-Location $WorkDir
   try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }

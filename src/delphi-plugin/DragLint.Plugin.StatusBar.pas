@@ -206,6 +206,9 @@ end;
 procedure TDragLintStatusBar.HandleCancel(Sender: TObject);
 begin
   JobQueue.ClearPending;
+  { and the running job, when it takes a cancel: its engine stands down (rolls
+    back, exits); the tree is killed only after the job's grace }
+  JobQueue.CancelRunning;
   { reflect immediately; the timer would catch it within 200ms anyway }
   HandleTimer(nil);
 end;
@@ -223,6 +226,7 @@ begin
        and (A.QueueDepth = B.QueueDepth)
        and (A.CurrentTitle = B.CurrentTitle)
        and (A.LastResult = B.LastResult)
+       and (A.CanCancelRunning = B.CanCancelRunning) { the Cancel button's state }
        { The Next:/Then: lines: a coalesced re-enqueue can reorder the waiting
          jobs without changing QueueDepth. }
        and (string.Join(#10, A.PendingTitles) = string.Join(#10, B.PendingTitles));
@@ -341,7 +345,8 @@ begin
     FDepthLbl.Caption:= IntToStr(AState.QueueDepth) + ' queued'
   else
     FDepthLbl.Caption:= '';
-  FCancel.Enabled:= AState.QueueDepth > 0;
+  { lane X-BT: also for a running job that takes a cancel (a cycle-fix run) }
+  FCancel.Enabled:= (AState.QueueDepth > 0) or AState.CanCancelRunning;
   ApplyTaskLines(AState);
 
   { PAINT NOW, DO NOT MERELY INVALIDATE.

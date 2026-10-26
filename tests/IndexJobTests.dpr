@@ -28,6 +28,7 @@ uses
   System.SysUtils,
   System.StrUtils,
   DRagLint.Core.EngineHold in '..\src\core\DRagLint.Core.EngineHold.pas',
+  DRagLint.Core.ControlChannel in '..\src\core\DRagLint.Core.ControlChannel.pas',
   DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.JobQueue in '..\src\delphi-plugin\DragLint.Plugin.JobQueue.pas',
   DRagLint.Core.Model in '..\src\core\DRagLint.Core.Model.pas',

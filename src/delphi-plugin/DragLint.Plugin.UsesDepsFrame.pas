@@ -155,8 +155,8 @@ type
   /// computed on. The engine owns the edit (atomic, compiler-verified, rolled
   /// back on failure); this section only passes --cycle and, on Apply, --apply.
   /// After an apply every `written[]` path is reloaded. Dry run and Apply run
-  /// as a Busy job on the plugin's JobQueue (off the main thread, limit
-  /// CYCLE_FIX_TIMEOUT_MS); both buttons are disabled while it is in flight and
+  /// as a Busy job on the plugin's JobQueue (off the main thread, no time limit;
+  /// Cancel stands the engine down); both buttons are disabled while it is in flight and
   /// a second start is refused. Not thread-safe; VCL, main thread only.</remarks>
   TCircularUsesSection = class(TUsesDepsSection)
     private
@@ -873,10 +873,11 @@ end; // procedure
   OFF THE MAIN THREAD, through the plugin's JobQueue -- the same Busy-job shape
   as StructureForm.EnqueueFixJob: a fix that builds the project two or three
   times would otherwise freeze the IDE for minutes. Busy gives the wait cursor
-  and makes JobQueueBusy refuse a second fix anywhere in the plugin; the limit
-  is CYCLE_FIX_TIMEOUT_MS, above the longest --apply the engine's own limits
-  allow (three builds, a re-index, a cycles run), so a kill can never land in
-  the middle of an --apply. }
+  and makes JobQueueBusy refuse a second fix anywhere in the plugin. No time
+  limit (CYCLE_FIX_TIMEOUT_MS = 0, owner ruling 2026-10-26); the status strip's
+  Cancel asks the engine to stand down and roll back, and kills only after
+  CYCLE_FIX_CANCEL_GRACE_MS, so a kill never lands in the middle of an --apply
+  the engine could still undo. }
 procedure TCircularUsesSection.RunFix(AApply: Boolean);
 var
   N      : Integer     ;
@@ -927,6 +928,7 @@ begin
                       if AApply then CycleFixApplyArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary, N)
                       else CycleFixDryRunArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary, N)]);
   Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS;
+  Job.CancelGraceMs:= CYCLE_FIX_CANCEL_GRACE_MS; { lane X-BT: Cancel asks the engine to stand down (roll back), kills only after this }
   Job.Streaming  := False;
   { Locals, so the closure captures copies; Sec is checked for liveness before
     use because the dock may be gone when the job finishes. }
@@ -949,10 +951,14 @@ var
   Outcome: TCycleFixOutcome;
 begin
   SetRunning(False);
-  if AExit = PROCRUN_TIMED_OUT_EXIT_CODE then
+  { lane X-BT: no time limit any more (CYCLE_FIX_TIMEOUT_MS = 0), so a kill is a Cancel the engine did
+    not answer within CYCLE_FIX_CANCEL_GRACE_MS. One it answered comes back as its own document
+    (refusal `cancelled`, "cancelled -- rolled back") and is described below like any other. }
+  if (AExit = PROCRUN_CANCELLED_EXIT_CODE) or (AExit = PROCRUN_TIMED_OUT_EXIT_CODE) then
   begin
-    Report(Format('cycles --fix: killed after the %d min limit -- files may or may not have been written. '
-                + 'Check them before re-running.', [CYCLE_FIX_TIMEOUT_MS div (MSecsPerSec * SecsPerMin)]));
+    Report(Format('cycles --fix: cancelled, and the engine did not stand down within %d s, so it was killed -- '
+                + 'files may or may not have been written. Check them before re-running.',
+                  [CYCLE_FIX_CANCEL_GRACE_MS div MSecsPerSec]));
     Exit;
   end;
   Outcome:= ParseCycleFixOutcome(AOutput);

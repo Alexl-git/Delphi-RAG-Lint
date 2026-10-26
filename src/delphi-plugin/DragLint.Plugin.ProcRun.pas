@@ -76,11 +76,21 @@ type
 /// <param name="ACancel">Optional manual-reset event handle (0 = none). Once it
 /// is signalled the child's process tree is killed and the call returns; if it
 /// is signalled before the call, nothing is spawned. The caller owns it.</param>
+/// <param name="AStandDownGraceMs">0 (the default): a cancel kills at once, as
+/// above. &gt; 0 (lane X-BT, a `cycles --fix` run): a cancel first ASKS the
+/// child to stand down -- the `shutdown` request of the maintenance control
+/// channel (DRagLint.Core.ControlChannel) on the pipe named after the child's
+/// pid -- and keeps reading its output for up to this many ms; a child that
+/// rolls back and exits in that time returns its own exit code and output.
+/// Only when the grace ends is the tree killed.</param>
 /// <returns>The child exit code; PROCRUN_TIMED_OUT_EXIT_CODE when the deadline
-/// expired; PROCRUN_CANCELLED_EXIT_CODE when ACancel was signalled; -1 if it
-/// could not start.</returns>
+/// expired; PROCRUN_CANCELLED_EXIT_CODE when ACancel was signalled and the tree
+/// was killed (with a grace: the child did not exit within it); -1 if it could
+/// not start.</returns>
+/// <remarks>Once a stand-down has started, the grace replaces ATimeoutMs as the
+/// deadline: the engine is rolling back, and a timeout must not cut that short.</remarks>
 function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;
-  ACancel: THandle = 0): Integer;
+  ACancel: THandle = 0; AStandDownGraceMs: Integer = 0): Integer;
 
 /// <summary>As RunCaptureStdout, but publishes the child's process handle and
 /// PID so another thread can cancel the run, and applies APriority to the
@@ -160,7 +170,8 @@ function RunCaptureStreaming(const ACmdLine: string; AOnLine: TOnLineProc; out A
 implementation
 
 uses
-  System.Math, System.Generics.Collections;
+  System.Math, System.Generics.Collections, System.Classes,
+  DRagLint.Core.ControlChannel; // dl:unit DRagLint.Core.ControlChannel accepted -- lane X-BT: a graceful cancel sends the channel's own `shutdown` (ControlRequest, ControlPipeNameFor, CONTROL_MSG_SHUTDOWN); the wire stays defined in one unit
 
 const
   { One chunk of the stdout pipe. }
@@ -178,6 +189,9 @@ const
     the cancel event again. It bounds the timeout's overshoot, the cancel's
     latency and the latency of output from a child that is still running. }
   PROCRUN_POLL_MS = 25;
+
+  { How long a graceful cancel waits for the child's control pipe to accept the request. }
+  PROCRUN_STANDDOWN_CONNECT_MS = 2000;
 
   { How often KillTree re-asks the job whether its members are gone. }
   PROCRUN_KILL_POLL_MS = 10;
@@ -380,6 +394,31 @@ begin
   Result:= 'drag-lint plugin: cancelled; the child process tree was killed';
 end;
 
+{ The line RunCore appends when a child asked to stand down did not exit within its grace. }
+function StandDownKilledText(AGraceMs: Integer): string;
+begin
+  Result:= Format('drag-lint plugin: cancelled; the child did not stand down within %d s and its process tree was killed',
+                  [(AGraceMs + MSecsPerSec div 2) div MSecsPerSec]);
+end;
+
+{ Sends the control channel's `shutdown` to the engine with pid APid, on a thread of its own: the request
+  blocks until the engine answers (once it has rolled back), and RunCore must keep draining the child's
+  output meanwhile. The caller WaitFor's and frees the thread once the child is gone -- its pipe is gone
+  then, so the request has returned. No pipe (an engine verb that does not listen) is a quick failure. }
+function StartStandDown(APid: DWORD; AGraceMs: Integer): TThread;
+begin
+  Result:= TThread.CreateAnonymousThread(
+    procedure
+    var
+      Reply, Err: string;
+    begin
+      ControlRequest(ControlPipeNameFor(APid), CONTROL_MSG_SHUTDOWN + #9 + IntToStr(AGraceMs),
+        PROCRUN_STANDDOWN_CONNECT_MS, Reply, Err);
+    end);
+  Result.FreeOnTerminate:= False;
+  Result.Start;
+end;
+
 { The one body behind every runner in this unit.
 
   AHandleOut = nil  -> this function owns PI.hProcess and closes it (the
@@ -394,10 +433,14 @@ end;
   pipe is peeked, read only when it holds data, and the clock and the cancel
   event are checked on every pass; an idle pass parks on the child's handle
   for PROCRUN_POLL_MS. On expiry or cancel the whole job -- the child and
-  everything it spawned -- is terminated. }
-function RunCore(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;  // dl:ok too-many-parameters@1b05 -- the one private body behind four public runners; each parameter is one of their distinct contracts, and a record would carry the same eight fields
+  everything it spawned -- is terminated.
+
+  AStandDownGraceMs > 0 (lane X-BT): a cancel first asks the child to stand
+  down (StartStandDown) and keeps draining for the grace; the child's own exit
+  ends the run normally, the end of the grace kills the tree. }
+function RunCore(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;  // dl:ok too-many-parameters@dc35, cyclomatic-complexity@ec7c -- the one private body behind four public runners; each parameter is one of their distinct contracts (lane X-BT added the stand-down grace), and a record would carry the same nine fields; the branches are the read loop's stop reasons, kept in one place on purpose
   ACreationFlags: DWORD; AHandleOut: PHandle; APidOut: PDWORD; ACancel: THandle;
-  const AOnChunk: TChunkProc): Integer;
+  const AOnChunk: TChunkProc; AStandDownGraceMs: Integer = 0): Integer;
 var
   SA        : TSecurityAttributes;
   ReadPipe  : THandle            ;
@@ -414,7 +457,27 @@ var
   Deadline  : UInt64             ;
   Stop      : Integer            ; { 0, PROCRUN_TIMED_OUT_EXIT_CODE or PROCRUN_CANCELLED_EXIT_CODE }
   Registered: Boolean            ;
+  StandDown : TThread            ; { the stand-down request in flight; nil = none asked }
+
+  { A graceful cancel (AStandDownGraceMs > 0): the first cancel starts the stand-down and moves the
+    deadline to the end of the grace; from then the cancel is ignored and the deadline means "kill". }
+  function Reason(AStop: Integer): Integer;
+  begin
+    Result:= AStop;
+    if AStandDownGraceMs <= 0 then Exit;
+    if StandDown = nil then
+    begin
+      if AStop <> PROCRUN_CANCELLED_EXIT_CODE then Exit;
+      StandDown:= StartStandDown(PI.dwProcessId, AStandDownGraceMs);
+      Deadline := GetTickCount64 + UInt64(AStandDownGraceMs);
+      Exit(0);
+    end;
+    if AStop = PROCRUN_CANCELLED_EXIT_CODE then Result:= 0
+    else if AStop = PROCRUN_TIMED_OUT_EXIT_CODE then Result:= PROCRUN_CANCELLED_EXIT_CODE;
+  end;
+
 begin
+  StandDown:= nil;
   Result:= -1;
   AOutput:= '';
   if AHandleOut <> nil then AHandleOut^:= 0;
@@ -473,7 +536,7 @@ begin
     SB:= TStringBuilder.Create;
     try
       repeat
-        Stop:= StopReason(Deadline, ACancel);
+        Stop:= Reason(StopReason(Deadline, ACancel));
         if Stop <> 0 then Break;
         Avail:= 0;
         { A failed peek is the broken pipe: every writer has closed it -- EOF. }
@@ -497,12 +560,17 @@ begin
       { EOF is normally the exit, but a child can close its stdout and keep
         running: the exit is bounded by what is left of the deadline, and by
         the cancel. }
-      if Stop = 0 then Stop:= WaitExitOrCancel(PI.hProcess, ACancel, MsLeft(Deadline));
+      if Stop = 0 then Stop:= Reason(WaitExitOrCancel(PI.hProcess, if StandDown = nil then ACancel else 0, MsLeft(Deadline)));
+      { a stand-down that began in the wait just above: the grace runs from here }
+      if (Stop = 0) and (StandDown <> nil) and (WaitForSingleObject(PI.hProcess, 0) <> WAIT_OBJECT_0) then
+        Stop:= Reason(WaitExitOrCancel(PI.hProcess, 0, MsLeft(Deadline)));
       if Stop <> 0 then
       begin
         KillTree(PI.hProcess, Job, PROCRUN_KILL_WAIT_MS);
         if (SB.Length > 0) and (SB.Chars[SB.Length - 1] <> #10) then SB.AppendLine;
-        SB.Append(if Stop = PROCRUN_TIMED_OUT_EXIT_CODE then TimedOutText(ATimeoutMs) else CancelledText);
+        if Stop = PROCRUN_TIMED_OUT_EXIT_CODE then SB.Append(TimedOutText(ATimeoutMs))
+        else if StandDown <> nil then SB.Append(StandDownKilledText(AStandDownGraceMs))
+        else SB.Append(CancelledText);
         Result:= Stop;
       end
       else
@@ -519,6 +587,12 @@ begin
     if AHandleOut = nil then CloseHandle(PI.hProcess);
     CloseHandle(PI.hThread );
   finally
+    { the child is gone (exited or killed), so its pipe is: the request has returned or fails now }
+    if StandDown <> nil then
+    begin
+      StandDown.WaitFor;
+      StandDown.Free;
+    end;
     { Unregistered BEFORE the job is closed: a KillProcess from now on falls
       back to the direct child, which has exited. }
     if Registered then UnregisterJob(PI.hProcess);
@@ -528,9 +602,9 @@ begin
 end;
 
 function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;
-  ACancel: THandle = 0): Integer;
+  ACancel: THandle = 0; AStandDownGraceMs: Integer = 0): Integer;
 begin
-  Result:= RunCore(ACmdLine, AOutput, ATimeoutMs, CREATE_NO_WINDOW, nil, nil, ACancel, nil);
+  Result:= RunCore(ACmdLine, AOutput, ATimeoutMs, CREATE_NO_WINDOW, nil, nil, ACancel, nil, AStandDownGraceMs);
 end;
 
 function RunCaptureStdoutCancellable(const ACmdLine: string; out AOutput: string;

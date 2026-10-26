@@ -113,7 +113,7 @@ try {
     $c = New-Copy 'c'
     Check 'c0 indexed' ($c.IndexExit -eq 0) "exit=$($c.IndexExit)"
     $fo = Join-Path $WorkDir 'fix-c.out'
-    & $Exe cycles --fix --project $c.Dproj --db $c.Db --library-db $Stub --cycle 1 --apply --no-backup `
+    & $Exe cycles --fix --build-timeout 1800 --project $c.Dproj --db $c.Db --library-db $Stub --cycle 1 --apply --no-backup `
       --shadow-out (Join-Path $WorkDir 'c-shadow') *> $fo
     $fx = $LASTEXITCODE
     $ft = [IO.File]::ReadAllText($fo)

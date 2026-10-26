@@ -56,7 +56,19 @@ type
     ShadowOut: string;
     /// <summary>--rsvars: the rsvars.bat the compile gate calls; '' = the Studio the registry / BDS names. Passed on to the --part all child runs.</summary>
     RsVars: string;
+    /// <summary>--build-timeout, as typed: whole seconds one build of the compile gate may take; '' or '0' =
+    /// no limit (the default, owner ruling 2026-10-26: an IDE run has progress and Cancel, and a slow machine
+    /// must not abort a result the user waits for). Checked by ResolveSelection; passed on to the --part all
+    /// child runs. Test runners and unattended scripts pass an explicit value.</summary>
+    BuildTimeout: string;
   end;
+
+  /// <summary>Raised inside a `cycles --fix` run once a stand-down request (the maintenance control
+  /// channel: `drag-lint shutdown`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
+  /// <remarks>The child's process tree is already gone when it is raised. ApplyGroup turns it into a
+  /// rollback and the refusal `cancelled`; RunCycleFix turns one raised before any file was written into
+  /// "cancelled -- nothing written". Either way the run exits 1.</remarks>
+  ECycleFixCancelled = class(Exception);
 
   /// <summary>The outcome of one msbuild run of a whole project (RunMsBuild).</summary>
   TBuildOutcome = record
@@ -162,10 +174,13 @@ type
 /// <returns>Ok, the distinct `error E`/`fatal F` lines and the seconds taken. A missing rsvars.bat
 /// gives Ok = False with one line saying so (CompilerAvailable tells beforehand).</returns>
 /// <remarks>The build writes what any build of the project writes (dcu, exe) into the project's
-/// own output folders; it writes no source file. The build is bounded: a run past CBuildTimeoutMs
-/// (30 minutes) is killed with its whole process tree (a job object) and returns Ok = False,
-/// TimedOut = True and one `build-timeout` line. The test seam DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS
-/// lowers the limit for a project under %TEMP% / C:\TEMP only.</remarks>
+/// own output folders; it writes no source file. The build is UNBOUNDED by default (owner ruling
+/// 2026-10-26); --build-timeout &lt;s&gt; bounds it: a run past the limit is killed with its whole process tree
+/// (a job object) and returns Ok = False, TimedOut = True and one `build-timeout` line. The test seam
+/// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS (milliseconds, so a test can force an instant timeout) overrides
+/// the flag for a project under %TEMP% / C:\TEMP only.</remarks>
+/// <exception cref="ECycleFixCancelled">A stand-down request arrived on the run's control channel while
+/// the build ran: the build's process tree was killed.</exception>
 function RunMsBuild(const pProject, pPlatform, pLogPath: string): TBuildOutcome;
 
 /// <summary>True when the RAD Studio rsvars.bat RunMsBuild calls exists.</summary>
@@ -342,7 +357,14 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// one child `cycles --fix --apply --unit` (so ApplyGroup, planned on the index the last iteration re-indexed); its cycle object is
 /// appended to the JSON `cycles[]`. The loop ends when no unit of the group is circular any more (exit 0), when an iteration fails
 /// (its code is the exit code; earlier iterations stay applied), when an iteration wrote nothing ("no edge is cuttable", exit 1)
-/// or after as many iterations as the group had edges (exit 1).</remarks>
+/// or after as many iterations as the group had edges (exit 1).
+/// CANCEL (lane X-BT): for the whole run the engine listens on the maintenance control channel
+/// (DRagLint.Core.ControlChannel; `drag-lint shutdown`, the IDE's Cancel). A stand-down request is taken while
+/// the run waits on a child: a build or re-index child is killed, a child `cycles --fix` (--part all, the A1
+/// re-run) is asked to stand down in turn. After WriteAll every written file is rolled back (refusal
+/// `cancelled`, "cancelled -- rolled back"); before it nothing was written ("cancelled -- nothing written").
+/// Both exit 1; a rollback that fails exits 2. A request that arrives when no child is left to wait on is
+/// answered when the run ends, with its own result.</remarks>
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
   const pLibStore: ISymbolStore = nil): Integer;
@@ -361,7 +383,9 @@ implementation
 uses
   System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
   System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
-  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv;
+  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv,
+  DRagLint.Core.ControlChannel, // lane X-BT: the stand-down request (Cancel) the run listens for
+  DRagLint.Core.Model;          // DRAGLINT_VERSION / DRAGLINT_EXTRACTOR_VERSION, what the channel's `status` reports
 
 const
   CExitMechanical = 0;
@@ -382,20 +406,19 @@ const
   CProbeWithLines  = 2;    // DRAGLINT_CYCLEFIX_REPAIR_PROBE=<tree>|<errors file>
   CBreakNoRepair   = 3;    // DRAGLINT_CYCLEFIX_BREAK=3: a stray line in every new unit, no repair covers it
   CBreakRaise      = 4;    // DRAGLINT_CYCLEFIX_BREAK=4 (--apply): the after gate raises once the files are written
-  { A whole-project msbuild of the demo takes seconds and a large project (Micronite) a few minutes;
-    30 minutes is far past either and still bounds a hung build of an unattended --apply. }
-  CBuildTimeoutMs  = 30 * 60 * 1000;
+  { No default limit on a build (owner ruling 2026-10-26, lane X-BT): the IDE shows progress and has
+    Cancel, and a slow machine must not abort a result the user waits for. --build-timeout <s> sets one;
+    tests\autotest\run_cyclefix_timeouts.ps1 pins this default. }
+  CDefaultBuildTimeoutS = 0; // seconds; 0 = no limit
+  CMsPerSec         = 1000;
+  CMaxBuildTimeoutS = High(Cardinal) div CMsPerSec - 1; // --build-timeout ceiling (~49 days): below INFINITE in ms
   { the C9 bound of convert-apply's child re-index (RefreshProjectIndex): ten minutes }
   CReindexTimeoutMs = 10 * 60 * 1000;
   CPartAll          = 'all';
-  { The longest one --apply can legitimately run before its own limits fire and it rolls back: the
-    baseline build, the after build and its one repair rebuild (CSecondBuild), then the child
-    re-index and the child `cycles` of VerifyAfterCore. A caller that kills an --apply must wait
-    longer than this, or the kill lands before the rollback (E18 final review F1). The plugin's
-    CYCLE_FIX_TIMEOUT_MS is pinned above it by tests\autotest\run_cyclefix_timeouts.ps1. }
-  CApplyWorstMs     = (1 + CSecondBuild) * CBuildTimeoutMs + 3 * CReindexTimeoutMs; // 3: the A1 pre-plan re-index too
-  CKillMarginMs     = 10 * 60 * 1000; // slack above CApplyWorstMs for start-up, writes and backups
-  CAllIterationMs   = CApplyWorstMs + CKillMarginMs; // one --part all child is one whole --apply
+  CReindexSteps     = 3; // the re-index steps of one --apply: the A1 pre-plan re-index, VerifyAfterCore's re-index and `cycles`
+  CKillMarginMs     = 10 * 60 * 1000; // slack above one --apply's own limits for start-up, writes and backups
+  CChildStandDownMs = 60 * 1000; // how long a child `cycles --fix` gets to roll back after a forwarded stand-down
+  CPipeConnectMs    = 2000;  // how long to wait for a child's control pipe to accept the forwarded request
   CChildKillWaitMs = 5000;  // how long to wait for a killed child to exit
   CKilledExitCode  = 1;     // the exit code a killed child is given
   CExitApplyUnverified = 1; // --apply: written and compiled, but not verified
@@ -456,6 +479,9 @@ var
   GShadowPick: string; // the default shadow dir this process picked (never one that existed); '' = not asked yet
   GBuildPick : string; // the same for the compile gate's _build dir
   GRsVars    : string; // W6 C7: --rsvars, expanded; '' = TStudioEnv
+  GBuildTimeoutMs: Cardinal = INFINITE; // --build-timeout in ms; INFINITE = no limit (CDefaultBuildTimeoutS)
+  GStandDown : TControlChannel; // the run's control channel (RunCycleFix); nil = not listening
+  GCancelTaken: Boolean; // a stand-down request was taken: every later child wait raises at once
   GScratchCited: Boolean; // a message of this run names a file in its scratch: DeleteDefaultScratch keeps it
 
 // The text a message uses to cite pPath, a file in this run's scratch: Format(pFmt, [pPath]) when the file
@@ -855,21 +881,73 @@ begin
     ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full));
 end;
 
-// The time limit of a build of pProject: CBuildTimeoutMs, or the test seam
-// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS for a project under %TEMP% / C:\TEMP.
+// The time limit of a build of pProject: --build-timeout (INFINITE = none, the default), or the test seam
+// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS (milliseconds) for a project under %TEMP% / C:\TEMP. The seam stays
+// beside the flag on purpose: the flag counts whole seconds, and a test that must time out the FIRST build
+// before it can finish needs a limit of 1 ms.
 function BuildTimeoutMs(const pProject: string): Cardinal;
 begin
-  Result:= CBuildTimeoutMs;
+  Result:= GBuildTimeoutMs;
   var Seam:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS'), 0);
   if (Seam > 0) and IsUnderTemp(pProject) then Result:= Seam;
 end;
 
-{ Runs pCmd as a child in its own job object and waits at most pTimeoutMs. pOutFile <> '': the
-  child's stdout and stderr go to that file (created). On expiry the WHOLE job is terminated (a
-  cmd.exe -> msbuild -> dcc tree dies with it) and pTimedOut is set. Returns the exit code, or -1
-  after a kill. Raises EOSError when the child cannot start. Replaces TCompileChecker.RunCommand
-  for the gate's builds: that one waits INFINITE (CompileCheck.pas), and stays so for its callers. }
-function RunBounded(const pCmd, pOutFile: string; pTimeoutMs: Cardinal; out pTimedOut: Boolean): Integer;
+// The limit of a child that is one whole --apply (a --part all iteration, the A1 re-run): its three builds
+// and three re-index steps plus CKillMarginMs, so the child's own limits fire first and it rolls back itself;
+// INFINITE when the builds are unbounded.
+function ChildApplyLimitMs: Cardinal;
+begin
+  if GBuildTimeoutMs = INFINITE then Exit(INFINITE);
+  Result:= Cardinal(Min(UInt64(1 + CSecondBuild) * GBuildTimeoutMs + UInt64(CReindexSteps) * CReindexTimeoutMs + CKillMarginMs,
+    UInt64(INFINITE - 1)));
+end;
+
+// The stand-down request, if one is pending: takes it (the listener can no longer withdraw it) and remembers
+// that it was taken. False when there is none, or the listener withdrew it a moment ago.
+function TakeStandDown: Boolean;
+begin
+  if not GCancelTaken and (GStandDown <> nil) and GStandDown.StandDownRequested then GCancelTaken:= True;
+  Result:= GCancelTaken;
+end;
+
+// A stand-down taken while pPI ran: a child `cycles --fix` (pEngineChild) is asked to stand down in turn and
+// given CChildStandDownMs to roll back and exit -- True, its exit code in pCode; otherwise (or when it does not
+// exit in time) the whole job is terminated and False is returned.
+function StandDownChild(const pPI: TProcessInformation; pJob: THandle; pEngineChild: Boolean; out pCode: Integer): Boolean;
+var
+  Code: Cardinal;
+begin
+  pCode:= -1;
+  if pEngineChild then
+  begin
+    var Reply, Err: string;
+    { blocks until the child answers: `exiting` once it rolled back and closed its stores, else `busy` }
+    ControlRequest(ControlPipeNameFor(pPI.dwProcessId), CONTROL_MSG_SHUTDOWN + #9 + IntToStr(CChildStandDownMs),
+      CPipeConnectMs, Reply, Err);
+    if WaitForSingleObject(pPI.hProcess, CChildStandDownMs) = WAIT_OBJECT_0 then
+    begin
+      GetExitCodeProcess(pPI.hProcess, Code);
+      pCode:= Integer(Code);
+      Exit(True);
+    end;
+  end;
+  if pJob <> 0 then TerminateJobObject(pJob, CKilledExitCode)
+  else TerminateProcess(pPI.hProcess, CKilledExitCode);
+  WaitForSingleObject(pPI.hProcess, CChildKillWaitMs);
+  Result:= False;
+end;
+
+{ Runs pCmd as a child in its own job object and waits at most pTimeoutMs (INFINITE = no limit). pOutFile
+  <> '': the child's stdout and stderr go to that file (created). On expiry the WHOLE job is terminated (a
+  cmd.exe -> msbuild -> dcc tree dies with it) and pTimedOut is set. Returns the exit code, or -1 after a
+  kill. Raises EOSError when the child cannot start. Replaces TCompileChecker.RunCommand for the gate's
+  builds: that one waits INFINITE (CompileCheck.pas), and stays so for its callers.
+  CANCEL (lane X-BT): the wait also watches the run's stand-down request (GStandDown). Once it is taken the
+  child is stopped (StandDownChild) and ECycleFixCancelled is raised -- except for a child `cycles --fix`
+  (pEngineChild) that stood down by itself: its exit code is returned, so the caller relays its own
+  (rolled-back) result. A request taken earlier raises before anything is spawned. }
+function RunBounded(const pCmd, pOutFile: string; pTimeoutMs: Cardinal; out pTimedOut: Boolean;
+  pEngineChild: Boolean = False): Integer;
 var
   SA     : TSecurityAttributes;
   SI     : TStartupInfo;
@@ -877,8 +955,11 @@ var
   Job    : THandle;
   Output : THandle;
   Code   : Cardinal;
+  Waits  : array[0..1] of THandle;
 begin
+  Result:= -1; { every path below Exit()s with a value or raises; this is the -1 of "no exit code" }
   pTimedOut:= False;
+  if GCancelTaken then raise ECycleFixCancelled.Create('cancelled');
   Output:= INVALID_HANDLE_VALUE;
   FillChar(SI, SizeOf(SI), 0);
   SI.cb         := SizeOf(SI);
@@ -906,19 +987,31 @@ begin
     try
       if Job <> 0 then AssignProcessToJobObject(Job, PI.hProcess);
       ResumeThread(PI.hThread);
-      if WaitForSingleObject(PI.hProcess, pTimeoutMs) = WAIT_OBJECT_0 then
-      begin
-        GetExitCodeProcess(PI.hProcess, Code);
-        Result:= Integer(Code);
-      end
-      else
-      begin
+      Waits[0]:= PI.hProcess;
+      if GStandDown <> nil then Waits[1]:= GStandDown.RequestEvent;
+      var Deadline:= if pTimeoutMs = INFINITE then High(UInt64) else GetTickCount64 + pTimeoutMs;
+      repeat
+        var Left:= if Deadline = High(UInt64) then INFINITE else Cardinal(Max(Int64(Deadline) - Int64(GetTickCount64), 0));
+        var Rc:= WaitForMultipleObjects(if GStandDown <> nil then 2 else 1, @Waits[0], False, Left);
+        if Rc = WAIT_OBJECT_0 then
+        begin
+          GetExitCodeProcess(PI.hProcess, Code);
+          Exit(Integer(Code));
+        end;
+        if Rc = WAIT_OBJECT_0 + 1 then
+        begin
+          if not TakeStandDown then Continue; { withdrawn by the listener a moment ago: keep waiting }
+          var Stood: Integer;
+          if StandDownChild(PI, Job, pEngineChild, Stood) then Exit(Stood);
+          raise ECycleFixCancelled.Create('cancelled');
+        end;
+        { WAIT_TIMEOUT (or a failed wait): the limit is up }
         pTimedOut:= True;
         if Job <> 0 then TerminateJobObject(Job, CKilledExitCode)
         else TerminateProcess(PI.hProcess, CKilledExitCode);
         WaitForSingleObject(PI.hProcess, CChildKillWaitMs);
-        Result:= -1;
-      end;
+        Exit(-1);
+      until False;
     finally
       CloseHandle(PI.hThread);
       CloseHandle(PI.hProcess);
@@ -1560,6 +1653,7 @@ begin
     Code:= RunBounded(Format('"%s" index --project "%s" --db "%s"', [Exe, Result.ReindexProject, pOpts.Db]),
       Dir + 'reindex.log', CReindexTimeoutMs, TimedOut);
   except
+    on ECycleFixCancelled do raise; { ApplyGroup rolls back }
     on E: Exception do Result.ReindexReason:= 'could not start the re-index (' + E.Message + ')';
   end;
   Result.ReindexMs:= Watch.ElapsedMilliseconds;
@@ -1580,6 +1674,7 @@ begin
     if not TimedOut and TFile.Exists(OutFile) then
       Result.Actual:= string.Join(#10, CyclesLines(TFile.ReadAllText(OutFile, TEncoding.ANSI)));
   except
+    on ECycleFixCancelled do raise; { ApplyGroup rolls back }
     on E: Exception do OutFile:= OutFile + ': ' + E.Message;
   end;
   if Result.Actual = '' then
@@ -1597,6 +1692,7 @@ begin
   try
     Result:= VerifyAfterCore(pView, pOpts, pStore);
   except
+    on ECycleFixCancelled do raise; { ApplyGroup rolls back }
     on E: Exception do
     begin
       { the files compiled and stay; only the verification failed }
@@ -1895,8 +1991,16 @@ begin
   else if pOpts.CycleGiven and (pOpts.CycleIndex < 1) then
     Result:= 'cycles --fix --cycle needs a group number of 1 or more (see `drag-lint cycles` for the groups)'
   else if (pOpts.RsVars <> '') and not FileExists(ExpandFileName(pOpts.RsVars)) then
-    Result:= 'cycles --fix --rsvars: no such file: ' + ExpandFileName(pOpts.RsVars);
+    Result:= 'cycles --fix --rsvars: no such file: ' + ExpandFileName(pOpts.RsVars)
+  else if (pOpts.BuildTimeout <> '') and not InRange(StrToIntDef(pOpts.BuildTimeout, -1), 0, CMaxBuildTimeoutS) then
+    Result:= Format('cycles --fix --build-timeout needs whole seconds from 0 (no limit, the default) to %d, got: %s',
+      [CMaxBuildTimeoutS, pOpts.BuildTimeout]);
   if Result = '' then GRsVars:= if pOpts.RsVars <> '' then ExpandFileName(pOpts.RsVars) else '';
+  if Result = '' then
+  begin
+    var Secs:= StrToIntDef(pOpts.BuildTimeout, CDefaultBuildTimeoutS);
+    GBuildTimeoutMs:= if Secs = 0 then INFINITE else Cardinal(Secs) * CMsPerSec;
+  end;
   if Result <> '' then Exit;
   if (pOpts.ShadowOut <> '') and TDirectory.Exists(ExpandFileName(pOpts.ShadowOut)) and
      (Length(TDirectory.GetFileSystemEntries(ExpandFileName(pOpts.ShadowOut))) > 0) then
@@ -1987,7 +2091,7 @@ begin
     Writeln(ErrOutput, Format('cycles --fix: TEST BREAK active (DRAGLINT_CYCLEFIX_BREAK=%d; the project lies under TEMP)', [Result]));
   pProbe:= ProbeSpec(pOpts, pProbeTree, pProbeLines);
   if pProbe then Writeln(ErrOutput, 'cycles --fix: TEST REPAIR PROBE active (dry run only): ' + pProbeTree);
-  if BuildTimeoutMs(pOpts.Project) <> CBuildTimeoutMs then
+  if BuildTimeoutMs(pOpts.Project) <> GBuildTimeoutMs then
     Writeln(ErrOutput, Format('cycles --fix: TEST BUILD TIMEOUT active (DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS=%d; the project lies under TEMP)', [BuildTimeoutMs(pOpts.Project)]));
 end;
 
@@ -2082,6 +2186,23 @@ begin
   Result.Verify.ReindexStatus:= 'dry-run';
 end;
 
+// A stand-down taken after WriteAll (lane X-BT): rolls pApply.Tx back. Exit 1 and the refusal `cancelled`
+// ("cancelled -- rolled back") when the project is as before; exit 2 when the rollback failed.
+function CancelledApply(const pApply: TApplyReport; const pOpts: TCycleFixOptions): TApplyReport;
+begin
+  Result:= pApply;
+  var Failure:= RollBack(Result.Tx);
+  Result.RolledBack:= Failure = '';
+  Result.Verify.ReindexStatus:= CStatusSkipped;
+  Result.Verify.Reason:= 'cancelled';
+  Result.Refusals:= [MakeRefusal('cancelled', '', pOpts.Project,
+    if Result.RolledBack then 'cancelled -- rolled back, project not changed'
+    else 'cancelled, and the rollback FAILED: ' + Failure, 0)];
+  Result.ExitCode:= if Result.RolledBack then CExitRefused else CExitError;
+  if not Result.RolledBack then
+    Result.Error:= 'cancelled and the rollback FAILED: ' + Failure + ' -- the project may be PARTLY changed; recovery.txt names the backups';
+end;
+
 // --apply of one mechanical group, after the baseline gate passed and pStaged was staged in pShadowDir:
 // WriteAll, CompileAfter in place (one repair at most), then RollBack or VerifyAfter.
 function ApplyGroup(const pStaged: TCyclePlanView; const pOpts: TCycleFixOptions; const pProjectDir, pShadowDir: string;
@@ -2107,6 +2228,12 @@ begin
       raise EInOutError.Create('TEST BREAK 4: simulated failure of the after gate once the files are written');
     pGate.After:= CompileAfter(pStaged, pProjectDir, pOpts.Project, pOpts.Platform, BuildScratchDir);
   except
+    on ECycleFixCancelled do
+    begin
+      pGate.AfterStatus:= 'cancelled';
+      Result:= CancelledApply(Result, pOpts);
+      Exit;
+    end;
     on E: Exception do
     begin
       { the build could not even run (spawn, .bat, a repair's file edit): the tree is written but
@@ -2137,7 +2264,16 @@ begin
     if not Result.RolledBack then Result.Error:= 'compile error and the rollback FAILED: ' + Failure;
     Exit;
   end;
-  Result.Verify  := VerifyAfter(pStaged, pOpts, pStore);
+  try
+    Result.Verify:= VerifyAfter(pStaged, pOpts, pStore);
+  except
+    on ECycleFixCancelled do
+    begin
+      { compiled, but the user asked to stop before the run ended: the owner ruling rolls EVERY file back }
+      Result:= CancelledApply(Result, pOpts);
+      Exit;
+    end;
+  end;
   Result.ExitCode:= if Result.Verify.Verified or pOpts.NoReindex then CExitMechanical else CExitApplyUnverified;
 end;
 
@@ -2266,6 +2402,7 @@ begin
   if pOpts.RulesDir <> '' then Result:= Result + ' --rules-dir ' + Quoted(pOpts.RulesDir);
   if pOpts.RsVars <> '' then Result:= Result + ' --rsvars ' + Quoted(pOpts.RsVars);
   if pOpts.NoBackup then Result:= Result + ' --no-backup';
+  if pOpts.BuildTimeout <> '' then Result:= Result + ' --build-timeout ' + Quoted(pOpts.BuildTimeout);
 end;
 
 // pFile holds the child's stdout and stderr (merged); a stderr note can sit in front of the JSON on the same
@@ -2392,7 +2529,7 @@ begin
   var OutFile:= BuildScratchDir + Format('all-iteration-%d.json', [S.Iterations]);
   var TimedOut:= False;
   PrepareChildOutput(pOpts, OutFile);
-  S.Code:= RunBounded(AllIterationCmd(pOpts, pStem), OutFile, CAllIterationMs, TimedOut);
+  S.Code:= RunBounded(AllIterationCmd(pOpts, pStem), OutFile, ChildApplyLimitMs, TimedOut, {pEngineChild=}True);
   var Doc:= ParseJsonFrom(OutFile, CDocMarker);
   try
     if TimedOut or not (Doc is TJSONObject) then
@@ -2520,6 +2657,12 @@ begin
     try
       LoopAll(pOpts, Members, Max(IntfEdgeCount(Members, pGraph, False), 1), S);
     except
+      on ECycleFixCancelled do
+      begin
+        { taken between iterations (a `cycles --edges` child): nothing of the next iteration was written }
+        S.Code   := CExitRefused;
+        S.Stopped:= Format('cancelled -- after %d iteration(s); those stay applied, nothing else was written', [S.Iterations]);
+      end;
       on E: Exception do
       begin
         S.Code   := CExitError;
@@ -2527,6 +2670,8 @@ begin
         S.Stopped:= 'the --part all loop could not continue';
       end;
     end;
+    { a child that stood down itself ended its iteration with its own (rolled-back) result: say why }
+    if GCancelTaken and not StartsText('cancelled', S.Stopped) then S.Stopped:= 'cancelled -- ' + S.Stopped;
     Result:= S.Code;
     PrintAll(pOpts, S);
   finally
@@ -2775,10 +2920,12 @@ begin
   var Dir:= BuildScratchDir;
   var Watch:= TStopwatch.StartNew;
   var Code:= -1;
+  TimedOut:= False; { read below even when RunBounded raised before assigning its out param }
   try
     Code:= RunBounded(Format('"%s" index --project "%s" --db "%s"', [ParamStr(0), Proj, pOpts.Db]),
       Dir + 'reindex-before.log', CReindexTimeoutMs, TimedOut);
   except
+    on ECycleFixCancelled do raise; { nothing written yet: RunCycleFix reports it }
     on Exception do Code:= -1;
   end;
   if TimedOut or (Code <> 0) then Exit; // the stale-file refusal then says what is wrong, as before
@@ -2786,7 +2933,7 @@ begin
   Winapi.Windows.SetEnvironmentVariable(PChar(CReindexedEnv), '1');
   try
     var OutFile:= Dir + 'rerun.out';
-    pExit:= RunBounded(string(CmdLine), OutFile, CApplyWorstMs + CKillMarginMs, TimedOut);
+    pExit:= RunBounded(string(CmdLine), OutFile, ChildApplyLimitMs, TimedOut, {pEngineChild=}True);
     var Text:= if TFile.Exists(OutFile) then TFile.ReadAllText(OutFile, TEncoding.ANSI) else '';
     { the child's stderr notes share its capture file: they go back to stderr, the document stays on stdout }
     var Brace:= Pos('{"schema"', Text);
@@ -2820,16 +2967,75 @@ begin
   Result:= True;
 end;
 
+// Opens the run's control channel (ControlChannelEnabledFor('cycles')), so `drag-lint shutdown` and the IDE's
+// Cancel can ask the run to stand down; nil when it could not listen (said on stderr: a cancel then kills).
+function StartStandDownChannel(const pOpts: TCycleFixOptions): TControlChannel;
+begin
+  Result:= nil;
+  if not ControlChannelEnabledFor('cycles') then Exit;
+  Result:= TControlChannel.Create([ExpandFileName(pOpts.Db)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+  var Err: string;
+  if not Result.Start(Err) then
+  begin
+    Writeln(ErrOutput, 'cycles --fix: control channel NOT started (' + Err + '); a cancel will kill this run instead of rolling it back');
+    FreeAndNil(Result);
+  end;
+end;
+
+// A stand-down taken before any file was written: the cycle-fix/1 error document (exit_code 1) or `ERROR:`.
+procedure ReportCancelledBeforeWrite(const pOpts: TCycleFixOptions);
+const
+  CMessage = 'cancelled -- nothing written';
+begin
+  if not pOpts.Json then
+  begin
+    Writeln('ERROR: ', CMessage);
+    Exit;
+  end;
+  var Doc:= NewRunDoc(pOpts);
+  try
+    Doc.AddPair('error', CMessage);
+    Doc.AddPair('cancelled', TJSONBool.Create(True));
+    Doc.AddPair('ok', TJSONBool.Create(False));
+    Doc.AddPair('exit_code', TJSONNumber.Create(CExitRefused));
+    Writeln(Doc.ToJSON);
+  finally
+    Doc.Free;
+  end;
+end;
+
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
   Result:= CExitError; { the exit code the kept-scratch note prints when an exception leaves this code }
-  if RerunAfterReindex(pOpts, pStore, Result) then Exit;
+  var Ctl:= StartStandDownChannel(pOpts);
+  GStandDown  := Ctl;
+  GCancelTaken:= False;
   try
-    if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
-    else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
+    try
+      if RerunAfterReindex(pOpts, pStore, Result) then Exit;
+      try
+        if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
+        else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
+      finally
+        DeleteDefaultScratch(pOpts, Result);
+      end;
+    except
+      on ECycleFixCancelled do
+      begin
+        { taken before WriteAll (ApplyGroup handles every later one): the project was not touched }
+        ReportCancelledBeforeWrite(pOpts);
+        Result:= CExitRefused;
+      end;
+    end;
   finally
-    DeleteDefaultScratch(pOpts, Result);
+    GStandDown:= nil;
+    if Ctl <> nil then
+    begin
+      { the run is over -- rolled back, or finished with its own result: a pending or taken request gets `exiting` }
+      Ctl.StandDownComplete;
+      Ctl.Free;
+    end;
   end;
 end;
 

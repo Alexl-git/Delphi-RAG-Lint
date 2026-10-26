@@ -1726,7 +1726,8 @@ begin
   Job.Title      := Title;
   Job.CoalesceKey:= 'cyclefix-apply:' + LowerCase(FilePath);
   Job.CmdLine    := AApplyCmd;
-  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: above the longest --apply the engine's own limits allow, so its rollback fires first }
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: none (owner ruling, lane X-BT); Cancel stops it }
+  Job.CancelGraceMs:= CYCLE_FIX_CANCEL_GRACE_MS; { Cancel asks the engine to stand down (roll back), kills only after this }
   Job.Streaming  := False;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)
@@ -1770,7 +1771,8 @@ begin
   Job.Title      := Title + (if Apply then ' (dry run first)' else '');
   Job.CoalesceKey:= 'cyclefix-dry:' + LowerCase(FilePath);
   Job.CmdLine    := DryCmd;
-  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: above the longest --apply the engine's own limits allow, so its rollback fires first }
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: none (owner ruling, lane X-BT); Cancel stops it }
+  Job.CancelGraceMs:= CYCLE_FIX_CANCEL_GRACE_MS; { Cancel asks the engine to stand down (roll back), kills only after this }
   Job.Streaming  := False;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)

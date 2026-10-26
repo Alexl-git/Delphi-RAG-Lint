@@ -73,7 +73,7 @@ function Index-Copy([string]$Dir, [string]$Tag) {
 }
 # `cycles --fix <extra>` on a copy; returns Exit + stdout text (+ parsed JSON when asked).
 function Run-Fix([string]$Dir, [string]$Db, [string[]]$Extra, [bool]$Json = $true, [string]$Dproj = 'CircularDemo.dproj') {
-  $a = @('cycles', '--fix', '--project', (Join-Path $Dir $Dproj), '--db', $Db) + $Extra
+  $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', (Join-Path $Dir $Dproj), '--db', $Db) + $Extra
   if ($Json) { $a += @('--format', 'json') }
   $out = (& $Exe @a 2>$null | Out-String)
   $code = $LASTEXITCODE
@@ -123,7 +123,7 @@ try {
   } else { Write-Host '  SKIP b: no platform library DB on disk' -ForegroundColor Yellow }
 
   Write-Host '== (c) --fix without --project' -ForegroundColor Cyan
-  $out = (& $Exe cycles --fix --db $db --library-db none 2>&1 | Out-String)
+  $out = (& $Exe cycles --fix --build-timeout 1800 --db $db --library-db none 2>&1 | Out-String)
   Check 'c: exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   Check 'c: names --project' ($out.Contains('cycles --fix needs --project <X.dproj>')) $out
 

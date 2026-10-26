@@ -46,7 +46,7 @@ function New-Stale([string]$Tag, [bool]$Touch) {
 function Run-Fix($Case, [string[]]$Extra, [hashtable]$Env = @{}) {
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe cycles --fix --project (Join-Path $Case.Dir 'CircularDemo.dproj') --db $Case.Db --cycle 1 `
+    $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Case.Dir 'CircularDemo.dproj') --db $Case.Db --cycle 1 `
       --library-db none --format json @Extra 2>$null | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }

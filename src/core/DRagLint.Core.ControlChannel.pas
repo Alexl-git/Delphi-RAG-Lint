@@ -90,7 +90,7 @@ const
 /// <summary>THE ONE GATE: does an engine running <paramref name="ACommand"/>
 /// open a control channel?</summary>
 /// <param name="ACommand">The CLI verb the engine was started with.</param>
-/// <returns>True for <c>lsp</c> only.</returns>
+/// <returns>True for <c>lsp</c> and <c>cycles</c>.</returns>
 /// <remarks>
 /// PROVISIONAL ANSWER to the plan's open owner question (Q1, session
 /// 93): honoured by every running engine, or only by one in <c>lsp</c> mode?
@@ -103,10 +103,16 @@ const
 /// start the channel in that verb's dispatch branch the way the <c>lsp</c>
 /// branch in DRagLint.CLI does (Create after the stores are open, Run,
 /// StandDownComplete after they are closed). Nothing else consults the mode.
+/// <para>WIDENED 2026-10-26 (lane X-BT, owner ruling: an IDE cycle-fix run has
+/// no time limit, so its Cancel must reach the engine): <c>cycles</c> listens,
+/// started by DRagLint.CLI.CycleFix.RunCycleFix -- which only a
+/// <c>cycles --fix</c> run reaches -- not by the dispatch. Standing down there
+/// means: kill the build it waits on, roll every written file back and exit 1
+/// with "cancelled -- rolled back" (not 0: the run did not finish).</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
 /// <para>Calls: SameText</para>
-/// <para>Returns: SameText(ACommand, 'lsp')</para>
+/// <para>Returns: SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles')</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -253,6 +259,7 @@ type
         FWork       : string        ;
         FDone       : TEvent        ; { StandDownComplete }
         FReplied    : TEvent        ; { the listener wrote its final reply }
+        FRequested  : TEvent        ; { set while a stand-down request is pending or taken }
       /// <param name="AError"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto type -->THandle</returns>
       /// <remarks>
@@ -338,6 +345,14 @@ type
       property PipeName: string read FPipeName;
       /// <summary>SID string the DACL grants -- the only trustee.</summary>
       property OwnerSid: string read FOwnerSid;
+      /// <summary>A manual-reset event, signalled the instant a stand-down
+      /// request arrives and reset if the listener withdraws it.</summary>
+      /// <returns>The event's handle; owned by the channel, valid until Free.</returns>
+      /// <remarks>For a host that blocks in something other than the stdin read
+      /// (`cycles --fix` waiting on a build): it waits on this beside its child,
+      /// then takes the request with StandDownRequested. Taking it commits the
+      /// host to exiting; the event stays set from then on.</remarks>
+      function RequestEvent: THandle;
       /// <summary>Host hook: True exactly once, when a stand-down request is
       /// pending; taking it commits the host to exiting.</summary>
       /// <returns>True when the host must leave its loop.</returns>
@@ -504,8 +519,8 @@ function QueryFullProcessImageNameW(hProcess: THandle; dwFlags: DWORD; lpExeName
 
 function ControlChannelEnabledFor(const ACommand: string): Boolean;
 begin
-  { PROVISIONAL -- see the interface remarks. `lsp` only. }
-  Result:= SameText(ACommand, 'lsp');
+  { PROVISIONAL -- see the interface remarks. `lsp`, and `cycles` (its --fix run). }
+  Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles');
 end;
 
 { ---- identity ------------------------------------------------------------ }
@@ -727,6 +742,7 @@ begin
   FWorkLock := TCriticalSection.Create;
   FDone     := TEvent.Create(nil, {ManualReset=}True, False, '');
   FReplied  := TEvent.Create(nil, {ManualReset=}True, False, '');
+  FRequested:= TEvent.Create(nil, {ManualReset=}True, False, '');
   FOwnerSid := CurrentUserSidString;
   FPipeName := ControlPipeNameFor(GetCurrentProcessId);
 end;
@@ -769,6 +785,7 @@ begin
   if FMainThread <> 0 then CloseHandle(FMainThread);
   if FSD <> nil then LocalFree(HLOCAL(FSD));
   FReplied.Free;
+  FRequested.Free;
   FDone.Free;
   FWorkLock.Free;
   inherited Destroy;
@@ -822,6 +839,11 @@ begin
   end;
   FListener:= TControlListener.Create(Self);
   Result:= True;
+end;
+
+function TControlChannel.RequestEvent: THandle;
+begin
+  Result:= FRequested.Handle;
 end;
 
 function TControlChannel.StandDownRequested: Boolean;
@@ -967,6 +989,7 @@ begin
     else Reply(APipe, CONTROL_REPLY_BUSY + #9 + Pid + #9 + 'a stand-down is already in progress');
     Exit;
   end;
+  FOwner.FRequested.SetEvent;
 
   Started  := GetTickCount64;
   Cancelled:= False;
@@ -1002,6 +1025,7 @@ begin
     else if InterlockedCompareExchange(FOwner.FState, TControlChannel.ST_IDLE, TControlChannel.ST_REQUESTED) = TControlChannel.ST_REQUESTED then
     begin
       { WITHDRAWN atomically: the host never took it, nothing changed }
+      FOwner.FRequested.ResetEvent;
       Line:= FOwner.CurrentWork;
       if Line = '' then Line:= 'not idle';
       Audit('shutdown REFUSED at ' + NowIso + ' -- busy with ' + Line + '; asked by ' + Who + '; deadline ' + IntToStr(AWaitMs) + ' ms');
