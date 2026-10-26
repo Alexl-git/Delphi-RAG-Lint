@@ -4,9 +4,9 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.2.0-alpha",
-  "summary": "Shows the catalog of lint rules in the context of a specific project",
-  "intro": "Read this when you want the lint rule catalog starting from the Project Manager: right-click a project and choose drag-lint: Project Rules.... From the command line the same list comes from drag-lint rules, and no index is needed.",
+  "since": "0.95.0-alpha",
+  "summary": "Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock",
+  "intro": "Read this when you want to review or change the lint rules of one project: in the Project Manager right-click the project and choose drag-lint: Project Rules..., which activates it and opens its Lint Options tab in the drag-lint dock. From the command line, drag-lint rules lists the whole rule catalog (not per project) and needs no index.",
   "wikiPage": "drag-lint-Project-Rules",
   "surfaces": [
     {

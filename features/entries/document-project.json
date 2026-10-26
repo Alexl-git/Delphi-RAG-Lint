@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.90.0-alpha",
-  "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
-  "intro": "Read this when a whole project needs documentation coverage. Right-click in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration the project owns.",
+  "summary": "Generates or repairs managed DocInsight comments for every public declaration of the active project, started from the Structure form right-click menu",
+  "intro": "Read this when a whole project needs documentation coverage. Right-click anywhere in the Structure form and choose Document project to generate or repair managed DocInsight comments for every public declaration of the active project (it runs document --project --apply).",
   "wikiPage": "Document-project",
   "surfaces": [
     {
