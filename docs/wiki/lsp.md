@@ -64,6 +64,11 @@ store's compiler findings. **OFF by default**: it costs one `lint` run per save.
 The measured cost is written to stderr on every save:
 `drag-lint lsp: full-rules <file> <ms> ms <n> findings`. On a timeout, a failed
 run or invalid JSON the server falls back to the subset and says so on stderr.
+A **platform-library unit** (one whose covering index is a `library-*.sqlite`,
+e.g. an RTL file opened from the IDE) gets neither the project rules nor the
+flow rules (`used-before-assignment`, `write-only-local`, ...): you cannot edit
+it, and the flow pass alone took `System.IOUtils.pas` past the 8 s budget
+(17.5 s -> 7.2 s). Guard: `tests\autotest\run_lsp_library_flow_timeout_guard.ps1`.
 Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
 second process start) is deliberately NOT built; it can follow if the measured
 cost justifies it.
