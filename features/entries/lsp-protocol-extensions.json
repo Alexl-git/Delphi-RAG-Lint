@@ -47,6 +47,12 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Which editor features does drag-lint lsp answer besides hover and definition?",
+      "command": "drag-lint lsp --db <file.sqlite>"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-24",
@@ -58,9 +64,9 @@
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-24",
+    "date": "2026-10-26",
     "by": "LSP",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "c1294941637d6b47f90f1ba5b5b942c37de2b7884c87acc1811fe5f106cab49d"
   }
 }

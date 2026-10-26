@@ -16,6 +16,16 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I stop VS Code starting its own Delphi MCP server?",
+      "command": "drag-lint-switch --vscode --off"
+    },
+    {
+      "ask": "How do I put the VS Code Delphi MCP entry back?",
+      "command": "drag-lint-switch --vscode --on"
+    }
+  ],
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-24",
@@ -27,9 +37,9 @@
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-24",
+    "date": "2026-10-26",
     "by": "LSP",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "3066be030c3e7cdd35b2545403e6508f5b48c9f730c2ec8a926914f4d507e709"
   }
 }
