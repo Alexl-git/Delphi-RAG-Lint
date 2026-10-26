@@ -47,8 +47,21 @@ function CompareRows(const pA, pB: TRow): Integer;
 /// <remarks>Internal, planned and removed entries are skipped: they are not part of the public surface.</remarks>
 function VerbReferenceLines(const pReg: TRegistry): TArray<string>;
 
+/// <summary>The "Flag aliases:" section of --help, without Pascal quoting (docs\CLI-FLAG-ALIASES.md).</summary>
+/// <param name="pAliases">Rows of features\flag-aliases.json.</param>
+/// <returns>A header line, three lines of policy, one row per canonical flag (`  --canonical  also: --a, --b`) and a blank line; an empty array when pAliases is empty.</returns>
+/// <remarks>The header matches the --help section-header shape (a capitalised word run ending in a colon), so the flag/verb scanners stop the last verb block there; the rows are the only --help lines allowed to name an alias.</remarks>
+function FlagAliasLines(const pAliases: TArray<TFlagAlias>): TArray<string>;
+
+/// <summary>The flag alias table as Markdown, for the CLI reference pages and the docs\AI-USAGE.md flag-aliases block.</summary>
+/// <param name="pAliases">Rows of features\flag-aliases.json.</param>
+/// <param name="pHeading">True prefixes a "## Flag aliases" heading (the CLI reference pages).</param>
+/// <returns>A sentence of policy and a canonical / aliases / why table, LF line ends; '' when pAliases is empty.</returns>
+function FlagAliasesMarkdown(const pAliases: TArray<TFlagAlias>; pHeading: Boolean): string;
+
 /// <summary>The complete text of src\cli\DRagLint.CLI.HelpText.pas for pReg (LF line ends; the output writer converts to CRLF).</summary>
 /// <param name="pReg">Loaded registry.</param>
+/// <remarks>Emits WriteVerbReference, WriteFlagAliases (the "Flag aliases:" section, FlagAliasLines) and WriteVerbHelp.</remarks>
 function RenderHelpTextUnit(const pReg: TRegistry): string;
 
 implementation
@@ -240,6 +253,50 @@ begin
   end;
 end;
 
+const
+  /// <summary>Column the "also:" of an alias row starts after (the longest canonical flag plus a gap).</summary>
+  ALIAS_CANON_WIDTH = 22;
+
+function FlagAliasLines(const pAliases: TArray<TFlagAlias>): TArray<string>;
+var
+  lA: TFlagAlias;
+begin
+  Result := nil;
+  if Length(pAliases) = 0 then
+    Exit;
+  Result := ['Flag aliases:',
+    '  Every verb line above names the CANONICAL spelling of a flag. Each alias below is accepted',
+    '  wherever its canonical flag is and means exactly the same, so scripts that use one keep',
+    '  working; write the canonical spelling. Policy: docs\CLI-FLAG-ALIASES.md.'];
+  for lA in pAliases do
+    Result := Result + [USAGE_INDENT + lA.Canonical.PadRight(ALIAS_CANON_WIDTH) + ' also: ' + string.Join(', ', lA.Aliases)];
+  Result := Result + [''];
+end;
+
+function FlagAliasesMarkdown(const pAliases: TArray<TFlagAlias>; pHeading: Boolean): string;
+var
+  lA: TFlagAlias;
+  lSb: TStringBuilder;
+begin
+  if Length(pAliases) = 0 then
+    Exit('');
+  lSb := TStringBuilder.Create;
+  try
+    if pHeading then
+      lSb.Append('## Flag aliases'#10#10);
+    lSb.Append('A verb''s usage line names the canonical flag only. Each alias is accepted wherever its canonical flag is and means '
+      + 'exactly the same, so scripts that use one keep working; write the canonical spelling. `drag-lint --help` lists them '
+      + 'in its "Flag aliases:" section. Policy: `docs/CLI-FLAG-ALIASES.md`.'#10#10);
+    lSb.Append('| Canonical | Aliases | Why |'#10'|---|---|---|'#10);
+    for lA in pAliases do
+      lSb.Append('| `' + lA.Canonical + '` | `' + string.Join('`, `', lA.Aliases) + '` | ' + lA.Reason + ' |'#10);
+    lSb.Append(#10);
+    Result := lSb.ToString;
+  finally
+    lSb.Free;
+  end;
+end;
+
 function RenderHelpTextUnit(const pReg: TRegistry): string;
 var
   lSb: TStringBuilder;
@@ -253,6 +310,8 @@ begin
     lSb.Append('interface'#10#10);
     lSb.Append('/// <summary>Writes the generated verb reference of --help to standard output.</summary>'#10);
     lSb.Append('procedure WriteVerbReference;'#10#10);
+    lSb.Append('/// <summary>Writes the "Flag aliases:" section of --help (features\flag-aliases.json; policy docs\CLI-FLAG-ALIASES.md).</summary>'#10);
+    lSb.Append('procedure WriteFlagAliases;'#10#10);
     lSb.Append('/// <summary>Writes the own help of one verb: the help lines of its registry surfaces, in helpOrder.</summary>'#10);
     lSb.Append('/// <param name="pVerb">Verb name, e.g. menu-tree.</param>'#10);
     lSb.Append('/// <returns>True when the registry carries help lines for pVerb (and they were written); False writes nothing.</returns>'#10);
@@ -261,6 +320,11 @@ begin
     lSb.Append('procedure WriteVerbReference;  // dl:ok method-too-long@c473 -- GENERATED: one Writeln per registry help line; the length follows the verb count'#10);
     lSb.Append('begin'#10);
     for lLine in VerbReferenceLines(pReg) do
+      lSb.Append(WritelnStatement(lLine));
+    lSb.Append('end;'#10#10);
+    lSb.Append('procedure WriteFlagAliases;'#10);
+    lSb.Append('begin'#10);
+    for lLine in FlagAliasLines(pReg.FlagAliases) do
       lSb.Append(WritelnStatement(lLine));
     lSb.Append('end;'#10#10);
     lSb.Append(RenderVerbHelpFunction(pReg));

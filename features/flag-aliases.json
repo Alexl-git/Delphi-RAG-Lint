@@ -1,0 +1,30 @@
+{
+  "policy": "docs\\CLI-FLAG-ALIASES.md",
+  "aliases": [
+    {
+      "canonical": "--force-reparse",
+      "aliases": ["--no-skip"],
+      "reason": "back-compat: the first spelling of the index re-parse switch"
+    },
+    {
+      "canonical": "--help",
+      "aliases": ["-h", "-?"],
+      "reason": "convention: the short help tokens every CLI user tries first"
+    },
+    {
+      "canonical": "--in",
+      "aliases": ["--file"],
+      "reason": "one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb"
+    },
+    {
+      "canonical": "--output",
+      "aliases": ["--out"],
+      "reason": "back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working"
+    },
+    {
+      "canonical": "--scan-libraries-win",
+      "aliases": ["--scan-libraries"],
+      "reason": "back-compat: the spelling before --scan-libraries-all existed"
+    }
+  ]
+}

@@ -115,9 +115,18 @@ type
     Questions: TArray<TQuestion>;
   end;
 
+  /// <summary>One row of features\flag-aliases.json: a canonical CLI flag and its other spellings (docs\CLI-FLAG-ALIASES.md).</summary>
+  /// <remarks>An alias is accepted wherever its canonical flag is and means exactly the same. --help prints the canonical spelling on verb lines and every alias once, in its "Flag aliases:" section.</remarks>
+  TFlagAlias = record
+    Canonical: string;
+    Aliases: TArray<string>;
+    Reason: string;
+  end;
+
   /// <summary>The loaded registry of one repo (or fixture) root.</summary>
   TRegistry = class
   strict private
+    FFlagAliases: TArray<TFlagAlias>;
     FEntries: TArray<TFeatureEntry>;
     FGroups: TArray<TNamedRow>;
     FTeams: TArray<TNamedRow>;
@@ -135,7 +144,19 @@ type
     property Teams: TArray<TNamedRow> read FTeams;
     /// <summary>The root given to the last Load ('' before any load); the registry checks read the raw files under it.</summary>
     property Root: string read FRoot;
+    /// <summary>Rows of features\flag-aliases.json in file order; empty when the file is absent.</summary>
+    property FlagAliases: TArray<TFlagAlias> read FFlagAliases;
   end;
+
+const
+  /// <summary>Registry-relative path of the flag alias table.</summary>
+  FLAG_ALIASES_PATH = 'features\flag-aliases.json';
+
+/// <summary>Reads the flag alias table under pRepo.</summary>
+/// <param name="pRepo">Root holding a features folder.</param>
+/// <returns>The rows in file order; an empty array when features\flag-aliases.json does not exist (a fixture without one).</returns>
+/// <exception cref="EFeatureJson">The file exists but is malformed (message names the file).</exception>
+function LoadFlagAliases(const pRepo: string): TArray<TFlagAlias>;
 
 implementation
 
@@ -313,6 +334,32 @@ begin
   end;
 end;
 
+function LoadFlagAliases(const pRepo: string): TArray<TFlagAlias>;
+var
+  lPath: string;
+  lRoot: TJSONValue;
+  lItems: TArray<TJSONValue>;
+  i: Integer;
+begin
+  Result := nil;
+  lPath := TPath.Combine(pRepo, FLAG_ALIASES_PATH);
+  if not TFile.Exists(lPath) then
+    Exit;
+  lRoot := ReadJsonFile(lPath);
+  try
+    lItems := ObjList(lRoot, 'aliases');
+    SetLength(Result, Length(lItems));
+    for i := 0 to High(lItems) do
+    begin
+      Result[i].Canonical := Prop(lItems[i], 'canonical');
+      Result[i].Aliases := StrList(lItems[i], 'aliases');
+      Result[i].Reason := Prop(lItems[i], 'reason');
+    end;
+  finally
+    lRoot.Free;
+  end;
+end;
+
 procedure TRegistry.Load(const pRepo: string);
 var
   lFiles: TArray<string>;
@@ -324,6 +371,7 @@ var
   i: Integer;
 begin
   FRoot := pRepo;
+  FFlagAliases := LoadFlagAliases(pRepo);
   FGroups := LoadRows(TPath.Combine(pRepo, 'features\groups.json'), 'groups');
   FTeams := LoadRows(TPath.Combine(pRepo, 'features\teams.json'), 'teams');
   lFiles := TDirectory.GetFiles(TPath.Combine(pRepo, 'features\entries'), '*.json');

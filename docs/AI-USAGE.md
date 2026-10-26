@@ -27,7 +27,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 
 | Question | Command |
 |---|---|
-| What is in this unit? | `drag-lint outline --file <U.pas> --db <db>` |
+| What is in this unit? | `drag-lint outline --in <U.pas> --db <db>` |
 | Is this report still true? | `drag-lint compare --in <U.pas> --line <L>` |
 | Which unit declares `X`? | `drag-lint find-unit --name X --in <U.pas> --db <db>` |
 | Where is `X`, what is its signature? | `drag-lint query --name X --db <db>` |
@@ -350,14 +350,26 @@ Add `--json` to most commands for machine-readable output.
 ### 2a. Full verb reference (grouped)
 
 Every verb below is a real `drag-lint` subcommand. Most take `--db <file>`
-(repeatable) and `--json`. `--help` (aliases `-h`, `-?`) is accepted after any
-verb and prints the FULL banner -- there is no per-verb help TEXT, so read the
+(repeatable) and `--json`. `--help` is accepted after any verb and prints the
+FULL banner (only `menu-tree` and `menu-drift` print help of their own), so read the
 banner's line for the verb you want (`drag-lint --version` prints just the
 engine version). This is the canonical list an AI should reach for; the
 pure-diagnostic verbs are broken out in 2b.
 
-`--out` is accepted everywhere `--output` is, and is deliberately undocumented in
-`--help` (owner ruling 2026-09-22): scripts that use it keep working; write `--output`.
+**Flag aliases** (generated from `features\flag-aliases.json`; policy `docs\CLI-FLAG-ALIASES.md`):
+
+<!-- dl:registry:begin flag-aliases -->
+A verb's usage line names the canonical flag only. Each alias is accepted wherever its canonical flag is and means exactly the same, so scripts that use one keep working; write the canonical spelling. `drag-lint --help` lists them in its "Flag aliases:" section. Policy: `docs/CLI-FLAG-ALIASES.md`.
+
+| Canonical | Aliases | Why |
+|---|---|---|
+| `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
+| `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
+| `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
+| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
+
+<!-- dl:registry:end flag-aliases -->
 
 **Exit codes common to every verb.** An unknown VERB exits `2` (`ERROR: unknown command: X`, then the
 banner). An unknown FLAG, and any other fatal (`FATAL: <class>: <message>` on stderr), exits `3` -- the
@@ -659,7 +671,7 @@ define further codes.
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
 | `lint --project P.dproj` | project-level rules (e.g. `unit-not-in-dpr`). Since 2026-09-08 a plain `lint-all --db <db>` ALSO evaluates `unit-not-in-dpr`: it infers the project file from the manifest section that owns the DB, so the canonical run no longer skips the membership check. Passing `--project` explicitly additionally SCOPES the report; inference does not |
 | `lint-project --db DB` | index-wide rules (god-class, circular-uses, layering-violation, ...); `--layers <f.json>` is the architecture-layer config `layering-violation` needs (else `drag-lint-layers.json` in the CWD) |
-| `lint-all` | lint everything indexed (`--output report.txt`, alias `--out`; with `--json` / `--format sarif` it receives that document instead, a note on stderr; `--quiet`); refuses `--file`/`--in` with exit 2 (it was silently ignored -- use `lint <file> --db <db>` for one unit); `--rule <id>` reports only that rule and opts an OFF-by-default rule in for the run, exactly as `lint --rule` does (no `--enable` needed), and RUNS only the checkers and the `.scm` query that can emit it (a `review-marker-*` rule still runs everything it is computed from); a `"rule"` key in `.drag-lint.json` is IGNORED by `lint-all` (with a stderr note) and honoured, with a note, only by `lint`; with no `_D-RAG\drag-lint-project.json` the run says which ownRoots it DEFAULTED to (the project folder) and how many files that skipped; `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
+| `lint-all` | lint everything indexed (`--output report.txt`; with `--json` / `--format sarif` it receives that document instead, a note on stderr; `--quiet`); refuses `--in` with exit 2 (it was silently ignored -- use `lint <file> --db <db>` for one unit); `--rule <id>` reports only that rule and opts an OFF-by-default rule in for the run, exactly as `lint --rule` does (no `--enable` needed), and RUNS only the checkers and the `.scm` query that can emit it (a `review-marker-*` rule still runs everything it is computed from); a `"rule"` key in `.drag-lint.json` is IGNORED by `lint-all` (with a stderr note) and honoured, with a note, only by `lint`; with no `_D-RAG\drag-lint-project.json` the run says which ownRoots it DEFAULTED to (the project folder) and how many files that skipped; `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
 | `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer, `--with-rules` also harvests the dependents' lint findings, `--compile` also compiles the dependents in a shadow dir. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
 | `exceptions-sync` | materialise the project's derived exception classes into the exceptions unit (`--apply`; dry-run without it; `--json` emits one machine-readable document on stdout with the counts and the classes it would add, prose to stderr). Harvests every bare `raise Exception.Create('literal')` project-wide and declares ONE class per DISTINCT message inside a `drag-lint:auto` managed block. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough; key `unit` names the unit (default `uExceptionDefinitions`, **created if absent**) and key `root` the ancestor (default `Exception`). **The same-line `//` comment after each declaration IS the key**, so renaming a generated class is safe and editing its comment makes the next run add a second class for the old message. It is a VERB and not a `--fix` because its input is project-wide and its output is one file |
 | `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`; `--shadow <dir>` compiles an unsaved buffer staged there instead of the file on disk) |
@@ -672,7 +684,7 @@ define further codes.
 | Verb | What it does |
 |------|--------------|
 | `index <path>` | build/refresh an index; `--project <.dpr/.dproj>` = project (compile-closure) scan, a folder = library scan. A POSITIONAL `.dpr`/`.dproj` refreshes ONLY that one file (no project defines, into the project's own DB) -- not a closure scan. `--recompile` (default) / `--rebuild`; also `--project` (a `.dproj`, `.dpr` or `.dpk`; a POSITIONAL project file beats the `project` key of `.drag-lint.json`, an explicit `--project` beats both), `--watch`, `--deep`, `--dir <path>` (= the positional path), `--use-ignore` (the default, accepted for old scripts). **Exit 1 when any file failed to store** (stderr `ERROR` line names it; the file keeps its old rows) and, for `index --all`, when any section failed. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold), **`purity`** (purity v2: the interprocedural `Effect-free (proven)` verdict into `symbol_facts.effect_free` / `effect_summary` / `effect_witness`; runs whenever `calls` ran or any routine lacks a verdict) |
-| any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.gitignore` / `.hgignore` pattern files honoured by default (a folder holding a `.scanignore` marker file is always pruned), `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
+| any `index` run | mode and sweep: `--force-reparse` re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.gitignore` / `.hgignore` pattern files honoured by default (a folder holding a `.scanignore` marker file is always pruned), `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
 | any verb that opens a DB | `--size-guard-mb N` / `--force32` (`index`, `query`, `lsp`, `serve`): the 32-bit build refuses a database larger than the guard because it would run out of address space mid-answer; the first moves the threshold, the second overrides the refusal. Neither is normally needed on Win64 |
 | `index <path> --resolve-only` | re-derive call edges / ancestry / helper targets and purity verdicts from the STORED parses, skipping the walk. Use when `schema_meta.resolver_fingerprint` shows the edges predate the current resolver -- minutes, against the hours a re-parse costs, because no parse became wrong. It writes edges INSIDE that one index only: **no cross-store edges are written** (0 `refs.external_target` in every project DB, measured 2026-09-22; a library re-resolve added 13 intra-library edges per platform). Do not expect it to bind project calls to the platform library |
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |

@@ -12,10 +12,10 @@
     {
       "type": "cli",
       "verb": "preprocess-file",
-      "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
+      "usage": "drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
       "flags": [
         {
-          "name": "--file",
+          "name": "--in",
           "arg": "PATH"
         },
         {
@@ -40,22 +40,22 @@
         }
       ],
       "helpOrder": 89,
-      "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
+      "help": ["  drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
     }
   ],
   "audience": "both",
   "questions": [
     {
       "ask": "What does this file look like after IFDEF resolution?",
-      "command": "drag-lint preprocess-file --file <PATH>"
+      "command": "drag-lint preprocess-file --in <PATH>"
     },
     {
       "ask": "What if I define a symbol?",
-      "command": "drag-lint preprocess-file --file <PATH> --define <SYM>"
+      "command": "drag-lint preprocess-file --in <PATH> --define <SYM>"
     },
     {
       "ask": "Which include files did this file pull in, and what did each contribute?",
-      "command": "drag-lint preprocess-file --file <PATH> --include-mode defines-only --include-sites"
+      "command": "drag-lint preprocess-file --in <PATH> --include-mode defines-only --include-sites"
     }
   ],
   "access": "cli-only",
@@ -64,9 +64,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "5d546080815dd4cd618f9b24ee2831584c0715cf471eaf0d04ae757510d2a268"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "ccb4161e2a2a017a0b2e58dd2cac7b2cd4860eea372cb13d6dade7e22e2673dd"
   }
 }

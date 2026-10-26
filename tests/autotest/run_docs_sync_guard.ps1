@@ -1106,14 +1106,15 @@ function Get-FlagSet([string]$Text, [string]$Rx) {
   return ,$s
 }
 
-# Flags ParseArgs accepts that --help deliberately does NOT print. THREE
+# Flags ParseArgs accepts that --help deliberately does NOT print. TWO
 # admissible classes, and an entry must cite one:
 #   (a) flag of a verb that is itself in $UndocumentedOnPurpose
-#   (b) back-compat ALIAS whose canonical form IS in --help
 #   (c) test-harness entry point (pre-dispatch self-test)
-# Anything else is a defect -- document it on the verb's line. Class (b) is the
-# one that can absorb anything ("it's an alias of the default"), so it is
-# reviewed at each release exactly as $UndocumentedOnPurpose is.
+# Anything else is a defect -- document it on the verb's line. Class (b),
+# "back-compat ALIAS whose canonical form IS in --help", is RETIRED (owner
+# ruling 2026-10-25, docs\CLI-FLAG-ALIASES.md): every alias is listed in the
+# generated "Flag aliases:" section of --help, so no alias is undocumented, and
+# F1y below fails if one is ever exempted here again.
 $FlagUndocumentedOnPurpose = [ordered]@{
   '--expr'            = '(a) dump-pp-eval expression; that verb is itself exempt'
   '--from-block'      = '(a) convert-reemit input; that verb is itself exempt'
@@ -1244,6 +1245,16 @@ Check 'F2x every structural flag''s handler still exists in source' ($structGone
 foreach ($k in $FlagUndocumentedOnPurpose.Keys) {
   Write-Host ("      [NOTE] flag not in --help on purpose: {0} -- {1}" -f $k, $FlagUndocumentedOnPurpose[$k]) -ForegroundColor DarkGray
 }
+# --- F1y: an alias is never exempt (docs\CLI-FLAG-ALIASES.md) ----------------
+$aliasJson = Join-Path $Repo 'features\flag-aliases.json'
+$aliasSet = @()
+if (Test-Path -LiteralPath $aliasJson) {
+  $aliasSet = @((Get-Content -LiteralPath $aliasJson -Raw | ConvertFrom-Json).aliases | ForEach-Object { @($_.aliases) })
+}
+Check 'F1y the alias table is read (else the next check is vacuous)' ($aliasSet.Count -gt 0) "($($aliasSet.Count) alias(es)) $aliasJson"
+$exAlias = @($FlagUndocumentedOnPurpose.Keys | Where-Object { $aliasSet -contains $_ })
+Check 'F1y no flag exemption is an alias (aliases are listed in --help "Flag aliases:")' ($exAlias.Count -eq 0) `
+  ("exempted alias(es): " + ($exAlias -join ' '))
 
 # --- F3: the prose may not name a flag --help denies ------------------------
 # REVERSE and total: no list to maintain, and it catches the class that keeps

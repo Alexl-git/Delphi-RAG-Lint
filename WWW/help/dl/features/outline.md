@@ -7,7 +7,7 @@ group: search-navigation
 order: 20015
 since: 0.86.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # outline
@@ -24,7 +24,7 @@ Full flag list: [outline in the CLI reference](../cli.md#outline).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--file` | `<path.pas>` |  |  |
+| `--in` | `<path.pas>` |  |  |
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
 

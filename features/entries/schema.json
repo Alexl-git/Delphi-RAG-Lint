@@ -27,7 +27,7 @@
         }
       ],
       "helpOrder": 44,
-      "help": ["  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)", "  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)"]
+      "help": ["  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)", "  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)"]
     }
   ],
   "audience": "both",
@@ -48,9 +48,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "3be8eb2ba2052cfe4b7ba610687f689f8494e18d725a205aec8f2f7ce803409b"
+    "build": "1.35.0-alpha",
+    "surfaceHash": "ee9b2e4e42ceba0d3e0fe8bf2e7b33bc1924e9c9de75afa5204c65b93fd6d95f"
   }
 }

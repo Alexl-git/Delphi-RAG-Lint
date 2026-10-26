@@ -97,6 +97,52 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:Failed = $true }
 }
 
+# FLAG ALIASES (docs\CLI-FLAG-ALIASES.md, features\flag-aliases.json). An alias
+# is a second spelling of ONE option: same parser branch, same TArgs field. The
+# policy: a verb line names the CANONICAL spelling only, and every alias is
+# listed once, in the generated "Flag aliases:" section of --help. So this axis
+# counts an OPTION, not a spelling: a verb that reads TArgs.Output consumes
+# --output, and its line naming --output documents it -- --out is not a second,
+# undocumentable cell. Folding happens BEFORE the gap is computed; the planted
+# case below proves a NON-alias undocumented flag is still counted after it.
+function Get-CanonicalFlag([string]$Flag, [hashtable]$AliasOf) {
+  if ($AliasOf.ContainsKey($Flag)) { return $AliasOf[$Flag] }
+  return $Flag
+}
+
+function Get-VerbGap($VerbFlags, [hashtable]$Blocks, $HelpSet, $GlobalFlags, [string[]]$Exempt, [hashtable]$AliasOf) {
+  $rows = @(); $total = 0; $miss = 0; $noBlock = @()
+  foreach ($verb in $VerbFlags.Keys) {
+    if (-not $Blocks.ContainsKey($verb)) { $noBlock += $verb; continue }
+    $want = @(@($VerbFlags[$verb] | ForEach-Object { Get-CanonicalFlag $_ $AliasOf }) | Sort-Object -Unique | Where-Object {
+                $HelpSet.Contains($_) -and -not $GlobalFlags.Contains($_) -and ($Exempt -notcontains $_) })
+    $m = @($want | Where-Object { -not $Blocks[$verb].Contains($_) })
+    $total += $want.Count
+    $miss  += $m.Count
+    if ($m.Count -gt 0) { $rows += [pscustomobject]@{ verb = $verb; consumes = $want.Count; missing = $m.Count; flags = ($m -join ' ') } }
+  }
+  return [pscustomobject]@{ Rows = $rows; Total = $total; Missing = $miss; NoBlock = $noBlock }
+}
+
+# Every `(A = 'x') or (A = 'y')` test in the CLI source is an alias group. Read
+# from the source, so the table cannot list a pair the parser does not accept,
+# nor miss one it does.
+function Get-ParserAliasGroups([string]$CliText) {
+  $groups = @()
+  foreach ($line in ($CliText -split "`r?`n")) {
+    if ($line -notmatch "\(A\s*=\s*'-[^']*'\)\s*or\s*\(A\s*=\s*'-") { continue }
+    $lits = @([regex]::Matches($line, "A\s*=\s*'(-[^']*)'") | ForEach-Object { $_.Groups[1].Value })
+    if ($lits.Count -ge 2) { $groups += ,(@($lits | Sort-Object) -join ' ') }
+  }
+  return @($groups | Sort-Object -Unique)
+}
+
+# A token regex for one alias spelling: '-?' needs escaping, and '--in' must not
+# match inside '--include'.
+function Get-AliasTokenRx([string]$Alias) {
+  return '(?<![A-Za-z0-9-])' + [regex]::Escape($Alias) + '(?![A-Za-z0-9-])'
+}
+
 # RECORDED BASELINE -- see the header. Measured 2026-09-15 at 44a2b0a; re-measured
 # 2026-09-22 (C3a) at 124/33 after glyph-vacuum's banner gained the --output alias
 # (the row that had pushed it to 125/34). 123 on 2026-09-23 (D4): lint-all's banner
@@ -107,8 +153,15 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # (lint-all, schema, export, butterfly, sql, uses-report, graph, deps-report),
 # and export / forms-csv / convert-scaffold gained --output on their own lines
 # (3 cells). Six verbs had nothing else missing and left the table.
-$BaselineCells = 110
-$BaselineVerbs = 27
+# 108/24 on 2026-10-26 (FLAG lane, docs\CLI-FLAG-ALIASES.md): the drift to 125/36
+# was undone by (1) folding aliases to their canonical flag (--out read by a verb
+# whose line names --output is ONE documented option, not a missing cell), (2)
+# --json named on schema / butterfly / compare / menu-tree / menu-drift and
+# --output on check-ast (kept from lane 909fc131, without its --output|--out),
+# and despite (3) Apply / Fix leaving the pinned cross-verb set (refusal-only
+# reads, CliFlagVerbMap.ps1), which put --apply/--fix back into the count (+4).
+$BaselineCells = 108
+$BaselineVerbs = 24
 
 $Repo = (Resolve-Path $Repo).Path
 . (Join-Path $Repo 'tests\autotest\lib\CliFlagVerbMap.ps1')
@@ -186,6 +239,33 @@ Check 'PLANT a {$IFDEF} inside a STRING LITERAL opens no conditional' `
   ("stray directive(s): " + (@($plr.Unevaluated | Where-Object { $_ -notmatch 'ZZ_NO_RULING_FOR_THIS' }) -join ' '))
 
 # ---------------------------------------------------------------------------
+# PLANTED ALIAS CASES -- the fold must be proved unable to hide a real gap.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- planted cases (alias fold)' -ForegroundColor Cyan
+$pAlias = @{ '--zz-short' = '--zz-canon' }
+$pVerbs = [ordered]@{ 'zz-verb' = @('--zz-canon', '--zz-short', '--zz-undoc', '--zz-named') }
+$pBlock = New-Object System.Collections.Generic.HashSet[string]
+[void]$pBlock.Add('--zz-canon'); [void]$pBlock.Add('--zz-named')
+$pHelp = New-Object System.Collections.Generic.HashSet[string]
+foreach ($x in @('--zz-canon', '--zz-short', '--zz-undoc', '--zz-named')) { [void]$pHelp.Add($x) }
+$pNone = New-Object System.Collections.Generic.HashSet[string]
+$pg = Get-VerbGap -VerbFlags $pVerbs -Blocks @{ 'zz-verb' = $pBlock } -HelpSet $pHelp -GlobalFlags $pNone -Exempt @() -AliasOf $pAlias
+Check 'CONTROL an undocumented NON-alias flag is still counted after the fold' `
+  ($pg.Missing -eq 1 -and $pg.Rows.Count -eq 1 -and $pg.Rows[0].flags -eq '--zz-undoc') `
+  ("missing=$($pg.Missing) flags=" + (@($pg.Rows | ForEach-Object flags) -join ';'))
+Check 'PLANT an alias of a flag the line names is one option, not a second cell' `
+  ($pg.Total -eq 3) "consumes=$($pg.Total) (canon+short fold to 1, + undoc + named)"
+$pg2 = Get-VerbGap -VerbFlags $pVerbs -Blocks @{ 'zz-verb' = $pBlock } -HelpSet $pHelp -GlobalFlags $pNone -Exempt @() -AliasOf @{}
+Check 'CONTROL without the alias table the same alias IS a missing cell (the fold is what removes it)' `
+  ($pg2.Missing -eq 2) "missing=$($pg2.Missing)"
+$pTxt = "  drag-lint zz-verb [--zz-short <f>]`r`nFlag aliases:`r`n  --zz-canon          also: --zz-short`r`n"
+$pLeak = @(($pTxt -split "`r?`n") | Where-Object { $_ -notmatch '^\s{2}-\S*\s+also:' -and $_ -match (Get-AliasTokenRx '--zz-short') })
+Check 'CONTROL an alias on a verb line IS reported by the leak scan' ($pLeak.Count -eq 1) "leaks=$($pLeak.Count)"
+Check 'CONTROL the alias token regex does not match a longer flag' `
+  (-not ('--include-mode' -match (Get-AliasTokenRx '--in')) -and ('[--in <f>]' -match (Get-AliasTokenRx '--in'))) ''
+
+# ---------------------------------------------------------------------------
 # THE MAP, against the real source
 # ---------------------------------------------------------------------------
 Write-Host ''
@@ -251,9 +331,50 @@ Check 'help: flag set parsed' ($helpSet.Count -gt 100) "($($helpSet.Count) flag(
 # Flags bound to a field Run reads BEFORE it dispatches are cross-verb plumbing
 # (--db, --platform, --project, the positional path). They belong on no single
 # verb line, and the banner documents them in its own Databases block.
+# --- the alias table, proved against the parser and against --help ----------
+$aliasPath = Join-Path $Repo 'features\flag-aliases.json'
+Check 'alias table present' (Test-Path -LiteralPath $aliasPath) $aliasPath
+$AliasOf = @{}
+$tableGroups = @()
+if (Test-Path -LiteralPath $aliasPath) {
+  foreach ($row in @((Get-Content -LiteralPath $aliasPath -Raw | ConvertFrom-Json).aliases)) {
+    foreach ($a in @($row.aliases)) { $AliasOf[[string]$a] = [string]$row.canonical }
+    $tableGroups += ,(@(@($row.canonical) + @($row.aliases) | Sort-Object) -join ' ')
+  }
+}
+$tableGroups = @($tableGroups | Sort-Object -Unique)
+$parserGroups = Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli))
+Check 'alias groups read from the parser (else the two-way check below is vacuous)' ($parserGroups.Count -ge 4) `
+  ("($($parserGroups.Count) group(s)): " + ($parserGroups -join ' | '))
+$grpDiff = @(Compare-Object -ReferenceObject $parserGroups -DifferenceObject $tableGroups |
+             ForEach-Object { '{0}[{1}]' -f $(if ($_.SideIndicator -eq '=>') { 'table-only' } else { 'parser-only' }), $_.InputObject })
+Check 'alias table == the parser''s alias groups (two-way)' ($grpDiff.Count -eq 0) `
+  ("difference: " + ($grpDiff -join ' ') + " -- every (A = 'x') or (A = 'y') pair is a row of features\flag-aliases.json, and nothing else is")
+
+# Policy: a verb line, a note, COMMON QUESTIONS -- every --help line except the
+# alias rows themselves -- names the canonical spelling only.
+$helpLines = @($helpText -split "`r?`n")
+$aliasRowRx = '^\s{2}(-\S+)\s+also:\s+(.*)$'
+$leaks = @()
+foreach ($l in $helpLines) {
+  if ($l -match $aliasRowRx) { continue }
+  foreach ($a in $AliasOf.Keys) { if ($l -match (Get-AliasTokenRx $a)) { $leaks += ("{0} in: {1}" -f $a, $l.Trim()) } }
+}
+Check 'no --help line outside the alias section names an alias (canonical only)' ($leaks.Count -eq 0) `
+  ("$($leaks.Count) leak(s)")
+foreach ($x in $leaks) { Write-Host ("      [LEAK] {0}" -f $x) -ForegroundColor Red }
+$listed = @{}
+foreach ($l in $helpLines) {
+  $am = [regex]::Match($l, $aliasRowRx)
+  if ($am.Success) { foreach ($t in ($am.Groups[2].Value -split '[,\s]+' | Where-Object { $_ })) { $listed[$t] = $am.Groups[1].Value } }
+}
+$unlisted = @($AliasOf.Keys | Where-Object { $listed[$_] -ne $AliasOf[$_] } | Sort-Object)
+Check 'every alias is listed once in the --help "Flag aliases:" section, under its canonical flag' ($unlisted.Count -eq 0) `
+  ("not listed (or under the wrong flag): " + ($unlisted -join ' '))
+
 $globalFlags = New-Object System.Collections.Generic.HashSet[string]
 foreach ($f in $map.Global) {
-  if ($map.FieldFlags.ContainsKey($f)) { foreach ($x in $map.FieldFlags[$f]) { [void]$globalFlags.Add($x) } }
+  if ($map.FieldFlags.ContainsKey($f)) { foreach ($x in $map.FieldFlags[$f]) { [void]$globalFlags.Add((Get-CanonicalFlag $x $AliasOf)) } }
 }
 Write-Host ("      [NOTE] cross-verb (pre-dispatch) flags, excluded: " + (($globalFlags | Sort-Object) -join ' ')) -ForegroundColor DarkGray
 
@@ -263,10 +384,13 @@ Write-Host ("      [NOTE] cross-verb (pre-dispatch) flags, excluded: " + (($glob
 # and a flag that LEAVES it (1.20.4: Run stopped calling the resolver before
 # dispatch) inflates the gap for a reason no banner edit can fix. Either is a
 # change to the classification, so it must be made here, deliberately.
-$ExpectedGlobalFlags = @('--db', '--dir', '--file', '--in', '--platform', '--project')
+# 2026-10-26 (FLAG lane): '--file' left the pinned list because it is an ALIAS of
+# --in (features\flag-aliases.json) and the set is now folded to canonical
+# spellings -- the same option, still exempt, counted once.
+$ExpectedGlobalFlags = @('--db', '--dir', '--in', '--platform', '--project')
 $globalDiff = @(Compare-Object -ReferenceObject $ExpectedGlobalFlags -DifferenceObject @($globalFlags | Sort-Object) |
                 ForEach-Object { '{0}{1}' -f $(if ($_.SideIndicator -eq '=>') { '+' } else { '-' }), $_.InputObject })
-Check 'cross-verb flag set is exactly the pinned set (--db --dir --file --in --platform --project)' ($globalDiff.Count -eq 0) `
+Check 'cross-verb flag set is exactly the pinned set (--db --dir --in --platform --project)' ($globalDiff.Count -eq 0) `
   ("difference: " + ($globalDiff -join ' ') + " -- update `$ExpectedGlobalFlags only as a deliberate reclassification")
 
 # check 9 of run_docs_sync_guard.ps1 owns "accepted but in --help nowhere" (F1)
@@ -274,16 +398,8 @@ Check 'cross-verb flag set is exactly the pinned set (--db --dir --file --in --p
 # documented, so a flag the banner does not carry at all is not counted twice.
 $exempt = @('--expr','--from-block','--selftest-fts5','--selftest-schema','--use-ignore','--dir','--target')
 
-$rows = @(); $totalCells = 0; $missCells = 0; $noBlock = @()
-foreach ($verb in $map.VerbFlags.Keys) {
-  if (-not $blocks.ContainsKey($verb)) { $noBlock += $verb; continue }
-  $want = @($map.VerbFlags[$verb] | Where-Object {
-              $helpSet.Contains($_) -and -not $globalFlags.Contains($_) -and ($exempt -notcontains $_) })
-  $miss = @($want | Where-Object { -not $blocks[$verb].Contains($_) })
-  $totalCells += $want.Count
-  $missCells  += $miss.Count
-  if ($miss.Count -gt 0) { $rows += [pscustomobject]@{ verb = $verb; consumes = $want.Count; missing = $miss.Count; flags = ($miss -join ' ') } }
-}
+$gap = Get-VerbGap -VerbFlags $map.VerbFlags -Blocks $blocks -HelpSet $helpSet -GlobalFlags $globalFlags -Exempt $exempt -AliasOf $AliasOf
+$rows = $gap.Rows; $totalCells = $gap.Total; $missCells = $gap.Missing; $noBlock = $gap.NoBlock
 
 Write-Host ''
 Write-Host ("  (verb, flag) cells the code consumes : {0}" -f $totalCells)

@@ -188,7 +188,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 
 | Question | Command |
 |---|---|
-| What is in this unit? | `drag-lint outline --file <U.pas> --db <db>` |
+| What is in this unit? | `drag-lint outline --in <U.pas> --db <db>` |
 | Is this report still true? | `drag-lint compare --in <U.pas> --line <L>` |
 | Which unit declares `X`? | `drag-lint find-unit --name X --in <U.pas> --db <db>` |
 | Where is `X`, what is its signature? | `drag-lint query --name X --db <db>` |
@@ -334,8 +334,8 @@ drag-lint index --scan-libraries-all --db Library.sqlite   # every registered pl
 
 - **`--scan-libraries-win`** covers the IDE's native targets (Win32 + Win64).
   Because the RTL / VCL / FMX `.pas` source is shared across platforms, this
-  already captures essentially all library source. (`--scan-libraries` is kept
-  as a back-compat alias for this.)
+  already captures essentially all library source. (Its older spelling is listed
+  under "Flag aliases:" in `drag-lint --help`.)
 - **`--scan-libraries-all`** enumerates **every** platform subkey under
   `...\BDS\37.0\Library` (Android*, iOS*, Linux64, OSX*, Win64x, ...). On top of
   the Win set it pulls in the platform-specific source trees - `source\rtl\posix`,
@@ -900,7 +900,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | `index --project <file.dproj>` | Index one project's **compile closure** -- members, transitively used project-local units, sibling `.dfm`, `{$I}` includes | `--dry-run`, `--watch`; accepts a `.dproj`, `.dpr` or `.dpk`; a positional project file beats the `project` key of `.drag-lint.json`, an explicit `--project` beats both |
 | `index --scan-libraries-win` / `--scan-libraries-all` | Index the IDE's registered Library + Browsing paths (Win32+Win64, or every platform incl. Posix/iOS/Android/OSX) | `--dry-run` |
 | `index --all` | Index every section of the named-DB manifest (`drag-lint.json`) | `--only <Sec1,Sec2>`, `--platform win32\|win64`, `--jobs <n>`, `--dry-run [--json]` |
-| any `index` run | Mode is chosen per run, independent of scan type | `--recompile` (default, incremental) / `--rebuild` (from scratch), `--force-reparse` (alias `--no-skip`: re-parse every walked file even when path+mtime+sha are unchanged -- needed once per DB after an engine upgrade that extracts something new), `--no-prune` (dry look), `--prune` |
+| any `index` run | Mode is chosen per run, independent of scan type | `--recompile` (default, incremental) / `--rebuild` (from scratch), `--force-reparse` (re-parse every walked file even when path+mtime+sha are unchanged -- needed once per DB after an engine upgrade that extracts something new), `--no-prune` (dry look), `--prune` |
 | any `index` run (walk scoping) | Decide which files the walk admits before anything is parsed | `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` (skip any file larger than N KB), `--no-use-ignore` (opt out of the `.gitignore` / `.hgignore` pattern files, honoured by default; a folder holding a `.scanignore` marker file is always pruned), `--deep` (also record usage refs; `--shallow` is the default) |
 | [`migrate-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Move project indexes into each project's `_D-RAG` folder | `--apply` |
 | `register-project` | Add a NEW project to the manifest so `index --all` and the IDE can index it | `<file.dproj>`, `--name <Section>`, `--apply`, `--json` |
@@ -1149,7 +1149,22 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | `check-ast <file>` | Run tree-sitter lint rules without compiling | `--rule <id>`, `--format text\|json` |
 | [`purge-locals`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/purge-locals) `--db <db>` | Size escape hatch: drop local-var/param symbols + VACUUM (call graph unchanged; re-inflated on next index) | `--json` |
 | [`workspace index`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-index) / [`status`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) / [`add <dproj>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-add) | Multi-project workspace management | `--config <file>` |
-| `--version` / `--help` | Print version / usage. `--help` (aliases `-h`, `-?`) is accepted **after any verb** too -- `drag-lint lint --help` prints this same full banner and exits 0. There is no per-verb help text. | |
+| `--version` / `--help` | Print version / usage. `--help` is accepted **after any verb** too -- `drag-lint lint --help` prints this same full banner and exits 0. Only `menu-tree` and `menu-drift` print help of their own. | |
+
+### Flag aliases
+
+<!-- dl:registry:begin flag-aliases -->
+A verb's usage line names the canonical flag only. Each alias is accepted wherever its canonical flag is and means exactly the same, so scripts that use one keep working; write the canonical spelling. `drag-lint --help` lists them in its "Flag aliases:" section. Policy: `docs/CLI-FLAG-ALIASES.md`.
+
+| Canonical | Aliases | Why |
+|---|---|---|
+| `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
+| `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
+| `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
+| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
+
+<!-- dl:registry:end flag-aliases -->
 
 ### MCP tools (15)
 

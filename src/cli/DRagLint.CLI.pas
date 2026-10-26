@@ -744,7 +744,7 @@ begin
     docs\AI-USAGE.md, and those three must agree. }
   Writeln('COMMON QUESTIONS -- the shortest command for each. Full reference below.');
   Writeln('');
-  Writeln('  What is in this unit?                 drag-lint outline --file <U.pas> --db <db>');
+  Writeln('  What is in this unit?                 drag-lint outline --in <U.pas> --db <db>');
   Writeln('  Is this report still true?            drag-lint compare --in <U.pas> --line <L>');
   Writeln('  Which unit declares X?                drag-lint find-unit --name X --in <U.pas> --db <db>');
   Writeln('       ^ for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database');
@@ -757,7 +757,7 @@ begin
   Writeln('  Is unit U part of project P?          drag-lint query --name U --db <P.sqlite> --exact');
   Writeln('       ^ a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.');
   Writeln('  What are the members of a type?       drag-lint surface --qname <Unit.TType> --db <db>');
-  Writeln('       ^ names, TYPES and trailing comments. outline --file lists them with line numbers.');
+  Writeln('       ^ names, TYPES and trailing comments. outline --in lists them with line numbers.');
   Writeln('  Where does a DOC COMMENT say this?    drag-lint query find --doc-contains "<phrase>" --db <db>');
   Writeln('       ^ case-insensitive, over /// blocks and harvested // above a declaration.');
   Writeln('  Which DECLARATIONS say this?          drag-lint query find --decl-contains "stored IsFontStored" --kind property --db <db>');
@@ -799,6 +799,7 @@ begin
     // it carries no managed facts block.
   }
   WriteVerbReference;
+  WriteFlagAliases;
   Writeln('Databases (--db is repeatable, on every verb that takes it):');
   Writeln('  THE FIRST --db IS THE PRIMARY. Every later --db is an EXTRA store.');
   Writeln('  The primary answers the query and is the only store that contributes RESOLVED');
@@ -835,7 +836,7 @@ begin
   Writeln('         OWN database only -- its exact manifest owner, else');
   Writeln('         <project dir>\_D-RAG\<base>.sqlite -- plus, for readers that use');
   Writeln('         the consumer DB list, the platform library; no sibling project DB.');
-  Writeln('         Exceptions: outline --file also opens DBs that hold or folder-match');
+  Writeln('         Exceptions: outline --in also opens DBs that hold or folder-match');
   Writeln('         the file, and lint''s dl:shared check opens the sibling projects a');
   Writeln('         unit declares. index <x.dpr|.dproj> refreshes ONLY that one file');
   Writeln('         (use --project for the compile-closure scan). index and');
@@ -9854,7 +9855,11 @@ var
   JArr : TJSONArray     ;
   JObj : TJSONObject    ;
 begin
-  if AArgs.InFile = '' then begin Writeln('Usage: drag-lint outline --file <path.pas> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
+  if AArgs.InFile = '' then
+  begin
+    Writeln('Usage: drag-lint outline --in <path.pas> ' + '[--db <path>] [--format text|json]');
+    Exit(2);
+  end;
 
   { Resolve from the FILE, not from the cwd. See ResolveReadDbsForFile's header
     for the defect this closes. The old single-path behaviour survives as the

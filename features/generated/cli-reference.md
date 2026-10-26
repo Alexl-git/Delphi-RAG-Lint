@@ -34,13 +34,13 @@ Described in:
 Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls.
 
 ```text
-drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)
+drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--qname` | `<Foo.Bar>` |  |  |
-| `--file` | `<file>` |  |  |
+| `--in` | `<file>` |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
@@ -102,7 +102,7 @@ Described in [bench-context](../../docs/wiki/bench-context.md).
 Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command.
 
 ```text
-drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)
+drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -156,7 +156,7 @@ Described in [callgraph](../../docs/wiki/callgraph.md).
 Runs drag-lint's AST-level checks against a file.
 
 ```text
-drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]
+drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -560,12 +560,12 @@ Described in:
 Pulls a run of statements out of a routine into a new method.
 
 ```text
-drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] - pull a statement run into a new method
+drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] - pull a statement run into a new method
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--file` | `<F>` |  |  |
+| `--in` | `<F>` |  |  |
 | `--from-line` | `<L1>` |  |  |
 | `--to-line` | `<L2>` |  |  |
 | `--name` | `<N>` |  |  |
@@ -1145,12 +1145,12 @@ Described in [migrate-dbs](../../docs/wiki/migrate-dbs.md).
 Prints the file-scoped symbol outline for one Pascal unit.
 
 ```text
-drag-lint outline --file <path.pas> [--db <path>] [--format text|json]
+drag-lint outline --in <path.pas> [--db <path>] [--format text|json]
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--file` | `<path.pas>` |  |  |
+| `--in` | `<path.pas>` |  |  |
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
 
@@ -1177,12 +1177,12 @@ Described in [pp-profile](../../docs/wiki/pp-profile.md).
 Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set.
 
 ```text
-drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)
+drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--file` | `PATH` |  |  |
+| `--in` | `PATH` |  |  |
 | `--define` | `SYM` |  |  |
 | `--numeric` | `K` |  |  |
 | `--include-mode` |  |  |  |
@@ -1553,13 +1553,13 @@ Described in [Symbol Slice](../../docs/wiki/Symbol-Slice.md).
 Runs one read-only SQL statement against an index database and prints the result set.
 
 ```text
-drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)
+drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--query` |  |  |  |
-| `--file` | `<q.sql>` |  |  |
+| `--in` | `<q.sql>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
@@ -1768,4 +1768,16 @@ Described in:
 * [workspace add](../../docs/wiki/workspace-add.md)
 * [workspace index](../../docs/wiki/workspace-index.md)
 * [workspace status](../../docs/wiki/workspace-status.md)
+
+## Flag aliases
+
+A verb's usage line names the canonical flag only. Each alias is accepted wherever its canonical flag is and means exactly the same, so scripts that use one keep working; write the canonical spelling. `drag-lint --help` lists them in its "Flag aliases:" section. Policy: `docs/CLI-FLAG-ALIASES.md`.
+
+| Canonical | Aliases | Why |
+|---|---|---|
+| `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
+| `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
+| `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
+| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
 

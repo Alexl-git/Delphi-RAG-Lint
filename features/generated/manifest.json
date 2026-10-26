@@ -165,7 +165,7 @@
             }
           ],
           "helpOrder": 1,
-          "help": ["  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]", "                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.", "                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,", "                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the", "                               cross-DB rung runs last), so adding a library can never change an edge that already existed.", "                               Answers only when exactly ONE type and ONE member match; absence beats a guess.", "                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...", "                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]", "                               --exclude-under and --include-only are repeatable and prune the walk;", "                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the", "                               .gitignore / .hgignore pattern files, which are honoured by default. A folder", "                               holding a .scanignore MARKER file (contents never read) is always pruned with", "                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY", "                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read", "                               from by default. --deep also records usage refs (--shallow is the default).", "  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]", "  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths; alias --scan-libraries)", "  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)", "  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]", "                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>", "                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project", "                               members, the project-local units they transitively use, each one's sibling", "                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose", "                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay", "                               OUT. A FOLDER target indexes the whole tree instead.", "                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;", "                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the", "                               .sqlite: schema, migrations and settings survive and no open handle is", "                               dropped. Implies --force-reparse. The two are mutually exclusive, and BOTH", "                               apply to index --all: each manifest section honours the mode it was given.", "                               [--force-reparse] (alias --no-skip): re-parse every walked file even when", "                               path+mtime+sha are unchanged. Needed once per DB after an engine upgrade that", "                               extracts something new -- see INBOX 2.3.", "                               EVERY walk SWEEPS, and both halves delete symbols/refs/uses/docs with the", "                               file: PRUNE drops indexed files that left the DISK; EVICTION drops files that", "                               STILL EXIST and left the SCOPE -- a unit dropped from the .dproj, a copy under", "                               an ignored folder, a tree a new [--exclude] now covers. Rows that outlive", "                               their scope make every reference-derived answer (find-callers,", "                               unused-public-symbol, doc facts) wrong. Bounded to the roots THIS run walked,", "                               so indexing one project never purges another's rows from a shared DB, and", "                               reported only when there is something to report. [--prune] forces the sweep", "                               for a single-FILE walk, which does not sweep by default. [--no-prune] is the", "                               one \"delete nothing\" switch, and it is a DRY LOOK: both sweeps are still", "                               COMPUTED and REPORTED as \"would remove\" (count + a capped sample of paths),", "                               nothing is deleted. Take it before a big run. Applies to index --all too.", "                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local", "                               .drag-lint.json, or --config -- naming the file, the key path and both types", "                               (\"indexes: expected object, got array\"). Read verbs only warn.", "                               A POSITIONAL .dpr/.dproj/.dpk beats the \"project\" key of the defaults file (one stderr note names the override); an explicit --project beats both.", "                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.", "                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed."]
+          "help": ["  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]", "                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.", "                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,", "                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the", "                               cross-DB rung runs last), so adding a library can never change an edge that already existed.", "                               Answers only when exactly ONE type and ONE member match; absence beats a guess.", "                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...", "                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]", "                               --exclude-under and --include-only are repeatable and prune the walk;", "                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the", "                               .gitignore / .hgignore pattern files, which are honoured by default. A folder", "                               holding a .scanignore MARKER file (contents never read) is always pruned with", "                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY", "                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read", "                               from by default. --deep also records usage refs (--shallow is the default).", "  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]", "  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)", "  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)", "  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]", "                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>", "                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project", "                               members, the project-local units they transitively use, each one's sibling", "                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose", "                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay", "                               OUT. A FOLDER target indexes the whole tree instead.", "                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;", "                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the", "                               .sqlite: schema, migrations and settings survive and no open handle is", "                               dropped. Implies --force-reparse. The two are mutually exclusive, and BOTH", "                               apply to index --all: each manifest section honours the mode it was given.", "                               [--force-reparse]: re-parse every walked file even when", "                               path+mtime+sha are unchanged. Needed once per DB after an engine upgrade that", "                               extracts something new -- see INBOX 2.3.", "                               EVERY walk SWEEPS, and both halves delete symbols/refs/uses/docs with the", "                               file: PRUNE drops indexed files that left the DISK; EVICTION drops files that", "                               STILL EXIST and left the SCOPE -- a unit dropped from the .dproj, a copy under", "                               an ignored folder, a tree a new [--exclude] now covers. Rows that outlive", "                               their scope make every reference-derived answer (find-callers,", "                               unused-public-symbol, doc facts) wrong. Bounded to the roots THIS run walked,", "                               so indexing one project never purges another's rows from a shared DB, and", "                               reported only when there is something to report. [--prune] forces the sweep", "                               for a single-FILE walk, which does not sweep by default. [--no-prune] is the", "                               one \"delete nothing\" switch, and it is a DRY LOOK: both sweeps are still", "                               COMPUTED and REPORTED as \"would remove\" (count + a capped sample of paths),", "                               nothing is deleted. Take it before a big run. Applies to index --all too.", "                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local", "                               .drag-lint.json, or --config -- naming the file, the key path and both types", "                               (\"indexes: expected object, got array\"). Read verbs only warn.", "                               A POSITIONAL .dpr/.dproj/.dpk beats the \"project\" key of the defaults file (one stderr note names the override); an explicit --project beats both.", "                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.", "                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed."]
         },
         {
           "type": "cli",
@@ -209,10 +209,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-25",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.34.0-alpha",
-        "surfaceHash": "c1433343d20f55bacf35ac6eec768a68f533ac3994cd7e522aee20f9304d1749"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "b8dadc4fd460a74c84d7e83bcf99222a0885db937a3941fc311a0b204ee3429f"
       }
     },
     {
@@ -240,7 +240,7 @@
             }
           ],
           "helpOrder": 100,
-          "help": ["  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project's _D-RAG folder", "  drag-lint --version", "  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,", "                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS", "                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.", "                               There is no per-verb help TEXT -- one banner answers them all.", "  Exit reason: an unknown verb (2), unknown flag (3) or stale index (3) also says WHY -- stderr line error[<reason>]:, or with --json a stderr object {\"error\":\"<reason>\"}.", ""]
+          "help": ["  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project's _D-RAG folder", "  drag-lint --version", "  drag-lint --help             Accepted AFTER A VERB too: `drag-lint lint --help`,", "                               `drag-lint query find-callers --help` and `drag-lint index --help` all print THIS", "                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.", "                               Only menu-tree and menu-drift print help of their own; one banner answers every other verb.", "  Exit reason: an unknown verb (2), unknown flag (3) or stale index (3) also says WHY -- stderr line error[<reason>]:, or with --json a stderr object {\"error\":\"<reason>\"}.", ""]
         },
         {
           "type": "ide-menu",
@@ -265,9 +265,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "b943b9ca28fd5ea4f705191a583b6381d139bbbac048916d79e87219465d5130"
       }
     },
@@ -528,7 +528,7 @@
             }
           ],
           "helpOrder": 44,
-          "help": ["  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)", "  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)"]
+          "help": ["  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)", "  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)"]
         }
       ],
       "audience": "both",
@@ -549,10 +549,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "3be8eb2ba2052cfe4b7ba610687f689f8494e18d725a205aec8f2f7ce803409b"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "ee9b2e4e42ceba0d3e0fe8bf2e7b33bc1924e9c9de75afa5204c65b93fd6d95f"
       }
     },
     {
@@ -1388,10 +1388,10 @@
         {
           "type": "cli",
           "verb": "outline",
-          "usage": "drag-lint outline --file <path.pas> [--db <path>] [--format text|json]",
+          "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json]",
           "flags": [
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "<path.pas>"
             },
             {
@@ -1403,7 +1403,7 @@
             }
           ],
           "helpOrder": 6,
-          "help": ["  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
+          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json]", "                               unit outline; backs the IDE Structure form."]
         },
         {
           "type": "ide-menu",
@@ -1415,18 +1415,18 @@
       "questions": [
         {
           "ask": "What is in this unit?",
-          "command": "drag-lint outline --file <U.pas> --db <db>"
+          "command": "drag-lint outline --in <U.pas> --db <db>"
         },
         {
           "ask": "Can I get the outline as JSON?",
-          "command": "drag-lint outline --file <U.pas> --format json"
+          "command": "drag-lint outline --in <U.pas> --format json"
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "403cc97d8b5859a7a5f24acd6ebdb949aaf72f2958dd8a4d8a937d744ea96109"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "5226ebaf7d59c51ed909bc29b49c81c20f93e5aa323134c42d8d859b29fcfd97"
       }
     },
     {
@@ -2340,7 +2340,7 @@
             }
           ],
           "helpOrder": 15,
-          "help": ["  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)", "                               [--output <file>] (alias --out): with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
+          "help": ["  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
       "audience": "both",
@@ -2351,10 +2351,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-25",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.34.0-alpha",
-        "surfaceHash": "ad775764fd6c9ace32d17f3a601a35ea1ad0e14cd1d563ed6fc14d2ef890eed3"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "12afffb707a0d04d03d20e6b801c03dd5fe031089480cfb8c3045f05fc22419b"
       }
     },
     {
@@ -2639,7 +2639,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file> (alias --out): the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -2655,10 +2655,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-25",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.34.0-alpha",
-        "surfaceHash": "066f75343d0b659d7cb6b7057c91cb808635c728d92239012e8cac0ea0ce7fc8"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "733dd92e8ad0e281e3732222f3689196063b898b41646bb0ec28f74a2a1116f8"
       }
     },
     {
@@ -3505,7 +3505,7 @@
         {
           "type": "cli",
           "verb": "check-ast",
-          "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]",
+          "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]",
           "flags": [
             {
               "name": "--db",
@@ -3520,7 +3520,7 @@
             }
           ],
           "helpOrder": 73,
-          "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]"]
+          "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]"]
         }
       ],
       "audience": "both",
@@ -3535,10 +3535,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "15dbfbd9a3674b0bb56e8437ae8bf98fd49bafe382e7636419d1a325fdbb1e94"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "975b22774294b38887a7a7f6a7c1c58c7c149151c521777172967957ba730dc1"
       }
     },
     {
@@ -4702,10 +4702,10 @@
         {
           "type": "cli",
           "verb": "extract-method",
-          "usage": "drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] - pull a statement run into a new method",
+          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] - pull a statement run into a new method",
           "flags": [
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "<F>"
             },
             {
@@ -4731,7 +4731,7 @@
             }
           ],
           "helpOrder": 61,
-          "help": ["  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method"]
+          "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method"]
         },
         {
           "type": "ide-menu",
@@ -4743,19 +4743,19 @@
       "questions": [
         {
           "ask": "How do I move a run of statements into its own method?",
-          "command": "drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N>"
+          "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N>"
         },
         {
           "ask": "Can I preview the extraction without changing the file?",
-          "command": "drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> --json"
+          "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --json"
         }
       ],
       "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319",
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "4d3a8f3f01c7fc8edb6ac589a8252c9c51c2ce36650f58eb18f0e75e7c42f134"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "8594720b159a50644ee2542e8baacfdde83e4c6e6926c746789f8c5498b3d68b"
       }
     },
     {
@@ -4994,7 +4994,7 @@
             }
           ],
           "helpOrder": 52,
-          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]", "      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2)"]
+          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]", "      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2)"]
         }
       ],
       "audience": "both",
@@ -5010,10 +5010,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "92115d3a46966ce85706d01bd7b4bf2ebc2a4b8c581f012be046a2db1970ee22"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "5b48df501c23aef8780d62a82863b62912362721669c9c38adb98289487ba99c"
       }
     },
     {
@@ -6038,7 +6038,7 @@
         {
           "type": "cli",
           "verb": "butterfly",
-          "usage": "drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)",
+          "usage": "drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)",
           "flags": [
             {
               "name": "--qname",
@@ -6061,7 +6061,7 @@
             }
           ],
           "helpOrder": 87,
-          "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
+          "help": ["  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)"]
         },
         {
           "type": "ide-menu",
@@ -6082,10 +6082,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "dcb48864388d7967b51de30c1e98f913c646c85e0d0c6b288f363f777527c1c3"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "646ea26eaf11f813317fa3e265f230d630c170a55a2a452b8ef96473d1969fe4"
       }
     },
     {
@@ -6362,7 +6362,7 @@
             }
           ],
           "helpOrder": 101,
-          "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)"]
+          "help": ["  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--json] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)"]
         },
         {
           "type": "cli",
@@ -6394,7 +6394,7 @@
             }
           ],
           "helpOrder": 102,
-          "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry's ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\\_D-RAG\\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
+          "help": ["  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry's ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\\_D-RAG\\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)"]
         }
       ],
       "audience": "both",
@@ -6422,7 +6422,7 @@
         "date": "2026-10-26",
         "by": "ENGINE",
         "build": "1.35.0-alpha",
-        "surfaceHash": "1e03a332aa6b43fabe3755caeb7ee74cda650077bedc023cf770a3bc08709dca"
+        "surfaceHash": "f3e477594f45a1b0b8a984ec283c9750740c8a7672874f7b4621055e280ddd33"
       }
     },
     {
@@ -7804,7 +7804,7 @@
             }
           ],
           "helpOrder": 7,
-          "help": ["  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]", "                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]", "                               [--format text|json|html] [--output <file>] [--open]", "  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)", "  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page", "  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot", "                               Reruns the old report's COMMAND in-process (no PowerShell) and diffs the normalised", "                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,", "                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping."]
+          "help": ["  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]", "                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]", "                               [--format text|json|html] [--output <file>] [--open]", "  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)", "  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page", "  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot", "                               Reruns the old report's COMMAND in-process (no PowerShell) and diffs the normalised", "                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,", "                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping."]
         },
         {
           "type": "ide-menu",
@@ -8322,10 +8322,10 @@
         {
           "type": "cli",
           "verb": "preprocess-file",
-          "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
+          "usage": "drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites] (diagnostic: print {$IFDEF}-resolved source to stdout)",
           "flags": [
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "PATH"
             },
             {
@@ -8350,22 +8350,22 @@
             }
           ],
           "helpOrder": 89,
-          "help": ["  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
+          "help": ["  drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
         }
       ],
       "audience": "both",
       "questions": [
         {
           "ask": "What does this file look like after IFDEF resolution?",
-          "command": "drag-lint preprocess-file --file <PATH>"
+          "command": "drag-lint preprocess-file --in <PATH>"
         },
         {
           "ask": "What if I define a symbol?",
-          "command": "drag-lint preprocess-file --file <PATH> --define <SYM>"
+          "command": "drag-lint preprocess-file --in <PATH> --define <SYM>"
         },
         {
           "ask": "Which include files did this file pull in, and what did each contribute?",
-          "command": "drag-lint preprocess-file --file <PATH> --include-mode defines-only --include-sites"
+          "command": "drag-lint preprocess-file --in <PATH> --include-mode defines-only --include-sites"
         }
       ],
       "access": "cli-only",
@@ -8374,10 +8374,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "5d546080815dd4cd618f9b24ee2831584c0715cf471eaf0d04ae757510d2a268"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "ccb4161e2a2a017a0b2e58dd2cac7b2cd4860eea372cb13d6dade7e22e2673dd"
       }
     },
     {
@@ -9683,14 +9683,14 @@
         {
           "type": "cli",
           "verb": "ambiguous-calls",
-          "usage": "drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)",
+          "usage": "drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)",
           "flags": [
             {
               "name": "--qname",
               "arg": "<Foo.Bar>"
             },
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "<file>"
             },
             {
@@ -9702,7 +9702,7 @@
             }
           ],
           "helpOrder": 78,
-          "help": ["  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)"]
+          "help": ["  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)"]
         }
       ],
       "audience": "both",
@@ -9714,7 +9714,7 @@
         },
         {
           "ask": "Which calls in a file could the resolver not pin to one target?",
-          "command": "drag-lint ambiguous-calls --file <file> --db <db>"
+          "command": "drag-lint ambiguous-calls --in <file> --db <db>"
         }
       ],
       "access": "cli-only",
@@ -9723,10 +9723,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "6deed3e6818af0d1162b7a28e41e9da9955222bb103a7cc5b0452a6f7e160ab4"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "23bdccae19ab78dd9e92d3f249419aa8f6b72a29be67ee574ef342b917b2f979"
       }
     },
     {
@@ -9957,10 +9957,10 @@
         {
           "type": "cli",
           "verb": "dump-parse-uses",
-          "usage": "drag-lint dump-parse-uses --file PATH",
+          "usage": "drag-lint dump-parse-uses --in PATH",
           "flags": [
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "PATH"
             }
           ]
@@ -9970,14 +9970,14 @@
       "questions": [
         {
           "ask": "What uses entries and implementation line does the parser see in this file?",
-          "command": "drag-lint dump-parse-uses --file <U.pas>"
+          "command": "drag-lint dump-parse-uses --in <U.pas>"
         }
       ],
       "notes": "internal: diagnostic (N-06): parser uses entries + implementation line for one file, no index. Backs run_parse_implementation_line.ps1.",
       "verified": {
-        "date": "2026-10-25",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.34.0-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "109c6dd9cb725520c0d30448a256b4dc402787b87ab3c4c92b1204a342dc8a72"
       }
     },
@@ -10041,10 +10041,10 @@
         {
           "type": "cli",
           "verb": "dump-pp-lex",
-          "usage": "drag-lint dump-pp-lex --file PATH",
+          "usage": "drag-lint dump-pp-lex --in PATH",
           "flags": [
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "PATH"
             }
           ]
@@ -10054,14 +10054,14 @@
       "questions": [
         {
           "ask": "How does the preprocessor lexer tokenise this file?",
-          "command": "drag-lint dump-pp-lex --file <U.pas>"
+          "command": "drag-lint dump-pp-lex --in <U.pas>"
         }
       ],
       "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed",
       "verified": {
-        "date": "2026-10-25",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.34.0-alpha",
+        "build": "1.35.0-alpha",
         "surfaceHash": "b02944f9cf3a99666155c5d3b86d955740509e94a734f5a3d330c5dff215c34d"
       }
     },
@@ -10552,13 +10552,13 @@
         {
           "type": "cli",
           "verb": "sql",
-          "usage": "drag-lint sql --query \"SELECT ...\" | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)",
+          "usage": "drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)",
           "flags": [
             {
               "name": "--query"
             },
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "<q.sql>"
             },
             {
@@ -10585,7 +10585,7 @@
             }
           ],
           "helpOrder": 47,
-          "help": ["  drag-lint sql --query \"SELECT ...\" | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)"]
+          "help": ["  drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)"]
         }
       ],
       "audience": "both",
@@ -10607,10 +10607,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-26",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "62cc4fd79410b4a066185676d88535b83f84d2841535227c8e7a71b66dd40d14"
+        "build": "1.35.0-alpha",
+        "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
       }
     },
     {

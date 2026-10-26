@@ -7,7 +7,7 @@ group: compiler
 order: 90010
 since: 0.92.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.0-alpha
 ---
 
 # preprocess-file
@@ -24,7 +24,7 @@ Full flag list: [preprocess-file in the CLI reference](../cli.md#preprocess-file
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
-| `--file` | `PATH` |  |  |
+| `--in` | `PATH` |  |  |
 | `--define` | `SYM` |  |  |
 | `--numeric` | `K` |  |  |
 | `--include-mode` |  |  |  |
