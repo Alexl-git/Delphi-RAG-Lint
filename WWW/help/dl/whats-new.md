@@ -12,7 +12,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.35.0-alpha
 
 * [Rule book and source encoding](features/convrules-encoding.md) -- ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel).
-* [Member migration (#migrate)](features/convrules-migrate-members.md) -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE into a #convert block from a Work list row or the block's Members list.
+* [Member migration (#migrate)](features/convrules-migrate-members.md) -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list.
 
 ## 1.33.0-alpha
 
