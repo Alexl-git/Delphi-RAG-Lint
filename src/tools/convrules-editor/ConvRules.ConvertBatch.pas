@@ -29,11 +29,17 @@ const
   /// says it may have been written (ConfigStopMayHaveWritten); %s = the backup it is
   /// restored from.</summary>
   CONFIG_STOP_WROTE_FMT = 'the run stopped (cast library unusable) but the engine reported this unit written -- restored from this run''s backup %s';
+  /// <summary>Format of the row note of a unit in a configuration-stopped chunk whose answer
+  /// does not line up with the --unit list; %s = the error read, %s = the backup it is restored from.</summary>
+  CONFIG_STOP_UNREAD_FMT = 'the run stopped (cast library unusable: %s) and the answer could not be read per unit -- restored from this run''s backup %s';
   /// <summary>Format of the note on a converted row that a cancel between batch chunks undid
   /// (R4: a unit gets every book or none); %s = the backup it was restored from.</summary>
   BATCH_CANCEL_UNDONE_FMT = 'undone: the run was cancelled before every book reached this unit; restored from %s';
-  /// <summary>Format of the unit-level row when that restore failed; %s = the error, %s = the backups.</summary>
-  BATCH_CANCEL_RESTORE_FAILED_FMT = 'the run was cancelled before every book reached this unit and the restore failed: %s; the unit may be half-converted -- backup at %s';
+  /// <summary>As BATCH_CANCEL_UNDONE_FMT, for a configuration stop (exit ENGINE_EXIT_CONFIG).</summary>
+  BATCH_STOP_UNDONE_FMT = 'undone: the run stopped (cast library unusable) before every book reached this unit; restored from %s';
+  /// <summary>Format of the unit-level row when that restore failed; %s = 'was cancelled' or
+  /// 'stopped (cast library unusable)', %s = the error, %s = the backups.</summary>
+  BATCH_PARTIAL_RESTORE_FAILED_FMT = 'the run %s before every book reached this unit and the restore failed: %s; the unit may be half-converted -- backup at %s';
 
 /// <summary>PURE: True when the answer of one batch call lines up with the units asked for.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's reading.</param>
@@ -92,7 +98,8 @@ function BatchOfSingle(const AJson: string; ACode: Integer; AFeatures: TApplyFea
 /// refused, 2 write failure, 6 configuration), the batch's exit_code is the worst unit's.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's (or BatchOfSingle's) reading.</param>
 /// <returns>'' when every entry's ExitCode is APPLY_EXIT_ABSENT (an older engine) or agrees
-/// with its ok flag (0 exactly when ok) and is no worse than ABatch.ExitCode. Else
+/// with its ok flag (0 exactly when ok) and is no worse than ABatch.ExitCode (not compared
+/// when that is APPLY_EXIT_ABSENT). Else
 /// 'units[I] exit_code E contradicts ok=true|false' or 'units[I] exit_code E exceeds the
 /// batch exit_code X', for the first such entry (I zero-based).</returns>
 function BatchEntryExitBroken(const ABatch: TApplyBatch): string;
@@ -186,7 +193,7 @@ begin
       Continue;
     if LEntry.Ok <> (LEntry.ExitCode = 0) then
       Exit(Format('units[%d] exit_code %d contradicts ok=%s', [I, LEntry.ExitCode, if LEntry.Ok then 'true' else 'false']));
-    if LEntry.ExitCode > ABatch.ExitCode then
+    if (ABatch.ExitCode <> APPLY_EXIT_ABSENT) and (LEntry.ExitCode > ABatch.ExitCode) then
       Exit(Format('units[%d] exit_code %d exceeds the batch exit_code %d', [I, LEntry.ExitCode, ABatch.ExitCode]));
   end;
   Result:= '';

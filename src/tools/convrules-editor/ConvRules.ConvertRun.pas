@@ -336,7 +336,8 @@ type
     Valid       : Boolean;
     /// <summary>The batch's own ok flag.</summary>
     Ok          : Boolean;
-    /// <summary>exit_code -- the engine's exit contract: 0 only when every unit is ok.</summary>
+    /// <summary>exit_code -- the engine's exit contract: 0 only when every unit is ok;
+  /// APPLY_EXIT_ABSENT when the key is absent or not a number.</summary>
     ExitCode    : Integer;
     /// <summary>units_count.</summary>
     UnitsCount  : Integer;
@@ -562,7 +563,8 @@ function BatchSummaryText(const ABatch: TApplyBatch): string;
 /// <summary>PURE: True when a batch breaks the engine's all-or-nothing exit contract:
 /// exit 0 with a refused or failed unit counted, or a non-zero exit with every unit ok.</summary>
 /// <param name="ABatch">ParseApplyBatchJson's reading.</param>
-/// <returns>False for an invalid batch and for a consistent one.</returns>
+/// <returns>False for an invalid batch and for a consistent one. An absent exit_code
+/// (APPLY_EXIT_ABSENT) is judged as 0.</returns>
 function BatchContractBroken(const ABatch: TApplyBatch): Boolean;
 
 /// <summary>PURE: the converted row's scoped part, from the engine's own answer.</summary>
@@ -1978,7 +1980,7 @@ begin
       Exit;
     Result.Valid       := True;
     Result.Ok          := JsonTrue(Obj, 'ok');
-    Result.ExitCode    := JsonInt(Obj, 'exit_code');
+    Result.ExitCode    := if Obj.Values['exit_code'] is TJSONNumber then JsonInt(Obj, 'exit_code') else APPLY_EXIT_ABSENT;
     Result.UnitsCount  := JsonInt(Obj, 'units_count');
     Result.OkCount     := JsonInt(Obj, 'ok_count');
     Result.RefusedCount:= JsonInt(Obj, 'refused_count');
@@ -2001,9 +2003,13 @@ begin
 end;
 
 function BatchContractBroken(const ABatch: TApplyBatch): Boolean;
+var
+  LExit: Integer;
 begin
-  Result:= ABatch.Valid and (((ABatch.ExitCode = 0) and (ABatch.RefusedCount + ABatch.FailedCount > 0))
-    or ((ABatch.ExitCode <> 0) and (ABatch.RefusedCount + ABatch.FailedCount = 0)));
+  // An absent exit_code is read as 0 here, as before it was told apart (APPLY_EXIT_ABSENT).
+  LExit:= if ABatch.ExitCode = APPLY_EXIT_ABSENT then 0 else ABatch.ExitCode;
+  Result:= ABatch.Valid and (((LExit = 0) and (ABatch.RefusedCount + ABatch.FailedCount > 0))
+    or ((LExit <> 0) and (ABatch.RefusedCount + ABatch.FailedCount = 0)));
 end;
 
 function ScopedMatchText(const ARow: TApplyRow): string;

@@ -349,9 +349,9 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// status, once the unit has finished: after its chunk of the last book still to run, or
 /// earlier when it failed, was refused or skipped; the rest at the end of the run.</param>
 /// <param name="ACancelled">May be nil; polled once before each chunk (never inside a
-/// call). True stops the run there (R4): a unit every live book already reached keeps them;
+/// call). True stops the run there (R4) -- as a configuration stop does: a unit every live book already reached keeps them;
 /// a unit only some books reached is restored -- its csConverted rows become csRolledBack,
-/// note BATCH_CANCEL_UNDONE_FMT, backup kept (a failed restore adds a unit-level
+/// note BATCH_CANCEL_UNDONE_FMT (BATCH_STOP_UNDONE_FMT after a stop), backup kept (a failed restore adds a unit-level
 /// csRestoreFailed row) -- so, as on the per-unit path, a unit gets every book or none.</param>
 /// <param name="AOnStep">May be nil; receives every TRunStep: rpReindexBefore (UnitNo 0),
 /// rpBackup per unit, then per book and chunk rpApplyBatch, rpRestore per unit restored,
@@ -412,8 +412,14 @@ type
     Converted  : Integer;
     /// <summary>csFailedRestored rows.</summary>
     Restored   : Integer;
-    /// <summary>csRolledBack rows.</summary>
+    /// <summary>csRolledBack rows undone by a later failure or refusal on the unit.</summary>
     RolledBack : Integer;
+    /// <summary>csRolledBack rows a cancel between batch chunks undid (note
+    /// BATCH_CANCEL_UNDONE_FMT).</summary>
+    UndoneByCancel: Integer;
+    /// <summary>csRolledBack rows a configuration stop between batch chunks undid (note
+    /// BATCH_STOP_UNDONE_FMT).</summary>
+    UndoneByStop: Integer;
     /// <summary>csBookSkipped rows.</summary>
     BookSkips  : Integer;
     /// <summary>csUnitSkipped rows.</summary>
@@ -432,6 +438,14 @@ type
 /// <param name="ARows">A run's rows.</param>
 /// <returns>The tally; every row lands in exactly one count (or NotRestored).</returns>
 function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
+
+/// <summary>PURE: the status sentences for a run's rolled-back rows, each naming its cause.</summary>
+/// <param name="ATally">TallyRows of the run's rows.</param>
+/// <returns>' N earlier conversion(s) on those units were rolled back by a later failure or
+/// refusal.' (RolledBack), then ' N conversion(s) were undone by the cancel: a unit gets every
+/// book or none.' (UndoneByCancel), then the same with 'the stop' (UndoneByStop) -- each only
+/// when its count is above 0; '' when all are 0.</returns>
+function RolledBackText(const ATally: TRunTally): string;
 
 /// <summary>PURE: the summary's lead sentence (C12 Task 3 carry): out-of-scope pairs
 /// are counted on their own and are NOT part of the "of M" denominator.</summary>
@@ -639,6 +653,12 @@ begin
   end;
 end;
 
+// The fixed text of AFmt before its first %s.
+function FmtHead(const AFmt: string): string;
+begin
+  Result:= Copy(AFmt, 1, Pos('%s', AFmt) - 1);
+end;
+
 function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
 begin
   Result:= Default(TRunTally);
@@ -646,7 +666,13 @@ begin
     case LRow.Status of
       csConverted     : Inc(Result.Converted);
       csFailedRestored: Inc(Result.Restored);
-      csRolledBack    : Inc(Result.RolledBack);
+      csRolledBack    :
+        if LRow.Note.StartsWith(FmtHead(BATCH_CANCEL_UNDONE_FMT)) then
+          Inc(Result.UndoneByCancel)
+        else if LRow.Note.StartsWith(FmtHead(BATCH_STOP_UNDONE_FMT)) then
+          Inc(Result.UndoneByStop)
+        else
+          Inc(Result.RolledBack);
       csBookSkipped   : Inc(Result.BookSkips);
       csUnitSkipped   : Inc(Result.UnitSkips);
       csRestoreFailed : Result.NotRestored:= Result.NotRestored + [ExtractFileName(LRow.UnitPas)];
@@ -654,6 +680,19 @@ begin
       csOutOfScope    : Inc(Result.OutOfScope);
       csConfigError   : Inc(Result.ConfigErrors);
     end; // case
+end;
+
+function RolledBackText(const ATally: TRunTally): string;
+const
+  UNDONE_FMT = ' %d conversion(s) were undone by %s: a unit gets every book or none.';
+begin
+  Result:= '';
+  if ATally.RolledBack > 0 then
+    Result:= Result + Format(' %d earlier conversion(s) on those units were rolled back by a later failure or refusal.', [ATally.RolledBack]);
+  if ATally.UndoneByCancel > 0 then
+    Result:= Result + Format(UNDONE_FMT, [ATally.UndoneByCancel, 'the cancel']);
+  if ATally.UndoneByStop > 0 then
+    Result:= Result + Format(UNDONE_FMT, [ATally.UndoneByStop, 'the stop']);
 end;
 
 function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
@@ -1668,9 +1707,15 @@ var
         else
           LRow.Apply:= ParseApplyJson(LJson, AFeatures);
         LReason:= LRow.Apply.Error;
-        // R1: the 1.33.1 contract says exit 6 wrote nothing; an entry that says it did is
-        // not believed -- the unit is restored and its backup kept.
-        if BatchUnitsMatch(LDoc, LPaths) and ConfigStopMayHaveWritten(LRow.Apply) then
+        // R1: the 1.33.1 contract says exit 6 wrote nothing; an entry that says it did, or an
+        // answer that cannot be read per unit, is not believed -- restored, backup kept.
+        if not BatchUnitsMatch(LDoc, LPaths) then
+        begin
+          // An answer not readable per unit says nothing about what was written: restore.
+          Units[AChunk[I]].Changed:= True;
+          LReason:= Format(CONFIG_STOP_UNREAD_FMT, [LReason, Units[AChunk[I]].RP.Names(False)]);
+        end
+        else if ConfigStopMayHaveWritten(LRow.Apply) then
         begin
           Units[AChunk[I]].Changed:= True;
           LReason:= Format(CONFIG_STOP_WROTE_FMT, [Units[AChunk[I]].RP.Names(False)]);
@@ -1756,9 +1801,10 @@ var
         Exit(False);
   end;
 
-  // R4: a unit a cancel left with some of its books but not all is restored, as the per-unit
-  // path never leaves one -- its converted rows become csRolledBack, the backup is kept.
-  procedure UndoCancelled(K: Integer);
+  // R4: a unit a cancel or a configuration stop left with some of its books but not all is
+  // restored, as the per-unit path never leaves one -- its converted rows become csRolledBack,
+  // the backup is kept.
+  procedure UndoPartial(K: Integer);
   var
     LError: string;
     LRow  : TConvertRow;
@@ -1773,7 +1819,7 @@ var
       LRow.Backup   := Units[K].RP.BakPas;
       LRow.BackupDfm:= Units[K].RP.BakDfm;
       LRow.Status   := csRestoreFailed;
-      LRow.Note     := Format(BATCH_CANCEL_RESTORE_FAILED_FMT, [LError, Units[K].RP.Names(True)]);
+      LRow.Note     := Format(BATCH_PARTIAL_RESTORE_FAILED_FMT, [if Cancelled then 'was cancelled' else 'stopped (cast library unusable)', LError, Units[K].RP.Names(True)]);
       Units[K].Rows:= Units[K].Rows + [LRow];
       Exit;
     end;
@@ -1781,7 +1827,7 @@ var
       if Units[K].Rows[I].Status = csConverted then
       begin
         Units[K].Rows[I].Status:= csRolledBack;
-        Units[K].Rows[I].Note  := Format(BATCH_CANCEL_UNDONE_FMT, [Units[K].RP.Names(False)]);
+        Units[K].Rows[I].Note  := Format(if Cancelled then BATCH_CANCEL_UNDONE_FMT else BATCH_STOP_UNDONE_FMT, [Units[K].RP.Names(False)]);
       end;
   end;
 
@@ -1883,12 +1929,12 @@ begin
     if not MatchText(ABooks[B], Invalid) then
       RunBook(B + 1);
   end;
-  // Every unit still undelivered after a cancel is short of a book (a complete or finished
-  // one was delivered after its chunk).
-  if Cancelled then
+  // Every unit still undelivered after a cancel or a configuration stop is short of a book (a
+  // complete or finished one was delivered after its chunk).
+  if Stopped then
     for var K: Integer:= 0 to High(AUnits) do
       if not Units[K].Delivered then
-        UndoCancelled(K);
+        UndoPartial(K);
   for var K: Integer:= 0 to High(AUnits) do
     Deliver(K);
   Result:= Rows;

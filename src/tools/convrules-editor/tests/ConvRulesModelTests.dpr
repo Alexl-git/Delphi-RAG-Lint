@@ -2541,13 +2541,15 @@ end;
 
 // B4 test helper: one apply/1 object as the engine puts it in units[] (or alone, for one
 // --unit). AKind: 'o' ok; 'f' failed, nothing written; 'w' failed after the fake wrote the
-// file (the editor's restore must undo it); 'r' refused; 'e' the book's rule_errors.
+// file (the editor's restore must undo it); 'r' refused; 'e' the book's rule_errors; 'c' the
+// 1.33.1 configuration stop (refused, exit_code 6).
 function BatchTestEntry(const AUnit: string; AKind: Char; const AText: string): string;
 begin
   case AKind of
     'o': Result:= '"ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]';
     'r': Result:= Format('"ok":false,"refused":true,"error":"%s","reason":"%s","rule_errors":[],"edits_count":0', [AText, AText]);
     'e': Result:= '"ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],"edits_count":0';
+    'c': Result:= Format('"ok":false,"refused":true,"error":"%s","reason":"%s","rule_errors":[],"edits_count":0,"exit_code":6', [AText, AText]);
     else Result:= Format('"ok":false,"refused":false,"error":"%s","rule_errors":[],"edits_count":0', [AText]);
   end; // case
   Result:= '{"schema":"apply/1","unit":"' + BatchJ(AUnit) + '",' + Result + '}';
@@ -2565,7 +2567,7 @@ begin
   for var C: Char in AKinds do
     case C of
       'o': Inc(LOk);
-      'r': Inc(LRef);
+      'r', 'c': Inc(LRef);
       else Inc(LFail);
     end; // case
   AExit:= 0;
@@ -2573,6 +2575,8 @@ begin
     AExit:= 1;
   if LFail > 0 then
     AExit:= 2;
+  if Pos('c', AKinds) > 0 then
+    AExit:= ENGINE_EXIT_CONFIG;
   Result:= Format('{"schema":"apply-batch/1","mode":"apply","units_count":%d,"ok":%s,"exit_code":%d,"ok_count":%d,"refused_count":%d,'
     + '"failed_count":%d,"classes_built":2,"units":[%s]}', [Length(AEntries), if AExit = 0 then 'true' else 'false', AExit, LOk, LRef, LFail, string.Join(',', AEntries)]);
 end;
@@ -2969,6 +2973,40 @@ var
     Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
     Check('batch.entry.exit.contradicts.restores.chunk', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
       Pos(PREFIX + 'units[0] exit_code 2 contradicts ok=true', RowAt(0).Note) = 1, Untouched(S1), Untouched(S2)]), Describe);
+
+    // R5: S2's refused entry says exit_code 6 under a batch exit_code of 1 -- not trusted.
+    Reset;
+    Decide:= BatchKindFor('S2', 'A.rules', 'r');
+    Answer:= function(AJson: string): string
+      begin
+        Result:= StringReplace(AJson, '"edits_count":0', '"edits_count":0,"exit_code":6', []);
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.entry.exit.exceeds.restores.chunk', AllOf([Length(Rows) = 2, RowAt(0).Status = csFailedRestored, RowAt(1).Status = csFailedRestored,
+      Pos(PREFIX + 'units[1] exit_code 6 exceeds the batch exit_code 1', RowAt(0).Note) = 1, Untouched(S1), Untouched(S2)]), Describe);
+
+    // R1 (b): an exit-6 answer that cannot be read per unit -- every unit restored, backups kept.
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Answer:= function(AJson: string): string
+      begin
+        Result:= 'engine died';
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.unreadable.restores.keeps.backup', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csConfigError,
+      RowOf(S2, 'A.rules').Status = csConfigError, Untouched(S1), Untouched(S2), BackupsOf(S1) = 1, BackupsOf(S2) = 1]), Describe);
+
+    // Review round 1: a configuration STOP in book B's first chunk leaves S3 with book A only --
+    // restored like a cancel (every book or none).
+    Reset;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= if ABook = 'B.rules' then 'c' else 'o';
+      end;
+    Rows:= RunConversionBatched([S1, S2, S3], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, 2);
+    Check('batch.config.stop.partial.unit.restored', AllOf([RowOf(S1, 'B.rules').Status = csConfigError, RowOf(S1, 'A.rules').Status = csRolledBack,
+      RowOf(S3, 'A.rules').Status = csRolledBack, Pos('stopped', RowOf(S3, 'A.rules').Note) > 0, Untouched(S1), Untouched(S3), BackupsOf(S3) = 1,
+      string.Join('|', Calls) = 'A:S1,S2|A:S3|B:S1,S2']), Describe + ' calls=' + string.Join('|', Calls));
 
     // Positive control: consistent per-entry codes are trusted.
     Reset;

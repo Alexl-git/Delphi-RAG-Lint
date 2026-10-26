@@ -1936,8 +1936,8 @@ begin
     Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Tally.Refused]);
   // After the refused sentence: a roll-back follows a failure OR a refusal, and
   // "rolled back with them" right after "0 failed" named the wrong cause.
-  if Tally.RolledBack > 0 then
-    Msg:= Msg + Format(' %d earlier conversion(s) on those units were rolled back by a later failure or refusal.', [Tally.RolledBack]);
+  // A batch cancel or stop undoes partly-reached units: RolledBackText names each cause.
+  Msg:= Msg + RolledBackText(Tally);
   if Tally.BookSkips > 0 then
     Msg:= Msg + Format(' %d book(s) failed the engine''s validation and were skipped.', [Tally.BookSkips]);
   if Tally.UnitSkips > 0 then

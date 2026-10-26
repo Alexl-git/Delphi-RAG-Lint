@@ -99,6 +99,26 @@ begin
   Doc.Units[0].ExitCode:= APPLY_EXIT_ABSENT;
   Doc.Units[1].ExitCode:= APPLY_EXIT_ABSENT;
   Check('batch.entry.exit.absent.trusted', BatchEntryExitBroken(Doc) = '');
+  // A batch with no root exit_code: absent, never 0 -- an entry's code cannot "exceed" it.
+  Doc:= ParseApplyBatchJson('{"schema":"apply-batch/1","units_count":1,"ok":false,"ok_count":0,"refused_count":1,"failed_count":0,"units":['
+    + '{"schema":"apply/1","unit":"b","ok":false,"refused":true,"reason":"r","exit_code":1}]}', APPLY_FEATURES_ALL);
+  Check('batch.root.exit.absent', Doc.ExitCode = APPLY_EXIT_ABSENT, IntToStr(Doc.ExitCode));
+  Check('batch.root.exit.absent.no.exceeds', BatchEntryExitBroken(Doc) = '', BatchEntryExitBroken(Doc));
+  Check('batch.root.exit.absent.contract.as.before', BatchContractBroken(Doc));
+
+  // --- The status sentence for rolled-back rows names their cause (review round 1, (a)) ---
+  All:= [Default(TConvertRow), Default(TConvertRow), Default(TConvertRow)];
+  for var I: Integer:= 0 to High(All) do
+    All[I].Status:= csRolledBack;
+  All[0].Note:= Format(BATCH_CANCEL_UNDONE_FMT, ['A.pas.BCK1']);
+  All[1].Note:= Format(BATCH_STOP_UNDONE_FMT, ['B.pas.BCK1']);
+  All[2].Note:= 'undone: B.rules was refused on this unit; restored from C.pas.BCK1';
+  Check('tally.undone.split', (TallyRows(All).RolledBack = 1) and (TallyRows(All).UndoneByCancel = 1) and (TallyRows(All).UndoneByStop = 1));
+  Check('rolledback.text.all', RolledBackText(TallyRows(All)) = ' 1 earlier conversion(s) on those units were rolled back by a later failure or refusal.'
+    + ' 1 conversion(s) were undone by the cancel: a unit gets every book or none.'
+    + ' 1 conversion(s) were undone by the stop: a unit gets every book or none.', RolledBackText(TallyRows(All)));
+  Check('rolledback.text.cancel.only', RolledBackText(TallyRows([All[0]])) = ' 1 conversion(s) were undone by the cancel: a unit gets every book or none.', RolledBackText(TallyRows([All[0]])));
+  Check('rolledback.text.none', RolledBackText(TallyRows(nil)) = '');
 
   // --- R1: may an entry of an exit-6 chunk have written its unit? ---
   Entry:= Default(TApplyRow);
