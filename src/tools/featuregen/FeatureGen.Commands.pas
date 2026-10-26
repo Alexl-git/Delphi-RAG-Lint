@@ -54,6 +54,18 @@ procedure PrintRegistryUsage(const pOut: TCmdOut);
 function RunRegistryCommand(const pVerb: string; const pArgs: TArray<string>; const pDefaultRepo: string;
   const pOut: TCmdOut): Integer;
 
+/// <summary>Splits a Windows command line into words by the Microsoft C runtime rules (CommandLineToArgvW).</summary>
+/// <param name="pLine">A whole command line, program name first.</param>
+/// <returns>The words, program name at index 0. \" is a literal quote and backslashes before a quote halve, so a
+/// value bash or PowerShell passed as He said "hi" arrives intact (System.ParamStr turns \" into \).</returns>
+function SplitCommandLine(const pLine: string): TArray<string>;
+
+/// <summary>The --set values split into field=value items.</summary>
+/// <param name="pValues">Every --set value given.</param>
+/// <returns>Trimmed, non-empty items. A value splits at ";;" only where the next text is a field name and "="
+/// (";; summary=..."), so a ";;" inside a value stays part of it.</returns>
+function SplitSetArgs(const pValues: TArray<string>): TArray<string>;
+
 implementation
 
 uses
@@ -65,6 +77,8 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , System.Generics.Defaults
+  , Winapi.Windows
+  , Winapi.ShellAPI
   , FeatureGen.Json
   , FeatureGen.Model
   , FeatureGen.SiteFormat
@@ -916,7 +930,7 @@ begin
     raise ECommand.Create('update: --set field=value is required');
   lSet := nil;
   try
-    for lArg in SplitList(pArgs.All('set'), '\s*;;\s*') do
+    for lArg in SplitSetArgs(pArgs.All('set')) do
       lSet := lSet + [ParseSetArg(lArg)];
     EmitText(pJson, 'updated ' + UpdateEntry(pRepo, lId, lSet), pOut);
   finally
@@ -1820,6 +1834,29 @@ begin
   finally
     lArgs.Free;
   end;
+end;
+
+function SplitCommandLine(const pLine: string): TArray<string>;
+var
+  lArgv: PPWideChar;
+  lCount, i: Integer;
+begin
+  Result := nil;
+  lArgv := CommandLineToArgvW(PWideChar(pLine), lCount);
+  if lArgv = nil then
+    RaiseLastOSError;
+  try
+    SetLength(Result, lCount);
+    for i := 0 to lCount - 1 do
+      Result[i] := PPWideChar(NativeUInt(lArgv) + NativeUInt(i) * SizeOf(PWideChar))^;
+  finally
+    LocalFree(HLOCAL(lArgv));
+  end;
+end;
+
+function SplitSetArgs(const pValues: TArray<string>): TArray<string>;
+begin
+  Result := SplitList(pValues, '\s*;;\s*(?=[A-Za-z][\w.]*\s*=)');
 end;
 
 end.
