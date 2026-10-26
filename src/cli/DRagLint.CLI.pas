@@ -14154,6 +14154,9 @@ begin
           if FlowStore <> nil then TSharedFacts.ProjectTag:= ProjectTagFor(FlowStore, FlowDb, AArgs);
         end;
       end;
+      { E29 / LSP C11: decided HERE, before the flow checker, because both the flow
+        gate and the project-rules gate below read it -- see those gates. }
+      FlowIsLibrary:= (FlowStore <> nil) and (FlowFid > 0) and StartsText('library-', ExtractFileName(FlowDb));
       { Say which index answered. Both traps above are INVISIBLE from the output
         -- a dropped store does not fail, it just quietly reports more -- and
         this line is what turned four rebuild-and-guess cycles into one run.
@@ -14349,7 +14352,15 @@ begin
         store-free 4.29 s vs 4.07 s with the store -- the open disappears next
         to process start and parse. Opened QUIETLY because OpenReadOnlyStore's
         schema-behind line goes to stdout and would corrupt --format sarif. }
-      if LintRuleWants(NarrowRule, LINT_GATE_FLOW) then
+      { LSP C11: A PLATFORM-LIBRARY UNIT GETS NO FLOW PASS EITHER. Measured on
+        System.IOUtils.pas against library-Win64 after E29: flow was 9.8 s of a
+        17.5 s run (DRAGLINT_PROFILE), so `lsp --full-rules` and the IDE plugin,
+        both on an 8 s child budget, timed out and fell back to the subset on
+        every RTL file the user opened. The user cannot edit the RTL, so its
+        dataflow findings are noise; a project file's store is never named
+        `library-`, so its flow run is unchanged.
+        tests\autotest\run_lsp_library_flow_timeout_guard.ps1. }
+      if LintRuleWants(NarrowRule, LINT_GATE_FLOW) and (not FlowIsLibrary) then
       begin
         TraceLintChecker('flow');
         for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
@@ -14406,8 +14417,8 @@ begin
         about the CONSUMERS, which are not in the library index -- the same
         ruling as ResolveFrameworkContextDb, with the same `library-` file-name
         test. The per-file checkers above keep the store.
-        tests\autotest\run_lint_library_unit_project_rules_guard.ps1. }
-      FlowIsLibrary:= FlowStoreSeen and StartsText('library-', ExtractFileName(FlowDb));
+        tests\autotest\run_lint_library_unit_project_rules_guard.ps1.
+        FlowIsLibrary is set after the store is resolved, above the flow gate. }
       if FlowStoreSeen and (not FlowIsLibrary) then
       begin
         { THE INDEX-WIDE RULES, NARROWED TO THIS FILE'S FINDINGS.
@@ -14566,7 +14577,8 @@ begin
       Writeln(ErrOutput,
         'drag-lint: note: this file is a platform-library unit, so the project rules ' +
         '(unused-*, circular-uses, ...) did NOT run -- they are questions about its ' +
-        'consumers, which the library index does not hold.')
+        'consumers, which the library index does not hold -- and neither did the flow ' +
+        'rules (used-before-assignment, ...), whose findings you cannot act on there.')
     else if FlowStoreSeen then
       Writeln(ErrOutput,
         'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +

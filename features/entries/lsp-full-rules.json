@@ -30,6 +30,10 @@
     {
       "ask": "How do I make the editor show the same findings as drag-lint lint?",
       "command": "drag-lint lsp --db <file.sqlite> --full-rules"
+    },
+    {
+      "ask": "Why does an RTL file opened in the editor show no flow findings such as used-before-assignment?",
+      "command": "drag-lint lint <library unit.pas> --db library-Win64.sqlite"
     }
   ],
   "access": "cli-only",
