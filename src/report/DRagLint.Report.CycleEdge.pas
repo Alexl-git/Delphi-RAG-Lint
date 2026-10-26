@@ -236,6 +236,12 @@ type
     /// consumer used it and the .dpr does not list it); the plan then adds it to the .dpr uses
     /// (and a DCCReference to the .dproj when absent) instead of refusing unit-leaves-program.</summary>
     RegisterDecl: Boolean;
+    /// <summary>R1 (W6 C2): True when the leaf already declares TypeDecl and VarDecl with exactly this
+    /// text; the plan then inserts neither (the pointer is reused).</summary>
+    ReuseDecl: Boolean;
+    /// <summary>R1 (W6 C2): True when the declaring unit already assigns `PtrVar := Routine;` -- the
+    /// plan adds no second assignment.</summary>
+    AssignExists: Boolean;
   end;
 
 const
@@ -302,19 +308,26 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// <param name="pSource">Index access; must not be nil; IsSccStem answers for the edge's group.</param>
 /// <param name="pSurface">The edge's surface (BuildEdgeSurface); RoutineName must be set.</param>
 /// <param name="pRefusal">Receives why the recipe does not apply; Kind '' when it does.</param>
+/// <param name="pSuffix">W6 C2: 2 or more appends it to the pointer's names (`FooPtr2`, `TFooPtr2`) when the
+/// leaf already declares different `FooPtr` / `TFooPtr`; 0 or 1 gives the plain names.</param>
 /// <returns>The steps; Recipe = crNone when refused.</returns>
 /// <remarks>
 /// <para>Refusals, checked in this order: `not-a-routine` (RoutineName ''),
 /// `signature-in-cycle` (a SigTypes entry is InScc; names the type),
-/// `overloaded-routine` (two signatures of the name in its unit), `signature-unknown` (a function
-/// with no stored signature), `routine-not-called`
-/// (a ref of the edge is not a call -- `@Foo`, `X := Foo` as a value),
-/// `qualified-ref` (the consumer names anything as `B.X`, B the declaring unit), `init-order` (a call line lies in
+/// `overloaded-routine` (two signatures of the name in its unit that the call argument counts do not tell
+/// apart -- W6 C4: the overload the index bound admits the argument count of EVERY call, no other overload
+/// admits any of them and none has a default parameter, otherwise the refusal stays), `signature-unknown`
+/// (a function with no stored signature), `routine-not-called`
+/// (a ref of the edge is neither a call nor an assignment value -- `@Foo` refuses; W6 C7: `X := Foo` is
+/// redirected to the pointer),
+/// `qualified-ref` (the consumer names anything but the routine itself as `B.X`, B the declaring unit; W6 C7:
+/// `B.Foo(...)` of the inverted routine becomes the pointer call, except behind `@`), `init-order` (a call line lies in
 /// A's initialization section, or that section -- from `initialization` to `end.` --
 /// names the enclosing routine as a whole word: the variable is still nil there),
 /// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).
 /// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses two more after this one:
-/// `duplicate-identifier` (the leaf declares the pointer's names) and `unit-leaves-program` (the
+/// `duplicate-identifier` (the leaf declares the pointer's names differently and every suffix up to 99 is taken --
+/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...) and `unit-leaves-program` (the
 /// declaring unit would drop out of the program after the cut, so its initialization never runs).</para>
 /// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
 /// winapi) is carried into the procedural type; inline, overload, external, forward and the
@@ -329,7 +342,7 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// final `end.` is replaced by the section plus `end.`.</para>
 /// </remarks>
 function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
-  out pRefusal: TRecipeRefusal): TRecipeSteps;
+  out pRefusal: TRecipeRefusal; pSuffix: Integer = 0): TRecipeSteps;
 
 /// <summary>The deterministic GUID of an extracted interface (R2).</summary>
 /// <param name="pText">`&lt;LeafUnit&gt;.&lt;Interface&gt;`, e.g. `DemoGagePort.Untangle.IDemoGagePortSurface`.</param>
@@ -1072,6 +1085,153 @@ begin
   Result:= pEdit.Line > 0;
 end;
 
+{ W6 C4: the parameter count of a stored signature (`(const pA, pB: Integer; var pC): string`), and whether
+  any parameter has a default value. }
+function SignatureArity(const pSig: string; out pHasDefault: Boolean): Integer;
+begin
+  Result     := 0;
+  pHasDefault:= False;
+  var P:= Pos('(', pSig);
+  if P = 0 then Exit;
+  var Depth:= 0;
+  var Group := TStringBuilder.Create;
+  var Groups:= TList<string>.Create;
+  try
+    for var I:= P to Length(pSig) do
+    begin
+      var C:= pSig[I];
+      if C = '(' then
+      begin
+        Inc(Depth);
+        if Depth = 1 then Continue;
+      end
+      else if C = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Break;
+      end
+      else if (C = ';') and (Depth = 1) then
+      begin
+        Groups.Add(Group.ToString);
+        Group.Clear;
+        Continue;
+      end;
+      Group.Append(C);
+    end;
+    if Trim(Group.ToString) <> '' then Groups.Add(Group.ToString);
+    for var G in Groups do
+    begin
+      var Names:= Copy(G, 1, Pos(':', G + ':') - 1);
+      Inc(Result, Length(Names.Split([','])));
+      if TRegEx.IsMatch(Copy(G, Pos(':', G + ':'), MaxInt), '=') then pHasDefault:= True;
+    end;
+  finally
+    Groups.Free;
+    Group.Free;
+  end;
+end;
+
+{ W6 C4: the argument counts of the calls of pName that start on line pLine (the argument list may run over
+  CMaxDeclLines lines). False when a list does not close. }
+function CallArities(const pLines: TArray<string>; pLine: Integer; const pName: string; pArities: TList<Integer>): Boolean;
+begin
+  Result:= True;
+  var SB:= TStringBuilder.Create;
+  try
+    for var L:= pLine to Min(pLine + CMaxDeclLines - 1, Length(pLines)) do SB.Append(BareCode(LineOf(pLines, L))).Append(' ');
+    var Text:= SB.ToString;
+    var M:= TRegEx.Match(LineOf(pLines, pLine), '(?<![\w.])' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]);
+    var Skip:= 0;
+    while M.Success do
+    begin
+      Inc(Skip);
+      M:= M.NextMatch;
+    end;
+    var Pos0:= 1;
+    for var K:= 1 to Skip do
+    begin
+      var Hit:= TRegEx.Match(Text.Substring(Pos0 - 1), '(?<![\w.])' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]);
+      if not Hit.Success then Exit(False);
+      var P:= Pos0 - 1 + Hit.Index + Hit.Length;  { TMatch.Index is 1-based }
+      Pos0:= P;
+      while (P <= Length(Text)) and (Text[P] = ' ') do Inc(P);
+      if (P > Length(Text)) or (Text[P] <> '(') then
+      begin
+        pArities.Add(0);
+        Continue;
+      end;
+      var Depth:= 0;
+      var Args := 0;
+      var Seen := False;
+      var InStr:= False;
+      repeat
+        var C:= Text[P];
+        if C = '''' then InStr:= not InStr
+        else if not InStr then
+        begin
+          if CharInSet(C, ['(', '[']) then
+          begin
+            Inc(Depth);
+            if Depth > 1 then Seen:= True;
+          end
+          else if CharInSet(C, [')', ']']) then Dec(Depth)
+          else if (C = ',') and (Depth = 1) then Inc(Args)
+          else if (Depth >= 1) and (C <> ' ') then Seen:= True;
+        end;
+        Inc(P);
+      until (Depth = 0) or (P > Length(Text));
+      if Depth <> 0 then Exit(False);
+      pArities.Add(if Seen then Args + 1 else 0);
+    end;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ W6 C4: whether the overloads (distinct signatures of the routine's name in its unit) are told apart by
+  the argument count of every call: the bound overload pBound admits all the calls' counts, no other
+  overload admits any of them, and no overload has a default parameter. The index binds a call of an
+  overload by name, so only the overload it bound can be trusted -- and only when the counts agree. }
+function OverloadsTellApart(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; const pSigs: TList<string>;
+  const pBound: string): Boolean;
+var
+  Arities: TList<Integer>;
+  Done   : TList<Integer>;
+begin
+  Result:= False;
+  var Lines:= pSource.FileLines(pSource.FidOfStem(pSurface.FromStem));
+  Arities:= TList<Integer>.Create;
+  Done   := TList<Integer>.Create;
+  try
+    for var R in pSurface.Refs do
+    begin
+      if Done.Contains(R.Line) then Continue;
+      Done.Add(R.Line);
+      if not CallArities(Lines, R.Line, pSurface.RoutineName, Arities) then Exit;
+    end;
+    if Arities.Count = 0 then Exit;
+    for var Sig in pSigs do
+    begin
+      var HasDef: Boolean;
+      var N:= SignatureArity(Sig, HasDef);
+      if HasDef then Exit;
+      var Admits:= False;
+      for var A in Arities do
+        if A = N then Admits:= True;
+      if Sig = pBound then
+      begin
+        for var A in Arities do
+          if A <> N then Exit;
+      end
+      else if Admits then Exit;
+    end;
+    Result:= True;
+  finally
+    Done.Free;
+    Arities.Free;
+  end;
+end;
+
 { R1 refusals a signature can give: not one routine, a type of the cycle, no stored
   signature, an overloaded name (the index binds a call of an overload by NAME, so the
   surface's signature may be another overload's -- E2010 in the run that found it). }
@@ -1096,7 +1256,7 @@ begin
     for var S in pSource.Store.FindSymbolsByExactName(Name) do
       if (S.FileId = pDeclFid) and (S.Kind in [skFunction, skProcedure]) and not Sigs.Contains(S.Signature) then
         Sigs.Add(S.Signature);
-    if Sigs.Count > 1 then
+    if (Sigs.Count > 1) and not OverloadsTellApart(pSource, pSurface, Sigs, pRoutine.Signature) then
       Result:= MakeRefusal('overloaded-routine', Name, pDeclFid, pRoutine.StartLine, Format('`%s` is ' +
         'overloaded (%d signatures); the index cannot tell which one each call binds to', [Name, Sigs.Count]))
     else if (pRoutine.Kind = skFunction) and (pSurface.RoutineSig = '') then
@@ -1207,9 +1367,12 @@ end;
 
 { The first `<DeclUnit>.<member>` of the consumer (a qualified name is no ref on the edge
   surface, but needs the uses entry the cut removes): its line, member in pMember; 0 for none.
-  `<DeclUnit>.<more>` that is itself a unit of the project (e.g. its Untangle leaf) is skipped. }
+  `<DeclUnit>.<more>` that is itself a unit of the project (e.g. its Untangle leaf) is skipped.
+  W6 C7: `<DeclUnit>.<pAllowName>` alone (the inverted routine) is not a finding when pAllowedLines is
+  given -- its line is collected there instead. }
 function UnitQualifiedLine(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>;
-  const pDeclUnit: string; out pMember: string): Integer;
+  const pDeclUnit: string; out pMember: string; const pAllowName: string = '';
+  pAllowedLines: TList<Integer> = nil): Integer;
 begin
   pMember:= '';
   var Parts:= pDeclUnit.Split(['.']);
@@ -1227,28 +1390,68 @@ begin
         if pSource.FidOfStem(LowerCase(Name)) > 0 then IsUnit:= True;
       end;
       if IsUnit then Continue;
+      if (pAllowedLines <> nil) and (Length(Tail) = 1) and SameText(Tail[0], pAllowName) then
+      begin
+        if not pAllowedLines.Contains(L) then pAllowedLines.Add(L);
+        Continue;
+      end;
       pMember:= Tail[0];
       Exit(L);
     end;
   Result:= 0;
 end;
 
+{ W6 C7: whether pText names pName as the VALUE of an assignment (`X := Name`, `X := Unit.Name`), not
+  calling it with arguments and not taking its address -- the one non-call use R1 can redirect. }
+function IsValueUse(const pText, pName: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(pText, ':=\s*(?:[A-Za-z_][\w.]*\s*\.\s*)?' + TRegEx.Escape(pName) + '\b(?!\s*\()', [roIgnoreCase]);
+end;
+
+{ W6 C7: the qualified use `<DeclUnit>.<Name>` on pLine, classified like a bare ref: a call (arguments, or a
+  statement of its own) or an assignment value; `@` before it, or any other shape, is refused. }
+function QualifiedUseOk(const pText, pName, pDeclUnit: string): Boolean;
+begin
+  var Parts:= pDeclUnit.Split(['.']);
+  for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+  var Q:= '(?<![\w.@])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*' + TRegEx.Escape(pName) + '\b';
+  Result:= TRegEx.IsMatch(pText, Q + '\s*\(', [roIgnoreCase]) or TRegEx.IsMatch(pText, '^\s*' + Q + '\s*;', [roIgnoreCase]) or
+    IsValueUse(pText, pName);
+  if TRegEx.IsMatch(pText, '@\s*(?:[A-Za-z_][\w.]*\s*\.\s*)?' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]) then Result:= False;
+end;
+
 { R1 refusals a call site can give: not a call, a name qualified by the declaring unit
-  anywhere in the consumer (the uses entry it needs would be removed), init order (J4). }
+  anywhere in the consumer (the uses entry it needs would be removed), init order (J4).
+  W6 C7: the inverted routine itself, qualified (`B.Foo(...)`) or assigned as a value (`X := Foo`), is
+  redirected to the pointer under the same init-order check; any other `B.X` and `@Foo` still refuse.
+  pQualified receives the lines that name the inverted routine qualified. }
 function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;
-  const pLines: TArray<string>; const pFromUnit, pDeclUnit: string): TRecipeRefusal;
+  const pLines: TArray<string>; const pFromUnit, pDeclUnit: string; pQualified: TList<Integer>): TRecipeRefusal;
 var
   Member: string;
 begin
   Result:= Default(TRecipeRefusal);
   var Name:= pSurface.RoutineName;
-  var Q:= UnitQualifiedLine(pSource, pLines, pDeclUnit, Member);
+  var Q:= UnitQualifiedLine(pSource, pLines, pDeclUnit, Member, Name, pQualified);
   if Q > 0 then
     Exit(MakeRefusal('qualified-ref', Member, pFromFid, Q, Format('line %d names `%s` qualified by its unit ' +
       '(`%s`); that use keeps needing the uses entry the cut removes', [Q, Member, Trim(pLines[Q - 1])])));
+  for var L in pQualified do
+  begin
+    if not QualifiedUseOk(BareCode(LineOf(pLines, L)), Name, pDeclUnit) then
+      Exit(MakeRefusal('qualified-ref', Name, pFromFid, L, Format('line %d names `%s` qualified by its unit in a ' +
+        'shape the plan cannot redirect (`%s`)', [L, Name, Trim(LineOf(pLines, L))])));
+    var Ref:= Default(TEdgeRef);
+    Ref.Line:= L;
+    var Encl:= pSource.Store.FindEnclosingRoutineByImpl(pFromFid, L);
+    if Encl.Id > 0 then Ref.Enclosing:= Encl.Name;
+    var QWhy:= InitOrderWhy(pLines, Ref, pFromUnit);
+    if QWhy <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, L, QWhy));
+  end;
   for var R in pSurface.Refs do
   begin
-    if R.Kind <> erCall then
+    if (R.Kind <> erCall) and not (IsValueUse(R.LineText, Name) and not TRegEx.IsMatch(R.LineText, '@\s*' + TRegEx.Escape(Name) + '\b',
+      [roIgnoreCase])) then
       Exit(MakeRefusal('routine-not-called', Name, pFromFid, R.Line, Format('line %d uses `%s` without ' +
         'calling it (`%s`)', [R.Line, Name, R.LineText])));
     var Why:= InitOrderWhy(pLines, R, pFromUnit);
@@ -1257,53 +1460,59 @@ begin
 end;
 
 function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
-  out pRefusal: TRecipeRefusal): TRecipeSteps;
+  out pRefusal: TRecipeRefusal; pSuffix: Integer): TRecipeSteps;
 var
-  Routine: TSymbol;
-  Edits  : TList<TRecipeEdit>;
-  Done   : TList<Integer>;
-  E      : TRecipeEdit;
-  Conv   : string;
-  Why    : string;
+  Routine  : TSymbol;
+  Edits    : TList<TRecipeEdit>;
+  Done     : TList<Integer>;
+  Qualified: TList<Integer>;
+  E        : TRecipeEdit;
+  Conv     : string;
+  Why      : string;
 begin
   Result  := Default(TRecipeSteps);
   var FromFid:= pSource.FidOfStem(pSurface.FromStem);
   var DeclFid:= pSource.FidOfStem(pSurface.ToStem);
   var Name   := pSurface.RoutineName;
   var Lines  := pSource.FileLines(FromFid);
-  pRefusal:= SignatureRefusal(pSource, pSurface, DeclFid, Routine);
-  if pRefusal.Kind = '' then
-    pRefusal:= CallRefusal(pSource, pSurface, FromFid, Lines,
-      ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''),
-      ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''));
-  if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
-    pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
-  if pRefusal.Kind <> '' then Exit;
-  Result.Recipe     := crRoutineInversion;
-  Result.RoutineId  := Routine.Id;
-  Result.RoutineName:= Name;
-  Result.DeclStem   := pSurface.ToStem;
-  Result.ConsumerFid:= FromFid;
-  Result.PtrVar     := Name + 'Ptr';
-  Result.PtrType    := 'T' + Result.PtrVar;
-  Result.TypeDecl   := Format('%s = %s%s;%s', [Result.PtrType,
-    (if Routine.Kind = skFunction then 'function' else 'procedure'), pSurface.RoutineSig,
-    (if Conv <> '' then ' ' + Conv + ';' else '')]);
-  Result.VarDecl    := Format('%s: %s;', [Result.PtrVar, Result.PtrType]);
-  Result.LeafStem   := PickExistingLeaf(pSource, pSurface, FromFid, DeclFid);
-  Edits:= TList<TRecipeEdit>.Create;
-  Done := TList<Integer>.Create;
+  Qualified:= TList<Integer>.Create;
+  Edits    := TList<TRecipeEdit>.Create;
+  Done     := TList<Integer>.Create;
   try
+    pRefusal:= SignatureRefusal(pSource, pSurface, DeclFid, Routine);
+    if pRefusal.Kind = '' then
+      pRefusal:= CallRefusal(pSource, pSurface, FromFid, Lines,
+        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''),
+        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified);
+    if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
+      pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
+    if pRefusal.Kind <> '' then Exit;
+    Result.Recipe     := crRoutineInversion;
+    Result.RoutineId  := Routine.Id;
+    Result.RoutineName:= Name;
+    Result.DeclStem   := pSurface.ToStem;
+    Result.ConsumerFid:= FromFid;
+    Result.PtrVar     := Name + 'Ptr' + (if pSuffix > 1 then IntToStr(pSuffix) else '');
+    Result.PtrType    := 'T' + Result.PtrVar;
+    Result.TypeDecl   := Format('%s = %s%s;%s', [Result.PtrType,
+      (if Routine.Kind = skFunction then 'function' else 'procedure'), pSurface.RoutineSig,
+      (if Conv <> '' then ' ' + Conv + ';' else '')]);
+    Result.VarDecl    := Format('%s: %s;', [Result.PtrVar, Result.PtrType]);
+    Result.LeafStem   := PickExistingLeaf(pSource, pSurface, FromFid, DeclFid);
     for var R in pSurface.Refs do
+      if not Qualified.Contains(R.Line) then Qualified.Add(R.Line);  { W6 C7: Qualified now holds every line to edit }
+    Qualified.Sort;
+    var QualRx:= '(?<![\w.@])' + TRegEx.Escape(ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), '')).Replace('\.',
+      '\s*\.\s*') + '\s*\.\s*' + TRegEx.Escape(Name) + '\b';    for var L in Qualified do
     begin
-      if Done.Contains(R.Line) then Continue;
-      Done.Add(R.Line);
+      if Done.Contains(L) then Continue;
+      Done.Add(L);
       E:= Default(TRecipeEdit);
       E.Fid     := FromFid;
-      E.Line    := R.Line;
+      E.Line    := L;
       E.Replace := True;
-      E.NewLines:= [TRegEx.Replace(LineOf(Lines, R.Line), '(?<![\w.])' + TRegEx.Escape(Name) + '\b',
-        Result.PtrVar, [roIgnoreCase])];
+      E.NewLines:= [TRegEx.Replace(TRegEx.Replace(LineOf(Lines, L), QualRx, Result.PtrVar, [roIgnoreCase]),
+        '(?<![\w.])' + TRegEx.Escape(Name) + '\b', Result.PtrVar, [roIgnoreCase])];
       Edits.Add(E);
     end;
     if not AssignmentEdit(pSource.FileLines(DeclFid), DeclFid, Format('  %s := %s;', [Result.PtrVar, Name]), E) then
@@ -1316,9 +1525,9 @@ begin
   finally
     Done.Free;
     Edits.Free;
+    Qualified.Free;
   end;
 end;
-
 { ---------------------------------------------------------------------------
   R2 -- member hand-over through an extracted interface
   --------------------------------------------------------------------------- }

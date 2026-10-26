@@ -70,9 +70,17 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
       if ($h['cycle'] -eq '1') { $verdict = $h['verdict']; $refusals = $h['refusals'] }
     }
   }
-  return @{ Exit = $p.ExitCode; Text = [IO.File]::ReadAllText($o); Verdict = $verdict; Refusals = $refusals; Root = $root }
+  return @{ Exit = $p.ExitCode; Text = [IO.File]::ReadAllText($o); Verdict = $verdict; Refusals = $refusals; Root = $root; Out = $o; Dproj = (Join-Path $root $Dproj) }
 }
-function Test-Mechanical([string]$Tag, $Pl, [string]$Kind) {
+# Applies cycle 1 of a plan with the follower, re-indexes, returns the text `cycles` prints on the result.
+function Invoke-FollowAndCycles($Pl, [string]$Tag) {
+  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $Pl.Out -Cycle 1 2>&1 | Out-String
+  $db = Join-Path $WorkDir "after-$Tag.sqlite"
+  $null | & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log")
+  $o = & $Exe cycles --db $db | Out-String
+  return @{ Follow = $LASTEXITCODE; Text = $fo; Cycles = $o }
+}
+function Test-Mechanical( [string]$Tag, $Pl, [string]$Kind) {
   Check "$Tag m0 planned (exit 0)" ($Pl.Exit -eq 0) "exit=$($Pl.Exit)"
   Check "$Tag m1 no refused: $Kind" (-not $Pl.Text.Contains("refused: $Kind")) ([regex]::Match($Pl.Text, "(?m)^.*refused: $Kind.*$").Value)
   Check "$Tag m2 verdict mechanical" ($Pl.Verdict -eq 'mechanical') "[$($Pl.Verdict) / $($Pl.Refusals)]"
@@ -104,6 +112,58 @@ try {
     $rx = [regex]'(?m)^  end;'
     Set-Text $f ($rx.Replace($t, '  end; { TDemoGagePort }', 1)) }
   Test-Mechanical 'c6c-endcomment' (Get-Plan 'r2extend' 'R2Extend.dproj' 'c6c-endcomment' $endCm) 'manual-edit'
+
+  Write-Host '== (c2) duplicate-identifier in the leaf: reuse an identical declaration, else the lowest free suffix' -ForegroundColor Cyan
+  $ptrSame = {
+    param($r)
+    Edit-File (Join-Path $r 'R1Title.Untangle.pas') '  TR1TitleStyle = (tsPlain, tsBold);' "  TR1TitleStyle = (tsPlain, tsBold);`n  TR1TitleOfPtr = function(const pId: Integer): string;`nvar`n  R1TitleOfPtr: TR1TitleOfPtr;"
+  }
+  $c2a = Get-Plan 'r1extend' 'R1Extend.dproj' 'c2a-same' $ptrSame
+  Test-Mechanical 'c2a-same' $c2a 'duplicate-identifier'
+  Check 'c2a-same reused: the leaf gets no second TR1TitleOfPtr, the consumer calls R1TitleOfPtr' `
+    ((-not $c2a.Text.Contains('  TR1TitleOfPtr = function')) -and $c2a.Text.Contains('R1TitleOfPtr(pId)')) ''
+  $c2aRun = Invoke-FollowAndCycles $c2a 'c2a'
+  Check 'c2a-same followed (exit 0) and no cycle remains' (($c2aRun.Follow -eq 0) -and $c2aRun.Cycles.Contains('No circular unit dependencies found.')) ($c2aRun.Text.Trim() -replace "`r?`n", ' | ')
+  $ptrDiff = { param($r) Edit-File (Join-Path $r 'R1Title.Untangle.pas') '  TR1TitleStyle = (tsPlain, tsBold);' "  TR1TitleStyle = (tsPlain, tsBold);`n  TR1TitleOfPtr = Integer;" }
+  $c2b = Get-Plan 'r1extend' 'R1Extend.dproj' 'c2b-diff' $ptrDiff
+  Test-Mechanical 'c2b-diff' $c2b 'duplicate-identifier'
+  Check 'c2b-diff takes the lowest free suffix: TR1TitleOfPtr2 declared, assigned and called' `
+    ($c2b.Text.Contains('  TR1TitleOfPtr2 = function(const pId: Integer): string;') -and $c2b.Text.Contains('R1TitleOfPtr2 := R1TitleOf;') -and
+     $c2b.Text.Contains('R1TitleOfPtr2(pId)')) ''
+  $c2bRun = Invoke-FollowAndCycles $c2b 'c2b'
+  Check 'c2b-diff followed (exit 0) and no cycle remains' (($c2bRun.Follow -eq 0) -and $c2bRun.Cycles.Contains('No circular unit dependencies found.')) ($c2bRun.Text.Trim() -replace "`r?`n", ' | ')
+  $ptrDiff2 = { param($r) Edit-File (Join-Path $r 'R1Title.Untangle.pas') '  TR1TitleStyle = (tsPlain, tsBold);' "  TR1TitleStyle = (tsPlain, tsBold);`n  TR1TitleOfPtr = Integer;`n  TR1TitleOfPtr2 = Integer;" }
+  $c2c = Get-Plan 'r1extend' 'R1Extend.dproj' 'c2c-diff2' $ptrDiff2
+  Check 'c2c-diff2 skips a taken suffix: TR1TitleOfPtr3' ($c2c.Text.Contains('  TR1TitleOfPtr3 = function') -and ($c2c.Verdict -eq 'mechanical')) "[$($c2c.Verdict) / $($c2c.Refusals)]"
+
+  Write-Host '== (c4) overloaded-routine: arity-unique binding' -ForegroundColor Cyan
+  $ovl = {
+    param($r, $extra)
+    Edit-File (Join-Path $r 'R1Title.pas') '/// <summary>Title of one item.</summary>' "$extra`n`n/// <summary>Title of one item.</summary>"
+  }
+  $c4a = Get-Plan 'r1extend' 'R1Extend.dproj' 'c4a-arity' { param($r) & $ovl $r 'function R1TitleOf(const pId, pExtra: Integer): string; overload;' }
+  Test-Mechanical 'c4a-arity' $c4a 'overloaded-routine'
+  Check 'c4a-arity binds the one-argument overload: type declared with the signature of the call' `
+    ($c4a.Text.Contains('  TR1TitleOfPtr = function(const pId: Integer): string;')) ''
+  $c4b = Get-Plan 'r1extend' 'R1Extend.dproj' 'c4b-same-arity' { param($r) & $ovl $r 'function R1TitleOf(const pName: string): string; overload;' }
+  Test-Refused 'c4b-same-arity' $c4b 'overloaded-routine'
+  $c4c = Get-Plan 'r1extend' 'R1Extend.dproj' 'c4c-default' { param($r) & $ovl $r 'function R1TitleOf(const pId, pExtra: Integer; pMore: Integer = 0): string; overload;' }
+  Test-Refused 'c4c-default' $c4c 'overloaded-routine'
+
+  Write-Host '== (c7) qualified use and assigned value of the inverted routine' -ForegroundColor Cyan
+  $callLine = "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));"
+  $addLine = { param($r, $extra) Edit-File (Join-Path $r 'R1Form.pas') "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));" "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));`n$extra" }
+  $c7a = Get-Plan 'r1extend' 'R1Extend.dproj' 'c7a-qualified' { param($r) & $addLine $r '  Writeln(R1Title.R1TitleOf(pId + 1));' }
+  Test-Mechanical 'c7a-qualified' $c7a 'qualified-ref'
+  Check 'c7a-qualified redirected to the pointer' ($c7a.Text.Contains('Writeln(R1TitleOfPtr(pId + 1));')) ''
+  $c7aRun = Invoke-FollowAndCycles $c7a 'c7a'
+  Check 'c7a-qualified followed (exit 0) and no cycle remains' (($c7aRun.Follow -eq 0) -and $c7aRun.Cycles.Contains('No circular unit dependencies found.')) ($c7aRun.Text.Trim() -replace "`r?`n", ' | ')
+  Test-Refused 'c7a-other-member' (Get-Plan 'r1extend' 'R1Extend.dproj' 'c7a-other' { param($r) & $addLine $r '  Writeln(R1Title.R1TitleCount);' }) 'qualified-ref'
+  Test-Refused 'c7a-address' (Get-Plan 'r1extend' 'R1Extend.dproj' 'c7a-addr' { param($r) & $addLine $r '  Fn := @R1Title.R1TitleOf;' }) 'qualified-ref'
+  $c7b = Get-Plan 'r1extend' 'R1Extend.dproj' 'c7b-value' { param($r) & $addLine $r '  Fn := R1TitleOf;' }
+  Test-Mechanical 'c7b-value' $c7b 'routine-not-called'
+  Check 'c7b-value redirected to the pointer' ($c7b.Text.Contains('Fn := R1TitleOfPtr;')) ''
+  Test-Refused 'c7b-address' (Get-Plan 'r1extend' 'R1Extend.dproj' 'c7b-addr' { param($r) & $addLine $r '  Fn := @R1TitleOf;' }) 'routine-not-called'
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
