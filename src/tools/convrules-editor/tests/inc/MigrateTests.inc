@@ -448,3 +448,49 @@ begin
     B.Free;
   end;
 end;
+
+procedure TestMigrateTabHandoff;
+var
+  LRows   : TArray<TConvertRow>;
+  LRow    : TConvertRow;
+  LEntries: TArray<TBookEntry>;
+  LEntry  : TBookEntry;
+  LNotes  : TArray<string>;
+  LReader : TFunc<string, string>;
+begin
+  // D8 B: the rule-level checks of the converted rows of the OPEN book only.
+  LRow:= Default(TConvertRow);
+  LRow.Status:= csConverted;
+  LRow.Book  := 'C:\b\Fix.rules';
+  LRow.Apply := MigrateApply('apply-MigForm-legacy-1350.json', [afMigrateMembers]);
+  LRows:= [LRow];
+  LRow.Book:= 'C:\b\Other.rules';
+  LRows:= LRows + [LRow];
+  LRow.Book:= 'C:\b\Fix.rules';
+  LRow.Status:= csFailedRestored;
+  LRows:= LRows + [LRow];
+  Check('migrate.handoff.checks', Length(MigrateChecksForBook(LRows, 'c:\B\fix.rules')) = 5, IntToStr(Length(MigrateChecksForBook(LRows, 'c:\B\fix.rules'))));
+  Check('migrate.handoff.checks.none', Length(MigrateChecksForBook(LRows, 'C:\b\None.rules')) = 0);
+
+  // D4: one Preflight note per CHECKED book with member lines, only without migrate_members.
+  LEntry:= Default(TBookEntry);
+  LEntry.Path:= 'C:\b\Fix.rules';
+  LEntry.Checked:= True;
+  LEntries:= [LEntry];
+  LEntry.Path:= 'C:\b\Off.rules';
+  LEntry.Checked:= False;
+  LEntries:= LEntries + [LEntry];
+  LEntry.Path:= 'C:\b\Gone.rules';
+  LEntry.Checked:= True;
+  LEntries:= LEntries + [LEntry];
+  LReader:= function(APath: string): string
+    begin
+      if EndsText('Gone.rules', APath) then
+        raise EInOutError.Create('gone');
+      Result:= '#convert TA -> TB' + sLineBreak + '#migrate Click -> Press' + sLineBreak;
+    end;
+  LNotes:= MigrateBookNotes(LEntries, [], LReader);
+  Check('migrate.handoff.booknotes', (Length(LNotes) = 1) and (LNotes[0] = 'Fix.rules: 1 member #migrate line(s) -- this engine does not apply them (needs migrate_members)'),
+    string.Join('|', LNotes));
+  Check('migrate.handoff.booknotes.gated', Length(MigrateBookNotes(LEntries, [afMigrateMembers], LReader)) = 0);
+end;

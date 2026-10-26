@@ -2784,6 +2784,8 @@ uses
   , ConvRules.MigrateRules   // A4: CAPABILITY_MIGRATE_MEMBERS
   , ConvRules.Migrate        // A4: the member-migration decisions the Members list and the Work list run
   , ConvRules.MigrateForm    // A4: the Migrate dialog
+  , ConvRules.ConvertRunner  // A4: TConvertRow, the MigrateChecksReady parameter
+  , ConvRules.MigrateRun     // A4: MigrateChecksForBook
   , ConvRules.QualifyFix     // A2: ApplyQualifyPicks / QualifyStatusText behind the Convert host's QualifyBook
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
   , ConvRules.InputGate      // dl:unit ConvRules.InputGate accepted -- N7/N11: GateVerdict & co. behind AppMessage; LOST_COMMAND_CONVERT travels with LostCommandStatus (WMSetCursor names the Convert command by it)
@@ -3745,6 +3747,15 @@ begin
   LHost.WorkListReady:= procedure(ARun: TWorkRun)
     begin
       FWorkListTab.ShowRun(ARun);
+    end;
+  // A4 (D8 B): the engine's rule-level migrate-check verdicts as marks on the open book's lines.
+  LHost.MigrateChecksReady:= procedure(ARows: TArray<TConvertRow>)
+    begin
+      if AddMigrateCheckMarks(FBook, MigrateChecksForBook(ARows, FFilePath)) > 0 then
+      begin
+        RefreshRuleMarks;
+        FMembersPanel.ShowBlock(FBook, FActiveHdr);
+      end;
     end;
   LHost.WorkListRefused:= procedure
     begin

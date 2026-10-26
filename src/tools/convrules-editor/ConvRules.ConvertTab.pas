@@ -96,6 +96,10 @@ type
     /// converted unit, keyed by the run's id), once per run, from RunFinished on the UI
     /// thread; may be nil.</summary>
     WorkListReady : TProc<TWorkRun>;
+    /// <summary>A4 (D8 B): receives a finished run's rows, once per run, after WorkListReady, so the
+    /// host can mark the open book's #migrate lines with the engine's rule-level migrate-check
+    /// verdicts (ConvRules.Migrate.MigrateChecksForBook / AddMigrateCheckMarks); may be nil.</summary>
+    MigrateChecksReady: TProc<TArray<TConvertRow>>;
     /// <summary>A Convert was refused before it ran (Preflight, no project file, the
     /// inherited-instance gate): the Work list keeps the previous run's rows and says so
     /// (owner decision C-2); may be nil.</summary>
@@ -420,6 +424,7 @@ uses
   , ConvRules.Glyph
   , ConvRules.ConvertBatch  // dl:unit ConvRules.ConvertBatch accepted -- BATCH_MAX_UNITS is the chunk size the start status quotes; the batch decisions live there, the tab asks them through JobRunsBatched
   , ConvRules.QualifyForm
+  , ConvRules.Migrate  // A4: MigrateBookNotes, the D4 Preflight note
   , ConvRules.CapabilityProbe  // dl:unit ConvRules.CapabilityProbe accepted -- PROBE_SHOW_AFTER_MS is the probe's own window delay; it travels with the probe decisions the tab asks (ProbeCaseFor, ProbeStatusText)
   ;
 
@@ -1671,6 +1676,13 @@ begin
   FRunRows:= nil;
   UpdateQualifyButton;
   FNotes  := Pre.Notes;
+  // A4 (D4): a book with member #migrate lines on an engine that does not apply them says so.
+  if FProbeNote = '' then
+    FNotes:= FNotes + MigrateBookNotes(FEntries, FApplyFeatures,
+      function(APath: string): string
+      begin
+        Result:= ReadBookText(APath);
+      end);
   if FProbeNote <> '' then
     FNotes:= [FProbeNote] + FNotes; // R2: the real cause, before any "engine support pending" note
   for var LNote: string in FNotes do
@@ -1982,6 +1994,8 @@ begin
     LWork.At       := Now;
     FHost.WorkListReady(LWork);
   end;
+  if Assigned(FHost.MigrateChecksReady) then
+    FHost.MigrateChecksReady(FRunRows);
   // Red when the run went wrong, a re-read after it failed (C8), or units hold glyph to-dos (C10).
   var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Tally.ConfigErrors + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
   var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');

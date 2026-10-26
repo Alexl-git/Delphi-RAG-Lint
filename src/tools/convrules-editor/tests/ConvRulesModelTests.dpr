@@ -53,7 +53,8 @@ uses
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
   , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
   , ConvRules.MigrateRules in '..\ConvRules.MigrateRules.pas'  // dl:unit ConvRules.MigrateRules accepted -- the tests read MIGRATE_REFUSAL_* to pin the engine's own sentences, so the consts travel with the unit under test
-  , ConvRules.Migrate in '..\ConvRules.Migrate.pas'  // dl:unit ConvRules.Migrate accepted -- the tests read REPORT_STATUS_* / MIGRATE_GLOBAL_TEXT to pin the unit's own texts
+  , ConvRules.Migrate in '..\ConvRules.Migrate.pas'
+  , ConvRules.MigrateRun in '..\ConvRules.MigrateRun.pas'  // dl:unit ConvRules.Migrate accepted -- the tests read REPORT_STATUS_* / MIGRATE_GLOBAL_TEXT to pin the unit's own texts
   , ConvRules.CapabilityProbe in '..\ConvRules.CapabilityProbe.pas'  // dl:unit ConvRules.CapabilityProbe accepted -- the tests read REQUIRED_ENGINE_VERSION / REDUCED_FEATURES_TEXT to pin the probe's own contract, so the consts travel with the unit under test
   ;
 
@@ -16015,6 +16016,7 @@ begin
     TestMigrateNotes;
     TestMigrateWorkList;
     TestMigrateDecisions;
+    TestMigrateTabHandoff;
 
     FreeAndNil(GParseBook);
 

@@ -16,6 +16,7 @@ uses
   ConvRules.Model
   , ConvRules.WorkList
   , ConvRules.ConvertRun
+  , System.SysUtils
   ;
 
 const
@@ -145,7 +146,7 @@ function StaticMigrateMarks(ABook: TRuleBook): Integer;
 /// <param name="ABook">The open book; must be the book the run used.</param>
 /// <param name="AChecks">TApplyRow.MigrateChecks of the run's rows for that book.</param>
 /// <returns>The number of marks added; per-site items and repeats add none.</returns>
-function AddMigrateCheckMarks(ABook: TRuleBook; const AChecks: TArray<TApplyItem>): Integer;  // dl:ok unused-public-symbol@652d -- A4 D8 post-run marks: its caller is the Convert tab result hand-off (ConvRules.ConvertTab, lane D), a named follow-up; pinned by migrate.postrun.marks
+function AddMigrateCheckMarks(ABook: TRuleBook; const AChecks: TArray<TApplyItem>): Integer;
 
 /// <summary>The rule tree marker suffix of a block: '; N migrate' (N member-form lines).</summary>
 /// <param name="ABook">The book; not owned.</param>
@@ -177,12 +178,21 @@ function MigrateReportNote(const AItem: TApplyItem): string;
 /// <param name="ABookText">The book's text.</param>
 /// <returns>'B: N member #migrate line(s) -- this engine does not apply them (needs
 /// migrate_members)', counting member-form lines after the first header; '' when 0.</returns>
-function MigrateBookNote(const ABookName, ABookText: string): string;  // dl:ok unused-public-symbol@9864 -- A4 D4 Preflight note: its caller is ConvRules.ConvertTab Preflight (lane D), a named follow-up; pinned by migrate.booknote
+function MigrateBookNote(const ABookName, ABookText: string): string;
+
+/// <summary>The Preflight notes of D4: MigrateBookNote of every CHECKED book, only when the
+/// engine lacks migrate_members.</summary>
+/// <param name="AEntries">The Convert tab's book checklist.</param>
+/// <param name="AFeatures">The engine's apply/1 features.</param>
+/// <param name="AReadText">Reads a book's text; a book it cannot read (EInOutError,
+/// EFileStreamError, EEncodingError) gets no note -- the run reports it.</param>
+/// <returns>One note per book with member-form lines; [] with afMigrateMembers.</returns>
+function MigrateBookNotes(const AEntries: TArray<TBookEntry>; AFeatures: TApplyFeatures; const AReadText: TFunc<string, string>): TArray<string>;
 
 implementation
 
 uses
-  System.SysUtils
+  System.Classes  // EFileStreamError: an unreadable book in MigrateBookNotes
   , ConvRules.MigrateRules  // dl:unit ConvRules.MigrateRules accepted -- the APPLY_KIND_* migrate kinds and MIGRATE_DL_NONE are the classifier's own contract the decisions read
   ;
 
@@ -543,6 +553,34 @@ begin
     LBook.Free;
   end;
   Result:= if LCount > 0 then Format(BOOK_NOTE_FMT, [ABookName, LCount]) else '';
+end;
+
+function MigrateBookNotes(const AEntries: TArray<TBookEntry>; AFeatures: TApplyFeatures; const AReadText: TFunc<string, string>): TArray<string>;
+var
+  LText: string;
+  LNote: string;
+begin
+  Result:= nil;
+  if afMigrateMembers in AFeatures then
+    Exit;
+  for var LEntry: TBookEntry in AEntries do
+  begin
+    if not LEntry.Checked then
+      Continue;
+    try
+      LText:= AReadText(LEntry.Path);
+    except  // dl:ok try-except-swallowed@ef47 -- REVIEWED 2026-10-26 not swallowed: an unreadable book only gets no Preflight note; the run reads it again and reports the error
+      on EInOutError do
+        Continue;
+      on EFileStreamError do
+        Continue;
+      on EEncodingError do
+        Continue;
+    end; // try
+    LNote:= MigrateBookNote(ExtractFileName(LEntry.Path), LText);
+    if LNote <> '' then
+      Result:= Result + [LNote];
+  end;
 end;
 
 end.
