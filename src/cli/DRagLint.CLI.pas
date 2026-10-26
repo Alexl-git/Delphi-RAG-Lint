@@ -13758,6 +13758,8 @@ begin
     below has to tell the truth about which of two very different runs this
     was: store-backed and at parity, or store-free and quietly narrower. }
   var FlowStoreSeen: Boolean := False;
+  { E29: the covering index is the platform library -- see the project-rules gate. }
+  var FlowIsLibrary: Boolean := False;
   var StandInLogical: string := '';
   if (AArgs.StandInFor <> '') and (EffPath <> '') then
   begin
@@ -14391,7 +14393,20 @@ begin
         rule the flow store uses above. Without an index these questions have no
         answer at all, so the verb degrades to exactly what it did before. }
       FlowStoreSeen:= (FlowStore <> nil) and (FlowFid > 0);
-      if (FlowStore <> nil) and (FlowFid > 0) then
+      { E29: A PLATFORM-LIBRARY UNIT GETS NO PROJECT-RULES PASS.
+        The library index contains every RTL/VCL unit, so the membership gate
+        above hands it this block, whose whole-store passes then ran over ~7,000
+        files for one file's answers: `lint System.IOUtils.pas` against
+        library-Win64 (or with no --db, which resolves library-Win32) never
+        finished -- killed past 490 CPU-s; even unused-private-member alone
+        spent 28 s in the two whole-refs scans. The answers are meaningless
+        anyway: who calls an RTL routine, or whether an RTL import is used, is
+        about the CONSUMERS, which are not in the library index -- the same
+        ruling as ResolveFrameworkContextDb, with the same `library-` file-name
+        test. The per-file checkers above keep the store.
+        tests\autotest\run_lint_library_unit_project_rules_guard.ps1. }
+      FlowIsLibrary:= FlowStoreSeen and StartsText('library-', ExtractFileName(FlowDb));
+      if FlowStoreSeen and (not FlowIsLibrary) then
       begin
         { THE INDEX-WIDE RULES, NARROWED TO THIS FILE'S FINDINGS.
 
@@ -14545,7 +14560,12 @@ begin
     plugin's diagnostic stream are untouched.
     See docs\INBOX-ide-per-unit-view-omits-79pct-of-lint-all.md. }
   if (not AArgs.AsJson) and (not AArgs.Quiet) then
-    if FlowStoreSeen then
+    if FlowIsLibrary then
+      Writeln(ErrOutput,
+        'drag-lint: note: this file is a platform-library unit, so the project rules ' +
+        '(unused-*, circular-uses, ...) did NOT run -- they are questions about its ' +
+        'consumers, which the library index does not hold.')
+    else if FlowStoreSeen then
       Writeln(ErrOutput,
         'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +
         (if AArgs.ProjectRules then '' else 'doc-drift/missing-doc (pass --project-rules), ') +
@@ -14612,7 +14632,7 @@ begin
       about, and it is worse than the gap this closes, so the stand-in path
       keeps the documented degraded behaviour until the rewrite and the marker
       scan are ordered properly. }
-    Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
+    Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen and (not FlowIsLibrary))
   );
   TraceLintChecker('end');
 end; // function
