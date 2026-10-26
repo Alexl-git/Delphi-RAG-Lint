@@ -238,7 +238,18 @@ try {
   $lbl = Get-Plan 'sigincyclelabel' 'R1Extend.dproj' 'lbl-record' $null
   Test-Refused 'lbl-record' $lbl 'signature-in-cycle'
   Check 'lbl-record the refusal names `TR1TitleKind` (record), not (var)' ($lbl.Text.Contains('`TR1TitleKind` (record): refused: signature-in-cycle') -and
-    -not $lbl.Text.Contains('`TR1TitleKind` (var)')) ([regex]::Match($lbl.Text, '(?m)^.*refused: signature-in-cycle.*$').Value)  }
+    -not $lbl.Text.Contains('`TR1TitleKind` (var)')) ([regex]::Match($lbl.Text, '(?m)^.*refused: signature-in-cycle.*$').Value) }
+  if (Want 'b4f') {
+  Write-Host '== (b4f) Part B: a class handed over through a base class (implementation edge)' -ForegroundColor Cyan
+  $b4f = Get-Plan 'b4fbase' 'B4fBase.dproj' 'b4f-base' $null
+  Test-Accepted 'b4f-base' $b4f 'base-class'
+  Check 'b4f-base TBfShapeBase carries Name; `is` and `(X as ...)` switch to it' ($b4f.Text.Contains('TBfShape = class(TBfShapeBase)') -and
+    $b4f.Text.Contains('if pShape is TBfShapeBase then') -and $b4f.Text.Contains('(pShape as TBfShapeBase).Name')) ''
+  $b4fCast = Get-Plan 'b4fbase' 'B4fBase.dproj' 'b4f-cast' { param($r)
+    Edit-File (Join-Path $r 'BfCanvas.pas') "    Writeln('paint ', (pShape as TBfShape).Name, ' style ', pStyle);" "    Writeln('paint ', TBfShape(pShape).Name, ' style ', pStyle);" }
+  Check 'b4f-cast (a hard cast) refused, naming the site BfCanvas.pas:31' (($b4fCast.Verdict -ne 'mechanical') -and
+    $b4fCast.Text.Contains('through a base class: `TBfShape` (class): refused: base-class -- `BfCanvas.pas:31`')) "[$($b4fCast.Verdict) / $($b4fCast.Refusals)]"
+  }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

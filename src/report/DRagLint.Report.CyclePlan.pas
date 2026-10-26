@@ -522,6 +522,7 @@ type
     Recipe  : TCutRecipe;    // the recipe that applies to this edge (E18 T7 R3); crNone = none applies
     Refusal : string;        // the refusal kind when a recipe was tried and refused
     Steps   : TRecipeSteps;  // crRoutineInversion: the R1 steps
+    ViaBase : Boolean;       // B4-f: crMoveGlobals through a base class of a class need (the consumer's fid is its cut)
   end;
 
   TPredGroup = record
@@ -643,11 +644,12 @@ type
     procedure ClassifyStructured(const pF: TPlanFile; var pItem: TMoveItem);
     procedure SetHeader(const pF: TPlanFile; var pItem: TMoveItem);
     procedure BuildBase(const pF: TPlanFile; var pItem: TMoveItem);
-    function UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>): TDictionary<string, Boolean>;
+    function UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>; const pClassName: string = ''): TDictionary<string, Boolean>;
     function PullMembers(const pF: TPlanFile; var pItem: TMoveItem; const pChildren: TArray<TSymbol>;
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
+    function ClassTestSiteOk(const pCode: string; pIndex, pLen: Integer; const pItem: TMoveItem): Boolean;
     function FieldSiteRefusal(const pItem: TMoveItem; pFid: Int64; pLine: Integer; out pField: string;
       const pSlots: TArray<string> = nil): string;
     function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string;
@@ -702,7 +704,9 @@ type
     function Targets(pEdges: TObjectDictionary<string, TList<string>>; const pFrom: string): TArray<string>;
     function ExpectedOutput(pSelf: Integer): TArray<string>;
     function GroupHasIntf(const pComp: TArray<string>): Boolean;
-    function EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
+    function EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>; pViaBase: Boolean = False): TEdgeEval;
+    procedure PlanBaseHandOver(pEvals: TList<TEdgeEval>);
+    function BaseCut(const pSym: TSymbol; const pFrom: string; pViaBase: Boolean): TArray<Int64>;
     procedure RenderEdgeChoices(const pEvals: TArray<TEdgeEval>);
     function RemainingNeeds(const pFrom, pTo: string; pAll: Boolean): TArray<TNeed>;
     // rendering
@@ -1550,6 +1554,12 @@ begin
   end;
 end;
 
+{ B4-f: a base-class move ranks after R2 (it moves fields out of the class; an interface moves nothing). }
+function EvalRank(const pEv: TEdgeEval): Integer;
+begin
+  Result:= if pEv.ViaBase then RecipeRank(crMemberInterface) + 1 else RecipeRank(pEv.Recipe);
+end;
+
 { E18 T7 R3: pEv is a better cut than pBest -- the preferred recipe, then the
   fewest surface members, then the fewest surface refs, then the lower recipe
   cost; an empty pBest loses to any edge a recipe applies to. }
@@ -1557,7 +1567,7 @@ function BetterCut(const pEv, pBest: TEdgeEval): Boolean;
 begin
   if pEv.Recipe = crNone then Exit(False);
   if pBest.FromStem = '' then Exit(True);
-  if RecipeRank(pEv.Recipe) <> RecipeRank(pBest.Recipe) then Exit(RecipeRank(pEv.Recipe) < RecipeRank(pBest.Recipe));
+  if EvalRank(pEv) <> EvalRank(pBest) then Exit(EvalRank(pEv) < EvalRank(pBest));
   if Length(pEv.Surface.Members) <> Length(pBest.Surface.Members) then
     Exit(Length(pEv.Surface.Members) < Length(pBest.Surface.Members));
   if Length(pEv.Surface.Refs) <> Length(pBest.Surface.Refs) then
@@ -2053,7 +2063,7 @@ begin
   pItem.HeaderNew:= pItem.BaseIndent + pItem.Sym.Name + ' = class(' + pItem.BaseName + ')' +
     (if Comment <> '' then ' ' + Comment else '');
   Children:= FStore.FindAllChildSymbols(pItem.Sym.Id);
-  Used:= UsedMemberNames(Children, pItem.CutFids);
+  Used:= UsedMemberNames(Children, pItem.CutFids, pItem.Sym.Name);
   try
     if not PullMembers(pF, pItem, Children, Used) then Exit;
   finally
@@ -2072,7 +2082,7 @@ begin
   pItem.Kind:= mvBase;
 end;
 
-function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>): TDictionary<string, Boolean>;
+function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>; const pClassName: string): TDictionary<string, Boolean>;
 var
   Ids  : TDictionary<Int64, Boolean>;
   Names: TDictionary<string, Boolean>;
@@ -2094,6 +2104,12 @@ begin
         if (R.SymbolId > 0) and not Ids.ContainsKey(R.SymbolId) then Continue;
         if Names.ContainsKey(LowerCase(R.NameText)) then Result.AddOrSetValue(LowerCase(R.NameText), True);
       end;
+    { B4-f: `(X as TX).M` -- the index records no member access after a parenthesised cast }
+    if pClassName <> '' then
+      for var Fid in pCut do
+        for var Line in GetFile(Fid).Lines do
+          for var M in TRegEx.Matches(CodePart(Line), '\(\s*[A-Za-z_][\w.]*\s+as\s+' + pClassName + '\s*\)\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+            if Names.ContainsKey(LowerCase(M.Groups[1].Value)) then Result.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
   finally
     Names.Free;
     Ids.Free;
@@ -2297,6 +2313,21 @@ begin
   Result:= (Length(pFields) > 0) and TRegEx.IsMatch(pCode, '^\s*(Self\s*\.\s*)?(' + string.Join('|', pFields) +
     ')\s*:=\s*T(Object)?List\s*<\s*' + pTypeName + '\s*>\s*\.\s*Create\b', [roIgnoreCase]);
 end;
+{ B4-f: a class test the base class answers the same: `X is TX` (only TX derives from the new TXBase, so
+  `is TXBase` holds exactly when `is TX` did), and `(X as TX).M` with M a member pulled into the base,
+  read or called, never assigned (`(X as TX).M :=`). }
+function TCyclePlanner.ClassTestSiteOk(const pCode: string; pIndex, pLen: Integer; const pItem: TMoveItem): Boolean;
+begin
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
+  if TRegEx.IsMatch(Before, '[\w)\]]\s+is\s+$', [roIgnoreCase]) then Exit(True);
+  if not TRegEx.IsMatch(Before, '\(\s*[A-Za-z_][\w.]*\s+as\s+$', [roIgnoreCase]) then Exit(False);
+  var R:= TRegEx.Match(Rest, '^\s*\)\s*\.\s*([A-Za-z_]\w*)\b(?!\s*:=)', [roIgnoreCase]);
+  if not R.Success then Exit(False);
+  for var BM in pItem.BaseMembers do
+    if SameText(BM.Sym.Name, R.Groups[1].Value) then Exit(True);
+  Result:= False;
+end;
 { E18 T7 F5: '' when every switched site of pItem is a const or value parameter
   whose routine body only reads members of it, compares it with nil or stores it
   into a switchable field (`F[..] := p`), or is such a field (FieldSiteRefusal);
@@ -2355,6 +2386,7 @@ begin
             var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field, SlotNames(Slots, -1));
             if (Field = '') and ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Why:= ObjSlotRefusal(pItem, Slot, Fields, Slots)
             else if (Field = '') and IsListCreation(CodePart(LineAt(F.Lines, S.Line)), pItem.Sym.Name, Fields) then Continue
+            else if (Field = '') and ClassTestSiteOk(CodePart(LineAt(F.Lines, S.Line)), M.Index, M.Length, pItem) then Continue
             else if Field = '' then
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
@@ -3716,7 +3748,7 @@ begin
   end;
 end;
 
-function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
+function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>; pViaBase: Boolean): TEdgeEval;
 var
   Snap : Integer;
   Why  : string;
@@ -3727,11 +3759,12 @@ begin
   Result.ToStem  := pTo;
   Result.Needs   := pNeeds;
   Result.Surface := BuildEdgeSurface(Self, FidOfStem(pFrom), pTo);
+  Result.ViaBase := pViaBase;
   Result.Movable := Length(pNeeds) > 0;
   if not Result.Movable then Result.Why:= 'the index resolved no symbol for this edge';
   Snap:= FOrder.Count;
   for var N in pNeeds do
-    if not TryAdd(N.Owner, nil, Why) then
+    if not TryAdd(N.Owner, BaseCut(N.Owner, pFrom, pViaBase), Why) then
     begin
       Result.Movable:= False;
       Result.Why    := Format('`%s` (%s): %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
@@ -3748,6 +3781,40 @@ begin
   Rollback(Snap);
 end;
 
+{ B4-f: the cut a class need of an implementation edge is judged against -- the consumer's file, so
+  BuildBase runs (F5 / B4 site rules over that unit); nil for any other need, or without pViaBase. }
+function TCyclePlanner.BaseCut(const pSym: TSymbol; const pFrom: string; pViaBase: Boolean): TArray<Int64>;
+begin
+  Result:= if pViaBase and (pSym.Kind = skClass) then [FidOfStem(pFrom)] else nil;
+end;
+
+{ B4-f: every implementation edge no recipe cut, whose needs include a class, is evaluated again with the
+  class handed over through a base class (BuildBase, cut = the consumer). Movable -> crMoveGlobals,
+  ViaBase (ranked after R2 by EvalRank); else the edge keeps its earlier reason, and the base-class
+  refusal is appended when it names a site. }
+procedure TCyclePlanner.PlanBaseHandOver(pEvals: TList<TEdgeEval>);
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    if Ev.Recipe <> crNone then Continue;
+    var HasClass:= False;
+    for var N in Ev.Needs do
+      if N.Owner.Kind = skClass then HasClass:= True;
+    if not HasClass then Continue;
+    var Base:= EvaluateEdge(Ev.FromStem, Ev.ToStem, Ev.Needs, True);
+    if Base.Movable then
+    begin
+      Base.Recipe:= crMoveGlobals;
+      pEvals[I]  := Base;
+    end
+    else if ContainsStr(Base.Why, 'base-class') then
+    begin
+      Ev.Why:= Ev.Why + '; through a base class: ' + Base.Why;
+      pEvals[I]:= Ev;
+    end;
+  end;
+end;
 { ---------------------------------------------------------------------------
   rendering
   --------------------------------------------------------------------------- }
@@ -4733,6 +4800,7 @@ begin
       and the best by BetterCut is the one cut of this run }
     PlanInversion(Evals);
     PlanMemberHandOver(Evals);
+    PlanBaseHandOver(Evals);
     for var Ev in Evals do
       if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
     if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then FInversion:= FCutEdge.Steps;
@@ -4748,7 +4816,7 @@ begin
     MaterializeInversion;
     Exit;
   end;
-  for var N in FCutEdge.Needs do TryAdd(N.Owner, nil, Why);
+  for var N in FCutEdge.Needs do TryAdd(N.Owner, BaseCut(N.Owner, FCutEdge.FromStem, FCutEdge.ViaBase), Why);
   Materialize;
 end;
 
