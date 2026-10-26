@@ -588,6 +588,7 @@ begin
     if n > 99 then Break; // cap
   end;
 end;
+
 function BackupNote(const ABackup: string): string;
 begin
   if ABackup = '' then
