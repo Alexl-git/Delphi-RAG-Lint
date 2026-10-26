@@ -5,6 +5,9 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Added
+ - `cycles --fix` C6 (W6, CYC-C): `end.` followed by a block comment is still the final `end.` (R1 assignment edit), and an R2 class heritage spread over lines is read up to its closing `)` (the interface is appended there); an unbalanced heritage still refuses manual-edit. The same-line / indented `type` header forms of C6 are NOT done (the move planner is column-1 structured). Guard `run_cyclefix_w6_rest.ps1` c6a-c6c; `run_cyclefix_r2.ps1` f12 now uses an unclosed heritage.
+
 ### Fixed
 - autodoc / doc-drift (X-24, owner ruling 2026-10-25): `Used in units:` holds UNITS only. A
   stored entry the index resolves as a class / interface / record (and not as a unit) is no

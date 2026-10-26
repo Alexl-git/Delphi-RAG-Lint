@@ -892,12 +892,44 @@ begin
   Result:= Trim(if P > 0 then Copy(pLine, 1, P - 1) else pLine);
 end;
 
-{ 1-based number of the LAST line whose code is exactly pWord, or 0. }
+{ 1-based number of the LAST line whose code is exactly pWord, or 0. W6 C6: a block comment
+  after the word (`end.` then a comment) is not code. }
 function LastKeywordLine(const pLines: TArray<string>; const pWord: string): Integer;
 begin
   for var I:= High(pLines) downto 0 do
-    if SameText(BareCode(pLines[I]), pWord) then Exit(I + 1);
+    if SameText(TRegEx.Replace(BareCode(pLines[I]), '\s*(\{[^}]*\}|\(\*.*?\*\))$', ''), pWord) then Exit(I + 1);
   Result:= 0;
+end;
+
+{ W6 C6: where the heritage list of the class declared at pStart closes. The header is joined
+  over at most CMaxDeclLines lines (`//` comments dropped); False when the line at pStart does
+  not open a heritage list or the parentheses do not balance before a `;`. }
+function HeritageClose(const pLines: TArray<string>; pStart: Integer; out pLine, pCol: Integer): Boolean;
+begin
+  pLine:= 0;
+  pCol := 0;
+  if not TRegEx.IsMatch(BareCode(LineOf(pLines, pStart)), '=\s*class\b[^(;]*\(', [roIgnoreCase]) then Exit(False);
+  var Depth:= 0;
+  for var L:= pStart to Min(pStart + CMaxDeclLines - 1, Length(pLines)) do
+  begin
+    var S:= LineOf(pLines, L);
+    var Cut:= Pos('//', S);
+    if Cut > 0 then S:= Copy(S, 1, Cut - 1);
+    for var C:= 1 to Length(S) do
+      if S[C] = '(' then Inc(Depth)
+      else if S[C] = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          pLine:= L;
+          pCol := C;
+          Exit(True);
+        end;
+      end
+      else if (S[C] = ';') and (Depth = 0) then Exit(False);
+  end;
+  Result:= False;
 end;
 
 function MakeRefusal(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): TRecipeRefusal;
@@ -2329,10 +2361,11 @@ end;
   no reference counting on the way. }
 function TMemberPlan.CheckClass: Boolean;
 begin
-  if not SameText(FCls.Section, 'interface') or
-    not TRegEx.IsMatch(LineOf(FClsLines, FCls.StartLine), '=\s*class\b[^(;]*\([^)]*\)', [roIgnoreCase]) then
+  var HLine, HCol: Integer;
+  if not SameText(FCls.Section, 'interface') or not HeritageClose(FClsLines, FCls.StartLine, HLine, HCol) then
     Exit(Refuse('manual-edit', FCls.Name, FClsFid, FCls.StartLine, Format('the heritage of `%s` is not on its ' +
-      'declaration line %d in the interface section', [FCls.Name, FCls.StartLine])));
+      'declaration line %d in the interface section (or does not close within %d lines)', [FCls.Name,
+      FCls.StartLine, CMaxDeclLines])));
   if (FCls.EndLine <= FCls.StartLine) or not TRegEx.IsMatch(BareCode(LineOf(FClsLines, FCls.EndLine)), '^end\b',
     [roIgnoreCase]) then
     Exit(Refuse('manual-edit', FCls.Name, FClsFid, FCls.EndLine, Format('the declaration of `%s` does not end ' +
@@ -2743,9 +2776,10 @@ var
   Bodies: TList<string>;
 begin
   var Head:= LineOf(FClsLines, FCls.StartLine);
-  var M:= TRegEx.Match(Head, '(=\s*class\b[^(;]*\([^)]*)\)', [roIgnoreCase]);
-  AddEdit(FClsFid, FCls.StartLine, True, [Copy(Head, 1, M.Index - 1) + M.Groups[1].Value + ', ' + FIface + ')' +
-    Copy(Head, M.Index + M.Length, MaxInt)]);
+  var HLine, HCol: Integer;
+  HeritageClose(FClsLines, FCls.StartLine, HLine, HCol);  { CheckClass proved it closes }
+  var Close:= LineOf(FClsLines, HLine);
+  AddEdit(FClsFid, HLine, True, [Copy(Close, 1, HCol - 1) + ', ' + FIface + Copy(Close, HCol, MaxInt)]);
   var Prev:= LineOf(FClsLines, FCls.EndLine - 1);
   var Indent:= if Trim(Prev) <> '' then Copy(Prev, 1, Length(Prev) - Length(TrimLeft(Prev)))
     else Copy(Head, 1, Length(Head) - Length(TrimLeft(Head))) + '    ';
