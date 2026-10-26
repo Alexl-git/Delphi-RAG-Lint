@@ -26,7 +26,7 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$EngineDir = "$PSScriptRoot\..\..\third_party\dll-win64")
+param([string]$EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug")
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -55,7 +55,8 @@ New-Item -ItemType Directory -Force $eng | Out-Null
 foreach ($f in 'drag-lint.exe', 'tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll', 'casts.castlib') {
   if (Test-Path "$EngineDir\$f") { Copy-Item "$EngineDir\$f" "$eng\$f" }
 }
-Copy-Item "$EngineDir\rules" "$eng\rules" -Recurse
+$rulesSrc = if (Test-Path "$EngineDir\rules") { "$EngineDir\rules" } else { Join-Path $PSScriptRoot '..\..\rules' }  # worktree build dir has no staged rules\
+Copy-Item $rulesSrc "$eng\rules" -Recurse
 $Exe = Join-Path $eng 'drag-lint.exe'  # the COPY; built from $EngineDir above
 $script:AllOut = ''
 
