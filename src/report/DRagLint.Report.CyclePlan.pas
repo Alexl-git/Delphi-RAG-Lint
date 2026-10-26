@@ -481,6 +481,7 @@ type
     HeaderNew  : string;
     Switches   : TArray<TSwitchLine>;
     Refusal    : string;  // mvBlocked by a recipe gate: its refusal kind (F5: 'base-class'); '' otherwise
+    SameLine   : Boolean; // W6 C6: the keyword opens the declaration's own line (`var X: T;`); Header = Sym.StartLine
   end;
 
   TConsumer = record
@@ -744,6 +745,8 @@ type
     function ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
+      var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
     procedure RenderMemberHandOver(pStep: Integer);
     procedure EmitMemberWrites;
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
@@ -944,25 +947,63 @@ begin
   Result:= MatchText(Trim(CodePart(pText)), CBlockWords);
 end;
 
-/// The `type` / `var` / `const` line that opens the block holding pFirst, or 0.
+/// Count of leading blanks / tabs of pLine.
+function IndentOf(const pLine: string): Integer;
+begin
+  Result:= 0;
+  while (Result < Length(pLine)) and CharInSet(pLine[Result + 1], [' ', #9]) do Inc(Result);
+end;
+
+/// The `type` / `var` / `const` line that opens the block holding pFirst, or 0: the nearest
+/// column-1 block word above, or (W6 C6) an indented one indented LESS than pFirst -- a nested
+/// class section (`  var` inside a class body) sits at or beyond the declaration's indent.
 function HeaderOf(const pLines: TArray<string>; pFirst: Integer): Integer;
 var
   L: Integer;
 begin
+  var Depth:= IndentOf(LineAt(pLines, pFirst));
   L:= pFirst - 1;
-  while (L >= 1) and (IsIndented(LineAt(pLines, L)) or IsCommentOnly(LineAt(pLines, L))) do Dec(L);
+  while L >= 1 do
+  begin
+    var S:= LineAt(pLines, L);
+    if not IsCommentOnly(S) then
+    begin
+      if not IsIndented(S) then Break;
+      if (IndentOf(S) < Depth) and IsBlockWord(S) then Exit(L);
+    end;
+    Dec(L);
+  end;
   if (L >= 1) and IsBlockWord(LineAt(pLines, L)) then Result:= L
   else Result:= 0;
 end;
 
-/// First line after pHeader that starts a new column-1 construct.
+/// First line after pHeader that is indented no deeper than pHeader (a column-1 header: the
+/// first column-1 construct).
 function BlockEnd(const pLines: TArray<string>; pHeader: Integer): Integer;
 var
   L: Integer;
 begin
+  var Depth:= IndentOf(LineAt(pLines, pHeader));
   L:= pHeader + 1;
-  while (L <= Length(pLines)) and (IsIndented(LineAt(pLines, L)) or IsCommentOnly(LineAt(pLines, L))) do Inc(L);
+  while (L <= Length(pLines)) and (IsCommentOnly(LineAt(pLines, L)) or
+    (IsIndented(LineAt(pLines, L)) and (IndentOf(LineAt(pLines, L)) > Depth))) do Inc(L);
   Result:= L;
+end;
+
+/// W6 C6: the keyword of a declaration that opens its own line (`var GX: Integer = 2;`,
+/// `type TR = record`), or ''. A one-line declaration must end the line: `var A: T; B: T;`
+/// would carry B along, so it answers ''.
+function SameLineKeyword(const pLine, pName: string; pOneLine: Boolean): string;
+begin
+  var Code:= Trim(CodePart(pLine));
+  var M   := TRegEx.Match(Code, '^(type|var|const)\s+' + pName + '\b', [roIgnoreCase]);
+  if not M.Success then Exit('');
+  if pOneLine then
+  begin
+    var Bare:= TRegEx.Replace(Code, '''[^'']*''', '');
+    if Pos(';', Bare) <> Length(Bare) then Exit('');
+  end;
+  Result:= LowerCase(M.Groups[1].Value);
 end;
 
 function RangeText(const pRanges: TArray<TLineRange>): string;
@@ -1902,6 +1943,15 @@ end;
 
 procedure TCyclePlanner.SetHeader(const pF: TPlanFile; var pItem: TMoveItem);
 begin
+  var KW:= SameLineKeyword(LineAt(pF.Lines, pItem.Sym.StartLine), pItem.Sym.Name, pItem.Sym.StartLine = pItem.Sym.EndLine);
+  if KW <> '' then
+  begin
+    { W6 C6: `var GX: T;` -- the keyword stays on the line, the declaration moves }
+    pItem.Header  := pItem.Sym.StartLine;
+    pItem.Keyword := KW;
+    pItem.SameLine:= True;
+    Exit;
+  end;
   pItem.Header:= HeaderOf(pF.Lines, pItem.Decl.First);
   if pItem.Header = 0 then
   begin
@@ -2782,6 +2832,13 @@ begin
     if Item.Kind <> mvBase then
     begin
       for var R in MovedRanges(Item) do MarkDeleted(Fid, R);
+      if Item.SameLine then
+      begin
+        { W6 C6: the keyword line stays (DeleteEmptyHeaders drops it with an emptied block) }
+        var Line:= LineAt(GetFile(Fid).Lines, Item.Header);
+        FDeleted.Remove(LineKey(Fid, Item.Header));
+        MarkReplaced(Fid, Item.Header, Copy(Line, 1, IndentOf(Line)) + Item.Keyword);
+      end;
       Continue;
     end;
     var F:= GetFile(Fid);
@@ -2809,7 +2866,11 @@ begin
     var Empty:= True;
     for var L:= Item.Header + 1 to BlockEnd(F.Lines, Item.Header) - 1 do
       if not (IsDeleted(F.Fid, L) or IsCommentOnly(LineAt(F.Lines, L))) then Empty:= False;
-    if Empty then MarkDeleted(F.Fid, OneRange(Item.Header, Item.Header));
+    if Empty then
+    begin
+      FReplaced.Remove(LineKey(F.Fid, Item.Header));
+      MarkDeleted(F.Fid, OneRange(Item.Header, Item.Header));
+    end;
   end;
 end;
 
@@ -4082,6 +4143,14 @@ begin
       if KW <> Keyword then L.Add(KW);
       Keyword:= KW;
       if Item.Kind = mvBase then L.AddRange(BaseClassText(Item))
+      else if Item.SameLine then
+      begin
+        { W6 C6: the leaf's own keyword line opens the block; the declaration loses the keyword }
+        var Slice:= SliceLines(P.Lines, Item.Decl);
+        var K    := Item.Sym.StartLine - Item.Decl.First;
+        Slice[K]:= '  ' + TrimLeft(Copy(TrimLeft(Slice[K]), Length(Item.Keyword) + 1, MaxInt));
+        L.AddRange(Slice);
+      end
       else L.AddRange(SliceLines(P.Lines, Item.Decl));
       if Item.Kind = mvWithBodies then pBodies.AddRange(Item.Bodies);
     end;
@@ -4695,6 +4764,41 @@ begin
   Result:= Trim(TRegEx.Replace(Trim(TRegEx.Replace(Result, '\s+', ' ')), '^(type|var)\s+', '', [roIgnoreCase]));
 end;
 
+{ W6 C2: R2 into an existing leaf that already declares I<Class>Surface. The same code text (comments
+  aside; the GUID is derived from leaf + name, so a repeated plan matches) is reused: nothing is
+  inserted. A different declaration: the lowest free suffix (`I<Class>Surface2` ...) names the
+  interface and the steps are planned again with it. No free suffix below 100: `duplicate-identifier`. }
+procedure TCyclePlanner.SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf;
+  const pUnitScopes: TArray<string>; var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
+var
+  Clash: TSymbol;
+begin
+  var F:= GetFile(pLeaf.Fid);
+  Clash:= Default(TSymbol);
+  for var S in F.Syms do
+    if SameText(S.Name, pSteps.IfaceName) then Clash:= S;
+  if Clash.Id = 0 then Exit;
+  var Mine:= '';
+  for var T in pSteps.IfaceDecl do Mine:= Mine + ' ' + CodePart(T);
+  if SameText(DeclarationText(F.Lines, Clash), Trim(TRegEx.Replace(Mine, '\s+', ' '))) then
+  begin
+    pSteps.ReuseDecl:= True;
+    Exit;
+  end;
+  for var N:= 2 to CMaxPtrSuffix do
+  begin
+    var Name := Clash.Name + IntToStr(N);
+    var Taken:= False;
+    for var S in F.Syms do
+      if SameText(S.Name, Name) then Taken:= True;
+    if Taken then Continue;
+    pSteps:= PlanMemberInterface(Self, FLibStore, pSurface, pLeaf.UnitName, pUnitScopes, pRefusal, Name);
+    Exit;
+  end;
+  pRefusal.Kind  := 'duplicate-identifier';
+  pRefusal.Reason:= Format('`%s` already declares `%s` (line %d) differently, and every suffix up to %d is taken',
+    [pLeaf.UnitName, Clash.Name, Clash.StartLine, CMaxPtrSuffix]);
+end;
 { W6 C2: R1 into an existing leaf that already declares the pointer's names. The same type and variable
   declarations (text equal) are reused: nothing is inserted, and the assignment is added only when the
   declaring unit does not make it already. Different declarations: the lowest free suffix (`FooPtr2`,
@@ -4889,14 +4993,7 @@ begin
     if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
     var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
-    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then
-      for var S in GetFile(Leaf.Fid).Syms do
-        if SameText(S.Name, Steps.IfaceName) then
-        begin
-          Refusal.Kind  := 'duplicate-identifier';
-          Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
-          Break;
-        end;
+    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Ev.Surface, Leaf, UnitScopes, Steps, Refusal);
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
@@ -5178,9 +5275,14 @@ begin
     var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
     EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
       'units outside this cycle keep using it as before.', [FInversion.ClassTypeName, Decl]);
-    EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
-      [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
-       string.Join(', ', FInversion.MemberSigs)]);
+    if FInversion.ReuseDecl then
+      EmitFmt('- `%s` already declares the interface `%s` (GUID `%s`) with exactly this text: it is reused, nothing ' +
+        'is inserted there. Its properties are the members `%s` reads: %s.', [FLeafName[FInversion.DeclStem],
+        FInversion.IfaceName, FInversion.IfaceGuid, Consumer, string.Join(', ', FInversion.MemberSigs)])
+    else
+      EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
+        [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
+         string.Join(', ', FInversion.MemberSigs)]);
     EmitMemberWrites;
     if Length(FInversion.MethodSigs) > 0 then
       EmitFmt('- The interface also declares each method `%s` calls on it, the signature copied verbatim: %s. `%s` ' +

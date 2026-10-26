@@ -264,7 +264,8 @@ type
     /// empty when nothing moves.</summary>
     MoveIds: TArray<Int64>;
     /// <summary>R1 (W6 C2): True when the leaf already declares TypeDecl and VarDecl with exactly this
-    /// text; the plan then inserts neither (the pointer is reused).</summary>
+    /// text; the plan then inserts neither (the pointer is reused). R2: the leaf already declares IfaceDecl
+    /// with exactly this code text (comments aside); the interface is reused, nothing is inserted.</summary>
     ReuseDecl: Boolean;
     /// <summary>R1 (W6 C2): True when the declaring unit already assigns `PtrVar := Routine;` -- the
     /// plan adds no second assignment.</summary>
@@ -435,6 +436,8 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// is derived from it).</param>
 /// <param name="pUnitScopes">EffectiveUnitScopes of the project; nil = the Delphi defaults.</param>
 /// <param name="pRefusal">Receives why the recipe does not apply; Kind '' when it does.</param>
+/// <param name="pIfaceName">The interface's name; '' = `I&lt;Class&gt;Surface` (the leaf already declaring that name
+/// differently, W6 C2 plans again with the lowest free suffix).</param>
 /// <returns>The steps; Recipe = crNone when refused.</returns>
 /// <remarks>
 /// <para>Shape (first offending ref, in line order): every ref must be erTypeIs, erTypeAs or
@@ -444,7 +447,8 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// `qualified-ref` (`B.X` anywhere in A).</para>
 /// <para>Members: each must be a field or a non-indexed property declared in the class itself
 /// (`member-unsupported`; a method is `class-method`); `duplicate-identifier` when the class
-/// already has `Get&lt;M&gt;`. Class: its heritage on its declaration line and its `end;` line
+/// already has `Get&lt;M&gt;` -- unless it is exactly `function Get&lt;M&gt;: &lt;T&gt;;` and the property M
+/// reads through it: then that getter is reused, nothing is added for M (W6 C2). Class: its heritage on its declaration line and its `end;` line
 /// (`manual-edit`); an ancestor implementing IInterface (`no-iinterface`); no reference
 /// counting on the way -- TInterfacedObject, TAggregatedObject, TContainedObject or an
 /// unknown implementation would free the object when the temporary interface is released
@@ -469,7 +473,7 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// </remarks>
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
   const pSurface: TEdgeSurface; const pLeafUnit: string; const pUnitScopes: TArray<string>;
-  out pRefusal: TRecipeRefusal): TRecipeSteps;
+  out pRefusal: TRecipeRefusal; const pIfaceName: string = ''): TRecipeSteps;
 
 /// <summary>The effective unit-scope names of a project: every `&lt;DCC_Namespace&gt;` value of
 /// the .dproj (any configuration group), split at `;`.</summary>
@@ -2258,6 +2262,8 @@ type
     FRefusal : TRecipeRefusal;
     FMethods : TList<TSymbol>;  // B2: instance methods carried as interface methods
     FMethodDecls: TList<string>;  // B2: their interface declarations
+    FKeptGetters: TList<string>;  // W6 C2: `Get<M>` the class declares already, reused as the getter
+    function GetterReusable(const pM, pDup: TSymbol): Boolean;
     function CarriedMethodOf(const pR: TEdgeRef; const pS: TSymbol): TSymbol;
     function CheckMethod(const pR: TEdgeRef; const pM: TSymbol): Boolean;
     function CheckMethods: Boolean;
@@ -2297,7 +2303,7 @@ type
     constructor Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore; const pSurface: TEdgeSurface;
       const pUnitScopes: TArray<string>);
     destructor Destroy; override;
-    function Run(const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+    function Run(const pLeafUnit, pIfaceName: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
   end;
 
 constructor TMemberPlan.Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
@@ -2323,10 +2329,12 @@ begin
   FWithLines  := TList<Integer>.Create;
   FMethods    := TList<TSymbol>.Create;
   FMethodDecls:= TList<string>.Create;
+  FKeptGetters:= TList<string>.Create;
 end;
 
 destructor TMemberPlan.Destroy;
 begin
+  FKeptGetters.Free;
   FMethodDecls.Free;
   FMethods.Free;
   FWithLines.Free;
@@ -2337,6 +2345,22 @@ begin
   FGetters.Free;
   FMembers.Free;
   inherited Destroy;
+end;
+
+{ W6 C2: the class already declares `Get<M>`. It serves as the interface getter unchanged only when
+  it is exactly `function Get<M>: <T>;` (no parameters, no directive) AND the property M reads
+  through it -- then `ISurface.M` returns what `TX.M` returns. Any other GetM (another signature,
+  or a method the property does not read through) keeps the refusal: its value is not M's. }
+function TMemberPlan.GetterReusable(const pM, pDup: TSymbol): Boolean;
+begin
+  if (pM.Kind <> skProperty) or not (pDup.Kind in [skMethod, skFunction]) then Exit(False);
+  var Decl:= '';
+  for var L:= pDup.StartLine to Max(pDup.StartLine, pDup.EndLine) do Decl:= Decl + ' ' + BareCode(LineOf(FClsLines, L));
+  if not TRegEx.IsMatch(Trim(Decl), '^function\s+' + TRegEx.Escape(pDup.Name) + '\s*:\s*' +
+    TRegEx.Escape(Trim(pM.Signature)) + '\s*;$', [roIgnoreCase]) then Exit(False);
+  var Prop:= '';
+  for var L:= pM.StartLine to Max(pM.StartLine, pM.EndLine) do Prop:= Prop + ' ' + BareCode(LineOf(FClsLines, L));
+  Result:= TRegEx.IsMatch(Prop, '\bread\s+' + TRegEx.Escape(pDup.Name) + '\b', [roIgnoreCase]);
 end;
 
 function TMemberPlan.Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
@@ -2482,9 +2506,12 @@ begin
           Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('`%s.%s` is not a field or a ' +
             'non-indexed property with a stored type', [FCls.Name, M.Name])));
         var Dup:= FStore.FindChildSymbolByName(FCls.Id, 'Get' + M.Name);
-        if Dup.Id > 0 then
+        if (Dup.Id > 0) and not GetterReusable(M, Dup) then
           Exit(Refuse('duplicate-identifier', Dup.Name, FClsFid, Dup.StartLine, Format('`%s` already declares ' +
-            '`%s` (line %d), the getter the interface needs', [FCls.Name, Dup.Name, Dup.StartLine])));
+            '`%s` (line %d), the getter the interface needs, and it is not `function %s: %s;` read by the property ' +
+            '`%s` (only that one can serve as the interface getter unchanged)', [FCls.Name, Dup.Name, Dup.StartLine,
+            Dup.Name, Sig, M.Name])));
+        if Dup.Id > 0 then FKeptGetters.Add(Dup.Name);
         FMembers.Add(M);
       end;
   finally
@@ -3173,6 +3200,12 @@ begin
     for var I:= 0 to FMembers.Count - 1 do
     begin
       var Ty:= Trim(FMembers[I].Signature);
+      if FKeptGetters.Contains(FGetters[I]) then
+      begin
+        { W6 C2: the class's own getter implements the interface's }
+        AddSetterLines(I, Indent, Decls, Bodies);
+        Continue;
+      end;
       Decls.Add(Format('%s/// <summary>%s: returns %s (cycles --plan, member hand-over).</summary>', [Indent, FIface,
         FMembers[I].Name]));
       Decls.Add(Format('%sfunction %s: %s;', [Indent, FGetters[I], Ty]));
@@ -3218,14 +3251,15 @@ begin
   end;
 end;
 
-function TMemberPlan.Run(const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+function TMemberPlan.Run(const pLeafUnit, pIfaceName: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
 begin
   Result  := Default(TRecipeSteps);
   FRefusal:= Default(TRecipeRefusal);
   var Ok:= (FFromFid > 0) and (FClsFid > 0) and CheckShape;
   if Ok then
   begin
-    FIface:= 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
+    FIface:= if pIfaceName <> '' then pIfaceName
+      else 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
     Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass and RewriteConsumer;
     Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
@@ -3256,13 +3290,13 @@ end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
   const pSurface: TEdgeSurface; const pLeafUnit: string; const pUnitScopes: TArray<string>;
-  out pRefusal: TRecipeRefusal): TRecipeSteps;
+  out pRefusal: TRecipeRefusal; const pIfaceName: string): TRecipeSteps;
 var
   P: TMemberPlan;
 begin
   P:= TMemberPlan.Create(pSource, pLibrary, pSurface, pUnitScopes);
   try
-    Result:= P.Run(pLeafUnit, pRefusal);
+    Result:= P.Run(pLeafUnit, pIfaceName, pRefusal);
   finally
     P.Free;
   end;

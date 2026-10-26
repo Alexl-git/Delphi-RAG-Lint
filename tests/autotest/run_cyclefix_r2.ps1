@@ -33,7 +33,8 @@
   (f) one mutation of the clean pair per refusal kind (each was RED with the refusal disabled):
       class-method (a method called in the `with` body -- the Review Focus), construction,
       class-ref, type-decl, type-cast, other-ref, multiple-classes, qualified-ref,
-      member-unsupported (indexed property), duplicate-identifier (getter / leaf), manual-edit,
+      member-unsupported (indexed property), duplicate-identifier (getter; the leaf case is mechanical since W6 C2,
+      run_cyclefix_w6_more.ps1 c2d/c2e), manual-edit,
       no-iinterface, ref-counted, receiver-unknown, cast-unseen, with-member, ancestry-unknown
       (stub library), leaf-uses-cycle, type-unresolved, edge-still-used.
   (g) the demo with the STUB library: cycle 2 is refused, not cut -- what makes it mechanical
@@ -361,7 +362,6 @@ try {
     @('f8', 'qualified-ref', 'names `TDemoGagePort` qualified by its unit', $cleanDir, @(, @($U, '  if not (Owner is TDemoGagePort) then', '  if not (Owner is DemoGagePort.TDemoGagePort) then'))),
     @('f9', 'member-unsupported', '`TDemoGagePort.Lines` is not a field or a non-indexed property', $cleanDir, @(@($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    /// <summary>One log line.</summary>`n    property Lines[pIndex: Integer]: string read GetLine;"), @($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    function GetLine(pIndex: Integer): string;"), @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf + Lines[0]);"))),
     @('f10', 'duplicate-identifier', '`TDemoGagePort` already declares `GetLog`', $cleanDir, @(, @($G, '    procedure ReadGage(const pValue: Integer);', "    procedure ReadGage(const pValue: Integer);`n    /// <summary>Already there.</summary>`n    function GetLog: TStrings;"))),
-    @('f11', 'duplicate-identifier', '`DemoGagePort.Untangle` already declares `IDemoGagePortSurface`', (Join-Path $Fx 'r2extend'), @(, @('DemoGagePort.Untangle.pas', '  TDemoGageUnit = (guMillimetre, guInch);', "  TDemoGageUnit = (guMillimetre, guInch);`n`n  IDemoGagePortSurface = interface`n  end;"))),
     @('f12', 'manual-edit', 'the heritage of `TDemoGagePort` is not on its declaration line', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', "  TDemoGagePort = class(TComponent,`n    IUnknown"))),
     @('f13', 'no-iinterface', 'no ancestor of `TDemoGagePort` implements IInterface', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', '  TDemoGagePort = class(TObject)'))),
     @('f14', 'ref-counted', 'descends from `TInterfacedObject`, which counts references', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', '  TDemoGagePort = class(TInterfacedObject)'))),
