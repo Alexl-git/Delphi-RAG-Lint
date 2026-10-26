@@ -45,7 +45,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",   # worktree-local build, like mcp_protocol / docs_sync
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_precondition_$PID"
 )
 try {

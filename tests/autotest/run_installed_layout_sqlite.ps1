@@ -14,7 +14,7 @@
 
   Usage: pwsh -File tests\autotest\run_installed_layout_sqlite.ps1 [-EngineDir <dir>]
 #>
-param([string] $EngineDir = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64'))
+param([string] $EngineDir = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug'))
 $ErrorActionPreference = 'Stop'
 $EngineDir = [IO.Path]::GetFullPath($EngineDir)
 $fail = 0
