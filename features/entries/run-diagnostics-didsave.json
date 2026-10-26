@@ -4,15 +4,15 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.22.0-alpha",
   "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
-  "intro": "Read this to know why drag-lint findings refresh on their own: the diagnostics pass runs on a file each time you save it in the IDE, so there is nothing to invoke by hand.",
+  "intro": "Read this to know why drag-lint findings refresh on their own: with automatic diagnostics on, the pass runs on a file each time you save it in the IDE. You can also trigger it by hand for the active editor with Ctrl+Alt+D or the About dialog button.",
   "wikiPage": "Run-Diagnostics-didSave",
   "surfaces": [
     {
       "type": "ide-about",
       "caption": "Run Diagnostics (didSave)",
-      "steps": ["Nothing to click; it fires each time you save a file in the IDE", "It needs an open editor with a saved file", "There is no CLI equivalent; it runs in-process in the plugin"]
+      "steps": ["It fires on every save when Run diagnostics automatically on save is enabled in the options", "To run it by hand on the active editor: press Ctrl+Alt+D or click Run Diagnostics (didSave) in the About dialog", "It needs an open editor with a saved file", "There is no CLI equivalent; it runs in-process in the plugin"]
     }
   ],
   "audience": "both",

@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "1.19.1-alpha",
   "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
   "intro": "Read this when you need the complete set of one kind of symbol, for example every unit in a project or library index to fill a picker. It lists them all with no name and no row cap.",
   "wikiPage": "query-kind-all",

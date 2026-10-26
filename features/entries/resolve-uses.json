@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "internal",
   "since": "0.41.0-alpha",
-  "summary": "The diagnostic behind check-unit --resolve-uses; not a verb of its own",
-  "intro": "This is not a command of its own: it is the diagnostic behind the --resolve-uses option of check-unit. Read the Maintenance page if you need to understand how unit references are resolved.",
+  "summary": "Internal lookup verb: ranks the units that declare a symbol, to decide which unit a uses clause needs",
+  "intro": "Internal and not listed in --help: given a symbol name (and optionally the file that needs it), it ranks the units whose interface declares that symbol. For everyday work use find-unit, or check-unit --resolve-uses to annotate undeclared identifiers.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
@@ -43,7 +43,7 @@
       "command": "drag-lint check-unit <unit.pas> --resolve-uses --db <db>"
     }
   ],
-  "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed",
+  "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; standalone hidden verb (DoResolveUses), separate from check-unit --resolve-uses.; seed: group guessed",
   "verified": {
     "date": "2026-10-23",
     "by": "ENGINE",

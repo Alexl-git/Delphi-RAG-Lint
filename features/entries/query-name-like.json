@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "1.8.0-alpha",
   "summary": "Case-insensitive substring search over symbol names",
   "intro": "Read this when you do not know the identifier yet. It does a case-insensitive substring search over symbol names, so a fragment such as SVG finds the types that matter.",
   "wikiPage": "query-name-like",

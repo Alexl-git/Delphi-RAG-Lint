@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "0.66.0-alpha",
   "summary": "Resolves a type's category -- float, string, class, interface, and so on",
   "intro": "Read this when you need to know what kind of type a name is, such as float, string, class or interface, before writing code against it. Give it the type name and it resolves the category from the index.",
   "wikiPage": "query-typecat",
