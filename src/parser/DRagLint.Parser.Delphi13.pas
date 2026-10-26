@@ -691,6 +691,125 @@ begin
   AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode, ReceiverTextOf(EntityNode, AState.Source));
 end; // procedure
 
+{ XT-RAISE (spec 2026-10-26-extract-raise-handle-facts): one syntactic fact per
+  raise / handler site, as ADDED refs rows -- the read / type_use / call rows the
+  same site already gets are untouched, so none of these routines Exits Walk.
+  Shapes, dumped from tree_sitter_delphi13 (field names, not guessed):
+    (raise kRaise exception: <expr> [kAtWord address: <expr>] ;)   -- `raise;` has no exception
+    (exceptionHandler kOn [variable: identifier :] exception: (typeref ..) kDo body: ..)
+    (try kTry try: .. except: kExcept except: exceptionHandler* except: exceptionElse? kEnd)
+    (exceptionElse kElse <statement>)
+  Pinned by tests\autotest\run_raise_handle_refs.ps1. }
+
+{ The leftmost identifier of an expression: `E` -> E, `FErrors.Pop` -> FErrors,
+  `Make(..).X` -> Make. Null when the root is not an identifier (a literal, a
+  parenthesised cast). }
+function RootIdentifierOf(const AExpr: TTSNode): TTSNode;
+const
+  { a bound on a malformed tree only: real receiver chains stay in single digits }
+  MAX_ROOT_DEPTH = 32;
+var
+  N    : TTSNode;
+  Guard: Integer;
+begin
+  N:= AExpr;
+  for Guard:= 1 to MAX_ROOT_DEPTH do
+  begin
+    if N.IsNull or (N.NodeType = 'identifier') then Exit(N);
+    if N.NodeType = 'exprDot' then N:= N.ChildByField('lhs')
+    else if (N.NodeType = 'exprCall') or (N.NodeType = 'exprTpl') or (N.NodeType = 'exprSubscript') then
+      N:= N.ChildByField('entity')
+    else Break;
+  end;
+  Result:= Default(TTSNode);
+end; // function
+
+procedure EmitRaiseReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  Expr, Callee, Ctor, TypeNode, Root: TTSNode;
+  Receiver: string;
+begin
+  Expr:= ANode.ChildByField('exception');
+  if Expr.IsNull then
+  begin
+    AState.EmitRef(REF_KIND_RERAISE, 'raise', ANode);
+    Exit;
+  end;
+  { `raise T.Create*(..)` and the paren-less `raise T.Create;` (an exprDot with
+    no exprCall around it) are the same fact: a construction of T. }
+  Callee:= Expr;
+  if Callee.NodeType = 'exprCall' then Callee:= Callee.ChildByField('entity');
+  if (not Callee.IsNull) and (Callee.NodeType = 'exprDot') then
+  begin
+    Ctor:= Callee.ChildByField('rhs');
+    TypeNode:= Callee.ChildByField('lhs');
+    Receiver:= '';
+    if (not TypeNode.IsNull) and (TypeNode.NodeType = 'exprDot') then
+    begin
+      Receiver:= NodeText(TypeNode.ChildByField('lhs'), AState.Source);
+      TypeNode:= TypeNode.ChildByField('rhs');
+    end;
+    if (not Ctor.IsNull) and (Ctor.NodeType = 'identifier')
+       and StartsText('Create', NodeText(Ctor, AState.Source))
+       and (not TypeNode.IsNull) and (TypeNode.NodeType = 'identifier') then
+    begin
+      AState.EmitRef(REF_KIND_RAISE, NodeText(TypeNode, AState.Source), TypeNode, Receiver);
+      Exit;
+    end;
+  end;
+  Root:= RootIdentifierOf(Expr);
+  if not Root.IsNull then AState.EmitRef(REF_KIND_RAISE_EXPR, NodeText(Root, AState.Source), Root);
+end; // procedure
+
+procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  TypeRef, TypeExpr, NameNode: TTSNode;
+  Receiver: string;
+begin
+  TypeRef:= ANode.ChildByField('exception');
+  if TypeRef.IsNull or (TypeRef.NamedChildCount = 0) then Exit;
+  TypeExpr:= TypeRef.NamedChild(0);
+  Receiver:= '';
+  if TypeExpr.NodeType = 'typerefTpl' then TypeExpr:= TypeExpr.ChildByField('entity');
+  if TypeExpr.IsNull then Exit;
+  if (TypeExpr.NodeType = 'typerefDot') or (TypeExpr.NodeType = 'genericDot') then
+  begin
+    Receiver:= NodeText(TypeExpr.ChildByField('lhs'), AState.Source);
+    NameNode:= TypeExpr.ChildByField('rhs');
+  end
+  else NameNode:= TypeExpr;
+  if NameNode.IsNull or (NameNode.NodeType <> 'identifier') then Exit;
+  AState.EmitRef(REF_KIND_HANDLE, NodeText(NameNode, AState.Source), NameNode, Receiver);
+end; // procedure
+
+{ handle-all: `except <stmts> end` / `except end` (a kExcept with no
+  exceptionHandler sibling) on the kExcept token, and the `else` after handlers
+  on its kElse token. try..finally has no kExcept and emits nothing. }
+procedure EmitBareExceptReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  i: Integer;
+  C, ExceptTok, ElseNode: TTSNode;
+  HasHandler: Boolean;
+begin
+  ExceptTok:= Default(TTSNode);
+  ElseNode:= Default(TTSNode);
+  HasHandler:= False;
+  for i:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    C:= ANode.NamedChild(i);
+    if C.NodeType = 'kExcept' then ExceptTok:= C
+    else if C.NodeType = 'exceptionHandler' then HasHandler:= True
+    else if C.NodeType = 'exceptionElse' then ElseNode:= C;
+  end;
+  if ExceptTok.IsNull then Exit;
+  if not HasHandler then AState.EmitRef(REF_KIND_HANDLE_ALL, 'except', ExceptTok)
+  else if (not ElseNode.IsNull) and (ElseNode.NamedChildCount > 0) then
+  begin
+    C:= ElseNode.NamedChild(0);
+    if (not C.IsNull) and (C.NodeType = 'kElse') then AState.EmitRef(REF_KIND_HANDLE_ALL, 'else', C);
+  end;
+end; // procedure
+
 { PHASE B item B3 -- a bare parameterless call in EXPRESSION position.
 
   Delphi invokes a parameterless routine by NAME ALONE, so `if not
@@ -3083,6 +3202,16 @@ begin
       if (not RhsNode.IsNull) and (RhsNode.NodeType = 'identifier') then
         AState.EmitRef('type_use', NodeText(RhsNode, AState.Source), RhsNode);
     end;
+  end;
+
+  { XT-RAISE: raise / handler facts (deep scan only, the same gate as the
+    'read' the raise already gets). Additive arms, no Exit: the default
+    recursion and every existing handler still see these nodes. }
+  if AState.EmitUsageRefs then
+  begin
+    if NodeType = 'raise' then EmitRaiseReference(ANode, AState)
+    else if NodeType = 'exceptionHandler' then EmitHandlerReference(ANode, AState)
+    else if NodeType = 'try' then EmitBareExceptReference(ANode, AState);
   end;
 
   // v0.42: identifier usage references (deep scan only). Captures variable /

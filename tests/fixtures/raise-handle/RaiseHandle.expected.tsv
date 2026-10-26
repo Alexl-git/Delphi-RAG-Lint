@@ -1,0 +1,19 @@
+kind	name_text	start_line	start_col	receiver_text	enclosing
+raise	EFoo	44	11		RaiseHandle.SimpleRaise
+raise	EBare	46	11		RaiseHandle.SimpleRaise
+raise	EConvertError	47	9		RaiseHandle.SimpleRaise
+raise	EArgumentException	52	25	System.SysUtils	RaiseHandle.QualifiedRaise
+raise-expr	AErrors	57	9		RaiseHandle.RaiseOfCall
+handle	EConvertError	65	11		RaiseHandle.HandlerShapes
+reraise	raise	66	7		RaiseHandle.HandlerShapes
+handle	EAbort	67	8		RaiseHandle.HandlerShapes
+handle	EArgumentException	68	27	System.SysUtils	RaiseHandle.HandlerShapes
+handle	EFoo	73	12		RaiseHandle.HandlerShapes
+raise-expr	E	85	11		RaiseHandle.ReraiseAt
+handle-all	except	86	3		RaiseHandle.ReraiseAt
+raise-expr	E	87	11		RaiseHandle.ReraiseAt
+handle-all	except	95	3		RaiseHandle.BareExcepts
+handle-all	except	100	3		RaiseHandle.BareExcepts
+handle	EFoo	109	8		RaiseHandle.ElseBranch
+handle-all	else	110	3		RaiseHandle.ElseBranch
+handle	EFoo	134	13		RaiseHandle.Outer.Inner
