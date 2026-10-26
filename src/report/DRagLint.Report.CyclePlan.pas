@@ -4709,6 +4709,8 @@ begin
   var F:= GetFile(pLeaf.Fid);
   HasType:= False;
   HasVar := False;
+  TypeSym:= Default(TSymbol);
+  VarSym := Default(TSymbol);
   for var S in F.Syms do
     if SameText(S.Name, pSteps.PtrType) then
     begin

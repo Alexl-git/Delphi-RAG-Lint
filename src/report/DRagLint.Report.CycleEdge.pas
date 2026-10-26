@@ -1562,7 +1562,8 @@ begin
       if not Qualified.Contains(R.Line) then Qualified.Add(R.Line);  { W6 C7: Qualified now holds every line to edit }
     Qualified.Sort;
     var QualRx:= '(?<![\w.@])' + TRegEx.Escape(ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), '')).Replace('\.',
-      '\s*\.\s*') + '\s*\.\s*' + TRegEx.Escape(Name) + '\b';    for var L in Qualified do
+      '\s*\.\s*') + '\s*\.\s*' + TRegEx.Escape(Name) + '\b';
+    for var L in Qualified do
     begin
       if Done.Contains(L) then Continue;
       Done.Add(L);

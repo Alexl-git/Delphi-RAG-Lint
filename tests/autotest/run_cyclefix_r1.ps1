@@ -390,7 +390,8 @@ try {
   foreach ($dir in 'local', 'near', 'far') {
     $vd = Get-Variant "r1$dir" 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; $dir;`r`n`r`nimplementation"
     Check "n3 (C7) $dir; is neutral: mechanical" ($vd.Ok -and ($vd.Dump.verdict -eq 'mechanical')) "[$($vd.Dump.verdict) / $($vd.Dump.refusals)]"
-  }  Write-Host '== (o) another symbol named through the unit: R1Title.R1TitleCount' -ForegroundColor Cyan
+  }
+  Write-Host '== (o) another symbol named through the unit: R1Title.R1TitleCount' -ForegroundColor Cyan
   $vo = Get-Variant 'r1qualother' 'R1Form.pas' "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));" `
     ("  Writeln(Format('[form] %s', [R1TitleOf(pId)]));`r`n  Writeln(R1Title.R1TitleCount);") `
     'R1Title.pas' "function R1TitleOf(const pId: Integer): string;`r`n`r`nimplementation" `
