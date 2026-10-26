@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.35.0-alpha
+
+* [Member migration (#migrate)](features/convrules-migrate-members.md) -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE into a #convert block from a Work list row or the block's Members list.
+
 ## 1.33.0-alpha
 
 * [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) -- Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.

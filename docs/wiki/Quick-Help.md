@@ -112,6 +112,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **convert-validate** -- Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees. Check a conversion-rules book before you convert: syntax, and that every #link and #default path exists on the real classes. [More](convert-validate)
 * **ConvRulesEditor** -- Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27). Edit conversion-rules books visually, run a conversion and see what is left to do by hand. [More](convrules-editor)
 * **glyph-vacuum** -- Measure every streamed glyph or picture under a tree before writing a glyph rule. Before you write a glyph rule, measure every image embedded in your forms: size, format and how many images each list holds. [More](glyph-vacuum)
+* **Member migration (#migrate)** -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE into a #convert block from a Work list row or the block's Members list. Replace a member the converted code still uses (rename it, or mark it DL_NONE to convert by hand later) without typing the rule; needs an engine with migrate_members. [More](convrules-editor-migrate)
 * **proptree** -- Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties. List every property of a class, including inherited and nested ones, as dotted paths; the raw material for writing conversion rules. [More](proptree)
 * **Qualify #convert quick fix** -- ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book. Fix an ambiguous bare #convert class the way the engine suggests, without retyping the line. [More](convrules-editor-qualify-fix)
 * **Reindex project** -- ConvRulesEditor command: incremental index --project of the editor's project index, cancellable. Refresh the project index after IDE edits or between conversion stages. [More](convrules-editor-reindex-project)
@@ -262,6 +263,8 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * LSP protocol extensions: lsp textDocument/semanticTokens/full
 * LSP protocol extensions: lsp workspace/executeCommand
 * Maintenance: procedure docs\wiki\Maintenance.md
+* Member migration (#migrate): menu 'Classes tab > Members list > Add...' inside ConvRulesEditor.exe
+* Member migration (#migrate): menu 'Work list tab > Migrate...' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify #convert...' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify all...' inside ConvRulesEditor.exe
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe

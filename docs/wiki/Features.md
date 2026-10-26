@@ -224,6 +224,7 @@ Rule-driven migration of legacy component types.
 | [convert-validate](convert-validate) | `convert-validate` |  |
 | [ConvRulesEditor](convrules-editor) | `ConvRulesEditor.exe`; `ConvRulesEditor.exe` (Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)) |  |
 | [glyph-vacuum](glyph-vacuum) | `glyph-vacuum` |  |
+| [Member migration (#migrate)](convrules-editor-migrate) | `ConvRulesEditor.exe` (Work list tab > Migrate...); `ConvRulesEditor.exe` (Classes tab > Members list > Add...) |  |
 | [proptree](proptree) | `proptree` |  |
 | [Qualify #convert quick fix](convrules-editor-qualify-fix) | `ConvRulesEditor.exe` (Convert tab > Qualify #convert...); `ConvRulesEditor.exe` (Convert tab > Qualify all...) |  |
 | [Reindex project](convrules-editor-reindex-project) | `ConvRulesEditor.exe` (Conversion > Reindex project) |  |

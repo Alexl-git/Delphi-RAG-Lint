@@ -5770,6 +5770,30 @@
       }
     },
     {
+      "id": "convrules-migrate-members",
+      "title": "Member migration (#migrate)",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.35.0-alpha",
+      "summary": "ConvRulesEditor: write #migrate Old -> New or -> DL_NONE into a #convert block from a Work list row or the block's Members list",
+      "intro": "Replace a member the converted code still uses (rename it, or mark it DL_NONE to convert by hand later) without typing the rule; needs an engine with migrate_members.",
+      "wikiPage": "convrules-editor-migrate",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Work list tab > Migrate..."
+        },
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Classes tab > Members list > Add..."
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "proptree",
       "title": "proptree",
       "group": "component-conversion",

@@ -64,8 +64,8 @@
     "version": "1.34.1-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "c9dc955aa4ab7f5402ef4d5dc4da61fb7e88165627a8f3dafe0d4ed077f68375",
-    "version": "1.34.1-alpha"
+    "hash": "db521689b77a5056db90c58bf429f247815f9ccab57fb77ef21c50c5046c4452",
+    "version": "1.35.0-alpha"
   },
   "features/class-surface.md": {
     "hash": "51d9b8c38ae3754122a460b6770bab71c1a486f6e9b65acfb201726b09c18b85",
@@ -123,17 +123,21 @@
     "hash": "314f6e107a0dde02111645b5c0426cfaa2ea43a8798978e3faf4c53e33c2a069",
     "version": "1.33.0-alpha"
   },
+  "features/convrules-migrate-members.md": {
+    "hash": "36ac96ba90a8e280769e328c2afd7bc64f1ec221784472c94464524269f564f2",
+    "version": "1.35.0-alpha"
+  },
   "features/convrules-qualify-fix.md": {
-    "hash": "eea9174198f6573f7273e57c407ceecfa23c570a024bc410fa48f463b9ef549e",
-    "version": "1.33.0-alpha"
+    "hash": "29570ba0504883749508e91fb746534edd7bada5a067f0e41ffd0793ddf2249e",
+    "version": "1.35.0-alpha"
   },
   "features/convrules-reindex-project.md": {
-    "hash": "dcde62cdbffdb855aecf8ec4b8c1ca8f1ca5e11514420e26a11bdb1c52a8a1ef",
-    "version": "1.32.0-alpha"
+    "hash": "d0e3a13b7ccadd23ac0987f482569ce3835c885643c751aae67e1b5f75760bbf",
+    "version": "1.35.0-alpha"
   },
   "features/convrules-work-list.md": {
-    "hash": "c752cf64573f603a248f29189601fa124d0dce1cd6254386b11b2dff52991aea",
-    "version": "1.33.0-alpha"
+    "hash": "b78e207fe6ebefe86e9a2a587bc9468516f8bcf20ea988e947e854a23e5c1251",
+    "version": "1.35.0-alpha"
   },
   "features/copy-all-diagnostics.md": {
     "hash": "e90fcb2572f57ae07ddc3e0db8ba1e125a082569ce6c05f1c114f15317698e76",
@@ -156,8 +160,8 @@
     "version": "1.33.0-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "443b8a5f4d1edd5479cf6dabfdc00025b390f517a764d6105f19a6c80a68b504",
-    "version": "1.34.1-alpha"
+    "hash": "1dc51dc0de7cafd5127feb5e2ca9e49927e59b516db14bff46c6dcc559794a49",
+    "version": "1.35.0-alpha"
   },
   "features/deps-report.md": {
     "hash": "47e29dae02577c71eb6cdba390f48c145c77fc0baa042c4ac10ff1da94d8b5c9",
@@ -324,8 +328,8 @@
     "version": "1.33.0-alpha"
   },
   "features/glyph-vacuum.md": {
-    "hash": "bd8bab1ee4b0dcba927d7cc99fab75125b2699aefd2752eebd99bec56df15b31",
-    "version": "1.33.0-alpha"
+    "hash": "246bcd4face933c48b097fde89a7dd450296fea79f8340dd1dead12cb3e9c3df",
+    "version": "1.35.0-alpha"
   },
   "features/go-to-declaration.md": {
     "hash": "e9ce9fcb8b7eeef31f276bb503d3f3a13da8d4329ca13094882d6f217081a113",
@@ -464,8 +468,8 @@
     "version": "1.33.0-alpha"
   },
   "features/proptree.md": {
-    "hash": "c98fcc0e2a5f270e48e6941f9a8da81569697aafe54be8aefd1966223a08a691",
-    "version": "1.33.0-alpha"
+    "hash": "debe28febb5b65d33a075635d443aacf5aa5c57a0a3f791d69a50c521128ca68",
+    "version": "1.35.0-alpha"
   },
   "features/protocol-handler.md": {
     "hash": "49d725e52803be0772b3b30540d4626f6dc3a52861e599a9ea67c4350366c097",
