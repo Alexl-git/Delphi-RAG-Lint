@@ -10,16 +10,20 @@ No keyboard shortcut is documented for this menu item.
 
 ## Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:
-"(none - in-process)"). It is served in-process by the IDE plugin. The
-bundled language server exposes the same capability over stdio to other
-editors -- the [Features](Features) page lists go-to-definition among the
-methods `drag-lint lsp` implements -- but that is a stdio protocol server,
-not a one-shot CLI command.
+"(none - in-process)"). The menu item sends a `textDocument/definition`
+request (5 second limit) to the long-lived `drag-lint lsp --stdio` engine the
+plugin keeps running, and jumps to the location it answers; with several
+candidates (for example `ToUpper`) it lets you pick one. The same capability
+is exposed over stdio to other editors -- the [Features](Features) page lists
+go-to-definition among the methods `drag-lint lsp` implements -- but that is a
+stdio protocol server, not a one-shot CLI command.
 
 ## What it needs
 The feature map marks this row's Index column "n/a" and its Mechanism
-"in-process" -- it does not shell out to the CLI or query an index database
-through a verb. It needs an open editor with the caret on a symbol.
+"in-process" -- no CLI verb is shelled out. It still depends on the language
+server engine, which answers from the project's index, so the project must
+be indexed for the jump to find anything ("definition not found" otherwise).
+It needs an open editor with the caret on a symbol.
 
 ## Example
 Illustrative: with the caret on a reference to `TCustomerOrder.Total` in

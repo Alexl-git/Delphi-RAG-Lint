@@ -76,7 +76,7 @@ copy race twice to short-lived engines started by other sessions.
 
 | Flag | Meaning |
 |---|---|
-| `--seconds N` | hold length; default 120, clamped to 1..3600 |
+| `--seconds N` | hold length; default 120; a value below 1 (or not a number) means 120, a value above 3600 is capped at 3600 |
 | `--resume` | clear the hold immediately |
 | `--status` | report whether a hold is active; changes nothing |
 | `--json` | emit the stable `ide-release/1` document |

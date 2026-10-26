@@ -10,8 +10,10 @@ holding overlaid (unsaved-buffer) content.
 Running the verb bare (no arguments) does not print a usage banner; it runs
 immediately and prints `ghost-recover: nothing pending.` (exit 0) when there
 is no recovery journal, or `ghost-recover: N file(s) restored.` after acting.
-Passing `--help` or any unrecognized flag produces
-`FATAL: Exception: Unknown argument: <flag>` -- no other flags are documented.
+Passing `--help` (or `-h`, `-?`) prints the general `drag-lint` help banner
+(there is no per-verb text for this verb) and exits 0. Any unrecognized flag
+still ends in `FATAL: Exception: Unknown argument: <flag>` (exit 3) -- no other
+flags are documented.
 
 The plugin invokes it as:
 ```

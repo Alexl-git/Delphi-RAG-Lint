@@ -20,7 +20,7 @@ Two related forms also exist: `--kind param --in <F> --line <L> --col <C> --to <
 Without `--apply` (or with `--dry-run`), the run is a preview only.
 
 **Include files.** The index records no references inside `{$I}` included
-text yet (extractor 1.22). So when the old name is used as an identifier in an
+text yet. So when the old name is used as an identifier in an
 `.inc` file the index holds (comments and string literals are ignored), both
 the preview and `--apply` REFUSE with exit 2 and name the `.inc` file(s),
 instead of renaming the declaration and leaving those uses stale. Rename the
@@ -34,8 +34,13 @@ so is its `.dfm` binding. The `.dfm` event bindings (`OnClick = Button1Click`)
 that point at the renamed handler are rewritten with the declaration, again only
 for the owner form and the forms inheriting from it. `--apply` keeps each file's
 encoding, BOM and line breaks. Known limits: references the index cannot bind
-are still matched by name, and an unindexed or binary `.dfm` is skipped
-silently.
+are still matched by name. A BINARY `.dfm` of the owner form that holds the
+name as an identifier REFUSES the rename (exit 2, the message names the file),
+because event bindings are rewritten in text `.dfm` files only. A binary `.dfm`
+of a descendant form, or a text `.dfm` that is not in the index, is not
+rewritten but is reported: one `drag-lint: note: ...` line per file on stderr
+(never silent, never a refusal) -- convert it to text and re-index, or fix it by
+hand.
 
 ## What it needs
 An index IS required. The project's DB lives at

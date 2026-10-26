@@ -7,11 +7,12 @@ queries.
 
 ## Running it from the CLI
 ```
-drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]
+drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...]
 ```
 `--qname <X>` is the symbol to center the chart on. `--depth N` bounds how
 far each wing walks. `--format` selects `dot` (the default), `mermaid`,
-`text`, or `json`. `--output F` writes the chart to a file instead of
+`text`, or `json`; `--json` is the same as `--format json` (and makes a
+"symbol not found" error come back as JSON too). `--output F` writes the chart to a file instead of
 stdout. `--db PATH` may be repeated.
 
 ## Reaching it in the IDE
