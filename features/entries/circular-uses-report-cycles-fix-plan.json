@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.43.0-alpha",
   "summary": "Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them",
-  "intro": "Read this when the compiler complains about circular references or a project dependency graph feels tangled. It finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.",
+  "intro": "Read this when the compiler complains about circular references or a project dependency graph feels tangled. It finds uses cycles among indexed units (--f2047 narrows to the interface-only ones dcc rejects) and, on request, writes a refactoring playbook per group: what moves, the uses edits, the new-unit text and the predicted result, plus the exact cycles --fix commands that make the mechanical part for you. Where the playbook cannot cut a cycle it says so per edge and names the reason.",
   "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
   "surfaces": [
     {
@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "cycles",
-      "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--f2047 [--unit <stem>]] [--format json|text] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)",
+      "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <rsvars.bat>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
       "flags": [
         {
           "name": "--db",
@@ -33,10 +33,59 @@
           "name": "--plan"
         },
         {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
           "name": "--f2047"
         },
         {
+          "name": "--unit",
+          "arg": "<stem>"
+        },
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--cycle",
+          "arg": "<n>"
+        },
+        {
+          "name": "--part"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--no-reindex"
+        },
+        {
+          "name": "--no-compile"
+        },
+        {
+          "name": "--shadow-out",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<rsvars.bat>"
+        },
+        {
           "name": "--format"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
         }
       ],
       "helpOrder": 68,

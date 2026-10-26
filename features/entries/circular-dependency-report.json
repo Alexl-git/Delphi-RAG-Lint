@@ -4,9 +4,9 @@
   "group": "graphs-reports",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.4.0-alpha",
   "summary": "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it",
-  "intro": "Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index.",
+  "intro": "Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index, and shows which cycles the playbook cuts and which it leaves to you.",
   "wikiPage": "Circular-Dependency-Report",
   "surfaces": [
     {
@@ -26,7 +26,6 @@
       "command": "drag-lint cycles --db <db> --edges --causes"
     }
   ],
-  "notes": "seed: since unknown",
   "verified": {
     "date": "2026-10-21",
     "by": "ENGINE",
