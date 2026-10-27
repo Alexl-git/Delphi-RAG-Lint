@@ -1,0 +1,12 @@
+{
+  "id": "xml-external-entities-enabled",
+  "severity": "warning",
+  "category": "security",
+  "message": "XML external entities / DTD processing enabled (CWE-611, XXE) -- keep resolveExternals False and ProhibitDTD True for untrusted XML.",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "rext", "replace": "{rext} := False", "risky": true },
+    { "when_capture": "dtd", "replace": "{dtd} := True", "risky": true },
+    { "when_capture": "objp", "replace": "{objp}.setProperty('ProhibitDTD', True)", "risky": true }
+  ]
+}

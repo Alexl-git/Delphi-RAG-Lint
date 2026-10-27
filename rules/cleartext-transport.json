@@ -1,0 +1,7 @@
+{
+  "id": "cleartext-transport",
+  "severity": "warning",
+  "category": "security",
+  "message": "Cleartext transport (CWE-319) -- an http:// URL or TLS switched off; use https:// / UseTLS = utUseRequireTLS.",
+  "warn_capture": "warn"
+}

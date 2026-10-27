@@ -1,0 +1,7 @@
+{
+  "id": "loadlibrary-relative-name",
+  "severity": "warning",
+  "category": "security",
+  "message": "LoadLibrary with a bare DLL name is searched for in the application/current directory (DLL hijack, CWE-427) -- load by full path (ExtractFilePath(ParamStr(0)) + name) or use a KnownDLL.",
+  "warn_capture": "warn"
+}
