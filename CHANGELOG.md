@@ -5,6 +5,8 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.36.0-alpha -- 2026-10-27
+
 ### Changed (index)
 - A PROJECT index (`index --project`, and the project sections of `index --all`) is parsed against the project's ACTIVE build config -- the `.dproj` `<Config Condition="'$(Config)'==''">` marker (else, for a `.dproj` without one, the `.delphilsp.json` `-D` defines) -- instead of a hard-wired Release; `index --build-config <name>` overrides per run. `{$IFDEF DEBUG}` code becomes visible in a Debug-marked project's index. The indexer fingerprint of a PROJECT DB gains `;cfg=<config>;defs=<8hex>` (`cfg=<json>` when the define set came from `delphilsp.json`), so a config switch or a define edit re-parses exactly that DB; library and folder DBs keep a byte-identical fingerprint. This changes which preprocessor branches parse for project DBs: it rides the engine's next extractor bump (one project-DB re-parse). The `index: defines cfg=.. source=.. defs=..` line on stderr names the cause.
 ### Added
