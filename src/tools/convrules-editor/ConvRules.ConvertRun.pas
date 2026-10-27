@@ -376,6 +376,13 @@ type
     Notes   : TArray<string>;
   end;
 
+/// <summary>D2 Q6: the note for a Book-2 (DataDB-to-FireDAC.rules) that runs BEFORE the BDE book
+/// (BDE-to-FireDAC.rules) in the same job -- the BDE book must convert first.</summary>
+/// <param name="ARunnable">Paths of the books that will run, in application order.</param>
+/// <returns>The warning text; '' when either book is not in the list or the BDE book comes first.</returns>
+/// <remarks>Matched on the file name, case-insensitive. A warning only (Preflight Notes): the run is
+/// not refused, since a user may deliberately run Book-2 alone or in the order they chose.</remarks>
+function BookOrderNote(const ARunnable: TArray<string>): string;
 /// <summary>The backup paths for ONE unit's files, sharing one number: N is one
 /// above the highest existing .BCK&lt;N&gt; over ALL of AFiles, so a unit's .pas
 /// and .dfm restore points pair up by number (X.pas.BCK1 + X.dfm.BCK3 -> both
@@ -1161,6 +1168,25 @@ begin
     Result:= Result + ' -- not in the project index';
 end;
 
+function BookOrderNote(const ARunnable: TArray<string>): string;
+const
+  BDE_BOOK    = 'BDE-to-FireDAC.rules';
+  DATADB_BOOK = 'DataDB-to-FireDAC.rules';
+var
+  LBde   : Integer;
+  LDataDb: Integer;
+begin
+  Result:= '';
+  LBde:= -1;
+  LDataDb:= -1;
+  for var LIdx: Integer:= 0 to High(ARunnable) do
+    if SameText(ExtractFileName(ARunnable[LIdx]), BDE_BOOK) then
+      LBde:= LIdx
+    else if SameText(ExtractFileName(ARunnable[LIdx]), DATADB_BOOK) then
+      LDataDb:= LIdx;
+  if (LBde >= 0) and (LDataDb >= 0) and (LDataDb < LBde) then
+    Result:= DATADB_BOOK + ': listed before ' + BDE_BOOK + ' -- the BDE book must convert first; move it below the BDE book';
+end;
 function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 var
   B       : TBookEntry;
@@ -1198,6 +1224,9 @@ begin
         Result.Runnable:= Result.Runnable + [B.Path];
     end; // case
   end; // for
+  var LOrder: string:= BookOrderNote(Result.Runnable);
+  if LOrder <> '' then
+    Result.Notes:= Result.Notes + [LOrder];
   if not AnyCheck then
     Result.Problems:= Result.Problems + ['No rule book is checked.'];
   if Length(AUnits) = 0 then
