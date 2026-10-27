@@ -1,5 +1,6 @@
 boolean-comparison-true
 const-casing
+copy-paste-assignment
 doc-drift
 field-name-prefix
 local-field-prefix
