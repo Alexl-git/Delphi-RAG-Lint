@@ -100,7 +100,10 @@ const
     'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
     'nil-comparison', 'public-writable-field', 'loop-control-flag',
     'mutable-global-variable', 'default-encoding-io', 'split-variable',
-    'separate-query-from-modifier', 'ifdef-undefined-symbol', 'review-marker-reason-unreviewed'];
+    'separate-query-from-modifier', 'ifdef-undefined-symbol', 'review-marker-reason-unreviewed',
+    { clippy-parity wave (L0): OFF-by-default new built-ins }
+    'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
+    'too-many-bool-fields', 'index-loop-to-for-in'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -704,6 +707,32 @@ begin
     B('fan-in', 'metrics', 'info', 'Class is referenced by too many other classes (afferent coupling Ca)', False, [MkParam('threshold','int','20')]);
     B('instability', 'metrics', 'info', 'Class instability (I=Ce/(Ca+Ce)) is high -- unstable: depends on many, nothing depends on it', False, [MkParam('threshold','int','80'), MkParam('instability-floor','int','5')]);
 
+    { --- clippy-parity wave (2026-10-27): ids registered up front by lane L0; the
+      checker for each lives in its own src\diagnostics unit (stub until its lane
+      lands). Titles say WHAT and WHY in one sentence. --- }
+    B('loop-condition-invariant', 'bug-patterns', 'warning', 'Loop condition never changes inside the body -- the loop cannot end or never runs again');
+    B('for-bound-modified-in-body', 'bug-patterns', 'warning', 'For-loop bound or counter variable is modified in the body -- Delphi evaluates the bound once, so the change has no effect');
+    B('infinite-loop-no-exit', 'bug-patterns', 'warning', 'Loop with a constant-true condition has no Exit/Break/raise -- it can never terminate');
+    B('redundant-continue-exit', 'dead-code', 'hint', 'Continue or Exit as the last statement of a loop or routine does nothing -- remove it');
+    B('else-after-exit', 'refactoring', 'hint', 'else after a branch that ends in Exit/raise/Continue/Break -- drop the else to cut nesting', False);
+    B('unconditional-recursion', 'bug-patterns', 'warning', 'Routine calls itself on every path -- it recurses until the stack overflows');
+    B('bad-bit-mask', 'bug-patterns', 'warning', 'Bit-mask test that is always true or always false (e.g. X and 0 or X or -1 compared) -- the mask is wrong');
+    B('invalid-regex-literal', 'bug-patterns', 'warning', 'Regular-expression literal does not compile -- the call will raise at run time');
+    B('double-dictionary-lookup', 'refactoring', 'info', 'ContainsKey followed by an indexed read looks the key up twice -- use TryGetValue');
+    B('case-same-branches', 'dead-code', 'info', 'Case branches have identical bodies -- merge the labels or the branches are a copy-paste error');
+    B('misleading-indentation', 'bug-patterns', 'warning', 'Statement is indented as if it were controlled by the preceding if/while/for but is not -- likely a missing begin/end');
+    B('missing-const-param', 'refactoring', 'hint', 'Parameter is never modified, assigned or passed as var -- declare it const to avoid a copy or refcount', False);
+    B('local-shadows-field', 'structure', 'info', 'Local variable or parameter has the same name as a field of the class -- it hides the field and invites mistakes', False);
+    B('method-could-be-static', 'refactoring', 'hint', 'Method never uses Self or any instance member -- make it a class function or a free routine', False);
+    B('large-stack-local', 'complexity', 'info', 'Local variable is very large -- it can overflow the thread stack; allocate it on the heap', True, [MkParam('threshold','int','65536')]);
+    B('too-many-bool-fields', 'refactoring', 'info', 'Class has many Boolean fields -- they are probably a state machine or a set of flags in disguise', False, [MkParam('threshold','int','5')]);
+    B('inline-on-large-routine', 'complexity', 'hint', 'inline on a long or try-containing routine -- the compiler will not inline it or code bloat outweighs the gain', True, [MkParam('threshold','int','20')]);
+    B('wait-while-holding-lock', 'bug-patterns', 'warning', 'Blocking call (Synchronize, WaitFor, Sleep, SendMessage, dialog) while a lock is held -- risk of deadlock');
+    B('disallowed-method', 'policy', 'warning', 'Call to a method the project configuration disallows -- see the configured reason');
+    B('disallowed-type', 'policy', 'warning', 'Use of a type the project configuration disallows -- see the configured reason');
+    B('disallowed-name', 'policy', 'warning', 'Use of an identifier the project configuration disallows -- see the configured reason');
+    B('index-loop-to-for-in', 'modernize', 'hint', 'Index loop only reads Items[I] -- a for..in loop is shorter and cannot go out of range', False);
+    B('duplicate-unit-on-search-path', 'structure', 'warning', 'Two files with the same unit name are on the search path -- the compiler may pick the wrong one');
     Result:= L.ToArray;
   finally
     L.Free;
@@ -780,7 +809,9 @@ begin
           if (Id = '') or ById.ContainsKey(Id) then Continue; { builtin/dup wins }
           Sc.Id:= Id;
           Sc.Source:= 'scm';
-          Sc.Category:= ScmCategory(Id);
+          if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then
+            Sc.Category:= Obj.GetValue('category').Value  { optional sidecar key; lets a rule file name its own category (e.g. modernize, policy) }
+          else Sc.Category:= ScmCategory(Id);
           if Obj.GetValue('severity') <> nil then Sc.DefaultSeverity:= Obj.GetValue('severity').Value
           else Sc.DefaultSeverity:= 'warning';
           if Obj.GetValue('message') <> nil then Sc.Title:= Obj.GetValue('message').Value

@@ -206,6 +206,13 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.AstChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.NamingChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ControlFlowChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ExprChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DeclChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.SizeChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ConcurrencyChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DisallowedChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ModernizeChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CloneChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParseCache.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Cfg.pas"/>

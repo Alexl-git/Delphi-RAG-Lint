@@ -202,6 +202,13 @@ uses
   , DRagLint.Diagnostics.AstChecks
   , DRagLint.Diagnostics.NamingChecks
   , DRagLint.Diagnostics.DeadCodeChecks
+  , DRagLint.Diagnostics.ControlFlowChecks
+  , DRagLint.Diagnostics.ExprChecks
+  , DRagLint.Diagnostics.DeclChecks
+  , DRagLint.Diagnostics.SizeChecks
+  , DRagLint.Diagnostics.ConcurrencyChecks
+  , DRagLint.Diagnostics.DisallowedChecks
+  , DRagLint.Diagnostics.ModernizeChecks
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.FlowChecks
@@ -13126,12 +13133,12 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..16] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..17] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
-    'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted');
+    'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
@@ -13171,6 +13178,22 @@ const
     'line-too-long');
   { RunDocDrift splits one analysis over three ids (DocRules.IsDocDriftFamily). }
   LINT_GATE_DOC_DRIFT: array[0..2] of string = ('doc-drift', 'doc-param-no-description', 'doc-param-not-in-signature');
+  { Clippy-parity wave (L0): one gate per new checker unit. A lane that adds an
+    emit site adds nothing here -- the ids are already listed. }
+  LINT_GATE_CONTROL_FLOW: array[0..5] of string = (
+    'loop-condition-invariant', 'for-bound-modified-in-body', 'infinite-loop-no-exit', 'redundant-continue-exit', 'else-after-exit', 'unconditional-recursion');
+  LINT_GATE_EXPR: array[0..4] of string = (
+    'bad-bit-mask', 'invalid-regex-literal', 'double-dictionary-lookup', 'case-same-branches', 'misleading-indentation');
+  LINT_GATE_DECL: array[0..2] of string = (
+    'missing-const-param', 'local-shadows-field', 'method-could-be-static');
+  LINT_GATE_SIZE: array[0..2] of string = (
+    'large-stack-local', 'too-many-bool-fields', 'inline-on-large-routine');
+  LINT_GATE_CONCURRENCY: array[0..0] of string = (
+    'wait-while-holding-lock');
+  LINT_GATE_DISALLOWED: array[0..2] of string = (
+    'disallowed-method', 'disallowed-type', 'disallowed-name');
+  LINT_GATE_MODERNIZE: array[0..0] of string = (
+    'index-loop-to-for-in');
 
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
@@ -14586,6 +14609,35 @@ begin
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
           Cfg.ThresholdFor('message-chain', 4)) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      { Clippy-parity wave (L0): the seven new per-file checker units. }
+      TraceLintChecker('controlflow');
+      if LintRuleWants(NarrowRule, LINT_GATE_CONTROL_FLOW) then
+        for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('expr');
+      if LintRuleWants(NarrowRule, LINT_GATE_EXPR) then
+        for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('decl');
+      if LintRuleWants(NarrowRule, LINT_GATE_DECL) then
+        for F in DRagLint.Diagnostics.DeclChecks.TDeclChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('size');
+      if LintRuleWants(NarrowRule, LINT_GATE_SIZE) then
+        for F in DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('concurrency');
+      if LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY) then
+        for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('disallowed');
+      if LintRuleWants(NarrowRule, LINT_GATE_DISALLOWED) then
+        for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('modernize');
+      if LintRuleWants(NarrowRule, LINT_GATE_MODERNIZE) then
+        for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
@@ -20400,6 +20452,21 @@ begin
           for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
             PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
             Cfg.ThresholdFor('message-chain', 4)) do Findings:= Findings + [F];
+        { Clippy-parity wave (L0): the seven new per-file checker units. }
+        if LintRuleWants(Nr, LINT_GATE_CONTROL_FLOW) then
+          for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_EXPR) then
+          for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_DECL) then
+          for F in DRagLint.Diagnostics.DeclChecks.TDeclChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_SIZE) then
+          for F in DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_CONCURRENCY) then
+          for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_DISALLOWED) then
+          for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
+          for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         ScanMark(31);
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));

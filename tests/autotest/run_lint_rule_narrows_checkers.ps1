@@ -281,7 +281,10 @@ foreach ($k in $emitted.Keys) {
   Check "D1 $k parsed from CLI.pas" ($gate.Count -gt 0) "($($gate.Count) id(s))"
   Check "D1 $k emit sites found" ($emit.Count -gt 0) "($($emit.Count) id(s))"
   $short = @($emit | Where-Object { $gate -notcontains $_ })
-  $extra = @($gate | Where-Object { $emit -notcontains $_ })
+  # clippy-parity L0: gate ids registered before their emit site exists. Lane L11 adds the WantRule
+  # call for duplicate-unit-on-search-path and DELETES this entry (the list may only shrink).
+  $gatePendingEmit = @('duplicate-unit-on-search-path')
+  $extra = @($gate | Where-Object { ($emit -notcontains $_) -and ($gatePendingEmit -notcontains $_) })
   Check "D2 $k carries every id its checker emits" ($short.Count -eq 0) `
     ("missing -> --rule answers 0 for: " + ($short -join ' '))
   Check "D3 $k names no id its checker never emits" ($extra.Count -eq 0) ("phantom: " + ($extra -join ' '))
