@@ -1,0 +1,135 @@
+// Data.DB -> FireDAC conversion library ("Book-2") -- the part of the old BDE book that
+// is NOT specific to BDE.
+//
+// Split 2026-10-27 (backlog D2) from convrules\BDE-to-FireDAC.rules. Everything here is
+// moved VERBATIM from that book; the split criterion is the DECLARING UNIT of the rule's
+// From symbol: the BDE book keeps what is declared in Bde.DBTables, this book takes what
+// is declared in Data.DB (shared by every TDataSet family -- TClientDataSet, TADOQuery,
+// TIBQuery, TSQLQuery -- so a rename or conversion here is FireDAC-specific, not
+// BDE-specific, and can be run on a chosen unit set). Plan:
+// docs\superpowers\plans\2026-10-27-converter-d2-book-split.md.
+//
+// RUN ORDER: run this book AFTER convrules\BDE-to-FireDAC.rules, on the SAME units, in
+//   the same editor job (the book-major loop runs books in the order given and reindexes
+//   between them). There is no rule chain between the books (no output of one is an
+//   input of the other); the dependency is CONTAINMENT: the Params items and persistent
+//   fields converted here live INSIDE the datasets the BDE book converts, and a FireDAC
+//   field under a BDE dataset does not load.
+//
+// The #migrate lines in section 2 are inert in the engine (a file-scope #migrate, before
+//   the first #convert, is not a member migration and is left alone -- plan section 2);
+//   they are kept so every corpus rename stays searchable.
+//
+// Plain 7-bit ASCII, CRLF.
+
+// ---------------------------------------------------------------------------
+// 1. File-scope removals that travel with the blocks below
+// ---------------------------------------------------------------------------
+// Derived only from the TAutoIncField block (its #ignore HasConstraints, below).
+#remove HasConstraints
+// The BDE book's "#remove DFM: Origin" only reaches the datasets IT converts. A
+// TAutoIncField that is still a Data.DB field when this book runs (the BDE book ran
+// first and left it alone) keeps its BDE-format Origin unless this book drops it too.
+// "#remove DFM:" twice is harmless. Decided by the D2 dry run (Q3).
+#remove DFM: Origin
+
+// ---------------------------------------------------------------------------
+// 2. Corpus lines that could NOT become property links -- carried verbatim.
+//    Enum types + members declared in Data.DB with no property in any block below
+//    to carry them.
+// ---------------------------------------------------------------------------
+
+#migrate TUpdateKind -> TFDUpdateRequest, FireDAC.Phys.Intf
+#migrate ukModify -> arUpdate, FireDAC.Phys.Intf
+#migrate ukInsert -> arInsert, FireDAC.Phys.Intf
+#migrate ukDelete -> arDelete, FireDAC.Phys.Intf
+
+#migrate TUpdateAction -> TFDErrorAction, FireDAC.Stan.Intf
+#migrate uaFail -> eaFail, FireDAC.Stan.Intf
+#migrate uaAbort -> eaExitFailure, FireDAC.Stan.Intf
+#migrate uaSkip -> eaSkip, FireDAC.Stan.Intf
+#migrate uaRetry -> eaRetry, FireDAC.Stan.Intf
+#migrate uaApplied -> eaApplied, FireDAC.Stan.Intf
+
+#migrate TDBScreenCursors -> TFDGUIxScreenCursor, FireDAC.UI.Intf
+#migrate dcrDefault -> gcrDefault
+#migrate dcrHourGlass -> gcrHourGlass
+#migrate dcrSQLWait -> gcrSQLWait
+#migrate dcrOther -> gcrNone
+
+// ---------------------------------------------------------------------------
+// 3. Component conversions
+// ---------------------------------------------------------------------------
+
+#convert Data.DB.TParam -> FireDAC.Stan.Param.TFDParam, FireDAC.Stan.Param
+#note 7 source properties: 0 corpus-supplied, 7 auto-matched, 0 via #mapping,
+#note 0 unmapped -- every one of them named in an #ignore below, none silent.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link DataType <- DataType
+#link Precision <- Precision
+#link NumericScale <- NumericScale
+#link Name <- Name
+#link ParamType <- ParamType
+#link Size <- Size
+#link Value <- Value
+
+#convert Data.DB.TParams -> FireDAC.Stan.Param.TFDParams, FireDAC.Stan.Param
+#note 7 source properties: 0 corpus-supplied, 7 auto-matched, 0 via #mapping,
+#note 0 unmapped -- every one of them named in an #ignore below, none silent.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link Items.DataType <- Items.DataType
+#link Items.Precision <- Items.Precision
+#link Items.NumericScale <- Items.NumericScale
+#link Items.Name <- Items.Name
+#link Items.ParamType <- Items.ParamType
+#link Items.Size <- Items.Size
+#link Items.Value <- Items.Value
+
+#convert Data.DB.TAutoIncField -> FireDAC.Comp.DataSet.TFDAutoIncField, FireDAC.Comp.DataSet
+#note 32 source properties: 0 corpus-supplied, 31 auto-matched, 0 via #mapping,
+#note 1 unmapped -- every one of them named in an #ignore below, none silent.
+#note auto-matched by the editor's Auto-Match rule -- review before applying.
+#link MaxValue <- MaxValue
+#link MinValue <- MinValue
+#link Alignment <- Alignment
+#link DisplayFormat <- DisplayFormat
+#link EditFormat <- EditFormat
+#link AutoGenerateValue <- AutoGenerateValue
+#link CustomConstraint <- CustomConstraint
+#link ConstraintErrorMessage <- ConstraintErrorMessage
+#link DefaultExpression <- DefaultExpression
+#link DisplayLabel <- DisplayLabel
+#link DisplayWidth <- DisplayWidth
+#link FieldKind <- FieldKind
+#link FieldName <- FieldName
+#link Index <- Index
+#link ImportedConstraint <- ImportedConstraint
+#link LookupDataSet <- LookupDataSet
+#link LookupKeyFields <- LookupKeyFields
+#link LookupResultField <- LookupResultField
+#link KeyFields <- KeyFields
+#link LookupCache <- LookupCache
+#link Origin <- Origin
+#link ProviderFlags <- ProviderFlags
+#link ReadOnly <- ReadOnly
+#link Required <- Required
+#link Visible <- Visible
+#link OnChange <- OnChange
+#link OnGetText <- OnGetText
+#link OnSetText <- OnSetText
+#link OnValidate <- OnValidate
+#link Name <- Name
+#link Tag <- Tag
+#note BOTH RULES STAND -- do not 'fix' this by deleting either one.
+#note 'Origin <- Origin' above is a REAL mapping: Origin is the one inherited
+#note Data.DB.TField.Origin, and both TAutoIncField and
+#note TFDAutoIncField descend from Data.DB.TField, so it is
+#note literally the same property on both sides.
+#note The file-scope '#remove DFM: Origin' (section 1 here and in the BDE book) is COMPLEMENTARY, not contradictory: the
+#note 'DFM:' prefix drops only the VALUE persisted in the old form -- a
+#note BDE-format string such as 'DBDEMOS.CUSTOMER.CUSTNO' that is stale
+#note once the dataset is FireDAC. The property itself is kept and stays
+#note assignable at run time, which is exactly what the #link preserves.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 1 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#ignore HasConstraints
