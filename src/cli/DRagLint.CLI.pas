@@ -162,6 +162,7 @@ uses
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
+  , DRagLint.Project.DefineProfile
   , DRagLint.FormsMap
   , DRagLint.MenuTree
   , DRagLint.MenuTree.Dfm
@@ -2760,6 +2761,36 @@ begin
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
   if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
+end;
+
+{ Installs the per-file define resolver (LSP C10) for a verb that lints files: the
+  process-wide profile stays the FALLBACK (built-ins, or --project's profile), so a
+  file no .dproj owns is treated exactly as before C10.
+
+  Precedence lives in DRagLint.Project.DefineProfile: an explicit --project
+  (AArgs.ProjectPath) wins over the owning .dproj found through DB membership, then
+  the .dproj's own folder (one .dproj only); the platform is the project's active
+  platform unless --platform was typed. Nothing to Clear: the LSP lint path calls
+  ApplyPreprocess on every run (no memo) and TProjectProfileCache re-stamps the
+  .dproj / .delphilsp.json on every lookup. No-op under --no-preprocess.
+  An explicit --project .dproj makes ITS active build the fallback too, so one run
+  never lints the same project with two profiles (a member with the active config, a
+  file the --db does not contain with Release). Guard: run_lsp_per_file_defines_guard
+  case g. }
+procedure InstallFileProfileResolver(const AArgs: TArgs; const ADbPaths: TArray<string>; const AFallback: TDefineProfile);
+var
+  Fallback: TDefineProfile;
+begin
+  if AArgs.NoPreprocess then Exit;
+  Fallback:= AFallback;
+  if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath) then
+    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, '', True).Profile;
+  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', Fallback, True);
+  TAstParseCache.SetProfileResolver(
+    function(AFile: string): TDefineProfile
+    begin
+      Result:= TProjectProfileCache.ProfileForFile(AFile);
+    end);
 end;
 
 // v0.45 Task 7: build one plan item into its SQLite database.
@@ -13732,6 +13763,7 @@ begin
     the same input, which is the point: two entry points, one decision. }
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  InstallFileProfileResolver(AArgs, AArgs.DbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -19917,6 +19949,7 @@ begin
     its own, linting its closure against the library is "0 file(s) scanned", a
     silent zero -- ProjectDb stays '' and the run refuses below. }
   SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
+  InstallFileProfileResolver(AArgs, Dbs, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -24504,7 +24537,10 @@ begin
 end; // function
 
 /// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
-/// [--config Release|Debug] -- diagnostic dump of the define-profile resolver.
+/// [--config Release|Debug] [--in FILE [--db DB]] -- diagnostic dump of the define-profile resolver.
+/// With --in FILE (LSP C10) it first prints dproj= / platform= / config= /
+/// source=builtins|dproj|delphilsp (the .dproj comes first, delphilsp.json only when it has no Config marker) / digest= lines and a blank line, then the symbols of
+/// the profile the FILE's own project's ACTIVE build gives it (built-ins when no .dproj owns it).
 /// With --dproj it resolves ProfileFromDproj (platform built-ins UNION the .dproj
 /// Base + selected-config DCC_Define symbols); without --dproj it dumps
 /// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
@@ -24515,25 +24551,39 @@ end; // function
 /// config.</param>
 /// <returns>0 always (a missing .dproj degrades to built-ins, never an error).</returns>
 function DoPpProfile(const AArgs: TArgs): Integer;
+const
+  SourceNames: array[TDefineSource] of string = ('builtins', 'dproj', 'delphilsp');
 var
   Platform: string        ;
   Config  : string        ;
   Profile : TDefineProfile;
   Defines : TArray<string>;
   Sym     : string        ;
+  Build   : TActiveBuild  ;
 begin
   Platform:= AArgs.CheckPlatform;
   if Platform = '' then Platform:= 'Win64';
   Config:= AArgs.WorkspaceConfig;
   if Config = '' then Config:= 'Release';
 
-  if AArgs.PpDproj <> '' then
-    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config)
-  else
+  Profile.Defines:= PlatformBuiltins(Platform);
+  Profile.NumericDefines:= nil;
+  if AArgs.InFile <> '' then
   begin
-    Profile.Defines:= PlatformBuiltins(Platform);
-    Profile.NumericDefines:= nil;
-  end;
+    { LSP C10: the profile of the file's OWN project's active build. }
+    TProjectProfileCache.Configure(AArgs.DbPaths, AArgs.ProjectPath, AArgs.CheckPlatform,
+      AArgs.WorkspaceConfig, Profile, True);
+    Build:= TProjectProfileCache.BuildForFile(AArgs.InFile);
+    Writeln('dproj=', if Build.Dproj = '' then '-' else Build.Dproj);
+    Writeln('platform=', Build.Platform);
+    Writeln('config=', if Build.Config = '' then '-' else Build.Config);
+    Writeln('source=', SourceNames[Build.Source]);
+    Writeln('digest=', if Build.Digest = '' then '-' else Build.Digest);
+    Writeln('');
+    Profile:= Build.Profile;
+  end
+  else if AArgs.PpDproj <> '' then
+    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config);
 
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);
@@ -33910,6 +33960,7 @@ begin
         Guard: tests\autotest\run_lsp_preprocess_guard.ps1. }
       TAstParseCache.SetPreprocess(not Args.NoPreprocess,
         ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
+      InstallFileProfileResolver(Args, DbList, ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;

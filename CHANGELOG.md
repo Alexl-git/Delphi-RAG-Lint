@@ -6,6 +6,7 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Added
+- `lsp` / `lint` / `lint-all` preprocess each file with its own project's active-build defines (the owning `.dproj` Config marker first, then `.delphilsp.json`; a loose file keeps the platform built-ins); `pp-profile --in <file.pas>` prints the profile (LSP C10 / A7-L). **Behaviour change:** `lint` / `lint-all` / `lsp --project X.dproj` now preprocess with X's ACTIVE build (its `.dproj` Config/Platform markers), no longer always Release/Win64; `--platform` still overrides the platform (D4/D5; the index follows with A7-I).
 - `cycles --fix`: no build time limit by default; `--build-timeout <s>` sets one (forwarded to every `--part all` iteration). Cancel: the run listens on the control channel; a stand-down rolls back and exits 1 'cancelled -- rolled back'. IDE: the 130-minute job limit is removed; the status-strip Cancel stops a running cycle-fix job and kills it only after 90 s (lane X-BT).
 - `cycles --plan` / `--fix` (lane X-CYC): B4-d -- the F5 base class accepts an inheriting class (`TX = class(TAnc[, I1..])`, ancestor outside the cycle); C7 type-cast -- R2 carries a hard cast followed by a member, `TX(Y).M` -> `(Y as ISurface).M`; C6 -- an ANSI target accepts inserted text its code page represents, `non-ascii-text` names the character it cannot carry; C1 -- a receiver-unknown behind an `is` guard; C9 plan-text defects.
 - `compare --out-root <dir>` moves the per-run bundle folder off `%TEMP%` (lane X-CLI, E12b).

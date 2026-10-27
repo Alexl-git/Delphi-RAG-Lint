@@ -14,7 +14,7 @@ updated: 1.35.1-alpha
 
 Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index.
 
-Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it.
+Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.
 
 ## Details
 

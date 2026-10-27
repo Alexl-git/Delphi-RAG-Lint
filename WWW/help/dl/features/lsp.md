@@ -166,6 +166,26 @@ How the diagnostics merge behaves:
 - With `--trace`, the trace records the frame actually forwarded (the merged
   one).
 
+### Which defines the LSP preprocesses with
+
+Every file the LSP lints is preprocessed with the define profile of ITS OWN project's active
+build, so `{$IFDEF DEBUG}` and project-define branches match what the developer sees in the IDE.
+`lint <file>` and `lint-all` use the same lookup (LSP and CLI findings stay in parity).
+
+| Step | Rule |
+|---|---|
+| Which project owns the file | an explicit `--project X.dproj` wins; else the project of the `--db` whose index contains the file (manifest section, or `<dir>\_D-RAG\<base>.sqlite` next to `<base>.dproj`); else the ONE `.dproj` in the file's own folder (two or none: no project). A library index owns nothing. |
+| Which defines | the `.dproj` FIRST: its `<Config Condition="'$(Config)'==''">` marker picks the config and `ProfileFromDproj` the defines; `<base>.delphilsp.json` (the IDE's `-D` set) only when the `.dproj` is unreadable or carries no Config marker; platform built-ins always. |
+| Which platform | explicit `--platform`, else the `.dproj` Platform marker, else the JSON `dllname`, else Win64. |
+| An explicit `--project X.dproj` | X's ACTIVE build (Config/Platform markers), for every file of the run -- a member or a file no `--db` contains alike. **Changed in C10:** before, `--project` always meant Release (and Win64 unless `--platform`). |
+| A file no project owns | the platform built-ins, exactly as before. |
+
+Changes to the `.dproj` / `.delphilsp.json` are seen on the next didOpen/didSave (the files are
+re-stamped on every lookup). `drag-lint pp-profile --in <file.pas> [--db DB]` prints the answer
+(`dproj=`, `platform=`, `config=`, `source=builtins|dproj|delphilsp`, `digest=`, then the symbols).
+Guards: `run_pp_profile_in_guard.ps1`, `run_parsecache_profile_resolver_guard.ps1`,
+`run_lsp_per_file_defines_guard.ps1`.
+
 ### Document outline (textDocument/documentSymbol)
 
 `lsp` answers `textDocument/documentSymbol` from the index as a hierarchical `DocumentSymbol[]` (the editor's outline, breadcrumbs and *Go to Symbol in File*): the unit's members at the top level, members nested under their type, locals and parameters left out, 0-based ranges, `selectionRange` on the name token. A file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.DocumentSymbol`); guard: `tests\autotest\run_lsp_document_symbol_guard.ps1`.

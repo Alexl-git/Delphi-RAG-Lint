@@ -1198,6 +1198,7 @@ type
 implementation
 
 uses
+  DRagLint.Project.DefineProfile,
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
 
@@ -3756,6 +3757,7 @@ begin
   if TextDoc = nil then Exit;
   var ClosedPath: string:= FileFromUri(TextDoc.GetValue('uri').Value);
   TLiveDocuments.Remove(ClosedPath);
+  TProjectProfileCache.Forget(ClosedPath); // LSP C10: keep the file -> .dproj memo bounded to open files
   { INBOX-lsp-hover-unindexed-file: the ephemeral index exists only to answer
     hovers in ONE file. Once that buffer is gone it is dead weight holding a
     temp database open, so it is evicted with the overlay and for the same
