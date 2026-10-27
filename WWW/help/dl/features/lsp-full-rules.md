@@ -19,7 +19,7 @@ Read this when the editor should publish the same findings as drag-lint lint, in
 ## How to run it
 
 ```text
-drag-lint lsp --db <file.sqlite> --full-rules
+drag-lint lsp --db <file.sqlite> --full-rules [--no-preprocess]
 ```
 
 Example:
@@ -36,6 +36,7 @@ Full flag list: [lsp in the CLI reference](../cli.md#lsp).
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 | `--full-rules` |  |  |  |
+| `--no-preprocess` |  |  |  |
 
 ## Where to click
 
@@ -67,6 +68,14 @@ flags tune the proxy itself:
 With every merge flag off the proxy relays DelphiLSP's bytes unchanged. Merging
 fails open: a handler that overruns the budget, raises or finds no index makes
 the proxy forward DelphiLSP's original bytes.
+
+The merged findings are linted from the preprocessed text, exactly as plain
+`drag-lint lsp` and `drag-lint lint` lint it: `{$IFDEF}` branches are resolved
+with the platform built-ins, or with the defines of the `.dproj` that owns the
+file (`--project` wins), so an inactive branch never adds a parser error. Both
+modes run one shared setup; the proxy runs it on its merge worker the first time
+it lints, so its startup still opens no index.
+Guard: `tests\autotest\run_lsp_proxy_preprocess_guard.ps1`.
 
 `--proxy` and `--full-rules` are separate modes. With `--proxy` the engine only
 relays and merges: it starts the relay before it reads `--full-rules`, so that

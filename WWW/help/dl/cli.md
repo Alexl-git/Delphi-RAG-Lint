@@ -1066,6 +1066,7 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--merge-budget-ms` | `<n>` |  |  |
 | `--full-rules` |  |  |  |
 | `--delphi-lsp-bits` | `32\|64` |  |  |
+| `--no-preprocess` |  |  |  |
 
 Described in:
 

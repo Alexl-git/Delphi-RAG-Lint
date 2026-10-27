@@ -421,7 +421,7 @@ begin
   Writeln('       see wiki page: index-build-config');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
-  Writeln('  drag-lint lsp --db <file.sqlite> --full-rules');
+  Writeln('  drag-lint lsp --db <file.sqlite> --full-rules [--no-preprocess]');
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
