@@ -1,0 +1,14 @@
+# Lines 14-15 Power(X,2) -> Sqr, 16 Power(X,0.5) -> Sqrt, 17 Sqrt(Sqr+Sqr) ->
+# Hypot must fire. Lines 18-22 must not (other exponent, plain Sqrt, minus,
+# one Sqr, Hypot already used).
+# Known FP shape: Power(X, 2) on Extended/Single where the Sqr overload
+# differs in precision; negative X with Power(X, 0.5) (NaN vs EInvalidOp).
+suboptimal-math 14
+suboptimal-math 15
+suboptimal-math 16
+suboptimal-math 17
+!suboptimal-math 18
+!suboptimal-math 19
+!suboptimal-math 20
+!suboptimal-math 21
+!suboptimal-math 22

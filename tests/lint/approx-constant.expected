@@ -1,0 +1,17 @@
+# Lines 11-18: pi, e, sqrt(2), ln(2), phi with >= 3 decimals must fire.
+# Lines 19/20 have only two decimals (3.14, 2.71), 21 is unrelated, 22 only
+# ENDS in 2.718 (12.718) and must not fire.
+# Known FP shape: a literal that is genuinely a measured value (a size table
+# with 1.618); suppress with dl:ok.
+approx-constant 11
+approx-constant 12
+approx-constant 13
+approx-constant 14
+approx-constant 15
+approx-constant 16
+approx-constant 17
+approx-constant 18
+!approx-constant 19
+!approx-constant 20
+!approx-constant 21
+!approx-constant 22

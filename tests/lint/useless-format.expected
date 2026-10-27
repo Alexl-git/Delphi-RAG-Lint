@@ -1,0 +1,10 @@
+# Lines 14-15: Format('%s', [X]) with exactly one argument must fire.
+# Lines 16 (two specs), 17 (%d), 18 (two args), 19 (extra text) must not.
+# Known FP shape: X is not a string (Variant, number) so Format does the
+# conversion; rewriting to plain X then changes meaning or fails to compile.
+useless-format 14
+useless-format 15
+!useless-format 16
+!useless-format 17
+!useless-format 18
+!useless-format 19
