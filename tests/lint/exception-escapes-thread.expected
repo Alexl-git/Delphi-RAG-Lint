@@ -1,0 +1,8 @@
+# Execute override of a TThread descendant without a top-level try..except (28) and anonymous thread/task lambdas without one (55, 69) fire; guarded ones and a non-thread Execute must not
+exception-escapes-thread 28
+exception-escapes-thread 55
+exception-escapes-thread 69
+!exception-escapes-thread 33
+!exception-escapes-thread 43
+!exception-escapes-thread 60
+!exception-escapes-thread 74

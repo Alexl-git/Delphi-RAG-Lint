@@ -1,0 +1,5 @@
+# raise in a destructor body (33) and a bare raise in an on handler of a destructor (53) fire; raise inside a swallowing try..except (40) and raise in an ordinary method (59) must not
+raise-in-destructor 33
+raise-in-destructor 53
+!raise-in-destructor 40
+!raise-in-destructor 59
