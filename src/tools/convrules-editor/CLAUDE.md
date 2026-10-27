@@ -55,14 +55,14 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-unit-picker.ps1` 20 -- unit picker
   * `drive-unit-harvest.ps1` 21 -- Unit Rules harvest (`-ProofNoDestination`)
   * `drive-file-menu.ps1` 19 -- New / Save As / Exit, unsaved guard
-  * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard` (FAILS 3/3 on main 2026-10-26: `owning.row.found` picks the Work-list filter list; backlog DRV-3)
+  * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
   * `drive-engine-wait.ps1` 16 -- progress window, Cancel, retry, cached reload; N7 Save under the progress window (menu path + real Ctrl+S) refused, book untouched (the key check is a guard only: it cannot go RED on a pre-N1 exe)
   * `drive-book-depth.ps1` 21 -- `#depth` combo
   * `drive-convert-tab.ps1` 32 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported; N7/N11 (`n7.*`): POSTED WM_COMMAND (Add..., Convert) and BM_CLICK (Delete) under the progress window are refused and reported, none runs (RED on a pre-InputGate exe: Open dialog over the window + a real Convert)
   * `drive-convert-batch.ps1` 22 -- B4 batch mode: 2 units in ONE convert-apply, batch note, `.BCK1` x4, then a `CONVRULES_BATCH=off` relaunch runs per-unit (`-ProofNoBatch` = RED). No retry since N11: every driver's `WaitIdle` also asks the editor (registered message `ConvRulesEditor.Busy`: 2 busy / 1 idle / no answer = blocked = busy), and `ConvRules.InputGate` refuses + reports a click that still lands in busy work
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
   * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
-  * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`) (FAILS 22/1 on main 2026-10-26: `glyph.open.good` no "Loaded" in 30 s; backlog DRV-3)
+  * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
   * `drive-convert-request.ps1` 28 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
   * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
