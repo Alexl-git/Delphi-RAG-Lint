@@ -10939,6 +10939,52 @@ begin
   end; // try
 end; // function
 
+/// <summary>Applies a built-in compliance profile (cwe, cert, misra, cwe-top25) to ACfg: enables the
+/// rules labelled under the standard, disables every other rule, and floors the severity of the
+/// selected rules at warning (a rule already at warning or error keeps its level).</summary>
+/// <param name="ACfg">The config to update; its enabled/disabled lists are replaced.</param>
+/// <param name="AProfile">A name accepted by IsComplianceProfile.</param>
+/// <param name="ARulesDir">The --rules-dir value ('' = rules beside the exe).</param>
+procedure ApplyComplianceProfile(var ACfg: TLintConfig; const AProfile, ARulesDir: string);
+var
+  R : TRuleInfo;
+  En, Dis: TArray<string>;
+  Sev: string;
+begin
+  for R in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(ARulesDir, '') do
+    if ComplianceProfileSelects(AProfile, R.Compliance) then
+    begin
+      En:= En + [R.Id];
+      Sev:= ACfg.ApplySeverity(R.Id, R.DefaultSeverity);
+      if not (SameText(Sev, 'warning') or SameText(Sev, 'error')) then ACfg.SetSeverityPair(R.Id, 'warning');
+    end
+    else Dis:= Dis + [R.Id];
+  ACfg.SetEnabled(En);
+  ACfg.SetDisabled(Dis);
+end;
+
+/// <summary>The rule-metadata lookup the SARIF writer needs (title, category, severity, labels).</summary>
+/// <param name="ARulesDir">The --rules-dir value ('' = rules beside the exe).</param>
+/// <returns>A lookup over the rule catalog; False for an id the catalog does not know.</returns>
+function SarifMetaLookup(const ARulesDir: string): TSarifMetaLookup;
+var
+  Meta: TDictionary<string, TSarifRuleMeta>;
+  R   : TRuleInfo;
+  M   : TSarifRuleMeta;
+begin
+  Meta:= TDictionary<string, TSarifRuleMeta>.Create;
+  for R in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(ARulesDir, '') do
+  begin
+    M.Title:= R.Title; M.Category:= R.Category; M.Severity:= R.DefaultSeverity; M.Labels:= R.Compliance;
+    Meta.AddOrSetValue(R.Id, M);
+  end;
+  Result:=
+    function(const ARuleId: string; out AMeta: TSarifRuleMeta): Boolean
+    begin
+      Result:= Meta.TryGetValue(ARuleId, AMeta);
+    end;
+end;
+
 /// <summary>Builds the effective TLintConfig for a command: discovers the config
 /// file (--config, else drag-lint-lint.json in CWD), applies the named --profile,
 /// and composes --disable/--enable from the command line.</summary>
@@ -11053,6 +11099,8 @@ begin
 
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
   Result:= TLintConfig.Load(Path, AArgs.Profile);
+  if IsComplianceProfile(AArgs.Profile) and not Result.UserProfileFound then
+    ApplyComplianceProfile(Result, AArgs.Profile, AArgs.RulesDir);
   if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
 end;
@@ -13035,7 +13083,7 @@ begin
       CompTbl.TryGet(Survivors[LI].RuleId, Lb);
       Survivors[LI].Message:= Survivors[LI].Message + Lb.Suffix;
     end;
-  if SameText(AArgs.Format, 'sarif') then EmitFindingsDoc(AArgs, DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
+  if SameText(AArgs.Format, 'sarif') then EmitFindingsDoc(AArgs, DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION, SarifMetaLookup(AArgs.RulesDir)))
   else if AArgs.AsJson or SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;

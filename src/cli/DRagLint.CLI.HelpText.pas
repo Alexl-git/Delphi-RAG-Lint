@@ -357,7 +357,7 @@ begin
   Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
-  Writeln('    --profile <name>          merge a named enable/disable set from the config');
+  Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
@@ -1106,7 +1106,7 @@ begin
     Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
-    Writeln('    --profile <name>          merge a named enable/disable set from the config');
+    Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
     Exit;

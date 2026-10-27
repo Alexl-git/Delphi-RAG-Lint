@@ -67,6 +67,29 @@ type
     property Missing: Boolean read FMissing;
   end;
 
+const
+  /// <summary>Where CWE_TOP25_2025 was read: the MITRE page of the 2025 CWE Top 25 Most Dangerous
+  /// Software Weaknesses (page dated 2025-12-15).</summary>
+  CWE_TOP25_2025_URL = 'https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html';
+  /// <summary>The day CWE_TOP25_2025 was fetched from CWE_TOP25_2025_URL.</summary>
+  CWE_TOP25_2025_FETCHED = '2026-10-27';
+  /// <summary>The 2025 CWE Top 25, rank order (rank 1 = CWE-79 .. rank 25 = CWE-770).</summary>
+  CWE_TOP25_2025: array[0..24] of string = (
+    'CWE-79', 'CWE-89', 'CWE-352', 'CWE-862', 'CWE-787', 'CWE-22', 'CWE-416', 'CWE-125', 'CWE-78',
+    'CWE-94', 'CWE-120', 'CWE-434', 'CWE-476', 'CWE-121', 'CWE-502', 'CWE-122', 'CWE-863', 'CWE-20',
+    'CWE-284', 'CWE-200', 'CWE-306', 'CWE-918', 'CWE-77', 'CWE-639', 'CWE-770');
+  /// <summary>The built-in profile names of --profile: a rule is selected when it carries a label
+  /// under the standard (cwe-top25: a CWE id of CWE_TOP25_2025).</summary>
+  COMPLIANCE_PROFILE_NAMES: array[0..3] of string = ('cwe', 'cert', 'misra', 'cwe-top25');
+
+/// <param name="AName">A --profile value; compared case-insensitively.</param>
+/// <returns>True when AName is one of COMPLIANCE_PROFILE_NAMES.</returns>
+function IsComplianceProfile(const AName: string): Boolean;
+/// <param name="AName">A built-in profile name (see <see cref="IsComplianceProfile"/>).</param>
+/// <param name="ALabels">The labels of one rule.</param>
+/// <returns>True when the rule belongs to the profile: it carries >= 1 id under the standard
+/// (cwe-top25: >= 1 CWE id that is in CWE_TOP25_2025). False for an unknown profile name.</returns>
+function ComplianceProfileSelects(const AName: string; const ALabels: TComplianceLabels): Boolean;
 /// <returns>True when AId is a well formed CWE id (CWE-476).</returns>
 function IsCweId(const AId: string): Boolean;
 /// <returns>True when AId is a well formed CERT id (EXP34-C, DCL57-CPP, LCK09-J).</returns>
@@ -101,6 +124,24 @@ end;
 function IsMisraId(const AId: string): Boolean;
 begin
   Result:= TRegEx.IsMatch(AId, RE_MISRA);
+end;
+
+function IsComplianceProfile(const AName: string): Boolean;
+begin
+  Result:= MatchText(AName, COMPLIANCE_PROFILE_NAMES);
+end;
+
+function ComplianceProfileSelects(const AName: string; const ALabels: TComplianceLabels): Boolean;
+var
+  Id: string;
+begin
+  Result:= False;
+  if SameText(AName, 'cwe') then Result:= Length(ALabels.Cwe) > 0
+  else if SameText(AName, 'cert') then Result:= Length(ALabels.Cert) > 0
+  else if SameText(AName, 'misra') then Result:= Length(ALabels.Misra) > 0
+  else if SameText(AName, 'cwe-top25') then
+    for Id in ALabels.Cwe do
+      if MatchStr(Id, CWE_TOP25_2025) then Exit(True);
 end;
 
 function TComplianceLabels.IsEmpty: Boolean;

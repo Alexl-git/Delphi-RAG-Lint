@@ -12,7 +12,7 @@
   Negative : --profile cwe on type-name-prefix.pas      -> 0 findings (unlabelled rule off).
   Control  : the same file without a profile            -> >= 1 finding (the negative is not vacuous).
   Override : a temp config naming its own profile `cwe` -> the built-in set is NOT applied.
-  Other    : --profile cwe-top25 keeps hardcoded-credential (CWE-798); --profile misra drops it.
+  Other    : cwe-top25 keeps sql-injection-concat (CWE-89) and drops hardcoded-credential (CWE-798); misra drops the latter.
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = "Stop"
@@ -39,7 +39,9 @@ $hit = @($pos | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severi
 Assert "--profile cwe on hardcoded-credential.pas: >= 1 finding at >= warning (got $($hit.Count))" ($hit.Count -ge 1)
 
 $top = Run 'hardcoded-credential.pas' @('--profile', 'cwe-top25')
-Assert "--profile cwe-top25 keeps hardcoded-credential (CWE-798)" (@($top | Where-Object { $_.rule -eq 'hardcoded-credential' }).Count -ge 1)
+Assert "--profile cwe-top25 drops hardcoded-credential (CWE-798 is not in the 2025 Top 25)" (@($top | Where-Object { $_.rule -eq 'hardcoded-credential' }).Count -eq 0)
+$topPos = Run 'sql-injection-concat.pas' @('--profile', 'cwe-top25')
+Assert "--profile cwe-top25 keeps sql-injection-concat (CWE-89, rank 2)" (@($topPos | Where-Object { $_.rule -eq 'sql-injection-concat' }).Count -ge 1)
 $mis = Run 'hardcoded-credential.pas' @('--profile', 'misra')
 Assert "--profile misra drops hardcoded-credential (no MISRA label)" (@($mis | Where-Object { $_.rule -eq 'hardcoded-credential' }).Count -eq 0)
 

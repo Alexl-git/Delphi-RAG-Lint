@@ -219,7 +219,10 @@ type
     /// replaces the list; the top level appends. Not written by
     /// TLintConfigWriter, which preserves the key verbatim.</remarks>
     PlatformDivergentAllow: TArray<string>;
-    /// <summary>True when AFilePath matches any glob in AGlobs (case-insensitive;
+    /// <summary>True when Load found a profile named AProfile under "profiles" in the
+    /// config file. A built-in compliance profile name applies only when this is False
+    /// (a user-defined profile of the same name wins).</summary>
+    UserProfileFound: Boolean;    /// <summary>True when AFilePath matches any glob in AGlobs (case-insensitive;
     /// '/' and '\' equivalent). The matcher behind IsPathExcluded and the
     /// per-entry "except" lists.</summary>
     /// <param name="AFilePath">Full path of the file.</param>
@@ -868,7 +871,10 @@ begin
     begin
       Profiles:= Root.GetValue('profiles') as TJSONObject;
       if Profiles.GetValue(AProfile) is TJSONObject then
+      begin
+        Result.UserProfileFound:= True;
         Result.ApplyConfigObject(Profiles.GetValue(AProfile) as TJSONObject, True);
+      end;
     end;
   finally
     RootVal.Free;
