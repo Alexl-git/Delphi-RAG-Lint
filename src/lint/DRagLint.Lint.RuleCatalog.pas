@@ -152,6 +152,7 @@ type
     DefaultSeverity: string;  // 'hint' | 'info' | 'warning' | 'error'
     Source         : string;  // 'builtin' | 'scm'
     DefaultEnabled : Boolean;
+    HasSidecarFix  : Boolean; // .scm only: its sidecar .json carries a "fix" key (autofix wave A0)
     Params         : TArray<TRuleParam>;
   end;
 
@@ -314,10 +315,87 @@ function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
 /// MarkerExpectedHash (where the hash is taken), so the three agree. Pure.</remarks>
 function DocCommentMarkerLine(const ALines: TArray<string>; ALine: Integer): Integer;
 
+/// <summary>Records that rule AId carries a sidecar "fix" key, so the autofix
+/// registry reports it fixable (autofix wave A0, 2026-10-27).</summary>
+/// <param name="AId">The rule id; compared case-insensitively.</param>
+/// <param name="ARisky">True when any of its fix entries is "risky": true.</param>
+/// <remarks>Called by BuildCatalog for every sidecar it reads and by
+/// TQueryRule.Create for every rule it loads, so `rules --json` and `lint --fix`
+/// agree without either loading the other. Process-wide; thread-safe. A second
+/// call for the same id ORs ARisky in.</remarks>
+procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
+
+/// <summary>Has rule AId been registered as carrying a sidecar fix?</summary>
+/// <param name="AId">The rule id; compared case-insensitively.</param>
+/// <param name="ARisky">Out: True when its fix is registered risky.</param>
+/// <returns>True when RegisterSidecarFixRule was called for AId in this process.</returns>
+function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
+
+/// <summary>Every rule id registered as carrying a sidecar fix, sorted.</summary>
+/// <returns>A fresh array; empty when no sidecar with a "fix" key was seen.</returns>
+function SidecarFixRuleIds: TArray<string>;
+
 implementation
 
 uses
   DRagLint.Lint.ReviewMarker;
+
+var
+  { id -> risky. Guarded by TMonitor on itself; created in initialization. }
+  GSidecarFixes: TDictionary<string, Boolean>;
+
+procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
+var
+  Prior: Boolean;
+begin
+  if AId = '' then Exit;
+  TMonitor.Enter(GSidecarFixes);
+  try
+    if GSidecarFixes.TryGetValue(AId, Prior) then ARisky:= ARisky or Prior;
+    GSidecarFixes.AddOrSetValue(AId, ARisky);
+  finally
+    TMonitor.Exit(GSidecarFixes);
+  end;
+end;
+
+function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
+begin
+  TMonitor.Enter(GSidecarFixes);
+  try
+    Result:= GSidecarFixes.TryGetValue(AId, ARisky);
+    if not Result then ARisky:= False;
+  finally
+    TMonitor.Exit(GSidecarFixes);
+  end;
+end;
+
+function SidecarFixRuleIds: TArray<string>;
+begin
+  TMonitor.Enter(GSidecarFixes);
+  try
+    Result:= GSidecarFixes.Keys.ToArray;
+  finally
+    TMonitor.Exit(GSidecarFixes);
+  end;
+  TArray.Sort<string>(Result, TIStringComparer.Ordinal);
+end;
+
+{ True when a sidecar "fix" value (object or array of objects) has an entry
+  marked "risky": true. }
+function SidecarFixIsRisky(const AFix: TJSONValue): Boolean;
+var
+  V: TJSONValue;
+begin
+  Result:= False;
+  if AFix is TJSONObject then
+  begin
+    V:= TJSONObject(AFix).GetValue('risky');
+    Exit((V <> nil) and SameText(V.Value, 'true'));
+  end;
+  if AFix is TJSONArray then
+    for var Item: TJSONValue in TJSONArray(AFix) do
+      if SidecarFixIsRisky(Item) then Exit(True);
+end;
 
 function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
   AStartLine, AMetric: Integer): string;
@@ -852,6 +930,10 @@ begin
             showed it ON. The catalogue is what a user reads to find out what
             runs; it does not get to disagree with what runs. }
           if MatchStr(Id, BUILTIN_RULES_OFF_BY_DEFAULT) then Sc.DefaultEnabled:= False;
+          { autofix wave A0: a "fix" key makes the rule fixable -- registered so
+            IsFixableRule (DRagLint.Lint.Autofix) answers for it }
+          Sc.HasSidecarFix:= Obj.GetValue('fix') <> nil;
+          if Sc.HasSidecarFix then RegisterSidecarFixRule(Id, SidecarFixIsRisky(Obj.GetValue('fix')));
           Sc.Params:= nil;
           ById.Add(Id, Sc); Order.Add(Id);
         finally
@@ -910,5 +992,11 @@ begin
     Counts.Free;
   end;
 end;
+
+initialization
+  GSidecarFixes:= TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal);
+
+finalization
+  GSidecarFixes.Free;
 
 end.

@@ -800,6 +800,24 @@ begin
   Result:= Apply(AEdits, AWriteBackups, Skipped);
 end;
 
+{ tekReplaceLines (autofix wave A0): the whole range must exist, and the first
+  line must still hold the text the producer saw (when it set ExpectText) --
+  else the edit is stale and only counted. }
+procedure ApplyReplaceLines(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
+begin
+  if (AEdit.Line < 1) or (AEdit.EndLine < AEdit.Line) or (AEdit.EndLine > ALines.Count)
+     or ((AEdit.ExpectText <> '') and (ALines[AEdit.Line - 1] <> AEdit.ExpectText)) then
+  begin
+    Inc(ASkippedEdits);
+    Exit;
+  end;
+  for var L: Integer:= AEdit.EndLine downto AEdit.Line do ALines.Delete(L - 1);
+  var Parts: TArray<string>:= AEdit.Text.Replace(#13#10, #10).Split([#10]);
+  if Length(Parts) = 0 then Parts:= [''];
+  for var PIdx: Integer:= High(Parts) downto 0 do ALines.Insert(AEdit.Line - 1, Parts[PIdx]);
+  Inc(AApplied);
+end;
+
 { One kept edit applied to ALines (the per-kind half of ApplyGroup). }
 class procedure TTextEditApplier.ApplyOneEdit(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
 begin
@@ -863,22 +881,7 @@ begin
         else
           Inc(ASkippedEdits);   { line does not exist: out of range, never written }
       end;
-    tekReplaceLines:
-      begin
-        { the whole range must exist, and the first line must still hold the
-          text the producer saw (when it set ExpectText) -- else it is stale }
-        if (AEdit.Line < 1) or (AEdit.EndLine < AEdit.Line) or (AEdit.EndLine > ALines.Count)
-           or ((AEdit.ExpectText <> '') and (ALines[AEdit.Line - 1] <> AEdit.ExpectText)) then
-          Inc(ASkippedEdits)
-        else
-        begin
-          for var L: Integer:= AEdit.EndLine downto AEdit.Line do ALines.Delete(L - 1);
-          var Parts: TArray<string>:= AEdit.Text.Replace(#13#10, #10).Split([#10]);
-          if Length(Parts) = 0 then Parts:= [''];
-          for var PIdx: Integer:= High(Parts) downto 0 do ALines.Insert(AEdit.Line - 1, Parts[PIdx]);
-          Inc(AApplied);
-        end;
-      end;
+    tekReplaceLines: ApplyReplaceLines(ALines, AEdit, AApplied, ASkippedEdits);
   end;
 end;
 

@@ -8,6 +8,9 @@
                                                            (an OFF rule needs {"enabled":["<id>"]})
     tests\autofix\fixtures\<rule-id>\<case>.db-needed     optional marker: the case directory is
                                                            indexed into a scratch DB and --db is passed
+    tests\autofix\fixtures\<rule-id>\_rules\              optional: a rules folder passed as --rules-dir to every
+                                                           run of the directory's cases -- a test-only .scm rule
+                                                           (zz-template-probe proves the sidecar "fix" path this way)
   Only directories holding at least one *.fixed.pas are cases; the loose legacy fixtures
   next to them (multi.pas, gating\, proj\ ...) are not touched.
 
@@ -86,6 +89,8 @@ try {
       $extra = @()
       $cfg = Join-Path $dir.FullName "$case.config.json"
       if (Test-Path $cfg) { $extra += @('--config', $cfg) }
+      $rdir = Join-Path $dir.FullName '_rules'
+      if (Test-Path $rdir) { $extra += @('--rules-dir', $rdir) }
       if (Test-Path (Join-Path $dir.FullName "$case.db-needed")) {
         $db = Join-Path $scr '_case.sqlite'
         Push-Location $scr

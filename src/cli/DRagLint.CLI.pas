@@ -11204,53 +11204,6 @@ var
              (Pos('classnameis(''exception'')', T) > 0);
   end;
 
-  { Insert AUnit into the implementation uses clause, as ONE edit. Returns False
-    when the unit is already there or no uses clause can be found -- in both
-    cases adding nothing is the correct outcome, so neither is an error. }
-  function BuildUsesEdit(const APath, AUnit: string; ALines: TStringList; out AEdit: TTextEdit): Boolean;
-  var
-    M, ImplAt, UsesAt: Integer;
-    T                : string ;
-  begin
-    Result:= False;
-    ImplAt:= -1;
-    for M:= 0 to ALines.Count - 1 do
-      if SameText(Trim(ALines[M]), 'implementation') then begin ImplAt:= M; Break; end;
-    { the raises are in the implementation, so that is the clause to extend; a
-      unit with no implementation section falls back to the interface one }
-    UsesAt:= -1;
-    for M:= Max(ImplAt, 0) to ALines.Count - 1 do
-    begin
-      T:= LowerCase(Trim(ALines[M]));
-      if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= M; Break; end;
-    end;
-    if (UsesAt < 0) and (ImplAt >= 0) then
-      for M:= 0 to ALines.Count - 1 do
-      begin
-        T:= LowerCase(Trim(ALines[M]));
-        if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= M; Break; end;
-      end;
-    if UsesAt < 0 then Exit;
-    AEdit:= Default(TTextEdit);
-    AEdit.FilePath:= APath;
-    if SameText(Trim(ALines[UsesAt]), 'uses') then
-    begin
-      AEdit.Kind   := tekInsertLines;
-      AEdit.Line   := UsesAt + 1;          { 1-based: insert AFTER the 'uses' line }
-      AEdit.Text   := '  ' + AUnit + ',';
-    end
-    else
-    begin
-      { 'uses A, B;' -- inject immediately after the keyword, which keeps the
-        edit to one line and cannot disturb a continuation line below it }
-      AEdit.Kind:= tekInsertInLine;
-      AEdit.Line:= UsesAt + 1;
-      AEdit.Col := Pos('uses', LowerCase(ALines[UsesAt])) + 4;
-      AEdit.Text:= ' ' + AUnit + ',';
-    end;
-    Result:= True;
-  end;
-
 begin
   Result:= nil;
   AFixed:= 0;
@@ -11371,7 +11324,7 @@ begin
         if K < 0 then
         begin
           var UE: TTextEdit;
-          if BuildUsesEdit(F.FilePath, Cfg.ExceptionsUnit, Lines, UE) then Result:= Result + [UE];
+          if BuildImplUsesEdit(F.FilePath, Cfg.ExceptionsUnit, Lines, UE) then Result:= Result + [UE];
         end;
       end;
     end;

@@ -9,9 +9,24 @@ unit DRagLint.Lint.Autofix;
 interface
 
 uses
-  DRagLint.Core.Model
+  System.Classes
+  , DRagLint.Core.Model
   , DRagLint.Refactor.TextEdit
   ;
+
+type
+  /// <summary>A per-FINDING fixer: the edits that fix AFinding.</summary>
+  /// <remarks>ALines is the finding's file as the builder read it (shared,
+  /// cached per file -- never free or modify it). Return no edits to decline
+  /// (the finding then counts as not fixed). Set ExpectText on every edit so a
+  /// file that changed under the finding is skipped, not corrupted.</remarks>
+  TFindingFixer = reference to function(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+
+  /// <summary>A per-FILE fixer: the edits for every finding of its rule in APath
+  /// (the unused-local shape -- several findings share one edit).</summary>
+  /// <remarks>AFindings is the whole batch; the fixer picks its own rule's rows
+  /// in APath. AFixed returns how many findings the edits fix.</remarks>
+  TFileFixer = reference to function(const APath: string; const AFindings: TArray<TLintFinding>; out AFixed: Integer): TArray<TTextEdit>;
 
 /// <summary>Is ARuleId a rule with a registered autofix?</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
@@ -52,16 +67,142 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// raise-bare-exception) are NOT built here -- see the implementation comment.</remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 
+/// <summary>Registers a per-finding fixer for ARuleId (autofix wave A0).</summary>
+/// <param name="ARuleId">The rule id; compared case-insensitively.</param>
+/// <param name="AFixer">Builds the edits for one finding; see TFindingFixer.</param>
+/// <param name="ARisky">True for a behaviour-CHANGING fix (tagged risky, still applied).</param>
+/// <remarks>Makes IsFixableRule (and so `rules --json`.fixable) true for the id.
+/// An id the legacy FIXABLE_RULE_IDS chain already fixes is never handed to a
+/// registered fixer. Call it from a fixer unit's RegisterFixers, which this
+/// unit's initialization runs; not thread-safe after start-up.</remarks>
+procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False);
+
+/// <summary>Registers a per-file fixer for ARuleId (autofix wave A0).</summary>
+/// <param name="ARuleId">The rule id; compared case-insensitively.</param>
+/// <param name="AFixer">Builds the edits for every finding of the rule in one file.</param>
+/// <param name="ARisky">True for a behaviour-CHANGING fix.</param>
+/// <remarks>Same contract as RegisterFixer; called once per file that has a
+/// finding of the rule.</remarks>
+procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False);
+
+/// <summary>Builds the ONE edit that wraps lines AFirstLine..ALastLine in
+/// try / finally / end.</summary>
+/// <param name="APath">The file the edit targets.</param>
+/// <param name="ALines">The file's current lines.</param>
+/// <param name="AFirstLine">1-based first line of the protected statements.</param>
+/// <param name="ALastLine">1-based last line of the protected statements.</param>
+/// <param name="AFinallyText">The finally body (may hold line breaks), unindented.</param>
+/// <param name="AIndent">The indent of the try/finally/end keywords.</param>
+/// <param name="AEdit">Out: a tekReplaceLines edit, guarded on line AFirstLine.</param>
+/// <returns>False when the range is outside the file.</returns>
+/// <remarks>The protected lines are re-indented by two spaces; the finally
+/// body is written at AIndent + two spaces, one line per input line.</remarks>
+function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;
+  const AFinallyText, AIndent: string; out AEdit: TTextEdit): Boolean;
+
+/// <summary>Builds the edit that deletes the statement AFinding spans: the
+/// span, the ';' after it, and the whole line when nothing else is left.</summary>
+/// <param name="AFinding">The finding; its span is the statement.</param>
+/// <param name="ALines">The finding's file.</param>
+/// <param name="AEdit">Out: a tekDeleteLines or guarded tekReplaceInLine edit.</param>
+/// <returns>False when the span is not a whole statement this helper can
+/// remove safely (a multi-line span that shares a line with other code).</returns>
+function DeleteStatement(const AFinding: TLintFinding; ALines: TStrings; out AEdit: TTextEdit): Boolean;
+
+/// <summary>Builds the edit that inserts AUnit into the implementation uses
+/// clause (the interface one when the unit has no implementation uses).</summary>
+/// <param name="APath">The file the edit targets.</param>
+/// <param name="AUnit">The unit name to add.</param>
+/// <param name="ALines">The file's current lines.</param>
+/// <param name="AEdit">Out: the insert edit.</param>
+/// <returns>False when no uses clause exists. Does NOT check whether AUnit is
+/// already listed -- EnsureImplUses does.</returns>
+/// <remarks>Lifted verbatim from DRagLint.CLI's raise-bare-exception rewrite
+/// (BuildUsesEdit), which still calls it.</remarks>
+function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEdit: TTextEdit): Boolean;
+
+/// <summary>Like BuildImplUsesEdit, but returns False (no edit) when AUnit is
+/// already named in any uses clause of the file.</summary>
+/// <param name="APath">The file the edit targets.</param>
+/// <param name="ALines">The file's current lines.</param>
+/// <param name="AUnit">The unit name to add (RTL units only without a --db).</param>
+/// <param name="AEdit">Out: the insert edit.</param>
+/// <returns>True when an edit was built.</returns>
+function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;
+
+/// <summary>The declared type of AName as seen from line ALine of APath: a
+/// same-routine local, parameter or inline var, or a unit-level var.</summary>
+/// <param name="APath">The source file (parsed through TAstParseCache).</param>
+/// <param name="ALine">1-based line inside the routine that uses AName.</param>
+/// <param name="AName">The identifier; case-insensitive.</param>
+/// <returns>The type text with whitespace removed, or '' when the source does
+/// not show one (a field, a with-member, an untyped inline var, a missing file).</returns>
+/// <remarks>The same scope walk as the .scm predicate #declared-type?, so a code
+/// fixer and a rule agree on what a local is.</remarks>
+function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;
+
 implementation
 
 uses
   System.SysUtils
-  , System.Classes
   , System.IOUtils
   , System.StrUtils
+  , System.Math
+  , System.RegularExpressions
   , System.Generics.Collections
+  , System.Generics.Defaults
   , DRagLint.Diagnostics.AstChecks
+  , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.QueryRules     { DeclaredTypeAt -- DeclTypeOf }
+  , DRagLint.Lint.RuleCatalog    { IsSidecarFixRule -- a sidecar "fix" key makes a rule fixable }
+  , DRagLint.Fix.Templates
+  , DRagLint.Fix.Expr
+  , DRagLint.Fix.Stmt
+  , DRagLint.Fix.Decl
+  , DRagLint.Fix.Store
+  , DRagLint.Fix.Hygiene
+  , DRagLint.Fix.Security
+  , DRagLint.Fix.Shape
+  , DRagLint.Fix.Typed
   ;
+
+type
+  TRegisteredFixer = record
+    Finding: TFindingFixer;
+    PerFile: TFileFixer   ;
+    Risky  : Boolean      ;
+  end;
+
+var
+  { rule id -> fixer; case-insensitive. Filled at start-up by the fixer units'
+    RegisterFixers (called from this unit's initialization), read-only after. }
+  GFixers: TDictionary<string, TRegisteredFixer>;
+
+function Fixers: TDictionary<string, TRegisteredFixer>;
+begin
+  if GFixers = nil then GFixers:= TDictionary<string, TRegisteredFixer>.Create(TIStringComparer.Ordinal);
+  Result:= GFixers;
+end;
+
+procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean);
+var
+  R: TRegisteredFixer;
+begin
+  R:= Default(TRegisteredFixer);
+  R.Finding:= AFixer;
+  R.Risky  := ARisky;
+  Fixers.AddOrSetValue(ARuleId, R);
+end;
+
+procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean);
+var
+  R: TRegisteredFixer;
+begin
+  R:= Default(TRegisteredFixer);
+  R.PerFile:= AFixer;
+  R.Risky  := ARisky;
+  Fixers.AddOrSetValue(ARuleId, R);
+end;
 { The set of rule-ids that have a registered, mechanical, side-effect-free
   quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
@@ -92,13 +233,23 @@ const
       having run, and it SKIPS any file that tests the class exactly. }
     'raise-bare-exception');
 
-function IsFixableRule(const ARuleId: string): Boolean;
+{ The LEGACY set: the ids the FIXABLE_RULE_IDS list (and the if-chain in
+  BuildAutofixEdits / the store-backed appends in the CLI) owns. }
+function IsLegacyFixRule(const ARuleId: string): Boolean;
 var
   S: string;
 begin
   for S in FIXABLE_RULE_IDS do
     if SameText(S, ARuleId) then Exit(True);
   Result:= False;
+end;
+
+{ autofix wave A0: legacy list OR a registered fixer OR a sidecar "fix" key. }
+function IsFixableRule(const ARuleId: string): Boolean;
+var
+  Risky: Boolean;
+begin
+  Result:= IsLegacyFixRule(ARuleId) or Fixers.ContainsKey(ARuleId) or IsSidecarFixRule(ARuleId, Risky);
 end;
 
 { The NAMING fixes. Each rewrites a declaration and every use the index knows
@@ -130,6 +281,11 @@ var
 begin
   SetLength(Result, Length(FIXABLE_RULE_IDS));
   for i:= 0 to High(FIXABLE_RULE_IDS) do Result[i]:= FIXABLE_RULE_IDS[i];
+  { autofix wave A0: then the registered and sidecar ids the list does not hold }
+  for var Id: string in Fixers.Keys do
+    if not IsLegacyFixRule(Id) then Result:= Result + [Id];
+  for var Id: string in SidecarFixRuleIds do
+    if (not IsLegacyFixRule(Id)) and not Fixers.ContainsKey(Id) then Result:= Result + [Id];
 end;
 
 { Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
@@ -148,10 +304,14 @@ const
 function IsRiskyFixRule(const ARuleId: string): Boolean;
 var
   S: string;
+  R: TRegisteredFixer;
+  B: Boolean;
 begin
   for S in RISKY_FIX_RULE_IDS do
     if SameText(S, ARuleId) then Exit(True);
-  Result:= False;
+  { autofix wave A0: a registered or sidecar fix declares its own risk }
+  if Fixers.TryGetValue(ARuleId, R) and R.Risky then Exit(True);
+  Result:= IsSidecarFixRule(ARuleId, B) and B;
 end;
 
 { Fixable rules whose fix is offered ONLY for a single targeted finding (the IDE
@@ -273,6 +433,9 @@ var
   Ln   : string                          ;
   Span : string                          ;
   Repl : string                          ;
+  { autofix wave A0: (file=unit) pairs a sidecar fix needs in the uses clause }
+  UsesWanted: TStringList                ;
+  UsesDone  : TStringList                ;
 
   function LinesFor(const APath: string): TStringList;
   begin
@@ -287,6 +450,8 @@ begin
   Result:= nil;
   AFixableCount:= 0;
   Cache:= TDictionary<string, TStringList>.Create;
+  UsesWanted:= TStringList.Create;
+  UsesDone  := TStringList.Create;
   try
     for F in AFindings do
     begin
@@ -725,6 +890,26 @@ begin
           end;
         end; // if
       end; // if
+
+      { autofix wave A0: a REGISTERED per-finding fixer, else a SIDECAR fix, for
+        an id the legacy chain above does not own -- a registered id never
+        doubles a legacy one. A sidecar "uses" unit is collected per file and
+        added once, after the loop. }
+      if not IsLegacyFixRule(F.RuleId) then
+      begin
+        var RegFx: TRegisteredFixer;
+        var RegEdits: TArray<TTextEdit>:= nil;
+        if Fixers.TryGetValue(F.RuleId, RegFx) and Assigned(RegFx.Finding) then
+          RegEdits:= RegFx.Finding(F, LinesFor(F.FilePath))
+        else if F.FixKind <> lfkNone then
+          RegEdits:= BuildSidecarFixEdits(F, LinesFor(F.FilePath));
+        if Length(RegEdits) > 0 then
+        begin
+          Result:= Result + RegEdits;  // dl:ok concat-in-loop@09c2 -- REVIEWED 2026-10-27: one or two edits per finding, the builder's own accumulate shape
+          Inc(AFixableCount);
+          if (F.FixKind <> lfkNone) and (F.FixUses <> '') then UsesWanted.AddPair(F.FilePath, F.FixUses);
+        end;
+      end;
     end; // for
 
     { unused-local is handled per FILE, not per finding: several dead names can
@@ -753,10 +938,263 @@ begin
     finally
       ULFiles.Free;
     end;
+
+    { autofix wave A0: registered PER-FILE fixers, once per file that has a
+      finding of the rule (the unused-local shape above, generalised). }
+    for var FxPair: TPair<string, TRegisteredFixer> in Fixers do
+    begin
+      if (not Assigned(FxPair.Value.PerFile)) or IsLegacyFixRule(FxPair.Key) then Continue;
+      var FxFiles: TStringList:= TStringList.Create(dupIgnore, True, False);
+      try
+        for F in AFindings do
+          if SameText(F.RuleId, FxPair.Key) and (F.FilePath <> '') then FxFiles.Add(F.FilePath);
+        for var FxPath: string in FxFiles do
+        begin
+          var FxFixed: Integer:= 0;
+          var FxEdits: TArray<TTextEdit>:= FxPair.Value.PerFile(FxPath, AFindings, FxFixed);
+          if Length(FxEdits) > 0 then
+          begin
+            Result:= Result + FxEdits;  // dl:ok concat-in-loop@e488 -- REVIEWED 2026-10-27: one append per file, the unused-local loop's shape
+            Inc(AFixableCount, FxFixed);
+          end;
+        end;
+      finally
+        FxFiles.Free;
+      end;
+    end;
+
+    { the "uses" units sidecar fixes asked for, once per (file, unit) }
+    for var UI: Integer:= 0 to UsesWanted.Count - 1 do
+    begin
+      var UE: TTextEdit;
+      var UKey: string:= LowerCase(UsesWanted.Names[UI] + '|' + UsesWanted.ValueFromIndex[UI]);
+      if UsesDone.IndexOf(UKey) >= 0 then Continue;
+      UsesDone.Add(UKey);
+      if EnsureImplUses(UsesWanted.Names[UI], LinesFor(UsesWanted.Names[UI]), UsesWanted.ValueFromIndex[UI], UE) then
+        Result:= Result + [UE];
+    end;
   finally
     for SL in Cache.Values do SL.Free;
     Cache.Free;
+    UsesWanted.Free;
+    UsesDone.Free;
   end; // try
 end; // begin
+
+function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;
+  const AFinallyText, AIndent: string; out AEdit: TTextEdit): Boolean;
+const
+  STEP = '  ';
+var
+  SB: TStringBuilder;
+  L : Integer       ;
+begin
+  AEdit:= Default(TTextEdit);
+  Result:= (AFirstLine >= 1) and (ALastLine >= AFirstLine) and (ALastLine <= ALines.Count);
+  if not Result then Exit;
+  SB:= TStringBuilder.Create;
+  try
+    SB.Append(AIndent + 'try');
+    for L:= AFirstLine to ALastLine do
+      if Trim(ALines[L - 1]) = '' then SB.Append(sLineBreak)
+      else SB.Append(sLineBreak + STEP + ALines[L - 1]);
+    SB.Append(sLineBreak + AIndent + 'finally');
+    for var FL: string in AFinallyText.Replace(#13#10, #10).Split([#10]) do
+      SB.Append(sLineBreak + AIndent + STEP + FL);
+    SB.Append(sLineBreak + AIndent + 'end;');
+    AEdit.FilePath  := APath;
+    AEdit.Kind      := tekReplaceLines;
+    AEdit.Line      := AFirstLine;
+    AEdit.EndLine   := ALastLine;
+    AEdit.Text      := SB.ToString;
+    AEdit.ExpectText:= ALines[AFirstLine - 1];
+  finally
+    SB.Free;
+  end;
+end;
+
+function DeleteStatement(const AFinding: TLintFinding; ALines: TStrings; out AEdit: TTextEdit): Boolean;
+var
+  First, Last: string ;
+  Tail       : Integer;
+  Before     : string ;
+  After      : string ;
+  Lead       : Integer;
+begin
+  AEdit:= Default(TTextEdit);
+  Result:= False;
+  if (AFinding.StartLine < 1) or (AFinding.EndLine < AFinding.StartLine) or (AFinding.EndLine > ALines.Count) then Exit;
+  First:= ALines[AFinding.StartLine - 1];
+  Last := ALines[AFinding.EndLine - 1];
+  if (AFinding.StartCol < 1) or (AFinding.StartCol > Length(First) + 1) or (AFinding.EndCol < 1) or (AFinding.EndCol > Length(Last) + 1) then Exit;
+  { the span, then blanks, then one optional ';' }
+  Tail:= AFinding.EndCol;
+  while (Tail <= Length(Last)) and CharInSet(Last[Tail], [' ', #9]) do Inc(Tail);
+  if (Tail <= Length(Last)) and (Last[Tail] = ';') then Inc(Tail) else Tail:= AFinding.EndCol;
+  Before:= Copy(First, 1, AFinding.StartCol - 1);
+  After := Copy(Last, Tail, MaxInt);
+  AEdit.FilePath:= AFinding.FilePath;
+  if (Trim(Before) = '') and (Trim(After) = '') then
+  begin
+    { nothing else on the line(s): drop them whole }
+    AEdit.Kind      := tekDeleteLines;
+    AEdit.Line      := AFinding.StartLine;
+    AEdit.EndLine   := AFinding.EndLine;
+    Exit(True);
+  end;
+  if AFinding.StartLine <> AFinding.EndLine then Exit;   { shares a line with other code: decline }
+  { a statement that ENDS its line takes the blanks before it along, so
+    `X := 1; Foo;` becomes `X := 1;`, not `X := 1; ` }
+  Lead:= AFinding.StartCol;
+  if Trim(After) = '' then
+    while (Lead > 1) and CharInSet(First[Lead - 1], [' ', #9]) do Dec(Lead);
+  AEdit.Kind      := tekReplaceInLine;
+  AEdit.Line      := AFinding.StartLine;
+  AEdit.Col       := Lead;
+  AEdit.EndCol    := Tail;
+  AEdit.Text      := '';
+  AEdit.ExpectText:= Copy(First, Lead, Tail - Lead);
+  { an empty guard would make the edit unguarded }
+  Result:= AEdit.ExpectText <> '';
+end;
+
+{ Lifted VERBATIM from DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit
+  (autofix wave A0). Insert AUnit into the implementation uses clause, as ONE
+  edit. Returns False when no uses clause can be found. }
+function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEdit: TTextEdit): Boolean;
+var
+  M, ImplAt, UsesAt: Integer;
+  T                : string ;
+const
+  USES_KW = 'uses';
+begin
+  Result:= False;
+  AEdit:= Default(TTextEdit);
+  ImplAt:= -1;
+  for M:= 0 to ALines.Count - 1 do
+    if SameText(Trim(ALines[M]), 'implementation') then
+    begin
+      ImplAt:= M;
+      Break;
+    end;
+  { the raises are in the implementation, so that is the clause to extend; a
+    unit with no implementation section falls back to the interface one }
+  UsesAt:= -1;
+  for M:= Max(ImplAt, 0) to ALines.Count - 1 do
+  begin
+    T:= LowerCase(Trim(ALines[M]));
+    if (T = USES_KW) or T.StartsWith(USES_KW + ' ') then
+    begin
+      UsesAt:= M;
+      Break;
+    end;
+  end;
+  if (UsesAt < 0) and (ImplAt >= 0) then
+    for M:= 0 to ALines.Count - 1 do
+    begin
+      T:= LowerCase(Trim(ALines[M]));
+      if (T = USES_KW) or T.StartsWith(USES_KW + ' ') then
+      begin
+        UsesAt:= M;
+        Break;
+      end;
+    end;
+  if UsesAt < 0 then Exit;
+  AEdit.FilePath:= APath;
+  if SameText(Trim(ALines[UsesAt]), 'uses') then
+  begin
+    AEdit.Kind   := tekInsertLines;
+    AEdit.Line   := UsesAt + 1;          { 1-based: insert AFTER the 'uses' line }
+    AEdit.Text   := '  ' + AUnit + ',';
+  end
+  else
+  begin
+    { 'uses A, B;' -- inject immediately after the keyword, which keeps the
+      edit to one line and cannot disturb a continuation line below it }
+    AEdit.Kind:= tekInsertInLine;
+    AEdit.Line:= UsesAt + 1;
+    AEdit.Col := Pos(USES_KW, LowerCase(ALines[UsesAt])) + Length(USES_KW);
+    AEdit.Text:= ' ' + AUnit + ',';
+  end;
+  Result:= True;
+end;
+
+function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;
+var
+  InUses: Boolean;
+  T     : string ;
+  M     : Integer;
+begin
+  AEdit:= Default(TTextEdit);
+  Result:= False;
+  if AUnit = '' then Exit;
+  { scan every uses clause (from the keyword to its ';') for AUnit as a whole name }
+  InUses:= False;
+  for M:= 0 to ALines.Count - 1 do
+  begin
+    T:= LowerCase(Trim(ALines[M]));
+    if (T = 'uses') or T.StartsWith('uses ') then InUses:= True;
+    if InUses then
+    begin
+      if TRegEx.IsMatch(ALines[M], '(^|[\s,])' + TRegEx.Escape(AUnit) + '\s*([,;]|$|\{|//)', [roIgnoreCase]) then Exit;
+      if ALines[M].Contains(';') then InUses:= False;
+    end;
+  end;
+  Result:= BuildImplUsesEdit(APath, AUnit, ALines, AEdit);
+end;
+
+function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;
+const
+  LF = 10;
+var
+  PF    : TParsedFile;
+  Row   : Integer    ;
+  B     : Integer    ;
+  LineAt: Integer    ;
+  Txt   : string     ;
+  Col   : Integer    ;
+begin
+  Result:= '';
+  if (AName = '') or (ALine < 1) or not TFile.Exists(APath) then Exit;
+  PF:= TAstParseCache.Get(APath);
+  if PF.Tree = nil then Exit;
+  { byte offset of line ALine (the parsed source is offset-preserving) }
+  Row:= 1;
+  LineAt:= 0;
+  B:= 0;
+  while (B < Length(PF.Src)) and (Row < ALine) do
+  begin
+    if PF.Src[B] = LF then
+    begin
+      Inc(Row);
+      LineAt:= B + 1;
+    end;
+    Inc(B);
+  end;
+  if Row <> ALine then Exit;
+  { the name's own column on that line when it is there, else the line start }
+  B:= LineAt;
+  while (B < Length(PF.Src)) and (PF.Src[B] <> LF) do Inc(B);
+  Txt:= TEncoding.ANSI.GetString(PF.Src, LineAt, B - LineAt);
+  Col:= TRegEx.Match(Txt, '\b' + TRegEx.Escape(AName) + '\b', [roIgnoreCase]).Index;
+  if Col < 1 then Col:= 1;
+  if not DeclaredTypeAt(PF.Tree.RootNode, PF.Src, UInt32(LineAt + Col - 1), AName, Result) then Result:= '';
+end;
+
+initialization
+  Fixers;
+  { every fixer unit registers once; each is a lane's home (A0 creates them empty) }
+  DRagLint.Fix.Templates.RegisterFixers;
+  DRagLint.Fix.Expr.RegisterFixers;
+  DRagLint.Fix.Stmt.RegisterFixers;
+  DRagLint.Fix.Decl.RegisterFixers;
+  DRagLint.Fix.Store.RegisterFixers;
+  DRagLint.Fix.Hygiene.RegisterFixers;
+  DRagLint.Fix.Security.RegisterFixers;
+  DRagLint.Fix.Shape.RegisterFixers;
+  DRagLint.Fix.Typed.RegisterFixers;
+
+finalization
+  GFixers.Free;
 
 end.
