@@ -281,3 +281,26 @@ exist on its own in the sources). The FIRST stage's block is replaced in place.
   no second ask, menu reopens, Split writes `.stage2.rules` and saves the source, a fresh
   chain book -> Merge rewrites the header and the links in the Raw DSL, Save then shows no
   dialog; Save from close shows no dialog.
+
+## 10. As built (T6 review, 2026-10-27)
+
+Deviations of T1-T5 from sections 4-5, judged in the whole-branch review; all ACCEPTED
+unless marked FIXED.
+* Chain key: when a chain loops back into a cycle the key omits the repeated last To (the
+  cycle is its own finding). Cycle detection walks from every winner not yet reported.
+* A2 casts are written `: Cast` (the DSL's cast form); the merge parses P/Q lines with
+  `TRuleBook.ParseLine`.
+* Block range: a Q stage that runs to the end of the book keeps a trailing `#migrate` as its
+  own (the grammar cannot tell a file-scope trailer from a block line); A6 carries it
+  de-duplicated, so the worst case is one duplicated `#migrate` line in the merged block.
+* S5 with more than two stages reads "... first, then A, then B"; `TChainSplit.Stages` lists
+  every non-moved `#convert` header at stage 1.
+* S2 append: when the stage book exists its own `#depth` line governs; the moved blocks' copy
+  is dropped (wiki says so). Every encoding question is asked before the first write (S4).
+* M3: the unit-conflict Save status also ends with the chain text.
+* M1 FIXED in T6: `StaticChainMarks` now drops every chain mark the current findings no longer
+  give. Before, the last stage block kept "chain ... stage 2 of 2" after a Merge, and a mark
+  whose "line N" moved was kept beside the new one (tests `chains.marks.merge.*`,
+  `chains.marks.replaces.shifted`). `MergeChains` refreshes the marks at once.
+* Driver: 22 checks (`-ProofNoChain` 5); the dirty check uses File > New's "Save changes"
+  question (the editor has no caption marker).

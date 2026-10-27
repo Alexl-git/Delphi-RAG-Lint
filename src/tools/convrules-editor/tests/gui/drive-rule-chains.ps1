@@ -327,7 +327,7 @@ try {
   }
   Check 'save1.status.chains' ($s -match 'Rule chains: 1 chain -- see marked rules') $s
   Check 'save1.dialog' ($dlg -ne [IntPtr]::Zero) (TopsNow $p.Id)
-  $rows = if ($dlg -ne [IntPtr]::Zero) { ChainRows $dlg } else { @() }
+  $rows = @(if ($dlg -ne [IntPtr]::Zero) { ChainRows $dlg })  # @(): one row must stay an array, not unroll to a string
   Check 'save1.dialog.row' (($rows.Count -eq 1) -and $rows[0].StartsWith('chain Bde.DBTables.TTable -> FireDAC.Comp.Client.TFDTable -> FireDAC.Comp.Client.TFDMemTable')) ($rows -join ' | ')
   $caps = if ($dlg -ne [IntPtr]::Zero) { Caps $dlg } else { @() }
   $bm = if ($dlg -ne [IntPtr]::Zero) { ButtonOf $dlg 'Merge' } else { $null }

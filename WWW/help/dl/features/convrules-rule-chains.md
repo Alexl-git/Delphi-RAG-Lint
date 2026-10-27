@@ -104,8 +104,9 @@ book beside it: `X.rules` stays, `X.stage2.rules` holds stage 2, `X.stage3.rules
 Cycle members, duplicate losers and the file-scope lines stay put. A stage book gets the
 source's `#depth` line, a copy of every `#mapping` group that a moved block `#applies` (the
 engine resolves `#apply` inside the book it runs; the status says which names were
-copied), then the moved blocks verbatim. An existing stage file is appended to, with the
-usual duplicate-header warning.
+copied), then the moved blocks verbatim. An existing stage file is appended to (its own
+`#depth` line governs; the moved blocks' copy is dropped), with the usual duplicate-header
+warning. Every encoding question is asked before the first file is written.
 
 Split writes the stage books first, then removes the moved blocks and saves the source.
 Every file gets a backup and the usual encoding question; cancelling that question aborts

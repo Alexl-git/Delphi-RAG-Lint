@@ -1123,9 +1123,9 @@ end;
 // True for a mark StaticChainMarks owns (the text shapes of ChainMarkText).
 function IsChainMark(const AMark: TRuleMark): Boolean;
 begin
-  Result:= AMark.IsWarning and not AMark.FromSyntax
-    and (AMark.Text.StartsWith('chain ') or AMark.Text.StartsWith('cycle ')
-      or AMark.Text.StartsWith('duplicate From type ') or AMark.Text.StartsWith('unit chain '));
+  var LChainText: Boolean:= AMark.Text.StartsWith('chain ') or AMark.Text.StartsWith('cycle ')
+    or AMark.Text.StartsWith('duplicate From type ') or AMark.Text.StartsWith('unit chain ');
+  Result:= LChainText and AMark.IsWarning and not AMark.FromSyntax;
 end;
 
 function StaticChainMarks(ABook: TRuleBook): Integer;
