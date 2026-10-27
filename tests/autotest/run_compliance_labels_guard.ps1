@@ -33,11 +33,7 @@ function Assert($name, $cond) {
 
 # Ids whose compliance row INT adds when their lane merges (plan section 5 rows marked NEW).
 # INT removes an id from this list in the same change that adds its row.
-$Pending = @(
-  'begin-end-pair-not-in-finally','field-created-not-freed','free-of-owned-item',
-  'free-of-parameter','freeonterminate-then-wait','hides-ancestor-virtual',
-  'mismatched-alloc-free','needless-exit','property-accessor-name','unused-loop-variable'
-)
+$Pending = @()
 
 $rulesJson = & $exe rules --json --rules-dir $rulesDir 2>$null
 Assert "rules --json exits 0" ($LASTEXITCODE -eq 0)
