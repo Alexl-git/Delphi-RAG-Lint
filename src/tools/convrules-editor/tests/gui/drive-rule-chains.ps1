@@ -282,7 +282,7 @@ function SaveAndWait($procId, $main, $sec) {
   $t0 = Get-Date
   while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
     if ((TopBy $procId 'Rule chains') -ne [IntPtr]::Zero) { break }
-    if (((StatusText $main) -match '^Saved ') -and -not ([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' })) { break }
+    if (((StatusText $main) -match '^(\[!\] )?Saved ') -and -not ([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' })) { break }
     Start-Sleep -Milliseconds 300
   }
   return $ok
@@ -399,7 +399,7 @@ try {
   [void](WaitIdle $p.Id $main $SLOW_SEC)
   $again = WaitFor $p.Id 'Rule chains' 10
   $s = StatusText $main
-  Check 'merge.save.no.dialog' (($s -match '^Saved Merge\.rules') -and ($s -notmatch 'Rule chains:') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
+  Check 'merge.save.no.dialog' (($s -match '^(\[!\] )?Saved Merge\.rules') -and ($s -notmatch 'Rule chains:') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
   if ($again -ne [IntPtr]::Zero) { Click (ButtonOf $again 'Keep'); [void](WaitGone $p.Id $again 10) }
 
   # --- Close with a dirty book that still has a chain: the Save from the guard never offers (O3) ---
