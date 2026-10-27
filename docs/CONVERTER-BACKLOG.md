@@ -63,6 +63,17 @@ before working on an item.**
     message (`ConvRulesEditor.Busy`) as the kit claims every driver does.
   * **N4-1** (S) no GUI case for a mixed raise (some units refused): needs a fixture; 14 model checks cover it.
   * **N13-1** (low) `BookPlaces` splits on LF only; the model also splits on a lone CR.
+* 2026-10-26 (night) OWNER: main pushed (1b7a70d3..7c7746b4, 81 commits). Two owner inputs:
+  * **D2 -> SPLIT (owner option, preferred)**: split BDE-to-FireDAC.rules into a BDE book and a
+    "Book-2" with every rule unrelated to the BDE conversion. First step: classify the 43 book-wide
+    `#migrate` lines + the blocks (BDE vs not); BDE book keeps its book-wide lines ABOVE the first
+    `#convert` header (rule A; check the engine's scoping first). No trailer special case needed.
+  * **CHAIN-1 (new, M, needs ENGINE answer first)**: rules A->B and B->C in one book. Owner: warn and
+    offer an A->C rule, or offer to move them to separate books run one after the other. FIRST ask
+    ENGINE whether convert-apply applies a book in ONE pass (each node matched against the original
+    type, so B->C never sees A's output) or sequentially (A->B->C chains); the DSL doc does not say.
+    Then: a pure `RuleChains` decision (From/To graph over #convert headers + unit swaps, cycle
+    A->B, B->A = error), surfaced in ValidateScope on Save with the two quick fixes.
 
 ## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- historical
 
