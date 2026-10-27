@@ -49,7 +49,7 @@ before working on an item.**
   HLP 677ba1a3, N13 f5c01c3c, N2 34663029, N4 75fc2309, DRV fa80b602 (driver audit: WaitCls 0-timeout,
   stale status, WaitIdle before Convert, convert-encoding lost first copy). main: 2950/0/20 no engine,
   3068/0/0 with the pin; lint 0 on the wave's changed lines. Follow-ups:
-  * **READY: name-drop workaround removal** -- ENGINE (2026-10-26) says 1.35.1 already binds cross-unit
+  * **DONE (conv/namedrop, 2026-10-26): name-drop workaround removed** -- `ListCodeRefs` (`CODE_REFS_SQL`) now reads FIELD-resolved refs only; the unresolved-ref read and its local/param name-drop are gone; tests `coderefs.live.fields.only` / `.library.member.dropped`. Was: ENGINE (2026-10-26) says 1.35.1 already binds cross-unit
     implicit-Self reads/writes of inherited fields (7 shapes; guard lands with 1.36.0). Limit: members
     of a LIBRARY ancestor (TForm.Tag) still need the library store attached.
   * **DRV-1** (S) drive-save-encoding `save.nonascii.asks` read '' from the warning (1 of 3 runs): same

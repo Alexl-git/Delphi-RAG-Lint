@@ -11102,6 +11102,12 @@ begin
             LUsed:= True;
       Check('coderefs.live.use.found', LUsed, Format('%d refs %s', [Length(Refs), Err]));
       Check('coderefs.live.local.ignored', (Length(Refs) > 0) and not MatchText('Label2', CodeNames(Refs)), string.Join(',', CodeNames(Refs)));
+      // 1.35.1 binds every implicit-Self use of an inherited PROJECT field to the field
+      // (cross-unit), so only field-resolved refs are read: the unresolved member rows
+      // (Label1's library Caption) and TForm.Tag (a LIBRARY ancestor's member, unresolved
+      // without the library store) are not answered. One row: the Label1 read.
+      Check('coderefs.live.fields.only', (Length(Refs) = 1) and SameText(CodeNames(Refs)[0], 'Label1'), string.Join(',', CodeNames(Refs)));
+      Check('coderefs.live.library.member.dropped', not MatchText('Tag', CodeNames(Refs)), string.Join(',', CodeNames(Refs)));
       Check('coderefs.live.bad.db.failed', not Eng.ListCodeRefs(TPath.Combine(Dir, 'none.sqlite'), DescPas, 'TDesc2Form', Refs, Err) and (Err <> ''), Err);
       Check('coderefs.live.unit.not.indexed.failed', not Eng.ListCodeRefs(Db, TPath.Combine(Dir, 'Nope.pas'), 'TDesc2Form', Refs, Err)
         and ContainsText(Err, 'not in the index'), Err);
