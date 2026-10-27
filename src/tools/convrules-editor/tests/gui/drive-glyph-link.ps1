@@ -334,16 +334,29 @@ function OpenClass($main, $cls) {
   DblClickRow $lb $row
   return ''
 }
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  /* DRV-5 / N7/N11: 'ConvRulesEditor.Busy' answers 2 busy / 1 idle; no answer within the timeout = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+"@
 # The editor is idle once it has had no engine child and no progress window (TEngineWaitForm)
 # for 3 s running: a click and its double-click can start two loads back to back.
 $ENGINE_IDLE_SEC = 900
-function WaitIdle($procId) {
+function WaitIdle($procId, $main = [IntPtr]::Zero) {
   $t0 = Get-Date; $quiet = $null
   while (((Get-Date) - $t0).TotalSeconds -lt $ENGINE_IDLE_SEC) {
     # Children created AFTER the editor started only: a reused PID can make an old orphan of
     # another session look like the editor's child (measured: a day-old tail.exe).
     $kids = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$procId" | Where-Object { $_.CreationDate -ge $script:editorStart })
-    $busy = ($kids.Count -gt 0) -or ([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' })
+    $busy = ($kids.Count -gt 0) -or ([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }) -or (($main -ne [IntPtr]::Zero) -and [B]::Busy($main))
     if ($busy) { $quiet = $null } elseif ($null -eq $quiet) { $quiet = Get-Date } elseif (((Get-Date) - $quiet).TotalSeconds -ge 3) { return $true }
     Start-Sleep -Milliseconds 250
   }
@@ -427,14 +440,14 @@ try {
   Check 'glyph.menu.disabled.no.rule' (($caps -match 'Mapping\|Glyph expression\.\.\.') -and -not [W]::MenuEnabled($main, 'Mapping|Glyph expression...'))
 
   # --- File > Open the good book (again: the File > Open path), then double-click its class ---
-  [void](WaitIdle $p.Id)   # the start-up class-list queries
+  [void](WaitIdle $p.Id $main)   # the start-up class-list queries
   Check 'glyph.open.invoke' ([W]::InvokeMenu($main, 'File|Open...'))
   $e = OpenDialogTo $p.Id $good
   $st = WaitStatus $main '^Loaded \d+ line' 30
   Check 'glyph.open.good' (($e -eq '') -and ($st -match '^Loaded 6 line\(s\), 1 rule\(s\)')) "$e $st"
   $e = OpenClass $main 'TBitBtn'
   Start-Sleep -Seconds 1
-  [void](WaitIdle $p.Id)
+  [void](WaitIdle $p.Id $main)
   $st = StatusText $main
   Check 'glyph.rule.loaded' ($st -match '^Loaded Vcl\.Buttons\.TBitBtn -> cxButtons\.TcxButton from BitBtn-glyph\.rules') "$e $st"
   Check 'glyph.menu.enabled.rule' ([W]::MenuEnabled($main, 'Mapping|Glyph expression...'))
@@ -514,7 +527,7 @@ try {
   Check 'glyph.saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
   $e = SaveDialogTo $p.Id $out
   Start-Sleep -Seconds 1
-  [void](WaitIdle $p.Id)
+  [void](WaitIdle $p.Id $main)
   $st = WaitStatus $main 'Validate:' 60
   Check 'glyph.saveas.written' (($e -eq '') -and (Test-Path -LiteralPath $out)) "$e $st"
   $outLines = Lines $out
@@ -534,10 +547,10 @@ try {
   Check 'glyph.bad.open' (($e -eq '') -and $raw.Contains($badLine)) "$e; status: $(StatusText $main)"
   [void][W]::ClickTab($main, 'Classes')
   # The Classes selection survives the open, so the bad book's rule for it starts loading.
-  [void](WaitIdle $p.Id)
+  [void](WaitIdle $p.Id $main)
   Check 'glyph.bad.save.invoke' ([W]::InvokeMenu($main, 'File|Save'))
   Start-Sleep -Seconds 1
-  [void](WaitIdle $p.Id)
+  [void](WaitIdle $p.Id $main)
   $st = WaitStatus $main 'G-expression column|Validate:' 60
   Check 'glyph.bad.save.error' ($st -match 'G-expression column') $st
 
