@@ -1,0 +1,10 @@
+# OFF by default (else-after-exit.config.json enables it). Hits: the else keyword of an
+# if whose then-branch ends in Exit / Break / Continue / raise.
+# FP shapes (non-hits): then-branch without an unconditional exit, exit only inside a
+# nested conditional of the then-branch, an if with no else.
+else-after-exit 11
+else-after-exit 26
+else-after-exit 35
+!else-after-exit 44
+!else-after-exit 55
+!else-after-exit 61

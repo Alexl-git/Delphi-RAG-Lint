@@ -1,0 +1,10 @@
+# Hits: Continue as the last statement of a loop body; bare Exit as the last statement of a routine.
+# FP shapes (non-hits): guarded Continue / Exit followed by more code, Exit(Value)
+# (carries the result), Exit at the tail of a try block (finally still follows).
+redundant-continue-exit 14
+redundant-continue-exit 21
+redundant-continue-exit 27
+!redundant-continue-exit 37
+!redundant-continue-exit 45
+!redundant-continue-exit 52
+!redundant-continue-exit 60
