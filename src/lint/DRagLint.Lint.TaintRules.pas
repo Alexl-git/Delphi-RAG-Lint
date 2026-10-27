@@ -384,6 +384,7 @@ type
     function  SlotSummary(AStore: Integer; const T: TSymbol; const ASlot: string; AOutIdx: Integer): TSummary;
     function  CallersParam(const X: TSymbol; AIdx: Integer): TSummary;
     function  FieldSummary(AStore: Integer; const ARow: TDataFlowRow): TSummary;
+    function  IsInheritedField(AStore: Integer; const X: TSymbol; const AName: string): Boolean;
     function  GlobalSummary(AStore: Integer; const ARow: TDataFlowRow): TSummary;
     function  Top(AStore: Integer; const X: TSymbol; const ASum: TSummary): TSummary;
     function  Implementations(AStore: Integer; const T: TSymbol): TArray<TSymbol>;
@@ -1220,6 +1221,15 @@ var
   I   : Integer;
 begin
   Result:= Default(TSummary);
+  { 0. a bare read of a field the owner INHERITS: the extractor only classifies the
+    owner's own fields (T1 contract), so an ancestor's field arrives as a ref by
+    name and is resolved here -- then it is a field read like any other. }
+  if IsInheritedField(AStore, X, ARow.SrcName) then
+  begin
+    var FRow:= ARow;
+    FRow.SrcKind:= DF_SRC_FIELD;
+    Exit(FieldSummary(AStore, FRow));
+  end;
   R:= Resolve(AStore, X, ARow.FileId, ARow.SrcLine, ARow.SrcCol, ARow.SrcName);
   { a. a catalogued source }
   for Src in FCfg.Sources do
@@ -1502,6 +1512,29 @@ begin
   finally
     Leave(Key, Result, Cyc);
   end;
+end;
+
+{ True when AName, read bare inside routine X, is a field X's class inherits: the
+  class itself declares no member of that name (its own field would already be a
+  'field' row; any other own member hides the ancestor's), and the NEAREST resolved
+  ancestor declaring the name declares it as a field. }
+function TTaintWalker.IsInheritedField(AStore: Integer; const X: TSymbol; const AName: string): Boolean;
+var
+  P  : TSymbol;
+  C  : TSymbol;
+  Anc: TTypeAncestor;
+begin
+  Result:= False;
+  if (AName = '') or (Pos('.', AName) > 0) or (X.ParentId <= 0) then Exit;
+  P:= Sym(AStore, X.ParentId);
+  if P.Kind <> skClass then Exit;
+  if FStores[AStore].FindChildSymbolByName(P.Id, AName).Id > 0 then Exit;
+  for Anc in FStores[AStore].GetTransitiveAncestors(P.Id) do
+    if Anc.Resolved and (Anc.SymbolId > 0) then
+    begin
+      C:= FStores[AStore].FindChildSymbolByName(Anc.SymbolId, AName);
+      if C.Id > 0 then Exit(C.Kind = skField);
+    end;
 end;
 
 { A src 'global' row: every writer of that unit variable. A writer in another file
