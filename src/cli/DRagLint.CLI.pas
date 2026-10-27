@@ -148,6 +148,7 @@ uses
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
+  , DRagLint.Lint   .Compliance
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .QueryRules { QueryRuleTimings -- the per-rule .scm breakdown }
   , DRagLint.Lint   .ProjectChecks
@@ -346,6 +347,8 @@ type
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
+    RuleStandard    : string        ; // --standard cwe|cert|misra: `rules` lists only rules labelled under it
+    ShowLabels      : Boolean       ; // --labels: `lint` / `lint-all` text findings get a  [CWE-476] suffix
     Disable         : string        ; // --disable id1,id2,...: rule ids to drop from lint output
     LayersPath      : string        ; // --layers <file.json>: architecture-layer config for lint-project
     Format          : string        ;
@@ -1452,6 +1455,8 @@ begin
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
     else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
+    else if (A = '--standard') and (i < ParamCount) then begin Inc(i); Result.RuleStandard:= ParamStr(i); end
+    else if A = '--labels' then Result.ShowLabels:= True
     else if (A = '--disable') and (i < ParamCount) then begin Inc(i); Result.Disable:= ParamStr(i); end
     else if (A = '--layers') and (i < ParamCount) then begin Inc(i); Result.LayersPath:= ParamStr(i); end
     else if A = '--json'    then Result.AsJson:= True
@@ -12441,6 +12446,26 @@ begin
   end;
 end;
 
+/// <summary>JSON form of one rule's compliance labels: `{cwe[],cert[],misra[],weak[]}`.</summary>
+/// <param name="ALabels">The rule's labels.</param>
+/// <param name="AAlways">True = always build the object; False = nil when the rule has no CWE/CERT/MISRA id.</param>
+/// <returns>A new TJSONObject the caller owns (or nil, see AAlways).</returns>
+function ComplianceToJson(const ALabels: TComplianceLabels; AAlways: Boolean): TJSONObject;
+  function Arr(const AIds: TArray<string>): TJSONArray;
+  var S: string;
+  begin
+    Result:= TJSONArray.Create;
+    for S in AIds do Result.Add(S);
+  end;
+begin
+  if ALabels.IsEmpty and not AAlways then Exit(nil);
+  Result:= TJSONObject.Create;
+  Result.AddPair('cwe'  , Arr(ALabels.Cwe  ));
+  Result.AddPair('cert' , Arr(ALabels.Cert ));
+  Result.AddPair('misra', Arr(ALabels.Misra));
+  Result.AddPair('weak' , Arr(ALabels.Weak ));
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
@@ -12992,7 +13017,24 @@ begin
     Exit(0);
   end; // if
 
-  { 3: output. }
+  { 3: output. Compliance labels (rules\compliance.json): JSON gets a `compliance` object per labelled finding;
+    text gets the  [CWE-476] suffix only under `--labels` -- default text is byte-identical to before. }
+  var CompTbl: TComplianceTable:= nil;
+  var CompErr: string:= '';
+  var IsJsonOut: Boolean:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if (IsJsonOut or AArgs.ShowLabels) and not SameText(AArgs.Format, 'sarif') then
+  begin
+    CompTbl:= TComplianceTable.Shared(AArgs.RulesDir, CompErr);
+    if CompTbl.Missing then Writeln(ErrOutput, 'drag-lint: note: rules\compliance.json not found; compliance labels are empty');
+    if CompErr <> '' then Writeln(ErrOutput, 'drag-lint: ' + CompErr);
+  end;
+  if AArgs.ShowLabels and not IsJsonOut and not SameText(AArgs.Format, 'sarif') then
+    for var LI: Integer:= 0 to High(Survivors) do
+    begin
+      var Lb: TComplianceLabels;
+      CompTbl.TryGet(Survivors[LI].RuleId, Lb);
+      Survivors[LI].Message:= Survivors[LI].Message + Lb.Suffix;
+    end;
   if SameText(AArgs.Format, 'sarif') then EmitFindingsDoc(AArgs, DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
   else if AArgs.AsJson or SameText(AArgs.Format, 'json') then
   begin
@@ -13014,6 +13056,9 @@ begin
         if F.Metric > 0 then JObj.AddPair('metric', TJSONNumber.Create(F.Metric));
         { E18 T15b: the verb that fixes it (per-file circular-uses); absent = no such verb }
         if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);
+        var CompLb: TComplianceLabels;
+        CompTbl.TryGet(F.RuleId, CompLb);
+        if not CompLb.IsEmpty then JObj.AddPair('compliance', ComplianceToJson(CompLb, False));
         JArr.AddElement(JObj);
       end;
       EmitFindingsDoc(AArgs, JArr.Format(2));
@@ -13026,6 +13071,20 @@ begin
   { 4: exit code. }
   Result:= ExitCodeFor(Survivors, AArgs.FailOn, IfThen(Length(Survivors) > 0, 1, 0));
 end; // function
+
+/// <summary>Keeps the rules labelled under one standard (`rules --standard`).</summary>
+/// <param name="ACat">The catalog.</param>
+/// <param name="AStandard">cwe, cert or misra (already validated).</param>
+/// <returns>The labelled subset, order kept.</returns>
+function ComplianceFilter(const ACat: TArray<TRuleInfo>; const AStandard: string): TArray<TRuleInfo>;
+var R: TRuleInfo;
+begin
+  Result:= nil;
+  for R in ACat do
+    if (SameText(AStandard, 'cwe') and (Length(R.Compliance.Cwe) > 0))
+      or (SameText(AStandard, 'cert') and (Length(R.Compliance.Cert) > 0))
+      or (SameText(AStandard, 'misra') and (Length(R.Compliance.Misra) > 0)) then Result:= Result + [R];
+end;
 
 /// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rules-dir &lt;dir&gt;]` --
 /// emit the full rule catalog (built-ins + external .scm). Default = grouped text
@@ -13049,6 +13108,14 @@ var
   end;
 begin
   Cat:= TRuleCatalog.BuildCatalog(AArgs.RulesDir, AArgs.RuleCategory);
+  if TRuleCatalog.ComplianceError <> '' then begin Writeln(ErrOutput, 'drag-lint: ' + TRuleCatalog.ComplianceError); Exit(2); end;
+  var CompDummy: string;
+  if TComplianceTable.Shared(AArgs.RulesDir, CompDummy).Missing then Writeln(ErrOutput, 'drag-lint: note: rules\compliance.json not found; compliance labels are empty');
+  if AArgs.RuleStandard <> '' then
+  begin
+    if not MatchText(AArgs.RuleStandard, ['cwe', 'cert', 'misra']) then begin Writeln(ErrOutput, 'drag-lint: --standard must be cwe, cert or misra'); Exit(2); end;
+    Cat:= ComplianceFilter(Cat, AArgs.RuleStandard);
+  end;
   Sum:= TRuleCatalog.Summarize(Cat);
 
   if AArgs.AsJson then
@@ -13069,6 +13136,7 @@ begin
         { true: the fix runs only when "autofix": [...] opts the rule in }
         O.AddPair('fix_opt_in', TJSONBool.Create(IsOptInFixRule(R.Id)));
         AddParamsJson(O, R.Params);
+        O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
         Arr.AddElement(O);
       end;
       Root.AddPair('rules', Arr);
@@ -13108,7 +13176,7 @@ begin
         for P in R.Params do begin if Names <> '' then Names:= Names + ','; Names:= Names + P.Name + '=' + P.DefaultVal; end;
         Flags:= Flags + '; ' + Names;
       end;
-      Sb.AppendLine(Format('  %-34s %-8s (%s)', [R.Id, R.Source, Flags]));
+      Sb.AppendLine(Format('  %-34s %-8s (%s)', [R.Id, R.Source, Flags]) + R.Compliance.Suffix);
     end; // for
     Writeln(Sb.ToString);
   finally

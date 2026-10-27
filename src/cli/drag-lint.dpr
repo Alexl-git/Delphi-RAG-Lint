@@ -97,6 +97,7 @@ uses
   DRagLint.Query.HoverModel in '..\query\DRagLint.Query.HoverModel.pas',
   DRagLint.Symbol.Describe in '..\query\DRagLint.Symbol.Describe.pas',
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
+  DRagLint.Lint.Compliance in '..\lint\DRagLint.Lint.Compliance.pas',
   DRagLint.Lint.RuleCatalog in '..\lint\DRagLint.Lint.RuleCatalog.pas',
   DRagLint.Lint.Baseline in '..\lint\DRagLint.Lint.Baseline.pas',
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',

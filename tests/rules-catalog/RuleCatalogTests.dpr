@@ -2,6 +2,7 @@ program RuleCatalogTests;
 {$APPTYPE CONSOLE}
 uses
   System.SysUtils, System.IOUtils, System.Generics.Collections,
+  DRagLint.Lint.Compliance in '..\..\src\lint\DRagLint.Lint.Compliance.pas',
   DRagLint.Lint.RuleCatalog in '..\..\src\lint\DRagLint.Lint.RuleCatalog.pas';
 var
   GPass, GFail: Integer;
@@ -155,6 +156,19 @@ begin
     Ids.Free;
   end;
 end;
+procedure TestCompliance;
+var
+  Cat : TArray<TRuleInfo>;
+  Info: TRuleInfo;
+begin
+  Cat:= TRuleCatalog.BuildCatalog(TPath.GetFullPath(TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), '..\..\rules')), '');
+  Check('compliance.json is not read as a rule sidecar', not Find(Cat, 'compliance', Info) and not Find(Cat, 'abstract-method-instantiation-x', Info));
+  Check('catalog loaded without a compliance error', TRuleCatalog.ComplianceError = '');
+  Check('hardcoded-credential carries CWE-798', Find(Cat, 'hardcoded-credential', Info) and (Length(Info.Compliance.Cwe) > 0) and (Info.Compliance.Cwe[0] = 'CWE-798'));
+  Check('type-name-prefix carries nothing', Find(Cat, 'type-name-prefix', Info) and Info.Compliance.IsEmpty);
+  Check('weak ids are a subset of the rule ids', Find(Cat, 'wait-while-holding-lock', Info) and (Length(Info.Compliance.Weak) = 2) and (Info.Compliance.Suffix = ' [CWE-833 LCK09-J]'));
+  Check('malformed id is rejected by the format check', not IsCweId('CWE-x') and IsCweId('CWE-476') and IsCertId('EXP34-C') and IsMisraId('MISRA-C-2012-R18.6'));
+end;
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -164,6 +178,11 @@ begin
   end;
   try
     TestMerge;
+  except
+    on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
+  end;
+  try
+    TestCompliance;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

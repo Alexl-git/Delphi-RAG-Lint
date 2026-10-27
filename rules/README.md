@@ -15,12 +15,26 @@ drag-lint rules                       # grouped text table + a "N rules across M
 drag-lint rules --json                # structured catalog: [{id,category,title,default_severity,default_enabled,source,params}] + summary
 drag-lint rules --category naming      # only one category
 drag-lint rules --rules-dir <dir>      # point at a specific rules folder (default <exe-dir>\rules)
+drag-lint rules --standard cwe        # only rules labelled with a CWE (or cert / misra); --json adds a compliance object per rule
 ```
 
 Built-in rules carry their category/severity/params from an in-code registry
 (`DRagLint.Lint.RuleCatalog`); external `.scm` rules contribute id/severity/message
 from their sidecar `.json`. This command replaces the hand-maintained rule tables
 below as the canonical inventory.
+
+## Compliance labels
+
+`rules\compliance.json` maps every rule id to the standards ids it answers: one line per rule, sorted by id, an unlabelled rule is `{}`:
+
+```json
+{
+  "hardcoded-credential": {"cwe": ["CWE-798", "CWE-259"], "cert": ["MSC41-C"]},
+  "wait-while-holding-lock": {"cwe": ["CWE-833"], "cert": ["LCK09-J"], "weak": ["CWE-833", "LCK09-J"]}
+}
+```r
+
+Id formats (checked by `tests\autotest\run_compliance_labels_guard.ps1` and by the loader): `CWE-<n>`; CERT `ABC12-C|CPP|J`; MISRA `MISRA-C-2012-R<n>.<n>` / `D<n>.<n>`, `MISRA-CPP-2008-<n>-<n>-<n>`. `weak` lists the ids (a subset of the entry's own) whose fit is only plausible; everything not listed is confident, meaning the rule's title IS the weakness. The file is not a rule sidecar: the catalog skips it by name. Every rule must have an entry.
 
 ## Rule files
 

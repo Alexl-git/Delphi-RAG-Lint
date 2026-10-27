@@ -1229,6 +1229,9 @@ auto-fix.** The table below is a small sample of the built-in rules:
 | `redundant-as-tobject` | info | `(X as TObject)` -- every object is already TObject |
 | `inherited-bare` | info | Bare `inherited;` -- verify it calls the right ancestor |
 
+#### Compliance labels
+Each rule can carry the CWE, CERT and MISRA ids it answers (data file `rules\compliance.json`; see `docs\wiki\compliance-labels.md`). `drag-lint rules` shows them (`[CWE-476 EXP34-C]`; `--json` adds a `compliance` object; `--standard cwe|cert|misra` lists only the rules labelled under one standard), `lint --json` / `lint-all --json` add `compliance` to each labelled finding, and `lint --labels` appends the ids to text findings. Labels never change a severity or an exit code.
+
 #### Coupling rules
 
 Newest additions, and a different kind of question: these ask which unit really
