@@ -112,11 +112,12 @@ uses
     DragLint.Plugin.LiveDbChoice
   , { TProjectDbMatch: the active project's unique-owner test }
     DRagLint.Index.Manifest
+  , { LSP C13: LintChildTimeoutMs -- the lint-child budget shared with the LSP }
+    DRagLint.Core.LintBudget
   ;
 
 const
   DEBOUNCE_MS          = 700; { keystroke->lint (instant feedback) }
-  CLiveLintTimeoutMs   = 8000; { one live lint run; a superseded run is killed long before }
   SEMANTIC_DEBOUNCE_MS = 5000; { keystroke->semantic check (compiler; slower) }
   GHOST_IDLE_MS        = 3500; { keystroke->auto ghost-check (full-project compile of the unsaved buffer; heavy, so a longer pause) }
   SWITCH_COMPILE_MS    = 1200; { tab-switch->compile-current-state (debounce so flipping through tabs doesn't spam) }
@@ -425,7 +426,10 @@ begin
     it is closed, so a kill can never touch a closed handle. }
   var LintHandle: THandle;
   var LintPid: DWORD:= 0;
-  var LintExit: Integer:= RunCaptureStdoutCancellable(Cmd, Output, CLiveLintTimeoutMs, 0, GLintProc, LintPid);
+  { LSP C13: LiveDbs[0] is the index the engine's lint picks (the first --db that
+    contains the file -- every candidate does, by resolve-dbs membership), so a
+    library-owned RTL/VCL file gets the 16 s library budget, a project file 8 s. }
+  var LintExit: Integer:= RunCaptureStdoutCancellable(Cmd, Output, LintChildTimeoutMs(if Length(LiveDbs) > 0 then LiveDbs[0] else ''), 0, GLintProc, LintPid);
   TMonitor.Enter(GLintProcLock);
   try
     LintHandle:= GLintProc;
