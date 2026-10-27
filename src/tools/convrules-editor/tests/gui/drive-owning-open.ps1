@@ -230,9 +230,15 @@ try {
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   Start-Sleep -Seconds 2
   [void][W]::ClickTab($main, 'Classes'); Start-Sleep -Milliseconds 500
-  $lb = @(Find $main 'TCheckListBox' $null)[0]
-  $rows = if ($null -ne $lb) { ListTexts $lb } else { @() }
-  $row = -1; for ($i = 0; $i -lt $rows.Count; $i++) { if ($rows[$i] -match '\bTZedPanel\b') { $row = $i; break } }
+  # The Classes list is the VISIBLE check list box holding the class rows: the Work list
+  # tab owns another TCheckListBox (its status filter) that comes first in child order.
+  $lb = $null; $rows = @(); $row = -1
+  foreach ($cand in @(Find $main 'TCheckListBox' $null | Where-Object { [W]::IsWindowVisible($_) })) {
+    $cr = @(ListTexts $cand)
+    for ($i = 0; $i -lt $cr.Count; $i++) { if ($cr[$i] -match '\bTZedPanel\b') { $lb = $cand; $rows = $cr; $row = $i; break } }
+    if ($row -ge 0) { break }
+    $rows += $cr
+  }
   Check 'owning.row.found' ($row -ge 0) ('rows: ' + ($rows -join ' | '))
 
   # Dirty book: the cross-book open is guarded -- a prompt, and Cancel keeps Book1.

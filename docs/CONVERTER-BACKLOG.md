@@ -49,14 +49,15 @@ before working on an item.**
   HLP 677ba1a3, N13 f5c01c3c, N2 34663029, N4 75fc2309, DRV fa80b602 (driver audit: WaitCls 0-timeout,
   stale status, WaitIdle before Convert, convert-encoding lost first copy). main: 2950/0/20 no engine,
   3068/0/0 with the pin; lint 0 on the wave's changed lines. Follow-ups:
-  * **READY: name-drop workaround removal** -- ENGINE (2026-10-26) says 1.35.1 already binds cross-unit
+  * **DONE (conv/namedrop, 2026-10-26): name-drop workaround removed** -- `ListCodeRefs` (`CODE_REFS_SQL`) now reads FIELD-resolved refs only; the unresolved-ref read and its local/param name-drop are gone; tests `coderefs.live.fields.only` / `.library.member.dropped`. Was: ENGINE (2026-10-26) says 1.35.1 already binds cross-unit
     implicit-Self reads/writes of inherited fields (7 shapes; guard lands with 1.36.0). Limit: members
     of a LIBRARY ancestor (TForm.Tag) still need the library store attached.
   * **DRV-1** (S) drive-save-encoding `save.nonascii.asks` read '' from the warning (1 of 3 runs): same
     lost-first-copy race DRV fixed in convert-encoding -- port the copy retry.
   * **DRV-2** (S) drive-convert-tab N1/N7 precondition "progress window never appeared" (2 of 3 runs):
     the engine call is too fast to catch; make the fixture slower or hold the window deterministically.
-  * **DRV-3** (M) FAIL on main before the wave: owning-open 3/6 (`owning.row.found` picks the Work-list
+  * **DONE (conv/drv3 4fdcf11d, 2026-10-27): DRV-3** driver defects, both 3x green. Side effect found: open
+    status lost its line/rule counts since cd8cdc07 -> owner: counts must show (lane opencounts). Was: FAIL on main before the wave: owning-open 3/6 (`owning.row.found` picks the Work-list
     filter list), glyph-link 22/1 (`glyph.open.good` no "Loaded" in 30 s).
   * **DRV-4** (S) gui.lock needs a heartbeat: a 30-min takeover broke a 38-min run (two editors).
   * **DRV-5** (S) glyph-link, inherited-offer, qualify-fix, work-list do not ask the editor's busy
@@ -68,6 +69,8 @@ before working on an item.**
     "Book-2" with every rule unrelated to the BDE conversion. First step: classify the 43 book-wide
     `#migrate` lines + the blocks (BDE vs not); BDE book keeps its book-wide lines ABOVE the first
     `#convert` header (rule A; check the engine's scoping first). No trailer special case needed.
+  * **CHAIN-1 spec + plan DONE (8917176d, 6 tasks; owner Q1-Q8 open) / D2 plan DONE (2c53947e; owner Q1-Q7 open)** --
+    docs\superpowers\specs\2026-10-27-converter-chain1-design.md, plans\2026-10-27-converter-chain1.md, plans\2026-10-27-converter-d2-book-split.md.
   * **CHAIN-1 (new, M, needs ENGINE answer first)**: rules A->B and B->C in one book. Owner: warn and
     offer an A->C rule, or offer to move them to separate books run one after the other. FIRST ask
     ENGINE whether convert-apply applies a book in ONE pass (each node matched against the original
