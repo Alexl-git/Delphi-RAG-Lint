@@ -5,8 +5,10 @@ constructor-call-on-instance
 dfm-password-edit-unmasked
 copy-paste-assignment
 doc-drift
+empty-conditional
 field-name-prefix
 interface-without-guid
+identical-then-else
 local-field-prefix
 local-var-casing
 method-pascalcase
