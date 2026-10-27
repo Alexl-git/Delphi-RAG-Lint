@@ -22,3 +22,5 @@ begin
   var Local: array[0..99999] of Byte;
   Local[0] := 1;
 end;
+
+end.
