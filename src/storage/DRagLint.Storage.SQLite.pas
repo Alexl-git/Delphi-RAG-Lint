@@ -1028,6 +1028,11 @@ type
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
       function IncludeOriginsChanged(const APath: string): Boolean;
+      /// <summary>Lane INC: records the include files AHostPath took in its last
+      /// parse; see ISymbolStore.SetFileIncludes.</summary>
+      /// <param name="AHostPath">The host file path.</param>
+      /// <param name="AIncludes">Absolute include paths; empty deletes the record.</param>
+      procedure SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta reader.
       /// Tolerates a missing table (a DB from before schema_meta existed) and a missing
       /// key, both as '' -- callers treat that as "unknown", never as an error, exactly
@@ -5551,10 +5556,68 @@ begin
   end;
 end; // function
 
+const
+  // Lane INC: schema_meta key prefix of a host's recorded include list.
+  FILE_INCLUDES_KEY = 'file_includes:';
+  FILE_INCLUDES_SEP = '|';
+
+// True when one of the includes recorded for APath by SetFileIncludes is
+// missing or newer than APath's last parse.
+function RecordedIncludesChanged(AConn: TFDConnection; const APath: string): Boolean;
+var
+  Q: TFDQuery;
+  ParsedAt: Int64;
+  List: string;
+begin
+  Result:= False;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AConn;
+    Q.SQL.Text:= 'SELECT m.value, f.parsed_at FROM schema_meta m JOIN files f ' +
+                 'ON (f.path = :p OR LOWER(f.path) = LOWER(:p)) WHERE m.key = :k LIMIT 1';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('k').AsWideString:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(APath));
+    try
+      Q.Open;
+    except
+      { no schema_meta table (a pre-schema_meta DB): nothing was recorded }
+    end;
+    if (not Q.Active) or Q.IsEmpty then Exit;
+    List    := Q.Fields[0].AsString;
+    ParsedAt:= Q.Fields[1].AsLargeInt;
+  finally
+    Q.Free;
+  end;
+  for var Inc_ in List.Split([FILE_INCLUDES_SEP]) do
+  begin
+    if Inc_ = '' then Continue;
+    if (not TFile.Exists(Inc_)) or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > ParsedAt) then
+      Exit(True);
+  end;
+end;
+
+procedure TSQLiteSymbolStore.SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);
+var
+  Key: string;
+begin
+  Key:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(AHostPath));
+  if Length(AIncludes) = 0 then
+  begin
+    try
+      FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [Key]);
+    except
+      { no schema_meta table: nothing to clear }
+    end;
+    Exit;
+  end;
+  SetMetaValue(Key, string.Join(FILE_INCLUDES_SEP, AIncludes));
+end;
+
 function TSQLiteSymbolStore.IncludeOriginsChanged(const APath: string): Boolean;
 var
   Q: TFDQuery;
 begin
+  if RecordedIncludesChanged(FConn, APath) then Exit(True);
   Result:= False;
   if not HasUseOriginCols then Exit;
   Q:= TFDQuery.Create(nil);
