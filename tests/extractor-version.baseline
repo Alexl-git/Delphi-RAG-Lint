@@ -1063,4 +1063,9 @@
 #   src\analysis\DRagLint.Analysis.Cfg.pas, DataFlow.pas, Flow.Lattices.pas (owner Q5: they now decide
 #   stored rows). Pinned by tests\autotest\run_dataflow_facts.ps1 (RED on T0, green on T1).
 #   Superseded: 1.26.0-alpha|8b00b25aa4488d0761c960672cc9840551dbdacdc332c0757c53cd0cb15e423a
-1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
+#   2026-10-27 (lane REFTYPE, gaps/reftype): re-pinned WITHIN 1.26.0-alpha (rides the T0 bump, no second
+#   bump). Parser.Delphi13 TryWalkProcType now walks the declProcRef signature, so the parameter / result
+#   types of procedural and anonymous-method type declarations emit type_use refs. Pinned by
+#   tests\autotest\run_reftype_refs.ps1.
+#   Superseded: 1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
+1.26.0-alpha|78e9e91c9c34038abda630fd61f0508077e8fca2441009aa9be4f075b99be338

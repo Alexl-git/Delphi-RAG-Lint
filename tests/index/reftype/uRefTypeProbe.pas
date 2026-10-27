@@ -46,11 +46,12 @@ implementation
 
 procedure TRtHolder.Run(const pK: array of TRtOpenK);
 begin
+  if Length(pK) = 0 then Exit;
 end;
 
 function TRtHolder.Make(pL: TRtDefL): TRtResL;
 begin
-  Result:= nil;
+  Result:= TRtResL(pL);
 end;
 
 end.

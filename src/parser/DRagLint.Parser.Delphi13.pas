@@ -1669,6 +1669,15 @@ begin
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
+  { Lane REFTYPE (2026-10-27): the SIGNATURE is a type use. This handler Exits
+    the dispatch, so nothing else visits the declProcRef -- the parameter and
+    result types of `TStoreOpener = reference to function(..): ISymbolStore`
+    emitted no type_use, and uses-audit called DRagLint.Core.Interfaces movable
+    to the implementation. Walk the children (args, result type) exactly as a
+    method-impl header does; no other walker reaches them, so this cannot
+    double-emit (run_reftype_refs.ps1 asserts one row per name). }
+  for var ci:= 0 to RefNode.NamedChildCount - 1 do
+    Walk(RefNode.NamedChild(ci), AState, AParentSymbolIdx, AParentQualifiedName);
   Result:= True;
 end; // function
 
