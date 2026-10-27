@@ -55,3 +55,11 @@ stream-read-result-ignored
 approx-constant
 suboptimal-math
 pos-for-contains
+inherited-bare
+inline-on-large-routine
+missing-const-param
+public-field
+destructor-without-override
+missing-inherited-dtor
+missing-inherited-ctor
+method-could-be-static
