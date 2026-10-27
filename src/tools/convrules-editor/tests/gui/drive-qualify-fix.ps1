@@ -263,7 +263,7 @@ public static class CT {
 $script:pass = 0; $script:fail = 0
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
-function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 # BM_CLICK is POSTED: a sent click blocks this script for as long as the handler runs
@@ -565,7 +565,7 @@ try {
   if ($QualifyAll) {
     # One book in the fixture: no second dialog may follow the first one's Apply.
     Start-Sleep -Seconds 2
-    $second = WaitCls $p.Id 'TQualifyForm' 0
+    $second = WaitCls $p.Id 'TQualifyForm' 2
     Check 'qualifyall.one.dialog' ($second -eq [IntPtr]::Zero) (TopsNow $p.Id)
     $pre = 'Qualify all (1 of 1 book(s)): '
   }
