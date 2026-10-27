@@ -56,6 +56,7 @@ uses
   , ConvRules.MigrateRules in '..\ConvRules.MigrateRules.pas'  // dl:unit ConvRules.MigrateRules accepted -- the tests read MIGRATE_REFUSAL_* to pin the engine's own sentences, so the consts travel with the unit under test
   , ConvRules.Migrate in '..\ConvRules.Migrate.pas'
   , ConvRules.MigrateRun in '..\ConvRules.MigrateRun.pas'  // dl:unit ConvRules.Migrate accepted -- the tests read REPORT_STATUS_* / MIGRATE_GLOBAL_TEXT to pin the unit's own texts
+  , ConvRules.OutputEncoding in '..\ConvRules.OutputEncoding.pas'
   , ConvRules.CapabilityProbe in '..\ConvRules.CapabilityProbe.pas'  // dl:unit ConvRules.CapabilityProbe accepted -- the tests read REQUIRED_ENGINE_VERSION / REDUCED_FEATURES_TEXT to pin the probe's own contract, so the consts travel with the unit under test
   ;
 
@@ -9157,6 +9158,110 @@ begin
   DecodeAnsiChunk(LPending, [Byte($82)], CP932);
   Check('ansi.flush.truncated', (FlushAnsiPending(LPending, CP932) <> '') and (Length(LPending) = 0));
 end;
+
+{ OUTENC: engine 1.36.0 writes ASCII + \uXXXX by default and takes --output-encoding; older
+  engines write CP_ACP and reject the flag. The editor passes utf8 exactly when info --json's
+  version is 1.36.0 or newer, and then decodes the pipes as UTF-8 without breaking a character
+  split across two reads. A non-ASCII identifier (Cyrillic, accented, outside the BMP) must
+  come back whole -- through the pure decoder and through a real pipe. }
+procedure TestOutputEncoding;
+const
+  INFO_136 = '(loaded defaults from C:\x.json)' + #13#10 + '{"schema":"info/1","version":"1.36.0-alpha","capabilities":{"batch_units":true}}';
+  INFO_1351 = '{"version":"1.35.1-alpha","capabilities":{"batch_units":true}}';
+  // A name in Cyrillic, one accented, one outside the BMP (U+1D49C, a surrogate pair).
+  NAME = 'T' + #$0424 + #$043E + #$0440 + #$043C + #$0430 + '_Caf' + #$00E9 + '_' + #$D835 + #$DC9C;
+  STANDIN_PREFIX = '@echo {"version":"';
+  STANDIN_TAIL = '"}' + #13#10 + '@echo ARGS=%*' + #13#10 + '@type "%~dp0name.txt"' + #13#10;
+var
+  LBytes  : TBytes;
+  LPending: TBytes;
+  LGot    : string;
+  LBad    : Integer;
+  Dir     : string;
+  Eng     : TEngineAdapter;
+  LCaps   : TArray<string>;
+  LParsed : Boolean;
+  LOut    : string;
+begin
+  // The gate: the version, numbers only.
+  Check('outenc.version.136', SupportsOutputEncoding(INFO_136));
+  Check('outenc.version.1351', not SupportsOutputEncoding(INFO_1351));
+  Check('outenc.version.newer', SupportsOutputEncoding('{"version":"1.40.2"}') and SupportsOutputEncoding('{"version":"2.0.0-alpha"}'));
+  Check('outenc.version.none', not SupportsOutputEncoding('{"capabilities":{}}') and not SupportsOutputEncoding('FATAL: no')
+    and not SupportsOutputEncoding('') and not SupportsOutputEncoding('{"version":"x"}'));
+  Check('outenc.args', (OutputEncodingArgs(True) = ' --output-encoding utf8') and (OutputEncodingArgs(False) = ''));
+  Check('outenc.codepage', (PipeCodePage(True) = CP_UTF8) and (PipeCodePage(False) = CP_ACP));
+  // The default ascii mode is safe for --json: the escape IS the JSON escape.
+  var LJson: TJSONValue:= TJSONObject.ParseJSONValue('{"name":"T\u0424\u043e\u0440\u043c\u0430_Caf\u00e9_\ud835\udc9c"}');
+  try
+    Check('outenc.ascii.json.decodes', (LJson is TJSONObject) and (TJSONObject(LJson).GetValue<string>('name') = NAME));
+  finally
+    LJson.Free;
+  end; // try
+  // UTF-8 pipe bytes, cut at every position into two reads: always the same name.
+  LBytes:= TEncoding.UTF8.GetBytes('a ' + NAME + ' b');
+  LBad:= 0;
+  for var LCut: Integer:= 0 to Length(LBytes) do
+  begin
+    LPending:= nil;
+    LGot:= DecodeAnsiChunk(LPending, Copy(LBytes, 0, LCut), CP_UTF8);
+    LGot:= LGot + DecodeAnsiChunk(LPending, Copy(LBytes, LCut, Length(LBytes) - LCut), CP_UTF8);
+    LGot:= LGot + FlushAnsiPending(LPending, CP_UTF8);
+    if LGot <> 'a ' + NAME + ' b' then
+      Inc(LBad);
+  end;
+  Check('outenc.utf8.every.split', LBad = 0, IntToStr(LBad) + ' bad splits');
+  // One byte per read.
+  LPending:= nil;
+  LGot:= '';
+  for var LByte: Byte in LBytes do
+    LGot:= LGot + DecodeAnsiChunk(LPending, [LByte], CP_UTF8);
+  Check('outenc.utf8.byte.by.byte', (LGot + FlushAnsiPending(LPending, CP_UTF8)) = 'a ' + NAME + ' b');
+  Check('outenc.utf8.prefix', (Utf8CompletePrefixLen([Byte($61), Byte($D0)]) = 1)
+    and (Utf8CompletePrefixLen([Byte($F0), Byte($9D), Byte($92)]) = 0)
+    and (Utf8CompletePrefixLen([Byte($D0), Byte($A4)]) = 2)
+    and (Utf8CompletePrefixLen([Byte($61), Byte($80)]) = 2)
+    and (Utf8CompletePrefixLen([]) = 0));
+  // A lone invalid byte is decoded (U+FFFD), never held back or dropped.
+  LPending:= nil;
+  Check('outenc.utf8.invalid.not.held', (DecodeAnsiChunk(LPending, [Byte($E9), Byte($61)], CP_UTF8) <> '') and (Length(LPending) = 0));
+
+  // Through a real pipe: a stand-in that answers info with a version, echoes its arguments and
+  // writes the name as UTF-8 bytes.
+  Dir:= TPath.Combine(TPath.GetTempPath, 'outenc-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllBytes(TPath.Combine(Dir, 'name.txt'), TEncoding.UTF8.GetBytes(NAME));
+    TFile.WriteAllText(TPath.Combine(Dir, 'e136.cmd'), STANDIN_PREFIX + '1.36.0-alpha' + STANDIN_TAIL, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'e1351.cmd'), STANDIN_PREFIX + '1.35.1-alpha' + STANDIN_TAIL, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'e136.cmd'), []);
+    try
+      Check('outenc.adapter.default.off', not Eng.OutputUtf8);
+      Eng.CapabilityProbeTimed(LCaps, LParsed);
+      Check('outenc.adapter.136.on', LParsed and Eng.OutputUtf8);
+      Eng.RunCaptureTimed('query x', ENGINE_TIMEOUT_MS, LOut);
+      Check('outenc.adapter.136.flag', Pos('ARGS=query x --output-encoding utf8', LOut) > 0, LOut);
+      Check('outenc.adapter.136.name.round.trip', Pos(NAME, LOut) > 0, LOut);
+      // The probe itself runs without the flag (an older engine would refuse it).
+      Eng.InfoOutput(nil, LOut);
+      Check('outenc.adapter.probe.no.flag', (Pos('ARGS=info --json', LOut) > 0) and (Pos('--output-encoding', LOut) = 0) and Eng.OutputUtf8, LOut);
+    finally
+      Eng.Free;
+    end;
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'e1351.cmd'), []);
+    try
+      Eng.OutputUtf8:= True; // as if a newer engine had been probed before a swap
+      Eng.CapabilityProbeTimed(LCaps, LParsed);
+      Check('outenc.adapter.1351.off', LParsed and not Eng.OutputUtf8);
+      Eng.RunCaptureTimed('query x', ENGINE_TIMEOUT_MS, LOut);
+      Check('outenc.adapter.1351.no.flag', (Pos('ARGS=query x', LOut) > 0) and (Pos('--output-encoding', LOut) = 0), LOut);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
 { R2b round 1: a failed start-up probe is not repeated on every refresh (a hung engine would
   freeze the UI up to 15 s each time). }
 procedure TestStartupProbeDue;
@@ -16137,6 +16242,7 @@ begin
     TestEngineArgsAndCaps;
     TestCapabilityProbeTimeout;
     TestAnsiChunkDecode;
+    TestOutputEncoding;
     TestStartupProbeDue;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
