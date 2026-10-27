@@ -34,6 +34,10 @@
     {
       "ask": "Why does an RTL file opened in the editor show no flow or type-aware findings such as used-before-assignment?",
       "command": "drag-lint lint <library unit.pas> --db library-Win64.sqlite"
+    },
+    {
+      "ask": "How long do the LSP and the IDE live lint wait for one lint run of an RTL file?",
+      "command": "drag-lint lsp --db <file.sqlite> --full-rules"
     }
   ],
   "access": "cli-only",
@@ -50,6 +54,6 @@
     "date": "2026-10-26",
     "by": "LSP",
     "build": "1.35.1-alpha",
-    "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+    "surfaceHash": "a1589efeb3fa3e144fe329fe4fa2364dd4c3f0bea57db985478b28be70efa76b"
   }
 }

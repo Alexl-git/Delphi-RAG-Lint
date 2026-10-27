@@ -70,9 +70,11 @@ flow rules (`used-before-assignment`, `write-only-local`, ...) nor the type-awar
 rules (`float-equality-comparison`, `lossy-cast`, ...): you cannot edit it, and the
 flow pass alone took `System.IOUtils.pas` past the 8 s budget (17.5 s -> 7.2 s;
 5.9 s -> 5.2 s with type-aware off). Its child also gets a 16 s budget instead of 8 s,
-chosen when the first index that owns the file is a `library-*.sqlite`; the IDE
-plugin's live runner keeps its own 8 s. Guards:
-`tests\autotest\run_lsp_library_flow_timeout_guard.ps1`, `run_lsp_library_margin_guard.ps1`.
+chosen when the first index that owns the file is a `library-*.sqlite`. The IDE
+plugin's live runner uses the SAME budget (16 s for a library-owned file, 8 s for a
+project file): both ask `DRagLint.Core.LintBudget.LintChildTimeoutMs` with the owning
+index. Guards: `tests\autotest\run_lsp_library_flow_timeout_guard.ps1`,
+`run_lsp_library_margin_guard.ps1`, `run_plugin_library_timeout_guard.ps1`.
 Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
 second process start) is deliberately NOT built; it can follow if the measured
 cost justifies it.

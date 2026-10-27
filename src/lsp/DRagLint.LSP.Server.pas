@@ -17,6 +17,7 @@ uses
   , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
   , DRagLint.Core    .Interfaces
   , DRagLint.Core    .Encoding
+  , DRagLint.Core    .LintBudget { C13: LintChildTimeoutMs -- the --full-rules child budget, shared with the IDE plugin }
   , DRagLint.Storage .SQLite
   , DRagLint.Parser  .Delphi13
   , DRagLint.Core    .Indexer  { INBOX-lsp-hover-unindexed-file: TIndexer.IndexFile builds the ephemeral single-unit index }
@@ -755,7 +756,7 @@ type
       /// <summary>C1: runs `ParamStr(0) lint "AFile" --json` out-of-process and returns its stdout.</summary>
       /// <param name="AFile">Absolute path of the saved file.</param>
       /// <param name="AJson">Receives lint's stdout when the run succeeded.</param>
-      /// <returns>True when the child exited 0 within LSP_FULL_RULES_TIMEOUT_MS; False on a spawn
+      /// <returns>True when the child exited 0 within LintChildTimeoutMs (8 s, 16 s for a library-owned file); False on a spawn
       /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
       /// <remarks>
       /// Blocks the calling thread for at most the timeout. The child never inherits the
@@ -1201,15 +1202,9 @@ uses
   ;
 
 const
-  { C1: budget for the out-of-process `lint --json` that --full-rules runs on each
-    didOpen/didSave -- the same 8 s the plugin's live runner allows. }
-  LSP_FULL_RULES_TIMEOUT_MS = 8000;
-  { LSP C12: the budget when the file's owning index is a platform library
-    (`library-*.sqlite`). A library unit runs neither the flow nor the type-aware
-    nor the project rules (C11/C12), and still measured 7.8 s on a 100%-CPU box,
-    a hair under 8 s. Twice the project budget is the margin; the server waits
-    this long only on a library file, and a project file keeps the 8 s above. }
-  LSP_FULL_RULES_LIBRARY_TIMEOUT_MS = 16000;
+  { C1/C12/C13: the budget for the out-of-process `lint --json` that --full-rules
+    runs on each didOpen/didSave is DRagLint.Core.LintBudget.LintChildTimeoutMs --
+    the same function the IDE plugin's live runner asks, so the two cannot drift. }
   { Bounded wait for the killed child to be reaped after TerminateProcess. }
   LSP_FULL_RULES_REAP_MS = 2000;
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
@@ -3643,14 +3638,14 @@ begin
   if AFile = '' then Exit;
   { LSP C12: the FIRST store that owns the file is the one the child lint picks
     (it walks the same --db list in this order), so it alone decides the budget. }
-  var Budget: Cardinal:= LSP_FULL_RULES_TIMEOUT_MS;
+  var OwningDb: string:= '';
   for var I:= 0 to High(FStores) do
     if FStores[I].FindFileIdByPath(AFile) > 0 then
     begin
-      if (I <= High(FStorePaths)) and LowerCase(ExtractFileName(FStorePaths[I])).StartsWith('library-') then
-        Budget:= LSP_FULL_RULES_LIBRARY_TIMEOUT_MS;
+      if I <= High(FStorePaths) then OwningDb:= FStorePaths[I];
       Break;
     end;
+  var Budget: Cardinal:= LintChildTimeoutMs(OwningDb);
   TmpPath:= TPath.GetTempFileName;
   FillChar(Sa, SizeOf(Sa), 0);
   Sa.nLength       := SizeOf(Sa);

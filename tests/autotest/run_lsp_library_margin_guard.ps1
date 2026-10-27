@@ -11,7 +11,7 @@
     The scm rules and the structural AST checks still run (they are what an RTL
     file shows).
   * LSP: when the FIRST store owning the file is a `library-*` index the child
-    gets LSP_FULL_RULES_LIBRARY_TIMEOUT_MS (16 s) instead of 8 s. The IDE
+    gets LINT_CHILD_LIBRARY_TIMEOUT_MS (16 s; DRagLint.Core.LintBudget since C13) instead of 8 s. The IDE
     plugin's own 8 s live-runner budget is a separate constant and unchanged.
 
   B1  library-named store: lint does not run the type-aware checker and does
