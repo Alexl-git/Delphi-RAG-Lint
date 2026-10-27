@@ -1,4 +1,6 @@
 <!-- dl:backlog status=open last-measured=2026-10-27 -->
+
+> **Owner 2026-10-27: GO -- every recommended answer in the open-questions table is accepted as written.**
 # PLAN D2 -- split convrules\BDE-to-FireDAC.rules into a BDE book and a Data.DB "Book-2"
 
 Lane d2 (converter stream), branch `conv/d2`, 2026-10-27. Classification + plan only; the

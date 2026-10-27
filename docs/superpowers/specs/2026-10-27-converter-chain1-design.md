@@ -1,5 +1,7 @@
 # ConvRulesEditor -- CHAIN-1: rule chains in one book (design)
 
+> **Owner 2026-10-27: GO -- every recommended answer in the open-questions table is accepted as written.**
+
 Date: 2026-10-27. Stream: CONVERTER. Origin: owner input in `docs\CONVERTER-BACKLOG.md`
 (2026-10-26 night, "CHAIN-1") and ENGINE's answer `docs\INBOX-engine-to-converter-chain1.md`.
 Status: written, awaiting owner approval. Plan: `docs\superpowers\plans\2026-10-27-converter-chain1.md`.
