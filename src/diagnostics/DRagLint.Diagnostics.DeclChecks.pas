@@ -6,7 +6,7 @@ unit DRagLint.Diagnostics.DeclChecks;
                             dynamic array, Variant) that the routine never assigns,
                             never hands to a modifying intrinsic / same-unit routine
                             with a var parameter, and never takes the address of.
-    local-shadows-field   : a local (or inline) var named like a field of the method's
+    local-shadows-field   : a local (or inline) var, or a parameter, named like a field of the method's
                             own class or of an ancestor declared in the same file.
     method-could-be-static: a plain method whose body touches nothing of its class.
   Pure AST, same-file class knowledge. AStore is accepted for the common checker
@@ -119,6 +119,7 @@ type
     procedure ScanLocals(const N: TTSNode; AFields: TDictionary<string, Boolean>);
     function FirstArgIsSender(const AArgs: TTSNode): Boolean;
     procedure CheckConst(const ADef, AHdr: TTSNode; AInfo: TClassInfo; const AMethod: string);
+    procedure ScanParams(const AHdr: TTSNode; AFields: TDictionary<string, Boolean>);
     procedure CheckShadow(const ADef: TTSNode; AInfo: TClassInfo);
     procedure CheckStatic(const ADef, AHdr: TTSNode; AInfo: TClassInfo; const AMethod: string);
     procedure Visit(const N: TTSNode; AOuter: TClassInfo);
@@ -662,6 +663,31 @@ begin
   for I:= 0 to N.NamedChildCount - 1 do ScanLocals(N.NamedChild(I), AFields);
 end;
 
+{ Parameters of the method header whose name equals a field (gap-rules wave G7, FI W517). }
+procedure TDeclRun.ScanParams(const AHdr: TTSNode; AFields: TDictionary<string, Boolean>);
+var
+  Args, Arg, Ty, C: TTSNode;
+  I, J, TyStart   : Integer;
+begin
+  Args:= AHdr.ChildByField('args');
+  if Args.IsNull then Exit;
+  for I:= 0 to Args.NamedChildCount - 1 do
+  begin
+    Arg:= Args.NamedChild(I);
+    if Arg.NodeType <> 'declArg' then Continue;
+    Ty:= Arg.ChildByField('type');
+    if Ty.IsNull then TyStart:= MaxInt else TyStart:= Integer(Ty.StartByte);
+    for J:= 0 to Arg.NamedChildCount - 1 do
+    begin
+      C:= Arg.NamedChild(J);
+      if (C.NodeType = 'identifier') and (Integer(C.StartByte) < TyStart)
+         and AFields.ContainsKey(LowerText(C)) then
+        EmitAt(C, 'local-shadows-field',
+          Format('Parameter "%s" hides a field of the enclosing class', [Trim(NodeStr(C))]), 'info');
+    end;
+  end;
+end;
+
 procedure TDeclRun.CheckShadow(const ADef: TTSNode; AInfo: TClassInfo);
 var
   Members, Fields: TDictionary<string, Boolean>;
@@ -673,6 +699,7 @@ begin
   try
     ChainCollect(AInfo, 0, Members, Fields);
     if Fields.Count = 0 then Exit;
+    ScanParams(ADef.ChildByField('header'), Fields);
     for I:= 0 to ADef.NamedChildCount - 1 do
     begin
       C:= ADef.NamedChild(I);
