@@ -88,6 +88,7 @@ type
     procedure CheckAccessorNames(const ACls: TTSNode);
     procedure CheckClasses(const N: TTSNode);
     procedure CheckNeedlessExit(const ADef: TTSNode);
+    function IsParamIdent(const N: TTSNode; AParams: TDictionary<string, Boolean>): Boolean;
     procedure ScanFree(const N: TTSNode; AParams: TDictionary<string, Boolean>);
     procedure CheckFreeOfParam(const ADef: TTSNode);
     procedure ScanSelfRead(const N: TTSNode; const AProp: string);
@@ -178,7 +179,7 @@ var
   P: Integer;
 begin
   P:= Pos('<', S);
-  if P > 0 then Result:= Copy(S, 1, P - 1) else Result:= S;
+  Result:= if P > 0 then Copy(S, 1, P - 1) else S;
 end;
 
 class function TParityRun.LastSegment(const S: string): string;
@@ -186,7 +187,7 @@ var
   P: Integer;
 begin
   P:= LastDelimiter('.', S);
-  if P > 0 then Result:= Copy(S, P + 1, MaxInt) else Result:= S;
+  Result:= if P > 0 then Copy(S, P + 1, MaxInt) else S;
 end;
 
 class function TParityRun.HasKeyword(const N: TTSNode; const AKinds: array of string): Boolean;
@@ -496,6 +497,11 @@ end;
 
 { ------------------------------------------------------- free-of-parameter }
 
+function TParityRun.IsParamIdent(const N: TTSNode; AParams: TDictionary<string, Boolean>): Boolean;
+begin
+  Result:= (N.NodeType = 'identifier') and AParams.ContainsKey(LowerText(N));
+end;
+
 procedure TParityRun.ScanFree(const N: TTSNode; AParams: TDictionary<string, Boolean>);
 var
   I        : Integer;
@@ -519,8 +525,7 @@ begin
     Args:= N.ChildByField('args');
     if (not Ent.IsNull) and (not Args.IsNull) and (Args.NamedChildCount > 0)
        and SameText(LastSegment(Trim(NodeStr(Ent))), 'FreeAndNil')
-       and (Args.NamedChild(0).NodeType = 'identifier')
-       and AParams.ContainsKey(LowerText(Args.NamedChild(0))) then
+       and IsParamIdent(Args.NamedChild(0), AParams) then
       EmitAt(N, 'free-of-parameter', Format(Msg, [Trim(NodeStr(Args.NamedChild(0)))]), 'warning');
   end;
   for I:= 0 to N.NamedChildCount - 1 do ScanFree(N.NamedChild(I), AParams);
@@ -549,7 +554,7 @@ begin
         if MatchStr(Arg.NamedChild(K).NodeType, ['kVar', 'kOut']) then ByValue:= False;
       if not ByValue then Continue;
       Ty:= Arg.ChildByField('type');
-      if Ty.IsNull then TyStart:= MaxInt else TyStart:= Integer(Ty.StartByte);
+      TyStart:= if Ty.IsNull then MaxInt else Integer(Ty.StartByte);
       for J:= 0 to Arg.NamedChildCount - 1 do
       begin
         C:= Arg.NamedChild(J);
@@ -712,7 +717,7 @@ end;
 
 { ------------------------------------------------------- TDeclParityChecker }
 
-class function TDeclParityChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@7a51 -- fixed checker signature shared by every gate unit
+class function TDeclParityChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@5416 -- fixed checker signature shared by every gate unit
   const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;
 var
   PF : TParsedFile;

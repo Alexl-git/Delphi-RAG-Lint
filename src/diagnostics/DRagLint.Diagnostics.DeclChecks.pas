@@ -676,7 +676,7 @@ begin
     Arg:= Args.NamedChild(I);
     if Arg.NodeType <> 'declArg' then Continue;
     Ty:= Arg.ChildByField('type');
-    if Ty.IsNull then TyStart:= MaxInt else TyStart:= Integer(Ty.StartByte);
+    TyStart:= if Ty.IsNull then MaxInt else Integer(Ty.StartByte);
     for J:= 0 to Arg.NamedChildCount - 1 do
     begin
       C:= Arg.NamedChild(J);
