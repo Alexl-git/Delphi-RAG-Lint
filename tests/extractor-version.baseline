@@ -1056,4 +1056,11 @@
 #   storage writer PutDataFlows joins the emit list; DRagLint.Index.DataFlowFacts (src\index) is an EMPTY
 #   shell until T1 -- T1 re-pastes this line when it fills Collect and adds Cfg/DataFlow/Lattices (Q5).
 #   Superseded: 1.25.0-alpha|93a60a03abe61057f8e40478f6de98c207be45a67523d12a86fe0197734a93d7
-1.26.0-alpha|8b00b25aa4488d0761c960672cc9840551dbdacdc332c0757c53cd0cb15e423a
+#   2026-10-27 (taint wave T1, gaps/taint-t1): re-pinned WITHIN 1.26.0-alpha (no index has been built
+#   under 1.26.0 from a merged branch; T0 bumped and said T1 re-pastes). DataFlowFacts.Collect now emits
+#   data_flows rows (TTaintReach over the CFG, fallback + DF_ROW_CAP); Doc.SymbolFacts.Analyze gains an
+#   out TSymbolFactsAst; Core.Indexer calls Collect after PutSymbolFacts; and the hashed set gains
+#   src\analysis\DRagLint.Analysis.Cfg.pas, DataFlow.pas, Flow.Lattices.pas (owner Q5: they now decide
+#   stored rows). Pinned by tests\autotest\run_dataflow_facts.ps1 (RED on T0, green on T1).
+#   Superseded: 1.26.0-alpha|8b00b25aa4488d0761c960672cc9840551dbdacdc332c0757c53cd0cb15e423a
+1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc

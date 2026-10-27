@@ -556,6 +556,7 @@ uses
   DRagLint.Doc.SymbolFacts        // dl:unit DRagLint.Doc.SymbolFacts accepted -- v(ADP2 T2): TSymbolFactsAnalyzer, the index-time symbol_facts pass; v23: FIELD_RW_CAP + JoinCappedDisplay travel with it so the facts-inherited post-pass re-joins by the SAME cap rule the parse-time string used
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
+  , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
   ;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
@@ -1153,6 +1154,9 @@ var
   SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
+  FactsAst      : TSymbolFactsAst            ; { taint T1 }
+  DfFieldsByParent: TDictionary<Integer, TArray<string>>; { taint T1: field names per in-array parent index, built once per file }
+  DfGlobals     : TArray<string>             ; { taint T1: this file's unit-level variables }
   SymStartLines : TArray<Integer>            ; { adp2-docregion-fix: every symbol's StartLine, sorted ascending -- lets FindDocRegionAbove reject a region separated from its symbol by an intervening declaration }
   EnclosingByLine: TArray<Int64>             ; { v0.85 perf: line -> enclosing routine's db id, built once per file (see BuildEnclosingLineMap) }
 begin
@@ -1331,6 +1335,7 @@ begin
     FStore.DeleteFileDocs(Token.FileId);
     Inc(GProfOpenTx, ProfNow - TProf);
     IdxToId:= TDictionary<Integer, Int64>.Create;
+    DfFieldsByParent:= nil; { taint T1: built lazily by the facts loop, freed below }
     try
       try
         // adp2-docregion-fix: every symbol's StartLine in this file, sorted
@@ -1464,9 +1469,40 @@ begin
           if (Sym.ParentId >= 0) and IdxToId.TryGetValue(Integer(Sym.ParentId), ResolvedParent) then Sym.ParentId:= ResolvedParent
           else Sym.ParentId:= -1;
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
-          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore);
+          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore, FactsAst);
           Facts.SymbolId:= NewSymId;
           FStore.PutSymbolFacts(Facts);
+          // taint T1 (2026-10-27): the routine's data_flows rows, from the SAME
+          // matched defProc (no second AST lookup). Field names: this file's
+          // fields of the owning class (an ancestor's field from another unit is
+          // emitted by NAME as an unclassified ref and resolved by the linter);
+          // globals: this file's unit-level variables. ON DELETE CASCADE on
+          // data_flows.symbol_id drops the old rows with the old symbols.
+          if FactsAst.Found then
+          begin
+            if DfFieldsByParent = nil then
+            begin
+              DfFieldsByParent:= TDictionary<Integer, TArray<string>>.Create;
+              DfGlobals:= nil;
+              for var K:= 0 to High(ParseRes.Symbols) do
+              begin
+                var KS:= ParseRes.Symbols[K];
+                if KS.Kind = skField then
+                begin
+                  var Arr: TArray<string>;
+                  if not DfFieldsByParent.TryGetValue(Integer(KS.ParentId), Arr) then Arr:= nil;
+                  DfFieldsByParent.AddOrSetValue(Integer(KS.ParentId), Arr + [KS.Name]);
+                end
+                else if (KS.Kind = skVarDecl) and ((KS.ParentId < 0) or (KS.ParentId > High(ParseRes.Symbols))
+                        or (ParseRes.Symbols[Integer(KS.ParentId)].Kind in [skUnit, skProgram, skPackage])) then
+                  DfGlobals:= DfGlobals + [KS.Name];
+              end;
+            end;
+            var OwnFields: TArray<string>;
+            var OrigParent:= ParseRes.Symbols[I].ParentId;
+            if (OrigParent < 0) or not DfFieldsByParent.TryGetValue(Integer(OrigParent), OwnFields) then OwnFields:= nil;
+            FStore.PutDataFlows(Token, TDataFlowFacts.Collect(Sym, FactsAst.Proc, FactsAst.Body, FactsAst.Src, OwnFields, DfGlobals));
+          end;
           // v23 (spec F1): hold the candidates for the facts-inherited pass.
           // Only a routine with an owning class AND something unclassified is
           // worth a record -- everything else can gain nothing from ancestors.
@@ -1517,6 +1553,7 @@ begin
       // run never accumulates one tree per file. Safe even on the exception
       // path above: Clear only frees cached trees, it does not touch FStore.
       TAstParseCache.Clear;
+      DfFieldsByParent.Free;
       IdxToId.Free;
       // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
       // termination cannot swallow COMPLETED lines from the tail of this log.
