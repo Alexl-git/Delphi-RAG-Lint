@@ -277,6 +277,7 @@ implementation
 uses
   System.Classes  // EFileStreamError: an unreadable book in MigrateBookNotes
   , System.StrUtils  // MatchText: the bulk member keys
+  , ConvRules.ValidateScope  // AddStaticWarningMark: the one session-mark adder
   , ConvRules.MigrateRules  // dl:unit ConvRules.MigrateRules accepted -- the APPLY_KIND_* migrate kinds and MIGRATE_DL_NONE are the classifier's own contract the decisions read
   ;
 
@@ -511,21 +512,6 @@ begin
     end;
 end;
 
-// Adds a warning mark AText to ANode unless one with that text is there; True when added.
-function AddWarningMark(ANode: TRuleNode; const AText: string): Boolean;
-var
-  LMark: TRuleMark;
-begin
-  for LMark in ANode.Marks do
-    if LMark.Text = AText then
-      Exit(False);
-  LMark:= Default(TRuleMark);
-  LMark.Text     := AText;
-  LMark.IsWarning:= True;
-  ANode.Marks:= ANode.Marks + [LMark];
-  Result:= True;
-end;
-
 function StaticMigrateMarks(ABook: TRuleBook): Integer;
 var
   LNode: TRuleNode;
@@ -556,7 +542,7 @@ begin
       LPick.New:= LNode.MigNew;
       LText:= MigrateCheck(ABook, LHdr, LPick);
     end;
-    if (LText <> '') and AddWarningMark(LNode, LText) then
+    if (LText <> '') and AddStaticWarningMark(LNode, LText) then
       Inc(Result);
   end;
 end;
@@ -571,7 +557,7 @@ begin
     if (LItem.Line <> 0) or not SameText(LItem.Kind, APPLY_KIND_MIGRATE_CHECK) then
       Continue;
     LIdx:= FindMigrateTarget(ABook, LItem.RuleLine, LItem.Path, LItem.Value);
-    if (LIdx >= 0) and AddWarningMark(ABook.Nodes[LIdx], LItem.Text) then
+    if (LIdx >= 0) and AddStaticWarningMark(ABook.Nodes[LIdx], LItem.Text) then
       Inc(Result);
   end;
 end;
