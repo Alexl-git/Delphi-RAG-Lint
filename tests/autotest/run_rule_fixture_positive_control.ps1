@@ -82,6 +82,9 @@ $Pending = @(
     'closure-captures-loop-local', 'hides-ancestor-virtual', 'needless-exit', 'free-of-parameter',
     'property-accessor-name', 'unused-loop-variable', 'dfm-event-handler-missing',
     'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
+    # taint wave T2 (2026-10-27): store-backed; their fixtures are tests\autotest\run_taint_rules.ps1 +
+    # run_taint_library.ps1 (tests\lint-project\taint*). INT empties these with the others.
+    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal',
     'weak-hash-for-secret', 'cleartext-transport', 'cleartext-credential-storage',
     'loadlibrary-relative-name', 'xml-external-entities-enabled', 'exception-text-in-response',
     'fixed-random-seed', 'checks-disabled-directive', 'constructor-call-on-instance',

@@ -165,6 +165,10 @@ begin
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
   Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
+  Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index''s data_flows');
+  Writeln('                               facts from a catalogued source to a sink; catalogues rules\taint-sources|sinks|propagators.json, extended by the');
+  Writeln('                               "taint" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds');
+  Writeln('                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.');
   Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
@@ -635,6 +639,10 @@ begin
     Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
     Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
     Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
+    Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index''s data_flows');
+    Writeln('                               facts from a catalogued source to a sink; catalogues rules\taint-sources|sinks|propagators.json, extended by the');
+    Writeln('                               "taint" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds');
+    Writeln('                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.');
     Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
     Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
     Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
