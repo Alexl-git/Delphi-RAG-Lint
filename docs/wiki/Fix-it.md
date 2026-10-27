@@ -85,8 +85,10 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 
 ## What it needs
 
-No index required -- `lint --in` works on a single file. (An index is
-still needed for the Structure form itself to populate.)
+A plain fixable rule needs no index -- `lint --in` works on a single file.
+A NAMING fix (it renames every use) and `unused-unit-in-uses` (the
+compiler-verified `uses-fix`) DO need the project index, as described above.
+(An index is also needed for the Structure form itself to populate.)
 
 ## Example
 
@@ -100,5 +102,5 @@ autofix: no fixable findings (of 13 finding(s))
 ```
 Then apply one specific finding:
 ```
-drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix --fix-line 42 --fix-rule bare-except --apply
+drag-lint lint --in C:\Projects\MyApp\Unit1.pas --fix --fix-line 42 --fix-rule self-assignment --apply
 ```

@@ -58,6 +58,10 @@
     {
       "ask": "Which columns can I query?",
       "command": "drag-lint schema --db <file.sqlite> --format json"
+    },
+    {
+      "ask": "Which values can a closed column such as refs.kind take?",
+      "command": "drag-lint schema --db <file.sqlite> --format json"
     }
   ],
   "notes": "seed: group guessed",
@@ -69,7 +73,7 @@
   "verified": {
     "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.35.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
   }
 }

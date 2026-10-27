@@ -45,7 +45,17 @@ type
     class var FPreprocess: Boolean;
     class var FProfile   : TDefineProfile;
     class var FProfileSet: Boolean;
+    class var FResolver  : TFunc<string, TDefineProfile>;
   public
+    /// <summary>Installs the per-file profile source ApplyPreprocess consults BEFORE the
+    /// process-wide profile from SetPreprocess. nil restores the single profile.</summary>
+    /// <param name="AResolver">Returns the profile for a path; an empty Defines array or an
+    /// exception means "use the process-wide profile" (fail-open: the fault is swallowed and the
+    /// file keeps the pre-C10 treatment).</param>
+    /// <remarks>Does not clear memoised entries (same contract as SetPreprocess). The CLI
+    /// installs it once per verb, before the first Get; the LSP installs it at start-up and the
+    /// resolver's own cache handles .dproj/.delphilsp.json changes per lookup.</remarks>
+    class procedure SetProfileResolver(const AResolver: TFunc<string, TDefineProfile>);
     /// <summary>Enables the same preprocessing the INDEX side already does, so the
     /// lint walk stops reporting findings inside branches the compiler never sees.</summary>
     /// <param name="AEnabled">False restores raw-byte parsing (what --no-preprocess asks for).</param>
@@ -225,6 +235,15 @@ begin
   try
     var PpOpts: TPPOptions:= TPPOptionsDefault;
     PpOpts.Profile    := FProfile;
+    { LSP C10: the file's own project profile, when a resolver is installed and has one.
+      An empty answer or a fault keeps the process-wide profile (the pre-C10 treatment). }
+    if Assigned(FResolver) and (AFile <> '') then
+      try
+        var FileProfile: TDefineProfile:= FResolver(AFile);
+        if Length(FileProfile.Defines) > 0 then PpOpts.Profile:= FileProfile;
+      except // dl:ok try-except-swallowed@52aa -- REVIEWED 2026-10-26 fail-open by contract: a resolver fault keeps the process-wide profile
+        on E: Exception do PpOpts.Profile:= FProfile;
+      end;
     PpOpts.IncludeMode:= 'defines-only';
     PpOpts.BaseDir    := TPath.GetDirectoryName(AFile);
     { Preprocess the NORMALISED bytes (Result), never the raw AUtf8 -- passing
@@ -242,6 +261,11 @@ begin
       throw and is what keeps reported lines pointing where the editor does. }
     on E: Exception do Result:= NormalizeLoneCR(AUtf8);
   end;
+end;
+
+class procedure TAstParseCache.SetProfileResolver(const AResolver: TFunc<string, TDefineProfile>);
+begin
+  FResolver:= AResolver;
 end;
 
 class procedure TAstParseCache.SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);

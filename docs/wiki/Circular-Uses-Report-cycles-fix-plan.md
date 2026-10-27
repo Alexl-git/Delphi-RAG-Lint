@@ -6,10 +6,12 @@ circular references, or a project's dependency graph feels tangled.
 
 ## Running it from the CLI
 ```
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
 ```
 `--edges` and `--causes` add detail to the cycle report; `--plan` produces the
-refactoring playbook; `--format` selects `json` or `text` output. `--fix` makes the edits
+refactoring playbook; `--f2047` narrows the report to the interface-only cycles
+the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
+`--format` selects `json` or `text` output. `--fix` makes the edits
 for you -- see [Fix it mechanically](#fix-it-mechanically-cycles---fix) below.
 
 ## What `--plan` gives you
@@ -56,6 +58,7 @@ and proves them with the compiler.
 ```
 drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> [--cycle <n> | --unit <stem>]
                  [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile]
+                 [--shadow-out <dir>] [--rsvars <rsvars.bat>]
                  [--platform win32|win64] [--library-db <lib.sqlite>] [--rules-dir <dir>]
                  [--format json|text]
 ```
@@ -141,8 +144,7 @@ The engine never guesses; every kind it can give:
 * **Run and gate:** `dirty-baseline` (the project does not build before any edit),
   `no-compiler` (rsvars.bat missing; name it with `--rsvars <rsvars.bat>` for a Studio the registry /
   BDS does not name, or use `--no-compile` for a dry run), `compile-error` (the
-  project does not build after the edit; rolled back), `build-timeout` (the build did not
-  finish; rolled back), `build-error` (the build itself failed to run; rolled back, exit 2),
+  project does not build after the edit; rolled back), `build-timeout` (a build exceeded the `--build-timeout <s>` you set; rolled back), `cancelled` (the engine was asked to stand down -- IDE Cancel or `drag-lint shutdown --db <db>`; rolled back, exit 1), `build-error` (the build itself failed to run; rolled back, exit 2),
   `write-failed` (a write failed part-way; rolled back, exit 2), `stale-file` (a file changed
   after it was indexed: a dry run or `--apply --no-reindex` refuses -- reindex and retry;
   `--apply` re-indexes once, re-plans and reports `reindex_before`, and refuses only a file
@@ -174,17 +176,18 @@ The engine never guesses; every kind it can give:
   `overloaded-routine`, `signature-unknown`, `qualified-ref`, `routine-not-called`,
   `init-order`, `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
   pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
-  reused, a different one gets the lowest free suffix), `unit-leaves-program` (the declaring unit is used only by the
-  consumer and the program's `.dpr` does not list it: after the cut the linker drops it, its
-  initialization never assigns the pointer and the call is a nil call at run time -- add the
-  unit to the `.dpr` uses; a `DCCReference` alone does not link it).
+  reused, a different one gets the lowest free suffix). `unit-leaves-program` is NOT a refusal
+  any more (since 1.34.1): when the declaring unit is used only by the consumer and the
+  program's `.dpr` does not list it, the plan adds the unit to the `.dpr` uses (and a
+  `DCCReference` to the `.dproj` when absent), because after the cut the linker would drop it,
+  its initialization would never assign the pointer and the call would be a nil call at run time.
 * **R2 (member hand-over):** `member-write` (a plain write `F := v` is carried by a read/write
   property with a one-line setter; `Inc` / `Dec(F)`, `F` passed to a var / out parameter and a
   write into a record-typed member are refused), `construction`, `class-method` (an instance
   method the consumer calls inside `with ... as TX do` is carried as an interface method, its
   signature copied verbatim and dispatch to an override unchanged; a class method or a method
   taken as a pointer is refused), `overloaded-routine`, `signature-in-cycle`, `class-ref`,
-  `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
+  `type-decl`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
   member, a `default` array property or a write to an indexed property; a plain indexed property
   is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
   that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the
@@ -203,7 +206,8 @@ refusals above name, stay human decisions.
 
 ### Per-file finding
 
-`lint <file> --db <db> --format json` reports `circular-uses` on every unit of a cycle, with
+`lint <file> --db <db> --format json` reports `circular-uses` on every unit of a cycle, at the
+first intra-cycle `uses` entry of that file (implementation section preferred), with
 `"fix_hint": "cycles --fix --project \"<X.dproj>\" --db \"<db>\" --unit <stem>"`; `lint-all`
 keeps one finding per cycle and no hint.
 
@@ -212,19 +216,14 @@ keeps one finding per cycle and no hint.
 * drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)... -- a dry
   run only (the engine picks the group; no `--apply` from a menu click). Save first: the
   engine plans and compiles from the files on disk.
-* View > Tool Windows > drag-lint > Uses & Deps tab, section *This project -- Circular uses
+* The drag-lint tool window (View > Tool Windows), Uses & Deps tab, section *This project -- Circular uses
   (cycles --fix)*: one row per group, Dry run / Apply buttons. Apply asks first (Yes / No,
   default No), like the Structure tree.
 * drag-lint Structure window, Diagnostics tree, right-click a `circular-uses` finding:
   *Fix this cycle (dry run)...* and *Apply cycle fix...* (a dry run, your confirmation, then
   `--apply`).
 
-Every IDE-started run passes the IDE's active platform as `--platform`. The IDE gives each
-cycle-fix job a 120 minute limit: above the longest run the engine's own limits allow one
-`--apply` (three builds of up to 30 minutes -- baseline, after, one repair rebuild -- plus a
-re-index and a `cycles` run of up to 10 minutes each), so the engine always times out and
-rolls back first; a kill by the IDE would bypass the rollback. A `--part all` iteration gets
-the same 120 minutes.
+Every IDE-started run passes the IDE's active platform as `--platform`. There is no time limit: `--build-timeout <s>` sets one per build (default 0 = none). Cancel on the status strip asks the engine to stand down: it kills the build, rolls back, exits 1 *cancelled -- rolled back*; only an engine still running after 90 s is killed. `--part all` forwards the request.
 
 ## What it needs
 Required. You must have indexed the project before running this -- cycle

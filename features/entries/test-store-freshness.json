@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "internal",
-  "since": "0.0.0",
+  "since": "1.2.0-alpha",
   "summary": "Store-freshness probe used by a test runner; it needs --db and does nothing else",
   "intro": "Internal: a store-freshness probe used by a test runner; it needs --db and does nothing else. It is not a user verb.",
   "wikiPage": "Maintenance",
@@ -30,9 +30,9 @@
   ],
   "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown",
   "verified": {
-    "date": "2026-10-23",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "233a758c69f464298b1cf5f57e96d6f6be4fbd8f197a6e4d8e041a8c7c7967c1"
   }
 }

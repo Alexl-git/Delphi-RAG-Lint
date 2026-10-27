@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "internal",
-  "since": "0.0.0",
+  "since": "0.95.0-alpha",
   "summary": "Self-test for the hover contrast computation, driven by a test runner",
   "intro": "Maintenance self-test for the hover contrast computation, run by a test runner. You will not need it for normal work.",
   "wikiPage": "Maintenance",
@@ -25,9 +25,9 @@
   "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown",
   "noFlags": true,
   "verified": {
-    "date": "2026-10-25",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.34.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "c95fc84e6dffddd5ff019a313955dd75a2ef9e53c50fe130be028d85f1a8af4c"
   }
 }

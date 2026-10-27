@@ -55,16 +55,16 @@
       "command": "drag-lint context --task \"modify <QName>\" --db <db> --no-docs"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633",
+  "notes": "issued by the plugin from GetActiveEditorInfo (DragLint.Plugin.Editor.pas)",
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "1969d373cece10036a4eac6e514e280e8162d03221a8a4f892a2127f77804a23"
   }
 }

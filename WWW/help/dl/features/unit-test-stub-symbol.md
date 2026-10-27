@@ -7,7 +7,7 @@ group: refactoring
 order: 50012
 since: 0.27.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Unit Test Stub (symbol)
@@ -47,9 +47,6 @@ drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db 
 ```
 `--qname` is the fully qualified symbol; `--framework` selects `dunitx` or
 `dunit`.
-
-### Reaching it in the IDE
-drag-lint > Generate & Export > Unit Test Stub (symbol)...
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

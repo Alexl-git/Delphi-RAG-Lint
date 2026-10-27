@@ -3,7 +3,7 @@
 
   The LSP's publish on didOpen/didSave runs a SUBSET of the built-ins
   (BuildDiagnostics). With --full-rules the server runs `lint <file> --json`
-  out-of-process (budget LSP_FULL_RULES_TIMEOUT_MS = 8000), publishes that set
+  out-of-process (budget DRagLint.Core.LintBudget.LINT_CHILD_TIMEOUT_MS = 8000), publishes that set
   instead of the lint subset, keeps the compiler findings, and writes the
   measured cost to stderr: `drag-lint lsp: full-rules <file> <ms> ms <n> findings`.
 
@@ -141,13 +141,15 @@ if ($csc) {
   $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1
   $stubOk = Test-Path $stubExe
 }
-# The wait budget is a CONSTANT in the engine (LSP_FULL_RULES_TIMEOUT_MS, then LSP_FULL_RULES_REAP_MS to reap the
+# The wait budget is a CONSTANT in the engine (LINT_CHILD_TIMEOUT_MS in DRagLint.Core.LintBudget since C13, then LSP_FULL_RULES_REAP_MS to reap the
 # killed child) -- derive the window from it so a budget change cannot silently make the bound wrong.
 $srvPas = Join-Path $PSScriptRoot '..\..\src\lsp\DRagLint.LSP.Server.pas'
 $srvTxt = if (Test-Path $srvPas) { [IO.File]::ReadAllText($srvPas) } else { '' }
-$mB = [regex]::Match($srvTxt, 'LSP_FULL_RULES_TIMEOUT_MS\s*=\s*(\d+)')
+$budPas = Join-Path $PSScriptRoot '..\..\src\core\DRagLint.Core.LintBudget.pas'
+$budTxt = if (Test-Path $budPas) { [IO.File]::ReadAllText($budPas) } else { '' }
+$mB = [regex]::Match($budTxt, 'LINT_CHILD_TIMEOUT_MS\s*=\s*(\d+)')
 $mR = [regex]::Match($srvTxt, 'LSP_FULL_RULES_REAP_MS\s*=\s*(\d+)')
-Check 'T1 the timeout budget constants were read from Server.pas' ($mB.Success -and $mR.Success) $srvPas
+Check 'T1 the timeout budget constants were read (LintBudget.pas + Server.pas)' ($mB.Success -and $mR.Success) ($budPas + ' ; ' + $srvPas)
 $budgetS = if ($mB.Success) { [int]$mB.Groups[1].Value / 1000 } else { 8 }
 $reapS   = if ($mR.Success) { [int]$mR.Groups[1].Value / 1000 } else { 2 }
 $winLo   = $budgetS - 1                  # waited (almost) the whole budget
@@ -189,7 +191,7 @@ if (-not $stubOk) {
 
     $to = RunStub 'sleep' 'stub-sleep'
     Check 'T1 timeout: the child ran' $to.Marker ''
-    Check 'T1 timeout: server waited out the budget (>= budget-1 s), then gave up well before the 60 s stub sleep' ($to.Seconds -ge $winLo -and $to.Seconds -lt $winHi) ("{0:N1} s, window {1}..{2} s from LSP_FULL_RULES_TIMEOUT_MS" -f $to.Seconds, $winLo, $winHi)
+    Check 'T1 timeout: server waited out the budget (>= budget-1 s), then gave up well before the 60 s stub sleep' ($to.Seconds -ge $winLo -and $to.Seconds -lt $winHi) ("{0:N1} s, window {1}..{2} s from LINT_CHILD_TIMEOUT_MS" -f $to.Seconds, $winLo, $winHi)
     Check 'T1 timeout: stderr reports the fallback to the subset' ($to.Err -match 'full-rules fallback to the subset') ''
     Check 'T1 timeout: a publishDiagnostics frame is still sent (subset)' ($to.Out -match '"diagnostics":\[') ''
     Check 'T1 timeout: no full-rules-only rule id is published' (($to.Codes -notcontains 'missing-inherited-ctor') -and ($to.Codes -notcontains 'zz-stub-rule')) ''

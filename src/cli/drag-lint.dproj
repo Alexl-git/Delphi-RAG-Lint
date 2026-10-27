@@ -112,6 +112,7 @@
         <DCCReference Include="..\core\DRagLint.Wiring.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Indexer.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JsonFile.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.LintBudget.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.LiveDocs.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.DragLintUri.pas"/>

@@ -7,7 +7,7 @@ group: editor-integration
 order: 110010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # lsp
@@ -37,6 +37,10 @@ Full flag list: [lsp in the CLI reference](../cli.md#lsp).
 | `--merge-budget-ms` | `<n>` |  |  |
 | `--full-rules` |  |  |  |
 | `--delphi-lsp-bits` | `32\|64` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -106,6 +110,11 @@ store's compiler findings. **OFF by default**: it costs one `lint` run per save.
 The measured cost is written to stderr on every save:
 `drag-lint lsp: full-rules <file> <ms> ms <n> findings`. On a timeout, a failed
 run or invalid JSON the server falls back to the subset and says so on stderr.
+A **platform-library unit** (one whose covering index is a `library-*.sqlite`,
+e.g. an RTL file opened from the IDE) gets neither the project rules nor the
+flow rules (`used-before-assignment`, `write-only-local`, ...): you cannot edit
+it, and the flow pass alone took `System.IOUtils.pas` past the 8 s budget
+(17.5 s -> 7.2 s). Guard: `tests\autotest\run_lsp_library_flow_timeout_guard.ps1`.
 Guard: `tests\autotest\run_lsp_full_rules_guard.ps1`. An in-process variant (no
 second process start) is deliberately NOT built; it can follow if the measured
 cost justifies it.
@@ -157,6 +166,26 @@ How the diagnostics merge behaves:
 - With `--trace`, the trace records the frame actually forwarded (the merged
   one).
 
+### Which defines the LSP preprocesses with
+
+Every file the LSP lints is preprocessed with the define profile of ITS OWN project's active
+build, so `{$IFDEF DEBUG}` and project-define branches match what the developer sees in the IDE.
+`lint <file>` and `lint-all` use the same lookup (LSP and CLI findings stay in parity).
+
+| Step | Rule |
+|---|---|
+| Which project owns the file | an explicit `--project X.dproj` wins; else the project of the `--db` whose index contains the file (manifest section, or `<dir>\_D-RAG\<base>.sqlite` next to `<base>.dproj`); else the ONE `.dproj` in the file's own folder (two or none: no project). A library index owns nothing. |
+| Which defines | the `.dproj` FIRST: its `<Config Condition="'$(Config)'==''">` marker picks the config and `ProfileFromDproj` the defines; `<base>.delphilsp.json` (the IDE's `-D` set) only when the `.dproj` is unreadable or carries no Config marker; platform built-ins always. |
+| Which platform | explicit `--platform`, else the `.dproj` Platform marker, else the JSON `dllname`, else Win64. |
+| An explicit `--project X.dproj` | X's ACTIVE build (Config/Platform markers), for every file of the run -- a member or a file no `--db` contains alike. **Changed in C10:** before, `--project` always meant Release (and Win64 unless `--platform`). |
+| A file no project owns | the platform built-ins, exactly as before. |
+
+Changes to the `.dproj` / `.delphilsp.json` are seen on the next didOpen/didSave (the files are
+re-stamped on every lookup). `drag-lint pp-profile --in <file.pas> [--db DB]` prints the answer
+(`dproj=`, `platform=`, `config=`, `source=builtins|dproj|delphilsp`, `digest=`, then the symbols).
+Guards: `run_pp_profile_in_guard.ps1`, `run_parsecache_profile_resolver_guard.ps1`,
+`run_lsp_per_file_defines_guard.ps1`.
+
 ### Document outline (textDocument/documentSymbol)
 
 `lsp` answers `textDocument/documentSymbol` from the index as a hierarchical `DocumentSymbol[]` (the editor's outline, breadcrumbs and *Go to Symbol in File*): the unit's members at the top level, members nested under their type, locals and parameters left out, 0-based ranges, `selectionRange` on the name token. A file no index knows answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.DocumentSymbol`); guard: `tests\autotest\run_lsp_document_symbol_guard.ps1`.
@@ -172,13 +201,6 @@ How the diagnostics merge behaves:
 `lsp` answers `textDocument/inlayHint` with parameter-name hints: for every call in the requested range of a tree-sitter parse of the live buffer (else the file on disk), the callee is looked up by exact name across the file's stores, and only when that name means exactly ONE routine (one qualified name, one parameter list -- an overload set is silent) whose parameter count, read from the indexed signature, equals the argument count does each argument get a `<paramName>:` hint (kind 2 Parameter, `paddingRight: true`) at its start. Capability `inlayHintProvider: true`; an unknown file answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.InlayHint`); guard: `tests\autotest\run_lsp_inlay_hint_guard.ps1`.
 
 `lsp` answers `workspace/executeCommand` for `draglint.showCallers` -- the command the codeLens `<n> callers` runs -- with arguments `[uri, line]` (0-based): `[{uri, line, character}]`, every distinct (file, line) call site of the routine(s) declared on that line, across every `--db` store, ordered by file then line, so the row count equals the lens count. An unknown command answers `-32601`, bad arguments `-32602`. Capability `executeCommandProvider: {commands: ["draglint.showCallers"]}`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ExecuteCommand`); guard: `tests\autotest\run_lsp_execute_command_guard.ps1`.
-
-### Reaching it in the IDE
-
-CLI+internal: the plugin starts this process itself, from
-`DragLint.Plugin.LspClient.pas:297`. There is no menu item -- the IDE
-launches the `lsp` server automatically as a background stdio process, not
-via a user-facing command.
 
 ### What it needs
 

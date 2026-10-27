@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Export to Obsidian
@@ -49,9 +49,6 @@ drag-lint export obsidian --db <file.sqlite> --output-dir <dir> [--open]
 ```
 `--output-dir` is required and names the folder to write pages into; `--open`
 opens it after export.
-
-### Reaching it in the IDE
-drag-lint > Generate & Export > Export to Obsidian...
 
 ### What it needs
 An index IS required. The project's DB lives at

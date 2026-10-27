@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80006
 since: 1.31.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Click-to-source: the draglint:// handler
@@ -37,6 +37,10 @@ Full flag list: [protocol in the CLI reference](../cli.md#protocol).
 | `--handler` | `<drag-lint-open.exe>` |  |  |
 | `--dry-run` |  |  |  |
 | `--force` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 

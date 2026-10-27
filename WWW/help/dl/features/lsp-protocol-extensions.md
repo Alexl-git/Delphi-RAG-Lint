@@ -7,14 +7,14 @@ group: editor-integration
 order: 110012
 since: 1.33.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # LSP protocol extensions
 
 Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index.
 
-Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index.
+Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.
 
 ## Details
 
@@ -26,10 +26,11 @@ feature is for and how it was verified.
 ### Proxy merge
 
 `drag-lint lsp --proxy` relays every message between the editor and RAD Studio's
-DelphiLSP. Four opt-in flags add drag-lint answers to DelphiLSP's, so one
-session shows the compiler's errors and drag-lint's findings together:
+DelphiLSP. Four opt-in merge flags add drag-lint answers to DelphiLSP's, so one
+session shows the compiler's errors and drag-lint's findings together; two more
+flags tune the proxy itself:
 
-| flag | merged answer |
+| flag | effect |
 |---|---|
 | `--merge-diagnostics` | drag-lint findings appended to `publishDiagnostics`, tagged `source: "drag-lint"` |
 | `--merge-completion` | drag-lint items unioned into the completion reply, keyed on label and kind |
@@ -41,6 +42,10 @@ session shows the compiler's errors and drag-lint's findings together:
 With every merge flag off the proxy relays DelphiLSP's bytes unchanged. Merging
 fails open: a handler that overruns the budget, raises or finds no index makes
 the proxy forward DelphiLSP's original bytes.
+
+`--proxy` and `--full-rules` are separate modes. With `--proxy` the engine only
+relays and merges: it starts the relay before it reads `--full-rules`, so that
+flag does nothing there. The merge flags, in turn, do nothing without `--proxy`.
 
 Guards: `tests\autotest\run_lsp_proxy_*_guard.ps1`.
 
@@ -56,7 +61,8 @@ behaviour is in [lsp](lsp.md).
 
 `drag-lint lsp --full-rules` runs `drag-lint lint "file" --json` on save, so the
 editor shows the same findings as the CLI, including `dl:ok` review markers.
-Without the flag the server keeps its small built-in check set unchanged.
+Without the flag the server keeps its small built-in check set unchanged. It
+applies to the plain server only; `lsp --proxy` ignores it (see above).
 
 ### VS Code switch
 

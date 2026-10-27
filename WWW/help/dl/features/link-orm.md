@@ -7,7 +7,7 @@ group: database
 order: 100002
 since: 0.40.5-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # link-orm
@@ -26,6 +26,10 @@ Full flag list: [link-orm in the CLI reference](../cli.md#link-orm).
 | --- | --- | --- | --- |
 | `--db` | `<projDb.sqlite>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -40,10 +44,6 @@ to.
 ```text
 drag-lint link-orm --db <projDb.sqlite> --db <sqlDb.sqlite>
 ```
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

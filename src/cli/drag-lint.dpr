@@ -69,6 +69,7 @@ uses
   DRagLint.Wiring in '..\core\DRagLint.Wiring.pas',
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
+  DRagLint.Core.LintBudget in '..\core\DRagLint.Core.LintBudget.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
   // The next unit and DragLint.Plugin.OpenSourcePath are listed so the CLI project index and lint cover the
   // draglint:// gate shared with drag-lint-open.exe (the engine does not use them); keep them for reconcile-project.

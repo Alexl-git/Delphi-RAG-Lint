@@ -7,14 +7,14 @@ group: search-navigation
 order: 20007
 since: 0.69.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # find-unit
 
 Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause.
 
-Read this when a symbol is undeclared and you need the unit to add to uses. find-unit --name X --in file looks the declaring unit up in the index and can add it to the file (--apply, with a backup unless --no-backup).
+Read this when a symbol is undeclared and you need the unit to add to uses. find-unit --name X --in file looks the declaring unit up in the index and can add it to the file (--apply, with a backup unless --no-backup). Without --apply it is a dry run: it prints the uses-clause edit, exits 0 and writes nothing (--json prints the edit set and never writes). Exit 0 for a preview, an applied edit or a unit already in uses; 1 when no unit declares the symbol or no edit can be computed; 2 on missing arguments or no database.
 
 ## How to run it
 
@@ -60,15 +60,6 @@ drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --d
 entry to. `--db` is required (not bracketed in the usage line). The usage
 line lists `--apply` as a flag; whether omitting it produces a dry run is
 not documented in the help text for this verb.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature. It is NOT the same as the
-IDE's [Quick-Fix: Add Unit for Undeclared at Cursor](quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) (Ctrl+Alt+U).
-The quick-fix parses a COMPILER DIAGNOSTIC, so it needs a prior build and a
-message that already names the unit. `find-unit --name <Symbol>` answers
-straight from the index instead, with no prior compile and no existing
-diagnostic message required -- it is strictly more capable here.
 
 ### What it needs
 

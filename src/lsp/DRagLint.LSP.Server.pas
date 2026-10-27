@@ -17,6 +17,7 @@ uses
   , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
   , DRagLint.Core    .Interfaces
   , DRagLint.Core    .Encoding
+  , DRagLint.Core    .LintBudget { C13: LintChildTimeoutMs -- the --full-rules child budget, shared with the IDE plugin }
   , DRagLint.Storage .SQLite
   , DRagLint.Parser  .Delphi13
   , DRagLint.Core    .Indexer  { INBOX-lsp-hover-unindexed-file: TIndexer.IndexFile builds the ephemeral single-unit index }
@@ -755,7 +756,7 @@ type
       /// <summary>C1: runs `ParamStr(0) lint "AFile" --json` out-of-process and returns its stdout.</summary>
       /// <param name="AFile">Absolute path of the saved file.</param>
       /// <param name="AJson">Receives lint's stdout when the run succeeded.</param>
-      /// <returns>True when the child exited 0 within LSP_FULL_RULES_TIMEOUT_MS; False on a spawn
+      /// <returns>True when the child exited 0 within LintChildTimeoutMs (8 s, 16 s for a library-owned file); False on a spawn
       /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
       /// <remarks>
       /// Blocks the calling thread for at most the timeout. The child never inherits the
@@ -1197,13 +1198,14 @@ type
 implementation
 
 uses
+  DRagLint.Project.DefineProfile,
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
 
 const
-  { C1: budget for the out-of-process `lint --json` that --full-rules runs on each
-    didOpen/didSave -- the same 8 s the plugin's live runner allows. }
-  LSP_FULL_RULES_TIMEOUT_MS = 8000;
+  { C1/C12/C13: the budget for the out-of-process `lint --json` that --full-rules
+    runs on each didOpen/didSave is DRagLint.Core.LintBudget.LintChildTimeoutMs --
+    the same function the IDE plugin's live runner asks, so the two cannot drift. }
   { Bounded wait for the killed child to be reaped after TerminateProcess. }
   LSP_FULL_RULES_REAP_MS = 2000;
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
@@ -3643,6 +3645,16 @@ begin
   Result:= False;
   AJson:= '';
   if AFile = '' then Exit;
+  { LSP C12: the FIRST store that owns the file is the one the child lint picks
+    (it walks the same --db list in this order), so it alone decides the budget. }
+  var OwningDb: string:= '';
+  for var I:= 0 to High(FStores) do
+    if FStores[I].FindFileIdByPath(AFile) > 0 then
+    begin
+      if I <= High(FStorePaths) then OwningDb:= FStorePaths[I];
+      Break;
+    end;
+  var Budget: Cardinal:= LintChildTimeoutMs(OwningDb);
   TmpPath:= TPath.GetTempFileName;
   FillChar(Sa, SizeOf(Sa), 0);
   Sa.nLength       := SizeOf(Sa);
@@ -3670,7 +3682,7 @@ begin
     UniqueString(Cmd);
     if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
-      if WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_TIMEOUT_MS) <> WAIT_OBJECT_0 then
+      if WaitForSingleObject(Pi.hProcess, Budget) <> WAIT_OBJECT_0 then
       begin
         TerminateProcess(Pi.hProcess, 1);
         WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_REAP_MS);
@@ -3753,6 +3765,7 @@ begin
   if TextDoc = nil then Exit;
   var ClosedPath: string:= FileFromUri(TextDoc.GetValue('uri').Value);
   TLiveDocuments.Remove(ClosedPath);
+  TProjectProfileCache.Forget(ClosedPath); // LSP C10: keep the file -> .dproj memo bounded to open files
   { INBOX-lsp-hover-unindexed-file: the ephemeral index exists only to answer
     hovers in ONE file. Once that buffer is gone it is dead weight holding a
     temp database open, so it is evicted with the overlay and for the same

@@ -161,6 +161,70 @@ function NearestCandidates(const pValue: string; const pCandidates: TArray<strin
 /// <remarks>An alias is matched as a whole flag token, so --in never matches inside --include.</remarks>
 function FlagAliasProblems(const pAliases: TArray<TFlagAlias>; const pEntries: TArray<TFeatureEntry>): TArray<string>;
 
+/// <summary>The entry's verification stamp: verified (canonical, written by featuregen verify) when present, else the
+/// legacy lastVerified (still carried by family definitions; featuregen add now writes verified too).</summary>
+/// <param name="pEntry">An entry or family definition object; not modified.</param>
+/// <returns>The stamp object, owned by pEntry; nil when the entry has neither key.</returns>
+/// <remarks>Every reader that asks "was this entry verified, and when" goes through here, so the seed backlog, the
+/// shipped-entry requirement and the staleness note see the stamp featuregen verify actually writes.</remarks>
+function VerificationOf(const pEntry: TJSONValue): TJSONValue;
+
+/// <summary>The body of one markdown section: the lines after the first heading whose text is pHeading, up to the
+/// next heading of any level.</summary>
+/// <param name="pMarkdown">A markdown page.</param>
+/// <param name="pHeading">The heading text, compared case-insensitively ("Reaching it in the IDE").</param>
+/// <returns>The section body without its heading; '' when the page has no such heading.</returns>
+function MarkdownSection(const pMarkdown, pHeading: string): string;
+
+/// <summary>Check A (help audit G-1, G-2): the hand-written "Reaching it in the IDE" prose of the entry's wiki page
+/// must agree with the entry's surfaces.</summary>
+/// <param name="pEntry">The entry object; not modified.</param>
+/// <param name="pWikiText">The text of docs\wiki\&lt;wikiPage&gt;.md; '' when the page does not exist.</param>
+/// <returns>One "&lt;id&gt;: ..." text per problem: (G-1) the section says "No IDE surface", "CLI-only", "only through"
+/// or "No main-menu item" while the entry has an ide-menu or ide-context surface; (G-2) the section writes an ide-about
+/// caption as a menu path "drag-lint &gt; ... &gt; Caption" while no ide-menu surface ends in that caption. Empty when
+/// clean, when the page has no such section, or when the entry is planned.</returns>
+function IdeProseProblems(const pEntry: TJSONObject; const pWikiText: string): TArray<string>;
+
+/// <summary>Check A (help audit G-3): every source line anchor "Unit.pas:NNNN" in the entry's text is resolved
+/// against the repo's sources.</summary>
+/// <param name="pEntry">The entry object; not modified.</param>
+/// <param name="pRepo">Repo root; the unit is looked up under src\ and tools\ (exact file name, else the one file
+/// whose name ends in ".&lt;name&gt;").</param>
+/// <param name="pWikiText">The entry's wiki page text ('' for none). Its anchors are judged only when the unit is
+/// exactly one file of this repo (a page also quotes sample output from user projects), and the routine name is
+/// looked for within 200 characters of the anchor.</param>
+/// <returns>One "&lt;id&gt;: ..." text per anchor that does not resolve (no such unit, ambiguous, line past the end)
+/// or that drifted: the text holding the anchor does not name the routine that encloses that line now. The message
+/// names that routine, so the anchor can be replaced by it. Empty when clean.</returns>
+/// <remarks>A line anchor is only kept when the same text names the enclosing routine, which makes drift visible;
+/// the routine name alone is the preferred form.</remarks>
+function LineAnchorProblems(const pEntry: TJSONObject; const pRepo: string; const pWikiText: string = ''): TArray<string>;
+
+/// <summary>Check C (help audit G-4): every main-menu path quoted in prose ("drag-lint &gt; A &gt; B") names a live
+/// menu node.</summary>
+/// <param name="pId">Entry id, for the message.</param>
+/// <param name="pWhere">Where the text came from (a JSON key or the wiki page), for the message.</param>
+/// <param name="pText">The prose; whitespace runs (line wraps) count as one space.</param>
+/// <param name="pNodes">The live menu tree (TLiveSurface.MenuNodes).</param>
+/// <returns>One text per quoted path that goes past its longest live prefix with " &gt; " (an item that is not
+/// there) or with " (...)" that closes the quote (a caption suffix such as "(wiki)" the live caption lacks; an aside
+/// like " (Ctrl+Alt+F); ..." is not). Empty when clean. Not judged: a path under a submenu that holds a dynamic
+/// caption, and " &gt; X" after a clickable leaf (X is in the dialog the leaf opens: "drag-lint &gt; About &gt; Open
+/// Plugin Log"). A blank line or a heading ends a quote; a single line break is a wrap.</returns>
+function MenuProseProblems(const pId, pWhere, pText: string; const pNodes: TArray<TMenuNodeRow>): TArray<string>;
+
+/// <summary>Check C (help audit G-6): rule-catalog counts quoted in prose equal the live "rules --json" catalog.</summary>
+/// <param name="pId">Entry id, for the message.</param>
+/// <param name="pWhere">Where the text came from, for the message.</param>
+/// <param name="pText">The prose.</param>
+/// <param name="pCatalog">The parsed rules --json output (TLiveSurface.RuleCatalog).</param>
+/// <returns>One text per literal that differs: "N rules" / "N-rule" (summary.total), "N on|enabled by default"
+/// (rules with default_enabled), "N categories" (summary.categories), "N fixable" / "N of them fixable" /
+/// "N marked fixable" (rules with fixable). A number that follows a '.' (a version) is not a count. Empty when
+/// clean or when pCatalog carries no summary.</returns>
+function RuleCountProblems(const pId, pWhere, pText: string; const pCatalog: TJSONValue): TArray<string>;
+
 implementation
 
 uses
@@ -797,7 +861,7 @@ begin
     Result := Result + [pTag + ': lastVerified.build ''' + lBuild + ''' is not a CHANGELOG version'];
 end;
 
-function CheckEntry(const pEntry: TJSONObject; const pCtx: TCheckContext; const pStem: string; pChild: Boolean;  // dl:ok cyclomatic-complexity@f527, cognitive-complexity@c492 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
+function CheckEntry(const pEntry: TJSONObject; const pCtx: TCheckContext; const pStem: string; pChild: Boolean;  // dl:ok cyclomatic-complexity@a84b, cognitive-complexity@abb8 -- REVIEWED 2026-10-26 (re-stamped: the shipped-entry stamp now reads verified OR lastVerified): one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
   pSinceOverride: Boolean): TArray<string>;
 var
   lP: TList<string>;
@@ -971,8 +1035,8 @@ begin
       lP.Add(lTag + ': family ''' + JS(pEntry, 'family') + ''' has no features\families\<family>.json');
     if JHas(pEntry, 'lastVerified') then
       lP.AddRange(LastVerifiedProblems(JVal(pEntry, 'lastVerified'), pCtx, lTag))
-    else if not pChild and SameText(lStatus, 'shipped') and not lInBacklog then
-      lP.Add(lTag + ': lastVerified is required for a shipped entry (seeded entries are exempt while listed in seed-backlog.json)');
+    else if (VerificationOf(pEntry) = nil) and not pChild and SameText(lStatus, 'shipped') and not lInBacklog then
+      lP.Add(lTag + ': verified (or the legacy lastVerified) is required for a shipped entry (seeded entries are exempt while listed in seed-backlog.json)');
     for lX in JItems(pEntry, 'tests') do
       if not RepoRelativeExists(pCtx.Repo, ItemText(lX)) then
         lP.Add(lTag + ': tests path ''' + ItemText(lX) + ''' does not exist');
@@ -1015,6 +1079,7 @@ type
     procedure CheckBacklog(const pCtx: TCheckContext);
     procedure CheckGenerated;
     procedure CheckStale(const pHand: TArray<TJSONObject>);
+    procedure CheckProse(const pEntries: TArray<TJSONObject>);
   public
     constructor Create(const pRepo: string; const pLive: TLiveSurface; pLevel: TCheckLevel; const pExtra: TArray<TJSONObject>;
       pSkipGenerated: Boolean);
@@ -1985,11 +2050,11 @@ begin
               + JoinS(NearestCandidates(lBid, lStems), ', ') + ') -- delete it from the backlog');
             Continue;
           end;
-          lOwed := not JHas(lBe, 'intro') or not JHas(lBe, 'lastVerified') or (JS(lBe, 'since') = '0.0.0');
+          lOwed := not JHas(lBe, 'intro') or (VerificationOf(lBe) = nil) or (JS(lBe, 'since') = '0.0.0');
           if lOwed then
             Inc(lRemaining)
           else
-            Fail('A', 'seed-backlog.json: ''' + lBid + ''' now has intro, lastVerified and a real since -- delete it from the backlog (the list is a debt, not a suppression)');
+            Fail('A', 'seed-backlog.json: ''' + lBid + ''' now has intro, verified and a real since -- delete it from the backlog (the list is a debt, not a suppression)');
         end;
       FNotes.Add(Format('backlog: %s %d remaining (intro + lastVerified owed; deadline: %s)', [lTeamName, lRemaining, JS(lRoot, 'deadline')]));
     end;
@@ -2063,13 +2128,413 @@ begin
   lOldestId := '';
   lOldest := 0;
   for lE in pHand do
-    if JHas(lE, 'lastVerified') then
-      Consider(JS(lE, 'id'), JVal(lE, 'lastVerified'));
+    if VerificationOf(lE) <> nil then
+      Consider(JS(lE, 'id'), VerificationOf(lE));
   for lF in FFamilies do
     Consider('family:' + lF.Name, JVal(lF.Def, 'lastVerified'));
   if lCount > 0 then
     FNotes.Add(Format('stale: %d entries older than 90 days, oldest %s (%s) -- the periodic review''s input, not a failure',
       [lCount, lOldestId, FormatDateTime('yyyy-mm-dd', lOldest)]));
+end;
+
+{ ---- help-audit prose checks (G-1..G-4, G-6) ---- }
+
+const
+  IDE_SECTION = 'Reaching it in the IDE';
+  NO_IDE_PATTERN = '(?i)(No IDE surface|CLI-only|\bonly through\b|No (?:main-)?menu (?:item|path)|not a menu item)';
+  ANCHOR_SCOPE = 200;
+  ANCHOR_PATTERN = '\b([A-Za-z_][\w.]*\.(?:pas|dpr|inc)):(\d+)';
+  ROUTINE_PATTERN = '^(?:class\s+)?(?:procedure|function|constructor|destructor|operator)\s+([A-Za-z_][\w.]*)';
+  MENU_ROOT = 'drag-lint';
+  QUOTE_SHOWN = 60;
+  PARA_MARK = #1;
+
+type
+  TTextAt = record
+    Where: string;
+    Text: string;
+  end;
+
+function VerificationOf(const pEntry: TJSONValue): TJSONValue;
+begin
+  Result := JVal(pEntry, 'verified');
+  if Result is not TJSONObject then
+    Result := JVal(pEntry, 'lastVerified');
+  if Result is not TJSONObject then
+    Result := nil;
+end;
+
+function MarkdownSection(const pMarkdown, pHeading: string): string;
+var
+  lLines: TArray<string>;
+  lIn: Boolean;
+  lSb: TStringBuilder;
+  lL: string;
+begin
+  lLines := pMarkdown.Replace(#13#10, #10).Split([#10]);
+  lIn := False;
+  lSb := TStringBuilder.Create;
+  try
+    for lL in lLines do
+    begin
+      if TRegEx.IsMatch(lL, '^#{1,6}\s') then
+      begin
+        if lIn then
+          Break;
+        lIn := SameText(TRegEx.Replace(lL, '^#{1,6}\s+', '').Trim, pHeading);
+        Continue;
+      end;
+      if lIn then
+        lSb.Append(lL).Append(#10);
+    end;
+    Result := lSb.ToString;
+  finally
+    lSb.Free;
+  end;
+end;
+
+{ Every string value under pV with a readable key path; surface "path" values are skipped (check C owns them). }
+procedure CollectTexts(const pV: TJSONValue; const pWhere: string; const pOut: TList<TTextAt>);
+var
+  lP: TJSONPair;
+  i: Integer;
+  lT: TTextAt;
+begin
+  if pV is TJSONString then
+  begin
+    lT.Where := pWhere;
+    lT.Text := TJSONString(pV).Value;
+    pOut.Add(lT);
+  end
+  else if pV is TJSONArray then
+    for i := 0 to TJSONArray(pV).Count - 1 do
+      CollectTexts(TJSONArray(pV).Items[i], pWhere + '[' + IntToStr(i) + ']', pOut)
+  else if pV is TJSONObject then
+    for lP in TJSONObject(pV) do
+      if not SameText(lP.JsonString.Value, 'path') then
+        CollectTexts(lP.JsonValue, (if pWhere = '' then '' else pWhere + '.') + lP.JsonString.Value, pOut);
+end;
+
+function EntryTexts(const pEntry: TJSONObject): TArray<TTextAt>;
+var
+  lList: TList<TTextAt>;
+begin
+  lList := TList<TTextAt>.Create;
+  try
+    CollectTexts(pEntry, '', lList);
+    Result := lList.ToArray;
+  finally
+    lList.Free;
+  end;
+end;
+
+function HasSurfaceOf(const pEntry: TJSONObject; const pKinds: array of string): Boolean;
+var
+  lS: TJSONValue;
+begin
+  for lS in JItems(pEntry, 'surfaces') do
+    if InCI(JS(lS, 'type'), pKinds) then
+      Exit(True);
+  Result := False;
+end;
+
+function IdeProseProblems(const pEntry: TJSONObject; const pWikiText: string): TArray<string>;
+var
+  lSection, lId, lCap: string;
+  lM: TMatch;
+  lS, lS2: TJSONValue;
+  lOnMenu: Boolean;
+begin
+  Result := nil;
+  if (pWikiText = '') or SameText(JS(pEntry, 'status'), 'planned') then
+    Exit;
+  lSection := MarkdownSection(pWikiText, IDE_SECTION);
+  if Trim(lSection) = '' then
+    Exit;
+  lId := JS(pEntry, 'id');
+  if HasSurfaceOf(pEntry, ['ide-menu', 'ide-context']) then
+  begin
+    lM := TRegEx.Match(lSection, NO_IDE_PATTERN);
+    if lM.Success then
+      Result := Result + [lId + ': wiki "' + IDE_SECTION + '" says ''' + lM.Value
+        + ''' but the entry has an ide-menu / ide-context surface -- rewrite the section from the surfaces (G-1)'];
+  end;
+  for lS in JItems(pEntry, 'surfaces') do
+  begin
+    if not SameText(JS(lS, 'type'), 'ide-about') then
+      Continue;
+    lCap := JS(lS, 'caption');
+    if lCap = '' then
+      Continue;
+    lOnMenu := False;
+    for lS2 in JItems(pEntry, 'surfaces') do
+      if SameText(JS(lS2, 'type'), 'ide-menu') and JS(lS2, 'path').ToLower.EndsWith(lCap.ToLower) then
+        lOnMenu := True;
+    if lOnMenu then
+      Continue;
+    if TRegEx.IsMatch(lSection, '(?i)' + MENU_ROOT + '\s*>\s*(?:[^>\r\n]*>\s*)*' + TRegEx.Escape(lCap)) then
+      Result := Result + [lId + ': wiki "' + IDE_SECTION + '" writes the About-window button ''' + lCap
+        + ''' as a menu path "drag-lint > ..." -- it is a button in the drag-lint About window (G-2)'];
+  end;
+end;
+
+{ Repo source files whose name is pName, else whose name ends in "." + pName; fixtures and build output left out. }
+function FindUnitFiles(const pRepo, pName: string): TArray<string>;
+var
+  lRoot, lF, lLow: string;
+  lExact, lSuffix: TArray<string>;
+begin
+  lExact := nil;
+  lSuffix := nil;
+  for lRoot in ['src', 'tools'] do
+  begin
+    if not TDirectory.Exists(TPath.Combine(pRepo, lRoot)) then
+      Continue;
+    for lF in TDirectory.GetFiles(TPath.Combine(pRepo, lRoot), '*' + ExtractFileExt(pName), TSearchOption.soAllDirectories) do
+    begin
+      lLow := LowerCase(lF);
+      if lLow.Contains('\fixtures\') or lLow.Contains('\__history\') or lLow.Contains('\_d-rag\') then
+        Continue;
+      if SameText(ExtractFileName(lF), pName) then
+        lExact := lExact + [lF]
+      else if LowerCase(ExtractFileName(lF)).EndsWith('.' + LowerCase(pName)) then
+        lSuffix := lSuffix + [lF];
+    end;
+  end;
+  Result := (if Length(lExact) > 0 then lExact else lSuffix);
+end;
+
+{ The routine whose implementation header (column 0) is the nearest one at or above pLine; '' when none. }
+function EnclosingRoutine(const pLines: TArray<string>; pLine: Integer): string;
+var
+  i: Integer;
+  lM: TMatch;
+begin
+  for i := pLine - 1 downto 0 do
+  begin
+    lM := TRegEx.Match(pLines[i], ROUTINE_PATTERN, [roIgnoreCase]);
+    if lM.Success then
+      Exit(lM.Groups[1].Value);
+  end;
+  Result := '';
+end;
+
+function LineAnchorProblems(const pEntry: TJSONObject; const pRepo: string; const pWikiText: string = ''): TArray<string>;
+var
+  lT: TTextAt;
+  lTexts: TArray<TTextAt>;
+  lM: TMatch;
+  lFiles, lLines: TArray<string>;
+  lId, lUnit, lRoutine, lShort, lAnchor, lScope: string;
+  lLine: Integer;
+  lFromWiki: Boolean;
+begin
+  Result := nil;
+  lId := JS(pEntry, 'id');
+  lTexts := EntryTexts(pEntry);
+  if pWikiText <> '' then
+  begin
+    SetLength(lTexts, Length(lTexts) + 1);
+    lTexts[High(lTexts)].Where := 'wiki page';
+    lTexts[High(lTexts)].Text := pWikiText;
+  end;
+  for lT in lTexts do
+    for lM in TRegEx.Matches(lT.Text, ANCHOR_PATTERN) do
+    begin
+      lFromWiki := lT.Where = 'wiki page';
+      lUnit := lM.Groups[1].Value;
+      lLine := StrToIntDef(lM.Groups[2].Value, 0);
+      lAnchor := lM.Value;
+      lFiles := FindUnitFiles(pRepo, lUnit);
+      // a wiki page quotes sample output from user projects: only an anchor into THIS repo's sources is judged
+      if lFromWiki and (Length(lFiles) <> 1) then
+        Continue;
+      if Length(lFiles) = 0 then
+      begin
+        Result := Result + [lId + ': ' + lT.Where + ' anchor ''' + lAnchor + ''' names no unit under src\ or tools\ (G-3)'];
+        Continue;
+      end;
+      if Length(lFiles) > 1 then
+      begin
+        Result := Result + [lId + ': ' + lT.Where + ' anchor ''' + lAnchor + ''' is ambiguous (' + JoinS(lFiles, ', ')
+          + ') -- name the routine instead (G-3)'];
+        Continue;
+      end;
+      lLines := TFile.ReadAllText(lFiles[0]).Replace(#13#10, #10).Split([#10]);
+      if (lLine < 1) or (lLine > Length(lLines)) then
+      begin
+        Result := Result + [Format('%s: %s anchor ''%s'' is past the end of %s (%d lines) (G-3)',
+          [lId, lT.Where, lAnchor, ExtractFileName(lFiles[0]), Length(lLines)])];
+        Continue;
+      end;
+      lRoutine := EnclosingRoutine(lLines, lLine);
+      lShort := lRoutine.Substring(lRoutine.LastIndexOf('.') + 1);
+      // an entry string is judged whole; a wiki page only around the anchor (a page names many routines)
+      lScope := (if lFromWiki then Copy(lT.Text, Max(1, lM.Index - ANCHOR_SCOPE), Length(lAnchor) + 2 * ANCHOR_SCOPE) else lT.Text);
+      if (lShort <> '') and TRegEx.IsMatch(lScope, '(?i)\b' + TRegEx.Escape(lShort) + '\b') then
+        Continue;
+      Result := Result + [lId + ': ' + lT.Where + ' anchor ''' + lAnchor + ''' drifts: line ' + IntToStr(lLine) + ' is in '
+        + (if lRoutine = '' then '(no routine)' else lRoutine) + ' now, and the text does not name it -- replace the line anchor with the routine name (G-3)'];
+    end;
+end;
+
+{ True when pPath is a clickable leaf: "drag-lint > About > Open Plugin Log" goes on into the dialog the leaf opens. }
+function IsMenuItemPath(const pPath: string; const pNodes: TArray<TMenuNodeRow>): Boolean;
+var
+  lRow: TMenuNodeRow;
+begin
+  for lRow in pNodes do
+    if SameText(lRow.Path, pPath) then
+      Exit(lRow.Kind = MENU_KIND_ITEM);
+  Result := False;
+end;
+
+function MenuProseProblems(const pId, pWhere, pText: string; const pNodes: TArray<TMenuNodeRow>): TArray<string>;
+var
+  lText, lLow, lBest, lRest, lQuote: string;
+  lRow: TMenuNodeRow;
+  lAt, lFrom: Integer;
+  lPaths: TArray<string>;
+  lP: string;
+begin
+  Result := nil;
+  // a blank line or a heading ends a quote (PARA_MARK); a single line break is a wrap
+  lText := TRegEx.Replace(pText, '\r?\n[ \t]*(\r?\n|#)', ' ' + PARA_MARK + ' ');
+  lText := TRegEx.Replace(lText, '\s+', ' ');
+  lLow := LowerCase(lText);
+  lPaths := [MENU_ROOT];
+  for lRow in pNodes do
+    if (lRow.Path <> '') and (lRow.Kind <> MENU_KIND_DYNAMIC) and (lRow.Kind <> MENU_KIND_SEPARATOR) then
+      lPaths := lPaths + [lRow.Path];
+  lFrom := 1;
+  repeat
+    lAt := Pos(MENU_ROOT + MENU_PATH_SEP, lLow, lFrom);
+    if lAt = 0 then
+      Break;
+    lBest := '';
+    for lP in lPaths do
+      if (Length(lP) > Length(lBest)) and SameText(Copy(lText, lAt, Length(lP)), lP) then
+        lBest := lP;
+    lRest := Copy(lText, lAt + Length(lBest), MaxInt);
+    lFrom := lAt + Length(lBest);
+    // " > X": an item the live menu does not have; " (X)" closing the quote: a caption suffix the live one lacks
+    // (" (Ctrl+Alt+F); it is ..." is an aside, not part of the caption)
+    if not (lRest.StartsWith(MENU_PATH_SEP) or TRegEx.IsMatch(lRest, '^ \([^)]*\)(?:$|[*`"''' + PARA_MARK + ']|\.(?: |$))')) then
+      Continue;
+    if HasDynamicUnder(MenuPathKey(lBest), pNodes) or (lRest.StartsWith(MENU_PATH_SEP) and IsMenuItemPath(lBest, pNodes)) then
+      Continue;
+    lQuote := Copy(lText, lAt, Length(lBest) + QUOTE_SHOWN);
+    lQuote := TRegEx.Replace(lQuote, '[*`"' + PARA_MARK + '].*$', '');
+    Result := Result + [pId + ': ' + pWhere + ' quotes menu path ''' + lQuote.Trim + ''' -- the live menu has ''' + lBest
+      + ''' and nothing more of it; update the caption (G-4)'];
+  until False;
+end;
+
+function RuleCountProblems(const pId, pWhere, pText: string; const pCatalog: TJSONValue): TArray<string>;
+var
+  lSum: TJSONValue;
+  lRule: TJSONValue;
+  lTotal, lCats, lOn, lFix: Integer;
+  lText: string;
+
+  procedure Probe(const pPattern, pFact: string; pWant: Integer);
+  var
+    lM: TMatch;
+  begin
+    for lM in TRegEx.Matches(lText, '(?i)(?<![\d.])(\d+)' + pPattern) do
+      if StrToIntDef(lM.Groups[1].Value, -1) <> pWant then
+        Result := Result + [Format('%s: %s says ''%s'' but rules --json has %d %s (G-6)', [pId, pWhere, lM.Value.Trim, pWant, pFact])];
+  end;
+
+begin
+  Result := nil;
+  lSum := JVal(pCatalog, 'summary');
+  if lSum is not TJSONObject then
+    Exit;
+  lTotal := StrToIntDef(JS(lSum, 'total'), 0);
+  lCats := StrToIntDef(JS(lSum, 'categories'), 0);
+  lOn := 0;
+  lFix := 0;
+  for lRule in JItems(pCatalog, 'rules') do
+  begin
+    if SameText(JS(lRule, 'default_enabled'), 'true') then
+      Inc(lOn);
+    if SameText(JS(lRule, 'fixable'), 'true') then
+      Inc(lFix);
+  end;
+  lText := TRegEx.Replace(pText, '\s+', ' ');
+  Probe('(?: rules\b|-rule\b)', 'rules', lTotal);
+  Probe(' (?:on|enabled) by default', 'rules on by default', lOn);
+  Probe(' categor(?:y|ies)\b', 'categories', lCats);
+  Probe('(?: of them| marked)? (?:auto-)?fixable\b', 'fixable rules', lFix);
+end;
+
+
+{ Help-audit prose checks: A (G-1/G-2 wiki IDE section, G-3 line anchors) at every level; C (G-4 quoted menu
+  paths, G-6 rule counts) when the live surface is there. A wiki page shared by several entries is read for C once. }
+procedure TChecker.CheckProse(const pEntries: TArray<TJSONObject>);
+var
+  lE: TJSONObject;
+  lPage, lFile, lWiki, lId, lPr: string;
+  lSeen: TList<string>;
+  lT: TTextAt;
+  lTexts: TArray<TTextAt>;
+  lFirstUse: Boolean;
+  lGenerated: TArray<string>;
+  lFmt: TJSONObject;
+  lG: TJSONValue;
+begin
+  // a generated page (site-format.json generatedWikiPages: Home, Features, ...) is not the entry's prose
+  lGenerated := nil;
+  if TFile.Exists(TPath.Combine(FRepo, 'features\site-format.json')) then
+  begin
+    lFmt := ReadJsonObject(TPath.Combine(FRepo, 'features\site-format.json'));
+    try
+      for lG in JItems(lFmt, 'generatedWikiPages') do
+        lGenerated := lGenerated + [ItemText(lG)];
+    finally
+      lFmt.Free;
+    end;
+  end;
+  lSeen := TList<string>.Create;
+  try
+    for lE in pEntries do
+    begin
+      lId := JS(lE, 'id');
+      lPage := JS(lE, 'wikiPage');
+      lWiki := '';
+      lFile := TPath.Combine(FRepo, 'docs\wiki\' + lPage + '.md');
+      if (lPage <> '') and not InCI(lPage, lGenerated) and TFile.Exists(lFile) then
+        lWiki := TFile.ReadAllText(lFile);
+      for lPr in IdeProseProblems(lE, lWiki) do
+        Fail('A', lPr);
+      lFirstUse := (lWiki <> '') and not lSeen.Contains(LowerCase(lPage));
+      if lFirstUse then
+        lSeen.Add(LowerCase(lPage));
+      for lPr in LineAnchorProblems(lE, FRepo, (if lFirstUse then lWiki else '')) do
+        Fail('A', lPr);
+      if (FLevel <> clFull) or (FLive = nil) or SameText(JS(lE, 'status'), 'planned') then
+        Continue;
+      lTexts := EntryTexts(lE);
+      if lFirstUse then
+      begin
+        SetLength(lTexts, Length(lTexts) + 1);
+        lTexts[High(lTexts)].Where := 'docs\wiki\' + lPage + '.md';
+        lTexts[High(lTexts)].Text := lWiki;
+      end;
+      for lT in lTexts do
+      begin
+        if FLive.HasMenuTree then
+          for lPr in MenuProseProblems(lId, lT.Where, lT.Text, FLive.MenuNodes) do
+            Fail('C', lPr);
+        if FLive.RuleCatalog <> nil then
+          for lPr in RuleCountProblems(lId, lT.Where, lT.Text, FLive.RuleCatalog) do
+            Fail('C', lPr);
+      end;
+    end;
+  finally
+    lSeen.Free;
+  end;
 end;
 
 procedure TChecker.Run;
@@ -2176,6 +2641,10 @@ begin
       for lX in FExtra do
         for lPr in CheckEntry(lX, lCtx, JS(lX, 'id')) do
           Fail('A', lPr);
+      lHand := nil;
+      for lE in lCtx.Entries do
+        lHand := lHand + [lE.Entry];
+      CheckProse(lHand + FExtra);
       Exit;
     end;
     // ---- Full: live surface + family children
@@ -2205,6 +2674,7 @@ begin
         for lPr in CheckEntry(lX, lFull, JS(lX, 'id')) do
           Fail('A', lPr);
       CheckLive(lHand, lFull);
+      CheckProse(lHand);
       CheckBacklog(lFull);
     finally
       lFull.Free;
@@ -2353,5 +2823,4 @@ begin
   Result := pFinding.Check + ': ' + pFinding.Text;
 end;
 
-end.
- -- REVIEWED 2026-10-19: the ported checks A-E live together because they share one context and one finding list; splitting is a later refactor
+end.

@@ -99,7 +99,7 @@ What a click does:
    so Auto Doc leaves it alone.
 
 If the question is refused (exit 1) or the indexes cannot be resolved (exit 2)
-you see the script's reason. If an index is **stale** (exit 3) you see the
+you see the engine's reason. If an index is **stale** (exit 3) you see the
 reindex command and are offered to run it as the background incremental index
 job; ask again when it finishes.
 

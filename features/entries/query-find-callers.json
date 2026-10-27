@@ -55,11 +55,11 @@
       "command": "drag-lint query find-callers --name <callee-name> --resolved --db <db>"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466",
+  "notes": "issued by the plugin from TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "5ead83fdcc8f1c26f301a1180a72e0a1349359a47df864523d3728f9dbc3935b"
   }
 }

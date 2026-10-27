@@ -2,7 +2,7 @@
 // (env DRAGLINT_FULLRULES_CHILD_EXE). Compiled by run_lsp_full_rules_guard.ps1 with csc.
 // STUB_MARKER = file to create (proves the child was this stub);
 // STUB_MODE = sleep | badjson | emit (emit prints the file named by STUB_JSON_FILE, exit 1
-// like a `lint` that reports findings).
+// like a `lint` that reports findings; slowemit sleeps STUB_SLEEP_MS first -- LSP C12).
 using System;
 using System.IO;
 using System.Threading;
@@ -13,6 +13,7 @@ static class FullRulesChildStub {
     string mode = Environment.GetEnvironmentVariable("STUB_MODE");
     if (mode == "sleep") { Thread.Sleep(60000); return 0; }
     if (mode == "badjson") { Console.Out.Write("this is not json"); return 0; }
+    if (mode == "slowemit") { Thread.Sleep(Int32.Parse(Environment.GetEnvironmentVariable("STUB_SLEEP_MS"))); mode = "emit"; }
     if (mode == "emit") { Console.Out.Write(File.ReadAllText(Environment.GetEnvironmentVariable("STUB_JSON_FILE"))); return 1; }
     return 3;
   }

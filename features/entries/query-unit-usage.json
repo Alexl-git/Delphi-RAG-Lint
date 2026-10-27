@@ -4,9 +4,9 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
-  "summary": "Answers one question, about one unit and one file",
-  "intro": "Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. It tells you whether one file references anything a given unit exports; an empty answer means the uses entry is a dead import.",
+  "since": "1.12.0-alpha",
+  "summary": "Shows which files reference a unit, or - with --in - which of its exports one file actually uses",
+  "intro": "Read this when cleaning a uses clause or checking an unused-unit-in-uses finding. With --in it lists which of the unit's exports that file references (empty means the uses entry is a dead import); without --in it lists the files that reference the unit and the ones that merely import it.",
   "wikiPage": "query-unit-usage",
   "surfaces": [
     {
@@ -52,9 +52,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "44e4e30e2283257467bc89293b7dfdfc0a85ced9267ed19c86c6b342f552818c"
   }
 }

@@ -7,7 +7,7 @@ group: linting
 order: 30021
 since: 1.31.4-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # type-name-prefix: expected letter from the ancestor chain
@@ -82,6 +82,10 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--db` | `<index.sqlite>` |  |  |
 | `--project-rules` |  |  |  |
 | `--stand-in-for` | `<realpath>` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Pitfalls
 

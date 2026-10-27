@@ -7,7 +7,7 @@ group: compiler
 order: 90011
 since: 1.20.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # project-facts
@@ -33,6 +33,10 @@ Full flag list: [project-facts in the CLI reference](../cli.md#project-facts).
 | `--config` |  |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ---
 

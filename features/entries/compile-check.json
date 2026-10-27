@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "compile-check",
-      "usage": "drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text] (no --db: caches only into the project's unique manifest owner, else reports uncached)",
+      "usage": "drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text] (no --db: caches only into the project's unique manifest owner, else reports uncached; no index is required, the compile and report still run; exit 1 iff an Error finding)",
       "flags": [
         {
           "name": "--project",
@@ -27,7 +27,7 @@
         }
       ],
       "helpOrder": 63,
-      "help": ["  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project's unique manifest owner, else reports uncached)"]
+      "help": ["  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project's unique manifest owner, else reports uncached; no index is required, the compile and report still run; exit 1 iff an Error finding)"]
     }
   ],
   "audience": "both",
@@ -41,16 +41,16 @@
       "command": "drag-lint compile-check <target.dproj|.pas> --format json"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037",
+  "notes": "issued by the plugin from RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas)",
   "access": "cli-only",
   "accessReviewed": {
     "date": "2026-10-21",
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "69e250155e50c9e6cbc027dd98ea1b024fd84da3242bda8153f4cae1be3bfd61"
   }
 }

@@ -10,19 +10,23 @@ unit ConvRules.ConvertEncoding;
   must be fixed, and the question says so.
   The .dfm is not checked here: the engine #-escapes a .dfm string losslessly, and anything it
   still cannot write is refused after the run (ConvRules.ConvertRerun asks then). Comment lines
-  (// first) are never written and never asked about; any other line of a book counts, whether
-  or not its #convert matches the unit (the editor cannot know before the engine runs).
+  (// first) are never written and never asked about. ENC-N1 (2026-10-26): a #convert block's own
+  lines (header, #link, #default, #ignore, #remove, #migrate, #apply, #tag, #warn, #check-ref)
+  count only for a unit the block applies to (FromTypeApplier); every other line of a book counts
+  for every unit.
   No UI and no engine calls; ConvRulesModelTests.dpr (EncodingPreRunTests.inc) pins every rule. }
 
 interface
 
 uses
-  ConvRules.TextEncoding;
+  ConvRules.TextEncoding
+  , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- FromTypeApplier reads a unit's evidence the way C8 does: TDfmTextReader, TUnitInheritance, ListDfmInstances, DFM_EXT and BINARY_DFM_SIGNATURE travel together
+  ;
 
 const
   /// <summary>At most this many places are listed in one question; the rest are counted.</summary>
   PRE_RUN_PLACES_SHOWN = 20;
-  /// <summary>Longest rule text shown for one place.</summary>
+  /// <summary>Longest slice of a rule line shown for one place (RuleExcerpt; a cut side adds '...').</summary>
   PRE_RUN_RULE_CHARS = 80;
 
 type
@@ -36,7 +40,7 @@ type
     Col      : Integer;
     /// <summary>Unicode code point (a pair is one code point; a lone surrogate its own unit).</summary>
     Code     : Integer;
-    /// <summary>The trimmed book line holding it (at most PRE_RUN_RULE_CHARS).</summary>
+    /// <summary>The trimmed book line holding it, windowed around Col when longer than PRE_RUN_RULE_CHARS (RuleExcerpt).</summary>
     Rule     : string;
     /// <summary>The target unit's .pas, as the job lists it.</summary>
     UnitPas  : string;
@@ -54,6 +58,10 @@ type
   /// (System.UITypes); anything else counts as mrNo.</summary>
   TPreRunAskFn = reference to function(const AUnitPas, AQuestion: string; ACanRaise: Boolean): Integer;
 
+  /// <summary>Whether a #convert block whose From type is AFromType (bare or qualified) applies to one unit.</summary>
+  TFromTypeAppliesFn = reference to function(const AFromType: string): Boolean;
+  /// <summary>The From-type test for one unit's .pas (FromTypeApplier); nil = every block applies to it.</summary>
+  TUnitApplierFn = reference to function(const AUnitPas: string): TFromTypeAppliesFn;
   /// <summary>What the pre-run questions decided.</summary>
   TPreRunPlan = record
     /// <summary>The .pas files to pass as --raise-encoding (each Yes), in question order.</summary>
@@ -64,6 +72,9 @@ type
     ChangeRules: Boolean;
     /// <summary>The places of the unit whose answer stopped the run; [] otherwise.</summary>
     Places     : TArray<TEncodingPlace>;
+    /// <summary>The places the Convert tab keeps as note rows (PlaceNoteText): every place of each unit
+    /// answered Yes, plus the stopping unit's places after a No; [] after a Cancel (nothing is kept).</summary>
+    Notes      : TArray<TEncodingPlace>;
   end;
 
 /// <summary>PURE: a book's text with every comment line (trimmed text starting with //) blanked;
@@ -84,11 +95,64 @@ function CharLabel(ACode: Integer): string;
 /// <param name="AUnits">The job's units (.pas).</param>
 /// <param name="ABookText">Reads a book; called once per book.</param>
 /// <param name="AUnitLevel">The level of a unit's .pas; a unit it returns False for is skipped.</param>
-/// <returns>Every occurrence, not one per distinct character; [] when everything fits.</returns>
+/// <returns>Every occurrence, not one per distinct character; [] when everything fits. Every block counts for every unit: EncodingPlacesFor narrows.</returns>
 /// <exception cref="Exception">Whatever ABookText raises propagates.</exception>
-function EncodingPlaces(const ABooks, AUnits: TArray<string>; const ABookText: TBookTextFn;
+function EncodingPlaces(const ABooks, AUnits: TArray<string>; const ABookText: TBookTextFn;  // dl:ok unused-public-symbol@4b8e, doc-drift@4b8e -- REVIEWED 2026-10-26 the no-narrowing form the model tests pin (prerun.*); the Convert tab calls EncodingPlacesFor. The exception is ABookText's, propagated (documented on purpose)
   const AUnitLevel: TUnitLevelFn): TArray<TEncodingPlace>;
 
+/// <summary>PURE (ENC-N3): the rule text shown for a place: the trimmed line, or when it is longer
+/// than PRE_RUN_RULE_CHARS a window of that many characters centred on ACol (clamped to the line),
+/// with '...' on each side that was cut.</summary>
+/// <param name="ALine">The book line, untrimmed (ACol counts from its first character).</param>
+/// <param name="ACol">1-based column of the offending character in ALine.</param>
+/// <returns>The excerpt; it always holds the character at ACol. A window edge never splits a
+/// surrogate pair (the half is left out).</returns>
+function RuleExcerpt(const ALine: string; ACol: Integer): string;
+
+/// <summary>PURE (ENC-N1): ABookText with the block-local lines (header, #link, #default, #ignore,
+/// #remove, #migrate, #apply, #tag, #warn, #check-ref) of every #convert block whose From type
+/// AApplies rejects blanked; line breaks are kept, so line numbers do not move.</summary>
+/// <param name="ABookText">A book's text (usually RuleLinesOnly'd).</param>
+/// <param name="AApplies">The unit's test (FromTypeApplier); nil = every block applies.</param>
+/// <returns>The text the engine may write into that unit.</returns>
+/// <remarks>Lines before the first #convert, unit directives (#use / #unuse / #useswap), #depth,
+/// #mapping (another block may #apply it), #note, raw pcre and unknown lines always count. A
+/// header naming no From type applies to every unit.</remarks>
+function AppliedRuleLines(const ABookText: string; const AApplies: TFromTypeAppliesFn): string;  // dl:ok unused-public-symbol@34c0 -- REVIEWED 2026-10-26 pinned by the model tests (n1.*), which are outside this project's index; EncodingPlacesFor runs the same BlockFromTypes / BlankUnapplied
+
+/// <summary>PURE (ENC-N1): which #convert blocks apply to one unit, from what the unit itself
+/// says: a block applies when its bare From type is the class of any block header of the unit's
+/// text .dfm (ListDfmInstances: object, inherited and inline, at any depth), an identifier of the
+/// unit's .pas (a field, a var, a runtime creator TFrom.Create), or the class of one of AInherit's
+/// verdicts (an inherited instance or an E2b code use the .dfm does not re-open).</summary>
+/// <param name="AUnitPas">The unit's .pas; its .dfm is ChangeFileExt(AUnitPas, DFM_EXT).</param>
+/// <param name="AReader">The file system (DiskTextReader in the editor, a fake in the tests);
+/// called once for the .pas and once for the .dfm, here, not by the answer.</param>
+/// <param name="AInherit">The unit's C8 analysis; Default(TUnitInheritance) when there is none.</param>
+/// <returns>The test; names compare case-insensitively on bare names; a From type '' always
+/// applies.</returns>
+/// <remarks>Decision 2026-10-26 (ENC-N1): a unit WITHOUT a .dfm (drMissing) gets the blocks its
+/// .pas or its C8 analysis names -- the engine's runtime-creator retype and code-use edits reach a
+/// .pas with no .dfm; with no .dfm instance and no such name no block can write into it. When the
+/// unit cannot be judged -- the .pas cannot be read, the .dfm exists but cannot be read, or the
+/// .dfm is binary (BINARY_DFM_SIGNATURE) -- every block applies (the question may be needless,
+/// never missing). Over-inclusion is the safe side throughout: a .pas comment or string naming
+/// the type counts too. The ancestors AncestorChain offers are units of the job in their own
+/// right and are judged by their own files.</remarks>
+function FromTypeApplier(const AUnitPas: string; const AReader: TDfmTextReader; const AInherit: TUnitInheritance): TFromTypeAppliesFn;
+
+/// <summary>PURE: EncodingPlaces, with each unit's places narrowed to the lines AppliedRuleLines
+/// keeps for it.</summary>
+/// <param name="ABooks">The runnable books, application order.</param>
+/// <param name="AUnits">The job's units (.pas).</param>
+/// <param name="ABookText">Reads a book; called once per book.</param>
+/// <param name="AUnitLevel">The level of a unit's .pas; a unit it returns False for is skipped.</param>
+/// <param name="AApplier">The test per unit (called once per unit with a level); nil, or a nil
+/// answer for a unit, = every block applies (EncodingPlaces).</param>
+/// <returns>Every occurrence, unit order, then book order, then line and column; [] when everything fits.</returns>
+/// <exception cref="Exception">Whatever ABookText raises propagates.</exception>
+function EncodingPlacesFor(const ABooks, AUnits: TArray<string>; const ABookText: TBookTextFn;  // dl:ok doc-drift@e7ae -- REVIEWED 2026-10-26 the exception is ABookText's, propagated (documented on purpose)
+  const AUnitLevel: TUnitLevelFn; const AApplier: TUnitApplierFn): TArray<TEncodingPlace>;
 /// <summary>PURE: the places of one unit (SameText on UnitPas), in order.</summary>
 /// <param name="APlaces">As EncodingPlaces returns them.</param>
 /// <param name="AUnitPas">The unit.</param>
@@ -109,12 +173,19 @@ function CanRaisePlaces(const APlaces: TArray<TEncodingPlace>; AGuard: Boolean):
 /// <returns>The dialog text.</returns>
 function PreRunQuestion(const AUnitPas: string; const APlaces: TArray<TEncodingPlace>; ACanRaise: Boolean): string;
 
+/// <summary>PURE: the text of one place's note row on the Convert tab.</summary>
+/// <param name="APlace">One place.</param>
+/// <returns>'encoding: book line:col U+XXXX unit does not fit level (rule)'-style text, rule appended.</returns>
+function PlaceNoteText(const APlace: TEncodingPlace): string;
+
 /// <summary>PURE: asks once per unit that has places, in order, until a No or Cancel.</summary>
 /// <param name="APlaces">As EncodingPlaces returns them.</param>
 /// <param name="AGuard">The engine reports convert_encoding_guard.</param>
 /// <param name="AAsk">The dialog; nil = nobody to ask: the run stops (Cancel) when there are places.</param>
 /// <returns>Yes (only where CanRaisePlaces) adds the unit's .pas to RaiseFiles; No (or a Yes that
-/// cannot raise) stops with ChangeRules; Cancel stops. No place = no question, an empty plan.</returns>
+/// cannot raise) stops with ChangeRules; Cancel stops. No place = no question, an empty plan.
+/// Notes: every place of each Yes unit (the run goes on, the places stay visible), the stopping
+/// unit's places after a No; a Cancel leaves Notes empty.</returns>
 function PreRunPlan(const APlaces: TArray<TEncodingPlace>; AGuard: Boolean; const AAsk: TPreRunAskFn): TPreRunPlan;
 
 implementation
@@ -124,6 +195,9 @@ uses
   , System.StrUtils  // MatchText
   , System.Character
   , System.UITypes  // mrYes / mrNo / mrCancel: PreRunPlan's answers
+  , System.Math  // Max / Min: RuleExcerpt's window
+  , System.Generics.Collections  // TArray.Sort / BinarySearch: FromTypeApplier's identifiers
+  , ConvRules.Model  // TRuleBook.ParseLine: which #convert block a line belongs to
   ;
 
 const
@@ -134,6 +208,7 @@ const
   SURR_LAST      = $DFFF;
   COMMENT_LEAD   = '//';
   PLACE_FMT      = '  %s %d:%d  %s  in: %s';
+  NOTE_FMT       = 'encoding: %s %d:%d %s does not fit %s (%s) -- rule: %s';
   MORE_FMT       = '  ... and %d more';
   HEAD_FMT       = '%s is %s, but the rule books would write %d character(s) it cannot hold -- converting would raise the file''s encoding:';
   CHOICE_RAISE   = 'Yes = raise %s to UTF-8 with BOM, then convert.';
@@ -168,26 +243,190 @@ begin
     Result:= Result + ' ''' + Char.ConvertFromUtf32(ACode) + '''';
 end;
 
-// The places of one book's rule text for one unit: every occurrence, line and column order.
-function BookPlaces(const ABook, AText, AUnitPas: string; ALevel: TTextLevel): TArray<TEncodingPlace>;
+const
+  // The kinds that belong to their #convert block (the engine applies them only to that block's
+  // instances). Every other kind -- a unit directive, #depth, #mapping (another block may #apply
+  // it), #note, a raw pcre line, an unknown line -- always counts, inside a block or not.
+  BLOCK_LOCAL_KINDS = [rnkConvert, rnkLink, rnkDefault, rnkIgnore, rnkRemove, rnkMigrate, rnkApply,
+    rnkTag, rnkWarn, rnkCheckRef];
+  ELLIPSIS          = '...';
+  RULE_HALF_WINDOW  = PRE_RUN_RULE_CHARS div 2;
+
+function IsHighSurrogateChar(AChar: Char): Boolean;
+begin
+  Result:= (Ord(AChar) >= SURR_FIRST) and (Ord(AChar) <= SURR_HIGH_LAST);
+end;
+
+function IsLowSurrogateChar(AChar: Char): Boolean;
+begin
+  Result:= (Ord(AChar) >= SURR_LOW_FIRST) and (Ord(AChar) <= SURR_LAST);
+end;
+
+function RuleExcerpt(const ALine: string; ACol: Integer): string;
+var
+  LText              : string;
+  LPos, LFirst, LLast: Integer;
+begin
+  LText:= Trim(ALine);
+  if Length(LText) <= PRE_RUN_RULE_CHARS then
+    Exit(LText);
+  LPos  := ACol - (Length(ALine) - Length(TrimLeft(ALine)));
+  LFirst:= Max(1, Min(LPos - RULE_HALF_WINDOW, Length(LText) - PRE_RUN_RULE_CHARS + 1));
+  LLast := LFirst + PRE_RUN_RULE_CHARS - 1;
+  // never cut a surrogate pair in half at either edge
+  if IsLowSurrogateChar(LText[LFirst]) then
+    Inc(LFirst);
+  if IsHighSurrogateChar(LText[LLast]) then
+    Dec(LLast);
+  Result:= Copy(LText, LFirst, LLast - LFirst + 1);
+  if LFirst > 1 then
+    Result:= ELLIPSIS + Result;
+  if LLast < Length(LText) then
+    Result:= Result + ELLIPSIS;
+end;
+
+// Per #10-line of a rule text: the bare From type of the #convert block the line belongs to when
+// its kind is block-local, else '' (the line always counts: before the first #convert, a kind
+// that is not block-local, or a header naming no From type).
+function BlockFromTypes(const ALines: TArray<string>): TArray<string>;
+var
+  LBook   : TRuleBook;
+  LNode   : TRuleNode;
+  LFrom   : string;
+  LInBlock: Boolean;
+begin
+  SetLength(Result, Length(ALines));
+  LFrom   := '';
+  LInBlock:= False;
+  LBook   := TRuleBook.Create;
+  try
+    for var N: Integer:= 0 to High(ALines) do
+    begin
+      LNode:= LBook.ParseLine(ALines[N].TrimRight([#13]));
+      try
+        if LNode.Kind = rnkConvert then
+        begin
+          LInBlock:= True;
+          LFrom   := BareType(Trim(LNode.FromType));
+        end;
+        Result[N]:= if LInBlock and (LNode.Kind in BLOCK_LOCAL_KINDS) then LFrom else '';
+      finally
+        LNode.Free;
+      end; // try
+    end;
+  finally
+    LBook.Free;
+  end; // try
+end;
+
+// ALines with every line whose block (AFroms) does not apply blanked; a #13 stays, so the lines
+// join back to the same line numbers.
+function BlankUnapplied(const ALines, AFroms: TArray<string>; const AApplies: TFromTypeAppliesFn): TArray<string>;
+begin
+  Result:= Copy(ALines);
+  for var N: Integer:= 0 to High(Result) do
+    if (AFroms[N] <> '') and not AApplies(AFroms[N]) then
+      Result[N]:= if Result[N].EndsWith(#13) then #13 else '';
+end;
+
+function AppliedRuleLines(const ABookText: string; const AApplies: TFromTypeAppliesFn): string;
 var
   LLines: TArray<string>;
+begin
+  if not Assigned(AApplies) then
+    Exit(ABookText);
+  LLines:= ABookText.Split([#10]);
+  Result:= string.Join(#10, BlankUnapplied(LLines, BlockFromTypes(LLines), AApplies));
+end;
+
+function AllApply: TFromTypeAppliesFn;
+begin
+  Result:=
+    function(const AFromType: string): Boolean
+    begin
+      Result:= True;
+    end;
+end;
+
+// Every identifier of a Pascal text, upper-cased and sorted (duplicates kept): a letter or '_'
+// followed by letters, digits or '_'. Comments and strings are not told apart (over-inclusion
+// only makes a block count).
+function SortedIdentifiers(const AText: string): TArray<string>;
+var
+  I, LStart: Integer;
+begin
+  Result:= nil;
+  I     := 1;
+  while I <= Length(AText) do
+  begin
+    if AText[I].IsLetter or (AText[I] = '_') then
+    begin
+      LStart:= I;
+      while (I <= Length(AText)) and (AText[I].IsLetterOrDigit or (AText[I] = '_')) do
+        Inc(I);
+      Result:= Result + [UpperCase(Copy(AText, LStart, I - LStart))];
+    end
+    else
+      Inc(I);
+  end;
+  TArray.Sort<string>(Result);
+end;
+
+function FromTypeApplier(const AUnitPas: string; const AReader: TDfmTextReader; const AInherit: TUnitInheritance): TFromTypeAppliesFn;
+var
+  LPas, LDfm: string;
+  LTypes    : TArray<string>;
+  LIdents   : TArray<string>;
+begin
+  if AReader(AUnitPas, LPas) <> drRead then
+    Exit(AllApply);
+  LTypes:= nil;
+  case AReader(ChangeFileExt(AUnitPas, DFM_EXT), LDfm) of
+    drUnreadable:
+      Exit(AllApply);
+    drRead:
+      begin
+        if LDfm.StartsWith(BINARY_DFM_SIGNATURE) then
+          Exit(AllApply);
+        for var LInst: TDfmInstance in ListDfmInstances(LDfm) do
+          LTypes:= LTypes + [BareType(LInst.TypeName)];
+      end;
+    drMissing:
+      ; // no .dfm: only the .pas and the C8 analysis say what applies
+  end;
+  for var LVerdict: TInstanceVerdict in AInherit.Verdicts do
+    LTypes:= LTypes + [BareType(LVerdict.Instance.TypeName)];
+  LIdents:= SortedIdentifiers(LPas);
+  Result:=
+    function(const AFromType: string): Boolean
+    var
+      LBare : string;
+      LFound: Integer;
+    begin
+      LBare := BareType(Trim(AFromType));
+      Result:= (LBare = '') or MatchText(LBare, LTypes)
+        or TArray.BinarySearch<string>(LIdents, UpperCase(LBare), LFound);
+    end;
+end;
+
+// The places of one book's rule lines (comments and unapplied blocks already blanked) for one
+// unit: every occurrence, line and column order.
+function BookPlaces(const ABook: string; const ALines: TArray<string>; const AUnitPas: string; ALevel: TTextLevel): TArray<TEncodingPlace>;
+var
   LLine : string;
   LPlace: TEncodingPlace;
   LCode, LWidth, I: Integer;
 begin
   Result:= nil;
-  LLines:= RuleLinesOnly(AText).Split([#10]);
-  for var N: Integer:= 0 to High(LLines) do
+  for var N: Integer:= 0 to High(ALines) do
   begin
-    LLine:= LLines[N];
+    LLine:= ALines[N];
     I:= 1;
     while I <= Length(LLine) do
     begin
       LCode := Ord(LLine[I]);
       LWidth:= 1;
-      if (LCode >= SURR_FIRST) and (LCode <= SURR_HIGH_LAST) and (I < Length(LLine))
-        and (Ord(LLine[I + 1]) >= SURR_LOW_FIRST) and (Ord(LLine[I + 1]) <= SURR_LAST) then
+      if IsHighSurrogateChar(LLine[I]) and (I < Length(LLine)) and IsLowSurrogateChar(LLine[I + 1]) then
       begin
         LCode := Char.ConvertToUtf32(LLine[I], LLine[I + 1]);
         LWidth:= 2;
@@ -199,7 +438,7 @@ begin
         LPlace.Line     := N + 1;
         LPlace.Col      := I;
         LPlace.Code     := LCode;
-        LPlace.Rule     := Copy(Trim(LLine), 1, PRE_RUN_RULE_CHARS);
+        LPlace.Rule     := RuleExcerpt(LLine, I);
         LPlace.UnitPas  := AUnitPas;
         LPlace.UnitLevel:= ALevel;
         LPlace.Needs    := NeededLevel(Copy(LLine, I, LWidth));
@@ -210,20 +449,40 @@ begin
   end;
 end;
 
-function EncodingPlaces(const ABooks, AUnits: TArray<string>; const ABookText: TBookTextFn;
-  const AUnitLevel: TUnitLevelFn): TArray<TEncodingPlace>;
+function EncodingPlacesFor(const ABooks, AUnits: TArray<string>; const ABookText: TBookTextFn;
+  const AUnitLevel: TUnitLevelFn; const AApplier: TUnitApplierFn): TArray<TEncodingPlace>;
 var
-  LTexts: TArray<string>;
-  LLevel: TTextLevel;
+  LLines, LFroms: TArray<TArray<string>>;
+  LLevel        : TTextLevel;
+  LApplies      : TFromTypeAppliesFn;
 begin
   Result:= nil;
-  SetLength(LTexts, Length(ABooks));
+  SetLength(LLines, Length(ABooks));
+  SetLength(LFroms, Length(ABooks));
   for var B: Integer:= 0 to High(ABooks) do
-    LTexts[B]:= ABookText(ABooks[B]);
+  begin
+    LLines[B]:= RuleLinesOnly(ABookText(ABooks[B])).Split([#10]);
+    if Assigned(AApplier) then
+      LFroms[B]:= BlockFromTypes(LLines[B]);
+  end;
   for var LUnit: string in AUnits do
     if AUnitLevel(LUnit, LLevel) then
+    begin
+      LApplies:= nil;
+      if Assigned(AApplier) then
+        LApplies:= AApplier(LUnit);
       for var B: Integer:= 0 to High(ABooks) do
-        Result:= Result + BookPlaces(ABooks[B], LTexts[B], LUnit, LLevel);
+        if Assigned(LApplies) then
+          Result:= Result + BookPlaces(ABooks[B], BlankUnapplied(LLines[B], LFroms[B], LApplies), LUnit, LLevel)
+        else
+          Result:= Result + BookPlaces(ABooks[B], LLines[B], LUnit, LLevel);
+    end;
+end;
+
+function EncodingPlaces(const ABooks, AUnits: TArray<string>; const ABookText: TBookTextFn;
+  const AUnitLevel: TUnitLevelFn): TArray<TEncodingPlace>;
+begin
+  Result:= EncodingPlacesFor(ABooks, AUnits, ABookText, AUnitLevel, nil);
 end;
 
 function PlacesOfUnit(const APlaces: TArray<TEncodingPlace>; const AUnitPas: string): TArray<TEncodingPlace>;
@@ -273,6 +532,12 @@ begin
   Result:= string.Join(sLineBreak, LLines);
 end;
 
+function PlaceNoteText(const APlace: TEncodingPlace): string;
+begin
+  Result:= Format(NOTE_FMT, [ExtractFileName(APlace.Book), APlace.Line, APlace.Col, CharLabel(APlace.Code),
+    ExtractFileName(APlace.UnitPas), LevelName(APlace.UnitLevel), APlace.Rule]);
+end;
+
 function PreRunPlan(const APlaces: TArray<TEncodingPlace>; AGuard: Boolean; const AAsk: TPreRunAskFn): TPreRunPlan;
 var
   LSeen  : TArray<string>;
@@ -293,11 +558,16 @@ begin
     if (LAnswer = mrYes) and LCan then
     begin
       Result.RaiseFiles:= Result.RaiseFiles + [LPlace.UnitPas];
+      Result.Notes     := Result.Notes + LOwn;
       Continue;
     end;
     Result.Stop       := True;
     Result.ChangeRules:= LAnswer <> mrCancel;
     Result.Places     := LOwn;
+    if LAnswer = mrCancel then
+      Result.Notes:= nil
+    else
+      Result.Notes:= Result.Notes + LOwn;
     Exit;
   end;
 end;

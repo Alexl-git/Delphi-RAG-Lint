@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Runs YADF formatting across a project's files, with indexing involved as part of the same action",
-  "intro": "Read this when you want a whole project brought to house style in one action instead of file by file. Choose drag-lint > Format Whole Project with YADF...; from the command line there is no single verb, only format per file and index.",
+  "intro": "Read this when you want a whole project brought to house style in one action instead of file by file. Choose drag-lint > Format Whole Project with YADF...; save your units first, confirm, and every project unit is rewritten in place by YADF and the index refreshed. drag-lint itself has no format verb.",
   "wikiPage": "Format-Whole-Project-with-YADF",
   "surfaces": [
     {
@@ -91,9 +91,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "a39b08a3cd303ae285f67b349713238e2d44889636cf7a675aad07f36640251a"
+    "build": "1.35.1-alpha",
+    "surfaceHash": "0ad2c2bda34030bc8dd66ef06706d631d871617d3e0308ceeb28ff100f32c280"
   }
 }

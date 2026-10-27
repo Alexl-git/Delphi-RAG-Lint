@@ -23,8 +23,12 @@ first two.
    tree-sitter-delphi13.dll      } parser DLLs -- MUST sit next to the exe
    tree-sitter-dfm.dll           }
    tree-sitter.dll               }
+   sqlite3.dll                   index storage -- without it a clean machine fails
+                                 with "-314 Cannot load vendor library"
    rules\                        external lint rules (*.scm + *.json)
-     builtin-symbols.txt
+     builtin-symbols.txt         allow-list read by the AST checks
+     enum-persist-sinks.txt      sink list for enum-ordinal-persisted
+     README.md
    ```
 
 3. Optionally add the folder to `PATH`, or call the exe by full path.
@@ -86,7 +90,7 @@ menu is unavailable) and two dockable windows under *View > Tool Windows*.
 
 The plugin does not contain the engine -- it **spawns `drag-lint.exe`**. If the
 menu items fail, check that the exe is reachable and still has `rules\` beside
-it. `drag-lint > Open Plugin Log` shows what the plugin actually invoked.
+it. The Open Plugin Log button in the drag-lint About window shows what the plugin actually invoked.
 
 ### Bitness
 

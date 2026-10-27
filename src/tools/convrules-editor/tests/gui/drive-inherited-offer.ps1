@@ -263,7 +263,7 @@ public static class CT {
 $script:pass = 0; $script:fail = 0
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
-function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 # BM_CLICK is POSTED: a sent click blocks this script for as long as the handler runs
@@ -571,7 +571,7 @@ try {
   # --- E7: the descendant ABOVE its ancestor warns once; No runs nothing ---
   $e = PickFile $p.Id $add $anc
   WaitAddSettled $p.Id $main 2
-  Check 'anc.no.prompt' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 0) -eq [IntPtr]::Zero)) "$e forms: $(TopsNow $p.Id)"
+  Check 'anc.no.prompt' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero)) "$e forms: $(TopsNow $p.Id)"
   $items = [CT]::Items($src)
   Check 'order.desc.above.anc' (($items.Count -eq 2) -and ($items[0] -eq $desc) -and ($items[1] -eq $anc)) ($items -join ' | ')
   Click $conv
@@ -602,7 +602,7 @@ try {
   $e = PickFile $p.Id $add $desc2
   WaitAddSettled $p.Id $main 3
   $st = Status $main
-  Check 'note.code.use' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 0) -eq [IntPtr]::Zero) -and ($st -like '*Desc2.pas: inherits 1 TLabel instance(s) from Anc -- convert it first (recommended)*')) "$e status: $st"
+  Check 'note.code.use' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero) -and ($st -like '*Desc2.pas: inherits 1 TLabel instance(s) from Anc -- convert it first (recommended)*')) "$e status: $st"
 
   # --- D3: two descendants in ONE add -> one prompt with "No to All"; answering it lists both, no Anc ---
   ClearSources $src $del
@@ -628,10 +628,11 @@ try {
     [void](WaitFor { @([CT]::Items($src)).Count -eq 1 } 10)
     $e = PickFile $p.Id $add $anc
     WaitAddSettled $p.Id $main 2
+    $pre = Status $main
     Click $conv
     $warn = WaitCls $p.Id 'TMessageForm' 30
     $yes = if ($warn -ne [IntPtr]::Zero) { Answer $p.Id 'Yes' } else { 'no gate warning' }
-    $ended = WaitFor { (Status $main) -like 'Converted *' } 90
+    $ended = WaitFor { (Status $main) -ne $pre -and (Status $main) -like 'Converted *' } 90
     $st = Status $main
     $bck = (Test-Path -LiteralPath ($anc + '.BCK1')) -or (Test-Path -LiteralPath ($desc + '.BCK1'))
     Check 'order.yes.runs' (($yes -eq '') -and $ended -and $bck) "answer: $yes; ended=$ended; BCK1=$bck; status: $st"

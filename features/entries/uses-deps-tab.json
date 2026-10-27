@@ -4,7 +4,7 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.12.0-alpha",
   "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
   "intro": "Read this when you want to review uses-clause fixes in one place: the Uses & Deps tab lists them and lets you apply the ones you accept.",
   "wikiPage": "Features",
@@ -24,9 +24,9 @@
   ],
   "notes": "seed: needs own page; seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "0bf3538cc94f5ecde760f03ee0fea048fe0414b596efd2894f2b9fb2e9524f9e"
   }
 }

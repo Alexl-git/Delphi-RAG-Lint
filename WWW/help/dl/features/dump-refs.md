@@ -7,7 +7,7 @@ group: maintenance
 order: 120006
 since: 0.82.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # dump-refs
@@ -25,6 +25,10 @@ Full flag list: [dump-refs in the CLI reference](../cli.md#dump-refs).
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--db` | `PATH` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -44,9 +48,6 @@ documented in the usage line.
 
 This is labeled a "diagnostic" in the CLI banner -- it is a troubleshooting
 tool, not a daily driver.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required. The project's DB lives at

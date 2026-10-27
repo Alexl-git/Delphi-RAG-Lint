@@ -4,7 +4,7 @@
   "group": "compiler",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.11.0-alpha",
   "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
   "intro": "Read this when you have changed a unit and want to check the units that depend on it right away. It runs that check now instead of waiting for the automatic quiet-period pass.",
   "wikiPage": "Features",
@@ -19,14 +19,14 @@
   "questions": [
     {
       "ask": "I changed a unit -- do the units that use it still compile?",
-      "command": "drag-lint > Compile Dependents (IDE menu)"
+      "command": "drag-lint > Compile Dependents"
     }
   ],
   "notes": "seed: needs own page; seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "4e75c8e04ee01aaa7b25c2139cad843457dfdbac9908dd1ff8a84cd87f81f637"
   }
 }

@@ -108,8 +108,10 @@ begin
   LJob.Units         := ['A.pas', 'B.pas', 'C.pas'];
   LJob.BatchSupported:= True;
   Check('raise.job.batched.without', JobRunsBatched(LJob));
-  LJob.RaiseFiles:= ['x'];
-  Check('raise.job.not.batched', not JobRunsBatched(LJob));
+  LJob.RaiseFiles:= ['B.pas'];
+  Check('raise.job.mixed.still.batched', JobRunsBatched(LJob)); // ENC-N4: one unit raised, two stay batched
+  LJob.RaiseFiles:= ['B.pas', 'c.dfm'];
+  Check('raise.job.not.batched', not JobRunsBatched(LJob)); // ENC-N4: one unit left = per-unit
 
   LRows:= EncodingRefusedRows([EncRefusedRow('U1', csConverted, True), EncRefusedRow('U1', csRefused, True), EncRefusedRow('U2', csRefused, False),
     EncRefusedRow('U1', csRefused, True)]);

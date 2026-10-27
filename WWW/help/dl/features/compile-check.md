@@ -7,7 +7,7 @@ group: compiler
 order: 90003
 since: 0.26.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # compile-check
@@ -28,6 +28,10 @@ Full flag list: [compile-check in the CLI reference](../cli.md#compile-check).
 | `--db` | `PATH` |  |  |
 | `--format` |  |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Runs a compiler-backed check against a single Delphi project (`.dproj`) or
@@ -39,12 +43,6 @@ compile-style verification of one target without a full project build.
 ```text
 drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]
 ```
-
-### Reaching it in the IDE
-
-CLI+internal: the plugin calls this internally from
-`DragLint.Plugin.Editor.pas:2037`. There is no menu item for it -- it is
-invoked in-process by the plugin, not exposed as a user-facing command.
 
 ### What it needs
 

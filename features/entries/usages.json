@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.33.0-alpha",
   "summary": "Finds usage sites of a named symbol, with a choice of report width",
-  "intro": "Read this when you want every place a symbol is used, outside the IDE: usages lists the usage sites of a named symbol, with a narrow, wide or very-wide report width.",
+  "intro": "Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites of a named symbol, with a narrow, wide or very-wide report width.",
   "wikiPage": "usages",
   "surfaces": [
     {
@@ -57,9 +57,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "49c04262fe8263d0117c1a77b7f12eb470dc65ebafe0099897d3503881ff2787"
   }
 }

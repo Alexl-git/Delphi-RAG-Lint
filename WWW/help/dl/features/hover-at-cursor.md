@@ -7,7 +7,7 @@ group: search-navigation
 order: 20014
 since: 0.7.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Hover at Cursor
@@ -40,11 +40,6 @@ Full flag list: [hover in the CLI reference](../cli.md#hover).
 Shows a hover card for the symbol under the editor caret: signature,
 documentation, and callers. Reach for it to check what a symbol is and how
 it is used without leaving the line you are on.
-
-### Reaching it in the IDE
-drag-lint > Hover at Cursor
-
-Keyboard shortcut: Ctrl+Alt+H.
 
 ### Running it from the CLI
 In the IDE this action is served in-process (the feature map's Mechanism

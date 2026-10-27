@@ -42,6 +42,9 @@ type
       order. Written together with QueueDepth, under FLock (SyncPendingLocked),
       so the status strip's "Next:/Then:" lines never disagree with "N queued". }
     PendingTitles: TArray<string>;
+    { The running job takes a Cancel (its CancelGraceMs > 0) and none was sent
+      yet: the status strip enables its Cancel button for it (lane X-BT). }
+    CanCancelRunning: Boolean;
   end;
 
   TJobPreRun = TProc;                  { UI thread, before the process starts }
@@ -65,6 +68,12 @@ type
       finished -- released just BEFORE its OnDone runs, so an OnDone that shows
       a dialog or queues the next step is not itself seen as busy }
     Busy       : Boolean   ;  // dl:ok public-field@3419
+    { > 0 -> the user may CANCEL this job while it runs (lane X-BT, a cycle-fix
+      run): Cancel asks the engine to stand down (ProcRun's AStandDownGraceMs --
+      it rolls back and exits) and kills the tree only after this many ms.
+      0 (the default) -> a running job is not cancellable, as before.
+      Non-streaming jobs only: a Streaming job ignores it. }
+    CancelGraceMs: Integer ;  // dl:ok public-field@60f2 -- the job record's fields are its public contract, set by the enqueuer like every field above
     constructor Create;
   end;
 
@@ -78,6 +87,9 @@ type
     { Manual-reset; set by Destroy. The running job's child polls it, so a
       shutdown kills that child's tree instead of waiting it out (1.31.6). }
     FCancel  : TEvent;
+    { Manual-reset; the cancel of a CANCELLABLE running job (CancelGraceMs > 0):
+      set by CancelRunning and by Destroy, reset before each job. }
+    FRunCancel: TEvent;
     FState   : TQueueState;
     { Worker thread only: whether THIS deferral episode has been logged.
       Cleared when the hold lifts, so a later hold is reported again. }
@@ -101,6 +113,14 @@ type
     procedure Enqueue(AJob: TDragLintJob);
     /// <summary>Cancel all pending (not-yet-running) jobs; the running one finishes.</summary>
     procedure ClearPending;
+    /// <summary>Cancels the RUNNING job when it takes a cancel (its CancelGraceMs
+    /// &gt; 0): its engine is asked to stand down -- roll back and exit -- and its
+    /// process tree is killed only if it has not exited after CancelGraceMs.</summary>
+    /// <returns>True when a cancel was sent; False when nothing runs, the running
+    /// job takes no cancel, or one was already sent.</returns>
+    /// <remarks>Any thread. The job's OnDone still runs, with the engine's own exit
+    /// code and output (or PROCRUN_CANCELLED_EXIT_CODE after the kill).</remarks>
+    function CancelRunning: Boolean;
     /// <summary>Thread-safe snapshot of the current state.</summary>
     function GetState: TQueueState;
   end;
@@ -237,6 +257,7 @@ begin
   FPending := TObjectList<TDragLintJob>.Create(True { owns });
   FWake    := TEvent.Create(nil, False { auto-reset }, False, '');
   FCancel  := TEvent.Create(nil, True { manual-reset }, False, '');
+  FRunCancel:= TEvent.Create(nil, True { manual-reset }, False, '');
   FShutdown:= False;
   FDeferredLogged:= False;
   FState.Running   := False;
@@ -254,6 +275,9 @@ begin
     nothing. }
   FShutdown:= True;
   if FCancel <> nil then FCancel.SetEvent;
+  { a cancellable job (a cycle-fix --apply) stands down and rolls back rather
+    than being killed mid-write; the join below waits out its grace at most }
+  if FRunCancel <> nil then FRunCancel.SetEvent;
   if FWake <> nil then FWake.SetEvent;
   if FWorker <> nil then
   begin
@@ -263,6 +287,7 @@ begin
   FPending.Free;
   FWake.Free;
   FCancel.Free;
+  FRunCancel.Free;
   FLock.Free;
   inherited;
 end;
@@ -368,14 +393,33 @@ begin
   end;
 end;
 
+function TDragLintJobQueue.CancelRunning: Boolean;
+var
+  Title: string;
+begin
+  FLock.Enter;
+  try
+    Result:= FState.Running and FState.CanCancelRunning;
+    if not Result then Exit;
+    Title:= FState.CurrentTitle;
+    FState.CanCancelRunning:= False; { one cancel per run: the strip disables its button }
+    FRunCancel.SetEvent;
+  finally
+    FLock.Leave;
+  end;
+  LogJobLine('JobQueue: cancel sent to "' + Title + '" (stand down, then kill after the grace)');
+end;
+
 procedure TDragLintJobQueue.RunOne(AJob: TDragLintJob);var
   ExitCode: Integer;
   Output  : string ;
   SB      : TStringBuilder;
   Res     : string ;
+  Cancelled: Boolean; { a cancellable job's Cancel was sent during its run }
 begin
   ExitCode:= 2;
   Output  := '';
+  Cancelled:= False;
   { 2026-10-16: a reindex ran for hours against the WRONG project's DB and
     nothing recorded what was run or how it ended. One line each way. }
   LogJobLine(Format('JobQueue: start "%s": %s', [AJob.Title, AJob.CmdLine]));
@@ -430,7 +474,30 @@ begin
   else
   begin
     SetPercent(-1); { indeterminate -> marquee }
-    ExitCode:= RunCaptureStdout(AJob.CmdLine, Output, AJob.TimeoutMs, FCancel.Handle);
+    if AJob.CancelGraceMs > 0 then
+    begin
+      { a cancellable job: its own cancel event, armed for this run only }
+      FLock.Enter;
+      try
+        FRunCancel.ResetEvent;
+        if FShutdown then FRunCancel.SetEvent; { Destroy already ran past its SetEvent }
+        FState.CanCancelRunning:= True;
+      finally
+        FLock.Leave;
+      end;
+      try
+        ExitCode:= RunCaptureStdout(AJob.CmdLine, Output, AJob.TimeoutMs, FRunCancel.Handle, AJob.CancelGraceMs);
+      finally
+        FLock.Enter;
+        try
+          FState.CanCancelRunning:= False;
+        finally
+          FLock.Leave;
+        end;
+      end;
+      Cancelled:= FRunCancel.WaitFor(0) = wrSignaled;
+    end
+    else ExitCode:= RunCaptureStdout(AJob.CmdLine, Output, AJob.TimeoutMs, FCancel.Handle);
   end;
 
   SetPercent(100);
@@ -452,8 +519,8 @@ begin
   end
   else if ExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
     Res:= Res + Format(': timed out after %d s', [AJob.TimeoutMs div MSecsPerSec])
-  else if ExitCode = PROCRUN_CANCELLED_EXIT_CODE then
-    Res:= Res + ': cancelled'
+  else if (ExitCode = PROCRUN_CANCELLED_EXIT_CODE) or Cancelled then
+    Res:= Res + ': cancelled' { Cancelled: the engine stood down by itself and exited with its own code }
   else if ExitCode = 2 then
     Res:= Res + ': failed'
   { F1 (2026-10-25): `index` exits 1 when a file failed to index (the run carried

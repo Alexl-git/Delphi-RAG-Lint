@@ -37,7 +37,11 @@ type
   //                             facts. Graded ONLY on a decl that HAS a body
   //                             (ImplStartLine > 0); an interface method has no
   //                             body to observe -- see the rule's own comment.
-  //   ddIdentifierGone        - a <c>/<paramref> code identifier no longer present (bounded)
+  //                             Satisfied too by a callee (3 hops), a bodyless
+  //                             callee's own cref contract, or a re-raise in a
+  //                             handler catching the class. FIXABLE only on an
+  //                             engine-written (auto exc) tag.
+  //   ddIdentifierGone       - a <c>/<paramref> code identifier no longer present (bounded)
   //   ddFactsBlockStale       - the managed facts block differs from a fresh render
   //                             (FIXABLE only when this index can VOUCH for what the
   //                             regeneration would delete -- see MakeFinding's call
@@ -207,6 +211,7 @@ implementation
 uses
   System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
   System.IOUtils,
+  System.JSON, { TJSONArray -- BodylessContractDeclares reads exceptions_json }
   { DRagLint.Doc.Facts moved to the INTERFACE uses -- TDocFactsRenderOptions is
     part of Analyze's signature now. It still supplies TDocFactsBuilder here. }
   DRagLint.Refactor.DocStub, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
@@ -669,8 +674,9 @@ end;
   FAIL-SAFE IN ONE DIRECTION ONLY: suppression requires a POSITIVELY mined
   raise in a resolved callee. An unresolved edge (TargetSymbolId = 0, i.e. RTL
   or cross-DB), a missing symbol, or a bodyless callee all leave the finding
-  exactly as it was. Absence of information never silences the rule. The one
-  exception is positive by contract: the shared miner's known OS-error raiser
+  exactly as it was -- unless that bodyless callee's own <exception cref>
+  contract names the class (E17, BodylessContractDeclares). Absence of
+  information never silences the rule. The other exception is positive by contract: the shared miner's known OS-error raiser
   table (RaiseLastOSError / RaiseLastWin32Error / Win32Check / CheckOSError ->
   EOSError, owner ruling D2 2026-10-25), so writer and checker still agree.
   --------------------------------------------------------------------------- }
@@ -687,6 +693,37 @@ const
 {$IF EXCEPTION_VIA_DEPTH > CREF_RAISE_MAX_HOPS}
   {$MESSAGE ERROR 'EXCEPTION_VIA_DEPTH (writer) exceeds CREF_RAISE_MAX_HOPS (doc-drift checker).'}
 {$IFEND}
+
+{ E17 (2026-10-26): a BODYLESS callee -- an interface method above all, or an
+  abstract one -- has nothing to mine, so the walk used to stop there and a
+  cref "propagated from <interface method>" was reported as never raised
+  (TPurityStage.Run -> ISymbolStore.PutEffectFacts). Its own <exception cref>
+  is its CONTRACT, the one place an interface can state it (rule 7 refuses to
+  grade it for exactly that reason), so a contract that names the class is the
+  positive evidence the fail-safe asks for. A bodied callee is never read this
+  way: its body is mined instead. Pinned by
+  tests\lint\run_doc_drift_exception_fps.ps1 RED-2 / CONTROL-3. }
+function BodylessContractDeclares(const AStore: ISymbolStore; ASymbolId: Int64;
+  const ATypeName: string): Boolean;
+begin
+  Result:= False;
+  var Callee: TSymbol:= AStore.GetSymbolById(ASymbolId);
+  if (Callee.Id <= 0) or (Callee.ImplStartLine > 0) then Exit;
+  { GetSymbolDoc carries the crefs only as the stored symbol_docs.exceptions_json
+    text, an array of objects with "type" and "desc"; it never fills .Exceptions. }
+  var Raw: string:= AStore.GetSymbolDoc(ASymbolId).ExceptionsJsonRaw;
+  if Raw = '' then Exit;
+  var V: TJSONValue:= TJSONObject.ParseJSONValue(Raw);
+  try
+    if V is TJSONArray then
+      for var Item in TJSONArray(V) do
+        if (Item is TJSONObject)
+          and SameText(Trim(TJSONObject(Item).GetValue<string>('type', '')), ATypeName) then
+          Exit(True);
+  finally
+    V.Free;
+  end;
+end;
 
 function CalleeRaisesType(const AStore: ISymbolStore; const ASym: TSymbol;
   const ATypeName: string; var ACallEdges: TArray<TCallEdge>;
@@ -731,6 +768,7 @@ begin
       if (E.TargetSymbolId > 0) and not Visited.ContainsKey(E.TargetSymbolId) then
       begin
         Visited.Add(E.TargetSymbolId, True);
+        if BodylessContractDeclares(AStore, E.TargetSymbolId, ATypeName) then Exit(True);
         Frontier:= Frontier + [E.TargetSymbolId];
       end;
     for var Hop: Integer:= 2 to CREF_RAISE_MAX_HOPS do
@@ -748,6 +786,7 @@ begin
           begin
             if Visited.Count >= CREF_RAISE_MAX_VISITS then Exit(False); { bounded: report }
             Visited.Add(E.TargetSymbolId, True);
+            if BodylessContractDeclares(AStore, E.TargetSymbolId, ATypeName) then Exit(True);
             Next:= Next + [E.TargetSymbolId];
           end;
       end;
@@ -1126,8 +1165,26 @@ begin
     // <exception cref> is correct. H2 (2026-10-25): up to THREE hops, bounded
     // and cycle-safe. See CalleeRaisesType above for the fail-safe rules and
     // for why the cheap carve-out is not used.
+    //
+    // E17 (2026-10-26), two more positive facts, both pinned by
+    // tests\lint\run_doc_drift_exception_fps.ps1:
+    //  * A RE-RAISE (`raise;` or `raise E` of the handler variable) in a handler
+    //    that catches the documented class, or catches everything (`on E:
+    //    Exception`, an `else` arm, a bare `except` -- MineHandlers names all
+    //    three 'Exception'), lets that class escape. The miner records no class
+    //    for a bare `raise;`, so ExecAdditiveDDL's
+    //    `except on E: Exception do if ... then raise;` was reported for the one
+    //    cref its whole contract is about. A narrower handler (`on E: EBar`)
+    //    satisfies only an EBar cref; a handler that does not re-raise satisfies
+    //    nothing.
+    //  * An ENGINE-WRITTEN tag (body starts with AUTO_EXC) that no longer holds is
+    //    FIXABLE: the regenerating --fix re-emits an AUTO_EXC tag only while the
+    //    body still raises the class (TDocRegions.MergeComment), so it drops this
+    //    one. A hand-written tag stays report-only -- a human decides.
     var XEdges: TArray<TCallEdge>:= nil;
     var XEdgesLoaded: Boolean:= False;
+    var XHandlers: TArray<TDocHandlerFact>:= nil;
+    var XHandlersLoaded: Boolean:= False;
     for DE in ADoc.Exceptions do
       if (Trim(DE.TypeName) <> '') and (ASym.ImplStartLine > 0) then
       begin
@@ -1138,9 +1195,23 @@ begin
           and CalleeRaisesType(AStore, ASym, DE.TypeName, XEdges, XEdgesLoaded) then
           Raised:= True;
         if not Raised then
+        begin
+          if not XHandlersLoaded then
+          begin
+            XHandlers:= TDocFactsBuilder.MineHandlers(AStore, ASym);
+            XHandlersLoaded:= True;
+          end;
+          for var H in XHandlers do
+            if H.Reraises and (SameText(H.ExcClass, 'Exception') or SameText(H.ExcClass, DE.TypeName)) then
+            begin
+              Raised:= True;
+              Break;
+            end;
+        end;
+        if not Raised then
           Findings.Add(MakeFinding(ddExceptionNotRaised,
             Format('documented <exception cref="%s"> but the body never raises it', [DE.TypeName]),
-            False, DocLine));
+            StartsStr(AUTO_EXC, TrimLeft(DE.Desc)), DocLine));
       end;
 
     // --- 8. ddIdentifierGone: a code-marked identifier (in summary/remarks) ----

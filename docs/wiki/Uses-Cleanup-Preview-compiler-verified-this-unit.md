@@ -38,7 +38,7 @@ Each try is a real compile of the unit, so expect seconds to a minute or more
 for a large unit.
 
 ## Reaching it in the IDE
-drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...
+drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...
 
 ## What it needs
 Required. You must have indexed the project first.

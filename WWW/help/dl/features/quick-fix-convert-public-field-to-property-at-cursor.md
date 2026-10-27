@@ -5,16 +5,16 @@ summary: Rewrites a public field under the caret as a property
 product: DL
 group: refactoring
 order: 50008
-since: 0.0.0
+since: 1.2.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Quick-Fix: Convert Public Field to Property at Cursor
 
 Rewrites a public field under the caret as a property.
 
-Read this when you are tightening a class public surface. With the caret on a public field, this rewrites it as a property.
+Read this when you are tightening a class public surface. With the caret on a lone public field such as Name: TType;, this turns it into a private FName plus a read/write property Name, so existing callers need no change.
 
 ## Where to click
 
@@ -30,9 +30,6 @@ tightening up a class's public surface.
 
 ### Running it from the CLI
 No CLI equivalent - this action is in-process only.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Quick-Fix: Convert Public Field to Property at Cursor
 
 ### What it needs
 n/a. This action runs in-process against the open editor buffer; the feature

@@ -11,7 +11,7 @@ drag-lint check-ast <file> [--db PATH] [--format text|json]
 selects `text` or `json` output.
 
 ## Reaching it in the IDE
-drag-lint > Run AST Checks
+Open the About window (drag-lint > About) and click the Run AST Checks button.
 
 ## What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

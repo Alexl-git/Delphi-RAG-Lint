@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "1.8.0-alpha",
   "summary": "Case-insensitive substring search over symbol names",
   "intro": "Read this when you do not know the identifier yet. It does a case-insensitive substring search over symbol names, so a fragment such as SVG finds the types that matter.",
   "wikiPage": "query-name-like",
@@ -52,9 +52,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
   }
 }

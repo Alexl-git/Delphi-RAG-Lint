@@ -5,9 +5,9 @@ summary: "This page documents the \"View > Tool Windows > drag-lint\" menu entry
 product: DL
 group: editor-integration
 order: 110001
-since: 0.2.0-alpha
+since: 0.42.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # drag-lint
@@ -30,11 +30,6 @@ Tool Windows menu instead of the drag-lint menu. It is the same panel as
 [drag-lint Panel (dockable)](drag-lint-panel-dockable.md); see that page for
 the drag-lint-menu path to it. For the product overview, see the wiki
 Home page.
-
-### Reaching it in the IDE
-View > Tool Windows > drag-lint
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 There is no standalone CLI verb for this (feature map CliVerb:

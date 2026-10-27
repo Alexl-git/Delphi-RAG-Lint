@@ -5,16 +5,16 @@ summary: "A worked example: a real four-unit uses cycle, and the report drag-lin
 product: DL
 group: graphs-reports
 order: 70004
-since: 0.0.0
+since: 1.4.0-alpha
 status: shipped
-updated: 1.34.1-alpha
+updated: 1.35.1-alpha
 ---
 
 # Circular Dependency Report (worked example)
 
 A worked example: a real four-unit uses cycle, and the report drag-lint produces for it.
 
-Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index.
+Read this to see what a circular uses report looks like before you run one. It walks through a real four-unit uses cycle and the report drag-lint produces for it, every line taken from the index, and shows which cycles the playbook cuts and which it leaves to you.
 
 ## Where to click
 
@@ -81,8 +81,11 @@ a three-unit one (`DemoBlueprint -> DemoBlueprint.ViewModel -> DemoControlPlan
 two-unit one (`DemoUIConnect <-> DemoGagePort`) whose only cheap cut is a
 **member access** behind `is` / `as`. Nothing on either is a plain constant or
 variable, so the playbook's "move the globals into a leaf" recipe does not
-apply; the report says so per edge, and refuses them. What a wider recipe would
-do with them is written up in `circular-demo/CYCLE-REPORT.md`.
+apply; the report says so per edge and uses a wider recipe instead: a
+**routine-call inversion** for the three-unit cycle and a **member hand-over**
+through an extracted interface for the two-unit one (the latter reads class
+ancestry from the platform library index; without one it is refused). Both are
+written up in `circular-demo/CYCLE-REPORT.md`.
 
 ### Reproduce it yourself
 
@@ -153,8 +156,10 @@ Applied literally (a script that only knows the playbook's own markup), Part A
 compiles and `cycles` prints the predicted three groups, the four-unit one now
 implementation-only; re-running `--plan` then prints Part B, which moves
 `TDemoSettings` + `GDemoSettings` into `DemoConfig.Untangle`, compiles, and
-leaves only the two cycles the playbook refuses. The program's output is
-unchanged throughout.
+leaves the edges Part B calls not mechanical (`demologger -> demosession` and
+`demosession -> demoaudit`: a global whose class cannot move), which stay human
+decisions; the three-unit and two-unit cycles are cut by the playbook itself.
+The program's output is unchanged throughout.
 The full, unabridged report -- regenerated from the current engine and checked
 for drift -- lives in the repository at
 `circular-demo/CYCLE-REPORT.md`.

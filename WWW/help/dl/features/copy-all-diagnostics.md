@@ -7,7 +7,7 @@ group: linting
 order: 30001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Copy All Diagnostics
@@ -47,14 +47,6 @@ Puts every lint finding for the current unit onto the clipboard, starting
 from the Structure form. Reach for it when you want to paste a unit's full
 findings list elsewhere (a chat, an issue, a note) instead of reading them
 in the IDE.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a tree node and choose "Copy All Diagnostics".
 
 ### What lands on the clipboard
 

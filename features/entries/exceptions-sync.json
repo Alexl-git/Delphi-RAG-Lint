@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.8.0-alpha",
   "summary": "Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites",
-  "intro": "Read this when a project raises bare Exception.Create with literal messages and you want one named exception class per distinct message. It runs as a dry run, and --apply writes the classes into a managed block in your exceptions unit; the raise sites are then rewritten by lint --fix.",
+  "intro": "Read this when a project raises bare Exception.Create with literal messages and you want one named exception class per distinct message. It is opt-in: add an \"exceptions\" block to drag-lint-lint.json (an empty one is enough; without it the verb says the feature is off and exits 0). It runs as a dry run, and --apply writes the classes into a managed block in your exceptions unit; the raise sites are then rewritten by `drag-lint lint <file> --fix --fix-rule raise-bare-exception [--apply]`.",
   "wikiPage": "Features",
   "surfaces": [
     {
@@ -51,9 +51,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "96d32fdb560ebad248e0f3f0f134fa47a4a4c1c9ee8249d8dea6fe3822b564a8"
   }
 }

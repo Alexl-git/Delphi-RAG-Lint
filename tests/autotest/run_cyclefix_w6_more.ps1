@@ -260,7 +260,7 @@ try {
     [IO.File]::WriteAllBytes($f, [Text.Encoding]::GetEncoding(28591).GetBytes($s.Replace('<summary>Read', "<summary>Gr$([char]0xF6)$([char]0xDF)e: read"))) }
   $naDb = Join-Path $WorkDir 'na.sqlite'
   $null | & $Exe index --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb *> (Join-Path $WorkDir 'index-na.log')
-  $naOut = & $Exe cycles --fix --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | Out-String
+  $naOut = & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | Out-String
   $naCode = $LASTEXITCODE
   Check 'na the dry run (it BUILDS the shadow tree) is exit 0 with no non-ascii-text refusal' (($naCode -eq 0) -and -not $naOut.Contains('non-ascii-text')) ("exit=$naCode " + ($naOut.Trim() -replace "`r?`n", ' '))
  }
@@ -270,7 +270,7 @@ try {
   Copy-Tree (Join-Path $Fx 'tiebreak') $rsRoot
   $rsDb = Join-Path $WorkDir 'rsv.sqlite'
   $null | & $Exe index --project (Join-Path $rsRoot 'TieBreak.dproj') --db $rsDb *> (Join-Path $WorkDir 'index-rsv.log')
-  $fixArgs = @('cycles', '--fix', '--project', (Join-Path $rsRoot 'TieBreak.dproj'), '--db', $rsDb, '--library-db', 'none', '--format', 'json')
+  $fixArgs = @('cycles', '--fix', '--build-timeout', '1800', '--project', (Join-Path $rsRoot 'TieBreak.dproj'), '--db', $rsDb, '--library-db', 'none', '--format', 'json')
   $savedBds = $env:BDS
   try {
     $env:BDS = Join-Path $WorkDir 'no-studio-here'   # TStudioEnv takes the root from BDS first: a root without rsvars.bat

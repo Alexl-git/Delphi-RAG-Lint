@@ -31,17 +31,38 @@ before working on an item.**
   capability) or decode the escapes; add a model test with a non-ASCII name before re-pinning.
 * 2026-10-26: L2 #migrate D5 + D6-B merged; ENGINE lane CONV (pre-run encoding question) reviewed +
   merged 45d84771. Its follow-ups (CONVERTER, review a1514a9a, all minor):
-  * **ENC-N1** (M) narrow `ConvertEncoding.BookPlaces` (:172-211) to lines of #convert blocks that apply to
-    the unit (match headers against `Inheritance.AnalyzeUnits` / `ListDfmInstances` / `AncestorChain`;
-    needs the book parsed through Model; decide units without a .dfm). Today any non-comment line
-    counts -> a needless (lossless) raise.
-  * **ENC-N2** (S) Yes path: `PreRunQuestion` (:258-266) shows 20 places + "and N more"; also leave
-    every place as note rows on Yes (No/Cancel already do). Cancel adds note rows then says
-    "cancelled" -- drop them on Cancel.
-  * **ENC-N3** (S) rule text `Copy(Trim(Line),1,80)` (:202) can cut the offending char off: window
-    the excerpt around the column.
-  * **ENC-N4** (S, perf) `JobRunsBatched` (ConvertRunner.pas:911/1084) goes per-unit for the whole job
-    once any RaiseFiles exist: batch the units without a raise.
+  * **ENC-N1** DONE (lane N13, branch conv/n13-bookplaces): `EncodingPlacesFor` + `FromTypeApplier`.
+    A #convert block's own lines (header, #link, #default, #ignore, #remove, #migrate, #apply, #tag,
+    #warn, #check-ref) count only for a unit whose text .dfm headers (`ListDfmInstances`), .pas
+    identifiers or C8 verdicts (`InheritanceOf`) name its From type; book-scope lines, unit
+    directives, #mapping, #note, pcre/unknown lines always count. DECISION (units without a .dfm):
+    they get the blocks their .pas / C8 analysis names (runtime creators, code uses); a binary or
+    unreadable .dfm, or an unreadable .pas, = every block applies (needless question, never a missed one).
+  * **ENC-N2** DONE (lane N2, 34663029): `TPreRunPlan.Notes` + `PlaceNoteText`; Yes keeps every place
+    as note rows, Cancel adds none (even after an earlier Yes).
+  * **ENC-N3** DONE (lane N13): `RuleExcerpt` windows 80 chars around the column, '...' on a cut
+    side, never splits a surrogate pair.
+  * **ENC-N4** DONE (lane N4, 75fc2309): `BatchSplit` batches the unraised units, raised ones run
+    per-unit; `ContinuedStep`/`RunMixedParts` keep one total and continued steps; `PerUnitPartMayStart`
+    skips the per-unit part after a batch stop/cancel.
+* 2026-10-26 (night) ready-wave CLOSED: W0 re-pin 1.35.1-alpha-20261026-134311 (SHA256 92E4655A...),
+  HLP 677ba1a3, N13 f5c01c3c, N2 34663029, N4 75fc2309, DRV fa80b602 (driver audit: WaitCls 0-timeout,
+  stale status, WaitIdle before Convert, convert-encoding lost first copy). main: 2950/0/20 no engine,
+  3068/0/0 with the pin; lint 0 on the wave's changed lines. Follow-ups:
+  * **READY: name-drop workaround removal** -- ENGINE (2026-10-26) says 1.35.1 already binds cross-unit
+    implicit-Self reads/writes of inherited fields (7 shapes; guard lands with 1.36.0). Limit: members
+    of a LIBRARY ancestor (TForm.Tag) still need the library store attached.
+  * **DRV-1** (S) drive-save-encoding `save.nonascii.asks` read '' from the warning (1 of 3 runs): same
+    lost-first-copy race DRV fixed in convert-encoding -- port the copy retry.
+  * **DRV-2** (S) drive-convert-tab N1/N7 precondition "progress window never appeared" (2 of 3 runs):
+    the engine call is too fast to catch; make the fixture slower or hold the window deterministically.
+  * **DRV-3** (M) FAIL on main before the wave: owning-open 3/6 (`owning.row.found` picks the Work-list
+    filter list), glyph-link 22/1 (`glyph.open.good` no "Loaded" in 30 s).
+  * **DRV-4** (S) gui.lock needs a heartbeat: a 30-min takeover broke a 38-min run (two editors).
+  * **DRV-5** (S) glyph-link, inherited-offer, qualify-fix, work-list do not ask the editor's busy
+    message (`ConvRulesEditor.Busy`) as the kit claims every driver does.
+  * **N4-1** (S) no GUI case for a mixed raise (some units refused): needs a fixture; 14 model checks cover it.
+  * **N13-1** (low) `BookPlaces` splits on LF only; the model also splits on a lone CR.
 
 ## State 2026-10-23 (autonomous run 20261023-1100-converter3d) -- historical
 

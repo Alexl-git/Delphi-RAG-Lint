@@ -165,7 +165,7 @@ type
     destructor Destroy; override;
     procedure SetRange(AFromLine, AFromCol, AToLine, AToCol: Integer);
     procedure Walk(const ARoot: TTSNode);
-    procedure WalkSource;
+    procedure WalkSource(const AFile: string);
   end;
 
 constructor THintWalker.Create(const ASource: TBytes; const AStores: TArray<ISymbolStore>; AResult: TJSONArray);
@@ -317,9 +317,9 @@ begin
   end;
 end;
 
-procedure THintWalker.WalkSource;
+procedure THintWalker.WalkSource(const AFile: string);
 begin
-  var Tree: TTSTree:= ParseDelphiUtf8(FSource);
+  var Tree: TTSTree:= ParseDelphiUtf8(FSource, AFile);
   try
     if Tree <> nil then Walk(Tree.RootNode);
   finally
@@ -380,7 +380,7 @@ begin
       var W: THintWalker:= THintWalker.Create(Source, Stores, Res);
       try
         W.SetRange(L0, C0, L1, C1);
-        W.WalkSource;
+        W.WalkSource(Path);
       finally
         W.Free;
       end;

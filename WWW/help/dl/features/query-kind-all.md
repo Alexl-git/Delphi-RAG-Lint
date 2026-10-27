@@ -5,9 +5,9 @@ summary: Lists every symbol of one kind -- every unit, every class, every enum -
 product: DL
 group: search-navigation
 order: 20019
-since: 0.1.0-alpha
+since: 1.19.1-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query --kind --all
@@ -29,6 +29,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--json` |  |  |  |
 | `--case-sensitive` |  |  |  |
 | `--exact` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Pitfalls
 
@@ -55,10 +59,6 @@ with its file.
 Do not use `query find --no-docs --kind unit` for this: `--no-docs` is a
 FILTER that keeps only UNDOCUMENTED symbols. On a library index it listed
 2,103 of 5,646 units. `sql` works too, but its default row cap is 200.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

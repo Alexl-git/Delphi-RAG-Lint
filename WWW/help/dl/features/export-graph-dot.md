@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70009
 since: 0.6.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Export Graph (DOT)
@@ -50,9 +50,6 @@ drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>]
 ```
 `--format` selects `dot` or `mermaid`; `--name` roots the graph at a
 substring match; `--output` writes to a file instead of stdout.
-
-### Reaching it in the IDE
-drag-lint > Generate & Export > Export Graph (DOT)...
 
 ### What it needs
 An index IS required. The project's DB lives at

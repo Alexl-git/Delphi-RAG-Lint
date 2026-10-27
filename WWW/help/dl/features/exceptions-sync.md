@@ -7,14 +7,14 @@ group: linting
 order: 30005
 since: 1.8.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # exceptions-sync
 
 Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites.
 
-Read this when a project raises bare Exception.Create with literal messages and you want one named exception class per distinct message. It runs as a dry run, and --apply writes the classes into a managed block in your exceptions unit; the raise sites are then rewritten by lint --fix.
+Read this when a project raises bare Exception.Create with literal messages and you want one named exception class per distinct message. It is opt-in: add an "exceptions" block to drag-lint-lint.json (an empty one is enough; without it the verb says the feature is off and exits 0). It runs as a dry run, and --apply writes the classes into a managed block in your exceptions unit; the raise sites are then rewritten by `drag-lint lint <file> --fix --fix-rule raise-bare-exception [--apply]`.
 
 ## How to run it
 
@@ -32,6 +32,10 @@ Full flag list: [exceptions-sync in the CLI reference](../cli.md#exceptions-sync
 | `--config` | `<lint.json>` |  |  |
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ---
 

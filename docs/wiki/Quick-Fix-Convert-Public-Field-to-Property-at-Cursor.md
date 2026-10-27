@@ -7,7 +7,7 @@ tightening up a class's public surface.
 No CLI equivalent - this action is in-process only.
 
 ## Reaching it in the IDE
-drag-lint > Uses & Dependencies > Quick-Fix: Convert Public Field to Property at Cursor
+drag-lint > Convert Public Field to Property at Cursor
 
 ## What it needs
 n/a. This action runs in-process against the open editor buffer; the feature

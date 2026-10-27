@@ -67,12 +67,22 @@ const
 /// <returns>The page text with LF line ends: front matter, title, summary, intro, How to run it, Where to click, Needs,
 /// Details and the footer. When the wiki body has its own "Running it from the CLI" or "Usage" section, How to run it keeps
 /// only the link to cli.md. A cli surface usage field replaces the --help line; flags render as a Flags table; pitfalls as a
-/// Pitfalls list; steps as a numbered list under the surface bullet.</returns>
+/// Pitfalls list; steps as a numbered list under the surface bullet. Where to click is derived from the surfaces alone
+/// (G-1): the wiki body's own "Reaching it in the IDE" section is dropped from Details, and an entry with a cli surface
+/// but no ide-menu / ide-context / ide-about / tool-window surface gets the line "No IDE surface: this feature runs from
+/// the CLI (see How to run it)."</returns>
 /// <exception cref="EFeatureGen">The wiki body holds raw HTML or a non-ASCII character, or a front matter key is unknown.</exception>
 /// <remarks>updated is UPDATED_TOKEN when pFmt.Version is set (BuildSite then settles it per page, see TSitePages); otherwise verified.build, else LastVerifiedBuild, else Since. order is the group order times 1000 plus the 1-based place among the
 /// site entries of the group (ordinal by id); index.json carries the same number.</remarks>
 function RenderLeaf(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry; const pRepo: string;
   out pImages: TArray<TImageRef>): string;
+
+/// <summary>A markdown text without one section: the heading whose text is pHeading and every line up to the next
+/// heading of any level.</summary>
+/// <param name="pBody">Markdown, CRLF or LF.</param>
+/// <param name="pHeading">The heading text, compared case-insensitively.</param>
+/// <returns>pBody with LF line ends minus the section; unchanged (but LF) when there is no such heading.</returns>
+function DropMarkdownSection(const pBody, pHeading: string): string;
 
 /// <summary>Writes the whole website set through the writer.</summary>
 /// <param name="pRepo">Repo root (features\, docs\wiki\, docs\Images\).</param>
@@ -382,6 +392,43 @@ begin
     Result := '## Pitfalls'#10#10 + Result + #10;
 end;
 
+const
+  /// <summary>The wiki heading whose section RenderLeaf drops (G-1).</summary>
+  IDE_SECTION_HEADING = 'Reaching it in the IDE';
+  NO_IDE_SURFACE_LINE = 'No IDE surface: this feature runs from the CLI (see How to run it).';
+
+function HasCliSurface(const pEntry: TFeatureEntry): Boolean;
+var
+  lS: TSurface;
+begin
+  for lS in pEntry.Surfaces do
+    if lS.Kind = 'cli' then
+      Exit(True);
+  Result := False;
+end;
+
+function DropMarkdownSection(const pBody, pHeading: string): string;
+var
+  lKept: TList<string>;
+  lSkip: Boolean;
+  lL: string;
+begin
+  lSkip := False;
+  lKept := TList<string>.Create;
+  try
+    for lL in pBody.Replace(#13#10, #10).Split([#10]) do
+    begin
+      if TRegEx.IsMatch(lL, '^#{1,6}\s') then
+        lSkip := SameText(TRegEx.Replace(lL, '^#{1,6}\s+', '').Trim, pHeading);
+      if not lSkip then
+        lKept.Add(lL);
+    end;
+    Result := string.Join(#10, lKept.ToArray);
+  finally
+    lKept.Free;
+  end;
+end;
+
 function WhereToClick(const pEntry: TFeatureEntry): string;
 var
   lS: TSurface;
@@ -405,6 +452,9 @@ begin
     for lI := 0 to High(lS.Steps) do
       Result := Result + '   ' + IntToStr(lI + 1) + '. ' + lS.Steps[lI] + #10;
   end;
+  // G-1: the IDE answer is derived from the surfaces alone; a CLI feature with none says so here
+  if (Result = '') and HasCliSurface(pEntry) then
+    Result := NO_IDE_SURFACE_LINE + #10;
   if Result <> '' then
     Result := '## Where to click'#10#10 + Result + #10;
 end;
@@ -429,6 +479,8 @@ begin
       lMap.Load(pReg, pFmt);
       lBody := TFile.ReadAllText(lWikiFile, TEncoding.UTF8);
       lHasCliSection := TRegEx.IsMatch(lBody, '(?im)^#{1,6}[ \t]+(Running it from the CLI|Usage)[ \t]*\r?$');
+      // G-1: "Where to click" is derived from the surfaces; the hand-written section could contradict it
+      lBody := DropMarkdownSection(lBody, IDE_SECTION_HEADING);
       lBody := TransformWikiBody(lBody, lMap, pEntry.Id, pImages, pFmt.FenceDefaultLang, pRepo);
     finally
       lMap.Free;

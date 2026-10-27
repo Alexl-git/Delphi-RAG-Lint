@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70011
 since: 0.25.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Find Dead Code
@@ -47,9 +47,6 @@ drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db P
 ```
 `--kind` filters by symbol kind (for example `method` or `function`);
 `--include-private` also considers private members.
-
-### Reaching it in the IDE
-drag-lint > Code Quality > Find Dead Code...
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

@@ -7,7 +7,7 @@ group: search-navigation
 order: 20001
 since: 0.91.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # call-path
@@ -52,9 +52,6 @@ drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]
 `--from <A>` and `--to <B>` are qualified symbol names. `--max-depth N`
 bounds the search. Exit code 1 means no path was found. `--json` emits
 machine-readable output.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required. The project's DB lives at

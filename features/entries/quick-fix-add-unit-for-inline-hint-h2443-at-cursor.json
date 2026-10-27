@@ -4,9 +4,9 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.2.0-alpha",
   "summary": "The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope",
-  "intro": "Read this when the compiler raises hint H2443 because an inline routine comes from a unit that is not in scope. With the caret on it, this adds the missing unit to the uses clause.",
+  "intro": "Read this when the compiler raises hint H2443 because an inline routine comes from a unit that is not in scope. With the caret on the flagged line, this adds the missing unit to the implementation uses clause; the H2443 finding must already be cached by a compile-check run.",
   "wikiPage": "Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor",
   "surfaces": [
     {
@@ -28,9 +28,9 @@
   ],
   "notes": "seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "ec8ce5d07f5b0068cd8006d0a3f575cb609245d2c8d27b3ef41a541424d45595"
   }
 }

@@ -35,6 +35,7 @@ uses
   System.Diagnostics,
   Winapi.Windows,
   Winapi.TlHelp32,
+  DRagLint.Core.ControlChannel in '..\src\core\DRagLint.Core.ControlChannel.pas',
   DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas';
 
 const

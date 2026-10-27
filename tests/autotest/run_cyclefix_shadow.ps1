@@ -97,7 +97,7 @@ function Run-Case([string]$Tag, [string[]]$Select, [string]$LibArg) {
   & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
   Check "${Tag}: demo indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $hashBefore = Get-TreeHash $proj
-  $out = (& $Exe cycles --fix --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
+  $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
     --no-compile --library-db $LibArg --shadow-out $shadow --format json 2>$null | Out-String)
   $code = $LASTEXITCODE
   $j = try { $out | ConvertFrom-Json } catch { $null }
@@ -190,7 +190,7 @@ try {
   $fake2 = 'planted' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
   $pl2 = Join-Path $ProductRoot "draglint_cyclefix_$fake2"; New-Item -ItemType Directory -Force $pl2 | Out-Null; [IO.File]::WriteAllText((Join-Path $pl2 'marker.txt'), 'keep me')
   $env:DRAGLINT_TEST_SCRATCH_PID = $fake2
-  try { $null = (& $Exe cycles --fix --db $ddb --library-db none 2>$null | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
+  try { $null = (& $Exe cycles --fix --build-timeout 1800 --db $ddb --library-db none 2>$null | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
   Check 'c6: a --fix run that fails validation (no --project: exit 2) leaves the planted dir alone' ($code4 -eq 2 -and (Test-Path (Join-Path $pl2 'marker.txt'))) "exit=$code4"
   if (Test-Path $pl2) { [IO.Directory]::Delete($pl2, $true) }
   $own = Join-Path $WorkDir 'c4-own-shadow'
@@ -208,7 +208,7 @@ try {
     $env:DRAGLINT_TEST_SCRATCH_PID = $fk
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
     try {
-      $o = (& $Exe cycles --fix --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf | Out-String)
+      $o = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf | Out-String)
       $code = $LASTEXITCODE
     } finally {
       $env:DRAGLINT_TEST_SCRATCH_PID = $null
@@ -270,7 +270,7 @@ try {
     $errf = Join-Path $WorkDir "$Tag-stderr.txt"
     foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
     try {
-      $out = (& $Exe cycles --fix --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
+      $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
         --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>$errf | Out-String)
       $code = $LASTEXITCODE
       $err = [IO.File]::ReadAllText($errf)
@@ -299,6 +299,15 @@ try {
   Check 'e1: the new unit is staged with the UTF-8 BOM' ($nb.Length -gt 3 -and $nb[0] -eq 0xEF -and $nb[1] -eq 0xBB -and $nb[2] -eq 0xBF) "units=$($nu.Count)"
   Check 'e1: the copied text survives as UTF-8 (S e-acute v ...)' (([Text.Encoding]::UTF8.GetString($nb)).Contains('S' + [char]0xE9 + 'v' + [char]0xE9 + 'rit' + [char]0xE9)) ''
 
+  Write-Host '== e1b (C6): a cp1252 char in a line the recipe REPLACES in an existing ANSI file (representable: no refusal)' -ForegroundColor Cyan
+  # 0xE9 in the trailing comment of DemoConfig.pas's `DemoLogger;` uses entry, which Part A rewrites to `DemoLogger.Untangle;`.
+  $r = Run-Patched 'e1b' { param($p) Patch-Bytes (Join-Path $p 'DemoConfig.pas') 'DemoLogger;' ([byte[]](0x44,0x65,0x6D,0x6F,0x4C,0x6F,0x67,0x67,0x65,0x72,0x3B,0x20,0x2F,0x2F,0x20,0x63,0x61,0x66,0xE9)) }
+  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  Check 'e1b: exit 0, mechanical (no non-ascii-text refusal: cp1252 represents e-acute)' ($r.Exit -eq 0 -and $r.Json -and $r.Json.cycles[0].verdict -eq 'mechanical' -and -not ($kinds -contains 'non-ascii-text')) $r.Out
+  $cb = if (Test-Path (Join-Path $r.Shadow 'DemoConfig.pas')) { [IO.File]::ReadAllBytes((Join-Path $r.Shadow 'DemoConfig.pas')) } else { [byte[]]@() }
+  Check 'e1b: the staged DemoConfig.pas stays ANSI (no BOM) and keeps the 0xE9 byte on the rewritten uses line' ($cb.Length -gt 3 -and -not ($cb[0] -eq 0xEF -and $cb[1] -eq 0xBB) -and ([Text.Encoding]::GetEncoding(28591).GetString($cb)).Contains('DemoLogger.Untangle; // caf' + [char]0xE9)) "bytes=$($cb.Length)"
+  # No positive control for the refusal itself: every byte of an ANSI file round-trips through its code page, so the
+  # non-ascii-text gate is reachable only for text copied from a UTF-8 file into an ANSI one (none of the recipes does that today).
   Write-Host '== e2: a UTF-8 BOM file keeps its BOM and bytes outside the edits' -ForegroundColor Cyan
   $r = Run-Patched 'e2' { param($p)
     $f = Join-Path $p 'DemoLogger.pas'

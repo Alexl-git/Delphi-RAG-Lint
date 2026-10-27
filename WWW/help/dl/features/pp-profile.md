@@ -7,7 +7,7 @@ group: indexing
 order: 10003
 since: 0.92.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # pp-profile
@@ -27,6 +27,10 @@ Full flag list: [pp-profile in the CLI reference](../cli.md#pp-profile).
 | `--dproj` | `PATH` |  |  |
 | `--platform` |  |  |  |
 | `--config` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -53,9 +57,6 @@ what this prints is what the indexer parses.
 
 This is labeled a "diagnostic" in the CLI banner -- it is a troubleshooting
 tool, not a daily driver.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 No index required -- `pp-profile` takes no `--db` flag; it resolves the

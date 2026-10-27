@@ -4,15 +4,15 @@
   "group": "compiler",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
-  "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
-  "intro": "Read this when you want compiler diagnostics for edits you have not saved yet. It compiles the project with the current editor buffer substituted for its file on disk, then restores the original file unchanged.",
+  "since": "0.47.0-alpha",
+  "summary": "Compiles a project with the current editor buffer's unsaved content in place of its file on disk, from a temporary shadow folder, without writing any real file",
+  "intro": "Read this when you want compiler diagnostics for edits you have not saved yet. By default it copies the unsaved buffer into a temporary shadow folder and compiles the project there, so no real file is written or touched; the old overlay-and-restore behaviour is only available from the command line as ghost-check --in-place.",
   "wikiPage": "Compile-Buffer-unsaved",
   "surfaces": [
     {
       "type": "ide-menu",
       "path": "drag-lint > Compile Buffer (unsaved)",
-      "steps": ["Edit a unit in the editor without saving", "Choose drag-lint > Compile Buffer (unsaved)", "The project compiles with the buffer substituted for the file on disk; the original file is restored unchanged afterwards"]
+      "steps": ["Edit a unit in the editor without saving", "Choose drag-lint > Compile Buffer (unsaved)", "The buffer is staged in a temporary shadow folder and the project compiles there; the file on disk is never written, so there is nothing to restore"]
     }
   ],
   "audience": "both",
@@ -24,9 +24,9 @@
   ],
   "notes": "seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "23434adeb49f37ca5b342c763cf57dce718fc1c5a000d6b4774de49acbfb02b1"
   }
 }

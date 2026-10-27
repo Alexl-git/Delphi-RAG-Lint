@@ -7,7 +7,7 @@ group: component-conversion
 order: 60012
 since: 1.15.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # glyph-vacuum
@@ -28,6 +28,10 @@ Full flag list: [glyph-vacuum in the CLI reference](../cli.md#glyph-vacuum).
 | `--output` | `DIR` |  |  |
 | `--append` |  |  |  |
 | `--db` | `PATH` |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
@@ -50,10 +54,6 @@ result files; `--append` adds this run to a measurement already there instead of
 In the output folder: `instances.tsv` (one row per streamed graphic), `classes.tsv` (one row per
 wrapper class), `skipped.tsv` (blobs it could not decode, with the reason) and an `images\`
 folder with the decoded pictures.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature. The glyph expressions of a rule book
-(`G[I/N]`) are authored in the ConvRulesEditor; see [ConvRulesEditor](convrules-editor.md).
 
 ### What it needs
 The folders to scan. An index is optional (`--db`).

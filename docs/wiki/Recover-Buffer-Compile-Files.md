@@ -16,7 +16,7 @@ drag-lint ghost-recover "<project>"
 ```
 
 ## Reaching it in the IDE
-drag-lint > Recover Buffer-Compile Files
+Open the About window (drag-lint > About) and click the Recover Buffer-Compile Files button.
 
 ## What it needs
 The feature map marks this row's Index column "n/a". It needs the project

@@ -103,8 +103,8 @@ try {
   Write-Host '-- T: time limits (fix round 1, R1)' -ForegroundColor Cyan
   # A kill at the plugin's limit takes engine + msbuild/dcc down mid-apply, past the engine's own
   # rollback; the plugin's limit must therefore sit ABOVE the engine's 30 min build timeout.
-  Check 'T1 CYCLE_FIX_TIMEOUT_MS is 130 min (run_cyclefix_timeouts.ps1 pins it above the engine)' ($kv['timeout.cyclefix'] -eq '7800000') "got: $($kv['timeout.cyclefix'])"
-  Check 'T2 ... which is above the engine''s 30 min build timeout' ([int]"0$($kv['timeout.cyclefix'])" -gt 1800000) "got: $($kv['timeout.cyclefix'])"
+  Check 'T1 CYCLE_FIX_TIMEOUT_MS is 0 = no limit (owner ruling 2026-10-26; run_cyclefix_timeouts.ps1)' ($kv['timeout.cyclefix'] -eq '0') "got: $($kv['timeout.cyclefix'])"
+  Check 'T2 ... and the engine runs IDE jobs without --build-timeout (unbounded builds, Cancel stops them)' (-not ($kv.Values -match '--build-timeout')) ''
   $frameSrc  = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.UsesDepsFrame.pas'))
   $editorSrc = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
   Check 'T3 the other Uses & Deps sections keep 180 s (ENGINE_TIMEOUT_MS, used by RunEngine)' `

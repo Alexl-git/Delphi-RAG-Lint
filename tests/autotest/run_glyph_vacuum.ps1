@@ -608,6 +608,21 @@ $hg1 = (Get-FileHash (Join-Path $outG1 'gallery.html')).Hash
 $hg2 = (Get-FileHash (Join-Path $outG2 'gallery.html')).Hash
 Check 'T16 finding4: gallery.html is byte-identical across repeated runs' ($hg1 -eq $hg2) "h1=$hg1 h2=$hg2"
 
+# ---- E1 (1026c): a text .dfm is decoded by the project's .dfm encoding rule (TTextFileFormat: BOM,
+# else valid UTF-8, else ANSI), not TEncoding.Default (the machine code page). Identifiers stop at a
+# non-ASCII char in the parser, so the visible proof is a BOM file the code page cannot read: a UTF-16 LE
+# .dfm (FF FE) decodes to NUL-interleaved garbage under a code page and is skipped (RED before the fix). ----
+$srcU = Join-Path $WorkDir 'src-utf16'; $outU = Join-Path $WorkDir 'out-utf16'
+New-Item -ItemType Directory $srcU -Force | Out-Null
+$e9 = [string][char]0xE9
+$nameU = 'BtnU'
+$txtU = "object FrmU: TFrmU`r`n  Caption = 'U$e9'`r`n  object $nameU`: TabcToggleBtn`r`n    NumGlyphs = 4`r`n    Picture.Data = $(ConvertTo-DfmHex $pay4)`r`n  end`r`nend`r`n"
+[IO.File]::WriteAllBytes((Join-Path $srcU 'FrmU.dfm'), ([byte[]](0xFF,0xFE) + [Text.Encoding]::Unicode.GetBytes($txtU)))
+$oU = & $Exe glyph-vacuum --root $srcU --out $outU 2>&1 | Out-String
+Check 'E1 utf16 dfm: walk completes, skipped=0' ($LASTEXITCODE -eq 0 -and $oU -match 'skipped=0') $oU
+$rowsU = if (Test-Path (Join-Path $outU 'instances.tsv')) { @(Import-Csv (Join-Path $outU 'instances.tsv') -Delimiter "`t" -Encoding UTF8) } else { @() }
+Write-Host "--- raw E1 object_path ---"; $rowsU | ForEach-Object { Write-Host ("[{0}] [{1}]" -f $_.object_path,$_.component_name) }
+Check 'E1 utf16 dfm: the file is parsed, its object row present' (@($rowsU | Where-Object { $_.object_path -ceq $nameU }).Count -eq 1) ($rowsU | ForEach-Object { $_.object_path })
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
 $o2 = & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | Out-String

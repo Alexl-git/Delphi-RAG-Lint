@@ -5,9 +5,9 @@ summary: Resolves a type's category -- float, string, class, interface, and so o
 product: DL
 group: search-navigation
 order: 20022
-since: 0.1.0-alpha
+since: 0.66.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query typecat
@@ -28,6 +28,10 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--db` |  |  |  |
 | `--json` |  |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Resolves a type's category -- float, string, class, interface, and so on.
@@ -41,10 +45,6 @@ drag-lint query typecat --name <type> [--db ...] [--json]
 ```
 
 `--name` is the type to resolve.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

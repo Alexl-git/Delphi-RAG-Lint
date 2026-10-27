@@ -7,7 +7,7 @@ group: indexing
 order: 10001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Auto-Document Whole Project
@@ -72,9 +72,6 @@ it is trusted again.
 `document --project` also accepts `--stubs`, `--json`, `--no-backup`,
 `--include-accessors`, `--reindex` (self-freshens the index after applying,
 folding steps 2-3 into one call), and `--document-third-party`.
-
-### Reaching it in the IDE
-drag-lint > Generate & Export > Auto-Document Whole Project...
 
 ### What it needs
 An active project. Unusually for this tool, **no pre-existing index is

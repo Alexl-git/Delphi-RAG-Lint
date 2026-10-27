@@ -6,7 +6,7 @@
   "status": "internal",
   "since": "0.92.0-alpha",
   "summary": "Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex",
-  "intro": "Read this only when debugging why a conditional-compilation branch was taken or skipped: it dumps how the preprocessor evaluated its expressions, and pairs with dump-pp-lex. Diagnostic verb, not part of the documented preprocessor workflow.",
+  "intro": "Read this only when debugging why a conditional-compilation expression came out true or false: `dump-pp-eval --expr <expr>` with optional --define SYM and --numeric K=V evaluates ONE {$IF} expression and prints true or false. Diagnostic verb, pairs with dump-pp-lex; no index needed.",
   "wikiPage": "Maintenance",
   "surfaces": [
     {
@@ -38,9 +38,9 @@
   ],
   "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed",
   "verified": {
-    "date": "2026-10-25",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.34.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "6486c3363a197c675ccb8205c2aa310640940b6bd3416a7f244e6c4741ed795f"
   }
 }

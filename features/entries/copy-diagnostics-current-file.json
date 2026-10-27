@@ -12,7 +12,7 @@
     {
       "type": "ide-about",
       "caption": "Copy Diagnostics (Current File)",
-      "steps": ["Open the file in the editor", "Choose drag-lint > Copy Diagnostics (Current File), or click the button of the same name in drag-lint > About", "The file's lint findings are on the clipboard"]
+      "steps": ["Open the file in the editor", "Open the About window (drag-lint > About) and click the Copy Diagnostics (Current File) button", "The file's lint findings are on the clipboard"]
     },
     {
       "type": "cli",
@@ -62,9 +62,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "e4aa587fd2064887f254624993e9a546994345187f322231e1db17841bdfeb17"
+    "build": "1.35.1-alpha",
+    "surfaceHash": "79b30fe4bd36625f14825bdd6816fab18d39de8604a32050d24cf56af1ae8c8e"
   }
 }

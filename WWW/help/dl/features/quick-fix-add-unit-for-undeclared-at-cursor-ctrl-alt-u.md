@@ -5,9 +5,9 @@ summary: Finds which unit declares the identifier under the caret and adds that 
 product: DL
 group: refactoring
 order: 50007
-since: 0.0.0
+since: 0.47.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
@@ -31,9 +31,6 @@ would otherwise report an undeclared identifier.
 
 ### Running it from the CLI
 No CLI equivalent - this action is in-process only.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
 
 ### What it needs
 n/a. This action runs in-process against the open editor buffer; the feature

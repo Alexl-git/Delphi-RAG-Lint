@@ -4,7 +4,7 @@
   "group": "indexing",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "0.2.0-alpha",
   "summary": "Walks a project's .dproj compile closure and (re)builds its index",
   "intro": "Read this after adding or moving units, or when hover, Find Usages or lint results feel stale. It walks the project .dproj compile closure and rebuilds the index for that project.",
   "wikiPage": "Rebuild-Index-for-This-Project",
@@ -58,9 +58,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "3fa7babcf81b5ab9acab511b7f62873c3df29c88e9b01c6a70bb98f479d93621"
+    "build": "1.35.1-alpha",
+    "surfaceHash": "70358ab6c19bfc66d9bb86f4d720cbfdc21b22f7f928e7afcc471338d96b4658"
   }
 }

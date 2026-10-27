@@ -52,4 +52,50 @@ end;
 function F8<T>(const A: T): Integer;
 begin
 end;
+{ B-30/B4: a try..except whose handler swallows (no raise, no Result
+  assignment) returns with Result unset when the try body raised before its
+  assignment. The handler used to see the state AFTER the try body's first
+  block, so T1/T2 never fired. T3-T5 are the controls that must stay silent. }
+function T1(const S: string): Integer;
+begin
+  try
+    Result := StrToInt(S);
+  except
+    on E: EConvertError do
+      Writeln(E.Message);
+  end;
+end;
+function T2(const S: string): Integer;
+begin
+  try
+    Result := StrToInt(S);
+  except
+    Writeln('x');
+  end;
+end;
+function T3(const S: string): Integer;
+begin
+  try
+    Result := StrToInt(S);
+  except
+    Result := 0;
+  end;
+end;
+function T4(const S: string): Integer;
+begin
+  try
+    Result := StrToInt(S);
+  except
+    raise;
+  end;
+end;
+function T5(const S: string): Integer;
+begin
+  Result := -1;
+  try
+    Result := StrToInt(S);
+  except
+    Writeln('x');
+  end;
+end;
 end.

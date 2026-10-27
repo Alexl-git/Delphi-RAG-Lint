@@ -7,7 +7,7 @@ group: component-conversion
 order: 60001
 since: 1.2.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # convert-apply
@@ -37,6 +37,10 @@ Full flag list: [convert-apply in the CLI reference](../cli.md#convert-apply).
 | `--no-reindex` |  |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 
@@ -158,9 +162,6 @@ rolled back, or the run could not start (a missing unit or rules file);
 `6` the `--castlib` cannot be used (it fails to load, or names an unknown
 `value` keyword) -- a configuration error, so it no longer reads as a write
 failure. A batch (`--unit` repeated) exits with the worst unit's code.
-
-### Reaching it in the IDE
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 An index IS required -- `convert-apply` reads the project's index database.

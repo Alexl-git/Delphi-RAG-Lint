@@ -4,10 +4,10 @@ title: workspace add
 summary: Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it
 product: DL
 group: editor-integration
-order: 110020
+order: 110019
 since: 0.6.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # workspace add
@@ -26,6 +26,10 @@ Full flag list: [workspace in the CLI reference](../cli.md#workspace).
 | --- | --- | --- | --- |
 | `--config` | `<.drag-lint-workspace.json>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 ## Details
 
 Registers a project file into a `.drag-lint-workspace.json` workspace
@@ -38,10 +42,6 @@ status` will operate over.
 ```text
 drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]
 ```
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

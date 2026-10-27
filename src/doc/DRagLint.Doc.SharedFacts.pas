@@ -170,7 +170,7 @@ type
     /// under B, so each project would rewrite the line the other just wrote.
     /// Order changes only on marked units.
     /// v(1.20.5): reads and writes LOGICAL fact lines. A fact the writer split
-    /// over several `///` lines (TDocRegions.WrapFactLine, over
+    /// over several `///` lines (WrapFactLine, over
     /// DOC_FACT_MAX_COLS) is folded back into one before it is merged, and the
     /// merged line -- rewritten or re-inserted -- is written through the same
     /// wrap, so it is one physical line again whenever it fits.
@@ -831,7 +831,7 @@ begin
       if (P > BestAt) and (P < LabAt) then
       begin
         BestAt:= P;
-        TDocRegions.FoldFactLine(Arr, I, Last);
+        FoldFactLine(Arr, I, Last);
         Result:= Last + 1;
       end;
       Break;
@@ -1723,7 +1723,7 @@ end;
 
 { v(1.20.5): replaces physical lines AFirst..ALast of ALines -- one LOGICAL fact
   line, possibly wrapped -- with ANewText written through
-  TDocRegions.WrapFactLine, and returns how many physical lines now hold it.
+  WrapFactLine, and returns how many physical lines now hold it.
   AChanged is set only when the written lines differ from the replaced ones, so
   a list that still fits stays byte-identical and is not reported as an edit. }
 function ReplaceFactLines(const ALines: TStrings; AFirst, ALast: Integer;
@@ -1734,8 +1734,8 @@ var
   Old    : TArray<string>;
   K      : Integer;
 begin
-  Prefix := TDocRegions.FactLinePrefix(ANewText);
-  Wrapped:= TDocRegions.WrapFactLine(Prefix, Copy(ANewText, Length(Prefix) + 1, MaxInt));
+  Prefix := FactLinePrefix(ANewText);
+  Wrapped:= WrapFactLine(Prefix, Copy(ANewText, Length(Prefix) + 1, MaxInt));
   Result := Length(Wrapped);
   SetLength(Old, ALast - AFirst + 1);
   for K:= AFirst to ALast do Old[K - AFirst]:= ALines[K];
@@ -1746,13 +1746,13 @@ begin
 end;
 
 { v(1.20.5): inserts APrefix + AText at AAt as the physical lines
-  TDocRegions.WrapFactLine makes of it -- one line unless it is too long. }
+  WrapFactLine makes of it -- one line unless it is too long. }
 procedure InsertFactLines(const ALines: TStrings; AAt: Integer; const APrefix, AText: string);
 var
   Wrapped: TArray<string>;
   K      : Integer;
 begin
-  Wrapped:= TDocRegions.WrapFactLine(APrefix, AText);
+  Wrapped:= WrapFactLine(APrefix, AText);
   for K:= 0 to High(Wrapped) do ALines.Insert(AAt + K, Wrapped[K]);
 end;
 
@@ -1832,7 +1832,7 @@ begin
   I     := AFirstAt;
   while I <= LastAt do
   begin
-    NewLine:= MergedFactLine(TDocRegions.FoldFactLine(Arr, I, Last), ASIn, AHandled, AStore);
+    NewLine:= MergedFactLine(FoldFactLine(Arr, I, Last), ASIn, AHandled, AStore);
     Span   := Last - I + 1;
     if NewLine <> '' then
     begin
@@ -1990,7 +1990,7 @@ begin
   for I:= ABeginAt + 1 to AEndAt - 1 do
     if Pos(PARA_OPEN + USED_IN_UNITS, ALines[I]) > 0 then
     begin
-      TDocRegions.FoldFactLine(Arr, I, Last);
+      FoldFactLine(Arr, I, Last);
       Exit(Last + 1);
     end;
 end;

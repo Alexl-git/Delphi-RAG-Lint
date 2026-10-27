@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70012
 since: 0.44.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Forms for testers (CSV)
@@ -55,9 +55,6 @@ project's index database (repeat `--db` to add an index that holds launch
 code living outside the project, e.g. COMMON); `--output` sets the output CSV
 path (without it the CSV goes to stdout); `--root` sets the root form to start
 from (default: the last form the `.dpr` creates before `Application.Run`).
-
-### Reaching it in the IDE
-drag-lint > Reports > Forms for testers (CSV)... (it was a stand-alone item on the drag-lint menu before 2026-10-05)
 
 ### What it needs
 An index IS required. The project's DB lives at

@@ -73,7 +73,7 @@ function Index-Case([string]$Root, [string]$Tag) {
 
 # --fix dry run (no compile): the refusals of cycle 1 as objects.
 function Get-Refusals([string]$Root, [string]$Db, [string]$Tag) {
-  $js = Invoke-Engine @('cycles', '--fix', '--project', ('"' + (Join-Path $Root 'IntfMoveDown.dproj') + '"'), '--db', ('"' + $Db + '"'),
+  $js = Invoke-Engine @('cycles', '--fix', '--build-timeout', '1800', '--project', ('"' + (Join-Path $Root 'IntfMoveDown.dproj') + '"'), '--db', ('"' + $Db + '"'),
     '--no-compile', '--format', 'json') "$Tag-fix"
   try { return @(($js.Out | ConvertFrom-Json).cycles | ForEach-Object { $_.refusals }) } catch { Check "$Tag fix json parses" $false $js.Out; return @() }
 }

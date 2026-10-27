@@ -5,16 +5,16 @@ summary: Jumps the editor caret to the declaration of the symbol represented by 
 product: DL
 group: search-navigation
 order: 20010
-since: 0.0.0
+since: 0.43.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Go to Declaration
 
 Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node.
 
-Read this when you are browsing the Structure form and want to land on where a symbol is declared. Right-click the tree node and choose Go to Declaration; it is an editor jump with no command line equivalent and needs no index.
+Read this when you are in the Structure form and want the editor to jump to where a node's symbol is declared. Right-click the node and choose Go to Declaration; it is an editor jump with no command line equivalent.
 
 ## Where to click
 
@@ -29,14 +29,6 @@ Jumps the editor caret to the declaration of the symbol represented by a
 Structure-tree node. Reach for it when you are browsing the Structure outline
 and want to land on where a symbol is declared, without first clicking into
 the editor.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a node in the tree and choose "Go to Declaration".
 
 ### Running it from the CLI
 

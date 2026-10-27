@@ -7,7 +7,7 @@ group: compiler
 order: 90008
 since: 0.64.1-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # ghost-recover
@@ -39,8 +39,10 @@ holding overlaid (unsaved-buffer) content.
 Running the verb bare (no arguments) does not print a usage banner; it runs
 immediately and prints `ghost-recover: nothing pending.` (exit 0) when there
 is no recovery journal, or `ghost-recover: N file(s) restored.` after acting.
-Passing `--help` or any unrecognized flag produces
-`FATAL: Exception: Unknown argument: <flag>` -- no other flags are documented.
+Passing `--help` (or `-h`, `-?`) prints the general `drag-lint` help banner
+(there is no per-verb text for this verb) and exits 0. Any unrecognized flag
+still ends in `FATAL: Exception: Unknown argument: <flag>` (exit 3) -- no other
+flags are documented.
 
 The plugin invokes it as:
 ```text
@@ -48,13 +50,6 @@ drag-lint ghost-recover "<path-to-.dproj-or-folder>"
 ```
 The single positional argument is optional; if omitted it defaults to the
 current directory.
-
-### Reaching it in the IDE
-No menu item calls this by name directly; the feature map's "Recover
-Buffer-Compile Files" menu item is the user-facing action for it. The
-plugin's editor code (Editor.pas:2522) shells out to this verb, both on
-demand and automatically after a project loads, to restore any file left
-overlaid by a crashed ghost-check.
 
 ### What it needs
 Not needed, per the feature map's Index column.

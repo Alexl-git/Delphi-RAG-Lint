@@ -7,7 +7,7 @@ group: search-navigation
 order: 20028
 since: 0.17.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Symbol Slice
@@ -41,11 +41,6 @@ Full flag list: [slice in the CLI reference](../cli.md#slice).
 Shows the slice of code relevant to one symbol: its declaration, body, and
 immediate context. Reach for it to see just what matters for a symbol
 instead of the whole file.
-
-### Reaching it in the IDE
-drag-lint > Inspect Symbol > Symbol Slice...
-
-No keyboard shortcut is documented for this menu item.
 
 ### Running it from the CLI
 ```text

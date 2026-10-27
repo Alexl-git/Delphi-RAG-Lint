@@ -4,10 +4,10 @@ title: serve
 summary: Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index
 product: DL
 group: editor-integration
-order: 110018
+order: 110017
 since: 0.4.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # serve
@@ -26,6 +26,10 @@ Full flag list: [serve in the CLI reference](../cli.md#serve).
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -43,10 +47,6 @@ the RAD Studio IDE, it is `lsp` instead.
 ```text
 drag-lint serve --db <file.sqlite>
 ```
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

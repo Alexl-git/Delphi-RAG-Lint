@@ -78,7 +78,7 @@ function New-Demo([string]$Tag) {
 }
 function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$Json = $true, [string]$LibArg = $Lib) {
   $errf = Join-Path $WorkDir ("stderr-{0}.txt" -f [guid]::NewGuid().ToString('N'))
-  $a = @('cycles', '--fix', '--project', $D.Dproj, '--db', $D.Db, '--library-db', $LibArg) + $Extra
+  $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $D.Dproj, '--db', $D.Db, '--library-db', $LibArg) + $Extra
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {

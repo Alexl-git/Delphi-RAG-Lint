@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.1.0-alpha",
+  "since": "1.2.2-alpha",
   "summary": "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases",
   "intro": "Read this to answer what derives from this class. It lists every class that descends from a given ancestor across all scanned indexes; derived interfaces are left out on purpose.",
   "wikiPage": "query-descendants",
@@ -47,9 +47,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "c153459c27cc909884c16bd94b262b6eea72bf47a405d0980f792b089dba0cf6"
   }
 }

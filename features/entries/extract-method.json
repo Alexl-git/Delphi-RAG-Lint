@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.85.0-alpha",
   "summary": "Pulls a run of statements out of a routine into a new method",
-  "intro": "Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; the usage lists --apply and --no-backup for writing the change.",
+  "intro": "Read this when a routine is too long and you want a run of statements moved into a new method without doing it by hand. Give the file, the first and last line and the new name; without --apply it is a dry run (exit 0, nothing written) and --json prints the edit set without writing. Exit 0 on a preview or an applied change, 1 when no edit is computed, 2 when the selection is refused or the arguments are incomplete; every refusal reason goes to stderr.",
   "wikiPage": "extract-method",
   "surfaces": [
     {
@@ -46,7 +46,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)",
-      "steps": ["Select the statements to extract in the editor", "drag-lint > Extract Method (selection)... or Ctrl+Alt+M", "Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk"]
+      "steps": ["Select the statements to extract in the editor", "drag-lint > Extract Method (selection)... (Ctrl+Alt+M)", "Enter the new method name, review the dry-run preview, then apply; the unit reloads from disk"]
     }
   ],
   "audience": "both",
@@ -60,11 +60,11 @@
       "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --json"
     }
   ],
-  "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319",
+  "notes": "issued by the plugin from InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)",
   "verified": {
     "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.35.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "8594720b159a50644ee2542e8baacfdde83e4c6e6926c746789f8c5498b3d68b"
   }
 }

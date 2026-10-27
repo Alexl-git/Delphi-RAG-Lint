@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70018
 since: 0.96.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Show in Call Graph
@@ -44,19 +44,15 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 
 Opens the call graph rooted at the symbol represented by a Structure-tree
 node. Reach for it when you want to see who calls (or is called by) a
-symbol you are already looking at in the Structure outline.
-
-### Reaching it in the IDE
-
-This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
-form (right-click a tree node)".
-
-To reach it: open the Structure form first (drag-lint > Show Structure),
-then right-click a node in the tree and choose "Show in Call Graph".
+symbol you are already looking at in the Structure outline. It opens the
+dock's Call Graph (Butterfly) tab with callers AND callees, depth 3 in each
+direction (the same path as [Call Graph (Butterfly)](call-graph-butterfly.md)).
 
 ### Running it from the CLI
 
-The feature map lists the underlying verb as `reverse-calltree`. From the
+The feature map lists the underlying verb as `reverse-calltree`; the IDE runs it
+twice with `--depth 3 --format json` (once plain for callers, once with
+`--direction callees`) and composes the Butterfly tab from both. From the
 usage banner:
 
 ```text

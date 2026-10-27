@@ -2009,7 +2009,14 @@ const
   // (2) nested schema violations (the PowerShell Test-Json drops them): an "A: "
   //     finding carrying FeatureGen.Check.NESTED_SCHEMA_MARK;
   // (3) Task 11: check D over the outputs the PowerShell generator did not own
-  //     (cli-reference.md, the website set, site-pages.json).
+  //     (cli-reference.md, the website set, site-pages.json);
+  // (4) H-SYS 2026-10-26: the help-audit prose checks (A: G-1/G-2/G-3, C: G-4/G-6),
+  //     each finding's first line ending in its "(G-n)" tag.
+  PROSE_MARK = '\(G-[1-6]\)$';
+  // The frozen golden repo's prose findings, reviewed 2026-10-26: 26 at check A (11 G-3 entry anchors that drift or
+  // name a unit the frozen tree lacks, 7 G-3 wiki anchors, 1 G-1, 7 G-2), plus 2 G-6 at the full level.
+  GOLDEN_PROSE_A = 26;
+  GOLDEN_PROSE_FULL = 28;
 
 { True for a "D: " finding whose output is one of the three Task 11 additions. }
 function IsNewDOutput(const pItem: string): Boolean;
@@ -2019,7 +2026,7 @@ begin
 end;
 
 { Splits off the Delphi-only classes; returns the rest. }
-function WithoutDelphiOnly(const pItems: TArray<string>; out pMcp, pNested, pNewD: Integer): TArray<string>;
+function WithoutDelphiOnly(const pItems: TArray<string>; out pMcp, pNested, pNewD, pProse: Integer): TArray<string>;
 var
   lS: string;
 begin
@@ -2027,6 +2034,7 @@ begin
   pMcp := 0;
   pNested := 0;
   pNewD := 0;
+  pProse := 0;
   for lS in pItems do
     if lS.StartsWith(MCP_ONLY_PREFIX) then
       Inc(pMcp)
@@ -2034,6 +2042,8 @@ begin
       Inc(pNested)
     else if IsNewDOutput(lS) then
       Inc(pNewD)
+    else if TRegEx.IsMatch(lS.Split([#10])[0], PROSE_MARK) then
+      Inc(pProse)
     else
       Result := Result + [lS];
 end;
@@ -2094,14 +2104,14 @@ end;
   many failures (a seeded repo). pMcpExpected / pNestedExpected: the exact size of each
   Delphi-only class; pNewDExpected: the exact number of check D findings on the outputs the
   PowerShell generator did not own (-1: any number above zero, a seeded tree). }
-procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;  // dl:ok too-many-parameters@3a35 -- REVIEWED 2026-10-19: test helper: each parameter is one expected count of the parity comparison
-  pMinFindings, pMcpExpected, pNestedExpected, pNewDExpected: Integer);
+procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;  // dl:ok too-many-parameters@8a65 -- REVIEWED 2026-10-26 (re-stamped: pProseExpected added): test helper: each parameter is one expected count of the parity comparison
+  pMinFindings, pMcpExpected, pNestedExpected, pNewDExpected, pProseExpected: Integer);
 var
   lFile, lMsg, lLine, lName: string;
   lPsFail, lPsNotes, lNotes, lMine, lCompared, lMissing, lExtra, lNMissing, lNExtra: TArray<string>;
   lFindings: TArray<TFinding>;
   lF: TFinding;
-  lDropped, lNested, lNewD: Integer;
+  lDropped, lNested, lNewD, lProse: Integer;
   lNewDOk: Boolean;
 begin
   lName := (if pName <> '' then pName else pLevelName);
@@ -2118,12 +2128,13 @@ begin
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
   end;
-  lCompared := WithoutDelphiOnly(lMine, lDropped, lNested, lNewD);
+  lCompared := WithoutDelphiOnly(lMine, lDropped, lNested, lNewD, lProse);
   CompareFindingSets(lPsFail, lCompared, lMissing, lExtra);
   CompareFindingSets(lPsNotes, lNotes, lNMissing, lNExtra);
   Writeln('INFO check ', lName, ': golden ', Length(lPsFail), ' failure(s) / ', Length(lPsNotes), ' note(s); featuregen ',
     Length(lMine), ' (', lDropped, ' Delphi-only MCP, expected ', pMcpExpected, '; ', lNested, ' nested schema, expected ',
-    pNestedExpected, '; ', lNewD, ' D on new outputs, expected ', pNewDExpected, ') / ', Length(lNotes));
+    pNestedExpected, '; ', lNewD, ' D on new outputs, expected ', pNewDExpected, '; ', lProse, ' prose, expected ', pProseExpected,
+    ') / ', Length(lNotes));
   for lLine in lMine do
     Writeln('INFO   finding: ', lLine.Split([#10])[0]);
   for lLine in lNotes do
@@ -2131,6 +2142,7 @@ begin
   lNewDOk := (if pNewDExpected < 0 then lNewD > 0 else ExclusionCountOk(lNewD, pNewDExpected));
   Check('Check.ParityWithGolden.' + lName, (lMsg = '') and TFile.Exists(lFile) and (Length(lPsFail) >= pMinFindings)  // dl:ok boolean-expression-complexity@8137 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     and ExclusionCountOk(lDropped, pMcpExpected) and ExclusionCountOk(lNested, pNestedExpected) and lNewDOk
+    and ExclusionCountOk(lProse, pProseExpected)
     and (Length(lMissing) = 0) and (Length(lExtra) = 0) and (Length(lNMissing) = 0) and (Length(lNExtra) = 0),
     lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 5)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 5))  // dl:ok magic-literal@51d8 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     + ' // notes missing: ' + string.Join(' | ', lNMissing) + ' // notes extra: ' + string.Join(' | ', lNExtra));
@@ -2645,6 +2657,8 @@ begin
   Check('Cmd.AddWritesCanonical.surfaceOrder', Pos('"type": "cli",'#13#10'      "verb": "zz-verb",'#13#10'      "sub": "sub",'#13#10'      "example": "zz-verb sub --x"', lRaw) > 0, lRaw);
   Check('Cmd.AddWritesCanonical.defaults', (Pos('"status": "shipped"', lRaw) > 0) and (Pos('"audience": "both"', lRaw) > 0)
     and (Pos('"by": "tester"', lRaw) > 0) and (Pos('"notes"', lRaw) = 0), lRaw);
+  // Defect (H-ENG-D): add stamped the legacy lastVerified; it must write verified (the shipped-entry stamp).
+  Check('Cmd.AddWritesVerifiedNotLegacy', (Pos('"verified": {', lRaw) > 0) and (Pos('"lastVerified"', lRaw) = 0), lRaw);
   lReg := TRegistry.Create;
   try
     lReg.Load(lCopy);
@@ -3268,6 +3282,200 @@ begin
     lCtx.Free;
   end;
 end;
+{ ---- H-SYS (help audit 2026-10-26): prose checks G-1..G-4, G-6, the verified key, --set parsing ---- }
+
+function JObj(const pJson: string): TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(pJson) as TJSONObject;
+end;
+
+function ProbeEntry(const pSurfaces, pExtra: string): TJSONObject;
+begin
+  Result := JObj('{"id": "zz-prose", "status": "shipped", "surfaces": [' + pSurfaces + ']' + pExtra + '}');
+end;
+
+procedure TestIdeProse;
+const
+  MENU = '{"type": "ide-menu", "path": "drag-lint > Uses & Dependencies > Call Tree..."}';
+  CLI = '{"type": "cli", "verb": "callgraph"}';
+  ABOUT = '{"type": "ide-about", "caption": "Open Plugin Log"}';
+  NO_IDE = '# x'#10#10'## Reaching it in the IDE'#10'No IDE surface -- this is a CLI-only feature.'#10#10'## What it needs'#10'No IDE surface here is fine.'#10;
+var
+  lE: TJSONObject;
+  lP: TArray<string>;
+begin
+  lE := ProbeEntry(CLI + ',' + MENU, '');
+  try
+    lP := IdeProseProblems(lE, NO_IDE);
+    Check('Prose.G1.NoIdeTextWithMenuSurfaceFails', (Length(lP) = 1) and (Pos('(G-1)', lP[0]) > 0), string.Join('|', lP));
+    lP := IdeProseProblems(lE, '## Reaching it in the IDE'#10'No menu item calls this directly.'#10);
+    Check('Prose.G1.NoMenuItemTextFails', Length(lP) = 1, string.Join('|', lP));
+    lP := IdeProseProblems(lE, '## Reaching it in the IDE'#10'drag-lint > Uses & Dependencies > Call Tree...'#10);
+    Check('Prose.G1.MenuPathTextPasses', Length(lP) = 0, string.Join('|', lP));
+  finally
+    lE.Free;
+  end;
+  lE := ProbeEntry(CLI, '');
+  try
+    lP := IdeProseProblems(lE, NO_IDE);
+    Check('Prose.G1.NoIdeTextOnCliOnlyEntryPasses', Length(lP) = 0, string.Join('|', lP));
+  finally
+    lE.Free;
+  end;
+  lE := ProbeEntry(ABOUT, '');
+  try
+    lP := IdeProseProblems(lE, '## Reaching it in the IDE'#10'drag-lint > Open Plugin Log'#10);
+    Check('Prose.G2.AboutButtonAsMenuPathFails', (Length(lP) = 1) and (Pos('(G-2)', lP[0]) > 0), string.Join('|', lP));
+    lP := IdeProseProblems(lE, '## Reaching it in the IDE'#10'drag-lint About window, button Open Plugin Log.'#10);
+    Check('Prose.G2.AboutWindowWordingPasses', Length(lP) = 0, string.Join('|', lP));
+  finally
+    lE.Free;
+  end;
+  Check('Prose.MarkdownSectionStopsAtNextHeading', MarkdownSection(NO_IDE, 'Reaching it in the IDE')
+    = 'No IDE surface -- this is a CLI-only feature.'#10#10, MarkdownSection(NO_IDE, 'Reaching it in the IDE'));
+  Check('Site.DropMarkdownSection', DropMarkdownSection(NO_IDE, 'Reaching it in the IDE')
+    = '# x'#10#10'## What it needs'#10'No IDE surface here is fine.'#10, DropMarkdownSection(NO_IDE, 'Reaching it in the IDE'));
+end;
+
+procedure TestLineAnchors;
+var
+  lRepo: string;
+  lE: TJSONObject;
+
+  function Problems(const pNotes: string; const pWiki: string = ''): TArray<string>;
+  begin
+    lE := ProbeEntry('', ', "notes": "' + pNotes + '"');
+    try
+      Result := LineAnchorProblems(lE, lRepo, pWiki);
+    finally
+      lE.Free;
+    end;
+  end;
+
+var
+  lP: TArray<string>;
+begin
+  lRepo := FreshDir('anchors');
+  ForceDirectories(TPath.Combine(lRepo, 'src\plugin'));
+  TFile.WriteAllText(TPath.Combine(lRepo, 'src\plugin\Zz.Plugin.Editor.pas'),
+    'unit Zz.Plugin.Editor;'#13#10'implementation'#13#10#13#10'procedure TZzEditor.CompileCheck;'#13#10'begin'#13#10
+    + '  RunEngine(''compile-check'');'#13#10'end;'#13#10#13#10'function TZzEditor.Other: Integer;'#13#10'begin'#13#10'end;'#13#10'end.'#13#10);
+  lP := Problems('issued by the plugin from Zz.Plugin.Editor.pas:6');
+  Check('Anchor.G3.UnnamedRoutineIsDrift', (Length(lP) = 1) and (Pos('TZzEditor.CompileCheck', lP[0]) > 0), string.Join('|', lP));
+  lP := Problems('issued by TZzEditor.CompileCheck (Zz.Plugin.Editor.pas:6)');
+  Check('Anchor.G3.NamedRoutinePasses', Length(lP) = 0, string.Join('|', lP));
+  lP := Problems('issued by TZzEditor.CompileCheck (Zz.Plugin.Editor.pas:11)');
+  Check('Anchor.G3.MovedLineFails', (Length(lP) = 1) and (Pos('TZzEditor.Other', lP[0]) > 0), string.Join('|', lP));
+  lP := Problems('issued by CompileCheck (Editor.pas:6)');
+  Check('Anchor.G3.SuffixUnitNameResolves', Length(lP) = 0, string.Join('|', lP));
+  lP := Problems('see Zz.Plugin.Editor.pas:999');
+  Check('Anchor.G3.PastEndFails', (Length(lP) = 1) and (Pos('past the end', lP[0]) > 0), string.Join('|', lP));
+  lP := Problems('see Nowhere.pas:12');
+  Check('Anchor.G3.UnknownUnitFails', (Length(lP) = 1) and (Pos('names no unit', lP[0]) > 0), string.Join('|', lP));
+  lP := Problems('no anchors', 'Sample output: @Blueprint4.ViewModel.pas:3553 -- in TFoo');
+  Check('Anchor.G3.WikiSampleFromUserCodeIgnored', Length(lP) = 0, string.Join('|', lP));
+  lP := Problems('no anchors', 'The plugin (Editor.pas:6) shells out.');
+  Check('Anchor.G3.WikiAnchorIntoRepoJudged', Length(lP) = 1, string.Join('|', lP));
+end;
+
+procedure TestMenuProse;
+var
+  lNodes: TArray<TMenuNodeRow>;
+
+  function Count(const pText: string): Integer;
+  begin
+    Result := Length(MenuProseProblems('zz', 'intro', pText, lNodes));
+  end;
+
+begin
+  lNodes := [MenuRow('drag-lint', 'root', ''), MenuRow('drag-lint > Help', 'submenu', ''),
+    MenuRow('drag-lint > Help > Effect Summary Legend', 'item', 'H'), MenuRow('drag-lint > About', 'item', 'A'),
+    MenuRow('drag-lint > Find Usages...', 'item', 'F')];
+  Check('Menu.G4.CaptionSuffixFails', Count('Choose drag-lint > Help > Effect Summary Legend (wiki)') = 1);
+  Check('Menu.G4.MissingItemFails', Count('Choose **drag-lint > Help > Gone Item** now') = 1);
+  Check('Menu.G4.TopLevelMissingFails', Count('drag-lint > Uninstall') = 1);
+  Check('Menu.G4.LivePathPasses', Count('Choose **drag-lint > Help > Effect Summary Legend** now') = 0);
+  Check('Menu.G4.AsideAfterCaptionPasses', Count('drag-lint > Find Usages... (Ctrl+Alt+F); it is served by the plugin') = 0);
+  Check('Menu.G4.WrappedPathPasses', Count('Choose drag-lint >'#10'Help > Effect Summary Legend.') = 0);
+  Check('Menu.G4.DialogBehindLeafPasses', Count('drag-lint > About > Open Plugin Log') = 0);
+  Check('Menu.G4.HeadingEndsQuote', Count('drag-lint > Help'#10#10'## Next') = 0);
+end;
+
+procedure TestRuleCounts;
+var
+  lCat: TJSONValue;
+
+  function Count(const pText: string): Integer;
+  begin
+    Result := Length(RuleCountProblems('zz', 'intro', pText, lCat));
+  end;
+
+begin
+  lCat := TJSONObject.ParseJSONValue('{"rules": [{"id": "a", "default_enabled": true, "fixable": true},'
+    + ' {"id": "b", "default_enabled": false, "fixable": false}, {"id": "c", "default_enabled": true, "fixable": false}],'
+    + ' "summary": {"total": 3, "categories": 2}}');
+  try
+    Check('Rules.G6.TrueCountsPass', Count('The catalog has 3 rules, 2 on by default, 1 of them fixable, across 2 categories; the full 3-rule list.') = 0);
+    Check('Rules.G6.StaleTotalFails', Count('The catalog has 4 rules.') = 1);
+    Check('Rules.G6.StaleHyphenTotalFails', Count('the full 190-rule catalog') = 1);
+    Check('Rules.G6.StaleOnByDefaultFails', Count('160 on by default') = 1);
+    Check('Rules.G6.StaleFixableFails', Count('23 fixable rules') = 1);
+    Check('Rules.G6.StaleCategoriesFails', Count('across 16 categories') = 1);
+    Check('Rules.G6.VersionIsNotACount', Count('the 1.26.6 rules above') = 0);
+  finally
+    lCat.Free;
+  end;
+end;
+
+{ Defect (H-SYS): featuregen verify writes "verified"; the seed backlog asked for "lastVerified", so no entry could
+  ever leave it. A backlog entry with intro + verified + a real since must be reported as paid (RED before the
+  fix); one whose stamps are removed stays owed (positive control). }
+procedure TestBacklogReadsVerified(const pRepo: string);
+var
+  lCopy, lFile: string;
+  lE: TJSONObject;
+  lReg: TRegistry;
+  lF: TArray<TFinding>;
+  lNotes: TArray<string>;
+begin
+  lCopy := CmdRepo(pRepo, 'backlog-verified');
+  lFile := TPath.Combine(lCopy, 'features\entries\butterfly.json');
+  lE := JObj(ReadBytesText(lFile));
+  try
+    lE.RemovePair('verified').Free;
+    lE.RemovePair('lastVerified').Free;
+    TFile.WriteAllText(lFile, lE.ToJSON, TEncoding.ASCII);
+  finally
+    lE.Free;
+  end;
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\seed-backlog.json'),
+    '{"deadline": "test", "teams": {"ENGINE": ["callgraph", "butterfly"]}}'#13#10, TEncoding.ASCII);
+  Check('Backlog.FixtureHasVerifiedOnly', (Pos('"verified"', ReadBytesText(TPath.Combine(lCopy, 'features\entries\callgraph.json'))) > 0)
+    and (Pos('"lastVerified"', ReadBytesText(TPath.Combine(lCopy, 'features\entries\callgraph.json'))) = 0));
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(lCopy);
+    lF := RunChecks(lReg, SharedLive(pRepo), clFull, nil, True, lNotes);
+  finally
+    lReg.Free;
+  end;
+  Check('Backlog.VerifiedEntryIsPaid', HasFinding(lF, 'A', '''callgraph'' now has intro, verified and a real since'), FindingsNaming(lF, 'seed-backlog'));
+  Check('Backlog.UnstampedEntryStaysOwed', not HasFinding(lF, 'A', '''butterfly'' now has') and (Pos('backlog: ENGINE 1 remaining', string.Join('|', lNotes)) > 0),
+    string.Join('|', lNotes));
+end;
+
+procedure TestSetArgParsing;
+var
+  lA: TArray<string>;
+begin
+  lA := SplitCommandLine('featuregen.exe update --set "intro=He said \"hi\" there." --id x');
+  Check('Args.BackslashQuoteIsALiteralQuote', (Length(lA) = 6) and (lA[3] = 'intro=He said "hi" there.'), string.Join('|', lA));  // dl:ok magic-literal@bc07 -- REVIEWED 2026-10-26: test expectation: the word count and index are the asserted values
+  lA := SplitSetArgs(['intro=A x;;y z ;; summary=B']);
+  Check('Args.SetSplitsOnlyBeforeAField', (Length(lA) = 2) and (lA[0] = 'intro=A x;;y z') and (lA[1] = 'summary=B'), string.Join('|', lA));
+  lA := SplitSetArgs(['related=["a","b"] ;; homeOrder=3']);
+  Check('Args.SetKeepsJsonValue', (Length(lA) = 2) and (lA[0] = 'related=["a","b"]'), string.Join('|', lA));
+end;
+
 procedure TestCommands(const pRepo: string);
 begin
   TestAuditVerify(pRepo);
@@ -3343,6 +3551,11 @@ begin
     TestCompareFindingSetsPositiveControl;
     TestEmptyKindsPositiveControl;
     TestExclusionCountPositiveControl;
+    TestIdeProse;
+    TestLineAnchors;
+    TestMenuProse;
+    TestRuleCounts;
+    TestSetArgParsing;
     if lRepo <> '' then
     begin
       TestSharedLiveNotCachedOnFailure(lRepo);
@@ -3350,12 +3563,12 @@ begin
       TestHarvestRaisesOnEmptySubMap(lRepo);
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
-      TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0);
-      TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, GoldenLive(lRepo).McpTools), 0, 0);
+      TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0, GOLDEN_PROSE_A);
+      TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, GoldenLive(lRepo).McpTools), 0, 0, GOLDEN_PROSE_FULL);
       lSeeded := SeededRepo(lGold);
       // the seeded copy carries the same MCP server source, so the live tool list is the same
-      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0);  // dl:ok magic-literal@e226 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
-      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1);  // dl:ok magic-literal@535a -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0, GOLDEN_PROSE_A);  // dl:ok magic-literal@8c3e -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_A argument added): test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1, GOLDEN_PROSE_FULL);  // dl:ok magic-literal@edb5 -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_FULL argument added): test expectation: the literal is the asserted value
       TestCheckDCoversAllOutputs(lRepo);
       TestWikiCwdIndependent(lRepo);
       TestMarkedBlockNoMarkers;
@@ -3368,6 +3581,7 @@ begin
       TestHelpOrderTiebreak;
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
+      TestBacklogReadsVerified(lRepo);
       TestCommands(lRepo);
     end;
   except

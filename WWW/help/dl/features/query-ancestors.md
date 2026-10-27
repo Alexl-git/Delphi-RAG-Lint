@@ -7,7 +7,7 @@ group: search-navigation
 order: 20016
 since: 0.1.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # query ancestors
@@ -50,10 +50,6 @@ drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json]
 
 `--name` is the type to resolve. `--of <ancestor>` narrows the query to a
 specific ancestor.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

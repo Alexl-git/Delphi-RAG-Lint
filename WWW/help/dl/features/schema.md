@@ -5,9 +5,9 @@ summary: "Prints the live schema of an index database: schemaversion, every tabl
 product: DL
 group: indexing
 order: 10007
-since: 0.3.0-alpha
+since: 0.95.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # schema
@@ -28,6 +28,10 @@ Full flag list: [schema in the CLI reference](../cli.md#schema).
 | `--format` |  |  |  |
 | `--output` | `<file>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -43,10 +47,6 @@ drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]
 ```
 
 Read-only.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.39.0-alpha",
   "summary": "Opens the drag-lint plugin's own log file",
-  "intro": "Read this when you are diagnosing the drag-lint plugin itself: choosing it opens the plugin own log file, which shows what it did, what it ran and any errors it hit.",
+  "intro": "Read this when you are diagnosing the drag-lint plugin itself: the About window button opens the plugin's own log file, which shows what it did, what it ran and any errors it hit.",
   "wikiPage": "Open-Plugin-Log",
   "surfaces": [
     {
@@ -24,9 +24,9 @@
   ],
   "notes": "seed: group guessed",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "0b00ecdb1d821ab35463d3bab7d64bb3749f7cac8abb0285ab0f7ba244578614"
   }
 }

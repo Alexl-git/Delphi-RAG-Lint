@@ -5,14 +5,14 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.2.0-alpha",
-  "summary": "Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold",
+  "summary": "Recompiles every unit of a project (a forced full build, refresh-findings --full) and refreshes its stored compiler findings",
   "intro": "Read this when you want a complete, current set of compiler diagnostics for a project rather than only what went stale. Choose drag-lint > Full Compile Sweep; it recompiles everything and refreshes the stored findings, like refresh-findings --full.",
   "wikiPage": "Full-Compile-Sweep",
   "surfaces": [
     {
       "type": "ide-menu",
       "path": "drag-lint > Full Compile Sweep",
-      "steps": ["Open the project in the IDE", "drag-lint > Full Compile Sweep", "Stale units are recompiled and the findings refreshed, then the open file is refreshed"]
+      "steps": ["Open the project in the IDE", "drag-lint > Full Compile Sweep", "Every unit is recompiled (refresh-findings --full, not only the stale ones) and the stored findings refreshed, then the open file is refreshed"]
     },
     {
       "type": "cli",
@@ -51,9 +51,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "9a9b329fc39a272f47b089a5f0e91d610fad0cd88d4fbe7289122c05ac1e03c8"
   }
 }

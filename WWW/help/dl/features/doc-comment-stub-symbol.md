@@ -7,7 +7,7 @@ group: documentation
 order: 40001
 since: 0.25.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Doc Comment Stub (symbol)
@@ -47,9 +47,6 @@ drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PA
 ```
 `--qname` is the fully qualified symbol; `--format` selects `xmldoc` or
 `pasdoc` output.
-
-### Reaching it in the IDE
-drag-lint > Generate & Export > Doc Comment Stub (symbol)...
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

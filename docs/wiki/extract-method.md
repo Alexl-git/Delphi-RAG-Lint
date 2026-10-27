@@ -16,11 +16,9 @@ run to extract; `--name` is the new method's name. The usage line lists
 documented in the help text for this verb.
 
 ## Reaching it in the IDE
-
-The feature map's internal call site is `DragLint.Plugin.Keyboard.pas:319`
--- a keyboard-bound plugin action, not a menu item. Beyond that call site,
-no menu path or keybinding is documented for this verb, so it is not stated
-here.
+In the IDE choose drag-lint > Extract Method (selection)... (Ctrl+Alt+M) with a
+selection in the editor. The keyboard binding calls `InvokeExtractMethod`
+(DragLint.Plugin.Keyboard.pas), the same routine behind the menu item.
 
 ## What it needs
 

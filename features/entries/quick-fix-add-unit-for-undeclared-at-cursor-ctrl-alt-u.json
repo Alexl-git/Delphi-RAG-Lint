@@ -4,7 +4,7 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "0.47.0-alpha",
   "summary": "Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause",
   "intro": "Read this when the compiler would report an undeclared identifier. Put the caret on it (Ctrl+Alt+U) and drag-lint finds the unit that declares it and adds that unit to your uses clause.",
   "wikiPage": "Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U",
@@ -28,9 +28,9 @@
   ],
   "notes": "seed: since unknown",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "d7a0b613f44087b5121cf9ff996cf7190407e8670f7b2e02052981aad8d3fa2d"
   }
 }

@@ -7,14 +7,14 @@ group: maintenance
 order: 120011
 since: 0.39.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Open Plugin Log
 
 Opens the drag-lint plugin's own log file.
 
-Read this when you are diagnosing the drag-lint plugin itself: choosing it opens the plugin own log file, which shows what it did, what it ran and any errors it hit.
+Read this when you are diagnosing the drag-lint plugin itself: the About window button opens the plugin's own log file, which shows what it did, what it ran and any errors it hit.
 
 ## Where to click
 
@@ -32,16 +32,13 @@ errors it hit.
 No CLI equivalent. The feature map lists this action's CliVerb as
 "(none - in-process)" and its Mechanism as "in-process".
 
-### Reaching it in the IDE
-drag-lint > Open Plugin Log
-
 ### What it needs
 Not documented as needing an index -- the feature map marks this row's
 Index column "n/a". It needs the plugin to have written a log file to
 open.
 
 ### Example
-Illustrative only: choosing drag-lint > Open Plugin Log opens the
+Illustrative only: clicking Open Plugin Log in the About window opens the
 plugin's log file in an editor or viewer, showing recent plugin activity.
 
 ---

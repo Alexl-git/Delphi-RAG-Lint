@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.6.0-alpha",
   "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
-  "intro": "Read this when you need to rebuild an index that running engines hold open: shutdown asks the running lsp engines to close their stores and stand down, without killing them.",
+  "intro": "Read this when you need to rebuild an index that running engines hold open: shutdown asks the running lsp engines to close their stores and stand down, without killing them (only --force terminates an engine that does not answer).",
   "wikiPage": "Features",
   "surfaces": [
     {
@@ -54,9 +54,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "79b21c85841d45de1e634588ee8fbd5c00aae1fc2e95b1a777267681e3c3e26d"
   }
 }

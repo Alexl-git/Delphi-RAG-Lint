@@ -130,6 +130,7 @@
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.GhostText.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.ControlChannel.pas"/>
         <DCCReference Include="DragLint.Plugin.JobQueue.pas"/>
         <DCCReference Include="DragLint.Plugin.QueueText.pas"/>
         <DCCReference Include="DragLint.Plugin.StatusBar.pas"/>
@@ -150,6 +151,7 @@
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JsonFile.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.LintBudget.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="DragLint.Plugin.OptionsFrames.pas">
             <Form>DLPageFrame</Form>

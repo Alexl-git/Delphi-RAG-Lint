@@ -7,7 +7,7 @@ group: component-conversion
 order: 60002
 since: 1.22.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # convert-apply #migrate (member rename / DL_NONE)
@@ -36,6 +36,10 @@ Full flag list: [convert-apply in the CLI reference](../cli.md#convert-apply).
 | `--no-reindex` |  |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 **Needs:** index
 

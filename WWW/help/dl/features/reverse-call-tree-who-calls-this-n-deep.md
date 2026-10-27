@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70016
 since: 0.96.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Reverse Call Tree (who calls this, N-deep)
@@ -54,9 +54,6 @@ drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]
 Default direction is `callers` (who calls X); `--direction callees` instead
 shows what X calls. `--depth` bounds the tree; `--format` selects text, json,
 dot, or mermaid output. The command is cycle-guarded.
-
-### Reaching it in the IDE
-drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...
 
 ### What it needs
 An index IS required -- `reverse-calltree` reads the project's index

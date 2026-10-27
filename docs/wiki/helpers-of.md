@@ -14,11 +14,10 @@ drag-lint helpers-of <T> [--json] --db <db>
 usage line). This verb has no `--apply` flag -- it is a read-only listing.
 
 ## Reaching it in the IDE
-
-Reachable in the IDE only through the Structure form's right-click menu, not
-the main menu. The feature map's internal call site is
-`DragLint.Plugin.StructureForm.pas:1179`; the feature map does not name a
-specific menu-item label for it beyond that.
+In the IDE choose drag-lint > Inspect Symbol > Helpers of Type... It is also
+offered from the Structure form's right-click menu. The feature map's internal
+call site is `TDragLintStructureForm.EnsureFixableRules`
+(DragLint.Plugin.StructureForm.pas).
 
 ## What it needs
 

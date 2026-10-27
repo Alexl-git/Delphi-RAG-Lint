@@ -28,7 +28,7 @@
   Usage: pwsh -File tests\callresolve\run_result_receiver_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
 try {
 
 $ErrorActionPreference = 'Stop'

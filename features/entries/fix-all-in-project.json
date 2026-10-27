@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.61.0-alpha",
   "summary": "Applies autofixes for every fixable finding across the whole project, starting from the Structure form",
-  "intro": "Read this when you want every auto-fixable finding in the whole project resolved in one action. Open the Structure form, right-click a node and choose Fix all in project; it is not on the main menu and runs lint-all with the fix flags.",
+  "intro": "Read this when you want every auto-fixable finding in the whole project resolved in one action. In the Structure form right-click the Diagnostics root and choose Fix all in project; it is not on the main menu and runs lint-all --fix --apply, so it can rewrite many files.",
   "wikiPage": "Fix-all-in-project",
   "surfaces": [
     {
@@ -81,7 +81,7 @@
   "verified": {
     "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.35.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "733dd92e8ad0e281e3732222f3689196063b898b41646bb0ec28f74a2a1116f8"
   }
 }

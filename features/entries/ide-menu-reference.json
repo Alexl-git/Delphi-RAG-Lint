@@ -4,7 +4,7 @@
   "group": "editor-integration",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "0.0.0",
+  "since": "1.4.0-alpha",
   "summary": "What every item in the drag-lint menu does",
   "intro": "Read this when you wonder what an item in the drag-lint menu of RAD Studio does. It lists every item, which ones need a current index, and where to look (the plugin log, the About box) when an item does nothing.",
   "wikiPage": "IDE-Menu-Reference",
@@ -16,26 +16,26 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Help > IDE Menu Reference",
-      "steps": ["drag-lint > Help > IDE Menu Reference (wiki)", "The page opens in the browser"]
+      "steps": ["drag-lint > Help > IDE Menu Reference", "The page opens in the browser"]
     }
   ],
   "audience": "both",
   "questions": [
     {
       "ask": "What does each drag-lint menu item do?",
-      "command": "drag-lint > Help > IDE Menu Reference (wiki)"
+      "command": "drag-lint > Help > IDE Menu Reference"
     },
     {
       "ask": "Where is the full verb reference?",
       "command": "drag-lint --help"
     }
   ],
-  "notes": "seed: since unknown",
+  "notes": "since: the wiki page IDE-Menu-Reference.md first shipped in v1.4.0-alpha (2026-08-17)",
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "694ccb28834a28c4550e8393e2dfc654f9a80e30ece04869ceca050471590fec"
+    "build": "1.35.1-alpha",
+    "surfaceHash": "7ec555f4a5fbc823c09d6032057b0c609aa4e55e9f7f078c4019cc0d53b7a42f"
   },
   "homeOrder": 40
 }

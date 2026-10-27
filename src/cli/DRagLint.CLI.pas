@@ -463,6 +463,7 @@ type
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
     ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
     CycleRsVars    : string ; // --rsvars <rsvars.bat> (cycles --fix: the Studio build environment, for a Studio the registry does not name)
+    CycleBuildTimeout: string ; // --build-timeout <s> (cycles --fix: whole seconds one build may take; '' / 0 = no limit, the default)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
@@ -721,6 +722,7 @@ type
     CompareShow   : string ; // --show <report|csv|bundle> (F4)
     UpdateDoc     : Boolean; // --update-doc (with --in/--line)
     SnapshotDir   : string ; // --snapshot-dir <dir>
+    CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
   end; // record
 
 procedure PrintHelp;  // dl:ok method-too-long@21f1 -- (483 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines + the protocol / mcp-config lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
@@ -1658,6 +1660,11 @@ begin
       Inc(i);
       Result.CycleRsVars:= ParamStr(i);  // dl:ok duplicate-code@bcfb -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
     end
+    else if (A = '--build-timeout') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CycleBuildTimeout:= ParamStr(i);  // dl:ok duplicate-code@2b8c -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+    end
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
     //       --file  already parsed into Result.InFile (line ~433)
@@ -1888,6 +1895,7 @@ begin
       Inc(i);
       Result.SnapshotDir:= ParamStr(i);
     end
+    else if (A = '--out-root') and (i < ParamCount) then begin Inc(i); Result.CompareOutRoot:= ParamStr(i); end // dl:ok multiple-statements-per-line -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
@@ -2860,6 +2868,36 @@ procedure WriteIndexDefinesLine(const ABuild: TActiveBuild);
 begin
   if ABuild.Dproj = '' then Exit;
   Writeln(ErrOutput, 'index: ' + IndexDefinesText(ABuild));
+end;
+
+{ Installs the per-file define resolver (LSP C10) for a verb that lints files: the
+  process-wide profile stays the FALLBACK (built-ins, or --project's profile), so a
+  file no .dproj owns is treated exactly as before C10.
+
+  Precedence lives in DRagLint.Project.DefineProfile: an explicit --project
+  (AArgs.ProjectPath) wins over the owning .dproj found through DB membership, then
+  the .dproj's own folder (one .dproj only); the platform is the project's active
+  platform unless --platform was typed. Nothing to Clear: the LSP lint path calls
+  ApplyPreprocess on every run (no memo) and TProjectProfileCache re-stamps the
+  .dproj / .delphilsp.json on every lookup. No-op under --no-preprocess.
+  An explicit --project .dproj makes ITS active build the fallback too, so one run
+  never lints the same project with two profiles (a member with the active config, a
+  file the --db does not contain with Release). Guard: run_lsp_per_file_defines_guard
+  case g. }
+procedure InstallFileProfileResolver(const AArgs: TArgs; const ADbPaths: TArray<string>; const AFallback: TDefineProfile);
+var
+  Fallback: TDefineProfile;
+begin
+  if AArgs.NoPreprocess then Exit;
+  Fallback:= AFallback;
+  if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath) then
+    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, '', True).Profile;
+  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', Fallback, True);
+  TAstParseCache.SetProfileResolver(
+    function(AFile: string): TDefineProfile
+    begin
+      Result:= TProjectProfileCache.ProfileForFile(AFile);
+    end);
 end;
 
 // v0.45 Task 7: build one plan item into its SQLite database.
@@ -13861,6 +13899,7 @@ begin
     the same input, which is the point: two entry points, one decision. }
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  InstallFileProfileResolver(AArgs, AArgs.DbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -13895,6 +13934,8 @@ begin
     below has to tell the truth about which of two very different runs this
     was: store-backed and at parity, or store-free and quietly narrower. }
   var FlowStoreSeen: Boolean := False;
+  { E29: the covering index is the platform library -- see the project-rules gate. }
+  var FlowIsLibrary: Boolean := False;
   var StandInLogical: string := '';
   if (AArgs.StandInFor <> '') and (EffPath <> '') then
   begin
@@ -14287,6 +14328,9 @@ begin
           if FlowStore <> nil then TSharedFacts.ProjectTag:= ProjectTagFor(FlowStore, FlowDb, AArgs);
         end;
       end;
+      { E29 / LSP C11: decided HERE, before the flow checker, because both the flow
+        gate and the project-rules gate below read it -- see those gates. }
+      FlowIsLibrary:= (FlowStore <> nil) and (FlowFid > 0) and StartsText('library-', ExtractFileName(FlowDb));
       { Say which index answered. Both traps above are INVISIBLE from the output
         -- a dropped store does not fail, it just quietly reports more -- and
         this line is what turned four rebuild-and-guess cycles into one run.
@@ -14399,7 +14443,14 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
         Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
-      if LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) then
+      { LSP C12: a platform-library unit skips the type map too, for the flow
+        ruling's reason (LSP C11, below): its findings -- float equality, lossy
+        casts, FreeAndNil on an interface -- are type-correctness of code the
+        user cannot edit. Measured on System.IOUtils.pas against library-Win64:
+        0 findings for 0.5 s of the per-file budget. The structural AST checks
+        that follow keep running; they are what an RTL file still shows.
+        tests\autotest\run_lsp_library_margin_guard.ps1. }
+      if LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) and (not FlowIsLibrary) then
       begin
         TraceLintChecker('type-aware');
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
@@ -14482,7 +14533,15 @@ begin
         store-free 4.29 s vs 4.07 s with the store -- the open disappears next
         to process start and parse. Opened QUIETLY because OpenReadOnlyStore's
         schema-behind line goes to stdout and would corrupt --format sarif. }
-      if LintRuleWants(NarrowRule, LINT_GATE_FLOW) then
+      { LSP C11: A PLATFORM-LIBRARY UNIT GETS NO FLOW PASS EITHER. Measured on
+        System.IOUtils.pas against library-Win64 after E29: flow was 9.8 s of a
+        17.5 s run (DRAGLINT_PROFILE), so `lsp --full-rules` and the IDE plugin,
+        both on an 8 s child budget, timed out and fell back to the subset on
+        every RTL file the user opened. The user cannot edit the RTL, so its
+        dataflow findings are noise; a project file's store is never named
+        `library-`, so its flow run is unchanged.
+        tests\autotest\run_lsp_library_flow_timeout_guard.ps1. }
+      if LintRuleWants(NarrowRule, LINT_GATE_FLOW) and (not FlowIsLibrary) then
       begin
         TraceLintChecker('flow');
         for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
@@ -14528,7 +14587,20 @@ begin
         rule the flow store uses above. Without an index these questions have no
         answer at all, so the verb degrades to exactly what it did before. }
       FlowStoreSeen:= (FlowStore <> nil) and (FlowFid > 0);
-      if (FlowStore <> nil) and (FlowFid > 0) then
+      { E29: A PLATFORM-LIBRARY UNIT GETS NO PROJECT-RULES PASS.
+        The library index contains every RTL/VCL unit, so the membership gate
+        above hands it this block, whose whole-store passes then ran over ~7,000
+        files for one file's answers: `lint System.IOUtils.pas` against
+        library-Win64 (or with no --db, which resolves library-Win32) never
+        finished -- killed past 490 CPU-s; even unused-private-member alone
+        spent 28 s in the two whole-refs scans. The answers are meaningless
+        anyway: who calls an RTL routine, or whether an RTL import is used, is
+        about the CONSUMERS, which are not in the library index -- the same
+        ruling as ResolveFrameworkContextDb, with the same `library-` file-name
+        test. The per-file checkers above keep the store.
+        tests\autotest\run_lint_library_unit_project_rules_guard.ps1.
+        FlowIsLibrary is set after the store is resolved, above the flow gate. }
+      if FlowStoreSeen and (not FlowIsLibrary) then
       begin
         { THE INDEX-WIDE RULES, NARROWED TO THIS FILE'S FINDINGS.
 
@@ -14682,7 +14754,13 @@ begin
     plugin's diagnostic stream are untouched.
     See docs\INBOX-ide-per-unit-view-omits-79pct-of-lint-all.md. }
   if (not AArgs.AsJson) and (not AArgs.Quiet) then
-    if FlowStoreSeen then
+    if FlowIsLibrary then
+      Writeln(ErrOutput,
+        'drag-lint: note: this file is a platform-library unit, so the project rules ' +
+        '(unused-*, circular-uses, ...) did NOT run -- they are questions about its ' +
+        'consumers, which the library index does not hold -- and neither did the flow ' +
+        'rules (used-before-assignment, ...), whose findings you cannot act on there.')
+    else if FlowStoreSeen then
       Writeln(ErrOutput,
         'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +
         (if AArgs.ProjectRules then '' else 'doc-drift/missing-doc (pass --project-rules), ') +
@@ -14749,7 +14827,7 @@ begin
       about, and it is worse than the gap this closes, so the stand-in path
       keeps the documented degraded behaviour until the rewrite and the marker
       scan are ordered properly. }
-    Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
+    Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen and (not FlowIsLibrary))
   );
   TraceLintChecker('end');
 end; // function
@@ -20008,6 +20086,7 @@ begin
     its own, linting its closure against the library is "0 file(s) scanned", a
     silent zero -- ProjectDb stays '' and the run refuses below. }
   SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
+  InstallFileProfileResolver(AArgs, Dbs, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -21169,6 +21248,9 @@ begin
         stderr (stdout stays the edit list / --json array), never refused }
       for var SkipNote: string in TRenameRefactoring.SkippedDfmNotes(KStore, QN) do
         Writeln(ErrOutput, 'drag-lint: note: ' + SkipNote);
+      { E5: an unbound ref another indexed symbol also names is left unrenamed; say so }
+      for var CandNote: string in TRenameRefactoring.UnresolvedCandidateNotes(KStore, QN) do
+        Writeln(ErrOutput, 'drag-lint: note: ' + CandNote);
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
 
@@ -21244,6 +21326,8 @@ begin
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   for var SkipNote: string in TRenameRefactoring.SkippedDfmNotes(Store, AArgs.QName) do
     Writeln(ErrOutput, 'drag-lint: note: ' + SkipNote);
+  for var CandNote: string in TRenameRefactoring.UnresolvedCandidateNotes(Store, AArgs.QName) do
+    Writeln(ErrOutput, 'drag-lint: note: ' + CandNote);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
   IncReason:= TRenameRefactoring.StaleEditReason(Edits);
   if IncReason <> '' then
@@ -22856,6 +22940,7 @@ begin
         FixOpts.NoCompile:= AArgs.NoCompile;
         FixOpts.ShadowOut:= AArgs.ShadowOut;
     FixOpts.RsVars   := AArgs.CycleRsVars;
+    FixOpts.BuildTimeout:= AArgs.CycleBuildTimeout;
         FixOpts.CycleIndex:= AArgs.FixCycle;
         FixOpts.CycleGiven:= AArgs.FixCycleGiven;
         FixOpts.UnitStem := AArgs.GhostUnit;
@@ -31920,10 +32005,10 @@ begin
   else begin Writeln('STUDIOROOT-FAIL: ', Failure); Result:= 1; end;
 end; // function
 
-// selftest fact-wrap: the TDocRegions.WrapFactLine / FoldFactLine / FactLinePrefix
+// selftest fact-wrap: the WrapFactLine / FoldFactLine / FactLinePrefix
 // contract (1.20.5) -- a managed-block fact line over DOC_FACT_MAX_COLS is broken
 // at entry boundaries, and every reader folds it back. The cases live in
-// TDocRegions.SelfTestFactWrap beside the code they pin.
+// SelfTestFactWrap beside the code they pin.
 //
 // Prints FACTWRAP-FAIL: <case> and returns 1 on the first failed case;
 // FACTWRAP-OK and 0 on success.
@@ -31931,7 +32016,7 @@ function DoSelfTestFactWrap: Integer;
 var
   Failure: string;
 begin
-  if TDocRegions.SelfTestFactWrap(Failure) then
+  if SelfTestFactWrap(Failure) then
   begin
     Writeln('FACTWRAP-OK');
     Result:= 0;
@@ -33521,14 +33606,14 @@ begin
 end;
 
 { Option set common to every rerun: the running exe is the engine; --db pins the new run's index.
-  The new run's bundle goes to a PER-RUN folder under %TEMP%\drag-lint-reports: the bundle name is
+  The new run's bundle goes to a PER-RUN folder under --out-root, default %TEMP%\drag-lint-reports: the bundle name is
   question + target only, so two runs in the shared folder overwrote each other's chart (INBOX
   compare item 3). }
 function CompareProduceOptions(const AArgs: TArgs): TProduceOptions;
 begin
   Result:= DefaultProduceOptions;
   Result.EnginePath:= ParamStr(0);
-  Result.OutRoot:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+  Result.OutRoot:= TPath.Combine(if AArgs.CompareOutRoot <> '' then AArgs.CompareOutRoot else TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
     Format('compare-run-%s-%d', [FormatDateTime(COMPARE_RUN_STAMP, Now), GetCurrentProcessId]));
   if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
 end;
@@ -34010,6 +34095,17 @@ begin
         end;
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
+      { PREPROCESS THE LSP'S LINT, exactly as `lint` does (the SetPreprocess call
+        in the lint verb above): didOpen/didSave lint through TAstParseCache, and
+        without this call it linted the RAW bytes, so every routine with
+        $IFDEF MSWINDOWS / $IFDEF POSIX alternative bodies published a false
+        parser-error on its second `end;` (79 on the RTL's System.IOUtils.pas,
+        where `lint` reports 0). The server is not bound to one .dproj, so the
+        profile is the platform built-ins unless --project names one.
+        Guard: tests\autotest\run_lsp_preprocess_guard.ps1. }
+      TAstParseCache.SetPreprocess(not Args.NoPreprocess,
+        ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
+      InstallFileProfileResolver(Args, DbList, ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;

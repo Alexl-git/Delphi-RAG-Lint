@@ -5,16 +5,16 @@ summary: Flags registered library roots that have source on disk but nothing in 
 product: DL
 group: maintenance
 order: 120009
-since: 0.0.0
+since: 0.47.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Library Drift Check
 
 Flags registered library roots that have source on disk but nothing in the index.
 
-Read this when a library index may have gone stale or was never built. It checks the registered library roots and flags any that have source on disk but nothing in the index; it exits 2 when it finds drift.
+Read this when a library index may have gone stale or was never built. The library-drift verb (or Library Drift Check in the IDE) flags every registered library root that has source on disk but nothing in the index, and exits 2 when it finds drift.
 
 ## How to run it
 
@@ -52,9 +52,6 @@ glob such as the manifest's global `"Win64"`, which matches compiled-lib roots
 like `...\Lib\RX13\Win64` -- is not drift: no rescan can index it. It is listed
 apart (`EXCLUDED BY CONFIG` in text, `excludedRoots` in JSON) and does not
 count toward exit 2. To index such a root, change the exclude, not the scan.
-
-### Reaching it in the IDE
-drag-lint > Index & Maintenance > Library Drift Check...
 
 ### What it needs
 No index required -- this command has no `--db` flag; it checks the

@@ -7,7 +7,7 @@ group: maintenance
 order: 120013
 since: 0.40.5-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # sql
@@ -33,6 +33,10 @@ Full flag list: [sql in the CLI reference](../cli.md#sql).
 | `--timeout-ms` | `N` |  |  |
 | `--output` | `<file>` |  |  |
 
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
+
 **Needs:** index
 
 ## Details
@@ -54,10 +58,6 @@ drag-lint sql --in <q.sql>       --db <file.sqlite> [--format text|json] [--json
 ```
 
 Pass **either** `--query` or `--in`, not both.
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 
@@ -118,8 +118,9 @@ drag-lint schema --db <file.sqlite> --format json
 ```
 
 That carries every column plus, where the vocabulary is closed, the enumerated
-values -- `refs.kind` is exactly {`read`, `call`, `member-access`, `write`,
-`type_use`}, and `symbols.section` has three values, one of which is the empty
+values -- `refs.kind` is exactly {`attribute`, `call`, `di-resolve`,
+`di-unresolved`, `event-binding`, `member-access`, `read`, `sql_table_ref`,
+`type_use`, `write`}, and `symbols.section` has three values, one of which is the empty
 string. A query that assumes a value which does not exist returns nothing and
 reads like an answer. When a query does fail, the error names this command.
 

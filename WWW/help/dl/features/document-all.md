@@ -7,14 +7,14 @@ group: documentation
 order: 40004
 since: 0.93.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # document-all
 
 Documents every public declaration in every indexed unit, with no project scope.
 
-Read this when you want to sweep DocInsight comments across everything in the index rather than one project at a time. document-all documents every public declaration in every indexed unit; the default is facts-only.
+Read this when you want to sweep DocInsight comments across everything in the index rather than one project at a time. document-all documents every public declaration in every indexed unit; the default is facts-only. Without --apply it is a dry run (it prints the edits and writes nothing); with --apply it writes the comments, with a .bak unless --no-backup. Exit 0 on success including a dry run, 1 when some edits were refused because the index was stale (reindex, then re-run), 2 on a usage or database error.
 
 ## How to run it
 
@@ -63,10 +63,6 @@ produces a dry run is not documented in the help text for this verb.
 different from `drag-lint document --project <p.dproj>`, which is scoped to
 the compile closure restricted to that project's own roots (declared in
 `_D-RAG\drag-lint-project.json`).
-
-### Reaching it in the IDE
-
-No IDE surface -- this is a CLI-only feature.
 
 ### What it needs
 

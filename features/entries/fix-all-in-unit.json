@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.1.0-alpha",
   "summary": "Applies autofixes for every fixable finding in the current unit, starting from the Structure form",
-  "intro": "Read this when one unit has several auto-fixable findings and you want them all fixed at once. Open the Structure form, right-click a node and choose Fix all in unit; the caption shows how many fixes are available.",
+  "intro": "Read this when one unit has several auto-fixable findings and you want them all fixed at once. In the Structure form right-click the Diagnostics root or a finding and choose Fix all in unit; the caption shows how many fixes are available, and the item is disabled when there are none.",
   "wikiPage": "Fix-all-in-unit",
   "surfaces": [
     {
@@ -67,9 +67,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "cdf7603c42e7887bffd7cb942da1d4c140401f456907fd842fc0104b64fa88ba"
+    "build": "1.35.1-alpha",
+    "surfaceHash": "dc122eb8f8945130916c3c09d73ade9db52d871489c5add4e2e9246ca5c292d5"
   }
 }

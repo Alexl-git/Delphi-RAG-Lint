@@ -5,9 +5,9 @@ summary: Walks a project's .dproj compile closure and (re)builds its index
 product: DL
 group: indexing
 order: 10005
-since: 0.1.0-alpha
+since: 0.2.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Rebuild Index for This Project
@@ -57,9 +57,6 @@ walks (implies `--force-reparse`). `--force-reparse` (alias `--no-skip`)
 re-parses every walked file even when unchanged. `--prune` forces the
 delete-sweep for a single-file walk; `--no-prune` computes and reports what
 would be removed without deleting anything.
-
-### Reaching it in the IDE
-drag-lint > Index & Maintenance > Rebuild Index for This Project
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

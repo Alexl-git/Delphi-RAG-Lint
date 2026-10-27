@@ -5,23 +5,24 @@ summary: Runs drag-lint's diagnostics pass on a file automatically when it is sa
 product: DL
 group: linting
 order: 30019
-since: 0.0.0
+since: 0.22.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Run Diagnostics (didSave)
 
 Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification.
 
-Read this to know why drag-lint findings refresh on their own: the diagnostics pass runs on a file each time you save it in the IDE, so there is nothing to invoke by hand.
+Read this to know why drag-lint findings refresh on their own: with automatic diagnostics on, the pass runs on a file each time you save it in the IDE. You can also trigger it by hand for the active editor with Ctrl+Alt+D or the About dialog button.
 
 ## Where to click
 
 * drag-lint About window, button **Run Diagnostics (didSave)**
-   1. Nothing to click; it fires each time you save a file in the IDE
-   2. It needs an open editor with a saved file
-   3. There is no CLI equivalent; it runs in-process in the plugin
+   1. It fires on every save when Run diagnostics automatically on save is enabled in the options
+   2. To run it by hand on the active editor: press Ctrl+Alt+D or click Run Diagnostics (didSave) in the About dialog
+   3. It needs an open editor with a saved file
+   4. There is no CLI equivalent; it runs in-process in the plugin
 
 ## Details
 
@@ -33,9 +34,6 @@ it indirectly -- it is not something you invoke by hand; it fires on save.
 No CLI equivalent. The feature map lists this action's CliVerb as
 "(none - in-process)" and its Mechanism as "in-process" -- it runs inside
 the plugin without shelling out to the drag-lint executable.
-
-### Reaching it in the IDE
-drag-lint > Run Diagnostics (didSave)
 
 ### What it needs
 Not documented as needing an index -- the feature map marks this row's

@@ -41,7 +41,9 @@ type
       /// <summary>Edits that rename the symbol AQName to ANewName: its
       /// declaration, its implementation header, and every reference that is
       /// THIS symbol's. References are looked up by name, then filtered: a ref
-      /// the resolver bound to another symbol is skipped, and a .dfm event
+      /// the resolver bound to another symbol is skipped; a ref it could not
+      /// bind is skipped too when another indexed symbol carries the name
+      /// (E5 -- UnresolvedCandidateNotes lists those); and a .dfm event
       /// binding (`OnClick = Name`) is kept only when the form's root class is
       /// the method's owner class, or descends from it with no class on the
       /// way down declaring a member of the same name (rename spec 2.2, X-25).
@@ -152,7 +154,7 @@ type
       /// <summary>Non-empty human reason when the short name of AQName occurs as an
       /// identifier token in an .inc file the index holds; '' otherwise. A rename
       /// must then be refused: the index records no references inside {$I}
-      /// included text (until extractor 1.22), so Build would rewrite the
+      /// included text (indexer limit, not yet lifted), so Build would rewrite the
       /// declaration and leave every use inside the include stale.</summary>
       /// <param name="AStore">Open index; its `files` rows are the project closure
       /// that is scanned. Must not be nil.</param>
@@ -202,6 +204,21 @@ type
       /// text .dfm that IS indexed is rewritten by Build and never noted.
       /// Reads the files; does not write.</remarks>
       class function SkippedDfmNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
+      /// <summary>One note per reference Build leaves UNRENAMED because the
+      /// resolver could not bind it and another indexed symbol carries the same
+      /// name (E5): `path:line:col: unresolved reference to "Name" not renamed
+      /// -- the index cannot tell it from Other.Q.Name; check it by hand`.
+      /// An unbound ref is renamed only when no other indexed symbol has its
+      /// name; this lists the rest, so a rename is never silently partial and
+      /// never silently rewrites another symbol's call.</summary>
+      /// <param name="AStore">The project index (read-only use).</param>
+      /// <param name="AQName">Qualified name of the symbol being renamed.</param>
+      /// <returns>Empty when the symbol is unknown or every by-name ref is bound,
+      /// a .dfm event binding, or unambiguous; else one note per source position
+      /// (line and col as the index records them).</returns>
+      /// <remarks>Reads the store only. Guard:
+      /// tests\autotest\run_rename_unresolved_by_name.ps1.</remarks>
+      class function UnresolvedCandidateNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
       /// <summary>Non-empty human reason when any edit's recorded position no
       /// longer holds its old name on disk; '' when every edit is still in place.
       /// A rename must then be refused: the file changed after it was indexed, and
@@ -507,6 +524,60 @@ begin
        and ClassDescendsFrom(AStore, Anc.SymbolId, AOwner.Id) then Exit(False);
 end;
 
+// E5 (2026-10-26): the refs of ARefs (a by-NAME lookup of AShortName) that the
+// resolver did NOT bind and that could be another symbol's -- rename CANDIDATES,
+// never edited. An unbound ref was renamed unconditionally, so renaming
+// Unit1.TA.Process also rewrote `ExtThing.Process` whose receiver the index
+// cannot type, though Unit2.TB.Process (or a library method) carries the name.
+// A ref is a candidate when ALL hold: its symbol_id is 0; it is not a .dfm
+// event binding (DfmBindingBelongsTo decides those); no ref BOUND to a target
+// sits at the same (file, line, col) -- a bare call indexes a bound `call` and
+// an unbound `member-access` on one span; and some indexed symbol of that name
+// is not a target. With no other bearer the name-only match is the best the
+// index has, and the ref is renamed as before. AOtherBearers: up to three
+// qualified names of the other bearers, for the note. Reads the store only.
+function UnresolvedCandidates(const AStore: ISymbolStore; const ATargetIds: TDictionary<Int64, Boolean>;
+  const AShortName: string; const ARefs: TArray<TReference>; out AOtherBearers: string): TArray<TReference>;
+const
+  MAX_NAMED_BEARERS = 3;
+var
+  Bearer: TSymbol;
+  Others: Integer;
+  Ref   : TReference;
+  Bound : TDictionary<string, Boolean>;
+  Key   : string;
+begin
+  Result:= nil;
+  AOtherBearers:= '';
+  Others:= 0;
+  for Bearer in AStore.FindSymbolsByExactName(AShortName) do
+  begin
+    if ATargetIds.ContainsKey(Bearer.Id) then Continue;
+    Inc(Others);
+    if Others <= MAX_NAMED_BEARERS then
+      AOtherBearers:= AOtherBearers + (if AOtherBearers = '' then '' else ', ') + Bearer.QualifiedName;
+  end;
+  if Others = 0 then Exit;
+  if Others > MAX_NAMED_BEARERS then
+    AOtherBearers:= AOtherBearers + Format(' (+%d more)', [Others - MAX_NAMED_BEARERS]);
+  Bound:= TDictionary<string, Boolean>.Create;
+  try
+    for Ref in ARefs do
+      if (Ref.SymbolId <> 0) and ATargetIds.ContainsKey(Ref.SymbolId) then
+        Bound.AddOrSetValue(Format('%d:%d:%d', [Ref.FileId, Ref.StartLine, Ref.StartCol]), True);
+    for Ref in ARefs do
+    begin
+      if (Ref.SymbolId <> 0) or SameText(Ref.Kind, 'event-binding') then Continue;
+      Key:= Format('%d:%d:%d', [Ref.FileId, Ref.StartLine, Ref.StartCol]);
+      if Bound.ContainsKey(Key) then Continue;
+      Bound.Add(Key, True); { one candidate per position }
+      Result:= Result + [Ref];
+    end;
+  finally
+    Bound.Free;
+  end;
+end;
+
 // ---------------------------------------------------------------------------
 // TRenameRefactoring
 // ---------------------------------------------------------------------------
@@ -528,6 +599,8 @@ var
   DfmPath  : string                ;
   Owned    : Boolean               ;
   Cache    : TObjectDictionary<string, TStringList>;
+  Skipped  : TDictionary<string, Boolean>; { E5 candidate positions 'file:line:col' }
+  Others   : string                ;
 begin
   Result:= nil;
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
@@ -539,10 +612,12 @@ begin
   TargetIds:= nil;
   DfmOwned := nil;
   Cache    := nil;
+  Skipped  := nil;
   List:= TList<TRenameEdit>.Create;
   try
     TargetIds:= TDictionary<Int64, Boolean>.Create; // dl:ok create-inside-try@8aae -- nil-initialised before the try, so the finally's Free is safe if a constructor raises
     DfmOwned:= TDictionary<string, Boolean>.Create;
+    Skipped:= TDictionary<string, Boolean>.Create;
     Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
     // Declaration site
     Edit.FilePath:= AStore.GetFilePath(Sym.FileId);
@@ -559,9 +634,15 @@ begin
     for TargetSym in Syms do TargetIds.AddOrSetValue(TargetSym.Id, True);
     Owner:= AStore.GetSymbolById(Sym.ParentId);
     Refs:= AStore.FindCallersByName(ShortName);
+    { E5: an unbound ref another indexed symbol could own is a candidate, not an
+      edit (UnresolvedCandidates; reported by UnresolvedCandidateNotes). }
+    for Ref in UnresolvedCandidates(AStore, TargetIds, ShortName, Refs, Others) do
+      Skipped.AddOrSetValue(Format('%d:%d:%d', [Ref.FileId, Ref.StartLine, Ref.StartCol]), True);
     for Ref in Refs do
     begin
       if (Ref.SymbolId <> 0) and not TargetIds.ContainsKey(Ref.SymbolId) then Continue;
+      if (Ref.SymbolId = 0)
+         and Skipped.ContainsKey(Format('%d:%d:%d', [Ref.FileId, Ref.StartLine, Ref.StartCol])) then Continue;
       if SameText(Ref.Kind, 'event-binding') then
       begin
         DfmPath:= AStore.GetFilePath(Ref.FileId);
@@ -662,6 +743,7 @@ begin
     Result:= List.ToArray;
   finally
     Cache.Free;
+    Skipped.Free;
     DfmOwned.Free;
     TargetIds.Free;
     List.Free;
@@ -1122,7 +1204,7 @@ begin
     if Hits.Count = 0 then Exit;
     Hits.Sort;
     Result:= Format('"%s" is used in include file(s) %s -- the index records no ' +
-      'references inside {$I} included text yet (extractor 1.22), so those uses ' +
+      'references inside {$I} included text yet, so those uses ' +
       'would be left stale. Rename them by hand together with the declaration.',
       [ShortName, string.Join(', ', Hits.ToStringArray)]);
   finally
@@ -1171,6 +1253,31 @@ begin
     end;
   finally
     Cache.Free;
+  end;
+end;
+
+class function TRenameRefactoring.UnresolvedCandidateNotes(const AStore: ISymbolStore;
+  const AQName: string): TArray<string>;
+var
+  Syms     : TArray<TSymbol>;
+  Target   : TSymbol;
+  Ref      : TReference;
+  ShortName: string;
+  Others   : string;
+  TargetIds: TDictionary<Int64, Boolean>;
+begin
+  Result:= nil;
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  if Length(Syms) = 0 then Exit;
+  ShortName:= LastDotSegment(AQName);
+  TargetIds:= TDictionary<Int64, Boolean>.Create;
+  try
+    for Target in Syms do TargetIds.AddOrSetValue(Target.Id, True);
+    for Ref in UnresolvedCandidates(AStore, TargetIds, ShortName, AStore.FindCallersByName(ShortName), Others) do
+      Result:= Result + [Format('%s:%d:%d: unresolved reference to "%s" not renamed -- the index cannot tell ' +
+        'it from %s; check it by hand', [AStore.GetFilePath(Ref.FileId), Ref.StartLine, Ref.StartCol, ShortName, Others])];
+  finally
+    TargetIds.Free;
   end;
 end;
 

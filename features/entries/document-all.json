@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "0.93.0-alpha",
   "summary": "Documents every public declaration in every indexed unit, with no project scope",
-  "intro": "Read this when you want to sweep DocInsight comments across everything in the index rather than one project at a time. document-all documents every public declaration in every indexed unit; the default is facts-only.",
+  "intro": "Read this when you want to sweep DocInsight comments across everything in the index rather than one project at a time. document-all documents every public declaration in every indexed unit; the default is facts-only. Without --apply it is a dry run (it prints the edits and writes nothing); with --apply it writes the comments, with a .bak unless --no-backup. Exit 0 on success including a dry run, 1 when some edits were refused because the index was stale (reindex, then re-run), 2 on a usage or database error.",
   "wikiPage": "document-all",
   "surfaces": [
     {
@@ -54,13 +54,13 @@
     },
     {
       "ask": "How do I preview that sweep?",
-      "command": "drag-lint document-all --stubs --db <db>"
+      "command": "drag-lint document-all --db <db>"
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-26",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "4b77ab45470d9413e3fee3214690c9124f534d9e9f2e6f4a82959d9a43cbc596"
   }
 }
