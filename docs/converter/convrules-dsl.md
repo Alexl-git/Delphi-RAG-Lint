@@ -275,6 +275,18 @@ reFind's identifier-level rename. Recognised, **not decomposed**: the node is cl
 #migrate Session.* -> FDManager.*, FireDAC.Comp.Client
 ```
 
+**Two shipped books, run in this order (D2 split, 2026-10-27).** `convrules\BDE-to-FireDAC.rules`
+ keeps the `Bde.DBTables` rules (10 `#convert` blocks minus the 3 `Data.DB` ones) and its 28 book-wide
+`#migrate` lines ABOVE the first `#convert` header: file-scope, so engine-inert, and the editor shows
+ them as file-scope (no trailer special case). `convrules\DataDB-to-FireDAC.rules` (Book-2) holds the
+`Data.DB`-declared rules (3 blocks, `#remove HasConstraints`, `#remove DFM: Origin`, 15 `#migrate` lines)
+ and runs AFTER the BDE book, because it converts classes the BDE book leaves behind (e.g. the
+`TAutoIncField` Origin). A member `#migrate` is applied only INSIDE a block: `UpdateRecordTypes ->
+ FilterChanges` was re-homed into the TTable / TQuery / TStoredProc blocks (Q4b) and is now a
+`migrate-applied` edit; `TransIsolation -> TxOptions.Isolation` stays file-scope because inside the
+ TDatabase block the engine refuses it (dotted replacement = template, not applied yet).
+ Guard: `tests\autotest\run_convert_book_split.ps1`.
+
 *Limitation:* because nothing is parsed, the editor cannot validate a `#migrate` line, and
 `Emit` returns `Raw` for it whether or not the node is dirty.
 
