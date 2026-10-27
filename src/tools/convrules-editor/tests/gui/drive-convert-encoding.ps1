@@ -14,9 +14,12 @@
 #   names 'FixUnit.pas is ASCII-7', 'Raise.rules 1:9', U+0414 and the rule; No -> 'Convert not started', a note row per place,
 #   FixUnit.pas untouched; Convert again, Cancel -> 'Convert cancelled', NO note row (ENC-N2); Convert again, Yes -> status 'Raised 1 file(s) ... (asked before the run)', row 'converted',
 #   the note row for the place is kept (ENC-N2), FixUnit.pas starts EF BB BF, FixUnit.pas.BCK1 exists. No question after the run.
+# mixed.* (N4-1, ENC-N4; needs the same capability and batch_units): Second.pas / Third.pas (UTF-8 with BOM, nothing to raise) + FixUnit.pas back to ASCII-7;
+#   the question names only FixUnit.pas; Yes -> 3 'converted' rows, ONE report note 'batch: 2 unit(s) -- 2 ok' (the two unraised units batched), FixUnit.pas raised (BOM) and run per unit, .BCK1 for all.
+#   -ProofNoMixed launches the editor with CONVRULES_BATCH=off: only mixed.batch.note.two must FAIL (28 pass / 1 fail).
 # Pre-feature RED (Task 8): lower.offer.asks FAILS on the pinned editor exe (no question; the run just starts).
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-param([string]$Exe)
+param([string]$Exe, [switch]$ProofNoMixed)
 # --- shared driver plumbing, verbatim from drive-convert-tab.ps1 ---
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
@@ -414,7 +417,7 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ('convert-enc-fx-' + [guid]::NewGuid
 $rulesDir = Join-Path $tmp 'rules'; $dragDir = Join-Path $tmp '_D-RAG'
 [void][IO.Directory]::CreateDirectory($rulesDir); [void][IO.Directory]::CreateDirectory($dragDir)
 $dproj = Join-Path $tmp 'Fix.dproj'; $db = Join-Path $dragDir 'Fix.sqlite'
-$pas = Join-Path $tmp 'FixUnit.pas'
+$pas = Join-Path $tmp 'FixUnit.pas'; $pas2 = Join-Path $tmp 'Second.pas'; $pas3 = Join-Path $tmp 'Third.pas'
 # Two UTF-16-with-BOM books, every character ASCII: Z is the OPEN book (SetBookLevel + SaveBook), Y is not
 # (re-encoded byte for byte, ruling I5). Their #convert finds nothing in FixUnit (no TLabel).
 $bookY = Join-Path $rulesDir 'YLower.rules'; $bookZ = Join-Path $rulesDir 'ZLower.rules'
@@ -451,7 +454,9 @@ WriteAscii (Join-Path $tmp 'Fix.dpr') @'
 program Fix;
 
 uses
-  FixUnit in 'FixUnit.pas';
+  FixUnit in 'FixUnit.pas',
+  Second in 'Second.pas',
+  Third in 'Third.pas';
 
 begin
 end.
@@ -471,6 +476,8 @@ begin
 end;
 end.
 '@
+WriteUtf8Bom $pas2 "unit Second;`ninterface`nprocedure OldName2;`nimplementation`nprocedure OldName2;`nbegin`nend;`nend."
+WriteUtf8Bom $pas3 "unit Third;`ninterface`nprocedure OldName3;`nimplementation`nprocedure OldName3;`nbegin`nend;`nend."
 $lowerText = @'
 #convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls
 #link Caption <- Caption
@@ -479,6 +486,7 @@ WriteUtf16Bom $bookY $lowerText
 WriteUtf16Bom $bookZ $lowerText
 
 $p = $null
+if ($ProofNoMixed) { $env:CONVRULES_BATCH = 'off'; 'NOTE  -ProofNoMixed: CONVRULES_BATCH=off, the run is per-unit; the mixed.batch.note.two check is expected to FAIL' }
 try {
   $t0 = Get-Date
   $out = & { $ErrorActionPreference = 'Continue'; & $engine index --project $dproj --db $db 2>&1 | Out-String }
@@ -585,6 +593,34 @@ try {
     RCheck 'raise.backup' (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -ge 1) ((@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*' | ForEach-Object Name)) -join ',')
     Start-Sleep -Seconds 3
     RCheck 'raise.no.second.question' ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero) (TopsNow $p.Id)
+  }
+  # --- mixed.*: N4-1 / ENC-N4 -- three units, ONE needs a raise (FixUnit.pas, ASCII-7), two already hold UTF-8 with BOM:
+  # the question names only the refused one; Yes runs the two others as ONE batch and the raised one per unit, in one run ---
+  $names = 'mixed.question.names.only.refused', 'mixed.status.raised.one', 'mixed.converted.three', 'mixed.batch.note.two', 'mixed.unit.bom', 'mixed.backups', 'mixed.no.second.question'
+  if ($script:raiseWhy) {
+    foreach ($n in $names) { RCheck $n $false }
+  } else {
+    [IO.File]::WriteAllBytes($pas, $before)  # back to the ASCII-7 original
+    foreach ($u in $pas2, $pas3) { $e = AddViaDialog $p.Id $add $u; if ($e -ne '') { "WARN  add $u : $e" | Out-Host } }
+    $reports0 = @(Get-ChildItem -LiteralPath $rulesDir -Filter 'convert-run-*.txt').Count
+    $ce = ClickConvert $p.Id $main $conv; if ($ce -ne '') { "WARN  $ce" | Out-Host }
+    $dlg = WaitCls $p.Id 'TMessageForm' 120
+    $txt = if ($dlg -ne [IntPtr]::Zero) { MsgText $dlg } else { '' }
+    RCheck 'mixed.question.names.only.refused' (($txt -match 'FixUnit\.pas is ASCII-7') -and ($txt -notmatch 'Second\.pas') -and ($txt -notmatch 'Third\.pas') -and ($txt -match 'Raise\.rules 1:9')) "$txt | status: $(Status $main)"
+    if ($dlg -ne [IntPtr]::Zero) { [void](AnswerDlg $dlg 'Yes') }
+    $st = WaitStatusMatch $main 'Raised 1 file' 900
+    RCheck 'mixed.status.raised.one' ($st -match '^Raised 1 file\(s\) to UTF-8 with BOM \(asked before the run\): FixUnit\.pas\. ') $st
+    $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 600 -and -not ((Status $main) -match 'Converted \d+ of \d+ unit x book')) { Start-Sleep -Milliseconds 300 }
+    $st = Status $main
+    $col = @([W]::Column($lv, 2))
+    RCheck 'mixed.converted.three' ((@($col | Where-Object { $_ -eq 'converted' }).Count -eq 3) -and ($st -match 'Converted 3 of 3 unit x book pair')) ("rows: $($col -join ' | ') status: $st")
+    $newest = Get-ChildItem -LiteralPath $rulesDir -Filter 'convert-run-*.txt' | Sort-Object LastWriteTime | Select-Object -Last 1
+    $rep = if ($null -ne $newest) { [IO.File]::ReadAllText($newest.FullName) } else { '' }
+    RCheck 'mixed.batch.note.two' ((@(Get-ChildItem -LiteralPath $rulesDir -Filter 'convert-run-*.txt').Count -gt $reports0) -and ($rep -match '(?m)^\t\tnote\t+batch: 2 unit\(s\) -- 2 ok')) ("report: " + (($rep -split "`r?`n" | Where-Object { $_ -match 'batch:' }) -join ' | '))
+    RCheck 'mixed.unit.bom' ((Head $pas 3) -eq 'EF BB BF') ("head=" + (Head $pas 4))
+    RCheck 'mixed.backups' ((Test-Path -LiteralPath ($pas2 + '.BCK1')) -and (Test-Path -LiteralPath ($pas3 + '.BCK1')) -and (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -ge 1)) ((@(Get-ChildItem -LiteralPath $tmp -Filter '*.BCK*' | ForEach-Object Name)) -join ',')
+    Start-Sleep -Seconds 3
+    RCheck 'mixed.no.second.question' ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero) (TopsNow $p.Id)
   }
 }
 finally {

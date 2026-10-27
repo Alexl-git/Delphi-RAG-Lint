@@ -67,7 +67,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
   * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
   * `drive-save-encoding.ps1` 15 -- Save question, File > Encoding, UTF-16 BOM note
-  * `drive-convert-encoding.ps1` 22 -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; N2: Yes keeps every place as note rows, Cancel adds none; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
+  * `drive-convert-encoding.ps1` 29 (mixed.* N4-1; `-ProofNoMixed` = 28 / 1) -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; N2: Yes keeps every place as note rows, Cancel adds none; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
   * `drive-migrate.ps1` 24 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks; D5 bulk DL_NONE, D6-B opens the row's book (`-ProofNoMigrate` = 13 / 7, `-ProofNoBulk` = 22 / 2)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
