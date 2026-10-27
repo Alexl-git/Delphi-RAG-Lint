@@ -37,3 +37,6 @@ needless-exit
 begin-end-pair-not-in-finally
 field-created-not-freed
 mismatched-alloc-free
+unused-private-member
+discarded-effect-free-result
+doc-orphan-block
