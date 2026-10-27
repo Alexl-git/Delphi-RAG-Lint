@@ -428,8 +428,8 @@ try {
 
   # --- File > Open the good book (again: the File > Open path), then double-click its class ---
   [void](WaitIdle $p.Id)   # the start-up class-list queries
-  # Since the encoding work (cd8cdc07) LoadFile ends on 'Loaded <book> (<encoding>)',
-  # overwriting LoadText's 'Loaded N line(s), N rule(s)' in the same call. The start-up
+  # LoadFile ends on 'Loaded <book> (<encoding>): N line(s), N rule(s)' (OpenedStatusText; cd8cdc07
+  # had dropped the counts, restored 2026-10-27). The start-up
   # auto-open already left that text, so File > New (the book is clean: no prompt) moves
   # the status off it first: only a real re-open puts it back. (WM_SETTEXT on the status
   # bar does not change what WM_GETTEXT reads back, so it cannot be the sentinel.)
@@ -438,7 +438,7 @@ try {
   Check 'glyph.open.invoke' ([W]::InvokeMenu($main, 'File|Open...'))
   $e = OpenDialogTo $p.Id $good
   $st = WaitStatus $main '^Loaded BitBtn-glyph\.rules \(' 30
-  Check 'glyph.open.good' (($pre -match '^New rule book') -and ($e -eq '') -and ($st -match '^Loaded BitBtn-glyph\.rules \(ASCII-7\)')) "$e $st (before: $pre)"
+  Check 'glyph.open.good' (($pre -match '^New rule book') -and ($e -eq '') -and ($st -match '^Loaded BitBtn-glyph\.rules \(ASCII-7\): 6 line\(s\), 1 rule\(s\)')) "$e $st (before: $pre)"
   $e = OpenClass $main 'TBitBtn'
   Start-Sleep -Seconds 1
   [void](WaitIdle $p.Id)
