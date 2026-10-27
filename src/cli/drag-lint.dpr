@@ -110,6 +110,7 @@ uses
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',
   DRagLint.Lint.EnumOrdinalPersisted in '..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas',
   DRagLint.Lint.RuleCache in '..\lint\DRagLint.Lint.RuleCache.pas',
+  DRagLint.Lint.Autofix in '..\lint\DRagLint.Lint.Autofix.pas',
   DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.Project.OwnRoots in '..\project\DRagLint.Project.OwnRoots.pas',
