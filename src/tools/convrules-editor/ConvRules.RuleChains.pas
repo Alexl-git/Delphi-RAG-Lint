@@ -91,7 +91,37 @@ function ChainsToOffer(const AChains: TArray<TRuleChain>; const AAsked: TArray<s
 /// <returns>The number of marks added.</returns>
 function StaticChainMarks(ABook: TRuleBook): Integer;  // dl:ok unused-public-symbol@30de -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm / ChainForm in CHAIN-1 Task 4; the model tests already call it
 
-// ---- Task 2 (merge composition) goes here: TChainMerge, MergeChainPlan, ApplyChainMerge ----
+// ---- Task 2 (merge composition): TChainMerge, MergeChainPlan, ApplyChainMerge ----
+type
+  /// <summary>A planned merge of a chain's first stage through its later stages (spec 5.4).</summary>
+  TChainMerge = record
+    /// <summary>Index of the first stage's header; the replaced range is NodeIdx..LastIdx inclusive.</summary>
+    NodeIdx : Integer;
+    /// <summary>Last node index of the replaced range (blank lines before the next header are inside it).</summary>
+    LastIdx : Integer;
+    /// <summary>The replacement lines: the new header, the merge #note, then the body (trailing blank lines of the range kept at the end).</summary>
+    NewLines: TArray<string>;
+    /// <summary>Links / defaults / migrates rewritten through the next stage.</summary>
+    Composed: Integer;
+    /// <summary>Lines kept verbatim because the next stage does not map them.</summary>
+    Carried : Integer;
+    /// <summary>#note lines added (the leading merge note not counted).</summary>
+    Noted   : Integer;
+    /// <summary>'' or why the merge is refused (spec A11); then nothing else is valid.</summary>
+    Problem : string;
+  end;
+
+/// <summary>Plan the merge of AChain (ckChain: compose stage 1 through stages 2..n; ckUnitChain: rewrite the adding line).</summary>
+/// <param name="ABook">The book the chain was found in; not owned, not changed.</param>
+/// <param name="AChain">A finding of FindRuleChains on ABook.</param>
+/// <returns>The plan; Problem is set (and nothing else valid) when the chain is not mergeable or its lines changed since detection.</returns>
+/// <remarks>Spec 5.4 A1-A9, A11. The last stage block stays in the book; only the first stage's range is replaced.</remarks>
+function MergeChainPlan(ABook: TRuleBook; const AChain: TRuleChain): TChainMerge;  // dl:ok unused-public-symbol@fff1 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm in CHAIN-1 Task 4; the model tests already call it
+/// <summary>Replace the planned range with the new lines (each parsed into a node, nodes moved in).</summary>
+/// <param name="ABook">The book the plan was made for; changed in place.</param>
+/// <param name="AMerge">A plan from MergeChainPlan.</param>
+/// <returns>The new header's node index (= AMerge.NodeIdx); -1 when AMerge.Problem is set or the range is no longer there.</returns>
+function ApplyChainMerge(ABook: TRuleBook; const AMerge: TChainMerge): Integer;  // dl:ok unused-public-symbol@0468 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm in CHAIN-1 Task 4; the model tests already call it
 
 // ---- Task 3 (split planning, stage-book text) goes here: TChainSplit, SplitChainPlan, StageBookPath ... ----
 
@@ -114,6 +144,435 @@ const
   QUALIFIER_NOTE_FMT = ' (qualifiers differ: %s vs %s)';
   STATUS_FMT         = 'Rule chains: %s -- see marked rules (Conversion > Rule chains...)';
   ARROW              = ' -> ';
+
+// ---- Task 2 (merge composition) implementation ----
+const
+  MERGE_NOT_MERGEABLE = 'only a chain or a unit chain can be merged';
+  MERGE_NOTE          = '#note chain merge: ';
+
+type
+  // The counters of one merge, summed over all pairwise steps (spec A7a).
+  TMergeCounts = record
+    Composed: Integer;
+    Carried : Integer;
+    Noted   : Integer;
+  end;
+
+// File-scope directive kinds (spec 5.4 block range).
+function MergeIsFileScope(AKind: TRuleNodeKind): Boolean;
+begin
+  Result:= AKind in [rnkMigrate, rnkUse, rnkUnuse, rnkUseSwap, rnkDepth, rnkMapping];
+end;
+
+// Last node of the block whose header is AHdr. A block that runs to the end of the book gives up its
+// trailing blank / comment / file-scope run (the trailer stays); AAsSource keeps #migrate in the block (a
+// source stage's migrates are its own lines, spec A6).
+function MergeBlockEnd(ABook: TRuleBook; AHdr: Integer; AAsSource: Boolean): Integer;
+var
+  LI: Integer;
+begin
+  for LI:= AHdr + 1 to ABook.Nodes.Count - 1 do
+    if ABook.Nodes[LI].Kind = rnkConvert then
+      Exit(LI - 1);
+  Result:= ABook.Nodes.Count - 1;
+  while (Result > AHdr)
+    and ((ABook.Nodes[Result].Kind in [rnkBlank, rnkComment])
+      or (MergeIsFileScope(ABook.Nodes[Result].Kind) and not (AAsSource and (ABook.Nodes[Result].Kind = rnkMigrate)))) do
+    Dec(Result);
+end;
+
+// '' when stage AStage still is the #convert block it was detected as, else why not.
+function MergeStageProblem(ABook: TRuleBook; const AStage: TChainStage): string;
+begin
+  Result:= '';
+  if (AStage.NodeIdx < 0) or (AStage.NodeIdx >= ABook.Nodes.Count)
+    or (ABook.Nodes[AStage.NodeIdx].Kind <> rnkConvert)
+    or not SameText(ABook.Nodes[AStage.NodeIdx].FromType, AStage.FromType) then
+    Result:= Format('line %d is no longer the #convert %s block that was found; reopen Rule chains', [AStage.NodeIdx + 1, AStage.FromType]);
+end;
+
+procedure MergeAddUnique(ALines: TList<string>; const ALine: string);
+begin
+  if ALines.IndexOf(ALine) < 0 then
+    ALines.Add(ALine);
+end;
+
+// Indexes of the Q links whose FromPath equals APath (case-insensitive).
+function MergeQLinks(const AQ: TArray<TRuleNode>; const APath: string): TArray<Integer>;
+var
+  LI: Integer;
+begin
+  Result:= nil;
+  for LI:= 0 to High(AQ) do
+    if (AQ[LI].Kind = rnkLink) and SameText(Trim(AQ[LI].LinkFrom), APath) then
+      Result:= Result + [LI];
+end;
+
+function MergeQIgnore(const AQ: TArray<TRuleNode>; const APath: string): Integer;
+begin
+  for Result:= 0 to High(AQ) do
+    if (AQ[Result].Kind = rnkIgnore) and SameText(Trim(AQ[Result].IgnorePath), APath) then
+      Exit;
+  Result:= -1;
+end;
+
+// A2 / A3 / A4 for one #link of P.
+procedure MergeLink(APN: TRuleNode; const APLine: string; const AQ: TArray<TRuleNode>; var AUsed: TArray<Boolean>;
+  ARes: TList<string>; var AC: TMergeCounts);
+var
+  LHits: TArray<Integer>;
+  LIg  : Integer;
+  LI   : Integer;
+  LCast: string;
+  LLine: string;
+begin
+  LHits:= MergeQLinks(AQ, Trim(APN.LinkTo));
+  if Length(LHits) > 0 then
+    for LI in LHits do
+    begin
+      AUsed[LI]:= True;
+      LCast:= APN.Cast + AQ[LI].Cast;
+      if (APN.Cast <> '') and (AQ[LI].Cast <> '') then
+      begin
+        ARes.Add(Format(MERGE_NOTE + 'casts %s then %s on %s cannot be composed -- pick one', [APN.Cast, AQ[LI].Cast, APN.LinkFrom]));
+        Inc(AC.Noted);
+        LCast:= '';
+      end;
+      LLine:= '#link ' + AQ[LI].LinkTo + ' <- ' + APN.LinkFrom;
+      if APN.GlyphExpr <> '' then
+        LLine:= LLine + ' ' + APN.GlyphExpr;
+      if LCast <> '' then
+        LLine:= LLine + ' : ' + LCast;
+      ARes.Add(LLine);
+      Inc(AC.Composed);
+    end
+  else
+  begin
+    LIg:= MergeQIgnore(AQ, Trim(APN.LinkTo));
+    if LIg >= 0 then
+    begin
+      AUsed[LIg]:= True;
+      ARes.Add('#ignore ' + APN.LinkFrom);
+      Inc(AC.Composed);
+    end
+    else
+    begin
+      ARes.Add(APLine);
+      Inc(AC.Carried);
+    end;
+  end;
+end;
+
+// A5 for one #default of P.
+procedure MergeDefault(APN: TRuleNode; const APLine, AQDesc: string; const AQ: TArray<TRuleNode>; var AUsed: TArray<Boolean>;
+  ARes: TList<string>; var AC: TMergeCounts);
+var
+  LHits: TArray<Integer>;
+  LIg  : Integer;
+  LI   : Integer;
+begin
+  LHits:= MergeQLinks(AQ, Trim(APN.DefTo));
+  if Length(LHits) > 0 then
+    for LI in LHits do
+    begin
+      AUsed[LI]:= True;
+      if AQ[LI].Cast <> '' then
+      begin
+        ARes.Add(Format(MERGE_NOTE + '#default %s now feeds %s through cast %s (%s); check the value', [APN.DefTo, AQ[LI].LinkTo, AQ[LI].Cast, AQDesc]));
+        Inc(AC.Noted);
+      end;
+      ARes.Add('#default ' + AQ[LI].LinkTo + ' = ' + APN.DefValue);
+      Inc(AC.Composed);
+    end
+  else
+  begin
+    LIg:= MergeQIgnore(AQ, Trim(APN.DefTo));
+    if LIg >= 0 then
+    begin
+      AUsed[LIg]:= True;
+      ARes.Add(Format(MERGE_NOTE + 'dropped #default %s = %s because %s ignores %s', [APN.DefTo, APN.DefValue, AQDesc, APN.DefTo]));
+      Inc(AC.Noted);
+    end
+    else
+    begin
+      ARes.Add(APLine);
+      Inc(AC.Carried);
+    end;
+  end;
+end;
+
+// A6 for one #migrate of P.
+procedure MergeMigrate(APN: TRuleNode; const APLine: string; const AQ: TArray<TRuleNode>; var AUsed: TArray<Boolean>;
+  ARes: TList<string>; var AC: TMergeCounts);
+var
+  LJ   : Integer;
+  LLine: string;
+begin
+  if (APN.MigScope = '') and (APN.MigNew <> '') then
+    for LJ:= 0 to High(AQ) do
+      if (not AUsed[LJ]) and (AQ[LJ].Kind = rnkMigrate) and (AQ[LJ].MigScope = '') and SameText(AQ[LJ].MigOld, APN.MigNew) then
+      begin
+        AUsed[LJ]:= True;
+        LLine:= '#migrate ' + APN.MigOld + ' -> ' + AQ[LJ].MigNew;
+        if AQ[LJ].MigUnits <> '' then
+          LLine:= LLine + ', ' + AQ[LJ].MigUnits;
+        MergeAddUnique(ARes, LLine);
+        Inc(AC.Composed);
+        Exit;
+      end;
+  if ARes.IndexOf(APLine) < 0 then
+  begin
+    ARes.Add(APLine);
+    Inc(AC.Carried);
+  end;
+end;
+
+// The lines of Q that P's lines did not consume: #default and #migrate copied, the block-scoped rest after a note (A5, A6, A7).
+procedure MergeQRest(const AQ: TArray<TRuleNode>; const AUsed: TArray<Boolean>; const AQDesc: string; ARes: TList<string>;
+  var AC: TMergeCounts);
+var
+  LI   : Integer;
+  LRest: TList<string>;
+begin
+  LRest:= TList<string>.Create;
+  try
+    for LI:= 0 to High(AQ) do
+      if not AUsed[LI] then
+        case AQ[LI].Kind of
+          rnkDefault: MergeAddUnique(ARes, AQ[LI].Emit);
+          rnkMigrate:
+            if ARes.IndexOf(AQ[LI].Emit) < 0 then
+            begin
+              ARes.Add(AQ[LI].Emit);
+              Inc(AC.Carried);
+            end;
+          rnkLink, rnkIgnore, rnkTag, rnkNote, rnkComment, rnkBlank: ;  // dropped (A7)
+          else
+            LRest.Add(AQ[LI].Emit);
+        end;
+    if LRest.Count > 0 then
+    begin
+      ARes.Add(Format(MERGE_NOTE + 'the lines below came from %s; review', [AQDesc]));
+      Inc(AC.Noted);
+      ARes.AddRange(LRest);
+    end;
+  finally
+    LRest.Free;
+  end;
+end;
+
+// Compose P (its body lines) with the stage block whose header is AQHdr; the result replaces AP's content.
+procedure MergeCompose(ABook: TRuleBook; AP: TList<string>; AQHdr: Integer; const AQDesc: string; var AC: TMergeCounts);
+var
+  LQ   : TArray<TRuleNode>;
+  LUsed: TArray<Boolean>;
+  LRes : TList<string>;
+  LLine: string;
+  LPN  : TRuleNode;
+  LI   : Integer;
+begin
+  SetLength(LQ, 0);
+  for LI:= AQHdr + 1 to MergeBlockEnd(ABook, AQHdr, True) do
+    LQ:= LQ + [ABook.Nodes[LI]];
+  SetLength(LUsed, Length(LQ));
+  LRes:= TList<string>.Create;
+  try
+    for LLine in AP do
+    begin
+      LPN:= ABook.ParseLine(LLine);
+      try
+        case LPN.Kind of
+          rnkLink   : MergeLink(LPN, LLine, LQ, LUsed, LRes, AC);
+          rnkDefault: MergeDefault(LPN, LLine, AQDesc, LQ, LUsed, LRes, AC);
+          rnkMigrate: MergeMigrate(LPN, LLine, LQ, LUsed, LRes, AC);
+          else
+            LRes.Add(LLine);
+        end;
+      finally
+        LPN.Free;
+      end;
+    end;
+    MergeQRest(LQ, LUsed, AQDesc, LRes, AC);
+    AP.Clear;
+    AP.AddRange(LRes);
+  finally
+    LRes.Free;
+  end;
+end;
+
+// 'TA -> TB (line 1)' for the #convert header at AHdr.
+function MergeStageDesc(ABook: TRuleBook; AHdr: Integer): string;
+begin
+  Result:= Format('%s -> %s (line %d)', [ABook.Nodes[AHdr].FromType, ABook.Nodes[AHdr].ToType, AHdr + 1]);
+end;
+
+function MergeChainStages(ABook: TRuleBook; const AChain: TRuleChain): TChainMerge;
+var
+  LStage: TChainStage;
+  LP    : TList<string>;
+  LC    : TMergeCounts;
+  LDescs: string;
+  LBlank: Integer;
+  LLast : TRuleNode;
+  LI    : Integer;
+  LHdr  : string;
+  LTarget: string;
+begin
+  Result:= Default(TChainMerge);
+  for LStage in AChain.Stages do
+  begin
+    Result.Problem:= MergeStageProblem(ABook, LStage);
+    if Result.Problem <> '' then
+      Exit;
+  end;
+  Result.NodeIdx:= AChain.Stages[0].NodeIdx;
+  Result.LastIdx:= MergeBlockEnd(ABook, Result.NodeIdx, False);
+  LBlank:= 0;
+  while (Result.LastIdx - LBlank > Result.NodeIdx) and (ABook.Nodes[Result.LastIdx - LBlank].Kind = rnkBlank) do
+    Inc(LBlank);
+  LC:= Default(TMergeCounts);
+  LDescs:= MergeStageDesc(ABook, Result.NodeIdx);
+  LP:= TList<string>.Create;
+  try
+    for LI:= Result.NodeIdx + 1 to Result.LastIdx - LBlank do
+      LP.Add(ABook.Nodes[LI].Emit);
+    for LI:= 1 to High(AChain.Stages) do
+    begin
+      MergeCompose(ABook, LP, AChain.Stages[LI].NodeIdx, ABook.Nodes[AChain.Stages[LI].NodeIdx].FromType + ' -> '
+        + ABook.Nodes[AChain.Stages[LI].NodeIdx].ToType + ' (line ' + IntToStr(AChain.Stages[LI].NodeIdx + 1) + ')', LC);
+      LDescs:= LDescs + ' + ' + MergeStageDesc(ABook, AChain.Stages[LI].NodeIdx);
+    end;
+    LLast:= ABook.Nodes[AChain.Stages[High(AChain.Stages)].NodeIdx];
+    LTarget:= ABook.Nodes[Result.NodeIdx].FromType + ' -> ' + LLast.ToType;
+    LHdr:= LTarget;
+    if LLast.Units <> '' then
+      LHdr:= LHdr + ', ' + LLast.Units;
+    Result.NewLines:= ['#convert ' + LHdr,
+      Format(MERGE_NOTE + '%s = %s; %d composed, %d carried, %d noted -- validate on Save', [LDescs, LTarget, LC.Composed, LC.Carried, LC.Noted])];
+    Result.NewLines:= Result.NewLines + LP.ToArray;
+    for LI:= 1 to LBlank do
+      Result.NewLines:= Result.NewLines + [''];
+    Result.Composed:= LC.Composed;
+    Result.Carried:= LC.Carried;
+    Result.Noted:= LC.Noted;
+  finally
+    LP.Free;
+  end;
+end;
+
+// A9: AOld replaced by ANew inside AUnits, de-duplicated; empty when AOld is not in AUnits.
+function MergeSwapUnits(const AUnits: TArray<string>; const AOld: string; const ANew: TArray<string>): TArray<string>;
+var
+  LU, LN: string;
+  LHit  : Boolean;
+
+  procedure AddOne(const AUnit: string);
+  var
+    LX: string;
+  begin
+    for LX in Result do
+      if SameText(LX, AUnit) then
+        Exit;
+    Result:= Result + [AUnit];
+  end;
+
+begin
+  Result:= nil;
+  LHit:= False;
+  for LU in AUnits do
+    if SameText(Trim(LU), Trim(AOld)) then
+    begin
+      LHit:= True;
+      for LN in ANew do
+        AddOne(Trim(LN));
+    end
+    else
+      AddOne(Trim(LU));
+  if not LHit then
+    Result:= nil;
+end;
+
+function MergeUnitChain(ABook: TRuleBook; const AChain: TRuleChain): TChainMerge;
+var
+  LAdd, LSwap: TRuleNode;
+  LUnits     : TArray<string>;
+  LUnit      : string;
+begin
+  Result:= Default(TChainMerge);
+  if (Length(AChain.Stages) < 2) or (AChain.Stages[0].NodeIdx < 0) or (AChain.Stages[0].NodeIdx >= ABook.Nodes.Count)
+    or (AChain.Stages[1].NodeIdx < 0) or (AChain.Stages[1].NodeIdx >= ABook.Nodes.Count) then
+  begin
+    Result.Problem:= 'the unit lines are no longer there; reopen Rule chains';
+    Exit;
+  end;
+  LAdd:= ABook.Nodes[AChain.Stages[0].NodeIdx];
+  LSwap:= ABook.Nodes[AChain.Stages[1].NodeIdx];
+  Result.NodeIdx:= AChain.Stages[0].NodeIdx;
+  Result.LastIdx:= Result.NodeIdx;
+  if LSwap.Kind <> rnkUseSwap then
+    Result.Problem:= 'the #useswap line is no longer there; reopen Rule chains'
+  else
+    case LAdd.Kind of
+      rnkUseSwap:
+      begin
+        LUnits:= MergeSwapUnits(LAdd.SwapNew, LSwap.SwapOld, LSwap.SwapNew);
+        Result.NewLines:= ['#useswap ' + LAdd.SwapOld + ' -> ' + string.Join(', ', LUnits)];
+      end;
+      rnkConvert:
+      begin
+        LUnits:= MergeSwapUnits(LAdd.Units.Split([',']), LSwap.SwapOld, LSwap.SwapNew);
+        Result.NewLines:= ['#convert ' + LAdd.FromType + ' -> ' + LAdd.ToType + ', ' + string.Join(', ', LUnits)];
+      end;
+      rnkUse:
+      begin
+        LUnits:= MergeSwapUnits([LAdd.UseUnit], LSwap.SwapOld, LSwap.SwapNew);
+        for LUnit in LUnits do
+          Result.NewLines:= Result.NewLines + ['#use ' + LUnit];
+      end;
+      else
+        Result.Problem:= 'the line adding the unit is no longer there; reopen Rule chains';
+    end;
+  if (Result.Problem = '') and (Length(LUnits) = 0) then
+    Result.Problem:= 'the line adding the unit no longer names the swapped unit; reopen Rule chains';
+  if Result.Problem = '' then
+    Result.Composed:= 1;
+end;
+
+function MergeChainPlan(ABook: TRuleBook; const AChain: TRuleChain): TChainMerge;
+begin
+  case AChain.Kind of
+    ckChain    : Result:= MergeChainStages(ABook, AChain);
+    ckUnitChain: Result:= MergeUnitChain(ABook, AChain);
+    else
+    begin
+      Result:= Default(TChainMerge);
+      Result.Problem:= MERGE_NOT_MERGEABLE;
+    end;
+  end;
+end;
+
+function ApplyChainMerge(ABook: TRuleBook; const AMerge: TChainMerge): Integer;
+var
+  LNodes: TArray<TRuleNode>;
+  LLine : string;
+  LI    : Integer;
+begin
+  Result:= -1;
+  if (AMerge.Problem <> '') or (Length(AMerge.NewLines) = 0) then
+    Exit;
+  if (AMerge.NodeIdx < 0) or (AMerge.LastIdx < AMerge.NodeIdx) or (AMerge.LastIdx >= ABook.Nodes.Count) then
+    Exit;
+  if not (ABook.Nodes[AMerge.NodeIdx].Kind in [rnkConvert, rnkUse, rnkUseSwap]) then
+    Exit;
+  SetLength(LNodes, 0);
+  for LLine in AMerge.NewLines do
+    LNodes:= LNodes + [ABook.ParseLine(LLine)];
+  ABook.Nodes.DeleteRange(AMerge.NodeIdx, AMerge.LastIdx - AMerge.NodeIdx + 1);
+  for LI:= 0 to High(LNodes) do
+    ABook.Nodes.Insert(AMerge.NodeIdx + LI, LNodes[LI]);
+  Result:= AMerge.NodeIdx;
+end;
+// ---- end Task 2 implementation ----
 
 function ChainBareName(const AName: string): string;
 var

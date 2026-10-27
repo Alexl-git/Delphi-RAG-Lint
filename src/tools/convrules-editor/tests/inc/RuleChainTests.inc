@@ -189,7 +189,131 @@ end;
 
 // ---- Task 2 (merge) block: TestRuleChainsMerge, filled by CHAIN-1 Task 2 ----
 procedure TestRuleChainsMerge;
+var
+  Books: TObjectList<TRuleBook>;
+
+  function J(const ALines: array of string): string;
+  begin
+    Result:= string.Join(CHAIN_CRLF, ALines);
+  end;
+
+  function Plan(const AText: string; AChainNo: Integer; out ABook: TRuleBook): TChainMerge;
+  var
+    LC: TArray<TRuleChain>;
+  begin
+    ABook:= ChainMakeBook(Books, AText);
+    LC:= FindRuleChains(ABook);
+    Result:= MergeChainPlan(ABook, LC[AChainNo]);
+  end;
+
+  function Has(const AM: TChainMerge; const ALine: string): Boolean;
+  var
+    LS: string;
+  begin
+    Result:= False;
+    for LS in AM.NewLines do
+      if LS = ALine then
+        Exit(True);
+  end;
+
+  function PosOf(const AM: TChainMerge; const ALine: string): Integer;
+  var
+    LI: Integer;
+  begin
+    Result:= -1;
+    for LI:= 0 to High(AM.NewLines) do
+      if AM.NewLines[LI] = ALine then
+        Exit(LI);
+  end;
+
+  function StartsAt(const AM: TChainMerge; const APrefix: string): Integer;
+  var
+    LI: Integer;
+  begin
+    Result:= -1;
+    for LI:= 0 to High(AM.NewLines) do
+      if AM.NewLines[LI].StartsWith(APrefix) then
+        Exit(LI);
+  end;
+
+var
+  Bk    : TRuleBook;
+  M     : TChainMerge;
+  MERGE_A: string;
+  LI    : Integer;
+  LText : string;
+  LBefore: string;
 begin
+  Books:= TObjectList<TRuleBook>.Create(True);
+  try
+    MERGE_A:= J(['#convert TA -> TB, UnitB', '#link Caption <- Text', '#link Width <- W : IntToStr', '#link Color <- Col : ToColor',
+      '#link Keep <- K', '#default Flag = True', '#default Gone = 1', '#ignore Old', '#migrate DoA -> DoB', '#tag t1', '',
+      '#convert TB -> TC, UnitC', '#link Title <- Caption', '#link Width <- Width : StrToInt', '#link Colour <- Color',
+      '#ignore Keep', '#ignore Gone', '#default Extra = 2', '#migrate DoB -> DoC, UnitC', '#warn Title "check"', '#tag t2',
+      '#migrate X -> Y']);
+    M:= Plan(MERGE_A, 0, Bk);
+    Check('chains.merge.problem.none', M.Problem = '', M.Problem);
+    Check('chains.merge.header', (Length(M.NewLines) > 1) and (M.NewLines[0] = '#convert TA -> TC, UnitC')
+      and M.NewLines[1].StartsWith('#note chain merge: TA -> TB (line 1) + TB -> TC (line 12) = TA -> TC;'),
+      IfThen(Length(M.NewLines) > 1, M.NewLines[0] + ' | ' + M.NewLines[1], 'short'));
+    Check('chains.merge.link.plain', Has(M, '#link Title <- Text'), '');
+    Check('chains.merge.link.one.cast', Has(M, '#link Colour <- Col : ToColor'), '');
+    LI:= PosOf(M, '#link Width <- W');
+    Check('chains.merge.link.two.casts', (LI > 0) and (M.NewLines[LI - 1] = '#note chain merge: casts IntToStr then StrToInt on W cannot be composed -- pick one'),
+      IntToStr(LI));
+    Check('chains.merge.link.ignored', (not Has(M, '#link Keep <- K')) and Has(M, '#ignore K'), '');
+    Check('chains.merge.default.ignored', (not Has(M, '#default Gone = 1')) and (StartsAt(M, '#note') >= 0)
+      and (PosOf(M, '#default Gone = 1') < 0) and (Pos('Gone', string.Join('|', M.NewLines)) > 0), '');
+    Check('chains.merge.default.carried', Has(M, '#default Flag = True'), '');
+    Check('chains.merge.default.q', Has(M, '#default Extra = 2'), '');
+    Check('chains.merge.ignore.p', Has(M, '#ignore Old'), '');
+    Check('chains.merge.migrate.composed', Has(M, '#migrate DoA -> DoC, UnitC') and (not Has(M, '#migrate DoB -> DoC, UnitC'))
+      and Has(M, '#migrate X -> Y'), '');
+    LI:= StartsAt(M, '#note chain merge: the lines below came from TB -> TC (line 12)');
+    Check('chains.merge.q.rest', (LI >= 0) and (PosOf(M, '#warn Title "check"') > LI) and (not Has(M, '#tag t2')) and Has(M, '#tag t1'),
+      IntToStr(LI));
+    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 2) and (M.Noted = 3),
+      Format('%d/%d/%d', [M.Composed, M.Carried, M.Noted]));
+    Check('chains.merge.range.non.last', (M.NodeIdx = 0) and (M.LastIdx = 10) and (M.NewLines[High(M.NewLines)] = ''),
+      Format('%d..%d', [M.NodeIdx, M.LastIdx]));
+
+    M:= Plan(J(['#convert TB -> TC', '#link a <- b', '#convert TA -> TB', '#link b <- c', '#migrate M -> N']), 0, Bk);
+    Check('chains.merge.range.last.trailer', (M.Problem = '') and (M.NodeIdx = 2) and (M.LastIdx = 3), Format('%d..%d %s', [M.NodeIdx, M.LastIdx, M.Problem]));
+
+    M:= Plan(MERGE_A, 0, Bk);
+    LBefore:= Bk.SaveToString;
+    LI:= ApplyChainMerge(Bk, M);
+    Check('chains.merge.apply', (LI = 0) and (Bk.Nodes[0].Kind = rnkConvert) and (Bk.Nodes[0].FromType = 'TA')
+      and (Bk.Nodes[0].ToType = 'TC') and (Bk.Nodes[0].Units = 'UnitC') and (Length(FindRuleChains(Bk)) = 0), IntToStr(LI));
+    LText:= Bk.SaveToString;
+    Check('chains.merge.apply.second.stage', LText.Contains('#convert TB -> TC, UnitC' + CHAIN_CRLF + '#link Title <- Caption' + CHAIN_CRLF + '#link Width <- Width : StrToInt'),
+      '');
+    Check('chains.merge.apply.roundtrip', LText = J(M.NewLines) + CHAIN_CRLF + Copy(LBefore, LBefore.IndexOf('#convert TB -> TC') + 1, MaxInt),
+      '');
+
+    M:= Plan(J(['#convert TA -> TB', '#link b <- a', '#convert TB -> TC', '#link c <- b', '#convert TC -> TD', '#link d <- c']), 0, Bk);
+    Check('chains.merge.three.stages', (M.Problem = '') and (M.NewLines[0] = '#convert TA -> TD') and Has(M, '#link d <- a'), M.Problem);
+
+    M:= Plan(CHAIN_BOOK_UNIT_SWAP, 0, Bk);
+    Check('chains.merge.unit.swap', (Length(M.NewLines) = 1) and (M.NewLines[0] = '#useswap UnitA -> UnitC') and (M.NodeIdx = 0) and (M.LastIdx = 0),
+      M.Problem);
+    M:= Plan(CHAIN_BOOK_UNIT_HDR, 0, Bk);
+    Check('chains.merge.unit.hdr', (Length(M.NewLines) = 1) and (M.NewLines[0] = '#convert TA -> TB, UnitC'), M.Problem);
+    M:= Plan(CHAIN_BOOK_UNIT_USE, 0, Bk);
+    Check('chains.merge.unit.use', (Length(M.NewLines) = 1) and (M.NewLines[0] = '#use UnitC'), M.Problem);
+
+    M:= Plan(CHAIN_BOOK_CHAIN, 0, Bk);
+    Bk.Nodes.Delete(2);
+    LBefore:= Bk.SaveToString;
+    M:= MergeChainPlan(Bk, FindRuleChains(ChainMakeBook(Books, CHAIN_BOOK_CHAIN))[0]);
+    Check('chains.merge.refused', (M.Problem <> '') and (ApplyChainMerge(Bk, M) = -1) and (Bk.SaveToString = LBefore), M.Problem);
+    M:= Plan(CHAIN_BOOK_CYCLE, 0, Bk);
+    Check('chains.merge.refused.kind.cycle', M.Problem = 'only a chain or a unit chain can be merged', M.Problem);
+    M:= Plan(CHAIN_BOOK_DUP, 0, Bk);
+    Check('chains.merge.refused.kind.dup', M.Problem = 'only a chain or a unit chain can be merged', M.Problem);
+  finally
+    Books.Free;
+  end;
 end;
 
 // ---- Task 3 (split) block: TestRuleChainsSplit, filled by CHAIN-1 Task 3 ----
