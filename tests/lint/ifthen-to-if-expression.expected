@@ -4,8 +4,8 @@
 # Known FP shape: a branch with side effects in the condition-dependent RHS is
 # still equivalent in an if-expression (only the taken branch is evaluated), so
 # no FP there; compound targets (A.B := ..) fire when both sides match.
-ifthen-to-if-expression 8
+ifthen-to-if-expression 9
 !ifthen-to-if-expression 17
 !ifthen-to-if-expression 18
-!ifthen-to-if-expression 23
-!ifthen-to-if-expression 26
+!ifthen-to-if-expression 22
+!ifthen-to-if-expression 24
