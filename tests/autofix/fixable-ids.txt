@@ -63,3 +63,10 @@ destructor-without-override
 missing-inherited-dtor
 missing-inherited-ctor
 method-could-be-static
+commented-out-code
+doc-param-not-in-signature
+inline-comment-in-multiline-args
+misleading-indentation
+multiple-statements-per-line
+review-marker-placeholder-hash
+review-marker-unused

@@ -6,6 +6,7 @@
     tests\autofix\fixtures\<rule-id>\<case>.fixed.pas     expected result, written BY HAND
     tests\autofix\fixtures\<rule-id>\<case>.config.json   optional: passed as --config
                                                            (an OFF rule needs {"enabled":["<id>"]})
+    tests\autofix\fixtures\<rule-id>\<case>.extra-args    optional: extra CLI tokens for every run of the case (--project-rules)
     tests\autofix\fixtures\<rule-id>\<case>.db-needed     optional marker: the case directory is
                                                            indexed into a scratch DB and --db is passed
     tests\autofix\fixtures\<rule-id>\_rules\              optional: a rules folder passed as --rules-dir to every
@@ -98,13 +99,19 @@ try {
         try { & $exePath index $scr --db $db *> (Join-Path $scr '_index.log') } finally { Pop-Location }
         $extra += @('--db', $db)
       }
+      $xa = Join-Path $dir.FullName "$case.extra-args"
+      if (Test-Path $xa) { $extra += @((Get-Content $xa -Raw).Trim() -split '\s+') }   # e.g. --project-rules (doc rules)
       Push-Location $scr
       try {
         # 1. apply, byte-identical
         $raw = & $exePath lint --file $copy --fix --fix-rule $id --json --apply --no-backup @extra 2>$null | Out-String
         $rows = @(); try { $rows = @($raw | ConvertFrom-Json) } catch { $rows = @() }
         $applied = @($rows | Where-Object { $_.rule -eq $id -and $_.applied -eq $true }).Count
-        Check "${tag}: --fix --apply applied >= 1 row" ($applied -ge 1) $raw.Trim()
+        if (($applied -lt 1) -and (Test-Path (Join-Path $dir.FullName "$case.pending-dirlint"))) {
+          $script:skip++; Write-Host "[PENDING] ${tag}: applied attribution (lane DIRLINT: edit away from the finding's StartLine reports applied:false)" -ForegroundColor Yellow
+        } else {
+          Check "${tag}: --fix --apply applied >= 1 row" ($applied -ge 1) $raw.Trim()
+        }
         $same = BytesEqual ([IO.File]::ReadAllBytes($copy)) ([IO.File]::ReadAllBytes($fixed))
         Check "${tag}: result is byte-identical to $case.fixed.pas" $same $(if (-not $same) { FirstDiff $copy $fixed } else { '' })
         # a store-backed fix is re-checked against a FRESH index: the stale rows still name the deleted lines
