@@ -1,7 +1,7 @@
 {
   "product": "1.35.1-alpha",
-  "extractor": "1.24.0-alpha",
-  "resolver": "1.14.0-alpha",
+  "extractor": "1.25.0-alpha",
+  "resolver": "1.15.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -213,6 +213,61 @@
         "by": "ENGINE",
         "build": "1.35.0-alpha",
         "surfaceHash": "b8dadc4fd460a74c84d7e83bcf99222a0885db937a3941fc311a0b204ee3429f"
+      }
+    },
+    {
+      "id": "index-build-config",
+      "title": "Index a project against its active build config",
+      "group": "indexing",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.35.1-alpha",
+      "summary": "Parses a project index against the project's active build config (the .dproj Config marker or delphilsp.json) instead of a fixed Release, with an override flag",
+      "intro": "Read this when a project index must show the code your IDE compiles, for example IFDEF DEBUG branches, or when you want to index a specific build such as Release for a ship view. The index follows the project's active configuration and records it, so a config switch re-parses exactly that database.",
+      "wikiPage": "index-build-config",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "index",
+          "example": "drag-lint index --project <file.dproj> --db <file.sqlite> --build-config Release",
+          "usage": "drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]",
+          "flags": [
+            {
+              "name": "--project",
+              "arg": "<file.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--build-config",
+              "arg": "<Release|Debug|name>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I index my project as the build the IDE has active?",
+          "command": "drag-lint index --project <file.dproj> --db <file.sqlite>"
+        },
+        {
+          "ask": "How do I index the Release build while Debug is active?",
+          "command": "drag-lint index --project <file.dproj> --db <file.sqlite> --build-config Release"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-26",
+        "by": "LSP"
+      },
+      "verified": {
+        "date": "2026-10-26",
+        "by": "LSP",
+        "build": "1.35.1-alpha",
+        "surfaceHash": "e65d0306b6f45e6b574096a25c08b746aaeabba7aa3d2cc66ab0581d41574876"
       }
     },
     {

@@ -4,7 +4,7 @@ title: Show Resolved DBs (debug)
 summary: Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query
 product: DL
 group: indexing
-order: 10008
+order: 10009
 since: 0.60.0-alpha
 status: shipped
 updated: 1.35.1-alpha

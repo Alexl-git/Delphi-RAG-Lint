@@ -875,6 +875,7 @@ drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-
 | `--exclude-under` |  |  |  |
 | `--include-only` |  |  |  |
 | `--project` | `<file.dproj>` |  |  |
+| `--build-config` | `<Release\|Debug\|name>` |  |  |
 | `--recompile` |  |  |  |
 | `--rebuild` |  |  |  |
 | `--dry-run` |  |  |  |
@@ -883,6 +884,7 @@ Described in:
 
 * [Auto-Document Whole Project](../../docs/wiki/Auto-Document-Whole-Project.md)
 * [Format Whole Project with YADF](../../docs/wiki/Format-Whole-Project-with-YADF.md)
+* [Index a project against its active build config](../../docs/wiki/index-build-config.md)
 * [Rebuild Index for This Project](../../docs/wiki/Rebuild-Index-for-This-Project.md)
 * [Rescan this unit](../../docs/wiki/Rescan-this-unit.md)
 

@@ -4,7 +4,7 @@ title: migrate-dbs
 summary: Moves project index databases into each project's own D-RAG folder, matching the current index layout
 product: DL
 group: indexing
-order: 10002
+order: 10003
 since: 1.3.0-alpha
 status: shipped
 updated: 1.35.1-alpha

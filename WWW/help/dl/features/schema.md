@@ -4,7 +4,7 @@ title: schema
 summary: "Prints the live schema of an index database: schemaversion, every table and column, and row counts"
 product: DL
 group: indexing
-order: 10007
+order: 10008
 since: 0.95.0-alpha
 status: shipped
 updated: 1.35.1-alpha

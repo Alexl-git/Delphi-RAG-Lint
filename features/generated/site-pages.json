@@ -375,6 +375,10 @@
     "hash": "9b8eda6009a2fc0870612745b4137a53b0cd20f4747eb170dae86946d06d5a9d",
     "version": "1.35.1-alpha"
   },
+  "features/index-build-config.md": {
+    "hash": "71572a38ab9a18159679bb5e478831eeec0b8d475d5c534d717eb7dd6ea45ece",
+    "version": "1.35.1-alpha"
+  },
   "features/info.md": {
     "hash": "1736f08144cb5faa9eb0487fca5694c5617542344f339fb09d61ee5318e22d5e",
     "version": "1.35.1-alpha"
@@ -444,7 +448,7 @@
     "version": "1.35.1-alpha"
   },
   "features/migrate-dbs.md": {
-    "hash": "edc83a70774ffe000291b05f3c7d9df0fd95441915b125e75578f36b50c404d7",
+    "hash": "96b14821e1aa2d8723c1796cf8f4f60cc2ff27afb48d4bb29ec4ed60c785fc75",
     "version": "1.35.1-alpha"
   },
   "features/multi-project-rename.md": {
@@ -459,8 +463,12 @@
     "hash": "1f0db5be61434f8fcded7db017cbab9775eaadd256b8fc024f47fe45d1db0b4a",
     "version": "1.35.1-alpha"
   },
+  "features/output-encoding.md": {
+    "hash": "c405d926abeac00f2d95dd2b393432ca56873f6e91a2ab5fd5cba953018f6ba9",
+    "version": "1.35.1-alpha"
+  },
   "features/pp-profile.md": {
-    "hash": "df317b88203db4da6c3d3d16d079c9bec9c60f74a07f0446b2dec099cab09840",
+    "hash": "17a8f0df0afff686849f95679bf5e6c184d1a9dfe7f6b954f3d47f1ebdaaf3c3",
     "version": "1.35.1-alpha"
   },
   "features/preprocess-file.md": {
@@ -480,7 +488,7 @@
     "version": "1.35.1-alpha"
   },
   "features/purge-locals.md": {
-    "hash": "f7af4cf8bf2e0ac39bd73ddab572747a67dba535993ba77499da3a30a9794c40",
+    "hash": "f84f501db43915e4682c654ae6c4ffc2e8705f068a7db076bca31bd11c176fe3",
     "version": "1.35.1-alpha"
   },
   "features/query-ancestors.md": {
@@ -492,7 +500,7 @@
     "version": "1.35.1-alpha"
   },
   "features/query-find-callers.md": {
-    "hash": "ba902c767908f03542dc55046183be3ebefb18f462f6dfefb3f7ef264849e582",
+    "hash": "6fff114730cc9408cd6b2b83c63541260c7eb87bd91d64e11cc89484ab6336d5",
     "version": "1.35.1-alpha"
   },
   "features/query-kind-all.md": {
@@ -528,7 +536,7 @@
     "version": "1.35.1-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
-    "hash": "194296541b9b2d9ce678dd61c256bfe9b9cadddac26184b5cbc4bd2e041beab9",
+    "hash": "317ef9af4269a2ad4ced5c43879031a50220c50c87362a30043d46f3ce96f3bf",
     "version": "1.35.1-alpha"
   },
   "features/reconcile-project-members-dpr-dproj.md": {
@@ -540,7 +548,7 @@
     "version": "1.35.1-alpha"
   },
   "features/register-project.md": {
-    "hash": "f61563456f5445e82969ae502508d561547672008e7fcebdbd7a57bc95b472c8",
+    "hash": "8d3c9727ff6bf3f08fc683c7d74d633b2a846a28a51f62ef35213980a9c796b9",
     "version": "1.35.1-alpha"
   },
   "features/rename-symbol.md": {
@@ -580,16 +588,16 @@
     "version": "1.35.1-alpha"
   },
   "features/schema.md": {
-    "hash": "1243a653aa655670384f6f64b027e7dfc71c2de91b92de5b1557b148013b9d75",
+    "hash": "8c33068c2d7344a9b2d334faff9bbde13b5b4586a290e5f975bafdd1f53c2f09",
     "version": "1.35.1-alpha"
   },
   "features/serve.md": {
-    "hash": "463ff06b5f4870cbf048b4abb13e86fc4325a8221ea947d1bead60bfebef4a29",
+    "hash": "f1cd394c95bb1a46ee4da82bb21b0102bf969f3853862b5dc145240944ae3415",
     "version": "1.35.1-alpha"
   },
   "features/setup-installer.md": {
-    "hash": "fc7b39fb6c5059cd489a8116d9d7e299fc99f425da83a209e692c47e561d6c55",
-    "version": "1.33.0-alpha"
+    "hash": "0e25e15529be98752707aea63c361a7e594617940f2e7957518837281f80a30b",
+    "version": "1.35.1-alpha"
   },
   "features/shared-unit.md": {
     "hash": "50a09c58eb0a92358bc0457498a3c7dde9017b37201909561fd1b8fae58b0e82",
@@ -604,7 +612,7 @@
     "version": "1.35.1-alpha"
   },
   "features/show-resolved-dbs-debug.md": {
-    "hash": "3100a61899aa5db926185e7f2baca7e000c146e76bcd78a04a835ff7a43afff9",
+    "hash": "2640670fdf9014aaf2d57c2394299877711e8813f8b24e1c4dd5a37e71f1e62e",
     "version": "1.35.1-alpha"
   },
   "features/show-signature-help.md": {
@@ -680,15 +688,15 @@
     "version": "1.35.1-alpha"
   },
   "features/workspace-add.md": {
-    "hash": "50d770cd88d72a69fff7fe028567f6af4e4f91d69ad9c225c1a664688f91a838",
+    "hash": "8f9fa259eef89c1a36fe4b4d3d70fe5baf85745eee9a9cbd52225c7f692e5bff",
     "version": "1.35.1-alpha"
   },
   "features/workspace-index.md": {
-    "hash": "47ad5007ed07e738a79a4fd17eaec04f2e38db70be43505d70e54a5aca9c3f77",
+    "hash": "628a1d2609fe34da4627a063fa5bb944a6a785dd21b5aeda2695dfde84ed3af5",
     "version": "1.35.1-alpha"
   },
   "features/workspace-status.md": {
-    "hash": "49bb9d566604f1d275d31549eb75e9f9d2d2a256bb110fec47ade10a5c1b7e73",
+    "hash": "629d46ab6c291e90c08fe7a56ebdaf037bc24b2c57c15f109a21fddda2b0c6f0",
     "version": "1.35.1-alpha"
   }
 }

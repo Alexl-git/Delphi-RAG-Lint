@@ -4,7 +4,7 @@ title: Rebuild Index for This Project
 summary: Walks a project's .dproj compile closure and (re)builds its index
 product: DL
 group: indexing
-order: 10005
+order: 10006
 since: 0.2.0-alpha
 status: shipped
 updated: 1.35.1-alpha

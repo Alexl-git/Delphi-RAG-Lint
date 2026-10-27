@@ -16,6 +16,7 @@ Build and maintain the per-project and library indexes.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Auto-Document Whole Project](features/auto-document-whole-project.md) | Writes DocInsight documentation into every public declaration a project owns | 0.1.0-alpha |
+| [Index a project against its active build config](features/index-build-config.md) | Parses a project index against the project's active build config (the .dproj Config marker or delphilsp.json) instead of a fixed Release, with an override flag | 1.35.1-alpha |
 | [migrate-dbs](features/migrate-dbs.md) | Moves project index databases into each project's own D-RAG folder, matching the current index layout | 1.3.0-alpha |
 | [pp-profile](features/pp-profile.md) | Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line | 0.92.0-alpha |
 | [purge-locals](features/purge-locals.md) | A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space | 0.91.0-alpha |

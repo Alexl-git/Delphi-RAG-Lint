@@ -4,7 +4,7 @@ title: workspace add
 summary: Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it
 product: DL
 group: editor-integration
-order: 110019
+order: 110020
 since: 0.6.0-alpha
 status: shipped
 updated: 1.35.1-alpha

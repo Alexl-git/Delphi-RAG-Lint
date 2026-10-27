@@ -129,6 +129,7 @@
   "helpers-of": "helpers-of",
   "ide-help-line": "ide-help-line",
   "ide-release": "ide-release",
+  "index-build-config": "index-build-config",
   "info": "info",
   "link-orm": "link-orm",
   "lint-project": "lint-project",

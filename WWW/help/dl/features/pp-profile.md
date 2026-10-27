@@ -4,7 +4,7 @@ title: pp-profile
 summary: Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line
 product: DL
 group: indexing
-order: 10003
+order: 10004
 since: 0.92.0-alpha
 status: shipped
 updated: 1.35.1-alpha

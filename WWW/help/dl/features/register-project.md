@@ -4,7 +4,7 @@ title: register-project
 summary: Add a new project to the manifest so index --all and the IDE can see it
 product: DL
 group: indexing
-order: 10006
+order: 10007
 since: 1.20.4-alpha
 status: shipped
 updated: 1.35.1-alpha

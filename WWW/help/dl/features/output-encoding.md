@@ -7,7 +7,7 @@ group: editor-integration
 order: 110017
 since: 1.35.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.35.1-alpha
 ---
 
 # Output encoding (--output-encoding)
@@ -29,6 +29,10 @@ drag-lint sql --query <select> --db <db> --json --output-encoding utf8
 ```
 
 Full flag list: [sql in the CLI reference](../cli.md#sql).
+
+## Where to click
+
+No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
