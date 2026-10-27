@@ -78,11 +78,11 @@ begin
     2026-10-16: 10 -> 11. confusable-identifier joined the naming bucket in
     40fd41b2; ce007d31 re-pinned the docrules count but missed this one.
     Verified against the live catalog (rules --json): the delta is that id. }
-  Check('summary naming count = 12', NamingCount = 12);
+  Check('summary naming count = 13', NamingCount = 13);
 
   { category filter returns only that category }
   Cat:= TRuleCatalog.BuildCatalog(RulesDir, 'naming');
-  Check('category filter naming -> 12 rules', Length(Cat) = 12);
+  Check('category filter naming -> 13 rules', Length(Cat) = 13);
   for Info in Cat do
     if Info.Category <> 'naming' then begin Check('filtered all naming', False); Break; end;
 
