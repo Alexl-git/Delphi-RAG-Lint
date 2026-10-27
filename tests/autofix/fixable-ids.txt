@@ -31,3 +31,11 @@ wrong-size-memory-op
 overflow-before-widening
 uses-movable-to-implementation
 virtual-never-overridden
+inherited-bare
+inline-on-large-routine
+missing-const-param
+public-field
+destructor-without-override
+missing-inherited-dtor
+missing-inherited-ctor
+method-could-be-static

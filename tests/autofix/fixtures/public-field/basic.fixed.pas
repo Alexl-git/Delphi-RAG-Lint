@@ -5,8 +5,8 @@ interface
 type
   TWithPrivate = class
   private
-    FSize: Integer;
     FName: string;
+    FSize: Integer;
     FOther: Integer;
   public
     property Name: string read FName write FName;
