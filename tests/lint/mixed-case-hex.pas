@@ -8,14 +8,14 @@ procedure P;
 var
   R: Integer;
 begin
-  R := $AbCd;
-  R := $aBCD;
-  R := $ABCD;
-  R := $abcd;
-  R := $1234;
-  R := $12ab;
-  R := $12AB;
-  R := 1234;
+  WriteLn($AbCd);
+  WriteLn($aBCD);
+  WriteLn($ABCD);
+  WriteLn($abcd);
+  WriteLn($1234);
+  WriteLn($12ab);
+  WriteLn($12AB);
+  WriteLn(1234);
 end;
 
 end.
