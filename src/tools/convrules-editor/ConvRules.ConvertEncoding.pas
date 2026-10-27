@@ -192,6 +192,7 @@ implementation
 
 uses
   System.SysUtils
+  , System.Classes  // TStringList: BookLines
   , System.StrUtils  // MatchText
   , System.Character
   , System.UITypes  // mrYes / mrNo / mrCancel: PreRunPlan's answers
@@ -220,6 +221,19 @@ const
 function IsSurrogateCode(ACode: Integer): Boolean;
 begin
   Result:= (ACode >= SURR_FIRST) and (ACode <= SURR_LAST);
+end;
+
+function BookLines(const ABookText: string): TArray<string>;
+var
+  LList: TStringList;
+begin
+  LList:= TStringList.Create;
+  try
+    LList.Text:= ABookText;
+    Result:= LList.ToStringArray;
+  finally
+    LList.Free;
+  end;
 end;
 
 function RuleLinesOnly(const ABookText: string): string;
@@ -461,7 +475,7 @@ begin
   SetLength(LFroms, Length(ABooks));
   for var B: Integer:= 0 to High(ABooks) do
   begin
-    LLines[B]:= RuleLinesOnly(ABookText(ABooks[B])).Split([#10]);
+    LLines[B]:= BookLines(RuleLinesOnly(string.Join(#10, BookLines(ABookText(ABooks[B])))));
     if Assigned(AApplier) then
       LFroms[B]:= BlockFromTypes(LLines[B]);
   end;

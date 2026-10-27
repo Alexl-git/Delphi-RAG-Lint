@@ -16,6 +16,7 @@ var
   BookFn: TBookTextFn;
   LevelFn: TUnitLevelFn;
   Applier: TUnitApplierFn;
+  LFirst, LSecond: TArray<string>;
 begin
   // --- AppliedRuleLines: a non-applying block's own lines are blanked, line breaks kept ---
   Book:= '#use U' + CYR + #13#10                           // 1 book scope: always counts
@@ -148,4 +149,23 @@ begin
       Result:= '#default Caption = ''' + StringOfChar('a', 150) + CYR + '''';
     end, LevelFn);
   Check('n3.place.rule.holds.char', (Length(Places) = 1) and Places[0].Rule.Contains(CYR));
+
+  // --- N13-1: the book is split the way the model splits it (CRLF, LF, lone CR, mixed) ---
+  LFirst := [#13#10, #10, #13, #13];
+  LSecond:= [#13#10, #10, #13, #10];
+  for var LCase: Integer:= 0 to 3 do
+  begin
+    var LB1: string:= LFirst[LCase];
+    var LB2: string:= LSecond[LCase];
+    var LText: string:= '#use A' + LB1 + '// c' + CYR + LB2 + '#default Tag = z' + CYR + LB1 + '#use B';
+    Places:= EncodingPlaces(['m.rules'], ['a.pas'],
+      function(const APath: string): string
+      begin
+        Result:= LText;
+      end, LevelFn);
+    Check('n13.split.one.place.' + IntToStr(LCase), Length(Places) = 1, IntToStr(Length(Places)));
+    if Length(Places) = 1 then
+      Check('n13.split.line3.' + IntToStr(LCase), (Places[0].Line = 3) and (Places[0].Col = 17),
+        IntToStr(Places[0].Line) + '/' + IntToStr(Places[0].Col));
+  end;
 end;
