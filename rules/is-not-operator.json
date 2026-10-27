@@ -1,0 +1,8 @@
+{
+  "id": "is-not-operator",
+  "category": "modernize",
+  "severity": "hint",
+  "message": "not (X is T) can be written X is not T (Delphi 13) -- the negation then reads as part of the type test.",
+  "warn_capture": "warn",
+  "enabled": true
+}

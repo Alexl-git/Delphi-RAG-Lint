@@ -1,0 +1,11 @@
+# Hit: line 8 (if/else, both branches assign the same target).
+# Non-hits: 17 (already an if-expression, no statement if), 18 (branches assign
+# different targets), 23 (no else), 26 (else branch is not an assignment).
+# Known FP shape: a branch with side effects in the condition-dependent RHS is
+# still equivalent in an if-expression (only the taken branch is evaluated), so
+# no FP there; compound targets (A.B := ..) fire when both sides match.
+ifthen-to-if-expression 9
+!ifthen-to-if-expression 17
+!ifthen-to-if-expression 18
+!ifthen-to-if-expression 22
+!ifthen-to-if-expression 24

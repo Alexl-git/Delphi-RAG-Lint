@@ -1,0 +1,11 @@
+# Hits: lines 10 and 12 (`not (X is T)`, the second inside an `and`).
+# Non-hits: 18 (`X is not T` already), 20 (not on a non-is expression),
+# 22 (not on a call), 24 (a bare `is` without not).
+# Known FP shape: `not (A is T)` where the parens group more than the is test,
+# e.g. `not (A is T) or B` is still a plain not(is) and fires correctly.
+is-not-operator 11
+is-not-operator 13
+!is-not-operator 19
+!is-not-operator 21
+!is-not-operator 23
+!is-not-operator 25
