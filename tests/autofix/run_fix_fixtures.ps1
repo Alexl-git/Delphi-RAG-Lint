@@ -87,6 +87,7 @@ try {
       $copy = Join-Path $scr "$case.pas"
       Copy-Item $src.FullName $copy -Force
       $extra = @()
+      $db = $null
       $cfg = Join-Path $dir.FullName "$case.config.json"
       if (Test-Path $cfg) { $extra += @('--config', $cfg) }
       $rdir = Join-Path $dir.FullName '_rules'
@@ -106,6 +107,8 @@ try {
         Check "${tag}: --fix --apply applied >= 1 row" ($applied -ge 1) $raw.Trim()
         $same = BytesEqual ([IO.File]::ReadAllBytes($copy)) ([IO.File]::ReadAllBytes($fixed))
         Check "${tag}: result is byte-identical to $case.fixed.pas" $same $(if (-not $same) { FirstDiff $copy $fixed } else { '' })
+        # a store-backed fix is re-checked against a FRESH index: the stale rows still name the deleted lines
+        if ($db) { & $exePath index $scr --db $db *> (Join-Path $scr '_reindex.log') }
         # 2. idempotence
         $before = [IO.File]::ReadAllBytes($copy)
         $txt = & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | Out-String
