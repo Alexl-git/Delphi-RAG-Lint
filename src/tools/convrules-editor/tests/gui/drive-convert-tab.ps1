@@ -30,6 +30,9 @@ public static class W {
   /* N1: a REAL left click (cursor + button down/up) at the centre of H. A posted BM_CLICK
      reaches a button even under a modal window; the user's mouse does not. */
   public static void MouseClick(IntPtr h) { RECT r; GetWindowRect(h, out r); SetCursorPos((r.L + r.R) / 2, (r.T + r.B) / 2); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); }
+  /* DRV-2: a press at the spot the cursor already stands on (the previous run's last click, same layout) did not reach
+     the editor's WM_SETCURSOR hit-test path in runs 2 and 3 of every batch: the cursor is moved away first, so the click is a real MOVE + press. */
+  public static void MouseClickFresh(IntPtr h) { SetCursorPos(2, 2); System.Threading.Thread.Sleep(200); MouseClick(h); }
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc p, IntPtr l);
@@ -338,6 +341,47 @@ function WaitStatus($main, $Before, $Seconds) {
 $engine = Join-Path (Split-Path -Parent $Exe) 'drag-lint.exe'
 if (-not (Test-Path -LiteralPath $engine)) { throw "no drag-lint.exe beside $Exe -- the fixture index must be built with the editor's own frozen engine" }
 
+# DRV-2: the engine call behind Add... can be shorter than the progress window's 400 ms show delay (or a cache hit),
+# so the N1/N7 preconditions were met in only 1 of 3 runs. EngineHold makes the call long on purpose: it watches for
+# a NEW drag-lint.exe (the one beside the editor, so other sessions' engines do not count) at ~1 ms and SUSPENDS it
+# (NtSuspendProcess) until Release(); the editor then waits on its engine call, shows the progress window after
+# 400 ms and stays behind it for as long as the driver holds. Release() resumes everything it suspended (idempotent).
+# No product code involved. If no engine child ever starts (an editor-side cache hit), nothing is held and the
+# precondition check reports "progress window never appeared" as before.
+Add-Type -TypeDefinition @"
+using System; using System.Text; using System.Threading; using System.Diagnostics;
+using System.Collections.Generic; using System.Runtime.InteropServices;
+public static class EngineHold {
+  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, int pid);
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageNameW(IntPtr h, int f, StringBuilder s, ref int n);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr h);
+  [DllImport("ntdll.dll")] static extern int NtResumeProcess(IntPtr h);
+  static volatile bool run; static Thread th; static HashSet<int> seen; static List<IntPtr> held = new List<IntPtr>(); static int total; public static int LastPid; static readonly object gate = new object();
+  static string Image(int pid) {
+    IntPtr h = OpenProcess(0x1000, false, pid); if (h == IntPtr.Zero) return "";
+    try { var s = new StringBuilder(1024); int n = 1024; return QueryFullProcessImageNameW(h, 0, s, ref n) ? s.ToString() : ""; } finally { CloseHandle(h); }
+  }
+  static int[] Ids() { var ps = Process.GetProcessesByName("drag-lint"); var r = new int[ps.Length]; for (int i = 0; i < ps.Length; i++) { r[i] = ps[i].Id; ps[i].Dispose(); } return r; }
+  public static void Arm(string exe) {
+    Release();
+    seen = new HashSet<int>(Ids()); run = true; total = 0;
+    th = new Thread(() => { while (run) { foreach (int id in Ids()) if (seen.Add(id) && string.Equals(Image(id), exe, StringComparison.OrdinalIgnoreCase)) {
+      IntPtr h = OpenProcess(0x0800, false, id); if (h != IntPtr.Zero) { NtSuspendProcess(h); lock (gate) { held.Add(h); total++; LastPid = id; } } }
+      Thread.Sleep(1); } });
+    th.IsBackground = true; th.Start();
+  }
+  public static int Total() { return total; }
+  public static int Held() { lock (gate) { return held.Count; } }
+  /* Resumes what is held NOW but keeps watching: the next engine child is held again (its pid was never seen). */
+  public static int ResumeHeld() { int n; lock (gate) { n = held.Count; foreach (IntPtr h in held) { NtResumeProcess(h); CloseHandle(h); } held.Clear(); } return n; }
+  public static int Release() {
+    run = false; if (th != null) { th.Join(); th = null; }
+    int n; lock (gate) { n = held.Count; foreach (IntPtr h in held) { NtResumeProcess(h); CloseHandle(h); } held.Clear(); }
+    return n;
+  }
+}
+"@
 # --- fixture ---
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('convert-tab-fx-' + [guid]::NewGuid().ToString('N'))
 $rulesDir = Join-Path $tmp 'rules'; $dragDir = Join-Path $tmp '_D-RAG'
@@ -501,6 +545,7 @@ try {
   $dlg = WaitCls $p.Id '#32770' 20
   Start-Sleep -Milliseconds 700
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
+  if (-not $ProofNoWindow) { [EngineHold]::Arm($engine) }   # DRV-2: hold the engine call so the progress window is up
   Click (@(Find $dlg 'Button' '&Open')[0])
   # N9: the progress window is timing-dependent. If it never appears, a REAL click would start an actual
   # Convert and every later check would cascade. So the click is only made while the window holds the
@@ -508,21 +553,51 @@ try {
   # -ProofNoWindow skips the wait for the window: 3b must FAIL and every later check must still pass.
   $wait = [IntPtr]::Zero; $t0 = Get-Date
   if ($ProofNoWindow) { "NOTE  -ProofNoWindow: the wait for the progress window is SKIPPED; only n1.click.under.progress is expected to FAIL" }
-  else { while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } } }
+  else {
+    # DRV-2: Add... runs several engine calls (the unit-name lists of the picker, then the C8 class-ancestor and field
+    # lookups of 'Checking N source unit(s) for inherited instances'); only the C8 stage is one the lost-click notice
+    # survives (it waits for the OPERATION to end), and only some stages sit behind the progress window. So: every NEW
+    # engine child is looked at (its command line); one that is not the C8 lookup of TFixForm is resumed at once, the
+    # first C8 child stays suspended until the click is made.
+    $lastPid = 0; $c8 = $false
+    while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) {
+      if ([EngineHold]::LastPid -ne $lastPid) {
+        $lastPid = [EngineHold]::LastPid
+        $cl = try { (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $lastPid) -ErrorAction Stop).CommandLine } catch { '' }
+        if (-not $c8) { if ($cl -match "TFixForm") { $c8 = $true } else { [void][EngineHold]::ResumeHeld() } }
+      }
+      if ($c8) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0 }
+      if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 }
+    }
+  }
   $disabled = -not [W]::IsWindowEnabled($main)
   if (($wait -ne [IntPtr]::Zero) -and $disabled) {
-    [W]::MouseClick($conv)
+    $script:dbg = 'wait=({0},{1}) conv=({2},{3}) held={4}' -f [W]::Left($wait), [W]::Top($wait), [W]::Left($conv), [W]::Top($conv), [EngineHold]::Held()
+    [W]::MouseClickFresh($conv)
+    # DRV-2: the lost-click notice is appended once the OPERATION ends, so it only survives a click made during the
+    # operation's LAST engine call (between calls it can fire and be overwritten by the next status). Add... makes a
+    # few C8 calls: each further child is held and clicked under too, until none starts for 3 s.
+    Start-Sleep -Milliseconds 700; [void][EngineHold]::ResumeHeld()
+    for ($quiet = Get-Date; ((Get-Date) - $quiet).TotalSeconds -lt 3; ) {
+      if ([EngineHold]::Held() -gt 0) {
+        $w2 = WaitCls $p.Id 'TEngineWaitForm' 2
+        if (($w2 -ne [IntPtr]::Zero) -and -not [W]::IsWindowEnabled($main)) { [W]::MouseClickFresh($conv) }
+        Start-Sleep -Milliseconds 700; [void][EngineHold]::ResumeHeld(); $quiet = Get-Date
+      } else { Start-Sleep -Milliseconds 50 }
+    }
+    $held = [EngineHold]::Release()
     [void](WaitIdle $p.Id $main 90)
     $st = Status $main
     Check 'n1.click.under.progress' $true "(precondition: the click landed while the progress window disabled the editor) window=True disabled=$disabled"
-    Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') $st
+    Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') ($st + ' | ' + $script:dbg)
     Check 'n1.lost.click.no.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
   } else {
     # let the add finish; NO click, so no real Convert is started. The progress window shows only after a 400 ms delay,
     # so first wait for the row to land (WaitIdle alone can see a brief false idle before the window opens).
+    $heldN = '{0}/{1} c8={2}' -f [EngineHold]::Held(), [EngineHold]::Total(), $c8; [void][EngineHold]::Release()
     $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and -not ([CT]::Items($src) -contains $pas)) { Start-Sleep -Milliseconds 250 }
     [void](WaitIdle $p.Id $main 90)
-    Check 'n1.click.under.progress' $false "precondition: progress window never appeared (window=$($wait -ne [IntPtr]::Zero) disabled=$disabled); click skipped, n1.lost.click.* not evaluated"
+    Check 'n1.click.under.progress' $false "precondition: progress window never appeared (engine children held/total=$heldN window=$($wait -ne [IntPtr]::Zero) disabled=$disabled); click skipped, n1.lost.click.* not evaluated"
   }
   [void](WaitIdle $p.Id $main 30)
   [void][W]::Send($src, 0x0185, [IntPtr]1, [IntPtr]0)   # LB_SETSEL row 0, then Delete: step 3c starts from an empty list
@@ -540,6 +615,7 @@ try {
   $dlg = WaitCls $p.Id '#32770' 20
   Start-Sleep -Milliseconds 700
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
+  [EngineHold]::Arm($engine)   # DRV-2
   Click (@(Find $dlg 'Button' '&Open')[0])
   $wait = [IntPtr]::Zero; $t0 = Get-Date
   while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } }
@@ -548,6 +624,7 @@ try {
     [void][W]::PostMessage([CT]::Parent($add), 0x0111, [IntPtr]::Zero, $add)    # WM_COMMAND, BN_CLICKED (0), lParam = the button
     [void][W]::PostMessage([CT]::Parent($conv), 0x0111, [IntPtr]::Zero, $conv)
     Click $del
+    Start-Sleep -Milliseconds 1500; [void][EngineHold]::Release()   # DRV-2: the posts are handled inside the held window
     # Anything the posted commands opened is recorded and closed, so a RED run still ends.
     $opened = @(); $t0 = Get-Date
     while (((Get-Date) - $t0).TotalSeconds -lt 120) {
@@ -568,6 +645,7 @@ try {
     Check 'n7.delete.not.run' (($n0 -eq 0) -and ($items.Count -eq 1) -and ($items -contains $pas)) ("before=$n0 items: " + ($items -join ' | '))
     Check 'n7.refusal.reported' ($st -match 'Add was NOT run: it was clicked while the editor was busy \(.+\)\. Click it again\.$') $st
   } else {
+    [void][EngineHold]::Release()
     $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and -not ([CT]::Items($src) -contains $pas)) { Start-Sleep -Milliseconds 250 }
     [void](WaitIdle $p.Id $main 90)
     Check 'n7.posted.under.progress' $false "precondition: progress window never appeared (window=$($wait -ne [IntPtr]::Zero) disabled=$disabled); nothing posted, n7.* not evaluated"
@@ -672,6 +750,7 @@ try {
   } finally { [IO.File]::Move($off, $dproj) }
 }
 finally {
+  [void][EngineHold]::Release()   # DRV-2: never leave a suspended engine behind
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }
   # The engine child may still hold the index for a moment after the kill.
   $gone = $false

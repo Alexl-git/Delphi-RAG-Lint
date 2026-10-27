@@ -317,6 +317,29 @@ public static class Q {
   public static void Pick(IntPtr dlg, IntPtr lb, int idx) { Send(lb, 0x0186, (IntPtr)idx, IntPtr.Zero); Send(dlg, 0x0111, (IntPtr)(1 << 16), lb); }
 }
 '@
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  /* DRV-5 / N7/N11: 'ConvRulesEditor.Busy' answers 2 busy / 1 idle; no answer within the timeout = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+"@
+# DRV-5: idle = no progress window / message box / common dialog, the editor enabled and saying idle (B::Busy), for 2 s.
+function WaitIdle($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [Q]::IsWindowEnabled($main) -or [B]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 200
+  }
+  return $false
+}
 # Waits for a run to END: the unit's row has a status AND Convert is enabled again AND the status line is not a
 # progress line (WaitStatus alone returns on the analysis' own '1 source unit(s) listed.' line).
 function WaitRun($main, $lv, $conv, $Seconds) {
@@ -326,7 +349,7 @@ function WaitRun($main, $lv, $conv, $Seconds) {
     $d = @(Forms $p.Id | Where-Object { [W]::Cls($_) -in 'TMessageForm', '#32770' })
     if ($d.Count -gt 0) { $script:dlg = TopsNow $p.Id; break }
     $rows = @([W]::Column($lv, 2) | Where-Object { $_ })
-    if ($rows.Count -gt 0 -and [Q]::IsWindowEnabled($conv) -and -not (RunInProgress (Status $main))) { break }
+    if ($rows.Count -gt 0 -and [Q]::IsWindowEnabled($conv) -and -not [B]::Busy($main) -and -not (RunInProgress (Status $main))) { break }
   }
   $script:waited = ((Get-Date) - $t0).TotalSeconds
   Start-Sleep -Seconds 2
@@ -512,6 +535,7 @@ try {
   $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 60 -and -not ((Status $main) -like '*source unit(s) listed*')) { Start-Sleep -Milliseconds 500 }
   Start-Sleep -Seconds 1
   $before = Status $main
+  [void](WaitIdle $p.Id $main 90)
   Click $conv
   $st = WaitRun $main $lv $conv 180
   $cols = @(0..7 | ForEach-Object { , @([W]::Column($lv, $_)) })
@@ -608,6 +632,7 @@ try {
   $before = Status $main
   $oldCols = @([W]::Column($lv, 2)) -join ','
   for ($try = 0; $try -lt 3; $try++) {
+    [void](WaitIdle $p.Id $main 90)
     Click $conv
     $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 20 -and -not (RunInProgress (Status $main)) -and ((@([W]::Column($lv, 2)) -join ',') -eq $oldCols)) { Start-Sleep -Milliseconds 400 }
     if ((RunInProgress (Status $main)) -or ((@([W]::Column($lv, 2)) -join ',') -ne $oldCols)) { break }

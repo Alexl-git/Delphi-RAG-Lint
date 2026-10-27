@@ -220,14 +220,30 @@ function WaitStatus($main, $pattern, $sec) { $t0 = Get-Date; while (((Get-Date) 
 # A TLabel has no window of its own; when no child answers, the dialog's own Ctrl+C (VCL TMessageForm copies
 # its caption, message and buttons) is read from the clipboard. Needs the editor on the desktop (GUI lock).
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class FG {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  /* SetForegroundWindow; only when that is refused, an ALT tap (the process that sent the last input may set the
+     foreground) and again. The tap can eat the next key, so the caller retries its Ctrl+C. */
+  public static void Front(IntPtr h) { if (SetForegroundWindow(h) && GetForegroundWindow() == h) return; keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); SetForegroundWindow(h); }
+}
+"@
 function MsgText($dlg) {
   $t = ((@([W]::Kids($dlg)) | Where-Object { [W]::Cls($_) -in 'TLabel', 'Static' } | ForEach-Object { [W]::Txt($_) }) -join ' ')
   if ($t.Trim() -ne '') { return $t }
-  Set-Clipboard -Value 'convert-encoding-sentinel'
-  [void][W]::SetForegroundWindow($dlg); Start-Sleep -Milliseconds 300
-  [System.Windows.Forms.SendKeys]::SendWait('^c'); Start-Sleep -Milliseconds 300
-  $c = ''
-  for ($i = 0; $i -lt 10; $i++) { try { $c = [string](Get-Clipboard -Raw -ErrorAction Stop); break } catch { Start-Sleep -Milliseconds 200 } }
+  # DRV-1: the FIRST Ctrl+C sent to a fresh question is lost (save.nonascii.asks read '' in 1 of 3 runs): retry
+  # the copy, only while the dialog really is the foreground window (same fix as drive-convert-encoding.ps1).
+  $c = 'convert-encoding-sentinel'
+  for ($try = 0; ($try -lt 6) -and ($c -eq 'convert-encoding-sentinel') -and [W]::IsWindowVisible($dlg); $try++) {
+    Set-Clipboard -Value 'convert-encoding-sentinel'
+    [FG]::Front($dlg); Start-Sleep -Milliseconds 300
+    if ([FG]::GetForegroundWindow() -ne $dlg) { Start-Sleep -Milliseconds 500; continue }
+    [System.Windows.Forms.SendKeys]::SendWait('^c'); Start-Sleep -Milliseconds 300
+    for ($i = 0; $i -lt 10; $i++) { try { $c = [string](Get-Clipboard -Raw -ErrorAction Stop); break } catch { Start-Sleep -Milliseconds 200 } }
+  }
   if ($c -eq 'convert-encoding-sentinel') { return '' }
   # '---' / caption / '---' / message / '---' / buttons: the message is the block after the second rule.
   $parts = $c -split '(?m)^-+\s*$'

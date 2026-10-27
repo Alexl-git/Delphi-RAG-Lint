@@ -314,6 +314,29 @@ function WaitStatus($main, $Before, $Seconds) {
   Status $main
 }
 
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  /* DRV-5 / N7/N11: 'ConvRulesEditor.Busy' answers 2 busy / 1 idle; no answer within the timeout = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+"@
+# DRV-5: idle = no progress window / message box / common dialog, the editor enabled and saying idle (B::Busy), for 2 s.
+function WaitIdle($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 200
+  }
+  return $false
+}
 # Waits for an add to settle instead of a fixed sleep: the Open dialog gone, no progress
 # window (TEngineWaitForm, the inherited-instance check), and the status line reporting
 # $count listed units -- or an editor message box (a prompt the check must not ask).
@@ -322,7 +345,7 @@ function WaitAddSettled($procId, $main, $count, $sec = 120) {
   while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
     $tops = @([W]::Tops($procId) | ForEach-Object { [W]::Cls($_) })
     if ($tops -contains 'TMessageForm') { return }
-    if (($tops -notcontains '#32770') -and ($tops -notcontains 'TEngineWaitForm') -and ((Status $main) -like "$count source unit(s) listed*")) { return }
+    if (($tops -notcontains '#32770') -and ($tops -notcontains 'TEngineWaitForm') -and -not [B]::Busy($main) -and ((Status $main) -like "$count source unit(s) listed*")) { return }
     Start-Sleep -Milliseconds 250
   }
 }
@@ -574,6 +597,7 @@ try {
   Check 'anc.no.prompt' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero)) "$e forms: $(TopsNow $p.Id)"
   $items = [CT]::Items($src)
   Check 'order.desc.above.anc' (($items.Count -eq 2) -and ($items[0] -eq $desc) -and ($items[1] -eq $anc)) ($items -join ' | ')
+  [void](WaitIdle $p.Id $main 90)
   Click $conv
   $warn = WaitCls $p.Id 'TMessageForm' 30
   $st = Status $main
@@ -629,6 +653,7 @@ try {
     $e = PickFile $p.Id $add $anc
     WaitAddSettled $p.Id $main 2
     $pre = Status $main
+    [void](WaitIdle $p.Id $main 90)
     Click $conv
     $warn = WaitCls $p.Id 'TMessageForm' 30
     $yes = if ($warn -ne [IntPtr]::Zero) { Answer $p.Id 'Yes' } else { 'no gate warning' }
