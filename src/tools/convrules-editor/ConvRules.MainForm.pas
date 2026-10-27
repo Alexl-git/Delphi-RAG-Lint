@@ -2381,9 +2381,10 @@ type
       /// is its only trace). ConvertClickLost decides; a lost click arms FLostClickTimer.</summary>
       /// <param name="Msg">The WM_SETCURSOR; always passed on (the beep / flash stay).</param>
       procedure WMSetCursor(var Msg: TWMSetCursor); message WM_SETCURSOR;
-      /// <summary>FLostClickTimer.OnTimer: once nothing is DepthCommitBlocked (the operation that
-      /// held the progress window has finished and written its own status), appends the
-      /// LostConvertClickStatus notice to the status line, red. Stays armed while blocked.</summary>
+      /// <summary>FLostClickTimer.OnTimer: once LostNoticeDeferred says the operation that
+      /// held the progress window has finished and written its own status, appends the
+      /// LostCommandStatus notice to the status line, red. Stays armed while deferred --
+      /// but not while merely another application is active (DRV-2b).</summary>
       /// <param name="Sender">The timer.</param>
       procedure LostClickTimerFire(Sender: TObject);
       /// <summary>Application.OnMessage (N7/N11): every VCL message pump -- the top-level
@@ -6783,8 +6784,10 @@ end;
 
 procedure TConvRulesForm.LostClickTimerFire(Sender: TObject);
 begin
-  if DepthCommitBlocked or (Screen.Cursor = crHourGlass) then
-    Exit; // still armed: a modal (a C8 prompt, another load) or an hourglass section is up
+  // DRV-2b: not DepthCommitBlocked -- its Screen.ActiveForm test held the notice back while
+  // another application was active (a progress window that closed in the background).
+  if LostNoticeDeferred(FTreeLoads, FMenuOpen or InMenuLoop, IsWindowEnabled(Handle), Screen.Cursor = crHourGlass) then
+    Exit; // still armed: a modal (a C8 prompt, another load), a menu or an hourglass section is up
   FLostClickTimer.Enabled:= False;
   if FLostClickTitle = '' then
     Exit;

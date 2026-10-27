@@ -15872,6 +15872,12 @@ begin
   Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
   Check('gate.busy.hourglass', EditorBusy(0, True));
   Check('gate.idle', not EditorBusy(0, False));
+  // DRV-2b: the lost-command notice waits for the OPERATION, never for the editor to be the active application.
+  Check('gate.notice.idle.due', not LostNoticeDeferred(0, False, True, False), '(idle main form, whatever application is active: the notice is due)');
+  Check('gate.notice.wait', LostNoticeDeferred(1, False, True, False), '(an engine wait still runs)');
+  Check('gate.notice.menu', LostNoticeDeferred(0, True, True, False), '(a menu is open)');
+  Check('gate.notice.modal', LostNoticeDeferred(0, False, False, False), '(a modal window disables the main form)');
+  Check('gate.notice.hourglass', LostNoticeDeferred(0, False, True, True), '(an hourglass section runs)');
   // N11: the second Add... (a posted BM_CLICK) and its WM_COMMAND form; N7: Convert.
   Check('gate.bmclick.refused', GateVerdict(BM_CLICK, True, True) = gvRefuse);
   Check('gate.command.refused', GateVerdict(WM_COMMAND, True, True) = gvRefuse, '(a button notification or a menu item)');

@@ -18,7 +18,7 @@
 # Delete) are refused, the first one reported, none run (n7.*); WaitIdle also asks the editor ('ConvRulesEditor.Busy').
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow)
+param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow, [switch]$ProofOccluded, [switch]$ForeignActive)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -51,10 +51,26 @@ public static class W {
   [DllImport("kernel32.dll")] static extern bool ReadProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr s, out UIntPtr got);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   public struct RECT { public int L, T, R, B; }
+  [DllImport("user32.dll", EntryPoint="WindowFromPoint")] static extern IntPtr WFP(PT p);
+  public static IntPtr WindowFromPoint(int x, int y) { PT p; p.X = x; p.Y = y; return WFP(p); }
   public static List<IntPtr> Tops(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static List<IntPtr> Kids(IntPtr parent) { var r = new List<IntPtr>(); EnumChildWindows(parent, (h, l) => { r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
   public static string Txt(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); var s = new StringBuilder(n + 2); SendSB(h, 0x000D, (IntPtr)(n + 1), s); return s.ToString(); }
+  /* DRV-2b: Txt that gives up after MS (null) instead of blocking. While EngineHold has suspended an engine child that the
+     editor waits for SYNCHRONOUSLY (the project-index listing after the C8 check), the editor's main thread answers no
+     message: a plain SendMessage then waits for the editor's 180 s engine timeout, and the driver cannot resume the child
+     meanwhile (a deadlock that turned every run's status into "file listing failed ... timeout"). */
+  [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW")] static extern IntPtr SMT(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageTimeoutW")] static extern IntPtr SMTSB(IntPtr h, uint m, IntPtr w, StringBuilder l, uint f, uint ms, out IntPtr r);
+  public static string TxtT(IntPtr h, uint ms) { IntPtr n; if (SMT(h, 0x000E, IntPtr.Zero, IntPtr.Zero, 2, ms, out n) == IntPtr.Zero) return null; var s = new StringBuilder((int)n + 2); IntPtr r; if (SMTSB(h, 0x000D, (IntPtr)((int)n + 1), s, 2, ms, out r) == IntPtr.Zero) return null; return s.ToString(); }
+  public static uint PidOf(IntPtr h) { uint p; GetWindowThreadProcessId(h, out p); return p; }
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  /* DRV-2b: the N1 click is a REAL click at screen coordinates; another application's window over the Convert button
+     (seen: Chrome_RenderWidgetHostHWND) takes it, so the editor never sees it. The editor is made topmost (no activation:
+     it is disabled under the progress window) for the click and put back afterwards. */
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+  public static void SetTopmost(IntPtr h, bool on) { SetWindowPos(h, (IntPtr)(on ? -1 : -2), 0, 0, 0, 0, 0x0013); }
   public static int Top(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.T; }
   public static int Left(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.L; }
   [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr s, out UIntPtr put);
@@ -295,6 +311,18 @@ function WaitIdle($procId, $main, $sec) {
   }
   return $false
 }
+# DRV-2b: WaitIdle that also records every DISTINCT status line it sees (sampled every 50 ms) into
+# $script:trail -- tells "the notice was never raised" from "it was raised and then overwritten".
+function WaitIdleTrail($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $s = Status $main; if ($script:trail.Count -eq 0 -or $script:trail[-1] -ne $s) { $script:trail += $s }
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 50
+  }
+  return $false
+}
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 # BM_CLICK is POSTED: a sent click blocks this script for as long as the handler runs
@@ -304,11 +332,38 @@ function Click($h) { [void][W]::PostMessage($h, 0x00F5, [IntPtr]::Zero, [IntPtr]
 # message reads it; SetStatus/SetError write the SAME text to the TStatusBar, and
 # SetError prefixes it '[!] ' there.
 function Status($main) { (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | ' }
+# DRV-2b -ProofOccluded: a topmost window of THIS process over H's rectangle (shown after the editor went topmost),
+# so the N1 click lands on it: n1.click.under.progress must FAIL with editor=False.
+function NewOccluder($h) {
+  Add-Type -AssemblyName System.Windows.Forms
+  $r = New-Object W+RECT; [void][W]::GetWindowRect($h, [ref]$r)
+  $fm = New-Object System.Windows.Forms.Form
+  $fm.FormBorderStyle = 'None'; $fm.ShowInTaskbar = $false; $fm.TopMost = $true; $fm.StartPosition = 'Manual'
+  $fm.Bounds = New-Object System.Drawing.Rectangle(($r.L - 20), ($r.T - 20), ($r.R - $r.L + 40), ($r.B - $r.T + 40))
+  $fm.Show(); [System.Windows.Forms.Application]::DoEvents(); return $fm
+}
+# DRV-2b -ForeignActive: another application's window (here: one of the driver's own process) takes the foreground while
+# the progress window is up, as when the user switches away from a long Add. The lost-command notice must still appear
+# once the operation ends (an exe whose notice waits for Screen.ActiveForm = main form fails n1/n7 then).
+function NewForeign {
+  Add-Type -AssemblyName System.Windows.Forms
+  $fm = New-Object System.Windows.Forms.Form
+  $fm.Text = 'drv2b foreign'; $fm.ShowInTaskbar = $false; $fm.StartPosition = 'Manual'
+  $fm.Bounds = New-Object System.Drawing.Rectangle(0, 0, 240, 120)
+  $fm.Show(); [System.Windows.Forms.Application]::DoEvents(); [void][W]::SetForegroundWindow($fm.Handle); [System.Windows.Forms.Application]::DoEvents()
+  return $fm
+}
+function CloseForm($fm) { if ($null -ne $fm) { $fm.Close(); $fm.Dispose() } }
+# DRV-2b: Status that returns $null instead of blocking on an editor whose main thread waits for a HELD engine child.
+function StatusT($main) { $parts = @(Find $main 'TStatusBar' $null | ForEach-Object { [W]::TxtT($_, 200) }); if ($parts -contains $null) { return $null }; $parts -join ' | ' }
 function WriteAscii($path, $text) { [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.ASCIIEncoding]::new()) }
 # Add... -> the common Open dialog ('#32770'): the file name goes into its 'Edit', then '&Open'.
+# DRV-2b: the Open dialog, i.e. a visible #32770 of the editor WITH an Edit child. A bare '#32770' also matches a
+# task dialog / message box (seen twice: no Edit child, the run then threw in SendS).
+function WaitOpenDlg($procId, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq '#32770' -and @([W]::Kids($h) | Where-Object { [W]::Cls($_) -eq 'Edit' }).Count -gt 0) { return $h } }; Start-Sleep -Milliseconds 250 } while (((Get-Date) - $t0).TotalSeconds -lt $sec); return [IntPtr]::Zero }
 function AddViaDialog($procId, $addBtn, $path) {
   Click $addBtn
-  $dlg = WaitCls $procId '#32770' 20
+  $dlg = WaitOpenDlg $procId 20
   if ($dlg -eq [IntPtr]::Zero) { return "no open dialog (forms: $(TopsNow $procId))" }
   Start-Sleep -Milliseconds 700
   $ed = @([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0]
@@ -357,7 +412,7 @@ public static class EngineHold {
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr h);
   [DllImport("ntdll.dll")] static extern int NtResumeProcess(IntPtr h);
-  static volatile bool run; static Thread th; static HashSet<int> seen; static List<IntPtr> held = new List<IntPtr>(); static int total; public static int LastPid; static readonly object gate = new object();
+  static volatile bool run; static Thread th; static HashSet<int> seen; static List<IntPtr> held = new List<IntPtr>(); static List<int> hpid = new List<int>(); public static List<string> Log = new List<string>(); static int total; public static int LastPid; static readonly object gate = new object();
   static string Image(int pid) {
     IntPtr h = OpenProcess(0x1000, false, pid); if (h == IntPtr.Zero) return "";
     try { var s = new StringBuilder(1024); int n = 1024; return QueryFullProcessImageNameW(h, 0, s, ref n) ? s.ToString() : ""; } finally { CloseHandle(h); }
@@ -365,19 +420,19 @@ public static class EngineHold {
   static int[] Ids() { var ps = Process.GetProcessesByName("drag-lint"); var r = new int[ps.Length]; for (int i = 0; i < ps.Length; i++) { r[i] = ps[i].Id; ps[i].Dispose(); } return r; }
   public static void Arm(string exe) {
     Release();
-    seen = new HashSet<int>(Ids()); run = true; total = 0;
+    seen = new HashSet<int>(Ids()); run = true; total = 0; lock (gate) { Log.Clear(); }
     th = new Thread(() => { while (run) { foreach (int id in Ids()) if (seen.Add(id) && string.Equals(Image(id), exe, StringComparison.OrdinalIgnoreCase)) {
-      IntPtr h = OpenProcess(0x0800, false, id); if (h != IntPtr.Zero) { NtSuspendProcess(h); lock (gate) { held.Add(h); total++; LastPid = id; } } }
+      IntPtr h = OpenProcess(0x0800, false, id); if (h != IntPtr.Zero) { int rs = NtSuspendProcess(h); lock (gate) { held.Add(h); hpid.Add(id); total++; LastPid = id; Log.Add(DateTime.Now.ToString("HH:mm:ss.fff") + " S" + id + "=" + rs); } } }
       Thread.Sleep(1); } });
     th.IsBackground = true; th.Start();
   }
   public static int Total() { return total; }
   public static int Held() { lock (gate) { return held.Count; } }
   /* Resumes what is held NOW but keeps watching: the next engine child is held again (its pid was never seen). */
-  public static int ResumeHeld() { int n; lock (gate) { n = held.Count; foreach (IntPtr h in held) { NtResumeProcess(h); CloseHandle(h); } held.Clear(); } return n; }
+  public static int ResumeHeld() { int n; lock (gate) { n = held.Count; for (int i = 0; i < held.Count; i++) { int rr = NtResumeProcess(held[i]); Log.Add(DateTime.Now.ToString("HH:mm:ss.fff") + " R" + hpid[i] + "=" + rr); CloseHandle(held[i]); } held.Clear(); hpid.Clear(); } return n; }
   public static int Release() {
     run = false; if (th != null) { th.Join(); th = null; }
-    int n; lock (gate) { n = held.Count; foreach (IntPtr h in held) { NtResumeProcess(h); CloseHandle(h); } held.Clear(); }
+    int n; lock (gate) { n = held.Count; for (int i = 0; i < held.Count; i++) { int rr = NtResumeProcess(held[i]); Log.Add(DateTime.Now.ToString("HH:mm:ss.fff") + " X" + hpid[i] + "=" + rr); CloseHandle(held[i]); } held.Clear(); hpid.Clear(); }
     return n;
   }
 }
@@ -503,12 +558,22 @@ try {
   # A zero HWND would make EnumChildWindows(NULL) walk every OTHER process's windows.
   if ($main -eq [IntPtr]::Zero) { return }
   Start-Sleep -Seconds 2
+  # DRV-2b: the start-up work (book load, engine probes) runs behind the InputGate; a menu command posted then is
+  # refused like any other (seen: 'active tabs: Classes' + busy=True, then every later step cascaded): the library unit-list
+  # query blocked the main thread for over 60 s while other sessions held the library DB. Wait (up to the engine timeout) until idle.
+  [void](WaitIdle $p.Id $main 180)
 
   # --- 1. Conversion > Convert... shows the Convert tab ---
-  $invoked = [W]::InvokeMenu($main, 'Conversion|Convert...')
-  Start-Sleep -Seconds 2
-  $active = @(Find $main 'TPageControl' $null | ForEach-Object { [CT]::ActiveTab($_) })
-  Check 'menu.convert' ($invoked -and ($active -contains 'Convert')) ("invoked=$invoked active tabs: " + ($active -join ', '))
+  # The start-up work comes in bursts (two 'info' probes, then the library unit list); a 2 s idle gap between them
+  # satisfies WaitIdle, and a command posted into the next burst is refused. So: up to 3 tries, each after WaitIdle.
+  for ($try = 1; $try -le 3; $try++) {
+    $invoked = [W]::InvokeMenu($main, 'Conversion|Convert...')
+    Start-Sleep -Seconds 2
+    $active = @(Find $main 'TPageControl' $null | ForEach-Object { [CT]::ActiveTab($_) })
+    if ((-not $invoked) -or ($active -contains 'Convert')) { break }
+    [void](WaitIdle $p.Id $main 180)
+  }
+  Check 'menu.convert' ($invoked -and ($active -contains 'Convert')) ("invoked=$invoked tries=$([Math]::Min($try, 3)) active tabs: " + ($active -join ', ') + '; status: ' + (Status $main) + '; enabled=' + [W]::MenuEnabled($main, 'Conversion|Convert...') + ' busy=' + [B]::Busy($main))
 
   # The tab's controls, located by STRUCTURE, not by caption alone (other tabs have
   # their own Add... / Delete): Convert is the button beside the progress bar; the
@@ -541,8 +606,12 @@ try {
   # it, ConvertClick never runs. The editor must say so once it is idle again, and not run.
   # FixUnit.pas: its C8 analysis (class lookups) reliably outlasts the window's 400 ms delay.
   [void][W]::SetForegroundWindow($main)
+  [void](WaitIdle $p.Id $main 60)
   Click $add
-  $dlg = WaitCls $p.Id '#32770' 20
+  $dlg = WaitOpenDlg $p.Id 20
+  # DRV-2b: a BM_CLICK that reaches the editor in a busy burst is refused (InputGate); once idle, click again.
+  if ($dlg -eq [IntPtr]::Zero) { [void](WaitIdle $p.Id $main 60); Click $add; $dlg = WaitOpenDlg $p.Id 20 }
+  if ($dlg -eq [IntPtr]::Zero) { Check 'add.dialog' $false "no Open dialog after two Add... clicks; windows: $(TopsNow $p.Id); status: $(Status $main)"; return }
   Start-Sleep -Milliseconds 700
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
   if (-not $ProofNoWindow) { [EngineHold]::Arm($engine) }   # DRV-2: hold the engine call so the progress window is up
@@ -573,7 +642,16 @@ try {
   $disabled = -not [W]::IsWindowEnabled($main)
   if (($wait -ne [IntPtr]::Zero) -and $disabled) {
     $script:dbg = 'wait=({0},{1}) conv=({2},{3}) held={4}' -f [W]::Left($wait), [W]::Top($wait), [W]::Left($conv), [W]::Top($conv), [EngineHold]::Held()
-    [W]::MouseClickFresh($conv)
+    $script:trail = @(Status $main)
+    [W]::SetTopmost($main, $true)
+    $occluder = if ($ProofOccluded) { NewOccluder $conv } else { $null }   # forced-wrong: another window over Convert
+    [W]::MouseClickFresh($conv); [EngineHold]::Log.Add((Get-Date -Format 'HH:mm:ss.fff') + ' CLICK')
+    $hit = [W]::WindowFromPoint([W]::Left($conv) + 5, [W]::Top($conv) + 5)
+    $hitOk = ([W]::PidOf($hit) -eq [uint32]$p.Id); $hitCls = [W]::Cls($hit)
+    $script:dbg += (' hit={0}/{1} editor={2}' -f [W]::Cls($hit), ($hit -eq $conv), $hitOk)
+    if ($null -ne $occluder) { $occluder.Close(); $occluder.Dispose() }
+    $foreign = if ($ForeignActive) { NewForeign } else { $null }
+    if ($ForeignActive) { [EngineHold]::Log.Add('foreign.fg=' + ([W]::GetForegroundWindow() -eq $foreign.Handle)) }
     # DRV-2: the lost-click notice is appended once the OPERATION ends, so it only survives a click made during the
     # operation's LAST engine call (between calls it can fire and be overwritten by the next status). Add... makes a
     # few C8 calls: each further child is held and clicked under too, until none starts for 3 s.
@@ -583,13 +661,16 @@ try {
         $w2 = WaitCls $p.Id 'TEngineWaitForm' 2
         if (($w2 -ne [IntPtr]::Zero) -and -not [W]::IsWindowEnabled($main)) { [W]::MouseClickFresh($conv) }
         Start-Sleep -Milliseconds 700; [void][EngineHold]::ResumeHeld(); $quiet = Get-Date
-      } else { Start-Sleep -Milliseconds 50 }
+      } else { $s = StatusT $main; if ($null -ne $s -and $script:trail[-1] -ne $s) { $script:trail += $s }; Start-Sleep -Milliseconds 50 }
     }
-    $held = [EngineHold]::Release()
-    [void](WaitIdle $p.Id $main 90)
+    [EngineHold]::Log.Add((Get-Date -Format 'HH:mm:ss.fff') + ' REL'); $held = [EngineHold]::Release()
+    [W]::SetTopmost($main, $false)
+    [void](WaitIdleTrail $p.Id $main 90)
+    $script:dbg += ' trail=[' + ($script:trail -join ' >> ') + '] hold=[' + ([EngineHold]::Log -join ' ') + ']'
     $st = Status $main
-    Check 'n1.click.under.progress' $true "(precondition: the click landed while the progress window disabled the editor) window=True disabled=$disabled"
+    Check 'n1.click.under.progress' $hitOk "(precondition: the click landed on the editor while the progress window disabled it) window=True disabled=$disabled editor=$hitOk hit=$hitCls"
     Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') ($st + ' | ' + $script:dbg)
+    CloseForm $foreign
     Check 'n1.lost.click.no.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
   } else {
     # let the add finish; NO click, so no real Convert is started. The progress window shows only after a 400 ms delay,
@@ -611,8 +692,12 @@ try {
   # Add..., WM_COMMAND for Convert, BM_CLICK for Delete. None may run; the first is reported once idle.
   $n0 = [int][W]::Send($src, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero)
   [void][W]::SetForegroundWindow($main)
+  [void](WaitIdle $p.Id $main 60)
   Click $add
-  $dlg = WaitCls $p.Id '#32770' 20
+  $dlg = WaitOpenDlg $p.Id 20
+  # DRV-2b: a BM_CLICK that reaches the editor in a busy burst is refused (InputGate); once idle, click again.
+  if ($dlg -eq [IntPtr]::Zero) { [void](WaitIdle $p.Id $main 60); Click $add; $dlg = WaitOpenDlg $p.Id 20 }
+  if ($dlg -eq [IntPtr]::Zero) { Check 'add.dialog' $false "no Open dialog after two Add... clicks; windows: $(TopsNow $p.Id); status: $(Status $main)"; return }
   Start-Sleep -Milliseconds 700
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
   [EngineHold]::Arm($engine)   # DRV-2
@@ -621,9 +706,12 @@ try {
   while ($wait -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 30) { $wait = WaitCls $p.Id 'TEngineWaitForm' 0; if ($wait -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 50 } }
   $disabled = -not [W]::IsWindowEnabled($main)
   if (($wait -ne [IntPtr]::Zero) -and $disabled) {
+    $script:trail = @(Status $main); [EngineHold]::Log.Add((Get-Date -Format 'HH:mm:ss.fff') + ' POST under=[' + [W]::Txt($wait) + '] child=[' + $(try { (Get-CimInstance Win32_Process -Filter ('ProcessId=' + [EngineHold]::LastPid) -ErrorAction Stop).CommandLine } catch { '' }) + ']')
     [void][W]::PostMessage([CT]::Parent($add), 0x0111, [IntPtr]::Zero, $add)    # WM_COMMAND, BN_CLICKED (0), lParam = the button
     [void][W]::PostMessage([CT]::Parent($conv), 0x0111, [IntPtr]::Zero, $conv)
     Click $del
+    $foreign = if ($ForeignActive) { NewForeign } else { $null }
+    if ($ForeignActive) { [EngineHold]::Log.Add('foreign.fg=' + ([W]::GetForegroundWindow() -eq $foreign.Handle)) }
     Start-Sleep -Milliseconds 1500; [void][EngineHold]::Release()   # DRV-2: the posts are handled inside the held window
     # Anything the posted commands opened is recorded and closed, so a RED run still ends.
     $opened = @(); $t0 = Get-Date
@@ -634,16 +722,20 @@ try {
         Start-Sleep -Milliseconds 500
       }
       if ((WaitCls $p.Id 'TEngineWaitForm' 0) -eq [IntPtr]::Zero -and -not [B]::Busy($main) -and [W]::IsWindowEnabled($main)) { break }
+      $s = Status $main; if ($script:trail[-1] -ne $s) { $script:trail += $s }
       Start-Sleep -Milliseconds 100
     }
-    [void](WaitIdle $p.Id $main 90)
+    [void](WaitIdleTrail $p.Id $main 90)
     $st = Status $main
     $items = [CT]::Items($src)
     Check 'n7.posted.under.progress' $true "(precondition: posted while the progress window disabled the editor) window=True disabled=$disabled"
     Check 'n7.add.not.run' ($opened.Count -eq 0) ("dialogs opened by the posted commands: " + ($opened -join ' | '))
     Check 'n7.convert.not.run' ((-not (RunInProgress $st)) -and ($st -notlike '*Convert refused*') -and -not (Test-Path -LiteralPath ($pas + '.BCK1'))) $st
     Check 'n7.delete.not.run' (($n0 -eq 0) -and ($items.Count -eq 1) -and ($items -contains $pas)) ("before=$n0 items: " + ($items -join ' | '))
-    Check 'n7.refusal.reported' ($st -match 'Add was NOT run: it was clicked while the editor was busy \(.+\)\. Click it again\.$') $st
+    $fgOk = ([W]::PidOf([W]::GetForegroundWindow()) -eq [uint32]$p.Id); [EngineHold]::Log.Add('fg.editor=' + $fgOk)
+    Check 'n7.refusal.reported' ($st -match 'Add was NOT run: it was clicked while the editor was busy \(.+\)\. Click it again\.$') ($st + ' | trail=[' + ($script:trail -join ' >> ') + '] hold=[' + ([EngineHold]::Log -join ' ') + ']')
+    CloseForm $foreign
+    if ($st -notmatch 'Add was NOT run') { [void][W]::SetForegroundWindow($main); Start-Sleep -Milliseconds 1500; "NOTE  n7.late  after SetForegroundWindow: $(Status $main)" }
   } else {
     [void][EngineHold]::Release()
     $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and -not ([CT]::Items($src) -contains $pas)) { Start-Sleep -Milliseconds 250 }
