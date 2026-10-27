@@ -51,7 +51,7 @@
 #migrate uaRetry -> eaRetry, FireDAC.Stan.Intf
 #migrate uaApplied -> eaApplied, FireDAC.Stan.Intf
 
-#migrate TDBScreenCursors -> TFDGUIxScreenCursor, FireDAC.UI.Intf
+#migrate TDBScreenCursor -> TFDGUIxScreenCursor, FireDAC.UI.Intf
 #migrate dcrDefault -> gcrDefault
 #migrate dcrHourGlass -> gcrHourGlass
 #migrate dcrSQLWait -> gcrSQLWait
