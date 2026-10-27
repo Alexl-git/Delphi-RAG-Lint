@@ -6,6 +6,7 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Changed
+- `--help` names `--out-root <dir>` on compare (its code reads it); the flag-verb map baseline drops 104 -> 103 cells.
 - `--help` names `--output` on lint-project and `--json` on check-ast and serve (every verb whose code reads --out / --json now shows it); the flag-verb map baseline drops 108 -> 104 cells.
 
 ### Fixed

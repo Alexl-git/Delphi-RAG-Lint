@@ -128,8 +128,8 @@
     "version": "1.35.0-alpha"
   },
   "features/convrules-migrate-members.md": {
-    "hash": "8ee3731f66ffd9b6cbfb6f94cf738817871b09f9786a461fde522b4df77ea4de",
-    "version": "1.35.1-alpha"
+    "hash": "251b1385db1dc4333c4ba7fe5d0bfa84eeec384caafcab7e025fd1ea1e8e4194",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-qualify-fix.md": {
     "hash": "cf2667f8386b4747c88852b31949445bfa9bf7f17f3b45b19b1448f26d858741",
