@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "lsp",
       "example": "drag-lint lsp --db <file.sqlite> --full-rules",
-      "usage": "drag-lint lsp --db <file.sqlite> --full-rules",
+      "usage": "drag-lint lsp --db <file.sqlite> --full-rules [--no-preprocess]",
       "flags": [
         {
           "name": "--db",
@@ -21,6 +21,9 @@
         },
         {
           "name": "--full-rules"
+        },
+        {
+          "name": "--no-preprocess"
         }
       ]
     }
@@ -51,7 +54,7 @@
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-27",
     "by": "LSP",
     "build": "1.35.1-alpha",
     "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
