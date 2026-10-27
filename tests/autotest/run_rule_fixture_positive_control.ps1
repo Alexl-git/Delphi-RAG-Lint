@@ -38,7 +38,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # shrink (P4 fails an entry that gained a fixture).
 $Allowlist = @(
     'abstract-method-instantiation', 'assert-with-side-effect', 'boolean-comparison-true',
-    'case-magic-numbers', 'circular-uses', 'classname-string-compare', 'compiler-magic-comments',
+    'case-magic-numbers', 'circular-uses', 'classname-string-compare',
     'confusable-identifier', 'const-casing', 'cycle-participant-unit', 'deep-inheritance',
     'deep-nesting', 'dependent-project-not-recompiled', 'deprecated-rtl-function',
     'dfm-property-not-declared', 'discarded-effect-free-result', 'doc-drift', 'doc-orphan-block',
