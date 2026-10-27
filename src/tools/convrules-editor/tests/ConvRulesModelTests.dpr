@@ -11006,7 +11006,7 @@ begin
 end;
 { B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
   descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
-  recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
+  make-capture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
   unconverted; ancestor converted first -> action code / converted. With both inherited_retype and
   inherited_code_unconverted the editor adds NO code-use note of its own (CodeUseNoteDue). }
 procedure TestInheritedCodeUnconverted;
