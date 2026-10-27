@@ -155,6 +155,7 @@ uses
   , DRagLint.Lint   .PlatformDivergent // dl:unit DRagLint.Lint.PlatformDivergent accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
+  , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
@@ -13013,7 +13014,22 @@ begin
           absent key says "this rule has no metric", which a 0 would not. }
         if F.Metric > 0 then JObj.AddPair('metric', TJSONNumber.Create(F.Metric));
         { E18 T15b: the verb that fixes it (per-file circular-uses); absent = no such verb }
-        if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);
+        if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);        { taint wave T2: source -> hops -> sink; absent for every rule without a path }
+        if Length(F.Path) > 0 then
+        begin
+          var JPath: TJSONArray:= TJSONArray.Create;
+          for var Hop: TLintLocation in F.Path do
+          begin
+            var JHop: TJSONObject:= TJSONObject.Create;
+            JHop.AddPair('file_path', Hop.FilePath);
+            JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
+            JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
+            JHop.AddPair('routine'  , Hop.Routine);
+            JHop.AddPair('note'     , Hop.Note);
+            JPath.AddElement(JHop);
+          end;
+          JObj.AddPair('path', JPath);
+        end;
         JArr.AddElement(JObj);
       end;
       EmitFindingsDoc(AArgs, JArr.Format(2));
@@ -13212,6 +13228,9 @@ const
     'property-references-itself', 'identical-then-else', 'interface-object-mixing');
   LINT_GATE_PARITY_EXT: array[0..2] of string = (
     'property-references-itself', 'identical-then-else', 'interface-object-mixing');
+  { taint wave T2: the store-backed interprocedural taint rules (DRagLint.Lint.TaintRules) }
+  LINT_GATE_TAINT: array[0..2] of string = (
+    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal');
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
@@ -13222,6 +13241,43 @@ begin
   Result:= False;
 end;
 
+var
+  { one stale-index note per process, however many files `lint` is asked about }
+  GTaintStaleNoted: Boolean = False;
+
+/// <summary>Runs the three taint rules (LINT_GATE_TAINT) over AScope and returns the
+/// findings the caller keeps.</summary>
+/// <param name="AStore">Project store; nil returns nothing (the rules are store-backed).</param>
+/// <param name="ALibStore">The platform library store the lint path opened, or nil.</param>
+/// <param name="AScope">files.id of the files whose sinks are examined.</param>
+/// <param name="ACfg">The lint config; its TaintJson objects extend the built-in catalogues.</param>
+/// <param name="ANarrowRule">--rule; '' = every taint rule.</param>
+/// <param name="AOnlyPath">Keep only findings in this file ('' = all).</param>
+/// <returns>Taint findings with their Path.</returns>
+/// <remarks>A DB indexed before extractor 1.26.0 (no or empty data_flows) prints ONE note to
+/// stderr and reports nothing. DRAGLINT_DEBUG / DRAGLINT_PROFILE print the
+/// `taint: sinks N, keys N, ...` stats line to stderr.</remarks>
+function RunTaintRules(const AStore, ALibStore: ISymbolStore; const AScope: TArray<Int64>;
+                       const ACfg: TLintConfig; const ANarrowRule, AOnlyPath: string): TArray<TLintFinding>;
+var
+  Stats: TTaintStats;
+  F    : TLintFinding;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  for F in TTaintRules.Check(AStore, ALibStore, AScope, TTaintRules.LoadConfig('', ACfg.TaintJson), Stats) do
+    if ((ANarrowRule = '') or SameText(ANarrowRule, F.RuleId))
+       and ((AOnlyPath = '') or SameText(F.FilePath, AOnlyPath)) then
+      Result:= Result + [F];
+  if Stats.StaleIndex and not GTaintStaleNoted then
+  begin
+    GTaintStaleNoted:= True;
+    Writeln(ErrOutput, 'taint: this index has no data_flows facts (built before extractor 1.26.0) -- ' +
+      're-index to enable taint-sql-injection / taint-command-injection / taint-path-traversal');
+  end;
+  if (GetEnvironmentVariable('DRAGLINT_DEBUG') <> '') or (GetEnvironmentVariable('DRAGLINT_PROFILE') <> '') then
+    Writeln(ErrOutput, Stats.ToLine);
+end;
 /// <summary>The rule ids named by a suppression marker anywhere in AFiles, lowercased:
 /// every `dl:ok &lt;rule&gt;` and every `drag-lint:ignore &lt;rule&gt;`; '*' when a
 /// `drag-lint:ignore` names no rule (it suppresses everything on its line).</summary>
@@ -14781,6 +14837,11 @@ begin
                        {AOnlyFileId=}FlowFid, RuleKeptByRun(AArgs, Cfg, Marked)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
+          end;          { taint wave T2: the sinks of THIS file; the walk may leave it (callers, fields, library) }
+          if LintRuleWants(NarrowRule, LINT_GATE_TAINT) then
+          begin
+            TraceLintChecker('taint');
+            Findings:= Findings + RunTaintRules(FlowStore, FlowLibStore, [FlowFid], Cfg, NarrowRule, MyPath);
           end;
         finally
           SibKeep .Free;
@@ -20098,7 +20159,7 @@ const
     cannot silently skew: run_lintall_progress_phases.ps1 asserts the sequence
     is monotonic and that 100 appears only last. }
   LINTALL_SCAN_PCT    = 90;
-  LINTALL_TAIL_PHASES = 13;
+  LINTALL_TAIL_PHASES = 14;
 
 { --file / --in used to be accepted by lint-all and IGNORED, so a "scoped"
   `lint-all --rule doc-drift --fix --file X` planned the whole project (1.31.5
@@ -20784,7 +20845,10 @@ begin
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
     Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
-      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));
+      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));  { taint wave T2: store-backed interprocedural taint over every file of the index }
+  LintPhase('taint');
+  if LintRuleWants(Nr, LINT_GATE_TAINT) then
+    Findings:= Findings + RunTaintRules(Store, LibStore, Store.GetAllFileIds, Cfg, Nr, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');
