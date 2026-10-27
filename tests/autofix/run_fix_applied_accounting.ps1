@@ -40,13 +40,15 @@ try {
   # NO-EDIT: a fixable RULE targeted where the finding is filtered out (wrong line)
   # produces no edit -> the finding is not in Targeted, so it is simply absent.
   # The invariant we lock: applied is never true for a finding that produced no edit.
-  # Target a NON-fixable finding (write-only-local at line 9) with --apply: it is in
-  # Targeted (rule filter off), fixable=false, and applied must be false (no edit).
-  Copy-Item $fixture $target -Force
-  $raw3 = & $exePath lint --file $target --fix --fix-line 9 --json --apply 2>$null | Out-String
+  # Target a NON-fixable finding (used-before-assignment on gating.pas line 12 -- write-only-local,
+  # the old control, is fixable since autofix lane A3) with --apply: it is in Targeted (rule
+  # filter off), fixable=false, and applied must be false (no edit).
+  $target3 = Join-Path $scratch 'gating.pas'
+  Copy-Item (Join-Path $PSScriptRoot 'fixtures\gating\gating.pas') $target3 -Force
+  $raw3 = & $exePath lint --file $target3 --fix --fix-line 12 --json --apply 2>$null | Out-String
   $arr3 = $null; try { $arr3 = ($raw3 | ConvertFrom-Json) } catch { $arr3 = $null }
   if ($null -ne $arr3 -and $arr3 -isnot [System.Array]) { $arr3 = @($arr3) }
-  $t3 = $arr3 | Where-Object { $_.rule -eq 'write-only-local' } | Select-Object -First 1
+  $t3 = $arr3 | Where-Object { $_.rule -eq 'used-before-assignment' } | Select-Object -First 1
   Check 'no-edit: non-fixable finding present' ($null -ne $t3)
   if ($null -ne $t3) {
     Check 'no-edit: fixable=false'          ($t3.fixable -eq $false)
