@@ -178,6 +178,8 @@ public static class W {
 }
 '@
 $script:pass = 0; $script:fail = 0
+$script:skip = 0
+function Skip($name, $why) { $script:skip++; "SKIP  $name  ($why)" }
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
@@ -447,6 +449,11 @@ function SaveRound($how) {
     }
     if ($how -eq 'key') { [K]::Nudge(); [void][K]::SetForegroundWindow($dlg); Start-Sleep -Milliseconds 300 }
     $fgw = [K]::GetForegroundWindow(); $fg = ($fgw -eq $dlg)
+    # A locked desktop / idle RDP has NO foreground window (0): a real key cannot be delivered, so the key checks SKIP. Any other foreground (a different window) stays a FAIL below.
+    if ($how -eq 'key' -and $fgw -eq [IntPtr]::Zero) {
+      foreach ($n in 'under.progress', 'not.run', 'idle.runs') { Skip "save.key.$n" 'no foreground window: desktop locked' }
+      return
+    }
     $issued = $true
     if ($how -eq 'menu') { $issued = [W]::InvokeMenu($main, 'File|Save') } else { [K]::CtrlS() }
     Check "save.$how.under.progress" ($issued -and ($how -eq 'menu' -or $fg)) "(precondition: issued while the progress window disabled the editor) issued=$issued foreground=$fg (fg window: $([W]::Cls($fgw))/$([W]::Txt($fgw)))"
@@ -473,7 +480,9 @@ function SaveRound($how) {
       "INFO  save.key.status (a key drop is silent by design)  $st"
     }
     # Idle now: the same kind of Save must run (it also proves the Ctrl+S keystroke reaches the editor).
-    if ($how -eq 'menu') { [void][W]::InvokeMenu($main, 'File|Save') } else { [void][K]::SetForegroundWindow($main); Start-Sleep -Milliseconds 300; [K]::CtrlS() }
+    if ($how -eq 'key') { [void][K]::SetForegroundWindow($main); Start-Sleep -Milliseconds 300 }
+    if ($how -eq 'key' -and [K]::GetForegroundWindow() -eq [IntPtr]::Zero) { Skip 'save.key.idle.runs' 'no foreground window: desktop locked'; return }
+    if ($how -eq 'menu') { [void][W]::InvokeMenu($main, 'File|Save') } else { [K]::CtrlS() }
     $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 20 -and [IO.File]::GetLastWriteTimeUtc($book) -eq $old) { Start-Sleep -Milliseconds 250 }
     $ran = [IO.File]::GetLastWriteTimeUtc($book) -gt $old
     Check "save.$how.idle.runs" $ran ("mtime=" + [IO.File]::GetLastWriteTimeUtc($book).ToString('o') + '; status: ' + (StatusText $main))
@@ -483,5 +492,5 @@ SaveRound 'menu'
 SaveRound 'key'
 
 [IO.Directory]::Delete($tmp, $true)
-"RESULT pass=$script:pass fail=$script:fail"
+"RESULT pass=$script:pass fail=$script:fail skip=$script:skip"
 if ($script:fail -gt 0) { exit 1 }
