@@ -171,6 +171,7 @@ keys = [r[0] for r in c.execute("select key from schema_meta where key like '%fi
 for k in keys:
     v = c.execute('select value from schema_meta where key = ?', (k,)).fetchone()[0]
     c.execute('update schema_meta set value = ? where key = ?', (v.replace('1.26.0-alpha', '1.25.0-alpha'), k))
+c.execute("update files set indexed_at_fingerprint = replace(indexed_at_fingerprint, '1.26.0-alpha', '1.25.0-alpha')")
 c.execute('delete from data_flows')
 c.commit()
 print(len(keys), c.execute('select count(*) from data_flows').fetchone()[0])

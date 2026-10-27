@@ -72,6 +72,15 @@ $files += @(Get-ChildItem (Join-Path $repo 'src\core') -File -Filter 'DRagLint.C
 # parser change makes every stored parse stale, and until it joined this list
 # nothing billed for that. Joined 2026-09-21.
 $files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Doc.SymbolFacts.pas')
+# Taint T1 (2026-10-27, owner Q5): the CFG builder, the solver and the lattice
+# units now decide STORED rows -- DRagLint.Index.DataFlowFacts builds every
+# data_flows row from TCfgBuilder + TDataFlowSolver + TRoutineVarTable at index
+# time -- and Flow.Lattices already decided symbol_facts (TRoutineVarTable in
+# SymbolFacts since ADP2 T4) without being billed. A change to any of the three
+# is an extractor change from 1.26.0 on.
+foreach ($a in @('DRagLint.Analysis.Cfg.pas', 'DRagLint.Analysis.DataFlow.pas', 'DRagLint.Analysis.Flow.Lattices.pas')) {
+  $files += @(Get-ChildItem (Join-Path $repo 'src\analysis') -File -Filter $a)
+}
 
 # F3 (deep review 2026-10-25): the storage WRITE side decides what a stored row
 # CONTAINS (receiver_text, member_accesses.mode, ...), so it is part of the

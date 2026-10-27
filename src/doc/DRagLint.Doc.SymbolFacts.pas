@@ -245,6 +245,8 @@ interface
 
 uses
   System.Generics.Collections       { ADP2 T4: TDictionary/TList for the field-name set + ordered read/write lists; v23: TList<string> in JoinCappedDisplay's signature }
+  , System.SysUtils                 { taint T1: TBytes in TSymbolFactsAst }
+  , TreeSitter                       { taint T1: TTSNode in TSymbolFactsAst }
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
@@ -391,6 +393,23 @@ function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): stri
 function ComputeWiring(const AStore: ISymbolStore; const ASym: TSymbol): string;
 
 type
+  /// <summary>The AST location Analyze matched for a routine (taint T1, 2026-10-27):
+  /// handed back so the indexer's data_flows pass (TDataFlowFacts.Collect) reuses the
+  /// SAME defProc/body/source instead of a second lookup.</summary>
+  /// <remarks>Valid only while the TAstParseCache entry of the file is alive -- the
+  /// indexer uses it immediately, inside the same per-file loop. Found = False (and
+  /// null nodes) when no defProc starts at ASym.ImplStartLine or the file did not parse.</remarks>
+  TSymbolFactsAst = record
+    /// <summary>True when a defProc was matched.</summary>
+    Found: Boolean;
+    /// <summary>The matched defProc node.</summary>
+    Proc : TTSNode;
+    /// <summary>Its body (ChildByField('body')).</summary>
+    Body : TTSNode;
+    /// <summary>The file's UTF-8 source bytes the nodes index into.</summary>
+    Src  : TBytes;
+  end;
+
   /// <summary>Index-time analyzer that derives a TSymbolFacts row for one
   /// routine symbol -- the single call site the indexer uses for every fact
   /// group Phase 2 will ever add (see the unit banner comment).</summary>
@@ -430,6 +449,8 @@ type
       /// <param name="AStore">Read-only access to the rest of the index, for
       /// facts that need a cross-symbol lookup (e.g. DFM event bindings, SQL
       /// table references). Unused by Task 3.</param>
+      /// <param name="AAst">taint T1: receives the matched defProc / body / source (Found = False when none),
+      /// for the indexer's data_flows pass.</param>
       /// <returns>A TSymbolFacts record with Present=True.</returns>
       /// <remarks>
       /// ADP2 T3: Cyclomatic is 0 when no defProc in AFilePath's tree
@@ -481,17 +502,16 @@ type
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
+      class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore;
+                             out AAst: TSymbolFactsAst): TSymbolFacts; static;
   end;
 
 implementation
 
 uses
-  System.SysUtils
-  , System.StrUtils
+  System.StrUtils
   , System.IOUtils                    { ADP2 T6: TFile.Exists/ReadAllBytes -- the paired .dfm sibling read }
   , System.Classes                    { ADP2 T5: TStringList for the sorted/deduped test-name set }
-  , TreeSitter                        { ADP2 T3: TTSNode for the AST-derived Cyclomatic fact }
   , DRagLint.Diagnostics.ParseCache    { ADP2 T3: TAstParseCache -- memoized per-file tree, owned by the cache }
   , DRagLint.Analysis.Cfg              { ADP2 T3: CfgFindProcs -- collect every defProc in the file's tree }
   , DRagLint.Analysis.Flow.Lattices    { ADP2 T4: TRoutineVarTable -- a same-named local/param/Result shadows a field, never misclassified as one }
@@ -3162,7 +3182,8 @@ begin
   Result         := GProcsCache;
 end;
 
-class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
+class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore;
+  out AAst: TSymbolFactsAst): TSymbolFacts;
 var
   PF   : TParsedFile     ;
   Procs: TArray<TTSNode> ;
@@ -3176,6 +3197,7 @@ begin
   Result:= Default(TSymbolFacts);
   Result.SymbolId:= ASym.Id;
   Result.Present := True;
+  AAst:= Default(TSymbolFactsAst);
 
   // BodyLoc: pure symbol-range arithmetic, no AST needed. Clamped to >= 0 as
   // a defensive guard (mirrors TIndexer.SliceBodyLines' Lo/Hi clip) though
@@ -3212,6 +3234,10 @@ begin
       if Integer(Proc.StartPoint.Row) + 1 = ASym.ImplStartLine then
       begin
         Body:= Proc.ChildByField('body');
+        AAst.Found:= True; { taint T1: the data_flows pass reuses this match }
+        AAst.Proc := Proc;
+        AAst.Body := Body;
+        AAst.Src  := PF.Src;
         Result.Cyclomatic:= TAstChecker.CyclomaticOf(Body);
         // ADP2 T4: Reads/Writes fields -- the SAME matched Proc/Body, no 2nd
         // AST scan. See AnalyzeReadsWrites' header comment (above, this
