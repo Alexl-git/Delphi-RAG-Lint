@@ -28,7 +28,8 @@
     C1-C5   array-element chains bind to the element type's member.
     C6-C7   pointer chains bind to the pointee's member.
     C8      `P^.Ping;` is a call on TInner, NOT the enclosing TFix.Ping.
-    C9      `A [1].K` -- a blank before the subscript -- still reads `A [1]`.
+    C9      `A [1].K` -- a blank before the subscript -- binds; since T-11 the parser
+            records the receiver normalised, `A[1]` (no blank next to '[').
     C10     `R.Inner.K := 6` -- the WRITE leaf of a nested record chain (reparse-batch
             C1, folded into X1) binds to TInner.K; the base R stays a READ (A16).
     NEG1    `Undecl[0].K` -- an undeclared head -- stays unbound.
@@ -121,7 +122,7 @@ $e = Sql ("SELECT s.qualified_name AS q FROM call_edges ce JOIN refs r ON r.id =
 $tg = @($e | ForEach-Object { $_.q }) -join ','
 Check 'C8 P^.Ping is a call on TInner.Ping, not the enclosing TFix.Ping' ($tg -eq 'uLocalRead.TInner.Ping') $tg
 
-$v = BoundTo $c9 'member-access' 'K' 'A [1]'; Check 'C9 A [1].K (blank before the subscript) -> TRec.K' ($v -eq 'uLocalRead.TRec.K') $v
+$v = BoundTo $c9 'member-access' 'K' 'A[1]'; Check 'C9 A [1].K (blank before the subscript, receiver A[1]) -> TRec.K' ($v -eq 'uLocalRead.TRec.K') $v
 $v = BoundTo $c10 'read' 'R' '';    Check 'C10a base R of R.Inner.K := 6 is a READ ref (A16) and binds' ($v -eq "$Run.R") $v
 $v = BoundTo $c10 'member-access' 'Inner' 'R'; Check 'C10b R.Inner -> TRec.Inner' ($v -eq 'uLocalRead.TRec.Inner') $v
 $v = BoundTo $c10 'member-access' 'K' 'R.Inner'; Check 'C10c leaf K of R.Inner.K := 6 -> TInner.K' ($v -eq 'uLocalRead.TInner.K') $v

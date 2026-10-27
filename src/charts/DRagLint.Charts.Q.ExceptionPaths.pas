@@ -59,7 +59,8 @@ implementation
 uses
   System.SysUtils, System.Math, System.Generics.Defaults, System.Generics.Collections, System.RegularExpressions,
   DRagLint.Charts.Question, DRagLint.Charts.Index, DRagLint.Charts.Text, DRagLint.Charts.Dot,
-  DRagLint.Charts.Source, DRagLint.Charts.Sql, DRagLint.Charts.Exceptions, DRagLint.Charts.PsSort;
+  DRagLint.Charts.Source, DRagLint.Charts.Sql, DRagLint.Charts.Exceptions, DRagLint.Charts.PsSort,
+  DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- REVIEWED 2026-10-26 (XT-RAISE): uses Core.Model only for the REF_KIND_* constants, the one declaration the extractor writes and this chart reads
 
 const
   RAISE_BORDER = '#B02A37';
@@ -610,61 +611,98 @@ end;
 function TExceptionPathsChart.BodyExceptions(const pRt: TRoutineInfo; pHandlersOnly: Boolean): TBody;
 begin
   Result:= Default(TBody);
-  var Kinds:= if pHandlersOnly then '''type_use''' else '''read'',''type_use''';
-  var Refs:= FIndex.AllRows(Format(
-    'SELECT r.id AS id, r.kind AS kind, r.name_text AS name, r.start_line AS line,' + sLineBreak +
-    '       r.start_col AS col, r.end_col AS ecol' + sLineBreak +
-    '  FROM refs r' + sLineBreak +
-    ' WHERE r.enclosing_symbol_id = %d AND r.kind IN (%s)', [pRt.Id, Kinds]), 'r.id');
+  { Facts (1.36.0 index): a raise / handle site is a refs row of that KIND on the type identifier,
+    so it is joined, not classified from the source around a read / type_use. The read / type_use
+    rows are still read: RefCount, the [stale source] list and Dropped keep their meaning, and a
+    candidate sitting on a fact is that site, never dropped. Pre-facts DB: the source path below. }
+  var Facts:= FExc.HasRaiseHandleFacts;
+  var FactAt:= TDictionary<string, Boolean>.Create;
   try
-    Result.Fresh:= FReader.SourceFresh(pRt.Path);
-    Result.RefCount:= Refs.Count;
-    for var R in Refs do
-    begin
-      var IsExc:= FExc.IsExceptionTypeName(R.S('name'));
-      var Row:= Default(TExcRef);
-      Row.TypeName:= R.S('name');
-      Row.Line:= R.I('line');
-      if not Result.Fresh then
-      begin
-        { never classified: the exception-named refs are listed as [stale source] }
-        if IsExc then
+    var Kinds:= if pHandlersOnly then '''type_use''' else '''read'',''type_use''';
+    if Facts then
+      Kinds:= Kinds + ',' + (if pHandlersOnly then QuotedStr(REF_KIND_HANDLE) else QuotedStr(REF_KIND_HANDLE) + ',' + QuotedStr(REF_KIND_RAISE));
+    var Refs:= FIndex.AllRows(Format(
+      'SELECT r.id AS id, r.kind AS kind, r.name_text AS name, r.start_line AS line,' + sLineBreak +
+      '       r.start_col AS col, r.end_col AS ecol' + sLineBreak +
+      '  FROM refs r' + sLineBreak +
+      ' WHERE r.enclosing_symbol_id = %d AND r.kind IN (%s)', [pRt.Id, Kinds]), 'r.id');
+    try
+      Result.Fresh:= FReader.SourceFresh(pRt.Path);
+      for var R in Refs do
+        if (R.S('kind') = 'read') or (R.S('kind') = 'type_use') then
+          Inc(Result.RefCount)
+        else if Result.Fresh then
         begin
-          Row.Kind:= R.S('kind');
-          Result.StaleRows:= Result.StaleRows + [Row];
+          var Row:= Default(TExcRef);
+          Row.TypeName:= R.S('name');
+          Row.Line:= R.I('line');
+          Row.Col:= R.I('col');
+          FactAt.AddOrSetValue(Format('%d:%d', [Row.Line, Row.Col]), True);
+          if R.S('kind') = REF_KIND_RAISE then
+            Result.Raises:= Result.Raises + [Row]
+          else
+            Result.Handles:= Result.Handles + [Row];
         end;
-        Continue;
+      for var R in Refs do
+      begin
+        if (R.S('kind') <> 'read') and (R.S('kind') <> 'type_use') then
+          Continue;
+        var IsExc:= FExc.IsExceptionTypeName(R.S('name'));
+        var Row:= Default(TExcRef);
+        Row.TypeName:= R.S('name');
+        Row.Line:= R.I('line');
+        if not Result.Fresh then
+        begin
+          { never classified: the exception-named refs are listed as [stale source] }
+          if IsExc then
+          begin
+            Row.Kind:= R.S('kind');
+            Result.StaleRows:= Result.StaleRows + [Row];
+          end;
+          Continue;
+        end;
+        if Facts then
+        begin
+          if IsExc and not FactAt.ContainsKey(Format('%d:%d', [Row.Line, R.I('col')])) then
+            Inc(Result.Dropped);
+          Continue;
+        end;
+        var C:= FReader.SourceContext(pRt.Path, R.I('line'), R.I('col'), R.I('ecol') - R.I('col'));
+        var Cls:= ExceptionRefClass(C, R.S('kind'));
+        Row.Col:= R.I('col');
+        if Cls = CLASS_RAISE then
+          Result.Raises:= Result.Raises + [Row]
+        else if Cls = CLASS_HANDLE then
+          Result.Handles:= Result.Handles + [Row]
+        else if IsExc then
+          Inc(Result.Dropped);
       end;
-      var C:= FReader.SourceContext(pRt.Path, R.I('line'), R.I('col'), R.I('ecol') - R.I('col'));
-      var Cls:= ExceptionRefClass(C, R.S('kind'));
-      Row.Col:= R.I('col');
-      if Cls = CLASS_RAISE then
-        Result.Raises:= Result.Raises + [Row]
-      else if Cls = CLASS_HANDLE then
-        Result.Handles:= Result.Handles + [Row]
-      else if IsExc then
-        Inc(Result.Dropped);
+    finally
+      Refs.Free;
+    end;
+    { casts and qualified `is`-tests arrive as call / member-access refs: counted, never drawn. The
+      fact kinds are never candidates, and on a facts index a member-access ON a fact (the type of a
+      qualified `raise U.EFoo.Create`) is that raise site, not a dropped ref. }
+    if not pHandlersOnly then
+    begin
+      var Ok:= FIndex.AllRows(Format(
+        'SELECT r.id AS id, r.name_text AS name, r.start_line AS line, r.start_col AS col FROM refs r' + sLineBreak +  // dl:ok sql-injection-concat@8740 -- REVIEWED 2026-10-26 (XT-RAISE): read-only index query; every value spliced in is an Integer (ids, lines) or a constant list (ExceptionFactKindsSql, ExceptionNameSql)
+        ' WHERE r.enclosing_symbol_id = %d AND r.kind NOT IN (''read'',''type_use'',%s)' + sLineBreak +
+        '   AND %s', [pRt.Id, ExceptionFactKindsSql, ExceptionNameSql('r.name_text')]), 'r.id');
+      try
+        for var O in Ok do
+          if FExc.IsExceptionTypeName(O.S('name')) and Result.Fresh
+            and not FactAt.ContainsKey(Format('%d:%d', [O.I('line'), O.I('col')])) then
+          begin
+            Inc(Result.Dropped);
+            Inc(Result.OtherKinds);
+          end;
+      finally
+        Ok.Free;
+      end;
     end;
   finally
-    Refs.Free;
-  end;
-  { casts and qualified `is`-tests arrive as call / member-access refs: counted, never drawn }
-  if not pHandlersOnly then
-  begin
-    var Ok:= FIndex.AllRows(Format(
-      'SELECT r.id AS id, r.name_text AS name FROM refs r' + sLineBreak +  // dl:ok sql-injection-concat@3ec4 -- REVIEWED 2026-10-14: read-only index query; every value spliced in is an Integer (ids, lines) or a constant
-      ' WHERE r.enclosing_symbol_id = %d AND r.kind NOT IN (''read'',''type_use'')' + sLineBreak +
-      '   AND %s', [pRt.Id, ExceptionNameSql('r.name_text')]), 'r.id');
-    try
-      for var O in Ok do
-        if FExc.IsExceptionTypeName(O.S('name')) and Result.Fresh then
-        begin
-          Inc(Result.Dropped);
-          Inc(Result.OtherKinds);
-        end;
-    finally
-      Ok.Free;
-    end;
+    FactAt.Free;
   end;
   if pRt.FromLine > 0 then
   begin

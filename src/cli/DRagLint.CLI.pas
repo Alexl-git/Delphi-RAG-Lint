@@ -97,6 +97,7 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Core.CliError
+  , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
@@ -658,6 +659,7 @@ type
     // index AND lint verbs (per-config conditional resolution before parsing); --no-preprocess
     // reverts to the prior raw all-branch behaviour.
     NoPreprocess : Boolean    ; // --no-preprocess  disable the in-process directive preprocessor for this index run
+    BuildConfig  : string     ; // --build-config <name>  index: parse a PROJECT against this build config instead of its ACTIVE one ('' = the .dproj's Config marker)
     // Task 5: create-enum-helper CLI verb (--qname reuses QName; --db/--apply/
     // --no-backup/--json already shared). EnumMethodsStr is the raw --methods
     // CSV ('' = default all 6, parsed by DoCreateEnumHelper); EnumToString is
@@ -848,6 +850,12 @@ begin
   Writeln('         A "db" in .drag-lint.json counts as an explicit --db.');
   Writeln('         Destructive purge-locals always needs an explicit --db');
   Writeln('         (on the command line or a .drag-lint.json "db").');
+  Writeln('');
+  Writeln('Output encoding (every verb; stdout and stderr):');
+  Writeln('  --output-encoding ascii|utf8|utf16   default ascii, or "outputEncoding" in .drag-lint.json.');
+  Writeln('  ascii: 7-bit only; each non-ASCII UTF-16 code unit is written \uXXXX (lower-case hex,');
+  Writeln('         a surrogate pair outside the BMP) -- the JSON escape, so --json decodes exactly.');
+  Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) are not affected.');
 end; // procedure
 
 const
@@ -955,8 +963,9 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
 procedure LoadConfigDefaults(var AArgs: TArgs);
 const
   { every key read below -- the set a convert verb names when it ignores the file }
-  DefaultsKeys: array[0..5] of string = ('db', 'project', 'path', 'rule', 'watch', 'docs');
+  DefaultsKeys: array[0..6] of string = ('db', 'project', 'path', 'rule', 'watch', 'docs', OUTPUT_ENCODING_CONFIG_KEY);
 var
+  OutEnc   : TOutputEncoding;
   Dir      : string     ;
   Candidate: string     ;
   Content  : string     ;
@@ -1065,6 +1074,14 @@ begin
             'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
             [V.Value, Candidate, AArgs.Command, V.Value]));
       end;
+      { "outputEncoding" (2026-10-26): the stdout/stderr encoding when the
+        command line names none. Applied here, so the banner below is already
+        written in it. A bad value is named and the default kept. }
+      V:= J.GetValue(OUTPUT_ENCODING_CONFIG_KEY);
+      if (V <> nil) and not HasSwitch(OUTPUT_ENCODING_SWITCH) then
+        if TryParseOutputEncoding(V.Value, OutEnc) then InstallOutputEncoding(OutEnc)
+        else Writeln(ErrOutput, Format('drag-lint: note: ignoring "%s": "%s" in %s -- expected %s.',
+          [OUTPUT_ENCODING_CONFIG_KEY, V.Value, Candidate, OUTPUT_ENCODING_VALUES]));
       V:= J.GetValue('watch');
       if V is TJSONObject then
       begin
@@ -1418,6 +1435,7 @@ begin
     else if A = '--deep' then begin Result.Deep:= True; Result.DeepExplicit:= True; end
     else if A = '--shallow' then begin Result.Deep:= False; Result.DeepExplicit:= True; end
     else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
+    else if (A = '--build-config') and (i < ParamCount) then begin Inc(i); Result.BuildConfig:= ParamStr(i); end  // dl:ok multiple-statements-per-line@902e -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
@@ -1446,6 +1464,13 @@ begin
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--diff' then Result.ShowDiff:= True
     else if A = '--quiet'   then Result.Quiet := True
+    else if A = '--output-encoding' then { = OUTPUT_ENCODING_SWITCH; spelled out for the docs-sync flag scan }
+    begin
+      var OutEnc: TOutputEncoding;
+      if (i = ParamCount) or not TryParseOutputEncoding(ParamStr(i + 1), OutEnc) then
+        raise Exception.CreateFmt('%s: expected %s', [OUTPUT_ENCODING_SWITCH, OUTPUT_ENCODING_VALUES]);  // dl:ok raise-bare-exception@755b -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. --delphi-lsp-bits)
+      Inc(i); { the value was applied by Run, before ParseArgs }
+    end
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if A = '--document-third-party' then Result.DocumentThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -2589,8 +2614,11 @@ end;
 // Library sections emit rootsCount (integer) instead of the full roots array
 // to keep output sane (libraries have hundreds of folders).
 // Caller owns + must free the returned object.
-function PlanToJson(const AManifest: TIndexManifest; const APlan: TIndexPlan): TJSONObject;
+function SectionIndexBuild(const AItem: TPlanSection; const ABuildConfig: string): TActiveBuild; forward;
+
+function PlanToJson(const AManifest: TIndexManifest; const APlan: TIndexPlan; const ABuildConfig: string = ''): TJSONObject;
 var
+  SecBuild : TActiveBuild ;
   JSettings: TJSONObject ;
   JSecObj  : TJSONObject ;
   JSections: TJSONArray  ;
@@ -2635,6 +2663,13 @@ begin
     JSecObj.AddPair('mode', ModeStr(PS.Mode));
     JSecObj.AddPair('db'      , PS.DbPath  );
     JSecObj.AddPair('platform', PS.Platform);
+    { A7-I: the build config the section would be parsed with ('' = no .dproj:
+      library / folder sections), so a dry run names the cause of a re-parse. }
+    SecBuild:= SectionIndexBuild(PS, ABuildConfig);
+    if SecBuild.Dproj = '' then JSecObj.AddPair('cfg', '')
+    else if SecBuild.Source = dsDelphiLsp then JSecObj.AddPair('cfg', '<json>')
+    else JSecObj.AddPair('cfg', SecBuild.Config);
+    JSecObj.AddPair('defs', SecBuild.Digest);
 
     if PS.Mode = smLibrary then
       // Library sections: emit count only (hundreds of folders)
@@ -2763,6 +2798,78 @@ begin
   if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
 end;
 
+/// <summary>A7-I: the full active build an INDEX run preprocesses a PROJECT section
+/// against: the .dproj's ACTIVE Config marker (or AConfig, which wins), the
+/// delphilsp.json -D set only when the .dproj has no Config marker (owner D1), the
+/// platform built-ins always unioned in.</summary>
+/// <param name="ADproj">Path to a .dproj, or '' for the built-ins build (library / folder sections).</param>
+/// <param name="APlatform">Section / --platform token; '' -&gt; Win64. It ALWAYS decides the platform: a
+/// Win64 library DB must not become Win32 because a project marker says so.</param>
+/// <param name="AConfig">--build-config; '' = the .dproj's own active Config marker.</param>
+/// <returns>The resolved build; Dproj = '' and Config = '' for the built-ins build.</returns>
+/// <remarks>Never raises. Unlike ResolveIndexProfile (kept as-is for lint / lsp / rename, which
+/// resolve Release) this reads the ACTIVE config.</remarks>
+function ResolveIndexBuild(const ADproj, APlatform, AConfig: string): TActiveBuild;
+begin
+  Result:= ResolveActiveBuild(ADproj, EffectiveIndexPlatform(APlatform), AConfig, True);
+end;
+
+/// <summary>The build an `index --all` section preprocesses with: the active build of its
+/// .dproj when it is a single-project closure section, the built-ins build otherwise.</summary>
+/// <param name="AItem">The plan section.</param>
+/// <param name="ABuildConfig">--build-config; '' = the project's own active config.</param>
+/// <returns>The resolved build (Dproj = '' for library / folder / multi-root sections).</returns>
+function SectionIndexBuild(const AItem: TPlanSection; const ABuildConfig: string): TActiveBuild;
+var
+  Dproj: string;
+begin
+  Dproj:= '';
+  if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) and
+     SameText(ExtractFileExt(AItem.Roots[0]), '.dproj') then
+    Dproj:= AItem.Roots[0];
+  Result:= ResolveIndexBuild(Dproj, AItem.Platform, ABuildConfig);
+end;
+
+/// <summary>The fingerprint limb a PROJECT build adds: ';cfg=&lt;config&gt;;defs=&lt;digest&gt;'.</summary>
+/// <param name="ABuild">The build the index run preprocesses with.</param>
+/// <returns>'' for a built-ins build (library / folder sections: their fingerprint stays
+/// byte-identical); ';cfg=&lt;json&gt;;defs=&lt;digest&gt;' LITERALLY when the define set came from
+/// delphilsp.json (Config is '' there: the IDE's effective set is no named config);
+/// otherwise the lowercased config name.</returns>
+/// <remarks>Changing the active config or the define set changes this limb, so the
+/// fingerprint gate re-parses exactly that DB; no extractor-version bump is involved.</remarks>
+function IndexCfgLimb(const ABuild: TActiveBuild): string;
+var
+  Cfg: string;
+begin
+  Result:= '';
+  if ABuild.Dproj = '' then Exit;
+  if ABuild.Source = dsDelphiLsp then Cfg:= '<json>' else Cfg:= LowerCase(ABuild.Config);
+  Result:= Format(';cfg=%s;defs=%s', [Cfg, ABuild.Digest]);
+end;
+
+/// <summary>The `defines cfg=.. source=.. defs=..` text naming where a project build's
+/// define set came from (cfg is the literal `&lt;json&gt;` for a delphilsp.json set).</summary>
+/// <param name="ABuild">The resolved build.</param>
+/// <returns>The text, without a prefix.</returns>
+function IndexDefinesText(const ABuild: TActiveBuild): string;
+const SOURCE_NAMES: array[TDefineSource] of string = ('builtins', 'dproj', 'delphilsp');
+var
+  Cfg: string;
+begin
+  if ABuild.Source = dsDelphiLsp then Cfg:= '<json>' else Cfg:= ABuild.Config;
+  Result:= Format('defines cfg=%s source=%s defs=%s', [Cfg, SOURCE_NAMES[ABuild.Source], ABuild.Digest]);
+end;
+
+/// <summary>Prints the one-line cause record of a section's define profile.</summary>
+/// <param name="ABuild">The resolved build.</param>
+/// <remarks>Silent for built-ins builds (library / folder sections).</remarks>
+procedure WriteIndexDefinesLine(const ABuild: TActiveBuild);
+begin
+  if ABuild.Dproj = '' then Exit;
+  Writeln(ErrOutput, 'index: ' + IndexDefinesText(ABuild));
+end;
+
 { Installs the per-file define resolver (LSP C10) for a verb that lints files: the
   process-wide profile stays the FALLBACK (built-ins, or --project's profile), so a
   file no .dproj owns is treated exactly as before C10.
@@ -2827,12 +2934,12 @@ end;
   forward-declared rather than moved so the fingerprint policy stays next to the
   comment that explains it. }
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean; forward;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string): Boolean; forward;
 { The other half of the fingerprint gate: called ONLY after a walk finishes.
   See CommitIndexerFingerprint's own comment for why the stamp cannot happen up
   front. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
-  APreprocess: Boolean; const APlatform: string); forward;
+  APreprocess: Boolean; const APlatform, ACfgLimb: string); forward;
 
 
 /// <summary>
@@ -3492,7 +3599,7 @@ function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: st
 
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
-  AResolveOnly: Boolean = False): Boolean;
+  AResolveOnly: Boolean = False; const ABuildConfig: string = ''): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -3583,19 +3690,19 @@ begin
     // A single-project closure section resolves defines from its .dproj; every
     // other section uses the platform built-ins (library sections carry their
     // platform; folder/multi-root sections default to Win64).
-    var SectionDproj: string:= '';
-    if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) and
-       SameText(ExtractFileExt(AItem.Roots[0]), '.dproj') then
-      SectionDproj:= AItem.Roots[0];
+
     // Resolve the section profile ONCE and reuse it for both the indexer and
     // (PP-Task-10) the closure resolver, so uses-discovery and symbol-extraction
     // honour the SAME active define profile.
-    var SectionProfile: TDefineProfile:= ResolveIndexProfile(SectionDproj, AItem.Platform, '');
+    var SectionBuild: TActiveBuild:= SectionIndexBuild(AItem, ABuildConfig);
+    var SectionProfile: TDefineProfile:= SectionBuild.Profile;
+    var SectionCfgLimb: string:= IndexCfgLimb(SectionBuild);
     Indexer.SetPreprocess(APreprocess, SectionProfile);
+    if APreprocess then WriteIndexDefinesLine(SectionBuild);
     { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
       path is the one that builds the big shared indexes, so it is the one where
       a silently stale parse survives longest. }
-    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform);
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform, SectionCfgLimb);
 
     { RESOLVER STALENESS -- and this path needs it MORE than the single-root one,
       not less. `index --all --only <Section>` is what tools\reindex-all.ps1
@@ -3861,7 +3968,10 @@ begin
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
        Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
     if RanCalls then
-      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
+    begin
+      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end); { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch; end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
+    end
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
@@ -3895,7 +4005,7 @@ begin
       produced by THIS engine -- only now may the fingerprint be recorded. A
       section that failed above exits before this point and deliberately leaves
       the OLD fingerprint in place, so the next run re-parses it. }
-    CommitIndexerFingerprint(Store, APreprocess, AItem.Platform);
+    CommitIndexerFingerprint(Store, APreprocess, AItem.Platform, SectionCfgLimb);
     { The manifest path must stamp the scan type too, and this is the site that
       matters MOST: nearly every project database is built through
       `index --all --only <Section>`, not through a bare `index`. Stamping only
@@ -4325,7 +4435,7 @@ begin
   begin
     if AArgs.AsJson then
     begin
-      JRoot:= PlanToJson(Manifest, Plan);
+      JRoot:= PlanToJson(Manifest, Plan, AArgs.BuildConfig);
       try
         Writeln(JRoot.Format(2));
       finally
@@ -4357,6 +4467,9 @@ begin
               PS.Name + (if PS.Platform <> '' then '[' + PS.Platform + ']' else ''),
               (function: string begin case PS.Mode of smFolderTree: Result:= 'folderTree'; smClosure: Result:= 'closure'; smLibrary: Result:= 'library'; else Result:= '?'; end; end)(),
               PS.DbPath]));
+          var DryBuild: TActiveBuild:= SectionIndexBuild(PS, AArgs.BuildConfig);
+          if DryBuild.Dproj <> '' then
+            Writeln('        ', IndexDefinesText(DryBuild));
           if PS.Mode = smLibrary then
           begin
             var DrySib: TArray<string>:= SiblingPlatformExcludes(PS.Platform, DryResolver.EnumRegistryPlatforms);
@@ -4404,7 +4517,7 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -4500,6 +4613,7 @@ begin
       // PP-Task-9: propagate --no-preprocess to the child so a parallel --all
       // build honours the raw all-branch request across every spawned worker.
       if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
+      if AArgs.BuildConfig <> '' then ChildCmdLine:= ChildCmdLine + ' --build-config "' + AArgs.BuildConfig + '"';
       { The MODE has to travel with the section, and did not have to before: when
         every section was recreated unconditionally there was nothing to
         propagate. A child that defaulted to --recompile would turn
@@ -4539,6 +4653,9 @@ begin
       if AArgs.ResolveOnly  then ChildCmdLine:= ChildCmdLine + ' --resolve-only';
       if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
       if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
+      { The child writes to the SAME stdout/stderr, so it must write the same bytes. }
+      if CurrentOutputEncoding <> oeAscii then
+        ChildCmdLine:= ChildCmdLine + ' ' + OUTPUT_ENCODING_SWITCH + ' ' + OutputEncodingName(CurrentOutputEncoding);
 
       SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
       Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
@@ -5122,7 +5239,7 @@ begin
   Result:= Format('r=%s;schema=%d', [DRAGLINT_RESOLVER_VERSION, Expected]);
 end;
 
-function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform: string): string;
+function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform, ACfgLimb: string): string;
 var
   Found, Expected: Integer;
 begin
@@ -5151,7 +5268,10 @@ begin
     measure first. }
   Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
                   [DRAGLINT_EXTRACTOR_VERSION, Expected, Ord(APreprocess),
-                   LowerCase(EffectiveIndexPlatform(APlatform))]);
+                   LowerCase(EffectiveIndexPlatform(APlatform))]) + ACfgLimb;
+  { A7-I: ACfgLimb is ';cfg=<config>;defs=<digest>' for a PROJECT section and ''
+    for library / folder / ad-hoc sections, whose string is therefore byte-
+    identical to what it was before the limb existed. }
 end;
 
 { The `v=` limb of a stored indexer fingerprint, or '' when the stamp is absent
@@ -5253,11 +5373,11 @@ end;
 // mass reindex the project is holding off until the schema settles. Files gain
 // protection as they are next reindexed; --force-reparse covers the rest.
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string): Boolean;
 var
   Cur, Prev: string;
 begin
-  Cur := IndexerFingerprint(AStore, APreprocess, APlatform);
+  Cur := IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb);
   Prev:= AStore.GetMetaValue(INDEXER_FP_KEY);
   Result:= AForceArg or ((Prev <> '') and (Prev <> Cur));
   { Say which of the three reasons actually applies. --rebuild sets ForceReparse
@@ -5320,10 +5440,10 @@ end;
   from the beginning. That needs the per-file indexed_at_version column tracked
   in INBOX-index-runs-are-not-resumable; this is the correctness half only. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
-  APreprocess: Boolean; const APlatform: string);
+  APreprocess: Boolean; const APlatform, ACfgLimb: string);
 begin
   AStore.SetMetaValue(INDEXER_FP_KEY,
-                      IndexerFingerprint(AStore, APreprocess, APlatform));
+                      IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb));
   { The freshness stamp rides the fingerprint's guarantee rather than getting a
     site of its own: BOTH are written only after a walk that ran to completion,
     so an interrupted run leaves both untouched and the next run still knows it
@@ -5522,8 +5642,10 @@ begin
   // built-ins (--platform, default Win64). Build config defaults to Release.
   var PpPlatform: string:= AArgs.CheckPlatform;
   if PpPlatform = '' then PpPlatform:= 'Win64';
-  Indexer.SetPreprocess(not AArgs.NoPreprocess,
-    ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  var IdxBuild: TActiveBuild:= ResolveIndexBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig);
+  var IdxCfgLimb: string:= IndexCfgLimb(IdxBuild);
+  Indexer.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
+  if not AArgs.NoPreprocess then WriteIndexDefinesLine(IdxBuild);
   { SIZE GUARD ON THE INDEX PATH TOO (INBOX-library-reindex-25x-slower-on-large-db).
 
     SizeGuardCheck was wired only into the CONSUMER commands (lint / lsp /
@@ -5546,7 +5668,7 @@ begin
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform);
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);  // dl:ok duplicate-code@08f6 -- REVIEWED 2026-10-26 (extract-136 review): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
 
   { RESOLVER STALENESS -- the sibling question, asked separately because its
     remedy is minutes rather than the ~5 hours a reparse costs.
@@ -5657,8 +5779,7 @@ begin
           disagree about which $IFDEF branch is live -- a unit reachable only
           from an inactive branch would be pulled in and then parsed as though
           it were not compiled, and vice versa. }
-        Cl.SetPreprocess(not AArgs.NoPreprocess,
-          ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+        Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
@@ -6126,7 +6247,10 @@ begin
     var RanCalls: Boolean:= CorpusMoved or (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or
        ResolverStale or AArgs.ResolveOnly;
     if RanCalls then
-      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
+    begin
+      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end); { v14 (D5) + v21 cross-DB }
+      Stage('', 'dispatch', procedure begin Store.ResolveDispatch(OpenLibraryStores(AArgs)); end); { 2026-10-26: libraries only recognise a library `class of` param type }
+    end
     else
       Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
@@ -6140,7 +6264,7 @@ begin
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
-    CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
+    CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
     { --watch: ResolverStale was read ONCE, before the loop. This tick derived
       the edges with the current resolver and stamped it, so a later tick must
       not clear every edge again (it did, on every tick of a new or restamped DB,
@@ -6274,7 +6398,10 @@ begin
     can open a database whose edges were dropped just as the other two can. }
   var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild;
   if RanCalls then
-    Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
+  begin
+    Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end); { v14 (D5): resolve call sites to target symbols }
+    Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch; end); { 2026-10-26: overrides / implements / classref args }
+  end
   else
     Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
   { Purity v2 -- same gate as the DoIndex site: after the edges, or when a
@@ -8744,7 +8871,7 @@ begin
 
             // Referenced by other units.
             QRefs.Close;
-            QRefs.ParamByName('u').AsString:= UnitName;
+            QRefs.ParamByName('u').AsWideString:= UnitName;
             QRefs.Open;
             if not QRefs.IsEmpty then
             begin
@@ -8961,20 +9088,20 @@ begin
 
         FileId:= 0;
         FileQ.Close;
-        FileQ.ParamByName('p').AsString:= RawPath;
-        FileQ.ParamByName('p2').AsString:= '%' + ExtractFileName(RawPath);
+        FileQ.ParamByName('p').AsWideString:= RawPath;
+        FileQ.ParamByName('p2').AsWideString:= '%' + ExtractFileName(RawPath);
         FileQ.Open;
         if not FileQ.IsEmpty then begin FileId:= FileQ.FieldByName('id').AsLargeInt; Inc(MatchedFile); end;
         FileQ.Close;
 
         if FileId > 0 then Q.ParamByName('fid').AsLargeInt:= FileId
         else Q.ParamByName('fid').Clear;
-        Q.ParamByName('rp').AsString:= RawPath;
-        Q.ParamByName('code').AsString:= Code.ToUpper;
-        Q.ParamByName('sev').AsString  := Severity;
+        Q.ParamByName('rp').AsWideString:= RawPath;
+        Q.ParamByName('code').AsWideString:= Code.ToUpper;
+        Q.ParamByName('sev').AsWideString  := Severity;
         Q.ParamByName('ln' ).AsInteger := LineNo;
         Q.ParamByName('cn' ).AsInteger := ColNo;
-        Q.ParamByName('msg').AsString  := Msg;
+        Q.ParamByName('msg').AsWideString  := Msg;
         Q.ParamByName('t'  ).AsLargeInt:= ImportedAt;
         Q.ExecSQL;
         Inc(Count);
@@ -10044,6 +10171,8 @@ var
   JTypes     : TJSONArray    ;
   JAttrs     : TJSONArray    ;
   JEvents    : TJSONArray    ;
+  JRaises    : TJSONArray    ; { 1.36.0 raise / raise-expr / reraise rows }
+  JHandles   : TJSONArray    ; { 1.36.0 handle / handle-all rows }
   JImpact    : TJSONArray    ;
 
   procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
@@ -10066,6 +10195,8 @@ var
     else if Bucket = 'types'      then Result:= JTypes
     else if Bucket = 'attributes' then Result:= JAttrs
     else if Bucket = 'events'     then Result:= JEvents
+    else if Bucket = 'raises'     then Result:= JRaises
+    else if Bucket = 'handles'    then Result:= JHandles
     else Result:= JCalls;
   end;
 
@@ -10092,6 +10223,8 @@ begin
   JWrites:= TJSONArray.Create; JCalls := TJSONArray.Create;
   JTypes := TJSONArray.Create; JAttrs := TJSONArray.Create;
   JEvents:= TJSONArray.Create; JImpact:= TJSONArray.Create;
+  JRaises := TJSONArray.Create;
+  JHandles:= TJSONArray.Create;
   { Attach the arrays to JRoot BEFORE the loop, not after it, so JRoot owns
     them on every path -- including the stale-db refusal below, which leaves
     the loop early. Attached-then-filled is fine: AddPair keeps the reference
@@ -10106,6 +10239,8 @@ begin
   JRoot.AddPair('types'       , JTypes );
   JRoot.AddPair('attributes'  , JAttrs );
   JRoot.AddPair('events'      , JEvents);
+  JRoot.AddPair('raises'      , JRaises);
+  JRoot.AddPair('handles'     , JHandles);
   JRoot.AddPair('impact'      , JImpact);
   try
     for DbPath in PathsToScan do
@@ -10170,7 +10305,8 @@ begin
       Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
       Writeln(Format('  declarations: %d', [JDecls.Count]));
       Writeln(Format(
-          '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d', [JReads.Count, JWrites.Count, JCalls.Count, JTypes.Count, JAttrs.Count, JEvents.Count]));
+          '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d  raises: %d  handles: %d',
+          [JReads.Count, JWrites.Count, JCalls.Count, JTypes.Count, JAttrs.Count, JEvents.Count, JRaises.Count, JHandles.Count]));
       if JImpact.Count > 0 then Writeln(Format('  impact (transitive): %d', [JImpact.Count]));
     end;
     Result:= 0;
@@ -15569,7 +15705,8 @@ var
         can notice for you -- which is the argument for the enum-derived
         treatment symbols.kind gets below. }
       AValues:= 'attribute,call,di-resolve,di-unresolved,event-binding,'
-              + 'member-access,read,sql_table_ref,type_use,write';
+              + 'handle,handle-all,member-access,raise,raise-expr,read,reraise,'
+              + 'sql_table_ref,type_use,write';
     end
     else if Key = 'symbols.kind' then
     begin
@@ -24621,7 +24758,7 @@ begin
     for Pfx in APrefixes do
     begin
       Q.Close;
-      Q.ParamByName('p').AsString:= Pfx + '%';
+      Q.ParamByName('p').AsWideString:= Pfx + '%';
       Q.Open;
       var FldPath: TField:= Q.FieldByName('path');
       var FldUnit: TField:= Q.FieldByName('unit_name');
@@ -29803,7 +29940,7 @@ begin
         PathPrefix:= IncludeTrailingPathDelimiter(AbsProjPath);
         Q.Close;
         Q.Sql.Text:= 'SELECT COUNT(*) AS cnt FROM files WHERE path LIKE :prefix';
-        Q.ParamByName('prefix').AsString:= PathPrefix + '%';
+        Q.ParamByName('prefix').AsWideString:= PathPrefix + '%';
         Q.Open;
         FileCount:= 0;
         if not Q.IsEmpty then FileCount:= Q.FieldByName('cnt').AsInteger;
@@ -31142,7 +31279,7 @@ begin
     var Dproj: string:= '';
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
     Resolver.SetPreprocess(not AArgs.NoPreprocess,
-      ResolveIndexProfile(Dproj, AArgs.CheckPlatform, ''));
+      ResolveIndexBuild(Dproj, AArgs.CheckPlatform, AArgs.BuildConfig).Profile);
     CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
   finally
     Resolver.Free;
@@ -32435,7 +32572,7 @@ begin
           ProfileTgt:= AArgs.ProjectPath;
           if ProfileTgt = '' then ProfileTgt:= ProjectFile;
           Indexer2.SetPreprocess(not AArgs.NoPreprocess,
-            ResolveIndexProfile(ProfileTgt, AArgs.CheckPlatform, ''));
+            ResolveIndexBuild(ProfileTgt, AArgs.CheckPlatform, AArgs.BuildConfig).Profile);
 
           Members:= PairDfmSiblings(RR.ClosureFiles);
           Coh:= ComputeCoherence(Store, Members);
@@ -32476,6 +32613,7 @@ begin
           begin
             RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
+            Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
             Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
           end;
 
@@ -33703,7 +33841,14 @@ const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
 var
   Args: TArgs;
+  OutEnc: TOutputEncoding;
+  OutEncText: string;
 begin
+  { --output-encoding FIRST, before anything is written: the config banner and
+    every ParseArgs note go out in it. Default ascii (owner ruling 2026-10-26);
+    a bad value leaves ascii here and ParseArgs refuses it (exit 3). }
+  OutputEncodingOnCommandLine(OutEnc, OutEncText);
+  InstallOutputEncoding(OutEnc);
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(SELFTEST_SCHEMA_DB_ARG)));
   try

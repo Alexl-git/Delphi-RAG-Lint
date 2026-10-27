@@ -995,6 +995,22 @@ type
     /// call or cast inside the chain, a subscript on a non-array such as an
     /// indexed property or a string, an untypable head).</returns>
     function TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    /// <summary>T-11 kind 12: types a receiver whose chain holds a CALL or a
+    /// parenthesised segment -- `O.Mk('a').Leaf`, `(O as TInner).Leaf`,
+    /// `SB.Append(x)` -- by typing everything left of the LAST top-level dot
+    /// through the full ladder (TypeReceiver, so the head may be any receiver
+    /// the ladder reads) and then stepping the last segment as a member of
+    /// that type: a field / property to its declared type, a method (with or
+    /// without an argument list) to its declared return type.</summary>
+    /// <param name="ACallRef">The ref whose receiver is typed (scope, file).</param>
+    /// <param name="AReceiverExpr">The receiver text.</param>
+    /// <param name="AHandled">True when the receiver has that shape -- the
+    /// answer is then final, 0 included; False leaves it to the other rungs.</param>
+    /// <returns>The receiver type id, or 0 when any step cannot be typed: an
+    /// untyped prefix, an empty segment (a line-scan fragment such as
+    /// `.Mk(1).L`), a method that is overloaded or missing, a procedure, a
+    /// subscript segment. Never a guess.</returns>
+    function TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string; out AHandled: Boolean): Int64;
     /// <summary>R3(a): True when the enclosing routine, or any routine on its
     /// lexical chain, declares a local, parameter, const, var or nested routine
     /// spelled AName -- i.e. something NEARER than the enum's unit scope.</summary>
@@ -1518,7 +1534,7 @@ type
     /// StartCol and EnclosingSymbolId are consulted.</param>
     /// <param name="AReason">OUT: '' when the ref bound OR when its name is not
     /// an enum-value name at all; otherwise the decline reason --
-    /// 'with-member' | 'not-visible' | 'ambiguous' | 'shadowed'.</param>
+    /// 'with-member' | 'scoped' | 'not-visible' | 'ambiguous' | 'shadowed'.</param>
     /// <returns>The enum_value symbol id, or 0 for every decline.</returns>
     /// <remarks>
     /// READS NO SOURCE LINE for the value rules themselves: R1-R4 are a pure
@@ -1530,6 +1546,11 @@ type
     /// in EnumStats.WithUndecided: an enum value almost never collides with a
     /// library object's member, and enum-read-inside-with -- which reads the
     /// library index too -- reports the collisions that do exist.
+    ///
+    /// E14: a value of an enum declared under SCOPEDENUMS ON (the X4 fact,
+    /// TEnumValueDecl.Scoped) is never a candidate for the bare form. When the
+    /// only R1-visible candidates are such values the pass declines 'scoped'
+    /// (EnumStats.Scoped), so a same-named const or var can bind instead.
     ///
     /// Not counted as a decline when the name matches no enum value: the store's
     /// candidate SQL already filtered the stream to enum-value names, so such a
@@ -3125,7 +3146,7 @@ begin
   end;
 end;
 
-function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@d157 -- REVIEWED 2026-09-23: each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
+function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@b863 -- REVIEWED 2026-10-26 (E14 added the scoped exit; first reviewed 2026-09-23): each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), scoped (E14), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
 
   { R1: a value declared in AFileId / ASection is visible from ARef's file when
     it is the SAME file (both sections of one's own unit are in scope), or it is
@@ -3221,6 +3242,7 @@ begin
     type or a descendant of it; treating such a value as unit-scoped is how a
     bare identifier binds to a declaration the compiler would not have seen. }
   Visible:= nil;
+  var ScopedOnly: Boolean:= False;
   for var C: TEnumValueDecl in Cands do
   begin
     if not VisibleHere(C.FileId, C.Section) then Continue;
@@ -3237,6 +3259,13 @@ begin
       if not OwnerOk then Continue;
     end;
     if (C.OwnerRoutineId > 0) and not RoutineOnChain(C.OwnerRoutineId) then Continue;
+    { E14: a value of a SCOPEDENUMS enum is in scope here but not under its BARE
+      name -- only TEnum.Value reaches it -- so it is no candidate at all. }
+    if C.Scoped then
+    begin
+      ScopedOnly:= True;
+      Continue;
+    end;
     Visible:= Visible + [C];
   end;
   { A routine-local value in scope is NEARER than any unit-level one of the
@@ -3257,6 +3286,12 @@ begin
     and would otherwise be indistinguishable from the totals. Delphi settles a
     tie between two used units by uses-clause ORDER; this engine does not model
     that order and must not pretend to. }
+  if (Length(Visible) = 0) and ScopedOnly then
+  begin
+    AReason:= 'scoped';
+    Inc(FEnumStats.Scoped);
+    Exit;
+  end;
   if Length(Visible) = 0 then
   begin
     AReason:= 'not-visible';
@@ -3878,7 +3913,7 @@ begin
   if not Result and FNameToCands.TryGetValue(ALc, L) then
     for S in L do Result:= Result or Visible(S.FileId, S.Section);
   if not Result and FNameToEnumValues.TryGetValue(ALc, E) then
-    for V in E do Result:= Result or Visible(V.FileId, V.Section);
+    for V in E do Result:= Result or (not V.Scoped and Visible(V.FileId, V.Section));  { E14: a scoped value shadows nothing }
 end;
 
 function TCallResolver.UnitLevelValueVisible(ARefFileId: Int64; const ALc: string): Boolean;
@@ -4706,7 +4741,9 @@ begin
     Result:= 'unreadable'
   else
   begin
-    AReceiver:= ExtractReceiverExpr(ALines[ARef.StartLine - 1], ARef.StartCol);
+    { T-11: the parse fact first (N-05 `Self`), the line scan only without it. }
+    AReceiver:= if ARef.ReceiverText <> '' then ARef.ReceiverText
+                else ExtractReceiverExpr(ALines[ARef.StartLine - 1], ARef.StartCol);
     if (AReceiver <> '') and not SameText(AReceiver, 'Self') then Result:= 'qualified';
   end;
 end;
@@ -5100,12 +5137,135 @@ begin
   end;
   Result:= if Ok then CurrentTypeId else 0;
 end;
+
+{ T-11: split a receiver at its TOP-LEVEL dots -- outside ( ) and [ ] groups
+  and '...' literals, so `O.Mk('a.b').Leaf` is `O`, `Mk('a.b')`, `Leaf`.
+  AHasParen: some segment holds a '(' outside any group (a call, a cast, a
+  parenthesised head). False when the groups or literals do not balance. }
+function SplitChainSegments(const AText: string; out ASegs: TArray<string>; out AHasParen: Boolean): Boolean;
+var
+  Parts: TList<string>;
+  Depth: Integer;
+  Start: Integer;
+  InLit: Boolean;
+  i    : Integer;
+begin
+  AHasParen:= False;
+  Parts:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    InLit:= False;
+    for i:= 1 to Length(AText) do
+    begin
+      if AText[i] = '''' then InLit:= not InLit
+      else if InLit then Continue
+      else if CharInSet(AText[i], ['(', '[']) then
+      begin
+        if (AText[i] = '(') and (Depth = 0) then AHasParen:= True;
+        Inc(Depth);
+      end
+      else if CharInSet(AText[i], [')', ']']) then Dec(Depth)
+      else if (AText[i] = '.') and (Depth = 0) then
+      begin
+        Parts.Add(Trim(Copy(AText, Start, i - Start)));
+        Start:= i + 1;
+      end;
+    end;
+    Parts.Add(Trim(Copy(AText, Start, MaxInt)));
+    ASegs := Parts.ToArray;
+    Result:= (Depth = 0) and not InLit;
+  finally
+    Parts.Free;
+  end;
+end;
+
+{ T-11: True when AText is exactly ONE balanced `( .. )` group (literals
+  skipped) -- the argument list of a call segment. }
+function IsOneParenGroup(const AText: string): Boolean;
+var
+  Depth: Integer;
+  InLit: Boolean;
+  i    : Integer;
+begin
+  Result:= (AText <> '') and (AText[1] = '(');
+  Depth := 0;
+  InLit := False;
+  i     := 1;
+  while Result and (i <= Length(AText)) do
+  begin
+    if AText[i] = '''' then InLit:= not InLit
+    else if not InLit then
+    begin
+      if AText[i] = '(' then Inc(Depth)
+      else if AText[i] = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Exit(i = Length(AText));
+      end;
+    end;
+    Inc(i);
+  end;
+  Result:= False;
+end;
+
+function TCallResolver.TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string;
+  out AHandled: Boolean): Int64;
+var
+  Segs     : TArray<string>;
+  HasParen : Boolean;
+  HasEmpty : Boolean;
+  OwnerType: Int64  ;
+
+  { The type the LAST segment ASeg yields as a member of AOwner. }
+  function ChainStep(AOwner: Int64; const ASeg: string): Int64;
+  var
+    P   : Integer;
+    Conf: string ;
+  begin
+    Result:= 0;
+    P:= 1;
+    while (P <= Length(ASeg)) and IsIdentPart(ASeg[P]) do Inc(P);
+    if (P = 1) or not IsIdentStart(ASeg[1]) then Exit;
+    var Name: string:= Copy(ASeg, 1, P - 1);
+    var Args: string:= Trim(Copy(ASeg, P, MaxInt));
+    if Args = '' then
+    begin
+      var Member: TSymbol:= LookupMemberOnType(AOwner, Name);
+      if Member.Id > 0 then
+        Exit(DerefPointerAlias(ResolveTypeNameToSymbol(Member.Signature, Member.FileId)));
+    end
+    else if not IsOneParenGroup(Args) then
+      Exit; // `Items[0]`, `F(x)[1]`: a subscript step is not modelled here
+    { A method -- `Mk('a')`, or the parenless `Leaf` -- types to its declared
+      return type. Exactly one candidate on the type's chain ('certain'): an
+      overload set or an override pair may disagree on the return type. }
+    var Target: Int64:= LookupMethodOnType(AOwner, Name, 0, False, Conf);
+    if (Target <= 0) or (Conf <> 'certain') then Exit;
+    var Method: TSymbol:= SymbolById(Target);
+    var RetType: string:= SignatureReturnType(Method.Signature);
+    if RetType <> '' then
+      Result:= DerefPointerAlias(ResolveTypeNameToSymbol(RetType, Method.FileId));
+  end;
+
+begin
+  Result  := 0;
+  AHandled:= SplitChainSegments(AReceiverExpr, Segs, HasParen) and HasParen and (Length(Segs) >= 2);
+  { An empty segment is a line-scan fragment (`.Mk(1).L`): never typed, and
+    above all never from the enclosing class, which is what '' would mean. }
+  HasEmpty:= False;
+  for var Seg: string in Segs do HasEmpty:= HasEmpty or (Seg = '');
+  if (not AHandled) or HasEmpty then Exit;
+  OwnerType:= TypeReceiver(ACallRef, string.Join('.', Segs, 0, High(Segs))); // shorter text -> the recursion ends
+  if OwnerType > 0 then Result:= ChainStep(OwnerType, Segs[High(Segs)]);
+end;
+
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
 begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr));
 end;
 
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;  // dl:ok too-many-exit-points@5c21 -- REVIEWED 2026-10-25 (X1; re-read at the X batch merge, X2 added the function-result rung, kind 11): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;  // dl:ok too-many-exit-points@fb25, cyclomatic-complexity@26f1 -- REVIEWED 2026-10-26 (whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
 var
   Encl    : TSymbol;
   ClassId : Int64  ;
@@ -5146,13 +5306,29 @@ begin
   // --- Kind 6: cast '(X as TBar).M' / 'TBar(X).M' -> the cast target type.
   //     Kind 11 (X2, resolver 1.14.0-alpha): 'F(...)' / 'F()' whose F is not a
   //     type is a CALL -- typed from F's declared return type.
+  var ChainHandled: Boolean;
   if TryParseCastTarget(AReceiverExpr, CastType) then
   begin
     Result:= ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
     if (Result = 0) and AReceiverExpr.StartsWith(CastType + '(', True) and IsIdentChain([CastType]) then
       Result:= TypeOfFunctionResult(ACallRef, CastType);
+    { T-11: `O.Mk('a')` also reads as a cast to `O.Mk`; when that names no type
+      and no function, kind 12 below types it as a call on O. }
+    if Result > 0 then Exit;
+    Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled);
     Exit;
   end;
+
+  // --- Kind 12 (T-11, resolver 1.15.0): a chain with a CALL or parenthesised
+  //     segment -- `O.Mk('a').Mk('b').Leaf`, `(O as TInner).Leaf`,
+  //     `SB.Append(x)`. The receiver text is a parse fact now, so a fluent
+  //     chain continued over several lines arrives whole; no rung below typed a
+  //     `Name(...)` segment in chain position. The prefix goes through this
+  //     ladder again, the last segment is a member / method lookup on its type;
+  //     any untyped step answers 0. Pinned by
+  //     tests\callresolve\run_receiver_cst_capture.ps1.
+  Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled);
+  if ChainHandled then Exit;
 
   // --- Kind 11 (X1, 2026-10-25): a receiver with SELECTORS -- an array element
   //     or a pointer dereference: `A[0].K`, `R.Arr[1].K`, `pM[X].Sev`, `P^.K`.
@@ -5726,6 +5902,7 @@ begin
         InUnit:= nil;
         for C in Enums do
           if (C.FileId = UnitFile) and (C.OwnerRoutineId = 0)   { W5-ext: a routine-local value has no Unit.value form }
+             and not C.Scoped                                   { E14: nor has a scoped one -- only Unit.TEnum.Value }
              and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
             InUnit:= InUnit + [C];
         InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
@@ -5882,7 +6059,7 @@ function TCallResolver.UnitScopeWriteTarget(ARefFileId: Int64; const ALc: string
         if OnRung(ARung, S.FileId, S.Section) then Inc(Result);
     if FNameToEnumValues.TryGetValue(ALc, E) then
       for V in E do
-        if OnRung(ARung, V.FileId, V.Section) then Inc(Result);
+        if not V.Scoped and OnRung(ARung, V.FileId, V.Section) then Inc(Result);  { E14: a scoped value competes with nothing }
   end;
 
 var
@@ -5955,7 +6132,8 @@ begin
     AReason:= 'unreadable'
   else if SameText(ARef.NameText, 'Result') then
     AReason:= 'result'
-  else if SameText(ExtractReceiverExpr(Lines[ARef.StartLine - 1], ARef.StartCol), 'Self') then
+  else if SameText(if ARef.ReceiverText <> '' then ARef.ReceiverText    { T-11: parse fact first }
+                   else ExtractReceiverExpr(Lines[ARef.StartLine - 1], ARef.StartCol), 'Self') then
   begin
     { `Self.X := v` (2026-09-28): the explicit qualifier names the member of the
       enclosing class whatever a local or a `with` target declares -- the rule
@@ -6458,11 +6636,14 @@ begin
 
   if ACallRef.NameText = '' then Exit;
 
-  // 1. read the source line and extract the receiver expression left of '.M'.
-  Line := '';
-  Rcv  := '';
+  // 1. the receiver expression left of '.M'. T-11 (extractor 1.25.0): the
+  // parser records it from the CST in refs.receiver_text, which is the FACT --
+  // whole across line breaks and true for the parse even when the file has
+  // changed since. Only a row without it (a bare call, a pre-1.25 parse) falls
+  // back to reading the source line.
+  Rcv  := ACallRef.ReceiverText;
   Lines:= LinesOf(ACallRef.FileId);
-  if (Lines <> nil) and (ACallRef.StartLine >= 1) and (ACallRef.StartLine <= Lines.Count) then
+  if (Rcv = '') and (Lines <> nil) and (ACallRef.StartLine >= 1) and (ACallRef.StartLine <= Lines.Count) then
   begin
     Line:= Lines[ACallRef.StartLine - 1];
     Rcv := ExtractReceiverExpr(Line, ACallRef.StartCol);
@@ -6478,7 +6659,7 @@ begin
     stored value -- computed against the source that actually produced the ref --
     survives. Resolution below still runs: a name-based rung can be right even
     when the source line is unusable. }
-  Result.ReceiverUnknown:= FileIsStale(ACallRef.FileId);
+  Result.ReceiverUnknown:= (ACallRef.ReceiverText = '') and FileIsStale(ACallRef.FileId); { T-11: a parse fact is never a guess }
 
   // 1b. B1: count the arguments at this site, from the same cached lines. Unlike
   // the receiver scan -- which reads LEFT and cannot leave the line -- an

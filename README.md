@@ -221,6 +221,18 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > the project; `compile-check` caches only into an explicit `--db` or the
 > project's unique manifest section. A `"db"` in `.drag-lint.json` counts as an
 > explicit `--db`.
+>
+> **Output encoding (every verb, stdout and stderr).** The default is 7-bit ASCII:
+> each non-ASCII UTF-16 code unit is written `\uXXXX` (lower-case hex; a character
+> outside the BMP is its surrogate pair), which inside `--json` is the JSON escape
+> itself, so a JSON reader gets the exact string back; in text output it is
+> reversible unless the original held a literal backslash-`u`-four-hex sequence.
+> ASCII output is byte-for-byte what it always was. `--output-encoding utf8` or
+> `utf16` writes UTF-8 / UTF-16LE instead (no BOM); `"outputEncoding": "utf8"` in
+> `.drag-lint.json` sets it when the command line does not; any other value is an
+> argument error (exit 3). Files a verb writes (`--output`) are not affected.
+> Non-ANSI characters in paths are stored in the index intact (they were `?`
+> before 2026-10-26).
 
 
 **The traps, because each one turns a correct command into a silent zero:**
@@ -798,7 +810,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
-| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
+| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
 | [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 <!-- dl:registry:end feature-summary -->
 
@@ -899,9 +911,9 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 |---|---|---|
 | `index <path>` | Index a folder tree (a Library-type scan) | `--db`, `--watch [--interval N]`, `--library-db <lib.sqlite>` (cross-DB resolution), `--resolve-only`, `--dir <path>` (same as the positional path), `--use-ignore` (the default; kept so old scripts parse). **Exit 1 when any file failed to store** (an `ERROR` line on stderr names it; the file keeps its old rows) and, for `index --all`, when any section failed |
 | `index <path> --resolve-only` | Re-derive call edges, ancestry, helper targets and purity verdicts from the parses the index ALREADY holds, skipping the walk entirely. The cheap remedy when `resolver_fingerprint` reports stale edges: no stored parse became wrong, so re-parsing buys nothing. It writes edges INSIDE that one index only -- no cross-store edges are written (measured 2026-09-22: 0 `refs.external_target` in every project DB; re-resolving the platform libraries added 13 intra-library edges per platform and nothing across stores) | `--db` |
-| `index --project <file.dproj>` | Index one project's **compile closure** -- members, transitively used project-local units, sibling `.dfm`, `{$I}` includes | `--dry-run`, `--watch`; accepts a `.dproj`, `.dpr` or `.dpk`; a positional project file beats the `project` key of `.drag-lint.json`, an explicit `--project` beats both |
+| `index --project <file.dproj>` | Index one project's **compile closure** -- members, transitively used project-local units, sibling `.dfm`, `{$I}` includes | `--dry-run`, `--watch`, `--build-config <name>` (parse the project against this build config instead of its ACTIVE one: the `.dproj` `Config` marker, else the `delphilsp.json` defines); accepts a `.dproj`, `.dpr` or `.dpk`; a positional project file beats the `project` key of `.drag-lint.json`, an explicit `--project` beats both |
 | `index --scan-libraries-win` / `--scan-libraries-all` | Index the IDE's registered Library + Browsing paths (Win32+Win64, or every platform incl. Posix/iOS/Android/OSX) | `--dry-run` |
-| `index --all` | Index every section of the named-DB manifest (`drag-lint.json`) | `--only <Sec1,Sec2>`, `--platform win32\|win64`, `--jobs <n>`, `--dry-run [--json]` |
+| `index --all` | Index every section of the named-DB manifest (`drag-lint.json`) | `--only <Sec1,Sec2>`, `--platform win32\|win64`, `--jobs <n>`, `--dry-run [--json]`, `--build-config <name>` (project sections only) |
 | any `index` run | Mode is chosen per run, independent of scan type | `--recompile` (default, incremental) / `--rebuild` (from scratch), `--force-reparse` (re-parse every walked file even when path+mtime+sha are unchanged -- needed once per DB after an engine upgrade that extracts something new), `--no-prune` (dry look), `--prune` |
 | any `index` run (walk scoping) | Decide which files the walk admits before anything is parsed | `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` (skip any file larger than N KB), `--no-use-ignore` (opt out of the `.gitignore` / `.hgignore` pattern files, honoured by default; a folder holding a `.scanignore` marker file is always pruned), `--deep` (also record usage refs; `--shallow` is the default) |
 | [`migrate-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Move project indexes into each project's `_D-RAG` folder | `--apply` |

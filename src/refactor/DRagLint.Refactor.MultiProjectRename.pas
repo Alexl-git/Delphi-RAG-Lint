@@ -388,9 +388,9 @@ uses
   , DRagLint.Index.Plan
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
+  , DRagLint.Project.DefineProfile
   , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- TagMismatch reads the PROJECT_TAG_KEY stamp this module defines beside ProjectTagConflicts, which compares it; the const travels with that call
   , DRagLint.Index.Closure
-  , DRagLint.Preprocess.Profile
   , DRagLint.Storage.FileMembership
   ;
 
@@ -557,7 +557,7 @@ const
   disk: the declared members and every project-local unit they use
   transitively, as `index --project` resolves them -- the same resolver, the
   same library-root exclusion, the same default profile (preprocess on,
-  Win64, Release). INBOX rename-owner-transitive-members-unchecked: a unit no
+  Win64, the project's ACTIVE build config -- A7-I). INBOX rename-owner-transitive-members-unchecked: a unit no
   project file lists is still compiled, so a rename must still reach it.
   .inc files are dropped: the index keeps no files row for them. Reads files;
   writes nothing. Raises when the project file does not exist. }
@@ -570,7 +570,7 @@ begin
   Resolver:= TClosureResolver.Create(LibraryRoots);
   List    := TStringList.Create;
   try
-    Resolver.SetPreprocess(True, ProfileFromDproj(AProjectFile, INDEX_DEFAULT_PLATFORM, ''));
+    Resolver.SetPreprocess(True, ResolveActiveBuild(AProjectFile, INDEX_DEFAULT_PLATFORM, '', True).Profile);
     for F in Resolver.Resolve(AProjectFile, []).Files do
       if SameText(ExtractFileExt(F), '.pas') then AddMember(List, F);
     Result:= List.ToStringArray;

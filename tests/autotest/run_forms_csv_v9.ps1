@@ -50,7 +50,8 @@ $raw = [IO.File]::ReadAllText($out)
 $lines = @($raw -split "`r`n" | Where-Object { $_ -ne '' })
 $header = '#,Form,Unit,How to open,Click,Control type,Handler,Opened by,Modal,Before you start,Other ways in,Confidence,Tester result,Notes'
 Check 'header is row 1' ($lines[0] -ceq $header) $lines[0]
-Check 'footer names algorithm v9' ($lines[-1] -match '^,{13}"# forms-csv algorithm v9 \|') $lines[-1]
+$algo9 = if ($lines[-1] -match 'algorithm v(\d+) \|') { [int]$Matches[1] } else { 0 }
+Check 'footer names algorithm v9 or later (v10: dispatch launches)' (($algo9 -ge 9) -and ($lines[-1] -match '^,{13}"# forms-csv algorithm v\d+ \|')) $lines[-1]
 $rows = @($lines[1..($lines.Count - 2)] | ConvertFrom-Csv -Header ($header -split ','))
 Check '7 data rows' ($rows.Count -eq 7) "got $($rows.Count)"
 function RowOf([string]$Form) { $rows | Where-Object { $_.Form -ceq $Form } | Select-Object -First 1 }

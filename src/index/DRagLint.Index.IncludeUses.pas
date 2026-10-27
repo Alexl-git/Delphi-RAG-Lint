@@ -57,11 +57,33 @@ function ExtractIncludeUses(const ASites: TArray<TPPIncludeSite>; const AParser:
 /// a false positive only costs one parse).</returns>
 function HasUsesWord(const AText: string): Boolean;
 
+/// <summary>E14: re-derives the X4 fact symbols.directives = 'scopedenums'
+/// on the host's enum TYPE symbols when an active include file sets the
+/// SCOPEDENUMS switch.</summary>
+/// <param name="ASites">The sites the 3-arg Preprocess overload reported for
+/// the host, nested ones included (source order, a nested site after its
+/// parent).</param>
+/// <param name="AHostBytes">The host bytes the parser saw (preprocessed).</param>
+/// <param name="ASymbols">The host's parsed symbols; the Directives of each
+/// skEnum is rewritten in place. Other kinds are untouched.</param>
+/// <remarks>The parser reads the switch from the host text only, where every
+/// include directive is blanked. Here each depth-0 include contributes ONE
+/// switch at its directive's host position: the state its own text -- and its
+/// nested includes, at their positions inside it -- leaves behind. An include
+/// that sets no switch contributes nothing, and when no include does the
+/// parser's answer stands untouched (the common case costs one byte scan per
+/// include). Inactive includes and inactive branches inside an include never
+/// reach here: the preprocessor reports no site for the first and blanks the
+/// second. Pure; thread-safe.</remarks>
+procedure ApplyIncludeScopedEnums(const ASites: TArray<TPPIncludeSite>;
+  const AHostBytes: TBytes; var ASymbols: TArray<TSymbol>);
+
 implementation
 
 uses
-  System.Generics.Collections;
-
+  System.Generics.Collections,
+  System.Generics.Defaults,
+  DRagLint.Parser.Delphi13;
 const
   USES_WORD = 'uses';
   // The synthetic wrapper puts the include body on line 3.
@@ -152,6 +174,149 @@ begin
     Result:= Rows.ToArray;
   finally
     Rows.Free;
+  end;
+end;
+
+const
+  SCOPED_DIRECTIVE = 'scopedenums';
+  LF_BYTE          = 10;
+
+type
+  { E14: one switch in HOST coordinates (1-based line, 1-based byte column). }
+  TSwitchAt = record
+    Line: Integer;
+    Col : Integer;
+    IsOn: Boolean;
+  end;
+
+{ 1-based line and byte column of AOffset in ABytes. }
+procedure LineColOf(const ABytes: TBytes; AOffset: Integer; out ALine, ACol: Integer);
+var
+  K, LineStart: Integer;
+begin
+  ALine    := 1;
+  LineStart:= 0;
+  for K:= 0 to AOffset - 1 do
+    if ABytes[K] = LF_BYTE then
+    begin
+      Inc(ALine);
+      LineStart:= K + 1;
+    end;
+  ACol:= AOffset - LineStart + 1;
+end;
+
+{ Byte offset of 1-based ALine / ACol in ABytes (clamped to the length). }
+function OffsetOf(const ABytes: TBytes; ALine, ACol: Integer): Integer;
+var
+  Line: Integer;
+begin
+  Result:= 0;
+  Line  := 1;
+  while (Line < ALine) and (Result < Length(ABytes)) do
+  begin
+    if ABytes[Result] = LF_BYTE then Inc(Line);
+    Inc(Result);
+  end;
+  Result:= Result + ACol - 1;
+  if Result > Length(ABytes) then Result:= Length(ABytes);
+end;
+
+{ The switch state the include at AIdx leaves behind, its nested includes
+  included. False when neither it nor a nested include sets the switch.
+  ANext is the first site after AIdx's whole subtree. }
+function IncludeEffect(const ASites: TArray<TPPIncludeSite>; AIdx: Integer;
+  out ANext: Integer; out AIsOn: Boolean): Boolean;
+var
+  Events : TList<TScopedEnumSwitch>;
+  Ev     : TScopedEnumSwitch;
+  J, Next: Integer;
+  ChildOn: Boolean;
+begin
+  AIsOn := False;
+  Events:= TList<TScopedEnumSwitch>.Create;
+  try
+    Events.AddRange(ScanScopedEnumSwitches(ASites[AIdx].Resolved));
+    J:= AIdx + 1;
+    while (J < Length(ASites)) and (ASites[J].Depth > ASites[AIdx].Depth) do
+    begin
+      if IncludeEffect(ASites, J, Next, ChildOn) then
+      begin
+        Ev.Offset:= OffsetOf(ASites[AIdx].Resolved, ASites[J].HostLine, ASites[J].HostCol);
+        Ev.IsOn  := ChildOn;
+        Events.Add(Ev);
+      end;
+      J:= Next;
+    end;
+    ANext := J;
+    Result:= Events.Count > 0;
+    if not Result then Exit;
+    Events.Sort(TComparer<TScopedEnumSwitch>.Construct(
+      function(const A, B: TScopedEnumSwitch): Integer
+      begin
+        Result:= A.Offset - B.Offset;
+      end));
+    AIsOn:= Events.Last.IsOn;
+  finally
+    Events.Free;
+  end;
+end;
+
+procedure ApplyIncludeScopedEnums(const ASites: TArray<TPPIncludeSite>;
+  const AHostBytes: TBytes; var ASymbols: TArray<TSymbol>);
+var
+  Events: TList<TSwitchAt>;
+  Ev    : TSwitchAt;
+  Sw    : TScopedEnumSwitch;
+  I     : Integer;
+  Next  : Integer;
+  IsOn  : Boolean;
+  Found : Boolean;
+begin
+  Events:= TList<TSwitchAt>.Create;
+  try
+    Found:= False;
+    I    := 0;
+    while I < Length(ASites) do
+    begin
+      if (ASites[I].Depth = 0) and IncludeEffect(ASites, I, Next, IsOn) then
+      begin
+        Ev.Line:= ASites[I].HostLine;
+        Ev.Col := ASites[I].HostCol;
+        Ev.IsOn:= IsOn;
+        Events.Add(Ev);
+        Found:= True;
+        I    := Next;
+      end
+      else
+        Inc(I);
+    end;
+    { No include touches the switch: the parser's host-only answer is complete. }
+    if not Found then Exit;
+    for Sw in ScanScopedEnumSwitches(AHostBytes) do
+    begin
+      LineColOf(AHostBytes, Sw.Offset, Ev.Line, Ev.Col);
+      Ev.IsOn:= Sw.IsOn;
+      Events.Add(Ev);
+    end;
+    Events.Sort(TComparer<TSwitchAt>.Construct(
+      function(const A, B: TSwitchAt): Integer
+      begin
+        Result:= if A.Line <> B.Line then A.Line - B.Line else A.Col - B.Col;
+      end));
+    for I:= 0 to High(ASymbols) do
+    begin
+      if ASymbols[I].Kind <> skEnum then Continue;
+      IsOn:= False;
+      for Ev in Events do
+      begin
+        if (Ev.Line > ASymbols[I].StartLine)
+           or ((Ev.Line = ASymbols[I].StartLine) and (Ev.Col >= ASymbols[I].StartCol)) then Break;
+        IsOn:= Ev.IsOn;
+      end;
+      ASymbols[I].Directives:= if IsOn then SCOPED_DIRECTIVE else '';
+    end;
+  finally
+    Events.Free;
   end;
 end;
 

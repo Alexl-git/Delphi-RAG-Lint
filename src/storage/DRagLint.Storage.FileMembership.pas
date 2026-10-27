@@ -390,7 +390,7 @@ function RebuildInProgress(AQuery: TFDQuery): Boolean;
 begin
   Result:= False;
   AQuery.SQL.Text:= 'SELECT value FROM schema_meta WHERE key = :k LIMIT 1';
-  AQuery.ParamByName('k').AsString:= REBUILD_IN_PROGRESS_META_KEY;
+  AQuery.ParamByName('k').AsWideString:= REBUILD_IN_PROGRESS_META_KEY;
   try
     try
       AQuery.Open;
@@ -450,7 +450,7 @@ begin
         try
           { Byte-exact first: served by the UNIQUE index on files.path. }
           Q.SQL.Text:= 'SELECT 1 FROM files WHERE path = :p LIMIT 1';
-          Q.ParamByName('p').AsString:= NP;
+          Q.ParamByName('p').AsWideString:= NP;
           Q.Open;
           Found:= not Q.Eof;
           Q.Close;
@@ -461,7 +461,7 @@ begin
           if not Found then
           begin
             Q.SQL.Text:= 'SELECT 1 FROM files WHERE path = :p COLLATE NOCASE LIMIT 1';
-            Q.ParamByName('p').AsString:= NP;
+            Q.ParamByName('p').AsWideString:= NP;
             Q.Open;
             Found:= not Q.Eof;
             Q.Close;

@@ -878,6 +878,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasMemberAccesses: Boolean;
+
       /// <summary>Purity v2: True when symbol_facts carries the three effect
       /// columns. They are Migrate ALTERs with NO schema bump, and a READ-ONLY
       /// open never runs Migrate, so every schema-23 DB indexed before this
@@ -2420,6 +2421,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
+      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
+      /// then wipes and rewrites dispatch_edges and classref_args in one
+      /// transaction.</summary>
+      /// <param name="AExtraStores">Library stores for class-reference type lookup; may be nil.</param>
+      /// <remarks>Logs `dispatch: overrides=N implements=N classref-args=N` plus the
+      /// decline counts. A read-only store or a DB without the tables does nothing.</remarks>
+      procedure ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
+      /// <summary>True when this database has the dispatch_edges / classref_args
+      /// tables (created by Migrate since 2026-10-26). Readers answer as before
+      /// without them.</summary>
+      /// <returns>True when dispatch_edges exists.</returns>
+      function HasDispatchEdges: Boolean;
       /// <summary>Implements ISymbolStore.CallEdgesNeedRebuild -- two LIMIT 1 probes.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (not ProbeExists('SELECT 1
       /// FROM call_edges LIMIT 1')); True.</returns>
@@ -3471,6 +3484,7 @@ uses
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
   , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
+  , DRagLint.Index.DispatchResolver { 2026-10-26: ResolveDispatch }
   , FireDAC.Stan.Error          { F2: EFDDBEngineException -- ExecAdditiveDDL's one tolerated failure }
   ;
 
@@ -3620,6 +3634,70 @@ begin
   end;
 end;
 
+function TSQLiteSymbolStore.HasDispatchEdges: Boolean;
+begin
+  Result:= TableExists('dispatch_edges');
+end;
+
+procedure TSQLiteSymbolStore.ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
+var
+  Res: TDispatchResolver;
+  QE : TFDQuery;
+  QA : TFDQuery;
+  T0 : Int64;
+  E  : TDispatchEdge;
+  A  : TClassRefArg;
+  C  : TDispatchCounters;
+begin
+  if FReadOnly or not HasDispatchEdges then Exit;
+  T0 := TStopwatch.GetTimeStamp;
+  Res:= TDispatchResolver.Create(Self, FConn, AExtraStores);
+  QE := TFDQuery.Create(nil);
+  QA := TFDQuery.Create(nil);
+  try
+    Res.Run;
+    QE.Connection:= FConn;
+    QE.SQL.Text  := 'INSERT INTO dispatch_edges(base_symbol_id, impl_symbol_id, kind, confidence) VALUES (:b, :i, :k, :c)';
+    QA.Connection:= FConn;
+    QA.SQL.Text  := 'INSERT INTO classref_args(ref_id, arg_index, param_symbol_id, class_symbol_id, confidence) VALUES (:r, :a, :p, :k, :c)';
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DELETE FROM dispatch_edges');
+      FConn.ExecSQL('DELETE FROM classref_args');
+      for E in Res.Edges do
+      begin
+        QE.ParamByName('b').AsLargeInt  := E.BaseId;
+        QE.ParamByName('i').AsLargeInt  := E.ImplId;
+        QE.ParamByName('k').AsWideString:= E.Kind;
+        QE.ParamByName('c').AsWideString:= E.Confidence;
+        QE.ExecSQL;
+      end;
+      for A in Res.Args do
+      begin
+        QA.ParamByName('r').AsLargeInt  := A.RefId;
+        QA.ParamByName('a').AsInteger   := A.ArgIndex;
+        QA.ParamByName('p').AsLargeInt  := A.ParamId;
+        QA.ParamByName('k').AsLargeInt  := A.ClassId;
+        QA.ParamByName('c').AsWideString:= A.Confidence;
+        QA.ExecSQL;
+      end;
+      FConn.Commit;
+    except // dl:ok bare-except@4bef -- rollback and RE-RAISE: nothing is swallowed, any failure must undo the wipe
+      FConn.Rollback;
+      raise;
+    end;
+    C:= Res.Counters;
+    ResolveLog(Format('dispatch: overrides=%d implements=%d classref-args=%d declined: no-base=%d external=%d ' +
+      'no-impl=%d generic=%d indirect=%d stale=%d unread=%d  [%.1fs]',
+      [C.Overrides, C.Implements, C.ClassRefArgs, C.NoBase, C.External, C.NoImpl, C.Generic, C.Indirect, C.Stale,
+       C.Unread, ResolveSecs(T0)]));
+  finally
+    QA.Free;
+    QE.Free;
+    Res.Free;
+  end;
+end;
+
 function TSQLiteSymbolStore.HasMemberAccesses: Boolean;
 var
   Q: TFDQuery;
@@ -3765,7 +3843,7 @@ begin
     Q.Connection := FConn;
     Q.SQL.Text := 'SELECT 1 FROM sqlite_master ' +
                   'WHERE type = ''table'' AND name = :n LIMIT 1';
-    Q.ParamByName('n').AsString := pName;
+    Q.ParamByName('n').AsWideString := pName;
     try
       Q.Open;
       Result := not Q.IsEmpty;
@@ -3925,7 +4003,7 @@ begin
         Grams:= DRagLint.Query.Fuzzy.Trigrams(SymName);
         for G in Grams do
         begin
-          InsertQ.ParamByName('tg' ).AsString  := G;
+          InsertQ.ParamByName('tg' ).AsWideString  := G;
           InsertQ.ParamByName('sid').AsLargeInt:= SymId;
           InsertQ.ExecSQL;
         end;
@@ -4446,6 +4524,26 @@ begin
           '  receiver_type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_member   ON member_accesses(member_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_accessor ON member_accesses(accessor_symbol_id)');
+  { 2026-10-26 (polymorphic form launches, spec 2026-10-26-extract-polymorphic-
+    form-launches): two DERIVED tables, wiped and rebuilt by ResolveDispatch
+    after the calls pass. ADDITIVE and probed for (HasDispatchEdges), so NO
+    SCHEMA_VERSION bump, exactly like member_accesses above. }
+  TryExec('CREATE TABLE IF NOT EXISTS dispatch_edges (' +
+          '  base_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  impl_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  kind           TEXT NOT NULL,' +
+          '  confidence     TEXT NOT NULL,' +
+          '  PRIMARY KEY (base_symbol_id, impl_symbol_id))');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dispatch_edges_impl ON dispatch_edges(impl_symbol_id)');
+  TryExec('CREATE TABLE IF NOT EXISTS classref_args (' +
+          '  ref_id          INTEGER NOT NULL REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  arg_index       INTEGER NOT NULL,' +
+          '  param_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  class_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  confidence      TEXT NOT NULL,' +
+          '  PRIMARY KEY (ref_id, arg_index))');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_class ON classref_args(class_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_param ON classref_args(param_symbol_id)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -5181,9 +5279,9 @@ begin
       every run. }
     Q.SQL.Text:= 'SELECT 1 FROM files WHERE (path = :p OR LOWER(path) = LOWER(:p)) ' +
                  'AND mtime_unix = :m AND sha256 = :s';
-    Q.ParamByName('p').AsString:= NormalizeStoredPath(APath);
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
     Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
-    Q.ParamByName('s').AsString  := ASha;
+    Q.ParamByName('s').AsWideString  := ASha;
     Q.Open;
     Result:= not Q.IsEmpty;
   finally
@@ -5203,7 +5301,7 @@ begin
     // Same path match as FileIsUpToDate.
     Q.SQL.Text:= 'SELECT DISTINCT u.origin_path, f.parsed_at FROM unit_uses u JOIN files f ON f.id = u.file_id ' +
                  'WHERE (f.path = :p OR LOWER(f.path) = LOWER(:p)) AND u.origin_path IS NOT NULL';
-    Q.ParamByName('p').AsString:= NormalizeStoredPath(APath);
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
     Q.Open;
     while not Q.Eof do
     begin
@@ -5230,7 +5328,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT value FROM schema_meta WHERE key = :k LIMIT 1';
-    Q.ParamByName('k').AsString:= AKey;
+    Q.ParamByName('k').AsWideString:= AKey;
     try
       Q.Open;
       if not Q.IsEmpty then Result:= Q.Fields[0].AsString;
@@ -5391,20 +5489,20 @@ begin
   try
     { UPDATE existing row in-place (no DELETE -- no cascade -- no FTS5 trigger).
       If no row exists yet (new file) fall through to INSERT OR IGNORE. }
-    FQUpsertFile.ParamByName('path'  ).AsString   := NP;
+    FQUpsertFile.ParamByName('path'  ).AsWideString   := NP;
     FQUpsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
-    FQUpsertFile.ParamByName('sha'   ).AsString   := ASha;
+    FQUpsertFile.ParamByName('sha'   ).AsWideString   := ASha;
     FQUpsertFile.ParamByName('parsed').AsLargeInt := DateTimeToUnix(Now, False);
-    FQUpsertFile.ParamByName('lang'  ).AsString   := ALanguage;
+    FQUpsertFile.ParamByName('lang'  ).AsWideString   := ALanguage;
     FQUpsertFile.ExecSQL;
     if FQUpsertFile.RowsAffected = 0 then
     begin
       Inc(FScopeNewWrites);
-      FQInsertFile.ParamByName('path'  ).AsString   := NP;
+      FQInsertFile.ParamByName('path'  ).AsWideString   := NP;
       FQInsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
-      FQInsertFile.ParamByName('sha'   ).AsString   := ASha;
+      FQInsertFile.ParamByName('sha'   ).AsWideString   := ASha;
       FQInsertFile.ParamByName('parsed').AsLargeInt := DateTimeToUnix(Now, False);
-      FQInsertFile.ParamByName('lang'  ).AsString   := ALanguage;
+      FQInsertFile.ParamByName('lang'  ).AsWideString   := ALanguage;
       FQInsertFile.ExecSQL;
     end;
 
@@ -5418,7 +5516,7 @@ begin
         upsert" rather than silently duplicating, and this keeps both halves
         answering the same question. }
       Q.SQL.Text:= 'SELECT id FROM files WHERE path = :path OR LOWER(path) = LOWER(:path) LIMIT 1';
-      Q.ParamByName('path').AsString:= NP;
+      Q.ParamByName('path').AsWideString:= NP;
       Q.Open;
       if Q.IsEmpty then raise Exception.CreateFmt('File row not found after upsert: %s', [NP]);
       Result.FileId:= Q.Fields[0].AsLargeInt;
@@ -5465,15 +5563,15 @@ begin
   FQInsertSymbol.ParamByName('pid').DataType:= ftLargeint;
   if ASymbol.ParentId >= 0 then FQInsertSymbol.ParamByName('pid').AsLargeInt:= ASymbol.ParentId
   else FQInsertSymbol.ParamByName('pid').Clear;
-  FQInsertSymbol.ParamByName('kind').AsString:= ASymbol.Kind.ToText;
-  FQInsertSymbol.ParamByName('name' ).AsString := ASymbol.Name;
-  FQInsertSymbol.ParamByName('qname').AsString := ASymbol.QualifiedName;
-  FQInsertSymbol.ParamByName('sig'  ).AsString := ASymbol.Signature;
-  FQInsertSymbol.ParamByName('mods' ).AsString := ASymbol.Modifiers;
-  FQInsertSymbol.ParamByName('sec'  ).AsString := ASymbol.Section;
+  FQInsertSymbol.ParamByName('kind').AsWideString:= ASymbol.Kind.ToText;
+  FQInsertSymbol.ParamByName('name' ).AsWideString := ASymbol.Name;
+  FQInsertSymbol.ParamByName('qname').AsWideString := ASymbol.QualifiedName;
+  FQInsertSymbol.ParamByName('sig'  ).AsWideString := ASymbol.Signature;
+  FQInsertSymbol.ParamByName('mods' ).AsWideString := ASymbol.Modifiers;
+  FQInsertSymbol.ParamByName('sec'  ).AsWideString := ASymbol.Section;
   { v11: NULL when no ancestors so non-class/interface rows stay clean. }
   FQInsertSymbol.ParamByName('her'  ).DataType := ftString;
-  if ASymbol.Heritage <> '' then FQInsertSymbol.ParamByName('her').AsString:= ASymbol.Heritage
+  if ASymbol.Heritage <> '' then FQInsertSymbol.ParamByName('her').AsWideString:= ASymbol.Heritage
   else FQInsertSymbol.ParamByName('her').Clear;
   FQInsertSymbol.ParamByName('virt' ).AsInteger:= Ord(ASymbol.IsVirtual); { v12 }
   FQInsertSymbol.ParamByName('ish'  ).AsInteger:= Ord(ASymbol.IsHelper); { v15 }
@@ -5489,7 +5587,7 @@ begin
     redeclaration both read back NULL, which proptree treats as writable/
     inherit-up-tree. Mirrors the heritage NULL-when-empty pattern above. }
   FQInsertSymbol.ParamByName('pa'   ).DataType := ftString;
-  if ASymbol.PropAccess <> '' then FQInsertSymbol.ParamByName('pa').AsString:= ASymbol.PropAccess
+  if ASymbol.PropAccess <> '' then FQInsertSymbol.ParamByName('pa').AsWideString:= ASymbol.PropAccess
   else FQInsertSymbol.ParamByName('pa').Clear;
   { v22: directives is bound as a STRING ALWAYS, INCLUDING the empty one -- the
     opposite of the heritage/prop_access NULL-when-empty idiom directly above,
@@ -5501,13 +5599,13 @@ begin
     heritage idiom sets it: without it FireDAC can infer the type from a null
     value and bind an empty string as NULL anyway. }
   FQInsertSymbol.ParamByName('dirs' ).DataType := ftString;
-  FQInsertSymbol.ParamByName('dirs' ).AsString := ASymbol.Directives;
+  FQInsertSymbol.ParamByName('dirs' ).AsWideString := ASymbol.Directives;
   FQInsertSymbol.ParamByName('vexp' ).AsInteger:= Ord(ASymbol.VisExplicit);
   { v23: generic_params follows the prop_access NULL-when-empty idiom -- NULL
     means "not generic", and no consumer needs to tell that from "pre-v23 row"
     because the extractor bump re-parses every row anyway. }
   FQInsertSymbol.ParamByName('gp'   ).DataType := ftString;
-  if ASymbol.GenericParams <> '' then FQInsertSymbol.ParamByName('gp').AsString:= ASymbol.GenericParams
+  if ASymbol.GenericParams <> '' then FQInsertSymbol.ParamByName('gp').AsWideString:= ASymbol.GenericParams
   else FQInsertSymbol.ParamByName('gp').Clear;
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
@@ -5517,7 +5615,7 @@ begin
   var G: string;
   for G in Grams do
   begin
-    FQInsertTrigram.ParamByName('tg' ).AsString  := G;
+    FQInsertTrigram.ParamByName('tg' ).AsWideString  := G;
     FQInsertTrigram.ParamByName('sid').AsLargeInt:= Result;
     FQInsertTrigram.ExecSQL;
   end;
@@ -5529,8 +5627,8 @@ begin
   if ARef.SymbolId > 0 then FQInsertRef.ParamByName('sid').AsLargeInt:= ARef.SymbolId
   else FQInsertRef.ParamByName('sid').Clear;
   FQInsertRef.ParamByName('fid' ).AsLargeInt:= AToken.FileId;
-  FQInsertRef.ParamByName('kind').AsString  := ARef  .Kind;
-  FQInsertRef.ParamByName('name').AsString  := ARef  .NameText;
+  FQInsertRef.ParamByName('kind').AsWideString  := ARef  .Kind;
+  FQInsertRef.ParamByName('name').AsWideString  := ARef  .NameText;
   FQInsertRef.ParamByName('sl'  ).AsInteger := ARef  .StartLine;
   FQInsertRef.ParamByName('sc'  ).AsInteger := ARef  .StartCol;
   FQInsertRef.ParamByName('el'  ).AsInteger := ARef  .EndLine;
@@ -5542,7 +5640,7 @@ begin
   { N-05: a receiver the PARSER knows (the member of `Self.X`). Empty stays
     NULL -- the call stream fills its own refs later, unchanged. }
   FQInsertRef.ParamByName('rcv').DataType:= ftString;
-  if ARef.ReceiverText <> '' then FQInsertRef.ParamByName('rcv').AsString:= ARef.ReceiverText
+  if ARef.ReceiverText <> '' then FQInsertRef.ParamByName('rcv').AsWideString:= ARef.ReceiverText
   else FQInsertRef.ParamByName('rcv').Clear;
   FQInsertRef.ExecSQL;
 end;
@@ -5551,7 +5649,7 @@ procedure TSQLiteSymbolStore.UpsertCallEdge(const AToken: TFileTxToken; const AE
 begin
   FQInsertCallEdge.ParamByName('rid' ).AsLargeInt:= AEdge.RefId;
   FQInsertCallEdge.ParamByName('tid' ).AsLargeInt:= AEdge.TargetSymbolId;
-  FQInsertCallEdge.ParamByName('conf').AsString  := AEdge.Confidence;
+  FQInsertCallEdge.ParamByName('conf').AsWideString  := AEdge.Confidence;
   { receiver_type_symbol_id is nullable (ON DELETE SET NULL); NULL it when unknown. }
   FQInsertCallEdge.ParamByName('rtid').DataType:= ftLargeint;
   if AEdge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
@@ -5953,7 +6051,7 @@ begin
     begin
       if FScopeTypesBefore.ContainsKey(N) then Continue; { not an addition }
       if Q.Active then Q.Close;
-      Q.ParamByName('n').AsString:= N;
+      Q.ParamByName('n').AsWideString:= N;
       Q.Open;
       while not Q.Eof do
       begin
@@ -6051,7 +6149,7 @@ begin
       for Anc in Ancs do
       begin
         if Q.Active then Q.Close;
-        Q.ParamByName('n').AsString:= Anc;
+        Q.ParamByName('n').AsWideString:= Anc;
         Q.Open;
         while not Q.Eof do
         begin
@@ -6119,7 +6217,7 @@ begin
       QIns.Prepare;
       for Nm in FScopeNames.Keys do
       begin
-        QIns.ParamByName('n').AsString:= Nm;
+        QIns.ParamByName('n').AsWideString:= Nm;
         QIns.ExecSQL;
       end;
       FConn.Commit;
@@ -6590,12 +6688,12 @@ begin
       RcvP +
       ScopeP +
       'ORDER BY f.path, r.start_line';
-    Q.ParamByName('n').AsString:= AName;
-    Q.ParamByName('n2').AsString:= AName;
+    Q.ParamByName('n').AsWideString:= AName;
+    Q.ParamByName('n2').AsWideString:= AName;
     if RcvP <> '' then
     begin
-      Q.ParamByName('own' ).AsString:= AOwnerTypeName;
-      Q.ParamByName('own2').AsString:= AOwnerTypeName;
+      Q.ParamByName('own' ).AsWideString:= AOwnerTypeName;
+      Q.ParamByName('own2').AsWideString:= AOwnerTypeName;
     end;
     if AReachableToFileId > 0 then Q.ParamByName('tf').AsLargeInt:= AReachableToFileId;
     Q.Open;
@@ -6677,7 +6775,7 @@ begin
       'AND NOT EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id) ' +
       'ORDER BY r.start_line, r.start_col';
     Q.ParamByName('x').AsLargeInt:= AEnclosingSymbolId;
-    Q.ParamByName('k').AsString  := REF_KIND_CALL;
+    Q.ParamByName('k').AsWideString  := REF_KIND_CALL;
     Q.Open;
     var IdF   : TField:= Q.FieldByName('id'        );
     var FileF : TField:= Q.FieldByName('file_id'   );
@@ -6856,8 +6954,8 @@ begin
       '   AND (:kind = '''' OR kind = :kind2) ' +
       ' ORDER BY start_line, start_col';
     Q.ParamByName('fid'  ).AsLargeInt:= AFileId;
-    Q.ParamByName('kind' ).AsString  := AKind  ;
-    Q.ParamByName('kind2').AsString  := AKind  ;
+    Q.ParamByName('kind' ).AsWideString  := AKind  ;
+    Q.ParamByName('kind2').AsWideString  := AKind  ;
     Q.Open;
     { Resolved once -- FieldByName is a linear name search per call. }
     FSym  := Q.FieldByName('symbol_id' ); FSrc  := Q.FieldByName('source'    );
@@ -7056,6 +7154,7 @@ var
   ColRoutine                       : TField;
   ColName, ColQName, ColSection    : TField;
   ColStart, ColEnd                 : TField;
+  ColScoped                        : TField;
 begin
   List:= TList<TEnumValueDecl>.Create;
   Q   := TFDQuery.Create(nil);
@@ -7066,7 +7165,8 @@ begin
                    '       CASE WHEN o.kind IN (''class'',''record'',''interface'') ' +
                    '            THEN o.id ELSE 0 END AS owner_type_id, ' +
                    '       CASE WHEN o.kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'') ' +
-                   '            THEN o.id ELSE 0 END AS owner_routine_id ' +
+                   '            THEN o.id ELSE 0 END AS owner_routine_id, ' +
+                   '       CASE WHEN e.directives = ''scopedenums'' THEN 1 ELSE 0 END AS scoped ' +   { E14 }
                    'FROM symbols v ' +
                    'JOIN symbols e ON e.id = v.parent_id ' +
                    'LEFT JOIN symbols o ON o.id = e.parent_id ' +
@@ -7084,6 +7184,7 @@ begin
     ColSection:= Q.FieldByName('section'       );
     ColStart  := Q.FieldByName('start_line'    );
     ColEnd    := Q.FieldByName('end_line'      );
+    ColScoped := Q.FieldByName('scoped'        );
     while not Q.Eof do
     begin
       E:= Default(TEnumValueDecl);
@@ -7097,6 +7198,7 @@ begin
       E.Section      := ColSection.AsString  ;
       E.StartLine    := ColStart  .AsInteger ;
       E.EndLine      := ColEnd    .AsInteger ;
+      E.Scoped       := ColScoped .AsInteger = 1;
       List.Add(E);
       Q.Next;
     end;
@@ -7263,8 +7365,8 @@ begin
     if AFilePath <> '' then SqlTxt:= SqlTxt + '  AND f.path LIKE :fp ';
     SqlTxt:= SqlTxt + 'ORDER BY f.path, r.start_line';
     Q.SQL.Text:= SqlTxt;
-    if AQName <> '' then Q.ParamByName('qn').AsString:= AQName;
-    if AFilePath <> '' then Q.ParamByName('fp').AsString:= '%' + ExtractFileName(AFilePath);
+    if AQName <> '' then Q.ParamByName('qn').AsWideString:= AQName;
+    if AFilePath <> '' then Q.ParamByName('fp').AsWideString:= '%' + ExtractFileName(AFilePath);
     Q.Open;
     while not Q.Eof do
     begin
@@ -7289,9 +7391,9 @@ end; // function
 procedure TSQLiteSymbolStore.UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
 begin
   FQUpsertDiBinding.ParamByName('fid' ).AsLargeInt:= AToken  .FileId;
-  FQUpsertDiBinding.ParamByName('intf').AsString  := ABinding.InterfaceName;
-  FQUpsertDiBinding.ParamByName('impl').AsString  := ABinding.ImplName;
-  FQUpsertDiBinding.ParamByName('life').AsString  := ABinding.Lifetime;
+  FQUpsertDiBinding.ParamByName('intf').AsWideString  := ABinding.InterfaceName;
+  FQUpsertDiBinding.ParamByName('impl').AsWideString  := ABinding.ImplName;
+  FQUpsertDiBinding.ParamByName('life').AsWideString  := ABinding.Lifetime;
   FQUpsertDiBinding.ParamByName('sl'  ).AsInteger := ABinding.StartLine;
   FQUpsertDiBinding.ParamByName('sc'  ).AsInteger := ABinding.StartCol;
   FQUpsertDiBinding.ParamByName('el'  ).AsInteger := ABinding.EndLine;
@@ -7316,10 +7418,10 @@ begin
   FQUpsertStringLiteral.ParamByName('sid').DataType:= ftLargeint;
   if ALit.SymbolId > 0 then FQUpsertStringLiteral.ParamByName('sid').AsLargeInt:= ALit.SymbolId
   else FQUpsertStringLiteral.ParamByName('sid').Clear;
-  FQUpsertStringLiteral.ParamByName('src'  ).AsString  := ALit.Source;
-  FQUpsertStringLiteral.ParamByName('kind' ).AsString  := ALit.Kind;
-  FQUpsertStringLiteral.ParamByName('owner').AsString  := ALit.OwnerName;
-  FQUpsertStringLiteral.ParamByName('txt'  ).AsString  := ALit.Text;
+  FQUpsertStringLiteral.ParamByName('src'  ).AsWideString  := ALit.Source;
+  FQUpsertStringLiteral.ParamByName('kind' ).AsWideString  := ALit.Kind;
+  FQUpsertStringLiteral.ParamByName('owner').AsWideString  := ALit.OwnerName;
+  FQUpsertStringLiteral.ParamByName('txt'  ).AsWideString  := ALit.Text;
   FQUpsertStringLiteral.ParamByName('sl').AsInteger := ALit.StartLine;
   FQUpsertStringLiteral.ParamByName('sc').AsInteger := ALit.StartCol;
   FQUpsertStringLiteral.ParamByName('el').AsInteger := ALit.EndLine;
@@ -7779,10 +7881,10 @@ begin
     Sql:= Sql + 'ORDER BY (lower(sl.text) = lower(:qraw)) DESC, ' +
       '(sl.kind IN (''comment'', ''doc'')), f.path, sl.start_line LIMIT :lim';
     Q.SQL.Text:= Sql;
-    Q.ParamByName('q').AsString:= MatchExpr;
-    Q.ParamByName('qraw').AsString:= Needle;
-    if ASource <> '' then Q.ParamByName('src').AsString:= ASource;
-    if AKind   <> '' then Q.ParamByName('knd').AsString:= AKind;
+    Q.ParamByName('q').AsWideString:= MatchExpr;
+    Q.ParamByName('qraw').AsWideString:= Needle;
+    if ASource <> '' then Q.ParamByName('src').AsWideString:= ASource;
+    if AKind   <> '' then Q.ParamByName('knd').AsWideString:= AKind;
     Q.ParamByName('lim').AsInteger:= ALimit;
     Q.Open;
     while not Q.Eof do
@@ -7817,7 +7919,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT * FROM di_bindings WHERE interface_name = :intf ' + 'ORDER BY file_id, start_line';
-    Q.ParamByName('intf').AsString:= AInterfaceName;
+    Q.ParamByName('intf').AsWideString:= AInterfaceName;
     Q.Open;
     while not Q.Eof do
     begin
@@ -7857,7 +7959,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT * FROM di_bindings WHERE impl_name = :impl COLLATE NOCASE ' +
                  'ORDER BY file_id, start_line';
-    Q.ParamByName('impl').AsString:= AImplName;
+    Q.ParamByName('impl').AsWideString:= AImplName;
     Q.Open;
     while not Q.Eof do
     begin
@@ -7959,7 +8061,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT * FROM refs WHERE kind = ''di-resolve'' AND name_text = :intf ' + 'ORDER BY file_id, start_line';
-    Q.ParamByName('intf').AsString:= AInterfaceName;
+    Q.ParamByName('intf').AsWideString:= AInterfaceName;
     Q.Open;
     while not Q.Eof do
     begin
@@ -8066,7 +8168,7 @@ begin
     next time, which is the safe direction. }
   if FIndexerFingerprint <> '' then
   begin
-    FQStampFileFingerprint.ParamByName('fp' ).AsString  := FIndexerFingerprint;
+    FQStampFileFingerprint.ParamByName('fp' ).AsWideString  := FIndexerFingerprint;
     FQStampFileFingerprint.ParamByName('fid').AsLargeInt:= AToken.FileId;
     FQStampFileFingerprint.ExecSQL;
   end;
@@ -8094,7 +8196,7 @@ begin
       if they resolved paths differently a file could be "up to date" and
       "unstamped" at the same time and would re-parse forever. }
     Q.SQL.Text:= 'SELECT indexed_at_fingerprint FROM files ' + 'WHERE (path = :p OR LOWER(path) = LOWER(:p)) LIMIT 1';
-    Q.ParamByName('p').AsString:= NormalizeStoredPath(AFilePath);
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(AFilePath);
     Q.Open;
     if (not Q.IsEmpty) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsString;
   finally
@@ -8232,7 +8334,7 @@ var
   begin
     try
       if FQFindByName.Active then FQFindByName.Close;
-      FQFindByName.ParamByName('name').AsString:= ABare;
+      FQFindByName.ParamByName('name').AsWideString:= ABare;
       FQFindByName.Open;
       while not FQFindByName.Eof do
       begin
@@ -8246,7 +8348,7 @@ var
       begin
         WarnIfNocaseIndexMissing;
         if FQFindByNameCI.Active then FQFindByNameCI.Close;
-        FQFindByNameCI.ParamByName('name').AsString:= ABare;
+        FQFindByNameCI.ParamByName('name').AsWideString:= ABare;
         FQFindByNameCI.Open;
         while not FQFindByNameCI.Eof do
         begin
@@ -8318,7 +8420,7 @@ begin
   List:= TList<TSymbol>.Create;
   try
     if FQFindByQName.Active then FQFindByQName.Close;
-    FQFindByQName.ParamByName('qname').AsString:= BareName;
+    FQFindByQName.ParamByName('qname').AsWideString:= BareName;
     FQFindByQName.Open;
     while not FQFindByQName.Eof do
     begin
@@ -8331,7 +8433,7 @@ begin
     begin
       WarnIfNocaseIndexMissing;
       if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
-      FQFindByQNameCI.ParamByName('qname').AsString:= BareName;
+      FQFindByQNameCI.ParamByName('qname').AsWideString:= BareName;
       FQFindByQNameCI.Open;
       while not FQFindByQNameCI.Eof do
       begin
@@ -8387,7 +8489,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT id, path FROM files WHERE path LIKE :leaf';
-    Q.ParamByName('leaf').AsString:= '%' + Leaf;
+    Q.ParamByName('leaf').AsWideString:= '%' + Leaf;
     Q.Open;
     CandCount:= 0;
     OnlyId := -1;
@@ -8604,7 +8706,7 @@ begin
       if MinShared < 1 then MinShared:= 1;
       Q.SQL.Text:= 'SELECT s.* FROM symbols s ' + 'WHERE s.id IN (' + '  SELECT symbol_id FROM symbol_trigrams ' + '  WHERE trigram IN (' + PlaceholderList + ')' +
       '  GROUP BY symbol_id HAVING COUNT(*) >= ' + IntToStr(MinShared) + ')';
-      for i:= 0 to High(Grams) do Q.ParamByName('g' + IntToStr(i)).AsString:= Grams[i];
+      for i:= 0 to High(Grams) do Q.ParamByName('g' + IntToStr(i)).AsWideString:= Grams[i];
     end; // else
     Q.Open;
     while not Q.Eof do
@@ -8666,7 +8768,7 @@ begin
                    'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
     else
       Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name COLLATE NOCASE ' + 'ORDER BY file_id, start_line';
-    Q.ParamByName('name').AsString:= ACalleeName;
+    Q.ParamByName('name').AsWideString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
     begin
@@ -8889,8 +8991,8 @@ procedure TSQLiteSymbolStore.UpsertSymbolDoc(const AToken: TFileTxToken; ASymbol
 begin
   if not ADoc.HasContent then Exit;
   FQUpsertSymbolDoc.ParamByName('sid').AsLargeInt:= ASymbolId;
-  FQUpsertSymbolDoc.ParamByName('fmt').AsString:= DocFormatToStr(ADoc.Format);
-  FQUpsertSymbolDoc.ParamByName('raw').AsString:= ADoc.RawBlock;
+  FQUpsertSymbolDoc.ParamByName('fmt').AsWideString:= DocFormatToStr(ADoc.Format);
+  FQUpsertSymbolDoc.ParamByName('raw').AsWideString:= ADoc.RawBlock;
 
   // Use Value := (not AsString :=) so DataType stays as pre-declared ftWideMemo.
   // AsString := implicitly changes DataType to ftString, which raises
@@ -9140,7 +9242,7 @@ begin
   Acc:= TList<TSymbol>.Create;
   try
     if FQFindByDocTag.Active then FQFindByDocTag.Close;
-    FQFindByDocTag.ParamByName('tag').AsString:= LowerCase(ATag);
+    FQFindByDocTag.ParamByName('tag').AsWideString:= LowerCase(ATag);
     FQFindByDocTag.Open;
     try
       while not FQFindByDocTag.Eof do
@@ -9164,7 +9266,7 @@ begin
   Acc:= TList<TSymbol>.Create;
   try
     if FQFindUndocumented.Active then FQFindUndocumented.Close;
-    FQFindUndocumented.ParamByName('kind').AsString:= AKind;
+    FQFindUndocumented.ParamByName('kind').AsWideString:= AKind;
     FQFindUndocumented.ParamByName('publicOnly').AsInteger:= Ord(APublicOnly);
     FQFindUndocumented.Open;
     try
@@ -9195,7 +9297,7 @@ begin
   Acc:= TList<TSymbol>.Create;
   try
     if FQFindSymbolsByKind.Active then FQFindSymbolsByKind.Close;
-    FQFindSymbolsByKind.ParamByName('kind').AsString:= AKind;
+    FQFindSymbolsByKind.ParamByName('kind').AsWideString:= AKind;
     FQFindSymbolsByKind.ParamByName('publicOnly').AsInteger:= Ord(APublicOnly);
     FQFindSymbolsByKind.ParamByName('lim').AsInteger:= ALimit;
     FQFindSymbolsByKind.Open;
@@ -9221,7 +9323,7 @@ begin
   Acc:= TList<TSymbol>.Create;
   try
     if FQFindByDocContains.Active then FQFindByDocContains.Close;
-    FQFindByDocContains.ParamByName('pat').AsString:= '%' + ASubstring + '%';
+    FQFindByDocContains.ParamByName('pat').AsWideString:= '%' + ASubstring + '%';
     FQFindByDocContains.Open;
     try
       while not FQFindByDocContains.Eof do
@@ -9310,7 +9412,7 @@ begin
   Result:= -1;
   NormPath:= StringReplace(APath, '/', '\', [rfReplaceAll]);
   if FQFindFileId.Active then FQFindFileId.Close;
-  FQFindFileId.ParamByName('p').AsString:= NormPath;
+  FQFindFileId.ParamByName('p').AsWideString:= NormPath;
   FQFindFileId.Open;
   try
     if not FQFindFileId.IsEmpty then Result:= FQFindFileId.Fields[0].AsLargeInt;
@@ -9322,7 +9424,7 @@ begin
     // Try forward-slash normalised version
     NormPath:= StringReplace(APath, '\', '/', [rfReplaceAll]);
     if FQFindFileId.Active then FQFindFileId.Close;
-    FQFindFileId.ParamByName('p').AsString:= NormPath;
+    FQFindFileId.ParamByName('p').AsWideString:= NormPath;
     FQFindFileId.Open;
     try
       if not FQFindFileId.IsEmpty then Result:= FQFindFileId.Fields[0].AsLargeInt;
@@ -9346,7 +9448,7 @@ begin
   Result:= Default(TSymbol);
   if FQFindChildByName.Active then FQFindChildByName.Close;
   FQFindChildByName.ParamByName('pid' ).AsLargeInt:= AParentId;
-  FQFindChildByName.ParamByName('name').AsString  := AName;
+  FQFindChildByName.ParamByName('name').AsWideString  := AName;
   FQFindChildByName.Open;
   try
     if not FQFindChildByName.IsEmpty then Result:= ReadSymbolFromQuery(FQFindChildByName);
@@ -10144,7 +10246,7 @@ begin
     try
       Q.Connection:= FConn;
       Q.SQL.Text  := 'UPDATE symbols SET signature = :sig WHERE id = :id AND kind = ''property''';
-      Q.ParamByName('sig').AsString  := ': ' + Trim(ATypeName);
+      Q.ParamByName('sig').AsWideString  := ': ' + Trim(ATypeName);
       Q.ParamByName('id' ).AsLargeInt:= ASymbolId;
       Q.ExecSQL;
       Result:= Q.RowsAffected > 0;
@@ -10185,7 +10287,7 @@ begin
     EscapedPrefix:= StringReplace(EscapedPrefix, '_', '\_', [rfReplaceAll]);
     EscapedPrefix:= EscapedPrefix + '%';
     if FQFindByPrefix.Active then FQFindByPrefix.Close;
-    FQFindByPrefix.ParamByName('prefixLike').AsString := EscapedPrefix;
+    FQFindByPrefix.ParamByName('prefixLike').AsWideString := EscapedPrefix;
     FQFindByPrefix.ParamByName('lim'       ).AsInteger:= ALimit;
     FQFindByPrefix.Open;
     try
@@ -10241,7 +10343,7 @@ begin
   List:= TList<TSymbol>.Create;
   try
     if FQFindNoCallers.Active then FQFindNoCallers.Close;
-    FQFindNoCallers.ParamByName('kind').AsString:= AKind;
+    FQFindNoCallers.ParamByName('kind').AsWideString:= AKind;
     FQFindNoCallers.ParamByName('includePrivate').AsInteger:= Ord(AIncludePrivate);
     FQFindNoCallers.Open;
     try
@@ -10304,12 +10406,12 @@ procedure TSQLiteSymbolStore.InsertCompilerFinding( const AFinding: TCompilerFin
 begin
   if AFinding.FileId > 0 then FQInsertCompilerFinding.ParamByName('fid').AsLargeInt:= AFinding.FileId
   else FQInsertCompilerFinding.ParamByName('fid').Clear;
-  FQInsertCompilerFinding.ParamByName('rp'  ).AsString := AFinding.RawPath;
-  FQInsertCompilerFinding.ParamByName('code').AsString := AFinding.Code;
-  FQInsertCompilerFinding.ParamByName('sev' ).AsString := AFinding.Severity;
+  FQInsertCompilerFinding.ParamByName('rp'  ).AsWideString := AFinding.RawPath;
+  FQInsertCompilerFinding.ParamByName('code').AsWideString := AFinding.Code;
+  FQInsertCompilerFinding.ParamByName('sev' ).AsWideString := AFinding.Severity;
   FQInsertCompilerFinding.ParamByName('lno' ).AsInteger:= AFinding.LineNo;
   FQInsertCompilerFinding.ParamByName('cno' ).AsInteger:= AFinding.ColNo;
-  FQInsertCompilerFinding.ParamByName('msg' ).AsString := AFinding.Message;
+  FQInsertCompilerFinding.ParamByName('msg' ).AsWideString := AFinding.Message;
   FQInsertCompilerFinding.ParamByName('iat').AsLargeInt:= System.DateUtils.DateTimeToUnix(Now, False);
   FQInsertCompilerFinding.ExecSQL;
 end;
@@ -10406,7 +10508,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= CTE_SQL;
-    Q.ParamByName('targetName').AsString := ASymbolName;
+    Q.ParamByName('targetName').AsWideString := ASymbolName;
     Q.ParamByName('maxDepth'  ).AsInteger:= ADepth;
     Q.Open;
     while not Q.Eof do
@@ -10573,10 +10675,10 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := SqlText;
-    if Length(Grams) > 0 then Q.ParamByName('tg').AsString:= Grams[0];
-    Q.ParamByName('pat').AsString := '%' + Term + '%';
+    if Length(Grams) > 0 then Q.ParamByName('tg').AsWideString:= Grams[0];
+    Q.ParamByName('pat').AsWideString := '%' + Term + '%';
     Q.ParamByName('lim').AsInteger:= ALimit;
-    for i:= 0 to High(Kinds) do Q.ParamByName('k' + IntToStr(i)).AsString:= Kinds[i];
+    for i:= 0 to High(Kinds) do Q.ParamByName('k' + IntToStr(i)).AsWideString:= Kinds[i];
     Q.Open;
     while not Q.Eof do
     begin
@@ -11075,11 +11177,11 @@ end;
 procedure TSQLiteSymbolStore.UpsertUnitUse(const AToken: TFileTxToken; const AUse: TUnitUse);
 begin
   FQInsertUnitUse.ParamByName('fid').AsLargeInt:= AToken.FileId;
-  FQInsertUnitUse.ParamByName('un' ).AsString  := AUse  .UnitName;
-  FQInsertUnitUse.ParamByName('unn').AsString:= UnitNameNorm       (AUse.UnitName);
-  FQInsertUnitUse.ParamByName('sec').AsString:= UnitUseSectionToStr(AUse.Section );
+  FQInsertUnitUse.ParamByName('un' ).AsWideString  := AUse  .UnitName;
+  FQInsertUnitUse.ParamByName('unn').AsWideString:= UnitNameNorm       (AUse.UnitName);
+  FQInsertUnitUse.ParamByName('sec').AsWideString:= UnitUseSectionToStr(AUse.Section );
   if AUse.InPath = '' then FQInsertUnitUse.ParamByName('inp').Clear
-  else FQInsertUnitUse.ParamByName('inp').AsString:= AUse.InPath;
+  else FQInsertUnitUse.ParamByName('inp').AsWideString:= AUse.InPath;
   FQInsertUnitUse.ParamByName('sl').AsInteger:= AUse.StartLine;
   FQInsertUnitUse.ParamByName('sc').AsInteger:= AUse.StartCol;
   FQInsertUnitUse.ParamByName('el').AsInteger:= AUse.EndLine;
@@ -11095,7 +11197,7 @@ begin
     end
     else
     begin
-      FQInsertUnitUse.ParamByName('op').AsString := AUse.OriginPath;
+      FQInsertUnitUse.ParamByName('op').AsWideString := AUse.OriginPath;
       FQInsertUnitUse.ParamByName('il').AsInteger:= AUse.IncludeLine;
     end;
   end;
@@ -11225,7 +11327,7 @@ var
 begin
   List:= TList<TUnitUse>.Create;
   try
-    FQFindUsersOfUnit.ParamByName('un').AsString:= LowerCase(AUnitNameNorm);
+    FQFindUsersOfUnit.ParamByName('un').AsWideString:= LowerCase(AUnitNameNorm);
     FQFindUsersOfUnit.Open;
     try
       while not FQFindUsersOfUnit.Eof do
@@ -11728,7 +11830,7 @@ var
       Probe.ParamByName('b').AsLargeInt:= AEdge.DeclFileId  ;
       { B's own unit name is its file STEM -- the identity a `uses` clause
         writes -- so conjunct 2 compares stems, never paths. }
-      Probe.ParamByName('bunit').AsString:=
+      Probe.ParamByName('bunit').AsWideString:=
         ChangeFileExt(ExtractFileName(GetFilePath(AEdge.DeclFileId)), '');
       Probe.Open;
       try
@@ -12078,8 +12180,8 @@ begin
         end;
         if not StemToFileId.TryGetValue(Stem, Fid) then Continue;
         QUpdate.ParamByName('tid' ).AsLargeInt:= Fid;
-        QUpdate.ParamByName('un'  ).AsString  := UsedNorms[i];
-        QUpdate.ParamByName('full').AsString  := UsedFulls[i];
+        QUpdate.ParamByName('un'  ).AsWideString  := UsedNorms[i];
+        QUpdate.ParamByName('full').AsWideString  := UsedFulls[i];
         QUpdate.ExecSQL;
         Inc(Hits);
       end;
@@ -12395,7 +12497,7 @@ begin
       no rows at all. Census at the time of writing -- 20 such aliases on ORM3
       CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
-                 'WHERE kind IN (''class'',''interface'',''type'') AND heritage IS NOT NULL AND heritage <> ''''';
+                 'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
     FConn.StartTransaction;
     try
       FConn.ExecSQL('DELETE FROM type_ancestors');
@@ -12450,10 +12552,10 @@ begin
           end;
           QIns.ParamByName('sid').AsLargeInt:= SymId;
           QIns.ParamByName('ord').AsInteger := Ord;
-          QIns.ParamByName('an' ).AsString  := AncName;
-          if AncArgs <> '' then QIns.ParamByName('targs').AsString:= AncArgs
+          QIns.ParamByName('an' ).AsWideString  := AncName;
+          if AncArgs <> '' then QIns.ParamByName('targs').AsWideString:= AncArgs
           else QIns.ParamByName('targs').Clear;
-          QIns.ParamByName('ak' ).AsString  := RKind;
+          QIns.ParamByName('ak' ).AsWideString  := RKind;
           if RSymId > 0 then
           begin
             QIns.ParamByName('asid').AsLargeInt:= RSymId;
@@ -12611,8 +12713,8 @@ begin
               end;
             end;
             QIns.ParamByName('hsid').AsLargeInt:= HelperId;
-            QIns.ParamByName('tn'  ).AsString  := TName;
-            QIns.ParamByName('hk'  ).AsString  := HelperKind;
+            QIns.ParamByName('tn'  ).AsWideString  := TName;
+            QIns.ParamByName('hk'  ).AsWideString  := HelperKind;
             if TSymId > 0 then
             begin
               QIns.ParamByName('tsid').AsLargeInt:= TSymId;
@@ -12815,12 +12917,12 @@ begin
   FQSetRefSymbol.ExecSQL;
   FQInsertMemberAccess.ParamByName('rid' ).AsLargeInt:= ARefId;
   FQInsertMemberAccess.ParamByName('mid' ).AsLargeInt:= AEdge.TargetSymbolId;
-  FQInsertMemberAccess.ParamByName('mode').AsString  := AEdge.MemberMode;
+  FQInsertMemberAccess.ParamByName('mode').AsWideString  := AEdge.MemberMode;
   FQInsertMemberAccess.ParamByName('aid' ).DataType:= ftLargeint;
   if AEdge.AccessorSymbolId > 0 then FQInsertMemberAccess.ParamByName('aid').AsLargeInt:= AEdge.AccessorSymbolId
   else FQInsertMemberAccess.ParamByName('aid').Clear;
   FQInsertMemberAccess.ParamByName('akind').DataType:= ftString;
-  if AEdge.AccessorKind <> '' then FQInsertMemberAccess.ParamByName('akind').AsString:= AEdge.AccessorKind
+  if AEdge.AccessorKind <> '' then FQInsertMemberAccess.ParamByName('akind').AsWideString:= AEdge.AccessorKind
   else FQInsertMemberAccess.ParamByName('akind').Clear;
   FQInsertMemberAccess.ParamByName('rtid').DataType:= ftLargeint;
   if AEdge.ReceiverTypeSymbolId > 0 then FQInsertMemberAccess.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
@@ -12830,7 +12932,7 @@ begin
   begin
     FQInsertCallEdge.ParamByName('rid' ).AsLargeInt:= ARefId;
     FQInsertCallEdge.ParamByName('tid' ).AsLargeInt:= AEdge.AccessorSymbolId;
-    FQInsertCallEdge.ParamByName('conf').AsString  := 'certain';
+    FQInsertCallEdge.ParamByName('conf').AsWideString  := 'certain';
     FQInsertCallEdge.ParamByName('rtid').DataType:= ftLargeint;
     if AEdge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
     else FQInsertCallEdge.ParamByName('rtid').Clear;
@@ -13355,7 +13457,7 @@ begin
           parenthesised call still produces exactly one edge. }
     Q.SQL.Text:=
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
-      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE ' +
+      '  end_line, end_col, enclosing_symbol_id, receiver_text FROM refs WHERE ' +
       '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
     { The scoped pass narrows the SAME universe rather than defining its own:
       widen the kind test above and the scoped path follows automatically. }
@@ -13492,6 +13594,10 @@ begin
         Ref.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
         if not Q.FieldByName('enclosing_symbol_id').IsNull then
           Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
+        { T-11: the receiver the PARSER recorded (or a previous resolve wrote);
+          ResolveOne prefers it over re-reading the source line. NULL -> ''. }
+        if not Q.FieldByName('receiver_text').IsNull then
+          Ref.ReceiverText:= Q.FieldByName('receiver_text').AsString;
 
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UnitValuesBefore:= Resolver.UnitValueBound;
@@ -13517,10 +13623,10 @@ begin
           means "never resolved by a v20 engine". Neither may be forged here. }
         if not Edge.ReceiverUnknown then
         begin
-        UpdRcv.ParamByName('r' ).AsString   := Edge.ReceiverText;
+        UpdRcv.ParamByName('r' ).AsWideString   := Edge.ReceiverText;
         { v21: NULL when there is no external answer, so "not resolved
           externally" stays distinguishable from "resolved to an empty name". }
-        if Edge.ExternalTarget <> '' then UpdRcv.ParamByName('x').AsString:= Edge.ExternalTarget
+        if Edge.ExternalTarget <> '' then UpdRcv.ParamByName('x').AsWideString:= Edge.ExternalTarget
         else UpdRcv.ParamByName('x').Clear;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
@@ -13726,12 +13832,13 @@ begin
       on a corpus that has real name collisions. }
     ResolveLog(Format('calls      enum-values: %d of %d bare read(s) bound (Shape A); ' +
       '%d qualified bound (Shape B); declined (both streams) ' +
-      'not-visible %d, ambiguous %d, shadowed %d; ' +
+      'not-visible %d, ambiguous %d, shadowed %d, scoped (bare form unreachable) %d; ' +
       'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d; ' +
       'with scope: declined as a with member %d, bound under an undecidable with target %d; ' +
       'unit receiver declined (nearer value or with target) %d',
       [EnumBound, EnumCandidates, WrittenValues,
        Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
+       Resolver.EnumStats.Scoped,
        Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
        EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided,
        Resolver.EnumUnitGateDeclined]));
@@ -14199,7 +14306,7 @@ begin
       '    JOIN desc_names d ON ta.ancestor_name = d.name COLLATE NOCASE ' +
       ') ' +
       'SELECT DISTINCT name FROM desc_names WHERE kind = ''class'' ORDER BY name';
-    Q.ParamByName('anc').AsString:= AAncestorName;
+    Q.ParamByName('anc').AsWideString:= AAncestorName;
     Q.Open;
     while not Q.Eof do
     begin
@@ -14255,8 +14362,8 @@ begin
       '    JOIN desc_names d ON ta.ancestor_name = d.name COLLATE NOCASE ' +
       ') ' +
       'SELECT DISTINCT name FROM desc_names WHERE kind = :knd ORDER BY name';
-    Q.ParamByName('anc').AsString:= AAncestorName;
-    Q.ParamByName('knd').AsString:= AKind;
+    Q.ParamByName('anc').AsWideString:= AAncestorName;
+    Q.ParamByName('knd').AsWideString:= AKind;
     Q.Open;
     while not Q.Eof do
     begin
@@ -14385,7 +14492,7 @@ begin
     Q.SQL.Text:= 'SELECT th.*, s.kind FROM type_helpers th ' +
                  'JOIN symbols s ON s.id = th.helper_symbol_id ' +
                  'WHERE th.target_name = :target_name';
-    Q.ParamByName('target_name').AsString:= ATargetName;
+    Q.ParamByName('target_name').AsWideString:= ATargetName;
     Q.Open;
     ReadHelperEdges(Q, List);
     Result:= List.ToArray;

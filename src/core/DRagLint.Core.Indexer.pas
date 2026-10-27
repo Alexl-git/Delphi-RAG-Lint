@@ -1296,6 +1296,8 @@ begin
     begin
       var IncRows: TArray<TUnitUse>:= ExtractIncludeUses(IncSites, Parser, AFilePath, ParseRes.ImplementationLine);
       if Length(IncRows) > 0 then ParseRes.UsesEntries:= ParseRes.UsesEntries + IncRows;
+      // E14: a SCOPEDENUMS switch inside an include reaches the host's enums.
+      ApplyIncludeScopedEnums(IncSites, ParseBytes, ParseRes.Symbols);
     end;
   end;
   Inc(GProfParse, ProfNow - TProf);

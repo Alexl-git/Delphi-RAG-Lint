@@ -96,6 +96,26 @@ type
 function tree_sitter_delphi13: PTSLanguage; cdecl;
 external 'tree-sitter-delphi13';
 
+type
+  /// <summary>X4: one SCOPEDENUMS switch met in a scanned text.</summary>
+  /// <remarks>Offset is the byte offset of the directive's opening bracket;
+  /// IsOn is the state it sets. E14 exported it so the indexer can carry a
+  /// switch written inside an include file into the host.</remarks>
+  TScopedEnumSwitch = record
+    /// <summary>Byte offset of the directive's opening bracket.</summary>
+    Offset: Integer;
+    /// <summary>True for ON, False for OFF.</summary>
+    IsOn  : Boolean;
+  end;
+
+/// <summary>Every SCOPEDENUMS ON/OFF switch in ASource, in source order.</summary>
+/// <param name="ASource">Preprocessed bytes (an inactive branch is already
+/// blanked); a host file or an include's TPPIncludeSite.Resolved.</param>
+/// <returns>The switches; empty when none. String literals and comments that
+/// are not directives are skipped.</returns>
+/// <remarks>Pure; thread-safe. X4, exported for E14.</remarks>
+function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;
+
 implementation
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
@@ -129,14 +149,6 @@ begin
   end;
 end;
 
-type
-  { X4: one SCOPEDENUMS switch met in the parsed text. Offset is the byte
-    offset of the directive's opening bracket; IsOn is the state it sets. }
-  TScopedEnumSwitch = record
-    Offset: Integer;
-    IsOn  : Boolean;
-  end;
-
 { X4 (INBOX-new-rules A3): every SCOPEDENUMS ON/OFF switch in ASource, in
   source order. ASource is the text the parser sees -- the PREPROCESSED bytes
   when the indexer preprocesses, where an unknown dollar-directive in an
@@ -144,8 +156,9 @@ type
   only switches the compiler would honour are found. String literals, line
   comments and brace / paren-star comments that are not directives are
   skipped, so commented-out text never counts. A switch inside an INCLUDE file
-  is not seen (the include body is not in ASource): the enum then reads as
-  unscoped, the absence-over-wrong direction for the rule that consumes it.
+  is not seen HERE (the include body is not in ASource); since E14 the indexer
+  scans each active include's own bytes with this same function and re-derives
+  the fact (DRagLint.Index.IncludeUses.ApplyIncludeScopedEnums).
   Directive bytes are named constants; this comment deliberately writes no
   bare bracket so the directive lexer never mistakes it for one. }
 function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;
@@ -279,8 +292,9 @@ type
       const ADirectives: string = ''; AVisExplicit: Boolean = True; const AGenericParams: string = ''
     ): Integer;
     { AReceiver is persisted as refs.receiver_text at insert time (N-05: the
-      member of `Self.X`). '' keeps the column NULL, as every other ref has it
-      until the call stream computes one. }
+      member of `Self.X`; T-11: the receiver of every qualified call and
+      member-access, see ReceiverTextOf). '' keeps the column NULL -- a bare
+      call, and every read/write ref -- until the call stream writes one. }
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string = '');
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
   end;
@@ -453,6 +467,116 @@ begin
   Result:= IsIndexedMemberReceiver(ANode.ChildByField('lhs'));
 end;
 
+{ Ref-gap G4 support (T-11 R5, INBOX-member-access-after-paren-cast): is this
+  node a PARENTHESISED receiver -- `(pShape as TBfShape)` -- or a dotted chain
+  of identifier members rooted in one, `(X as T).A.B`? G / G2 / G3 all answer
+  False for it, so `Writeln((pShape as TBfShape).Name)` recorded no ref for
+  Name at all and `cycles --plan` could not see the member. }
+function IsParenRootedReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprParens' then Exit(True);
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsParenRootedReceiver(ANode.ChildByField('lhs'));
+end;
+
+const
+  { T-11: a longer receiver is not recorded at parse ('' -> NULL), and the
+    resolver falls back to its line scan for it. }
+  RECEIVER_TEXT_MAX = 512;
+
+{ T-11: ARaw (a receiver's source slice) with comments dropped, every run of
+  whitespace / comments folded to ONE blank, and no blank kept before
+  . ( ) [ ] , ^ or after . ( [ , -- so `O.Mk('a')<NL>    .Mk('b')` reads `O.Mk('a').Mk('b')`
+  and a single-line tight receiver is returned byte-identical. String literals
+  are copied verbatim. A blank AFTER ) ] ^ stays: (A[0] as T) and
+  (F(x) + Y) must keep it, or the cast rung no longer sees ' as '. }
+function NormaliseReceiverText(const ARaw: string): string;
+const
+  TIGHT_BEFORE = ['.', '(', ')', '[', ']', ',', '^'];
+  TIGHT_AFTER  = ['.', '(', '[', ','];
+var
+  SB : TStringBuilder;
+  I  : Integer;
+  N  : Integer;
+  Gap: Boolean;
+
+  procedure Put(C: Char);
+  begin
+    if Gap and (SB.Length > 0) and not CharInSet(SB.Chars[SB.Length - 1], TIGHT_AFTER)
+       and not CharInSet(C, TIGHT_BEFORE) then
+      SB.Append(' ');
+    Gap:= False;
+    SB.Append(C);
+  end;
+
+begin
+  N  := Length(ARaw);
+  I  := 1;
+  Gap:= False;
+  SB := TStringBuilder.Create;
+  try
+    while I <= N do
+    begin
+      if ARaw[I] = '''' then
+      begin
+        Put('''');
+        Inc(I);
+        while (I <= N) and (ARaw[I] <> '''') do
+        begin
+          SB.Append(ARaw[I]);
+          Inc(I);
+        end;
+        if I <= N then SB.Append('''');
+      end
+      else if ARaw[I] = '{' then
+      begin
+        while (I <= N) and (ARaw[I] <> '}') do Inc(I);
+        Gap:= True;
+      end
+      else if (ARaw[I] = '(') and (I < N) and (ARaw[I + 1] = '*') then
+      begin
+        Inc(I, 2);
+        while (I < N) and not ((ARaw[I] = '*') and (ARaw[I + 1] = ')')) do Inc(I);
+        Inc(I);
+        Gap:= True;
+      end
+      else if (ARaw[I] = '/') and (I < N) and (ARaw[I + 1] = '/') then
+      begin
+        while (I <= N) and not CharInSet(ARaw[I], [#10, #13]) do Inc(I);
+        Gap:= True;
+      end
+      else if ARaw[I] <= ' ' then Gap:= True
+      else Put(ARaw[I]);
+      Inc(I);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ T-11 (extractor 1.25.0): the RECEIVER of a qualified call / member access as
+  a PARSE fact -- the lhs of the exprDot ADot, normalised by
+  NormaliseReceiverText. Recorded in refs.receiver_text, so the resolver no
+  longer re-reads one source line (which lost a fluent chain continued on the
+  next line, a dot at line end, and every receiver of a file edited since).
+  '' -- the column stays NULL and the resolver's line scan runs as before --
+  when ADot is not an exprDot, its lhs is missing, is or holds an ERROR node
+  (never a partial slice), or the text exceeds RECEIVER_TEXT_MAX. }
+function ReceiverTextOf(const ADot: TTSNode; const ASource: TBytes): string;
+begin
+  Result:= '';
+  if ADot.IsNull or (ADot.NodeType <> 'exprDot') then Exit;
+  var L:= ADot.ChildByField('lhs');
+  if L.IsNull or L.IsError or L.HasError then Exit;
+  Result:= NormaliseReceiverText(NodeText(L, ASource));
+  if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
 // v0.8: every `typeref` node that appears in a parameter type, field type,
@@ -563,7 +687,127 @@ begin
   // call resolver walks and the two unresolved-call queries take their
   // complement against, so producer and consumers read one declaration -- see
   // the block comment above REF_KIND_CALL in DRagLint.Core.Model (register E1).
-  AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode);
+  // T-11: a qualified callee carries its receiver text from the CST.
+  AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode, ReceiverTextOf(EntityNode, AState.Source));
+end; // procedure
+
+{ XT-RAISE (spec 2026-10-26-extract-raise-handle-facts): one syntactic fact per
+  raise / handler site, as ADDED refs rows -- the read / type_use / call rows the
+  same site already gets are untouched, so none of these routines Exits Walk.
+  Shapes, dumped from tree_sitter_delphi13 (field names, not guessed):
+    (raise kRaise exception: <expr> [kAtWord address: <expr>] ;)   -- `raise;` has no exception
+    (exceptionHandler kOn [variable: identifier :] exception: (typeref ..) kDo body: ..)
+    (try kTry try: .. except: kExcept except: exceptionHandler* except: exceptionElse? kEnd)
+    (exceptionElse kElse <statement>)
+  Pinned by tests\autotest\run_raise_handle_refs.ps1. }
+
+{ The leftmost identifier of an expression: `E` -> E, `FErrors.Pop` -> FErrors,
+  `Make(..).X` -> Make. Null when the root is not an identifier (a literal, a
+  parenthesised cast). }
+function RootIdentifierOf(const AExpr: TTSNode): TTSNode;
+const
+  { a bound on a malformed tree only: real receiver chains stay in single digits }
+  MAX_ROOT_DEPTH = 32;
+var
+  N    : TTSNode;
+  Guard: Integer;
+begin
+  N:= AExpr;
+  for Guard:= 1 to MAX_ROOT_DEPTH do
+  begin
+    if N.IsNull or (N.NodeType = 'identifier') then Exit(N);
+    if N.NodeType = 'exprDot' then N:= N.ChildByField('lhs')
+    else if (N.NodeType = 'exprCall') or (N.NodeType = 'exprTpl') or (N.NodeType = 'exprSubscript') then
+      N:= N.ChildByField('entity')
+    else Break;
+  end;
+  Result:= Default(TTSNode);
+end; // function
+
+procedure EmitRaiseReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  Expr, Callee, Ctor, TypeNode, Root: TTSNode;
+  Receiver: string;
+begin
+  Expr:= ANode.ChildByField('exception');
+  if Expr.IsNull then
+  begin
+    AState.EmitRef(REF_KIND_RERAISE, 'raise', ANode);
+    Exit;
+  end;
+  { `raise T.Create*(..)` and the paren-less `raise T.Create;` (an exprDot with
+    no exprCall around it) are the same fact: a construction of T. }
+  Callee:= Expr;
+  if Callee.NodeType = 'exprCall' then Callee:= Callee.ChildByField('entity');
+  if (not Callee.IsNull) and (Callee.NodeType = 'exprDot') then
+  begin
+    Ctor:= Callee.ChildByField('rhs');
+    TypeNode:= Callee.ChildByField('lhs');
+    Receiver:= '';
+    if (not TypeNode.IsNull) and (TypeNode.NodeType = 'exprDot') then
+    begin
+      Receiver:= NodeText(TypeNode.ChildByField('lhs'), AState.Source);
+      TypeNode:= TypeNode.ChildByField('rhs');
+    end;
+    if (not Ctor.IsNull) and (Ctor.NodeType = 'identifier')
+       and StartsText('Create', NodeText(Ctor, AState.Source))
+       and (not TypeNode.IsNull) and (TypeNode.NodeType = 'identifier') then
+    begin
+      AState.EmitRef(REF_KIND_RAISE, NodeText(TypeNode, AState.Source), TypeNode, Receiver);
+      Exit;
+    end;
+  end;
+  Root:= RootIdentifierOf(Expr);
+  if not Root.IsNull then AState.EmitRef(REF_KIND_RAISE_EXPR, NodeText(Root, AState.Source), Root);
+end; // procedure
+
+procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  TypeRef, TypeExpr, NameNode: TTSNode;
+  Receiver: string;
+begin
+  TypeRef:= ANode.ChildByField('exception');
+  if TypeRef.IsNull or (TypeRef.NamedChildCount = 0) then Exit;
+  TypeExpr:= TypeRef.NamedChild(0);
+  Receiver:= '';
+  if TypeExpr.NodeType = 'typerefTpl' then TypeExpr:= TypeExpr.ChildByField('entity');
+  if TypeExpr.IsNull then Exit;
+  if (TypeExpr.NodeType = 'typerefDot') or (TypeExpr.NodeType = 'genericDot') then
+  begin
+    Receiver:= NodeText(TypeExpr.ChildByField('lhs'), AState.Source);
+    NameNode:= TypeExpr.ChildByField('rhs');
+  end
+  else NameNode:= TypeExpr;
+  if NameNode.IsNull or (NameNode.NodeType <> 'identifier') then Exit;
+  AState.EmitRef(REF_KIND_HANDLE, NodeText(NameNode, AState.Source), NameNode, Receiver);
+end; // procedure
+
+{ handle-all: `except <stmts> end` / `except end` (a kExcept with no
+  exceptionHandler sibling) on the kExcept token, and the `else` after handlers
+  on its kElse token. try..finally has no kExcept and emits nothing. }
+procedure EmitBareExceptReference(const ANode: TTSNode; const AState: TWalkState);
+var
+  i: Integer;
+  C, ExceptTok, ElseNode: TTSNode;
+  HasHandler: Boolean;
+begin
+  ExceptTok:= Default(TTSNode);
+  ElseNode:= Default(TTSNode);
+  HasHandler:= False;
+  for i:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    C:= ANode.NamedChild(i);
+    if C.NodeType = 'kExcept' then ExceptTok:= C
+    else if C.NodeType = 'exceptionHandler' then HasHandler:= True
+    else if C.NodeType = 'exceptionElse' then ElseNode:= C;
+  end;
+  if ExceptTok.IsNull then Exit;
+  if not HasHandler then AState.EmitRef(REF_KIND_HANDLE_ALL, 'except', ExceptTok)
+  else if (not ElseNode.IsNull) and (ElseNode.NamedChildCount > 0) then
+  begin
+    C:= ElseNode.NamedChild(0);
+    if (not C.IsNull) and (C.NodeType = 'kElse') then AState.EmitRef(REF_KIND_HANDLE_ALL, 'else', C);
+  end;
 end; // procedure
 
 { PHASE B item B3 -- a bare parameterless call in EXPRESSION position.
@@ -1536,6 +1780,24 @@ end; // function
 // step later. For `TAliasStr = string` it is a strict improvement:
 // ResolveTypeCategory can now chase it to its intrinsic, which it previously
 // could not do at all.
+const
+  CLASSREF_PREFIX = 'class of ';
+
+// E1: the class named by a whitespace-collapsed `class of X` type text when X
+// is a BARE identifier, else ''. Bare only, the same v1 bound TryWalkAlias
+// puts on alias heritage: ResolveAncestry's name lookup was never exercised on
+// a qualified or generic target, and a wrong heritage becomes a wrong ancestor
+// row. A dotted target still yields kind classref, with empty heritage.
+function ClassRefTargetOf(const ATarget: string): string;
+begin
+  Result:= '';
+  if not StartsText(CLASSREF_PREFIX, ATarget) then Exit;
+  Result:= Trim(Copy(ATarget, Length(CLASSREF_PREFIX) + 1, MaxInt));
+  if (Result = '') or not CharInSet(Result[1], ['A'..'Z', 'a'..'z', '_']) then Exit('');
+  for var ci:= 2 to Length(Result) do
+    if not CharInSet(Result[ci], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit('');
+end; // function
+
 function TryWalkOtherTypeDecl(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
 var
   i           : Integer;
@@ -1567,7 +1829,17 @@ begin
   if Target = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
+  { E1 (1.25.0 extractor, spec 2026-10-26-extract-polymorphic-form-launches):
+    `TFormClass = class of TForm` reaches THIS walker (no earlier one claims a
+    class reference) and used to be emitted as a plain alias with no heritage,
+    so nothing could tell a class-reference parameter from any other type
+    without re-parsing the signature text. It is now kind 'classref' with the
+    target class in HERITAGE, which ResolveAncestry turns into one ordinal-0
+    type_ancestors row. Signature keeps the full 'class of X' text. }
+  if StartsText(CLASSREF_PREFIX, Target) then
+    AState.Emit(skClassRef, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', ClassRefTargetOf(Target), False, False, '', '', True, GenParams)
+  else
+    AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
   Result:= True;
 end; // function
 
@@ -2347,7 +2619,8 @@ var
     else if AExpr.NodeType = 'exprDot' then
     begin
       RhsNode:= AExpr.ChildByField('rhs');
-      if not RhsNode.IsNull then AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode);
+      if not RhsNode.IsNull then
+        AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode, ReceiverTextOf(AExpr, AState.Source)); { T-11 }
     end;
   end;
 
@@ -2931,6 +3204,16 @@ begin
     end;
   end;
 
+  { XT-RAISE: raise / handler facts (deep scan only, the same gate as the
+    'read' the raise already gets). Additive arms, no Exit: the default
+    recursion and every existing handler still see these nodes. }
+  if AState.EmitUsageRefs then
+  begin
+    if NodeType = 'raise' then EmitRaiseReference(ANode, AState)
+    else if NodeType = 'exceptionHandler' then EmitHandlerReference(ANode, AState)
+    else if NodeType = 'try' then EmitBareExceptReference(ANode, AState);
+  end;
+
   // v0.42: identifier usage references (deep scan only). Captures variable /
   // component / property usages so Find-Usages works beyond calls. Each handler
   // still recurses, so nested expressions are fully covered.
@@ -2998,7 +3281,7 @@ begin
       begin
         var RG:= ANode.ChildByField('rhs');
         if (not RG.IsNull) and (RG.NodeType = 'identifier') then
-          AState.EmitRef('member-access', NodeText(RG, AState.Source), RG);
+          AState.EmitRef('member-access', NodeText(RG, AState.Source), RG, ReceiverTextOf(ANode, AState.Source));
       end;
       // Ref-gap G2 (2026-09-10): the same capture when the receiver is itself a
       // dotted chain of identifiers -- `A.B.C.Proc`. G above handles only a
@@ -3023,7 +3306,7 @@ begin
       begin
         var RG2:= ANode.ChildByField('rhs');
         if (not RG2.IsNull) and (RG2.NodeType = 'identifier') then
-          AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2);
+          AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2, ReceiverTextOf(ANode, AState.Source));
       end;
       // Ref-gap G3 (B-13): the same capture when the receiver is INDEXED --
       // `S[First].IsWhiteSpace`, `A[I].Field:= 1`, `A[I].Sub.Leaf`. See
@@ -3032,7 +3315,16 @@ begin
       begin
         var RG3:= ANode.ChildByField('rhs');
         if (not RG3.IsNull) and (RG3.NodeType = 'identifier') then
-          AState.EmitRef('member-access', NodeText(RG3, AState.Source), RG3);
+          AState.EmitRef('member-access', NodeText(RG3, AState.Source), RG3, ReceiverTextOf(ANode, AState.Source));
+      end;
+      // Ref-gap G4 (T-11 R5): the same capture when the receiver is
+      // PARENTHESISED -- `(pShape as TBfShape).Name`, `(X as T).A.B`. See
+      // IsParenRootedReceiver; 'member-access' for the reasons G2 gives.
+      if IsParenRootedReceiver(L) then
+      begin
+        var RG4:= ANode.ChildByField('rhs');
+        if (not RG4.IsNull) and (RG4.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG4, AState.Source), RG4, ReceiverTextOf(ANode, AState.Source));
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;

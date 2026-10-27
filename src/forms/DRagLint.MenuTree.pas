@@ -1166,7 +1166,7 @@ begin
   try
     Result.Connection:= FStore.GetConnection;
     Result.SQL.Text:= pSql;
-    for I:= 0 to High(pParams) do Result.Params[I].AsString:= pParams[I];
+    for I:= 0 to High(pParams) do Result.Params[I].AsWideString:= pParams[I];
     Result.Open;  // dl:ok dataset-open-without-close@f8d5 -- Q hands the OPEN query to its caller, which frees it in a finally (Free closes the cursor)
   except
     on Exception do

@@ -1,0 +1,13 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>DispatchForms.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="DF.Main.pas"><Form>frmMain</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="DF.Base.pas"/>
+    <DCCReference Include="DF.Plans.pas"/>
+    <DCCReference Include="DF.FormA.pas"><Form>frmA</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="DF.FormC.pas"><Form>frmC</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="DF.FormD.pas"><Form>frmD</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>
