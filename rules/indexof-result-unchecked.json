@@ -1,0 +1,7 @@
+{
+  "id": "indexof-result-unchecked",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "IndexOf/Pos result used directly as an index -- it is -1 (0 for Pos) when the item is absent; store it and test it first.",
+  "warn_capture": "warn"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "guid-on-generic-interface",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Generic interface carries a GUID -- all instantiations share it, so Supports / QueryInterface cannot tell them apart; drop the GUID or put it on a non-generic base interface.",
+  "warn_capture": "warn"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "constructor-call-on-instance",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Constructor called on an existing instance -- nothing is allocated; write 'X := TFoo.Create(..)'.",
+  "warn_capture": "warn"
+}

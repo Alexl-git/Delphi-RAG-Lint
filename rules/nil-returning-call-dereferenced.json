@@ -1,0 +1,7 @@
+{
+  "id": "nil-returning-call-dereferenced",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Member access on the result of a Find* routine that returns nil when nothing is found -- store the result and test it first.",
+  "warn_capture": "warn"
+}
