@@ -8081,6 +8081,7 @@ begin
   end;
   if Length(LMerged) > 0 then
   begin
+    StaticChainMarks(FBook); // the last stage block stays: drop its old chain mark now, not at the next Save
     SyncRawFromModel;
     RefreshRulesList;
     LoadGridForBlock(LFirstHdr); // selects the first merged block (FActiveHdr)

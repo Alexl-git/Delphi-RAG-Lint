@@ -179,6 +179,29 @@ begin
     StaticChainMarks(Book);
     Check('chains.marks.after.migrate', (Length(Book.Nodes[0].Marks) = 2) and (Book.Nodes[0].Marks[0].Text = 'line 1: warning: a migrate warning'),
       IntToStr(Length(Book.Nodes[0].Marks)));
+    // T6: a merge leaves the last stage block in the book; its old "chain ..." mark must not
+    // survive the next StaticChainMarks (the chain is gone), and a non-chain mark stays.
+    Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
+    StaticChainMarks(Book);
+    AddStaticWarningMark(Book.Nodes[2], 'line 3: warning: an engine warning');
+    C:= FindRuleChains(Book);
+    ApplyChainMerge(Book, MergeChainPlan(Book, C[0]));
+    StaticChainMarks(Book);
+    N:= 0;
+    for var LNode: TRuleNode in Book.Nodes do
+      for var LMark: TRuleMark in LNode.Marks do
+        if LMark.Text.StartsWith('chain ') then
+          Inc(N);
+    Check('chains.marks.merge.drops.stale', (Length(FindRuleChains(Book)) = 0) and (N = 0), IntToStr(N) + ' stale chain mark(s)');
+    Check('chains.marks.merge.keeps.other', (Length(Book.Nodes[Book.Nodes.Count - 2].Marks) = 1)
+      and (Book.Nodes[Book.Nodes.Count - 2].Marks[0].Text = 'line 3: warning: an engine warning'),
+      IntToStr(Length(Book.Nodes[Book.Nodes.Count - 2].Marks)));
+    // T6: "line N" in a mark moves when lines shift; the old text must be replaced, not kept beside the new one.
+    Book:= ChainMakeBook(Books, CHAIN_BOOK_DUP);
+    AddStaticWarningMark(Book.Nodes[2], 'duplicate From type TA: never applied -- line 9 wins; delete this block or merge its lines there');
+    StaticChainMarks(Book);
+    Check('chains.marks.replaces.shifted', (Length(Book.Nodes[2].Marks) = 1) and (Pos('line 1 wins', Book.Nodes[2].Marks[0].Text) > 0),
+      IntToStr(Length(Book.Nodes[2].Marks)));
     Dup:= ChainMakeBook(Books, CHAIN_BOOK_FROMONLY);
     Check('chains.marks.hoist', AddStaticWarningMark(Dup.Nodes[0], 'w') and not AddStaticWarningMark(Dup.Nodes[0], 'w') and (Length(Dup.Nodes[0].Marks) = 1),
       IntToStr(Length(Dup.Nodes[0].Marks)));

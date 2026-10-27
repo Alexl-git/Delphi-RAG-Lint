@@ -91,6 +91,9 @@ function ChainsToOffer(const AChains: TArray<TRuleChain>; const AAsked: TArray<s
 /// <summary>Adds the warning mark of every finding to every node it involves (spec 5.2 M1); returns the number added; never adds a mark twice.</summary>
 /// <param name="ABook">The book whose nodes get the session marks; not owned.</param>
 /// <returns>The number of marks added.</returns>
+/// <remarks>First drops every chain mark the current findings no longer give (a finding a merge or an
+/// edit removed, or whose "line N" moved, must not survive); every other mark is kept. A chain mark is a warning whose
+/// text starts with "chain ", "cycle ", "duplicate From type " or "unit chain ".</remarks>
 function StaticChainMarks(ABook: TRuleBook): Integer;
 
 // ---- Task 2 (merge composition): TChainMerge, MergeChainPlan, ApplyChainMerge ----
@@ -194,6 +197,7 @@ implementation
 
 uses
   System.StrUtils
+  , System.Classes            // TStringList
   , System.Generics.Defaults
   , ConvRules.ValidateScope  // AddStaticWarningMark
   ;
@@ -1116,13 +1120,47 @@ begin
   end;
 end;
 
+// True for a mark StaticChainMarks owns (the text shapes of ChainMarkText).
+function IsChainMark(const AMark: TRuleMark): Boolean;
+begin
+  Result:= AMark.IsWarning and not AMark.FromSyntax
+    and (AMark.Text.StartsWith('chain ') or AMark.Text.StartsWith('cycle ')
+      or AMark.Text.StartsWith('duplicate From type ') or AMark.Text.StartsWith('unit chain '));
+end;
+
 function StaticChainMarks(ABook: TRuleBook): Integer;
 var
-  LChain: TRuleChain;
-  LI    : Integer;
+  LChains: TArray<TRuleChain>;
+  LWanted: TStringList; // '<node index>|<mark text>' of every mark the current findings give
+  LChain : TRuleChain;
+  LNode  : TRuleNode;
+  LKeep  : TArray<TRuleMark>;
+  LMark  : TRuleMark;
+  LI     : Integer;
 begin
-  Result:= 0;
-  for LChain in FindRuleChains(ABook) do
+  Result := 0;
+  LChains:= FindRuleChains(ABook);
+  LWanted:= TStringList.Create;
+  try
+    LWanted.CaseSensitive:= True;
+    for LChain in LChains do
+      for LI:= 0 to High(LChain.Stages) do
+        LWanted.Add(IntToStr(LChain.Stages[LI].NodeIdx) + '|' + ChainMarkText(LChain, LI));
+    LWanted.Sorted:= True;
+    for LI:= 0 to ABook.Nodes.Count - 1 do
+    begin
+      LNode:= ABook.Nodes[LI];
+      LKeep:= nil;
+      for LMark in LNode.Marks do
+        if not IsChainMark(LMark) or (LWanted.IndexOf(IntToStr(LI) + '|' + LMark.Text) >= 0) then
+          LKeep:= LKeep + [LMark];
+      if Length(LKeep) <> Length(LNode.Marks) then
+        LNode.Marks:= LKeep;
+    end;
+  finally
+    LWanted.Free;
+  end;
+  for LChain in LChains do
     for LI:= 0 to High(LChain.Stages) do
       if AddStaticWarningMark(ABook.Nodes[LChain.Stages[LI].NodeIdx], ChainMarkText(LChain, LI)) then
         Inc(Result);
