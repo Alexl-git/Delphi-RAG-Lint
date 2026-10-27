@@ -26,6 +26,8 @@ type
     procedure HitInline;
     procedure NoHitDifferentName;
     procedure NoHitQualified;
+    procedure HitParam(Count: Integer);
+    procedure NoHitParam(Cnt: Integer);
   end;
 
   TOther = class
@@ -79,6 +81,15 @@ var
   Count: Integer;
 begin
   Count:= 1;
+end;
+procedure TFoo.HitParam(Count: Integer);
+begin
+  Writeln(Count);
+end;
+
+procedure TFoo.NoHitParam(Cnt: Integer);
+begin
+  Writeln(Cnt);
 end;
 
 end.

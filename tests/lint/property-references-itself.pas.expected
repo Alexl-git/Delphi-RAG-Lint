@@ -2,5 +2,12 @@
 # property itself recurses forever. Fires on 'property Bar ... read Bar' (line 8:
 # the accessor equals the property name); NOT on 'property Baz ... read FBar write
 # FBar' (line 9: accessors are the backing field, not the property).
+# G7 extension: the accessor BODY shape -- GetX reading X (30), SetX assigning X (35),
+# GetZ reading Self.Z (50). Silent: GetY reading FY (40), SetY assigning FY (45).
 property-references-itself 8
 !property-references-itself 9
+property-references-itself 30
+property-references-itself 35
+property-references-itself 50
+!property-references-itself 40
+!property-references-itself 45

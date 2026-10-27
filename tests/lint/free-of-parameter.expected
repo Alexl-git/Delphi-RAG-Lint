@@ -1,0 +1,7 @@
+# Hits: AObj.Free (24), FreeAndNil(AObj) (29), AObj.DisposeOf on a const param (34).
+# Silent: var parameter (39), a local freed while the parameter is only read (47).
+free-of-parameter 24
+free-of-parameter 29
+free-of-parameter 34
+!free-of-parameter 39
+!free-of-parameter 47
