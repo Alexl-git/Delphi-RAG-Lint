@@ -2544,9 +2544,9 @@ begin
   begin
     var LVersion, LText: string;
     LText:= '';
-    if VersionOutput(nil, LVersion) = 0 then  // dl:ok magic-literal -- 0 is the success exit code
+    if VersionOutput(nil, LVersion) = 0 then
       LText:= EngineVersionText(LVersion);
-    FFieldRefsNote := FieldRefsGateNote(LText);
+    FFieldRefsNote:= FieldRefsGateNote(LText);
     FFieldRefsAsked:= True;
   end;
   if FFieldRefsNote <> '' then
