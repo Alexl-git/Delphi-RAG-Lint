@@ -1,7 +1,7 @@
 <#
   run_compliance_labels_guard.ps1 -- guard for the compliance labels (rules\compliance.json).
   Plan: docs\superpowers\plans\2026-10-27-rule-gaps-and-compliance-plan.md section 4.1.4,
-  items 1-5 (items 6-7, SARIF + built-in profiles, are lane K2 work).
+  items 1-7 (6-7 = SARIF taxonomies and the built-in profile cwe, added by lane K2).
 
   Every check runs against the exe passed as -Exe and the rules\ of THIS tree
   (--rules-dir), so a stale deployed exe or a stale <exe-dir>\rules cannot fool it.
@@ -14,7 +14,10 @@
   4. negative control: a temp copy of the rules dir whose compliance.json has a bogus id makes
      `rules --json` exit non-zero;
   5. `lint --json` finding of hardcoded-credential has compliance.cwe containing CWE-798 and a
-     type-name-prefix finding has no `compliance` key.
+     type-name-prefix finding has no `compliance` key;
+  6. `--format sarif` on hardcoded-credential.pas: tag external/cwe/cwe-798, a taxonomies entry named CWE,
+     a relationship targeting 798;
+  7. `--profile cwe`: 0 findings on type-name-prefix.pas, >= 1 at >= warning on hardcoded-credential.pas.
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = "Stop"
@@ -112,6 +115,24 @@ $f2 = & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type
 $a2 = @(($f2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'type-name-prefix' })
 Assert "lint --json: type-name-prefix finding exists" ($a2.Count -ge 1)
 Assert "lint --json: type-name-prefix finding has no compliance key" ($a2.Count -ge 1 -and $null -eq $a2[0].PSObject.Properties['compliance'])
+
+# ---- item 6: --format sarif carries the taxonomies -----------------------------------------
+$sarifTxt = (& $exe lint --format sarif --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null) -join "`n"
+$sj = $null; try { $sj = $sarifTxt | ConvertFrom-Json } catch {}
+Assert "sarif: parses" ($null -ne $sj)
+Assert "sarif: tags contain external/cwe/cwe-798" ($sarifTxt -match '"external/cwe/cwe-798"')
+$tax = $null; if ($sj) { $tax = @($sj.runs[0].taxonomies) }
+Assert "sarif: taxonomies array has name CWE" ($null -ne $tax -and @($tax | Where-Object { $_.name -eq 'CWE' }).Count -eq 1)
+$hcRule = $null; if ($sj) { $hcRule = @($sj.runs[0].tool.driver.rules | Where-Object { $_.id -eq 'hardcoded-credential' })[0] }
+Assert "sarif: hardcoded-credential has a relationship targeting 798" ($null -ne $hcRule -and @($hcRule.relationships | Where-Object { $_.target.id -eq '798' -and $_.target.toolComponent.name -eq 'CWE' }).Count -ge 1)
+
+# ---- item 7: built-in profile `cwe` ----------------------------------------------------------
+$p1 = & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null
+$n1 = @(($p1 -join "`n") | ConvertFrom-Json).Count
+Assert "--profile cwe on type-name-prefix.pas: 0 findings (got $n1)" ($n1 -eq 0)
+$p2 = & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null
+$h2 = @(($p2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severity -in @('warning','error') })
+Assert "--profile cwe on hardcoded-credential.pas: >= 1 finding at >= warning (got $($h2.Count))" ($h2.Count -ge 1)
 
 Write-Host ""
 if ($fail -gt 0) { Write-Host "$fail check(s) failed" -ForegroundColor Red; exit 1 }
