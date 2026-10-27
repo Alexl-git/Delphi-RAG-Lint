@@ -85,7 +85,8 @@ $files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Do
 $storagePas   = 'src\storage\DRagLint.Storage.SQLite.pas'
 $emitRoutines = @('UpsertSymbol','UpsertReference','UpsertDiBinding','UpsertStringLiteral',
                   'UpsertChunk','UpsertSymbolDoc','PutSymbolFacts','PutEffectFacts',
-                  'InsertCompilerFinding','UpsertUnitUse','WriteMemberAccess')
+                  'InsertCompilerFinding','UpsertUnitUse','WriteMemberAccess',
+                  'PutDataFlows')   # 2026-10-27 taint T0: data_flows rows (per-routine facts, file tx)
 $notEmit      = @('UpsertCallEdge')   # resolver surface (resolver-surface.txt)
 $HdrRx  = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
 $ImplRx = [regex]'^(?i)implementation\s*$'

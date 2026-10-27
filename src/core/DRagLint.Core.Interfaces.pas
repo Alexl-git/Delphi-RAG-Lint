@@ -2453,6 +2453,49 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+    { ---- data_flows (taint wave T0, 2026-10-27) ------------------------------ }
+    /// <summary>Writes the data_flows rows of ONE routine inside the open file
+    /// transaction (one prepared INSERT per row). Called by the indexer right
+    /// after PutSymbolFacts.</summary>
+    /// <param name="AToken">The open file tx; supplies file_id (each row's FileId is ignored).</param>
+    /// <param name="ARows">The routine's rows (TDataFlowFacts.Collect); may be empty (no-op).
+    /// Every row's SymbolId must be a symbols.id written in this tx.</param>
+    /// <remarks>No delete: a per-file reindex drops the old rows through
+    /// data_flows.symbol_id ON DELETE CASCADE when OpenFileTx deletes the file's
+    /// symbols. A no-op when the table is absent (read-only open of a DB that
+    /// predates it). Part of the extractor guard's emit list.</remarks>
+    procedure PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+    /// <summary>True when this database has the data_flows table (probed once).</summary>
+    /// <returns>False on a DB that predates extractor 1.26.0 and was opened read-only.
+    /// A present-but-EMPTY table means "indexed before 1.26.0": the taint rules print
+    /// ONE stale-index note and report nothing.</returns>
+    function HasDataFlows: Boolean;
+    /// <summary>Rows whose destination is AT one site (an 'arg' / 'write' call or
+    /// member-write ref position, or a field/global/result/outparam write site).</summary>
+    /// <param name="AFileId">files.id of the site.</param>
+    /// <param name="ALine">dst_line (refs.start_line of the site).</param>
+    /// <param name="ACol">dst_col (refs.start_col of the site).</param>
+    /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
+    /// <returns>Matching rows ordered by (dst_index, src_kind, src_line, src_col); empty
+    /// when none or when the table is absent.</returns>
+    function GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer; const ADstKind: string): TArray<TDataFlowRow>;
+    /// <summary>Rows of ONE routine with one destination kind -- the routine's
+    /// summary ('result', 'outparam', 'field', 'global' rows).</summary>
+    /// <param name="ASymbolId">symbols.id of the routine.</param>
+    /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
+    /// <returns>Rows ordered by (dst_kind, dst_index, dst_line, dst_col); empty when none.</returns>
+    function GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+    /// <summary>Every dst_kind='field' row writing field AName in a routine owned by
+    /// one of AOwnerIds (the caller passes the class, its ancestors and descendants).</summary>
+    /// <param name="AOwnerIds">data_flows.owner_id values to match; empty returns nothing.</param>
+    /// <param name="AName">Field name, compared case-insensitively against dst_name.</param>
+    /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>
+    function GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+    /// <summary>Every dst_kind='global' row writing unit variable AName.</summary>
+    /// <param name="AName">Variable name, compared case-insensitively against dst_name.</param>
+    /// <param name="AFileId">Restrict to rows of this files.id; 0 (or less) = every file.</param>
+    /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>
+    function GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
     /// <summary>True when at least one routine with a body has no purity
     /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
     /// stage run after a per-file reindex even when the calls stage was
