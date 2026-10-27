@@ -13675,9 +13675,59 @@ begin
     { .dpr joins .pas/.inc: lint-all scans a .dpr with these same AST checks (fixed 2026-08-16),
       so the per-file verb must too or the editor's gutter hides them (1.20.6 T3;
       tests\autotest\run_lint_dpr_parity.ps1). .dpk stays out: lint-all does not scan it. }
-    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')
-       or SameText(ExtractFileExt(EffPath), '.dpr')) then
+    { A DIRECTORY IS THE UNION OF ITS FILES (lane DIRLINT, 2026-10-27).
+      This block used to be gated on TFile.Exists(EffPath), so `lint <dir>` ran
+      the .scm pass above and NONE of the built-in checkers below: over
+      tests\lint, try-except-swallowed 0 vs 12, nil-check-after-dereference 0
+      vs 5, exception-escapes-thread 0 vs 3, while the .scm rules agreed. A
+      zero that means "not looked at" read as a clean folder.
+
+      Now every scanned .pas/.inc/.dpr of the walk runs this same block, with
+      the same flags, as if it had been linted alone: its own .scm findings are
+      handed to it as Findings (the block filters them per file -- the
+      string-equality drop, DropNonStringConcat, the buffer reconcile) and its
+      result is collected per file, so one file's store cannot filter another
+      file's findings. A single file stays byte-identical: one target, no
+      bucketing. tests\autotest\run_lint_dir_union_parity.ps1. }
+    var LintRoot      : string         := EffPath;
+    var LintDirMode   : Boolean        := (not TFile.Exists(EffPath)) and TDirectory.Exists(EffPath);
+    var PerFileTargets: TArray<string> := nil;
+    if LintDirMode then
     begin
+      for var PT: string in ScannedFiles do
+        if MatchText(ExtractFileExt(PT), ['.pas', '.inc', '.dpr']) then PerFileTargets:= PerFileTargets + [PT];
+    end
+    else if TFile.Exists(EffPath) and MatchText(ExtractFileExt(EffPath), ['.pas', '.inc', '.dpr']) then
+      PerFileTargets:= [EffPath];
+    var DirPending: TObjectDictionary<string, TList<TLintFinding>> := nil;
+    var DirOut    : TList<TLintFinding>                            := nil;
+    try
+    if LintDirMode then
+    begin
+      DirPending:= TObjectDictionary<string, TList<TLintFinding>>.Create([doOwnsValues]);
+      DirOut    := TList<TLintFinding>.Create;
+      for var PT: string in PerFileTargets do DirPending.AddOrSetValue(LowerCase(PT), TList<TLintFinding>.Create);
+      for var DF: TLintFinding in Findings do
+      begin
+        var Bucket: TList<TLintFinding>;
+        if DirPending.TryGetValue(LowerCase(DF.FilePath), Bucket) then Bucket.Add(DF) else DirOut.Add(DF);
+      end;
+      Findings:= nil;
+      { The two project-file checks above are gated on a FILE target too; they
+        already take a file list, so the directory hands them the whole set. }
+      var DirProj: string := IfdefProjectFile(AArgs, AArgs.DbPath);
+      if (DirProj <> '') and (Length(PerFileTargets) > 0) then
+      begin
+        if (NarrowRule = '') or SameText(NarrowRule, IFDEF_UNDEFINED_RULE_ID) then
+          DirOut.AddRange(TIfdefUndefinedCheck.CheckFiles(PerFileTargets, DirProj, LoadLintConfig(AArgs).IfdefAllow, nil));
+        if (NarrowRule = '') or SameText(NarrowRule, PLATFORM_DIVERGENT_RULE_ID) then
+          DirOut.AddRange(TPlatformDivergentCheck.CheckFiles(PerFileTargets, DirProj, LoadLintConfig(AArgs).PlatformDivergentAllow, nil));
+      end;
+    end;
+    for var PerFile: string in PerFileTargets do
+    begin
+      EffPath:= PerFile;
+      if LintDirMode then Findings:= DirPending[LowerCase(PerFile)].ToArray;
       var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { THE STORE IS RESOLVED ONCE, HERE, FOR EVERY PER-FILE CHECKER BELOW.
 
@@ -14175,7 +14225,18 @@ begin
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
-    end; // if
+      if LintDirMode then
+      begin
+        DirOut.AddRange(Findings);
+        Findings:= nil;
+      end;
+    end; // for PerFile
+    if LintDirMode then Findings:= DirOut.ToArray;
+    finally
+      EffPath:= LintRoot;
+      DirPending.Free;
+      DirOut.Free;
+    end;
   end; // if
   { The store-backed quick-fixes -- the six naming rules, doc-drift and
     missing-doc -- all sit behind `if AStore <> nil` in FinalizeAndOutput, and
