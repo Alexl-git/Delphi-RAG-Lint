@@ -263,9 +263,35 @@ public static class CT {
 }
 '@
 $script:pass = 0; $script:fail = 0
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class B {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  /* N7/N11: 'ConvRulesEditor.Busy' answers 2 busy / 1 idle; no answer within the timeout = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2 /* SMTO_ABORTIFHUNG */, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+"@
+# idle = no progress window / message box / common dialog, the editor enabled and saying idle (B::Busy), for 2 s
+# running. Convert clicked during the C8 inherited-instances check after Add... is refused ("clicked while the
+# editor was busy"), so RunConvert waits for this first.
+function WaitIdle($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [B]::IsWindowEnabled($main) -or [B]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 200
+  }
+  return $false
+}
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
-function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 # BM_CLICK is POSTED: a sent click blocks this script for as long as the handler runs
@@ -453,14 +479,19 @@ try {
   Check 'fixunit.added' ($e -eq '') "$e; status: $(Status $main)"
   # Settle first: the Add's own status lines arrive after the dialog closes.
   Start-Sleep -Seconds 2
+  # ... and the C8 inherited-instances check after Add... (a Convert clicked under it is refused).
+  [void](WaitIdle $p.Id $main 90)
+  $pre = Status $main
   Click $conv
   # The run's outcome, not just any change: the Add may still write a line after the click.
   $t0 = Get-Date; $st = ''
   while (((Get-Date) - $t0).TotalSeconds -lt 600) {
     Start-Sleep -Milliseconds 500
     $st = Status $main
-    if ($st -like 'Converted *' -or $st -like 'Convert stopped*' -or $st -like 'RESTORE FAILED*' -or $st -like '`[!`] *') { break }
+    # A question can come up before the run writes any status: look for it before the pre-skip.
     if (@(Forms $p.Id | Where-Object { [W]::Cls($_) -in 'TMessageForm', '#32770' }).Count -gt 0) { $script:dlg = TopsNow $p.Id; break }
+    if ($st -eq $pre) { continue } # the line from before the click is not this run's answer
+    if ($st -like 'Converted *' -or $st -like 'Convert stopped*' -or $st -like 'RESTORE FAILED*' -or $st -like '`[!`] *') { break }
   }
   $script:waited = ((Get-Date) - $t0).TotalSeconds
   Start-Sleep -Milliseconds 300

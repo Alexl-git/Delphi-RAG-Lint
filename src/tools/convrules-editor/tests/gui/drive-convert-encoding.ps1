@@ -313,8 +313,27 @@ function AddViaDialog($procId, $addBtn, $path) {
   $t0 = Get-Date; while ((WaitCls $procId '#32770' 0) -ne [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 20) { Start-Sleep -Milliseconds 250 }
   if ((WaitCls $procId '#32770' 0) -ne [IntPtr]::Zero) { return "open dialog still up (forms: $(TopsNow $procId))" }
   Start-Sleep -Seconds 2   # AddSources reads the project index (ListUnits) before it writes the status line
-  [void](WaitIdle $procId (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' })[0]) 90)   # and the C8 analysis behind the progress window
+  # and the C8 analysis behind the progress window (10-86 s seen on the 1.35.1 pin): a timeout is reported
+  if (-not (WaitIdle $procId (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' })[0]) 180)) { return "editor still busy 180 s after the add (forms: $(TopsNow $procId))" }
   return ''
+}
+# DRV: Convert only on an idle editor; a click the editor still refused ('Convert was NOT started: it was clicked
+# while the editor was busy') is clicked once more after the next idle. Returns '' or why it could not click.
+function ClickConvert($procId, $main, $btn) {
+  if (-not (WaitIdle $procId $main 180)) { return "editor busy for 180 s before Convert (forms: $(TopsNow $procId))" }
+  for ($attempt = 0; $attempt -lt 2; $attempt++) {
+    Click $btn
+    $t0 = Get-Date; $refused = $false
+    while (((Get-Date) - $t0).TotalSeconds -lt 3) {
+      if (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TMessageForm' }).Count -gt 0) { return '' }
+      if ((Status $main) -like '*Convert was NOT started: it was clicked while the editor was busy*') { $refused = $true; break }
+      Start-Sleep -Milliseconds 200
+    }
+    if (-not $refused) { return '' }
+    "INFO  Convert refused as busy (attempt $($attempt + 1)): $(Status $main)" | Out-Host
+    if (-not (WaitIdle $procId $main 180)) { return "editor busy for 180 s after a refused Convert" }
+  }
+  return "Convert refused twice: $(Status $main)"
 }
 # Waits until the status line differs from $Before and is not the run's own
 # 'Converting ...' line or a C16 progress line (RunInProgress), or an editor dialog appears;
@@ -338,14 +357,31 @@ function WaitStatus($main, $Before, $Seconds) {
 # A TLabel has no window of its own; when no child answers, the dialog's own Ctrl+C (VCL TMessageForm copies
 # its caption, message and buttons) is read from the clipboard. Needs the editor on the desktop (GUI lock).
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class FG {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  /* SetForegroundWindow; only when that is refused, an ALT tap (the process that sent the last input may set the
+     foreground) and again. The tap can eat the next key, so the caller retries its Ctrl+C. */
+  public static void Front(IntPtr h) { if (SetForegroundWindow(h) && GetForegroundWindow() == h) return; keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); SetForegroundWindow(h); }
+}
+"@
 function MsgText($dlg) {
   $t = ((@([W]::Kids($dlg)) | Where-Object { [W]::Cls($_) -in 'TLabel', 'Static' } | ForEach-Object { [W]::Txt($_) }) -join ' ')
   if ($t.Trim() -ne '') { return $t }
-  Set-Clipboard -Value 'convert-encoding-sentinel'
-  [void][W]::SetForegroundWindow($dlg); Start-Sleep -Milliseconds 300
-  [System.Windows.Forms.SendKeys]::SendWait('^c'); Start-Sleep -Milliseconds 300
-  $c = ''
-  for ($i = 0; $i -lt 10; $i++) { try { $c = [string](Get-Clipboard -Raw -ErrorAction Stop); break } catch { Start-Sleep -Milliseconds 200 } }
+  # DRV: the FIRST Ctrl+C sent to a fresh question is lost (seen 2026-10-26: foreground = the dialog, clipboard
+  # untouched; the second copy works), so lower.offer.asks read '' and the question stayed unanswered.
+  # The copy is retried, and only sent while the dialog really is the foreground window.
+  $c = 'convert-encoding-sentinel'
+  for ($try = 0; ($try -lt 6) -and ($c -eq 'convert-encoding-sentinel') -and [W]::IsWindowVisible($dlg); $try++) {
+    Set-Clipboard -Value 'convert-encoding-sentinel'
+    [FG]::Front($dlg); Start-Sleep -Milliseconds 300
+    if ([FG]::GetForegroundWindow() -ne $dlg) { Start-Sleep -Milliseconds 500; continue }
+    [System.Windows.Forms.SendKeys]::SendWait('^c'); Start-Sleep -Milliseconds 300
+    for ($i = 0; $i -lt 10; $i++) { try { $c = [string](Get-Clipboard -Raw -ErrorAction Stop); break } catch { Start-Sleep -Milliseconds 200 } }
+  }
   if ($c -eq 'convert-encoding-sentinel') { return '' }
   # '---' / caption / '---' / message / '---' / buttons: the message is the block after the second rule.
   $parts = $c -split '(?m)^-+\s*$'
@@ -475,7 +511,7 @@ try {
   Check 'fixunit.added' (($e -eq '') -and (([CT]::Items((Find ([CT]::Parent([CT]::Parent($add))) 'TListBox' $null)[0])) -contains $pas)) "$e status: $(Status $main)"
 
   # --- lower.*: the offer before the run, once per book; Yes lowers it losslessly ---
-  Click $conv
+  $ce = ClickConvert $p.Id $main $conv; if ($ce -ne '') { "WARN  $ce" | Out-Host }
   $asked = @()
   for ($i = 0; $i -lt 2; $i++) {
     $dlg = WaitCls $p.Id 'TMessageForm' 120
@@ -501,7 +537,7 @@ try {
   Check 'lower.open.book.bytes' (((Head $bookZ 2) -ne 'FF FE') -and (AllAscii $bookZ)) ("head=" + (Head $bookZ 4))
   Check 'lower.run.starts' ($s -match 'Converted \d+ of 2 unit x book pair') $s
   # Asked once per book and session: a second Convert asks nothing (the books are ASCII-7 now anyway).
-  Click $conv
+  $ce = ClickConvert $p.Id $main $conv; if ($ce -ne '') { "WARN  $ce" | Out-Host }
   $again = WaitCls $p.Id 'TMessageForm' 20
   Check 'lower.asked.once' (($again -eq [IntPtr]::Zero) -or ((MsgText $again) -notmatch 'fits ASCII-7')) $(if ($again -ne [IntPtr]::Zero) { MsgText $again } else { 'no question' })
   if ($again -ne [IntPtr]::Zero) { [void](AnswerDlg $again 'No') }
@@ -519,7 +555,7 @@ try {
     Click $checkAll; Start-Sleep -Milliseconds 500
     $before = [IO.File]::ReadAllBytes($pas)
     $bckBefore = @(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count  # the lower run above already backed it up
-    Click $conv
+    $ce = ClickConvert $p.Id $main $conv; if ($ce -ne '') { "WARN  $ce" | Out-Host }
     $dlg = WaitCls $p.Id 'TMessageForm' 120
     $txt = if ($dlg -ne [IntPtr]::Zero) { MsgText $dlg } else { '' }
     RCheck 'raise.prerun.question' (($txt -match 'FixUnit\.pas is ASCII-7') -and ($txt -match 'Raise\.rules 1:9') -and ($txt -match 'U\+0414') -and ($txt -match '#use New') -and ($txt -match 'Yes = raise')) "$txt | status: $(Status $main)"
@@ -531,7 +567,7 @@ try {
     $after = [IO.File]::ReadAllBytes($pas)
     RCheck 'raise.prerun.no.untouched' (([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after)) -and (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -eq $bckBefore)) ("head=" + (Head $pas 4) + " BCK before=$bckBefore after=" + @(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count)
     # Yes = raise FixUnit.pas, then convert: the first run carries --raise-encoding.
-    Click $conv
+    $ce = ClickConvert $p.Id $main $conv; if ($ce -ne '') { "WARN  $ce" | Out-Host }
     $dlg = WaitCls $p.Id 'TMessageForm' 120
     if ($dlg -ne [IntPtr]::Zero) { [void](AnswerDlg $dlg 'Yes') }
     $st = WaitStatusMatch $main 'Raised 1 file' 900
@@ -540,7 +576,7 @@ try {
     RCheck 'raise.unit.bom' ((Head $pas 3) -eq 'EF BB BF') ("head=" + (Head $pas 4))
     RCheck 'raise.backup' (@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*').Count -ge 1) ((@(Get-ChildItem -LiteralPath $tmp -Filter 'FixUnit.pas.BCK*' | ForEach-Object Name)) -join ',')
     Start-Sleep -Seconds 3
-    RCheck 'raise.no.second.question' ((WaitCls $p.Id 'TMessageForm' 0) -eq [IntPtr]::Zero) (TopsNow $p.Id)
+    RCheck 'raise.no.second.question' ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero) (TopsNow $p.Id)
   }
 }
 finally {
