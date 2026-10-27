@@ -1,0 +1,8 @@
+# Hits: local/inline var named like a field of own class or same-file ancestor.
+# FP shapes silent: different name, qualified Self.Count, unrelated class, free routine.
+local-shadows-field 40
+local-shadows-field 47
+local-shadows-field 54
+!local-shadows-field 60
+!local-shadows-field 72
+!local-shadows-field 79
