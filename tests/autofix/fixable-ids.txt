@@ -34,3 +34,6 @@ overflow-before-widening
 uses-movable-to-implementation
 virtual-never-overridden
 needless-exit
+begin-end-pair-not-in-finally
+field-created-not-freed
+mismatched-alloc-free
