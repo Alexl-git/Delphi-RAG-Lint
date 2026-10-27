@@ -5,6 +5,9 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Changed
+- `--help` names `--output` on lint-project and `--json` on check-ast and serve (every verb whose code reads --out / --json now shows it); the flag-verb map baseline drops 108 -> 104 cells.
+
 ### Fixed
 - `lint --project` / `lint-all --project` / `unit-not-in-dpr`: the scope closure follows the `.dproj`'s ACTIVE build config (the same profile the defines use), so a unit only the inactive config uses is no longer linted (LSP lane, guard `run_lint_project_scope_active_config_guard.ps1`).
 

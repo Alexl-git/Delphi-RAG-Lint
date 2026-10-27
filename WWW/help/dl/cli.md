@@ -163,7 +163,7 @@ Described in [callgraph](features/callgraph.md).
 Runs drag-lint's AST-level checks against a file.
 
 ```text
-drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]
+drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1008,7 +1008,7 @@ Described in:
 Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol.
 
 ```text
-drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]
+drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1501,7 +1501,7 @@ Described in [schema](features/schema.md).
 Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index.
 
 ```text
-drag-lint serve --db <file.sqlite> (MCP stdio server)
+drag-lint serve --db <file.sqlite> [--json] (MCP stdio server)
 ```
 
 | Flag | Argument | Meaning | Default |
