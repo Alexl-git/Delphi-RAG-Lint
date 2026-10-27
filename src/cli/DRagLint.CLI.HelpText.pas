@@ -136,7 +136,9 @@ begin
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
-  Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+  Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
+  Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
+  Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
   Writeln('                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).');
   Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
   Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
@@ -590,7 +592,9 @@ begin
   if pVerb = 'lint' then
   begin
     Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
-    Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+    Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
+    Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
+    Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
     Writeln('                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).');
     Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
     Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');

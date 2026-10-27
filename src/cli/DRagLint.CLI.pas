@@ -12529,6 +12529,13 @@ const
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden', 'uses-movable-to-implementation');
+  { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
+    opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
+    is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
+    -- so the IDE gutter and lint-all agree. Every other PROJECT_RULES_OPTIN_GATED
+    id ships OFF and stays --rule-only on this verb.
+    tests\autotest\run_lint_file_discarded_effect_free.ps1. }
+  LINT_FILE_OPTIN_ON: array[0..0] of string = ('discarded-effect-free-result');
   LINT_GATE_CLASS_METRICS: array[0..9] of string = (
     'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
     'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
@@ -12919,7 +12926,8 @@ end;
 /// that IS accounted by a finding this run produced (a within-file pair) is
 /// unaffected; lint-all still reports an unused marker for every rule here.
 /// The OptedIn-gated project rules (PROJECT_RULES_OPTIN_GATED, e.g. uses-global-census) are listed
-/// in every run, index or not: Run is handed no opt-in list, so none is evaluated (--rule<id> excepted).</remarks>
+/// in every run, index or not: Run is handed no opt-in list for them, so none is evaluated (--rule<id>
+/// excepted) -- except LINT_FILE_OPTIN_ON, which DoLint opts in whenever the store holds the file.</remarks>
 function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArray<string>;
 
   procedure AddAll(const AIds: array of string);
@@ -12935,10 +12943,10 @@ begin
     AddAll(LINT_GATE_DOC_DRIFT);
     AddAll(['missing-doc']);
   end;
-  { OptedIn-gated project rules: not evaluated by any `lint <file>` run, index or not
-    (Run gets no opt-in list), except the one --rule names. }
+  { OptedIn-gated project rules: not evaluated by a `lint <file>` run, index or not,
+    except the one --rule names and, with a store, the ON ones in LINT_FILE_OPTIN_ON. }
   for var Gated: string in PROJECT_RULES_OPTIN_GATED do
-    if not SameText(Gated, AArgs.Rule) then AddAll([Gated]);
+    if (not SameText(Gated, AArgs.Rule)) and not (AStoreSeen and MatchText(Gated, LINT_FILE_OPTIN_ON)) then AddAll([Gated]);
   if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr', UNIT_NOT_IN_LIBRARY_RULE_ID]);
   if not AStoreSeen then
   begin
@@ -14173,12 +14181,17 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES) then
           begin
             TraceLintChecker('project-rules');
+            { The ON opt-in-gated rules (LINT_FILE_OPTIN_ON), through the same
+              ShouldKeep(False) gate lint-all uses, so --disable still turns them off. }
+            var FileOptIn: TArray<string>:= nil;
+            for var OnId: string in LINT_FILE_OPTIN_ON do
+              if Cfg.ShouldKeep(OnId, {ADefaultDisabled=}False) then FileOptIn:= FileOptIn + [OnId];
             var WholeGraph: TFunc<string, TArray<TLintFinding>>:=
               WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
                                  RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid, WholeGraph) do
+                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
