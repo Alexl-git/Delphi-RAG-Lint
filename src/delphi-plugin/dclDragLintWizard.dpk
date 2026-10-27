@@ -89,6 +89,7 @@ contains
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Core.GhostText in '..\core\DRagLint.Core.GhostText.pas',
   DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',
+  DRagLint.Core.OutputEncoding in '..\core\DRagLint.Core.OutputEncoding.pas',
   DRagLint.Core.ControlChannel in '..\core\DRagLint.Core.ControlChannel.pas',
   DragLint.Plugin.JobQueue in 'DragLint.Plugin.JobQueue.pas',
   DragLint.Plugin.StatusBar in 'DragLint.Plugin.StatusBar.pas',

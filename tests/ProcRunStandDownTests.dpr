@@ -28,6 +28,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.Diagnostics,
+  DRagLint.Core.OutputEncoding in '..\src\core\DRagLint.Core.OutputEncoding.pas',
   DRagLint.Core.ControlChannel in '..\src\core\DRagLint.Core.ControlChannel.pas',
   DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas';
 

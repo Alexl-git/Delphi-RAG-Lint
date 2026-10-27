@@ -350,7 +350,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <rsvars.bat>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1173,7 +1173,7 @@ Described in [outline](features/outline.md).
 Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line.
 
 ```text
-drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] (diagnostic: print the resolved define profile, one symbol per line)
+drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] [--in <file.pas> [--db <file.sqlite>]] (diagnostic: print the resolved define profile, one symbol per line; --in prints the profile of the owning project's active build)
 ```
 
 | Flag | Argument | Meaning | Default |

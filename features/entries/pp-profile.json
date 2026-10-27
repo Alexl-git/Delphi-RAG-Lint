@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "pp-profile",
-      "usage": "drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] (diagnostic: print the resolved define profile, one symbol per line)",
+      "usage": "drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] [--in <file.pas> [--db <file.sqlite>]] (diagnostic: print the resolved define profile, one symbol per line; --in prints the profile of the owning project's active build)",
       "flags": [
         {
           "name": "--dproj",
@@ -26,7 +26,7 @@
         }
       ],
       "helpOrder": 90,
-      "help": ["  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)"]
+      "help": ["  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] [--in <file.pas> [--db <file.sqlite>]]   (diagnostic: print the resolved define profile, one symbol per line; --in prints the profile of the owning project's active build)"]
     }
   ],
   "audience": "both",
@@ -46,9 +46,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-27",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.35.1-alpha",
     "surfaceHash": "fbddd135d0b83191195de3f33fee93bc9fc38de47103ecfa150cacd2a99b14fd"
   }
 }
