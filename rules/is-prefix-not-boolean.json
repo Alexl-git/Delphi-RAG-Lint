@@ -1,0 +1,7 @@
+{
+  "id": "is-prefix-not-boolean",
+  "severity": "info",
+  "category": "naming",
+  "message": "Routine named Is/Has/Can... does not return Boolean -- the name promises a yes/no answer.",
+  "warn_capture": "warn"
+}
