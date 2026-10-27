@@ -129,6 +129,7 @@ uses
   , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
   , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
+  , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
@@ -22613,50 +22614,12 @@ end; // begin
 // applying, because the tree-sitter index can miss some references.
 function DoUsesAudit(const AArgs: TArgs): Integer;
 var
-  Store       : ISymbolStore                       ;
-  FileId      : Int64                              ;
-  ThisStem    : string                             ;
-  UU          : TArray<TUnitUse>                   ;
-  Uo          : TUnitUse                           ;
-  Refs        : TArray<TReference>                 ;
-  R           : TReference                         ;
-  Lines       : TStringList                        ;
-  ImplLine    : Integer                            ;
-  i           : Integer                            ;
-  RefIntf     : TDictionary<string, Boolean>       ;
-  RefImpl     : TDictionary<string, Boolean>       ;
-  IndexedUnits: TDictionary<string, Int64>         ; { stem -> file_id }
-  NameCache   : TDictionary<string, TArray<string>>;
-  UnitsForName: TArray<string>                     ;
-  U           : string                             ;
-  uStem       : string                             ;
-  JArr        : TJSONArray                         ;
-  nMove       : Integer                            ;
-  nUnused     : Integer                            ;
-
-  function UnitStemOf(const APath: string): string;
-  begin
-    Result:= LowerCase(ChangeFileExt(ExtractFileName( StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
-  end;
-
-{ distinct indexed-unit stems that define a symbol named AName (cached) }
-  function UnitsDefining(const AName: string): TArray<string>;
-  var
-    Sm: TSymbol      ;
-    Us: TList<string>;
-    St: string       ;
-  begin
-    if NameCache.TryGetValue(AName, Result) then Exit;
-    Us:= TList<string>.Create;
-    try
-      for Sm in Store.FindSymbolsByExactName(AName) do begin St:= UnitStemOf(Store.GetFilePath(Sm.FileId)); if (St <> '') and not Us.Contains(St) then Us.Add(St); end;
-      Result:= Us.ToArray;
-    finally
-      Us.Free;
-    end;
-    NameCache.AddOrSetValue(AName, Result);
-  end;
-
+  Store  : ISymbolStore ;
+  FileId : Int64        ;
+  Auditor: TUsesAuditor ;
+  JArr   : TJSONArray   ;
+  nMove  : Integer      ;
+  nUnused: Integer      ;
 begin
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]'); Exit (2 ); end;
   if NoDbResolved(AArgs.DbPath, 'uses-audit') then Exit(2);
@@ -22665,76 +22628,31 @@ begin
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-audit', AArgs.DbPath) then Exit(2);
 
-  RefIntf     := TDictionary<string, Boolean>.Create;
-  RefImpl     := TDictionary<string, Boolean>.Create;
-  IndexedUnits:= TDictionary<string, Int64  >.Create;
-  NameCache:= TDictionary<string, TArray<string>>.Create;
+  { The verdict routine lives in DRagLint.Lint.UsesAudit (gap-rules wave G8), shared with the
+    uses-movable-to-implementation lint rule. }
+  Auditor:= TUsesAuditor.Create(Store);
   try
-    { stem -> file_id for every indexed unit. Also lets us resolve the target by
-      unit name, tolerant of the stored-path separator quirks that defeat a
-      direct path lookup. }
-    for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
+    if not Auditor.TryFindFile(AArgs.Target, FileId) then begin Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target); Exit(2); end;
 
-    ThisStem:= UnitStemOf(AArgs.Target);
-    if not IndexedUnits.TryGetValue(ThisStem, FileId) then begin Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target); Exit(2); end;
-
-    { which section references each indexed unit }
-    ImplLine:= MaxInt;
-    var SrcPath: string:= Store.GetFilePath(FileId);
-    if not TFile.Exists(SrcPath) then SrcPath:= AArgs.Target;
-    if TFile.Exists(SrcPath) then
-    begin
-      Lines:= TStringList.Create;
-      try
-        Lines.LoadFromFile(SrcPath);
-        for i:= 0 to Lines.Count - 1 do
-          if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine:= i + 1; Break; end;
-      finally
-        Lines.Free;
-      end;
-    end;
-
-    Refs:= Store.GetReferencesFromFile(FileId);
-    for R in Refs do
-    begin
-      UnitsForName:= UnitsDefining(R.NameText);
-      for U in UnitsForName do
-      begin
-        if SameText(U, ThisStem) then Continue;
-        if R.StartLine < ImplLine then RefIntf.AddOrSetValue(U, True)
-        else RefImpl.AddOrSetValue(U, True);
-      end;
-    end;
-
-    UU:= Store.GetUnitUsesForFile(FileId);
     JArr:= TJSONArray.Create;
     nMove:= 0; nUnused:= 0;
     try
-      for Uo in UU do
+      for var Row in Auditor.Audit(FileId, AArgs.Target) do
       begin
-        uStem:= LowerCase(Uo.UnitName);
-        { audit only project units we can actually see in the index }
-        if not IndexedUnits.ContainsKey(uStem) then Continue;
-        if SameText(uStem, ThisStem) then Continue;
-
-        var Verdict: string:= '';
-        if (not RefIntf.ContainsKey(uStem)) and (not RefImpl.ContainsKey(uStem)) then begin Verdict:= 'unused'; Inc(nUnused); end
-        else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) then begin Verdict:= 'move-to-implementation'; Inc(nMove); end;
-        if Verdict = '' then Continue;
-
+        if Row.Verdict = USES_VERDICT_UNUSED then Inc(nUnused) else Inc(nMove);
         if SameText(AArgs.Format, 'json') then
         begin
           var JO:= TJSONObject.Create;
-          JO.AddPair('unit', Uo.UnitName);
-          JO.AddPair('verdict', Verdict);
-          JO.AddPair('section', IfThen(Uo.Section = uusInterface, 'interface', 'implementation'));
-          JO.AddPair('line', TJSONNumber.Create(Uo.StartLine));
+          JO.AddPair('unit', Row.UnitName);
+          JO.AddPair('verdict', Row.Verdict);
+          JO.AddPair('section', IfThen(Row.Section = uusInterface, 'interface', 'implementation'));
+          JO.AddPair('line', TJSONNumber.Create(Row.StartLine));
           JArr.AddElement(JO);
         end
         else
         begin
-          if Verdict = 'unused' then Writeln(Format('  line %d: %s  -- appears UNUSED (comment out?)', [Uo.StartLine, Uo.UnitName]))
-          else Writeln(Format('  line %d: %s  -- in interface uses, only used by ' + 'implementation -> MOVE down', [Uo.StartLine, Uo.UnitName]));
+          if Row.Verdict = USES_VERDICT_UNUSED then Writeln(Format('  line %d: %s  -- appears UNUSED (comment out?)', [Row.StartLine, Row.UnitName]))
+          else Writeln(Format('  line %d: %s  -- in interface uses, only used by ' + 'implementation -> MOVE down', [Row.StartLine, Row.UnitName]));
         end;
       end; // for
 
@@ -22749,10 +22667,9 @@ begin
     end; // try
     Result:= 0;
   finally
-    RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
+    Auditor.Free;
   end; // try
 end; // begin
-
 // v0.43: compile ONE unit in full project context (the engine behind
 // check-unit, factored so uses-fix can reuse it). AShadow, if set, is put first
 // on the unit search path so a modified copy of the unit there is compiled
