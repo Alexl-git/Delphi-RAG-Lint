@@ -10,9 +10,10 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Standing task lists (not handoffs)
 
+- 2026-10-27 | engine | 1.36.0 DEPLOYED+pushed (main a6515adc, 2 LSP lanes merged); full W32/W64 re-parse running; Clippy wave: L0 done, L1-L12 lanes running (238 rules planned) | open | [HANDOFF](HANDOFF-2026-10-27-engine-1360-deployed-clippy-lanes-running.md)
 - 2026-10-27 | converter | CHAIN-1 T1-T5 on conv/chain1-impl (T6 next); D2 split + drv2b HELD for ENGINE 1.36.0 re-parse, then re-pin | open | [HANDOFF-2026-10-27-converter-chain1-t6-next-reparse-hold.md](HANDOFF-2026-10-27-converter-chain1-t6-next-reparse-hold.md)
 - 2026-10-27 | engine | 1.36.0 extract line merged to main (ext 1.25 / res 1.15), battery triaged + R1-R3 fixed; waiting owner deploy go, then parallel W32/W64 re-parse | resumed | [HANDOFF-2026-10-27-engine-136-merged-deploy-go-next](HANDOFF-2026-10-27-engine-136-merged-deploy-go-next.md)
-- 2026-10-26 | lsp | C9-C16 + A7-I delivered and merged by ENGINE (main 62439e0a/2cddd43a, extract-136 frozen); C14 proxy-preprocess lane running (uncommitted at handoff); next: finish C14, StartupProfileFlags -> CLI-passed value, lint --project scope seam after extract-136 merges | open | [HANDOFF-2026-10-26-lsp-c9-c16-merged-c14-running.md](HANDOFF-2026-10-26-lsp-c9-c16-merged-c14-running.md)
+- 2026-10-26 | lsp | C9-C16 + A7-I delivered and merged by ENGINE (main 62439e0a/2cddd43a, extract-136 frozen); C14 proxy-preprocess lane running (uncommitted at handoff); CLOSED 2026-10-27: C14 (34a754de), lint --project scope (c80db02e), StartupProfileFlags (a6515adc) all merged + pushed; only owner/IDE items left | closed | [HANDOFF-2026-10-26-lsp-c9-c16-merged-c14-running.md](HANDOFF-2026-10-26-lsp-c9-c16-merged-c14-running.md)
 - 2026-10-26 | converter | ready wave closed + main pushed (7c7746b4); owner: D2 = split BDE book, new CHAIN-1 (awaiting ENGINE one-pass vs chained answer); next = present the next wave | resumed | [HANDOFF-2026-10-26-converter-wave-closed-chain1-next.md](HANDOFF-2026-10-26-converter-wave-closed-chain1-next.md)
 - 2026-10-26 | lsp | C8 LSP preprocess fix merged (fix/lsp-preprocess 11fb4b18 -> main c812798c, not deployed); help-audit entries 66c86fa3; NEXT = C9 preprocess SyntaxTree feature parse | closed 2026-10-26 (resumed by lsp-c9-c16) | [HANDOFF-2026-10-26-lsp-preprocess-c8-done-c9-next.md](HANDOFF-2026-10-26-lsp-preprocess-c8-done-c9-next.md)
 - 2026-10-26 | engine | wave 1026c: 25+ lanes, entries merged to local main 855a02d6, 13 lanes running; ledger C:\TEMP\claude\lanes\1026c\LEDGER.md; next: collect branches, H-SYS+W-WIKI then featuregen build --all once, merge code lanes, XT-* into extract-136 | closed | [HANDOFF-2026-10-26-engine-wave-1026c-lanes-running.md](HANDOFF-2026-10-26-engine-wave-1026c-lanes-running.md)
@@ -184,4 +185,3 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 - 2026-08-03 | converter | RESUME -- proptree ancestor scope + converter/editor fixes | closed | [RESUME-proptree-and-converter.md](../RESUME-proptree-and-converter.md)
 - 2026-06-26 | engine (pre-split) | drag-lint Resume Point -- 2026-06-26 | closed | [RESUME-2026-06-26.md](../RESUME-2026-06-26.md)
 - 2026-06-24 | engine (pre-split) | drag-lint Resume Point -- 2026-06-24 | closed | [RESUME-2026-06-24.md](../RESUME-2026-06-24.md)
-
