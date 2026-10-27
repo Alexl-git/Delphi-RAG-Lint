@@ -14,7 +14,7 @@ begin
   DeleteFile(F);
   RenameFile(F, F + '.bak');
   ForceDirectories(F);
-  CloseHandle(H);
+  ReleaseMutex(H);
   TryStrToInt(F, N);
   SetCurrentDir(F);
 end;

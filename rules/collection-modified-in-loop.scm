@@ -8,5 +8,8 @@
 ; Known false positive (named in the message): the mutating statement is followed by Break / Exit.
 ((foreach) @warn
  (#match? @warn "(?is)^for\\s+\\S+\\s+in\\s+(\\w+)\\s+do\\b.*\\b\\1\\.(Add|Insert|Delete|Remove|Clear|Extract|Pack|AddRange|DeleteRange|Exchange)\\s*\\("))
-((for) @warn
+((for
+  start: (assignment lhs: (identifier) @i)
+  end: (exprBinary lhs: (exprDot lhs: (identifier) @c))
+  body: (_) @body) @warn
  (#match? @warn "(?is)^for\\s+(\\w+)\\s*:=\\s*0\\s+to\\s+(\\w+)\\.Count\\s*-\\s*1\\s+do\\b.*\\b\\2\\.(Delete\\s*\\(\\s*\\1\\s*\\)|Remove\\s*\\()"))
