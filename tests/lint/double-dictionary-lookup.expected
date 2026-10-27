@@ -1,0 +1,15 @@
+# ContainsKey(K) followed by a read of D[K] in the then-branch: two hash lookups, use TryGetValue.
+double-dictionary-lookup 14
+double-dictionary-lookup 16
+# TryGetValue is the fix itself.
+!double-dictionary-lookup 21
+# FP shape: the only access is a WRITE (D[K]:= ...) -- ContainsKey guards an overwrite.
+!double-dictionary-lookup 23
+# FP shape: no subscript at all.
+!double-dictionary-lookup 25
+# FP shape: a different key.
+!double-dictionary-lookup 27
+# FP shape: key expression with a call -- the two evaluations may differ.
+!double-dictionary-lookup 29
+# FP shape: negated test.
+!double-dictionary-lookup 31

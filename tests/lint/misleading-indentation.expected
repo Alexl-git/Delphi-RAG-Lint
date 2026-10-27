@@ -1,0 +1,15 @@
+# `if` with a single statement, then the next statement indented deeper than the `if`: it looks guarded but is not.
+misleading-indentation 11
+# Properly aligned follow-up (line 14 at the `if` column): silent.
+!misleading-indentation 14
+# Single-line if, the next line indented under it (line 16 reads as guarded).
+misleading-indentation 16
+# while with one-statement body, next statement indented like the body.
+misleading-indentation 19
+# FP shape: begin..end body is a block; a later deeper line (24) is not this rule's shape.
+!misleading-indentation 24
+# FP shape: second statement on the SAME line (separate rule: multiple-statements-per-line).
+!misleading-indentation 25
+# FP shape: if/else chain has no dangling statement.
+!misleading-indentation 27
+!misleading-indentation 29
