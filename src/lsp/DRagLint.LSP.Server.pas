@@ -740,6 +740,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>Publishes diagnostics for an opened or saved document. When no store owns the file (AnyStoreOwns false, e.g. another worktree's copy) every drag-lint finding is tagged source "drag-lint (unowned)" instead of "drag-lint", so the reader can see it is not backed by a project index; owned files keep "drag-lint".</summary>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -3619,6 +3620,15 @@ begin
       Writeln(ErrOutput, 'drag-lint lsp: full-rules fallback to the subset (timeout, failed run or invalid JSON): ', Path);
     Writeln(ErrOutput, Format('drag-lint lsp: full-rules %s %d ms %d findings', [Path, GetTickCount64 - Started, Diags.Count]));
   end;
+  { No store owns the file (e.g. another worktree's copy): its findings are not backed by
+    a project index, so say so in the source tag. Owned files keep 'drag-lint'. }
+  if not AnyStoreOwns(Path) then
+    for var K:= 0 to Diags.Count - 1 do
+      if SameText((Diags.Items[K] as TJSONObject).GetValue<string>('source', ''), 'drag-lint') then
+      begin
+        (Diags.Items[K] as TJSONObject).RemovePair('source').Free;
+        (Diags.Items[K] as TJSONObject).AddPair('source', 'drag-lint (unowned)');
+      end;
   Notif:= TJSONObject.Create;
   try
     Notif.AddPair('jsonrpc', '2.0'                            );
