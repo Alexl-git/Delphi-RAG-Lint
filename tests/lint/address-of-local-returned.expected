@@ -1,0 +1,12 @@
+# 15 @L, 23 Exit(@L), 31 PChar(local string), 39 Pointer(local string), 44 @ by-value param
+address-of-local-returned 15
+address-of-local-returned 23
+address-of-local-returned 31
+address-of-local-returned 39
+address-of-local-returned 44
+# non-hits: var param (49), const param (54), global (59), Pointer(object local) (67), @L not returned (75)
+!address-of-local-returned 49
+!address-of-local-returned 54
+!address-of-local-returned 59
+!address-of-local-returned 67
+!address-of-local-returned 75
