@@ -1,0 +1,14 @@
+# TRegEx.Create with an unterminated class: does not compile.
+invalid-regex-literal 15
+!invalid-regex-literal 16
+# TRegEx.IsMatch(Input, Pattern): the PATTERN is argument 2.
+invalid-regex-literal 17
+!invalid-regex-literal 18
+# FP shape: non-literal pattern can not be judged.
+!invalid-regex-literal 19
+# nothing to repeat.
+invalid-regex-literal 20
+# FP shape: an invalid-looking INPUT (argument 1) is not a pattern.
+!invalid-regex-literal 21
+# FP shape: a plain string Replace is not a regex call.
+!invalid-regex-literal 22
