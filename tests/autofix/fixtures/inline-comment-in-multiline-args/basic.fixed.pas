@@ -4,14 +4,15 @@ interface
 
 implementation
 
-procedure Foo(A, B: Integer);
+procedure Foo(A, B, C: Integer);
 begin
 end;
 
 procedure Q;
 begin
-  // the first
+  // the second
   Foo(1,
-    2);
+    2,
+    3);
 end;
 end.

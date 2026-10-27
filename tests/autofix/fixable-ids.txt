@@ -31,3 +31,10 @@ wrong-size-memory-op
 overflow-before-widening
 uses-movable-to-implementation
 virtual-never-overridden
+commented-out-code
+doc-param-not-in-signature
+inline-comment-in-multiline-args
+misleading-indentation
+multiple-statements-per-line
+review-marker-placeholder-hash
+review-marker-unused
