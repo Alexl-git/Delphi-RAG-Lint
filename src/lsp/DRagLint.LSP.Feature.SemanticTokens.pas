@@ -65,6 +65,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Core.Encoding
+  , DRagLint.Preprocess.Types
   , DRagLint.Core.LiveDocs
   , DRagLint.LSP.SyntaxTree
   ;
@@ -435,6 +436,9 @@ begin
       var FromOverlay: Boolean;
       var Source: TBytes:= TLiveDocuments.ReadBytes(Path, FromOverlay);
       if not FromOverlay then Source:= EnsureUtf8Bytes(Source); // overlay bytes are UTF-8 already (see IdentifierAtPosition)
+      { C16: the tree is parsed from NormalizeLoneCR text (length-preserving CR->LF), and the index counts a lone CR as a line end like LSP clients do;
+        build the byte map and the declaration split from the same text, or every token after a lone CR sits one line too high. }
+      Source:= NormalizeLoneCR(Source);
       var Map: TByteMap;
       Map.Build(Source);
       var Tree: TTSTree:= ParseDelphiUtf8(Source, Path);
