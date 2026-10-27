@@ -1,0 +1,7 @@
+# almost-swap: A := B; B := A (reported on the second statement). Real swap via temp, different source, expression rhs (known FP shape: intentional copy-then-derive) and non-adjacent statements must not fire.
+swap-without-temp 10
+!swap-without-temp 15
+!swap-without-temp 17
+!swap-without-temp 20
+!swap-without-temp 22
+!swap-without-temp 25
