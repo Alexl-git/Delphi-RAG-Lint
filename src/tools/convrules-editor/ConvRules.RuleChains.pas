@@ -8,6 +8,8 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , ConvRules.Model
+  , ConvRules.BlockFile
+  , ConvRules.BlockOps
   ;
 
 type
@@ -93,7 +95,44 @@ function StaticChainMarks(ABook: TRuleBook): Integer;  // dl:ok unused-public-sy
 
 // ---- Task 2 (merge composition) goes here: TChainMerge, MergeChainPlan, ApplyChainMerge ----
 
-// ---- Task 3 (split planning, stage-book text) goes here: TChainSplit, SplitChainPlan, StageBookPath ... ----
+type
+  /// <summary>Which headers go to which stage book (spec 4 "Stage").</summary>
+  TChainSplit = record
+    /// <summary>Stages[0] = header node indexes that stay (stage 1); Stages[k] = stage k+1, each in file order. Length 1 when nothing moves.</summary>
+    Stages  : TArray<TArray<Integer>>;
+    /// <summary>Per stage (same index): the #mapping names its blocks #apply, distinct, file order; [] for stage 1.</summary>
+    Mappings: TArray<TArray<string>>;
+  end;
+
+/// <summary>Assign every winner a stage from AChains (ckChain only; other kinds and losers stay at stage 1).</summary>
+/// <param name="ABook">The book; not owned, not changed.</param>
+/// <param name="AChains">The findings of FindRuleChains(ABook).</param>
+/// <returns>The stage plan; links touching a cycle member are ignored, so those headers stay at stage 1.</returns>
+function SplitChainPlan(ABook: TRuleBook; const AChains: TArray<TRuleChain>): TChainSplit;  // dl:ok unused-public-symbol@d55b -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+/// <summary>'C:\x\Book.rules' + 2 -> 'C:\x\Book.stage2.rules'.</summary>
+/// <param name="ABookPath">The book file path.</param>
+/// <param name="AStage">The 1-based stage number (2 or more).</param>
+/// <returns>The stage book path beside the book.</returns>
+function StageBookPath(const ABookPath: string; AStage: Integer): string;  // dl:ok unused-public-symbol@4539 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+/// <summary>The text of one stage book: the '#depth N' line when ABook has a valid one, the #mapping groups named, then the blocks of AHeaderIdx verbatim (from SplitRulesBlocks of ABook.SaveToString), CRLF, trailing EOL.</summary>
+/// <param name="ABook">The source book; not owned, not changed.</param>
+/// <param name="AHeaderIdx">Header node indexes to carry.</param>
+/// <param name="AMappings">#mapping names whose declaration and clause lines are copied (not moved).</param>
+/// <returns>The stage book text.</returns>
+function StageBookText(ABook: TRuleBook; const AHeaderIdx: TArray<Integer>; const AMappings: TArray<string>): string;  // dl:ok unused-public-symbol@4459 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+/// <summary>The source without the moved blocks: JoinBlocks(SplitOut(...)) of ABook.SaveToString -- preamble and trailer untouched.</summary>
+/// <param name="ABook">The source book; not owned, not changed.</param>
+/// <param name="AMovedHeaderIdx">Header node indexes that moved to stage books.</param>
+/// <returns>The remaining book text.</returns>
+function RemainingBookText(ABook: TRuleBook; const AMovedHeaderIdx: TArray<Integer>): string;  // dl:ok unused-public-symbol@6383 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+/// <summary>The status line after a split: 'Split 2 block(s) into Book.stage2.rules -- convert with Book.rules first, then Book.stage2.rules (check both on the Convert tab, in that order)' plus '; copied #mapping M1, M2 into the stage book' when any.</summary>
+/// <param name="ABookPath">The book file path.</param>
+/// <param name="AStageFiles">The stage book paths written, stage 2 first.</param>
+/// <param name="AMoved">Number of blocks moved.</param>
+/// <param name="AMappings">The #mapping names copied.</param>
+/// <returns>The status text.</returns>
+function SplitStatusText(const ABookPath: string; const AStageFiles: TArray<string>; AMoved: Integer; const AMappings: TArray<string>): string;  // dl:ok unused-public-symbol@4cd0 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+
 
 implementation
 
@@ -602,6 +641,193 @@ begin
     for LI:= 0 to High(LChain.Stages) do
       if AddStaticWarningMark(ABook.Nodes[LChain.Stages[LI].NodeIdx], ChainMarkText(LChain, LI)) then
         Inc(Result);
+end;
+
+// ---- Task 3 (split planning, stage-book text) ----
+
+// Stage number per #convert header node: roots 1, stage(R2) = max(stage(R1) + 1) over the ckChain links;
+// links touching a cycle member are ignored. Fixed point, at most one round per node.
+procedure AssignChainStages(ABook: TRuleBook; const AChains: TArray<TRuleChain>; AStage: TDictionary<Integer, Integer>);
+var
+  LCycle  : TDictionary<Integer, Boolean>;
+  LChain  : TRuleChain;
+  LI, LJ  : Integer;
+  LRound  : Integer;
+  LFrom   : Integer;
+  LTo     : Integer;
+  LChanged: Boolean;
+begin
+  LCycle:= TDictionary<Integer, Boolean>.Create;
+  try
+    for LI:= 0 to ABook.Nodes.Count - 1 do
+      if ABook.Nodes[LI].Kind = rnkConvert then
+        AStage.Add(LI, 1);
+    for LChain in AChains do
+      if LChain.Kind = ckCycle then
+        for LJ:= 0 to High(LChain.Stages) do
+          LCycle.AddOrSetValue(LChain.Stages[LJ].NodeIdx, True);
+    LRound:= 0;
+    repeat
+      LChanged:= False;
+      Inc(LRound);
+      for LChain in AChains do
+        if LChain.Kind = ckChain then
+          for LJ:= 0 to High(LChain.Stages) - 1 do
+          begin
+            LFrom:= LChain.Stages[LJ].NodeIdx;
+            LTo  := LChain.Stages[LJ + 1].NodeIdx;
+            if LCycle.ContainsKey(LFrom) or LCycle.ContainsKey(LTo)
+              or not AStage.ContainsKey(LFrom) or not AStage.ContainsKey(LTo) then
+              Continue;
+            if AStage[LFrom] + 1 > AStage[LTo] then
+            begin
+              AStage[LTo]:= AStage[LFrom] + 1;
+              LChanged   := True;
+            end;
+          end;
+    until (not LChanged) or (LRound > ABook.Nodes.Count);
+  finally
+    LCycle.Free;
+  end;
+end;
+
+// Adds the distinct '#apply X' names of ABlock to ANames, in order.
+procedure AddApplyNames(const ABlock: TRuleBlock; ANames: TList<string>);
+var
+  LLine: string;
+  LName: string;
+begin
+  for LLine in ABlock.RawText.Split([#10]) do
+    if StartsText('#apply ', Trim(LLine)) then
+    begin
+      LName:= Trim(Copy(Trim(LLine), Length('#apply ') + 1, MaxInt));
+      if (LName <> '') and not ANames.Contains(LName) then
+        ANames.Add(LName);
+    end;
+end;
+
+// The header node indexes of stage ALevel in file order, and (stage 2 and up) the #apply names of their blocks.
+procedure CollectChainStage(ABook: TRuleBook; AStage: TDictionary<Integer, Integer>; const ABlocks: TRuleBlocks; ALevel: Integer;
+  out AIdxs: TArray<Integer>; out ANames: TArray<string>);
+var
+  LIdxs : TList<Integer>;
+  LNames: TList<string>;
+  LJ, LK: Integer;
+  LNo   : Integer;
+begin
+  LIdxs := TList<Integer>.Create;
+  LNames:= TList<string>.Create;
+  try
+    for LJ:= 0 to ABook.Nodes.Count - 1 do  // file order
+    begin
+      if not (AStage.TryGetValue(LJ, LNo) and (LNo = ALevel)) then
+        Continue;
+      LIdxs.Add(LJ);
+      if ALevel = 1 then
+        Continue;
+      for LK:= 0 to High(ABlocks) do
+        if (ABlocks[LK].Kind = rbkConvert) and (ABlocks[LK].StartLine - 1 = LJ) then
+          AddApplyNames(ABlocks[LK], LNames);
+    end;
+    AIdxs := LIdxs.ToArray;
+    ANames:= LNames.ToArray;
+  finally
+    LNames.Free;
+    LIdxs.Free;
+  end;
+end;
+
+function SplitChainPlan(ABook: TRuleBook; const AChains: TArray<TRuleChain>): TChainSplit;
+var
+  LStage  : TDictionary<Integer, Integer>;
+  LBlocks : TRuleBlocks;
+  LI      : Integer;
+  LNo     : Integer;
+  LMax    : Integer;
+begin
+  LStage:= TDictionary<Integer, Integer>.Create;
+  try
+    AssignChainStages(ABook, AChains, LStage);
+    LMax:= 1;
+    for LNo in LStage.Values do
+      if LNo > LMax then
+        LMax:= LNo;
+    SetLength(Result.Stages, LMax);
+    SetLength(Result.Mappings, LMax);
+    LBlocks:= SplitRulesBlocks(ABook.SaveToString);
+    for LI:= 1 to LMax do
+      CollectChainStage(ABook, LStage, LBlocks, LI, Result.Stages[LI - 1], Result.Mappings[LI - 1]);
+  finally
+    LStage.Free;
+  end;
+end;
+function StageBookPath(const ABookPath: string; AStage: Integer): string;
+begin
+  Result:= ChangeFileExt(ABookPath, '') + '.stage' + IntToStr(AStage) + ExtractFileExt(ABookPath);
+end;
+
+// Positions in ABlocks of the rbkConvert blocks whose header node is in AHeaderIdx.
+function ChainBlockPositions(const ABlocks: TRuleBlocks; const AHeaderIdx: TArray<Integer>): TArray<Integer>;
+var
+  LI, LJ: Integer;
+begin
+  Result:= nil;
+  for LI:= 0 to High(ABlocks) do
+    if ABlocks[LI].Kind = rbkConvert then
+      for LJ:= 0 to High(AHeaderIdx) do
+        if ABlocks[LI].StartLine - 1 = AHeaderIdx[LJ] then
+        begin
+          Result:= Result + [LI];
+          Break;
+        end;
+end;
+
+function StageBookText(ABook: TRuleBook; const AHeaderIdx: TArray<Integer>; const AMappings: TArray<string>): string;
+var
+  LBlocks : TRuleBlocks;
+  LPos    : TArray<Integer>;
+  LName   : string;
+  LNode   : TRuleNode;
+  LI      : Integer;
+  LBuilder: TStringBuilder;
+begin
+  LBuilder:= TStringBuilder.Create;
+  try
+    if ABook.DepthState = bdsValid then
+      LBuilder.Append('#depth ').Append(ABook.Depth).Append(#13#10);
+    for LName in AMappings do
+      for LNode in ABook.MappingNodesNamed(LName) do
+        LBuilder.Append(LNode.Emit).Append(#13#10);
+    LBlocks:= SplitRulesBlocks(ABook.SaveToString);
+    LPos   := ChainBlockPositions(LBlocks, AHeaderIdx);
+    for LI:= 0 to High(LPos) do
+      LBuilder.Append(EnsureTrailingEol(LBlocks[LPos[LI]]).RawText);
+    Result:= LBuilder.ToString;
+  finally
+    LBuilder.Free;
+  end;
+end;
+function RemainingBookText(ABook: TRuleBook; const AMovedHeaderIdx: TArray<Integer>): string;
+var
+  LBlocks, LRemaining, LMoved: TRuleBlocks;
+begin
+  LBlocks:= SplitRulesBlocks(ABook.SaveToString);
+  SplitOut(LBlocks, ChainBlockPositions(LBlocks, AMovedHeaderIdx), LRemaining, LMoved);
+  Result:= JoinBlocks(LRemaining);
+end;
+
+function SplitStatusText(const ABookPath: string; const AStageFiles: TArray<string>; AMoved: Integer; const AMappings: TArray<string>): string;
+var
+  LNames: TArray<string>;
+  LI    : Integer;
+begin
+  SetLength(LNames, Length(AStageFiles));
+  for LI:= 0 to High(AStageFiles) do
+    LNames[LI]:= ExtractFileName(AStageFiles[LI]);
+  Result:= Format('Split %d block(s) into %s -- convert with %s first, then %s (check both on the Convert tab, in that order)',
+    [AMoved, string.Join(', ', LNames), ExtractFileName(ABookPath), string.Join(', then ', LNames)]);
+  if Length(AMappings) > 0 then
+    Result:= Result + '; copied #mapping ' + string.Join(', ', AMappings) + ' into the stage book';
 end;
 
 end.

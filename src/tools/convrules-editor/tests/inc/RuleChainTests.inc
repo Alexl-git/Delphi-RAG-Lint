@@ -194,5 +194,79 @@ end;
 
 // ---- Task 3 (split) block: TestRuleChainsSplit, filled by CHAIN-1 Task 3 ----
 procedure TestRuleChainsSplit;
+const
+  THREE = '#convert TA -> TB' + CHAIN_CRLF + '#link x <- y' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x'
+    + CHAIN_CRLF + '#convert TC -> TD' + CHAIN_CRLF + '#link w <- z';
+  MAPPED = '#mapping M from E.TEnum to TC' + CHAIN_CRLF + '#convert TA -> TB' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#apply M';
+var
+  Books: TObjectList<TRuleBook>;
+  Book : TRuleBook;
+  P    : TChainSplit;
+
+  function Plan(const AText: string): TChainSplit;
+  begin
+    Book:= ChainMakeBook(Books, AText);
+    Result:= SplitChainPlan(Book, FindRuleChains(Book));
+  end;
+
+  // '[0,1];[2]' -- Stages as text.
+  function StagesText(const ASplit: TChainSplit): string;
+  var
+    LI, LJ: Integer;
+  begin
+    Result:= '';
+    for LI:= 0 to High(ASplit.Stages) do
+    begin
+      Result:= Result + IfThen(LI > 0, ';', '') + '[';
+      for LJ:= 0 to High(ASplit.Stages[LI]) do
+        Result:= Result + IfThen(LJ > 0, ',', '') + IntToStr(ASplit.Stages[LI][LJ]);
+      Result:= Result + ']';
+    end;
+  end;
+
 begin
+  Books:= TObjectList<TRuleBook>.Create(True);
+  try
+    Check('chains.split.path', (StageBookPath('C:\x\Book.rules', 2) = 'C:\x\Book.stage2.rules')
+      and EndsText('.stage3.rules', StageBookPath('C:\x\Book.rules', 3)), StageBookPath('C:\x\Book.rules', 2));
+    P:= Plan(CHAIN_BOOK_CHAIN);
+    Check('chains.split.stages.two', StagesText(P) = '[0];[2]', StagesText(P));
+    P:= Plan(THREE);
+    Check('chains.split.stages.three', StagesText(P) = '[0];[2];[4]', StagesText(P));
+    P:= Plan(CHAIN_BOOK_SHARED);
+    Check('chains.split.stages.shared', StagesText(P) = '[0,1];[2]', StagesText(P));
+    P:= Plan(CHAIN_BOOK_INTO_CYCLE);
+    Check('chains.split.cycle.stays', (Length(P.Stages) = 1) and (StagesText(P) = '[0,1,2]'), StagesText(P));
+    P:= Plan(CHAIN_BOOK_DUP);
+    Check('chains.split.dup.stays', StagesText(P) = '[0,2]', StagesText(P));
+    P:= Plan(MAPPED);
+    Check('chains.split.mappings', (StagesText(P) = '[1];[2]') and (Length(P.Mappings[0]) = 0) and (Length(P.Mappings[1]) = 1)
+      and (P.Mappings[1][0] = 'M'), StagesText(P));
+
+    Book:= ChainMakeBook(Books, '#depth 3' + CHAIN_CRLF + CHAIN_BOOK_CHAIN);
+    Check('chains.split.text.depth', StartsText('#depth 3' + CHAIN_CRLF, StageBookText(Book, [3], nil)), StageBookText(Book, [3], nil));
+    Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
+    Check('chains.split.text.blocks', StageBookText(Book, [2], nil) = '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x' + CHAIN_CRLF,
+      StageBookText(Book, [2], nil));
+    Book:= ChainMakeBook(Books, '#depth 2' + CHAIN_CRLF + MAPPED);
+    Check('chains.split.text.mappings',
+      StageBookText(Book, [3], ['M']) = '#depth 2' + CHAIN_CRLF + '#mapping M from E.TEnum to TC' + CHAIN_CRLF
+        + '#convert TB -> TC' + CHAIN_CRLF + '#apply M' + CHAIN_CRLF, StageBookText(Book, [3], ['M']));
+    Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
+    Check('chains.split.remaining', RemainingBookText(Book, [2]) = '#convert TA -> TB' + CHAIN_CRLF + '#link x <- y' + CHAIN_CRLF,
+      RemainingBookText(Book, [2]));
+    Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN + CHAIN_CRLF + '#migrate M -> N');
+    Check('chains.split.remaining.trailer', EndsText('#migrate M -> N', Trim(RemainingBookText(Book, [2]))) and (Pos('TB -> TC', RemainingBookText(Book, [2])) = 0),
+      RemainingBookText(Book, [2]));
+    Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
+    Check('chains.split.roundtrip', TrimRight(RemainingBookText(Book, [2]) + StageBookText(Book, [2], nil)) = TrimRight(Book.SaveToString),
+      RemainingBookText(Book, [2]) + StageBookText(Book, [2], nil));
+    Check('chains.split.status', SplitStatusText('C:\x\Book.rules', ['C:\x\Book.stage2.rules'], 2, nil)
+      = 'Split 2 block(s) into Book.stage2.rules -- convert with Book.rules first, then Book.stage2.rules (check both on the Convert tab, in that order)',
+      SplitStatusText('C:\x\Book.rules', ['C:\x\Book.stage2.rules'], 2, nil));
+    Check('chains.split.status.mappings', EndsText('; copied #mapping M1, M2 into the stage book',
+      SplitStatusText('C:\x\Book.rules', ['C:\x\Book.stage2.rules'], 1, ['M1', 'M2'])), 'mapping tail');
+  finally
+    Books.Free;
+  end;
 end;
