@@ -15849,6 +15849,16 @@ begin
   Check('probe.case.unknown', (ProbeCaseFor('') = pcVersionUnknown) and (ProbeCaseFor('garbage') = pcVersionUnknown));
 end;
 
+procedure TestFieldRefsGate;
+begin
+  Check('ndgate.min.version', FIELD_REFS_MIN_ENGINE_VERSION = '1.35.1');
+  Check('ndgate.ok.at.min', FieldRefsGateNote('1.35.1-alpha') = '');
+  Check('ndgate.ok.newer', (FieldRefsGateNote('1.36.0-alpha') = '') and (FieldRefsGateNote('2.0.0') = ''));
+  Check('ndgate.old.says.so', (FieldRefsGateNote('1.35.0-alpha') <> '') and (FieldRefsGateNote('1.28.3') <> ''));
+  Check('ndgate.old.names.versions', ContainsText(FieldRefsGateNote('1.35.0-alpha'), '1.35.0-alpha') and ContainsText(FieldRefsGateNote('1.35.0-alpha'), '1.35.1'));
+  Check('ndgate.unknown.is.not.trusted', (FieldRefsGateNote('') <> '') and (FieldRefsGateNote('garbage') <> ''));
+end;
+
 procedure TestCapabilityProbeAnswers;
 const
   INFO_OUT = '(loaded defaults)' + sLineBreak + '{"schema":"info/1","version":"1.33.0-alpha","capabilities":{"pas_uses":true,"cli_verbs":61,"batch_units":true,"glyph_stitch":false}}';
@@ -15915,6 +15925,7 @@ end;
 procedure TestCapabilityProbe;
 begin
   TestCapabilityProbeVersions;
+  TestFieldRefsGate;
   TestCapabilityProbeAnswers;
   TestCapabilityProbeTexts;
 end;
