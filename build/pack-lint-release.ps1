@@ -73,6 +73,17 @@ if (($LASTEXITCODE -ne 0) -or -not ($edOut | Select-String -SimpleMatch "BUILD_E
 }
 Write-Host "ConvRulesEditor: built Win64"
 
+# drag-lint-switch.exe (Win64 only: the .dproj has no Win32 platform). Built Release and
+# staged into dll-win64 through stage-engine.ps1 like the engine, so the deployed copy
+# never goes stale again (it lacked --params / --vscode on 2026-10-27).
+$swProj = Join-Path $repo "src\tools\lsp-switch\drag-lint-switch.dproj"
+$swOut = cmd /c "$rs && msbuild /t:Build /p:Config=Release /p:Platform=Win64 /v:minimal `"$swProj`"" 2>&1
+$swErr = $swOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
+if ($swErr) { Write-Host "drag-lint-switch BUILD FAILED:"; $swErr | Select-Object -First 10; exit 1 }
+& pwsh -NoProfile -File (Join-Path $repo "build\stage-engine.ps1") -FreshExe (Join-Path $repo "src\tools\lsp-switch\Win64\Release\drag-lint-switch.exe") -Target (Join-Path $repo "third_party\dll-win64\drag-lint-switch.exe")
+if ($LASTEXITCODE -ne 0) { Write-Host "PACK STOPPED: could not stage drag-lint-switch.exe into third_party\dll-win64"; exit 1 }
+Write-Host "drag-lint-switch: built Win64"
+
 }  # end -SkipBuild
 
 $rel = "C:\TEMP\rel-$Version"
@@ -140,11 +151,13 @@ foreach ($plat in 'win64','win32') {
 
   if ($plat -eq 'win64') {
     Copy-Item (Join-Path $repo "src\tools\convrules-editor\ConvRulesEditor.exe") $stg
+    Copy-Item (Join-Path $repo "third_party\dll-win64\drag-lint-switch.exe") $stg
     # The manual documents a GUI, so it ships only where the GUI does -- a manual
     # for an exe that is not in the archive is worse than no manual.
     Copy-Item (Join-Path $repo "docs\converter\convrules-editor-manual.md") (Join-Path $stg "docs\converter")
   } else {
     Write-Host "  note: ConvRulesEditor.exe is Win64-only -- omitted from the win32 archive" -ForegroundColor Yellow
+    Write-Host "  note: drag-lint-switch.exe is Win64-only (no Win32 platform in its .dproj) -- omitted from the win32 archive" -ForegroundColor Yellow
   }
   $z = Join-Path $rel "drag-lint-v$Version-$plat.zip"
   Compress-Archive -Path $stg -DestinationPath $z
@@ -158,13 +171,13 @@ foreach ($plat in 'win64','win32') {
     try { $names = @($zf.Entries | ForEach-Object { $_.FullName.Replace('\','/') }) }
     finally { $zf.Dispose() }
     $root = "drag-lint-v$Version-$plat"
-    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','sqlite3.dll') {
+    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','drag-lint-switch.exe','sqlite3.dll') {
       if ($names -notcontains "$root/$need") {
         Write-Host "PACK FAILED: $z does not contain $root/$need" -ForegroundColor Red
         exit 1
       }
     }
-    Write-Host "  verified: win64 zip holds drag-lint.exe and ConvRulesEditor.exe"
+    Write-Host "  verified: win64 zip holds drag-lint.exe, ConvRulesEditor.exe and drag-lint-switch.exe"
   }
   $zips += $z
 }
