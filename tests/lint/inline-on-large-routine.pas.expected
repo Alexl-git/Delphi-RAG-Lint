@@ -1,0 +1,18 @@
+# inline-on-large-routine: a routine declared `inline` whose defProc has MORE
+# than 20 lines (threshold param, default 20; header to end) or contains a try
+# statement. The finding anchors on the defProc header line. The `inline`
+# directive sits on the interface declaration, so the checker pairs the
+# declProc and defProc by bare name.
+# Line 14 Tiny: 4 lines, no try -> not flagged.
+!inline-on-large-routine 14
+# Line 19 WithTry: contains try -> FLAGGED.
+inline-on-large-routine 19
+# Line 28 Long: 24 lines -> FLAGGED.
+inline-on-large-routine 28
+# Line 53 Edge: 20 lines exactly (just below: not above threshold) -> not flagged.
+!inline-on-large-routine 53
+# Line 74 NotInline: has try but is not inline -> not flagged.
+!inline-on-large-routine 74
+# Line 88 Ovl(A, B): has try and shares the bare name with an inline overload (line 83);
+# the declProc/defProc pairing is ambiguous -> not flagged.
+!inline-on-large-routine 88

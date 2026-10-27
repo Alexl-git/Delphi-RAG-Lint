@@ -1,0 +1,9 @@
+# too-many-bool-fields: a class with MORE than 5 Boolean fields (threshold
+# param, default 5; counts every name in a multi-name field). OFF by default --
+# run with too-many-bool-fields.config.json. Records are not flagged.
+# Line 5 TFlags: 6 Boolean fields (FA, FB, FC, FD, FE, FF) -> FLAGGED on the class name line.
+too-many-bool-fields 5
+# Line 15 TJustBelow: exactly 5 Boolean fields, not above threshold -> not flagged.
+!too-many-bool-fields 15
+# Line 25 TRec: a record with 7 Booleans is a flag set by design -> not flagged.
+!too-many-bool-fields 25
