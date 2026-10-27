@@ -1,24 +1,37 @@
 <#
-  run_enum_bare_read_scoped.ps1 -- X4: the $SCOPEDENUMS fact on enum types and
-  the rule `enum-bare-read-scoped` (docs\INBOX-new-rules-from-graph-and-converter-
-  facts.md item A3).
+  run_enum_bare_read_scoped.ps1 -- the $SCOPEDENUMS fact on enum types (X4) and
+  the rule `enum-bare-read-scoped`, RETARGETED 2026-10-26 (owner ruling, lane
+  XT-SCOPED) after E14 made the resolver decline a bare scoped read.
 
   THE FACT. Under the SCOPEDENUMS ON switch Delphi does NOT add an enum's values
   to the enclosing scope: `TFoo.Value` is the only spelling that compiles. The
-  extractor now records the switch state in force at each enum TYPE declaration
-  as symbols.directives = 'scopedenums' (empty otherwise). The switch is read
-  from the text the parser sees, which is the PREPROCESSED text: a switch inside
-  an inactive conditional branch is blanked and must not count, and neither may
-  one inside a // or brace comment.
+  extractor records the switch state in force at each enum TYPE declaration as
+  symbols.directives = 'scopedenums' (empty otherwise), read from PREPROCESSED
+  text: a switch in an inactive branch or inside a comment does not count.
 
-  THE RULE. A BARE read (no receiver, no qualifier) that the index bound to a
-  value of a scoped enum cannot be what the compiler binds -- the bare name is
-  either something else of the same name or code that does not compile. Either
-  way the index's binding is wrong and the reader must verify it.
+  THE RULE. A BARE read (no receiver) whose name is the name of a value of a
+  scoped enum VISIBLE from the site (declared in the same unit or in a unit the
+  file uses):
+   (a) WARNING when the index bound it to ANOTHER symbol (unit const/var,
+       field or property of the class or an ancestor, local) AND the types say
+       the enum may have been meant (owner ruling 2026-10-26, type match):
+       (i) that symbol is OF the scoped enum type, or (ii) the site's target
+       is typed as the enum -- the LHS of `:=`, or the other operand of
+       `=`/`<>`/`in` (set of the enum). A target the index cannot type (an
+       argument, a statement split over lines) is NOT warned: no guessing;
+   (b) HINT when it stayed UNBOUND and no other symbol carries the name:
+       under SCOPEDENUMS ON it does not compile (E2003); write TEnum.Value.
+  Short un-prefixed values (TSeAlign.Left/Client/Top) are covered.
+  NOT a finding: the qualified form, a value of a non-scoped enum, a scoped
+  enum in a unit the site does not use, a const that ALIASES the scoped value
+  (`X = TEnum.X`, the Vcl.Dialogs compatibility idiom), an UNBOUND bare name that another
+  symbol also carries (the resolver declined for its own reason -- an untypable
+  with target -- not E2003), a site in an inactive
+  branch (the index has no ref there).
 
-  Positive AND negative controls; a precondition pins that the positive site is
-  really BOUND to the enum value, so a silent rule cannot pass for the wrong
-  reason. Run from a NEUTRAL CWD, pwsh 7.
+  Each positive is located by a {#tag} marker on its line; a precondition pins
+  each (a) site's binding, so a silent rule cannot pass for the wrong reason.
+  Run from a NEUTRAL CWD, pwsh 7.
 #>
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
@@ -40,12 +53,20 @@ $WorkDir = Join-Path $WorkDir ([guid]::NewGuid().ToString('N'))
 $srcDir = Join-Path $WorkDir 'src'
 New-Item -ItemType Directory $srcDir -Force | Out-Null
 
+$script:Texts = @{}
 function Emit([string]$name, [string]$text) {
+  $script:Texts[$name] = ($text -replace "`r`n", "`n")
   [System.IO.File]::WriteAllText((Join-Path $srcDir $name),
     (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [System.Text.Encoding]::ASCII)
 }
+# 1-based line of the line carrying {#tag} in a fixture; FATAL when absent or doubled.
+function LineOf([string]$file, [string]$tag) {
+  $ls = $script:Texts[$file] -split "`n"
+  $hit = @(for ($i = 0; $i -lt $ls.Count; $i++) { if ($ls[$i].Contains('{#' + $tag + '}')) { $i + 1 } })
+  if ($hit.Count -ne 1) { Write-Host "FATAL: marker $tag found $($hit.Count)x in $file" -ForegroundColor Red; exit 2 }
+  $hit[0]
+}
 
-# Line numbers matter for the reader only; the assertions key on type names.
 Emit 'uSeTypes.pas' @'
 unit uSeTypes;
 interface
@@ -53,6 +74,8 @@ type
   TSePlain = (spAlpha, spBeta);
 {$SCOPEDENUMS ON}
   TSeScoped = (ssAlpha, ssBeta);
+  TSeColor = (csOne, csTwo, csThree, csFour, csFive, csSix, csSeven, csProp, csAlias, csAliasIn, csAliasHere, csWith, csSame);
+  TSeAlign = (Left, Client, Top);
 {$SCOPEDENUMS OFF}
   TSeAfter = (saAlpha, saBeta);
 {$IFDEF X4_NEVER_DEFINED}
@@ -64,24 +87,62 @@ type
   TSeComment = (scAlpha, scBeta);
 (*$scopedenums on*)
   TSeParen = (sxAlpha, sxBeta);
+const
+  csAlias = TSeColor.csAlias;
+  csAliasIn = uSeTypes.TSeColor.csAliasIn;
 implementation
 end.
 '@
 
-# Line numbers matter: the assertions match on them.
-#   15  POSITIVE: bare ssAlpha, TSeScoped is scoped
-#   16  NEG: qualified TSeScoped.ssBeta
-#   21  NEG: qualified TSeScoped.ssAlpha
-#   27  NEG: bare spAlpha, TSePlain is not scoped
-#   33  NEG: bare saAlpha, scoping switched OFF again
-#   39  NEG: bare siAlpha, the ON switch sits in an inactive IFDEF branch
-#   45  NEG: bare scAlpha, the ON text is only inside comments
-#   51  POSITIVE: bare sxAlpha, TSeParen is scoped by the (*$ *) spelling
-#   52  NEG: qualified TSeParen.sxBeta
+# A scoped enum in a unit uSeUse does NOT use: its names are not visible there.
+Emit 'uSeHidden.pas' @'
+unit uSeHidden;
+interface
+{$SCOPEDENUMS ON}
+type
+  TSeHidden = (shOnly, shTwo);
+implementation
+end.
+'@
+
+# A unit-level const/var and an ancestor class in a used unit: the (a) targets.
+Emit 'uSeBase.pas' @'
+unit uSeBase;
+interface
+type
+  TSeRec = record
+    csWith: Integer;
+  end;
+  TSeBase = class
+  protected
+    csThree: Integer;
+    FProp: Integer;
+    property csProp: Integer read FProp;
+    property Left: Integer read FProp;
+    property Top: Integer read FProp;
+    FAlign: TSeAlign;
+    property Client: TSeAlign read FAlign;
+  end;
+implementation
+end.
+'@
+
 Emit 'uSeUse.pas' @'
 unit uSeUse;
 interface
-uses uSeTypes;
+uses uSeTypes, uSeBase;
+const
+  csOne = 1;
+  csAliasHere = uSeTypes.TSeColor.csAliasHere;
+var
+  csTwo: Integer;
+  csSame: TSeColor;
+type
+  TSeDerived = class(TSeBase)
+    csFour: Integer;
+    procedure UseThem;
+  end;
+procedure TakeColor(V: TSeColor);
 procedure BareScoped;
 procedure Qualified;
 procedure BarePlain;
@@ -90,47 +151,86 @@ procedure BareIfdef;
 procedure BareComment;
 procedure BareParen;
 implementation
+procedure TSeDerived.UseThem;
+var
+  csFive: Integer;
+  K: Integer;
+  X: TSeColor;
+  A: TSeAlign;
+  XS: set of TSeColor;
+begin
+  XS := [];
+  X := csOne; {#A_CONST}
+  X := csTwo; {#A_VAR}
+  X := csThree; {#A_ANCFIELD}
+  X := csProp; {#A_ANCPROP}
+  X := csFour; {#A_FIELD}
+  csFive := 0;
+  X := csFive; {#A_LOCAL}
+  K := csOne; {#N_INTTARGET}
+  TakeColor(csTwo); {#N_ARG_UNTYPED}
+  K := Ord(csSame); {#A_SAMETYPE_VAR}
+  A := Client; {#A_SAMETYPE_PROP}
+  A := Top; {#A_ENUMTARGET}
+  if A = Top then Exit; {#A_ENUMCMP}
+  X := csSix; {#B_UNBOUND}
+  X := TSeColor.csSeven; {#N_QUAL}
+  X := csAlias; {#N_ALIAS}
+  if csAliasIn in XS then Exit; {#N_ALIAS_IN}
+  if csAliasHere in XS then Exit; {#N_ALIAS_HERE}
+  K := shOnly; {#N_HIDDEN}
+  K := Left; {#N_UNPREFIXED_BOUND}
+  with NotDeclaredAnywhere do
+    K := csWith; {#N_UNBOUND_OTHER}
+{$IFDEF X4_NEVER_DEFINED}
+  X := csSeven; {#N_INACTIVE}
+{$ENDIF}
+  if K = Ord(X) then Exit;
+end;
+procedure TakeColor(V: TSeColor);
+begin
+end;
 procedure BareScoped;
 var E: TSeScoped;
 begin
-  E := ssAlpha;
-  if E = TSeScoped.ssBeta then Exit;
+  E := ssAlpha; {#B_SSALPHA}
+  if E = TSeScoped.ssBeta then Exit; {#N_QUAL2}
 end;
 procedure Qualified;
 var E: TSeScoped;
 begin
-  E := TSeScoped.ssAlpha;
+  E := TSeScoped.ssAlpha; {#N_QUAL3}
   if E = TSeScoped.ssBeta then Exit;
 end;
 procedure BarePlain;
 var P: TSePlain;
 begin
-  P := spAlpha;
+  P := spAlpha; {#N_PLAIN}
   if P = spBeta then Exit;
 end;
 procedure BareAfterOff;
 var A: TSeAfter;
 begin
-  A := saAlpha;
+  A := saAlpha; {#N_AFTEROFF}
   if A = saBeta then Exit;
 end;
 procedure BareIfdef;
 var I: TSeIfdef;
 begin
-  I := siAlpha;
+  I := siAlpha; {#N_IFDEFSWITCH}
   if I = siBeta then Exit;
 end;
 procedure BareComment;
 var C: TSeComment;
 begin
-  C := scAlpha;
+  C := scAlpha; {#N_COMMENTSWITCH}
   if C = scBeta then Exit;
 end;
 procedure BareParen;
 var X: TSeParen;
 begin
-  X := sxAlpha;
-  if X = TSeParen.sxBeta then Exit;
+  X := sxAlpha; {#B_SXALPHA}
+  if X = TSeParen.sxBeta then Exit; {#N_QUAL4}
 end;
 end.
 '@
@@ -155,9 +255,9 @@ try {
   }
   $facts   = & $Exe sql --db $db --query ("select name || '=' || coalesce(directives, '') from symbols " +
                                           "where kind = 'enum' order by name") 2>&1 | Out-String
-  $bind13  = & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name || ':' || coalesce(r.receiver_text, '') " +
-                                          "from refs r join symbols s on s.id = r.symbol_id " +
-                                          "where r.name_text = 'ssAlpha' and r.start_line = 15") 2>&1 | Out-String
+  $binds   = & $Exe sql --db $db --query ("select r.start_line || '|' || r.name_text || '|' || coalesce(s.kind || ':' || s.qualified_name, 'NULL') " +
+                                          "from refs r join files f on f.id = r.file_id left join symbols s on s.id = r.symbol_id " +
+                                          "where f.path like '%uSeUse.pas' and r.kind = 'read' and coalesce(r.receiver_text, '') = ''") 2>&1 | Out-String
   $onOut   = & $Exe lint-all --db $db --quiet 2>&1 | Out-String
   $offOut  = & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | Out-String
   $fileOut = & $Exe lint $useSrc --db $db --rule enum-bare-read-scoped --quiet 2>&1 | Out-String
@@ -168,10 +268,16 @@ function FactOf([string]$type) {
   $m = [regex]::Match($facts, '(?m)^\s*' + $type + '=(\S*)\s*$')
   if ($m.Success) { $m.Groups[1].Value } else { '<missing>' }
 }
-$lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'enum-bare-read-scoped' })
-function HitAt([string]$text, [int]$line) {
-  @($text -split "`r?`n" | Where-Object { $_ -match 'enum-bare-read-scoped' -and $_ -match ('uSeUse\.pas:' + $line + ':') })
+function BindOf([int]$line, [string]$name) {
+  $m = [regex]::Match($binds, '(?m)^\s*' + $line + '\|' + $name + '\|(\S+)\s*$')
+  if ($m.Success) { $m.Groups[1].Value } else { '<no ref>' }
 }
+$lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'enum-bare-read-scoped' })
+function HitAt([string]$text, [string]$tag) {
+  $ln = LineOf 'uSeUse.pas' $tag
+  @($text -split "`r?`n" | Where-Object { $_ -match 'enum-bare-read-scoped' -and $_ -match ('uSeUse\.pas:' + $ln + ':') })
+}
+function L([string]$tag) { LineOf 'uSeUse.pas' $tag }
 
 Write-Host ''
 Write-Host 'THE FACT -- symbols.directives on each enum type' -ForegroundColor Cyan
@@ -183,28 +289,52 @@ Check 'NEG: TSeIfdef (ON only in an inactive IFDEF branch) carries nothing' ((Fa
 Check 'NEG: TSeComment (ON only inside comments) carries nothing' ((FactOf 'TSeComment') -eq '') (FactOf 'TSeComment')
 
 Write-Host ''
-Write-Host 'E14 (1.36.0) -- the resolver now DECLINES the bare scoped read' -ForegroundColor Cyan
-# Until E14 the index bound `E := ssAlpha` to the scoped value and this rule
-# flagged that wrong edge. The resolver now declines it (TEnumValueDecl.Scoped;
-# guard run_enum_scoped_decline.ps1), so the rule has no input left on a fresh
-# index: its positives below are inverted DELIBERATELY, not weakened. Whether
-# the rule is retired or retargeted (e.g. at the unbound bare read) is an owner
-# decision recorded in the E14 lane report.
-Check 'line 15 ssAlpha is NOT bound (E14 decline)' ($bind13 -notmatch 'enum_value:') ($bind13.Trim())
-$h13 = HitAt $onOut 15
-Check 'BARE SCOPED: E := ssAlpha no longer fires (nothing bound)' ($h13.Count -eq 0) ("got " + $h13.Count + " of " + $lines.Count + " total")
-Check 'BARE SCOPED (*$ *) spelling: X := sxAlpha no longer fires' ((HitAt $onOut 51).Count -eq 0) ''
-Check 'single-file lint --rule agrees: silent on both' `
-  (((HitAt $fileOut 15).Count -eq 0) -and ((HitAt $fileOut 51).Count -eq 0)) ''
+Write-Host 'PRECONDITIONS -- what the index bound each site to' -ForegroundColor Cyan
+Check 'A_CONST csOne binds to the unit const' ((BindOf (L 'A_CONST') 'csOne') -eq 'const:uSeUse.csOne') (BindOf (L 'A_CONST') 'csOne')
+Check 'A_VAR csTwo binds to the unit var' ((BindOf (L 'A_VAR') 'csTwo') -match '^(var|variable):uSeUse\.csTwo$') (BindOf (L 'A_VAR') 'csTwo')
+Check 'A_ANCFIELD csThree binds to the ANCESTOR field' ((BindOf (L 'A_ANCFIELD') 'csThree') -match '^field:uSeBase\.TSeBase\.csThree$') (BindOf (L 'A_ANCFIELD') 'csThree')
+Check 'A_ANCPROP csProp binds to the ANCESTOR property' ((BindOf (L 'A_ANCPROP') 'csProp') -match '^property:uSeBase\.TSeBase\.csProp$') (BindOf (L 'A_ANCPROP') 'csProp')
+Check 'A_FIELD csFour binds to the own field' ((BindOf (L 'A_FIELD') 'csFour') -match '^field:uSeUse\.TSeDerived\.csFour$') (BindOf (L 'A_FIELD') 'csFour')
+Check 'A_LOCAL csFive binds to the local' ((BindOf (L 'A_LOCAL') 'csFive') -match '^local_var:') (BindOf (L 'A_LOCAL') 'csFive')
+Check 'B_UNBOUND csSix is NOT bound (E14 decline)' ((BindOf (L 'B_UNBOUND') 'csSix') -eq 'NULL') (BindOf (L 'B_UNBOUND') 'csSix')
+Check 'N_ALIAS csAlias binds to the aliasing const' ((BindOf (L 'N_ALIAS') 'csAlias') -eq 'const:uSeTypes.csAlias') (BindOf (L 'N_ALIAS') 'csAlias')
+Check 'N_UNPREFIXED_BOUND Left binds to the ancestor property' ((BindOf (L 'N_UNPREFIXED_BOUND') 'Left') -eq 'property:uSeBase.TSeBase.Left') (BindOf (L 'N_UNPREFIXED_BOUND') 'Left')
+Check 'A_SAMETYPE_PROP Client binds to the TSeAlign-typed property' ((BindOf (L 'A_SAMETYPE_PROP') 'Client') -eq 'property:uSeBase.TSeBase.Client') (BindOf (L 'A_SAMETYPE_PROP') 'Client')
+Check 'A_ENUMTARGET Top binds to the Integer property' ((BindOf (L 'A_ENUMTARGET') 'Top') -eq 'property:uSeBase.TSeBase.Top') (BindOf (L 'A_ENUMTARGET') 'Top')
+Check 'N_UNBOUND_OTHER csWith (under an untypable with) is NOT bound' ((BindOf (L 'N_UNBOUND_OTHER') 'csWith') -eq 'NULL') (BindOf (L 'N_UNBOUND_OTHER') 'csWith')
+Check 'N_INACTIVE: the index has no ref in the inactive branch' ((BindOf (L 'N_INACTIVE') 'csSeven') -eq '<no ref>') (BindOf (L 'N_INACTIVE') 'csSeven')
+
+Write-Host ''
+Write-Host '(a) WARNING -- the bare name binds to ANOTHER symbol' -ForegroundColor Cyan
+foreach ($t in @('A_CONST', 'A_VAR', 'A_ANCFIELD', 'A_ANCPROP', 'A_FIELD', 'A_LOCAL',
+                 'A_SAMETYPE_VAR', 'A_SAMETYPE_PROP', 'A_ENUMTARGET', 'A_ENUMCMP')) {
+  $h = @(HitAt $onOut $t)
+  Check "$t fires exactly once, as a warning naming the enum value" (($h.Count -eq 1) -and ($h[0] -match 'warning') -and ($h[0] -match 'TSe(Color|Align)\.')) (($h -join ' | ').Trim())
+}
+$hc = @(HitAt $onOut 'A_CONST')
+Check 'A_CONST message names what it binds to and the meant value' `
+  (($hc.Count -eq 1) -and ($hc[0] -match 'uSeUse\.csOne \(const\)') -and ($hc[0] -match 'write TSeColor\.csOne')) (($hc -join ' | ').Trim())
+
+Write-Host ''
+Write-Host '(b) HINT -- the bare name stays UNBOUND' -ForegroundColor Cyan
+foreach ($t in @('B_UNBOUND', 'B_SSALPHA', 'B_SXALPHA')) {
+  $h = @(HitAt $onOut $t)
+  Check "$t fires exactly once, as a hint" (($h.Count -eq 1) -and ($h[0] -match 'hint')) (($h -join ' | ').Trim())
+}
+$hb = @(HitAt $onOut 'B_UNBOUND')
+Check 'B_UNBOUND message says write TSeColor.csSix and E2003' `
+  (($hb.Count -eq 1) -and ($hb[0] -match 'write TSeColor\.csSix') -and ($hb[0] -match 'E2003')) (($hb -join ' | ').Trim())
+Check 'single-file lint --rule agrees on an (a) and a (b) site' `
+  (((HitAt $fileOut 'A_CONST').Count -eq 1) -and ((HitAt $fileOut 'B_UNBOUND').Count -eq 1)) ''
+
+Write-Host ''
 Write-Host 'THE NEGATIVE CONTROLS' -ForegroundColor Cyan
-Check 'QUALIFIED: TSeScoped.ssBeta (16) is SILENT' ((HitAt $onOut 16).Count -eq 0) ''
-Check 'QUALIFIED: TSeScoped.ssAlpha (21) is SILENT' ((HitAt $onOut 21).Count -eq 0) ''
-Check 'UNSCOPED: bare spAlpha (27) is SILENT' ((HitAt $onOut 27).Count -eq 0) ''
-Check 'SWITCHED OFF: bare saAlpha (33) is SILENT' ((HitAt $onOut 33).Count -eq 0) ''
-Check 'INACTIVE BRANCH: bare siAlpha (39) is SILENT' ((HitAt $onOut 39).Count -eq 0) ''
-Check 'COMMENT ONLY: bare scAlpha (45) is SILENT' ((HitAt $onOut 45).Count -eq 0) ''
-Check 'QUALIFIED: TSeParen.sxBeta (52) is SILENT' ((HitAt $onOut 52).Count -eq 0) ''
-Check 'nothing at all (was: exactly the two positives before E14)' ($lines.Count -eq 0) ("got " + $lines.Count)
+foreach ($t in @('N_QUAL', 'N_QUAL2', 'N_QUAL3', 'N_QUAL4', 'N_ALIAS', 'N_HIDDEN', 'N_INACTIVE',
+                 'N_UNPREFIXED_BOUND', 'N_INTTARGET', 'N_ARG_UNTYPED', 'N_ALIAS_IN', 'N_ALIAS_HERE', 'N_UNBOUND_OTHER',
+                 'N_PLAIN', 'N_AFTEROFF', 'N_IFDEFSWITCH', 'N_COMMENTSWITCH')) {
+  Check "$t is SILENT" ((HitAt $onOut $t).Count -eq 0) ''
+}
+Check 'total = the 13 positives, nothing else' ($lines.Count -eq 13) ("got " + $lines.Count)
 
 Write-Host ''
 Write-Host 'CATALOGUE + OFF SWITCH' -ForegroundColor Cyan

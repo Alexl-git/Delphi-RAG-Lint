@@ -190,7 +190,16 @@ Check 'no bare ref anywhere is bound to a scoped value' ($wrong -match '(?m)^\s*
 $evLn = (@(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' }) -join ' ')
 $gotScoped = if ($evLn -match 'scoped \(bare form unreachable\) (\d+)') { [int]$Matches[1] } else { -1 }
 Check 'the decline is COUNTED: scoped = 4 (L10, L13, L15, and L17 before the const pass binds it)' ($gotScoped -eq 4) ("scoped=$gotScoped line=$evLn")
-Check 'enum-bare-read-scoped has nothing left to report' (-not ($lintOut -match 'enum-bare-read-scoped')) ''
+# The rule was RETARGETED after E14 (lane XT-SCOPED, owner 2026-10-26): it now
+# reads the decline's OUTPUT -- a hint at each unbound bare scoped read, and a
+# warning only where the bare name binds to another symbol AND the types say the
+# enum may be meant (owner ruling 2026-10-26): L17 `K := ccOne` binds an untyped
+# Integer const into an Integer target, so it is silent.
+$ebr = @($lintOut -split "`r?`n" | Where-Object { $_ -match 'enum-bare-read-scoped' })
+function EbrAt([int]$ln, [string]$sev) { @($ebr | Where-Object { $_ -match ('uScUse\.pas:' + $ln + ':') -and $_ -match ('\[' + $sev + '\]') }).Count }
+Check 'enum-bare-read-scoped: hint at L10/L13/L15 (unbound), L17 silent (Integer const into Integer)' `
+  (((EbrAt 10 'hint') -eq 1) -and ((EbrAt 13 'hint') -eq 1) -and ((EbrAt 15 'hint') -eq 1) -and ((EbrAt 17 'warning') -eq 0)) ''
+Check 'enum-bare-read-scoped: nothing else (3 findings)' ($ebr.Count -eq 3) ("got " + $ebr.Count)
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
