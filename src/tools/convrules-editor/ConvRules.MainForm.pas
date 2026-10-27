@@ -4669,8 +4669,8 @@ begin
   FSavedLevel:= FBookLevel; // the freshly opened book is clean
   var LNote: string:= '';
   if not LDetected.Sure then
-    LNote:= ' -- ' + LDetected.Note;
-  var LLoaded: string:= Format('Loaded %s (%s)%s', [ExtractFileName(APath), LevelName(LDetected.Level), LNote]);
+    LNote:= LDetected.Note;
+  var LLoaded: string:= OpenedStatusText(APath, LDetected.Level, LNote, FBook.Nodes.Count, Length(FBook.ConvertHeaders));
   // LoadText's auto-select may have reported a failure (red): keep it beside ours.
   if FStatusIsError then
     SetError(LLoaded + ' -- ' + FLblStatus.Caption)

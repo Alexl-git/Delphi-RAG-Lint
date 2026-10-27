@@ -15925,6 +15925,7 @@ end;
 {$I inc\EncodingApplyTests.inc}
 {$I inc\EncodingTabTests.inc}
 {$I inc\EncodingPreRunTests.inc}
+{$I inc\OpenedStatusTests.inc}
 {$I inc\EncodingBookPlacesTests.inc}
 {$I inc\RunnerDecisionTests.inc}
 {$I inc\MigrateTests.inc}
@@ -16189,6 +16190,7 @@ begin
     TestEncodingApply;
     TestEncodingTab;
     TestEncodingPreRun;
+    TestOpenedStatusText;
     TestEncodingBookPlaces;
     TestMigrateModel;
     TestMigrateBdeTail;

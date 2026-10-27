@@ -79,6 +79,14 @@ function LevelRank(ALevel: TTextLevel): Integer;
 /// <returns>The display name.</returns>
 function LevelName(ALevel: TTextLevel): string;
 
+/// <summary>The status line after File > Open: book name, encoding and the counts, so the user still sees them.</summary>
+/// <param name="APath">The opened book's path; only the file name is shown.</param>
+/// <param name="ALevel">The detected encoding level.</param>
+/// <param name="ANote">Detection note appended after ' -- ' when not empty.</param>
+/// <param name="ALines">Number of lines (nodes) in the book.</param>
+/// <param name="ARules">Number of #convert rules in the book.</param>
+/// <returns>'Loaded Book.rules (ASCII-7): N line(s), N rule(s)' plus the optional note.</returns>
+function OpenedStatusText(const APath: string; ALevel: TTextLevel; const ANote: string; ALines, ARules: Integer): string;
 /// <summary>Inverse of <see cref="LevelName"/>, case-insensitive; 'ASCII-8' with any suffix.</summary>
 /// <returns>False (ALevel = tlAscii7) when the name is unknown.</returns>
 /// <param name="AName">A display name as produced by LevelName.</param>
@@ -203,6 +211,12 @@ begin
   end;
 end;
 
+function OpenedStatusText(const APath: string; ALevel: TTextLevel; const ANote: string; ALines, ARules: Integer): string;
+begin
+  Result:= Format('Loaded %s (%s): %d line(s), %d rule(s)', [ExtractFileName(APath), LevelName(ALevel), ALines, ARules]);
+  if ANote <> '' then
+    Result:= Result + ' -- ' + ANote;
+end;
 function LevelName(ALevel: TTextLevel): string;
 begin
   case ALevel of
