@@ -50,6 +50,10 @@ type
     procedure ListCarrier(const A: string);
     procedure ShellRecord(const A: string);
     procedure LambdaCapture(const A: string);
+    procedure ArgValueOnly;
+    procedure ArgRtlValue;
+    procedure ArgUnresolved;
+    procedure ArgTryGet(D: TObject);
   end;
 
 procedure Sink(const S: string);
@@ -215,6 +219,48 @@ begin
         Sink(S); { M-LAMBDA }
       end;
   P;
+end;
+
+{ argout cut (lane ARGOUT): a same-unit callee whose parameter at that position is
+  a value / const parameter cannot write the argument -- no argout row. }
+procedure TProbe.ArgValueOnly;
+var
+  N: string;
+begin
+  N:= ParamStr(1); { M-ARGVAL-SRC }
+  TrimParam(N);
+  Sink(N); { M-ARGVAL-SINK }
+end;
+
+{ a curated RTL routine with no var/out parameter (Trim) -- no argout row }
+procedure TProbe.ArgRtlValue;
+var
+  N, T: string;
+begin
+  N:= ParamStr(1);
+  T:= Trim(N);
+  Sink(N); { M-ARGRTL-SINK }
+end;
+
+{ a callee this unit does not declare and the RTL list does not know: the argout
+  row is KEPT (the linter resolves the callee and decides) }
+procedure TProbe.ArgUnresolved;
+var
+  N: string;
+begin
+  ExternalFill(N); { M-ARGUNRES-CALL }
+  Sink(N); { M-ARGUNRES-SINK }
+end;
+
+{ TryGetValue(const Key; out Value): position 1 only }
+procedure TProbe.ArgTryGet(D: TObject);
+var
+  K, V: string;
+begin
+  K:= ParamStr(1);
+  TDictionary<string, string>(D).TryGetValue(K, V); { M-ARGTRY-CALL }
+  Sink(K); { M-ARGTRY-K }
+  Sink(V); { M-ARGTRY-V }
 end;
 
 end.
