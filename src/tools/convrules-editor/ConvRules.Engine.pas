@@ -885,10 +885,8 @@ type
       function ListClassFields(const ADb, AClassName, APasPath: string; const AFromTypes: TArray<string>; out AFields: TArray<TEngineField>; out AError: string): Boolean;
       /// <summary>The identifiers used inside AClassName's methods in AUnitPas: refs of
       /// kind read / write / member-access / call whose enclosing routine's qualified
-      /// name contains '.AClassName.', and whose symbol is unresolved or a FIELD -- a
-      /// resolved local or parameter is not a field use, and neither is an unresolved
-      /// ref whose name (implicit-Self) or receiver is a local / parameter of the
-      /// enclosing routine -- one read-only `sql`.</summary>
+      /// name contains '.AClassName.', and whose symbol is a FIELD (an unresolved ref,
+      /// a local or a parameter is not a field use) -- one read-only `sql`.</summary>
       /// <param name="ADb">The PROJECT index.</param>
       /// <param name="AUnitPas">The unit's path as indexed (compared COLLATE NOCASE).</param>
       /// <param name="AClassName">The unit's form / data-module class.</param>
@@ -898,9 +896,11 @@ type
       /// AUnitPas is not in ADb's files (a second read, made only when no ref matched:
       /// an unindexed unit is unknown, never "no uses"). True with [] and no engine
       /// call when AClassName is not a plain identifier.</returns>
-      /// <remarks>Implicit-Self uses inside the class's own methods are UNRESOLVED in
-      /// the index (symbol_id NULL), so the filter is by enclosing class and name, not
-      /// by member_accesses (measured on DMTEST 2026-10-05).</remarks>
+      /// <remarks>Needs engine 1.35.1+: it binds implicit-Self uses of an inherited
+      /// field to the field, cross-unit (read, write, call / member receiver, argument,
+      /// Self., with) -- an older engine leaves them unresolved and this answers no uses.
+      /// A LIBRARY ancestor's member (TForm.Tag) is unresolved without the library store
+      /// and is not answered; C8 fields come from project-indexed ancestors only.</remarks>
       function ListCodeRefs(const ADb, AUnitPas, AClassName: string; out ARefs: TArray<TEngineCodeRef>; out AError: string): Boolean;
 
       /// <summary>The distinct component TYPES placed on AUnit's form, read from the
@@ -2377,12 +2377,13 @@ const
   CODE_REFS_SQL = 'SELECT r.name_text, COALESCE(r.receiver_text, ''''), r.start_line FROM refs r JOIN files f ON f.id = r.file_id '
     + 'JOIN symbols es ON es.id = r.enclosing_symbol_id LEFT JOIN symbols rs ON rs.id = r.symbol_id '
     + 'WHERE f.path = %s COLLATE NOCASE AND es.qualified_name LIKE ''%%.%s.%%'' '
-    + 'AND r.kind IN (''read'', ''write'', ''member-access'', ''call'') AND (r.symbol_id IS NULL OR rs.kind = ''field'') '
-    // The index leaves SOME uses of a local unresolved (1.21.1: `Tag:= Label2` reads a
-    // local Label2 with symbol_id NULL while `Label2:= 0` resolves), so a name the
-    // enclosing routine declares as a local or parameter is dropped by name too.
-    + 'AND NOT EXISTS (SELECT 1 FROM symbols l WHERE l.parent_id = r.enclosing_symbol_id AND l.kind IN (''local_var'', ''param'') '
-    + 'AND ((COALESCE(r.receiver_text, '''') = '''' AND l.name = r.name_text COLLATE NOCASE) OR l.name = r.receiver_text COLLATE NOCASE))';
+    // Engine 1.35.1 binds every implicit-Self use of an inherited project field to the
+    // field, cross-unit, and resolves locals / params (measured 2026-10-26), so a field
+    // use is a FIELD-resolved ref and nothing else; the old unresolved-ref read and its
+    // local / param name-drop are gone. A LIBRARY ancestor's member (TForm.Tag) stays
+    // unresolved without the library store, but C8 fields come from project-indexed
+    // ancestors only (ListClassFields), so such a member can never match one.
+    + 'AND r.kind IN (''read'', ''write'', ''member-access'', ''call'') AND rs.kind = ''field''';
   FILE_INDEXED_SQL = 'SELECT COUNT(*) FROM files WHERE path = %s COLLATE NOCASE';
   NOT_INDEXED_TEXT = '%s failed for %s: %s is not in the index';
   // Column positions in the C8 reads' positional rows.
