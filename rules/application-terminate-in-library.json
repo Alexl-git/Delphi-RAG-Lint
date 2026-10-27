@@ -1,0 +1,8 @@
+{
+  "id": "application-terminate-in-library",
+  "severity": "warning",
+  "category": "other",
+  "message": "Application.Terminate in a unit may end the application -- callers outside the main form cannot see it.",
+  "warn_capture": "warn",
+  "require_ancestor": ["unit"]
+}

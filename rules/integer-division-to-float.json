@@ -1,0 +1,7 @@
+{
+  "id": "integer-division-to-float",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Integer `div` assigned to a floating-point variable -- the fraction is lost before the assignment; use `/` if a real quotient was meant.",
+  "warn_capture": "warn"
+}

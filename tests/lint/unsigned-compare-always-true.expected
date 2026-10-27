@@ -1,0 +1,10 @@
+# Cardinal param (13), Byte (14), Word (15): unsigned compared with 0 is a tautology
+# Signed N (16, 19) and non-zero compares (17, 18) must not fire; field FCount (34) is silent by design
+unsigned-compare-always-true 13
+unsigned-compare-always-true 14
+unsigned-compare-always-true 15
+!unsigned-compare-always-true 16
+!unsigned-compare-always-true 17
+!unsigned-compare-always-true 18
+!unsigned-compare-always-true 19
+!unsigned-compare-always-true 34

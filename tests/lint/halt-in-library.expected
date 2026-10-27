@@ -1,0 +1,12 @@
+# Halt (12), Halt(1) (13), ExitProcess (14), TerminateProcess(GetCurrentProcess..) (15) in a unit
+# Terminating ANOTHER process (22), Application.ProcessMessages (23), a look-alike name (24) and a string (25) must not fire
+# Application.Terminate (16) is the separate rule application-terminate-in-library
+halt-in-library 12
+halt-in-library 13
+halt-in-library 14
+halt-in-library 15
+!halt-in-library 16
+!halt-in-library 22
+!halt-in-library 23
+!halt-in-library 24
+!halt-in-library 25

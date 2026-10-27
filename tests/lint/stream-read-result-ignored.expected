@@ -1,0 +1,11 @@
+# Bare Read/Write(Buf, N) on a TStream-family receiver discards the byte count (16, 17, 19)
+# Result used (20, 21), ReadBuffer/WriteBuffer (22, 23: they raise) and 1-arg Read (24) must not fire
+# Known FP shape: a receiver that is a field/global has no visible declaration -> silent
+stream-read-result-ignored 16
+stream-read-result-ignored 17
+stream-read-result-ignored 19
+!stream-read-result-ignored 20
+!stream-read-result-ignored 21
+!stream-read-result-ignored 22
+!stream-read-result-ignored 23
+!stream-read-result-ignored 24
