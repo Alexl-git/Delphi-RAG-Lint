@@ -153,6 +153,16 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.Autofix.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Templates.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Expr.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Stmt.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Decl.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Store.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Hygiene.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Security.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Shape.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.Typed.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ClassMetrics.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.DocRules.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>

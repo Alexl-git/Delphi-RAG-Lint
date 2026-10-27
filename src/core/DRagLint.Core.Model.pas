@@ -1102,6 +1102,14 @@ type
     Text     : string ;
   end;
 
+  /// <summary>What a rule's sidecar "fix" key asks the autofix to do with a
+  /// finding's span (see TLintFinding.FixKind).</summary>
+  /// <remarks>lfkNone: no sidecar fix. lfkReplace: replace the span with
+  /// TLintFinding.FixText. lfkDeleteSpan: delete the span. lfkDeleteStatement:
+  /// delete the span plus a trailing ';', and the whole line when nothing else is
+  /// left on it.</remarks>
+  TLintFixKind = (lfkNone, lfkReplace, lfkDeleteSpan, lfkDeleteStatement);
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.ScanAdd (DRagLint.CLI.pas) (+185 more)</para>
@@ -1158,6 +1166,19 @@ type
       `cycles --fix --project "<X.dproj>" --db "<db>" --unit <stem>`. '' for every other finding.
       Serialised to `--format json` as `fix_hint` only when set; never to the rule cache. }
     FixHint: string;
+    { A SIDECAR fix (autofix wave A0, 2026-10-27): what the rule's .json "fix" key
+      asked for at THIS match, already expanded -- every capture placeholder replaced by the
+      capture's raw source text. lfkNone (Default) for every finding whose rule has
+      no sidecar fix. It applies to the finding's own span (StartLine:StartCol ..
+      EndLine:EndCol = the warn capture). Read only by DRagLint.Lint.Autofix;
+      never serialised (--json, LSP, rule cache). }
+    FixKind: TLintFixKind;
+    { lfkReplace: the replacement text for the span (may contain line breaks);
+      '' for the delete kinds. }
+    FixText: string;
+    { A unit the fix needs in the implementation uses clause ('' = none), e.g.
+      System.Math for a SameValue rewrite; added once per file when missing. }
+    FixUses: string;
   end;
 
   /// <remarks>

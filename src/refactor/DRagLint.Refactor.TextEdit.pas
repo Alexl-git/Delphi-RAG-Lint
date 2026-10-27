@@ -20,13 +20,15 @@ type
   /// <para>Used by: declaration (DRagLint.Refactor.TextEdit.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TTextEditKind = (tekInsertInLine, tekInsertLines, tekDeleteLines, tekReplaceInLine);
+  TTextEditKind = (tekInsertInLine, tekInsertLines, tekDeleteLines, tekReplaceInLine, tekReplaceLines);
 
   /// <summary>One text edit. tekInsertInLine: insert Text into line Line at
   /// 1-based column Col. tekInsertLines: insert Text (CRLF-joined) after line
   /// Line (0 = top). tekDeleteLines: delete lines Line..EndLine inclusive.
   /// tekReplaceInLine: on line Line, replace the characters in 1-based columns
-  /// [Col, EndCol) (EndCol exclusive) with Text (Text may be '' to delete).</summary>
+  /// [Col, EndCol) (EndCol exclusive) with Text (Text may be '' to delete).
+  /// tekReplaceLines: replace lines Line..EndLine inclusive with Text, which may
+  /// span lines (CRLF- or LF-separated; '' leaves one empty line).</summary>
   /// <remarks>
   /// ExpectText is the OPTIONAL stale-position guard for
   /// tekReplaceInLine (ignored by every other kind). When it is non-empty the
@@ -40,6 +42,10 @@ type
   /// (tekInsertLines / tekDeleteLines), which had none at all -- see
   /// AnchorIsValid for what it verifies and why a substring test alone is not
   /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.
+  /// tekReplaceLines (autofix wave A0, 2026-10-27): a non-empty ExpectText must
+  /// EQUAL (case-sensitively) the current full text of line Line, else the edit
+  /// is dropped and counted skipped; the overlap check treats Line..EndLine as a
+  /// delete range, so it can never interleave with a delete or another replace.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.NetLineChange (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ToTextEdits (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas) (+81 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Strip, DRagLint.Lint.DocRules, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.TextEdit</para>
@@ -628,7 +634,7 @@ end;
   it. tekInsertInLine/Lines use Line. }
 function EditTopLine(const E: TTextEdit): Integer;
 begin
-  if E.Kind = tekDeleteLines then Result:= E.EndLine else Result:= E.Line;
+  if E.Kind in [tekDeleteLines, tekReplaceLines] then Result:= E.EndLine else Result:= E.Line;
 end;
 
 { THE STALE-POSITION GUARD for tekReplaceInLine. True when the edit may be
@@ -731,7 +737,7 @@ begin
   Ranges:= TList<TTextEdit>.Create;
   try
     for E in AEdits do
-      if E.Kind = tekDeleteLines then Ranges.Add(E);
+      if E.Kind in [tekDeleteLines, tekReplaceLines] then Ranges.Add(E);   { a replace-lines range overlaps like a delete }
     Ranges.Sort(TComparer<TTextEdit>.Construct(
       function(const A, B: TTextEdit): Integer
       begin
@@ -792,6 +798,24 @@ var
   Skipped: Integer;
 begin
   Result:= Apply(AEdits, AWriteBackups, Skipped);
+end;
+
+{ tekReplaceLines (autofix wave A0): the whole range must exist, and the first
+  line must still hold the text the producer saw (when it set ExpectText) --
+  else the edit is stale and only counted. }
+procedure ApplyReplaceLines(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
+begin
+  if (AEdit.Line < 1) or (AEdit.EndLine < AEdit.Line) or (AEdit.EndLine > ALines.Count)
+     or ((AEdit.ExpectText <> '') and (ALines[AEdit.Line - 1] <> AEdit.ExpectText)) then
+  begin
+    Inc(ASkippedEdits);
+    Exit;
+  end;
+  for var L: Integer:= AEdit.EndLine downto AEdit.Line do ALines.Delete(L - 1);
+  var Parts: TArray<string>:= AEdit.Text.Replace(#13#10, #10).Split([#10]);
+  if Length(Parts) = 0 then Parts:= [''];
+  for var PIdx: Integer:= High(Parts) downto 0 do ALines.Insert(AEdit.Line - 1, Parts[PIdx]);
+  Inc(AApplied);
 end;
 
 { One kept edit applied to ALines (the per-kind half of ApplyGroup). }
@@ -857,6 +881,7 @@ begin
         else
           Inc(ASkippedEdits);   { line does not exist: out of range, never written }
       end;
+    tekReplaceLines: ApplyReplaceLines(ALines, AEdit, AApplied, ASkippedEdits);
   end;
 end;
 
@@ -1068,6 +1093,7 @@ begin
         tekInsertLines : SB.AppendLine(Format('  insert after line %d: %s', [E.Line, E.Text]));
         tekInsertInLine: SB.AppendLine(Format('  insert at L%d:C%d: %s', [E.Line, E.Col, E.Text]));
         tekReplaceInLine: SB.AppendLine(Format('  replace L%d:C%d..%d -> "%s"', [E.Line, E.Col, E.EndCol, E.Text]));
+        tekReplaceLines : SB.AppendLine(Format('  replace lines %d..%d -> "%s"', [E.Line, E.EndLine, E.Text.Replace(#13#10, '\n').Replace(#10, '\n')]));
       end;
     end;
     Result:= SB.ToString;

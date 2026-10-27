@@ -1,0 +1,9 @@
+{
+  "id": "zz-template-probe",
+  "severity": "hint",
+  "message": "A0 probe: parenthesised identifier (test-only rule)",
+  "fix": [
+    { "when_capture": "never_bound", "replace": "WRONG" },
+    { "replace": "{x}" }
+  ]
+}

@@ -16,6 +16,25 @@ uses
   ;
 
 type
+  /// <summary>One entry of a rule sidecar's "fix" key (autofix wave A0,
+  /// 2026-10-27): what the autofix does with the finding's span.</summary>
+  /// <remarks>Grammar (rules\&lt;id&gt;.json): "fix" is ONE object or an ARRAY of
+  /// objects; each is { "when_capture": "&lt;name&gt;" (optional), then exactly one
+  /// of "replace": "&lt;template&gt;" | "delete": "span" | "statement", plus
+  /// optional "uses": "&lt;Unit&gt;" and "risky": true }. The FIRST entry whose
+  /// when_capture is bound in the match (or that has none) and whose template
+  /// expands completely wins; no winner = the finding carries no fix. Templates
+  /// substitute {capture} with the capture's RAW source text (not
+  /// regex-escaped, unlike exclude_if_preceded_by) and may span lines ("\n").
+  /// An object with neither replace nor a known delete value is ignored.</remarks>
+  TSidecarFix = record
+    WhenCapture: string      ;  { '' = always; else applies only when this capture is bound }
+    Kind       : TLintFixKind;  { lfkReplace / lfkDeleteSpan / lfkDeleteStatement }
+    Template   : string      ;  { lfkReplace only }
+    UsesUnit   : string      ;  { '' = none }
+    Risky      : Boolean     ;  { behaviour-changing fix: tagged risky, still applied }
+  end;
+
   // A loaded external lint rule expressed as a tree-sitter S-expression query.
   // Sister .json file (same basename) supplies metadata: id, severity, message.
   /// <summary><!-- drag-lint:auto sum -->A loaded external lint rule expressed as a
@@ -92,6 +111,9 @@ type
         enclosing routine before the picked node. A pattern naming a capture the match
         did not bind never excludes. }
       FExcludePrecededBy: TArray<string>;
+      { The sidecar "fix" entries (autofix wave A0), in file order; empty = the
+        rule carries no sidecar fix. See TSidecarFix. }
+      FFixes: TArray<TSidecarFix>;
       { True if the picked node (or any ancestor up to the root) is one of the
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
@@ -164,6 +186,7 @@ type
       /// </remarks>
       function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
       function IsPrecededByExcludedText(const APicked: TTSNode; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
+      procedure AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes);
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
@@ -255,6 +278,8 @@ type
       property SourcePath: string  read FSourcePath;
       property Enabled   : Boolean read FEnabled ;
       property RuleId    : string  read FRuleId  ;
+      /// <summary>The sidecar "fix" entries; empty when the rule has none.</summary>
+      property Fixes     : TArray<TSidecarFix> read FFixes;
   end;
 
   /// <remarks>
@@ -327,10 +352,26 @@ type
 /// </remarks>
 function QueryRuleTimings: TArray<TQueryRuleTiming>;
 
+
+/// <summary>The declared type of AName as seen from byte offset AByte of a
+/// parsed file -- the same scope walk #declared-type? makes.</summary>
+/// <param name="ARoot">Root node of the file's tree.</param>
+/// <param name="ASource">The bytes the tree was parsed from.</param>
+/// <param name="AByte">A byte offset inside the routine that uses AName.</param>
+/// <param name="AName">The identifier to resolve; case-insensitive.</param>
+/// <param name="AType">Out: the declared type text, whitespace removed.</param>
+/// <returns>True when a same-routine local, parameter, inline var or unit-level
+/// var declares AName with an explicit type; False for a field, a with-member,
+/// an untyped inline var or anything else the source does not show.</returns>
+function DeclaredTypeAt(const ARoot: TTSNode; const ASource: TBytes; AByte: UInt32;
+  const AName: string; out AType: string): Boolean;
+
 implementation
 
 uses
   System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
+  , System.StrUtils        { IndexText -- capture-name lookup for sidecar fixes }
+  , DRagLint.Lint.RuleCatalog { RegisterSidecarFixRule -- a rule with a "fix" key is fixable }
   , System.Generics.Defaults { TComparer -- sorting that table by cost }
   , System.RegularExpressionsCore { ERegularExpressionError -- a bad rule regex }
   ;
@@ -582,6 +623,82 @@ begin
   end;
 end;
 
+{ Parses a sidecar "fix" value (one object or an array of objects) into its
+  entries, in order; malformed objects are dropped. Grammar: TSidecarFix. }
+function ParseSidecarFix(const AValue: TJSONValue): TArray<TSidecarFix>;
+
+  procedure AddOne(const AObj: TJSONObject);
+  var
+    Fx: TSidecarFix;
+    V : TJSONValue ;
+  begin
+    Fx:= Default(TSidecarFix);
+    V:= AObj.GetValue('when_capture');
+    if V <> nil then Fx.WhenCapture:= Trim(V.Value);
+    V:= AObj.GetValue('uses');
+    if V <> nil then Fx.UsesUnit:= Trim(V.Value);
+    V:= AObj.GetValue('risky');
+    Fx.Risky:= (V <> nil) and SameText(V.Value, 'true');
+    if AObj.GetValue('replace') <> nil then
+    begin
+      Fx.Kind    := lfkReplace;
+      Fx.Template:= AObj.GetValue('replace').Value;
+    end
+    else if AObj.GetValue('delete') <> nil then
+    begin
+      V:= AObj.GetValue('delete');
+      if SameText(V.Value, 'span') then Fx.Kind:= lfkDeleteSpan
+      else if SameText(V.Value, 'statement') then Fx.Kind:= lfkDeleteStatement
+      else Exit;   { unknown delete target: the entry is ignored }
+    end
+    else Exit;     { neither replace nor delete: ignored }
+    Result:= Result + [Fx];
+  end;
+
+begin
+  Result:= nil;
+  if AValue is TJSONObject then AddOne(TJSONObject(AValue))
+  else if AValue is TJSONArray then
+    for var Item: TJSONValue in TJSONArray(AValue) do
+      if Item is TJSONObject then AddOne(TJSONObject(Item));
+end;
+
+{ Expands a sidecar fix template: each brace-wrapped capture name becomes the RAW
+  text of that capture (case-insensitive). False when a placeholder is left
+  unbound -- the entry then does not apply, so a half-expanded template is never
+  written. }
+function ExpandFixTemplate(const ATemplate: string; const ANames, ATexts: TArray<string>; out AText: string): Boolean;
+var
+  i   : Integer       ;
+  Ph  : TMatch        ;
+  Last: Integer       ;
+  SB  : TStringBuilder;
+begin
+  AText:= ATemplate;
+  { Every placeholder must be bound BEFORE anything is substituted: a capture's
+    own text may hold a brace comment such as (*x*) written with braces, which
+    must neither count as unbound nor be expanded again. }
+  for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
+    if IndexText(Ph.Groups[1].Value, ANames) < 0 then Exit(False);
+  { one pass over the template, so substituted text is never re-scanned }
+  SB:= TStringBuilder.Create;
+  try
+    Last:= 1;
+    for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
+    begin
+      SB.Append(Copy(ATemplate, Last, Ph.Index - Last));
+      i:= IndexText(Ph.Groups[1].Value, ANames);
+      SB.Append(if i <= High(ATexts) then ATexts[i] else Ph.Value);   { i >= 0: checked above }
+      Last:= Ph.Index + Ph.Length;
+    end;
+    SB.Append(Copy(ATemplate, Last, MaxInt));
+    AText:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+  Result:= True;
+end;
+
 constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
 var
   ErrOff : UInt32       ;
@@ -651,10 +768,18 @@ begin
         for ExVal in ExArr do
           if Trim(ExVal.Value) <> '' then
             FRequireFileText:= FRequireFileText + [LowerCase(Trim(ExVal.Value))];
+      { Optional sidecar FIX ("fix", autofix wave A0): see TSidecarFix. }
+      FFixes:= ParseSidecarFix(JSON.GetValue('fix'));
     finally
       JSON.Free;
     end;
   end; // if
+  if Length(FFixes) > 0 then
+  begin
+    var AnyRisky: Boolean:= False;
+    for var Fx: TSidecarFix in FFixes do AnyRisky:= AnyRisky or Fx.Risky;
+    RegisterSidecarFixRule(FId, AnyRisky);
+  end;
 
   ErrOff:= 0;
   ErrType:= TSQueryError(0);
@@ -1075,6 +1200,43 @@ begin
   end;
 end;
 
+function DeclaredTypeAt(const ARoot: TTSNode; const ASource: TBytes; AByte: UInt32;
+  const AName: string; out AType: string): Boolean;
+var
+  Cur  : TTSNode        ;
+  Kid  : TTSNode        ;
+  Found: Boolean        ;
+  Cache: TDeclScopeCache;
+begin
+  AType:= '';
+  Result:= False;
+  if ARoot.IsNull or (AName = '') then Exit;
+  { descend to the innermost named node holding AByte }
+  Cur:= ARoot;
+  repeat
+    Found:= False;
+    for Kid in NamedChildrenOf(Cur) do
+    begin
+      if (Kid.StartByte <= AByte) and (AByte < Kid.EndByte) then
+      begin
+        Cur:= Kid;
+        Found:= True;
+        Break;
+      end;
+    end;
+  until not Found;
+  Cache:= TDeclScopeCache.Create;
+  try
+    while not Cur.IsNull do
+    begin
+      if Cache.Find(Cur, ASource, AName, AByte, AType) then Exit(AType <> '');
+      Cur:= Cur.Parent;
+    end;
+  finally
+    Cache.Free;
+  end;
+end;
+
 function EvalDeclaredType(const AMatch: TTSQueryMatch; const ASource: TBytes;
   const AArgs: TArray<TPredicateArg>; ACache: TDeclScopeCache): Boolean;
 const
@@ -1310,6 +1472,7 @@ begin
         Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
         Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
         Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
+        if Length(FFixes) > 0 then AttachFix(Finding, Captures, ASource);
         FoundList.Add(Finding);
       end; // while
       Result:= FoundList.ToArray;
@@ -1322,6 +1485,36 @@ begin
     if Profiled then NoteRuleTicks(FRuleId, TStopwatch.GetTimeStamp - ProfT0);
   end; // try
 end; // function
+
+{ Autofix wave A0: the FIRST fix entry that applies to this match is expanded
+  onto the finding. An entry applies when its when_capture (if any) is bound
+  and its template expands with no placeholder left over. }
+procedure TQueryRule.AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes);
+var
+  Names: TArray<string>;
+  Texts: TArray<string>;
+  Fx   : TSidecarFix   ;
+  Txt  : string        ;
+  i    : Integer       ;
+begin
+  SetLength(Names, Length(ACaptures));
+  SetLength(Texts, Length(ACaptures));
+  for i:= 0 to High(ACaptures) do
+  begin
+    Names[i]:= FQuery.CaptureNameForID(ACaptures[i].index);
+    Texts[i]:= NodeText(ACaptures[i].node, ASource);
+  end;
+  for Fx in FFixes do
+  begin
+    if (Fx.WhenCapture <> '') and (IndexText(Fx.WhenCapture, Names) < 0) then Continue;
+    Txt:= '';
+    if (Fx.Kind = lfkReplace) and not ExpandFixTemplate(Fx.Template, Names, Texts, Txt) then Continue;
+    AFinding.FixKind:= Fx.Kind;
+    AFinding.FixText:= Txt;
+    AFinding.FixUses:= Fx.UsesUnit;
+    Exit;
+  end;
+end;
 
 { True when ScmPath sits below a sub-directory (relative to ARulesDir) named `rules`. }
 function IsUnderNestedRulesDir(const ARulesDir, AScmPath: string): Boolean;

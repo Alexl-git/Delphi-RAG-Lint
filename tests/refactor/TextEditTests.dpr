@@ -33,6 +33,14 @@ begin
   Result.FilePath:= AFile; Result.Kind:= tekReplaceInLine; Result.Line:= ALine;
   Result.Col:= ACol; Result.EndCol:= AEndCol; Result.Text:= AText; Result.ExpectText:= AExpect;
 end;
+{ tekReplaceLines builder: lines [ALine, AEndLine] become AText (line breaks
+  allowed), guarded by AExpect = the full current text of line ALine. }
+function MkLines(const AFile: string; ALine, AEndLine: Integer; const AText, AExpect: string): TTextEdit;
+begin
+  Result:= Default(TTextEdit);
+  Result.FilePath:= AFile; Result.Kind:= tekReplaceLines; Result.Line:= ALine;
+  Result.EndLine:= AEndLine; Result.Text:= AText; Result.ExpectText:= AExpect;
+end;
 var
   P: string; Edits: TArray<TTextEdit>; After: string; Skipped: Integer; Touched: Integer;
 begin
@@ -255,6 +263,54 @@ begin
     After:= TFile.ReadAllText(P, TEncoding.ANSI);
     Check('adjacent non-overlapping deletes still apply (de-vacuator)',
       (After = 'd'#13#10) and (Skipped = 0) and (Touched = 1));
+
+    { --- tekReplaceLines (autofix wave A0): Line..EndLine replaced by Text,
+      guarded by ExpectText = the first line's full current content --- }
+
+    { guarded multi-line replace: lines 2..3 become two new lines }
+    TFile.WriteAllText(P, 'a'#13#10'bbb'#13#10'ccc'#13#10'd'#13#10, TEncoding.ANSI);
+    Edits:= [MkLines(P, 2, 3, 'X'#13#10'Y'#13#10'Z', 'bbb')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-lines swaps lines 2..3 for X,Y,Z when ExpectText holds',
+      (After = 'a'#13#10'X'#13#10'Y'#13#10'Z'#13#10'd'#13#10) and (Skipped = 0) and (Touched = 1));
+
+    { stale: the first line no longer holds ExpectText -> skipped, file as found }
+    TFile.WriteAllText(P, 'a'#13#10'moved'#13#10'ccc'#13#10'd'#13#10, TEncoding.ANSI);
+    Edits:= [MkLines(P, 2, 3, 'X', 'bbb')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-lines SKIPPED when the first line does not hold ExpectText',
+      (After = 'a'#13#10'moved'#13#10'ccc'#13#10'd'#13#10) and (Skipped = 1) and (Touched = 0));
+
+    { one line -> several: Line = EndLine }
+    TFile.WriteAllText(P, 'a'#13#10'b'#13#10, TEncoding.ANSI);
+    Edits:= [MkLines(P, 1, 1, 'a1'#13#10'a2', 'a')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-lines with Line = EndLine expands one line into two',
+      (After = 'a1'#13#10'a2'#13#10'b'#13#10) and (Skipped = 0));
+
+    { applied back-to-front with an in-line replace BELOW it on another line }
+    TFile.WriteAllText(P, 'l1'#13#10'l2'#13#10'l3'#13#10'x := 1;'#13#10, TEncoding.ANSI);
+    Edits:= [MkLines(P, 1, 2, 'L', 'l1'), MkRep(P, 4, 1, 2, 'y', 'x')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-lines + a replace-in-line below both land (back-to-front)',
+      (After = 'L'#13#10'l3'#13#10'y := 1;'#13#10) and (Skipped = 0));
+
+    { the overlap check treats a replace-lines range like a delete range }
+    TFile.WriteAllText(P, 'a'#13#10'b'#13#10'c'#13#10'd'#13#10, TEncoding.ANSI);
+    Edits:= [MkLines(P, 1, 2, 'X', 'a'), Mk(P, tekDeleteLines, 2, 0, 3, '')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-lines overlapping a delete is refused whole -- file left as found',
+      (After = 'a'#13#10'b'#13#10'c'#13#10'd'#13#10) and (Skipped = 2) and (Touched = 0));
 
     if TFile.Exists(P) then TFile.Delete(P);
     if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');
