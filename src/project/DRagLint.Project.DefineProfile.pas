@@ -8,7 +8,7 @@ unit DRagLint.Project.DefineProfile;
 // fingerprint limbs, never through DRAGLINT_EXTRACTOR_VERSION.
 //
 // PRECEDENCE (decisions D1 / D2 / D4 of plans\2026-10-26-lsp-c10-a7-per-file-
-// defines.md) lives in ResolveActiveBuild and DprojForFile ONLY; nothing else in
+// defines.md) lives in ResolveActiveBuild and DprojForFileWith ONLY; nothing else in
 // the tree re-implements an order. D1 (owner ruling 2026-10-26): the .dproj
 // (active-config marker + ProfileFromDproj) FIRST, then <base>.delphilsp.json, then
 // the platform built-ins. To flip D1, change the ONE condition marked "D1" in
@@ -83,19 +83,6 @@ function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out A
 /// <remarks>Never raises. Pure apart from reading the two files.</remarks>
 function ResolveActiveBuild(const ADproj, APlatformOverride, AConfigOverride: string;
   AUseDelphiLsp: Boolean): TActiveBuild;
-
-/// <summary>The .dproj that owns AFile, or ''. Order: AActiveProject when it is a
-/// .dproj and (ADbPaths is empty or one of them contains the file); then, for each
-/// DB in ADbPaths that contains AFile, the manifest section's project, else
-/// &lt;AnchorDirForDb(db)&gt;\&lt;dbbase&gt;.dproj when that file exists (a DB a
-/// manifest section claims but without a project, i.e. a library, yields nothing);
-/// then (D2) the single *.dproj in AFile's own folder.</summary>
-/// <param name="AFile">The source file.</param>
-/// <param name="ADbPaths">The index DBs in play (may be empty).</param>
-/// <param name="AActiveProject">The explicit --project, '' = none.</param>
-/// <returns>An existing .dproj path or ''.</returns>
-/// <remarks>Never raises.</remarks>
-function DprojForFile(const AFile: string; const ADbPaths: TArray<string>; const AActiveProject: string): string; // dl:ok unused-public-symbol@eb01 -- REVIEWED 2026-10-26 public surface of the plan; used by TProjectProfileCache internals and Task 5
 
 type
   /// <summary>Process-wide memo: file -> .dproj and .dproj -> TActiveBuild,
@@ -397,6 +384,12 @@ begin
   end;
 end;
 
+// The .dproj that owns AFile, or ''. Order: AActiveProject when it is a .dproj and
+// (ADbPaths is empty or one of them contains the file); then, for each DB in ADbPaths
+// that contains AFile, the manifest section's project, else <AnchorDirForDb(db)>\<dbbase>.dproj
+// when that file exists (a DB a manifest section claims but without a project, i.e. a
+// library, yields nothing); then (D2) the single *.dproj in AFile's own folder. Never raises.
+// (C14: the public DprojForFile wrapper had no caller and was removed.)
 function DprojForFileWith(const AFile: string; const ADbPaths: TArray<string>;
   const AActiveProject: string; const AManifest: TIndexManifest; AHaveManifest: Boolean): string;
 var
@@ -454,15 +447,6 @@ begin
   except // dl:ok bare-except@79dc -- REVIEWED 2026-10-26 fail-open by contract: a resolver fault falls back to the pre-C10 profile, never raises
     Result := False;
   end;
-end;
-
-function DprojForFile(const AFile: string; const ADbPaths: TArray<string>; const AActiveProject: string): string;
-var
-  Manifest: TIndexManifest;
-  Have    : Boolean;
-begin
-  Have := (Length(ADbPaths) > 0) and LoadManifestSafe(Manifest);
-  Result := DprojForFileWith(AFile, ADbPaths, AActiveProject, Manifest, Have);
 end;
 
 { TProjectProfileCache }

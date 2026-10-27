@@ -2900,6 +2900,26 @@ begin
     end);
 end;
 
+{ THE LSP LINT SETUP, shared by plain `lsp` (at startup) and `lsp --proxy` (lazily,
+  on the merge worker, through TLspProxyOptions.PrepareLint) -- one routine, so the
+  two modes cannot drift (C14: the proxy branch returned before the C8/C10 setup
+  and merged findings linted from the RAW bytes).
+
+  PREPROCESS THE LSP'S LINT, exactly as `lint` does (the SetPreprocess call in the
+  lint verb): didOpen/didSave lint through TAstParseCache, and without this call
+  it linted the RAW bytes, so every routine with $IFDEF MSWINDOWS / $IFDEF POSIX
+  alternative bodies published a false parser-error on its second `end;` (79 on
+  the RTL's System.IOUtils.pas, where `lint` reports 0). The server is not bound
+  to one .dproj, so the profile is the platform built-ins unless --project names
+  one; then the per-file resolver (C10). Guards: run_lsp_preprocess_guard.ps1,
+  run_lsp_proxy_preprocess_guard.ps1. }
+procedure ConfigureLspLint(const AArgs: TArgs; const ADbPaths: TArray<string>);
+begin
+  TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
+    ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  InstallFileProfileResolver(AArgs, ADbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+end;
+
 // v0.45 Task 7: build one plan item into its SQLite database.
 // Creates the Store + Indexer, applies filter + dedup roots, walks per mode,
 // then calls ResolveUnitUseTargets. Writes a one-line summary to stdout.
@@ -33836,6 +33856,24 @@ begin
   Result:= function: TArray<string> begin Result:= ResolveConsumerDbs(Snapshot); end;
 end;
 
+{ C14: `lsp --proxy`'s TLspProxyOptions.PrepareLint -- ConfigureLspLint, the
+  routine plain `lsp` runs at startup, deferred to the merge worker so the relay's
+  startup path resolves no database. The DB list (--db, else the consumer
+  resolution) feeds only the per-file resolver's ownership probes. Snapshot for
+  the same reason as MakeConsumerDbResolver. }
+function MakeLspLintSetup(const pArgs: TArgs): DRagLint.LSP.Proxy.TLspLintSetup;
+var
+  Snapshot: TArgs;
+begin
+  Snapshot:= pArgs;
+  Result:=
+    procedure
+    begin
+      ConfigureLspLint(Snapshot,
+        if Length(Snapshot.DbPaths) > 0 then Snapshot.DbPaths else ResolveConsumerDbs(Snapshot));
+    end;
+end;
+
 function Run: Integer;
 const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
@@ -34078,6 +34116,7 @@ begin
         ProxyOpt.MergeDefinition := Args.LspMergeDefinition;
         ProxyOpt.DbPaths         := Args.DbPaths;
         ProxyOpt.ResolveDbs      := MakeConsumerDbResolver(Args);   { P0 review I1: lazy, on the merge worker }
+        ProxyOpt.PrepareLint     := MakeLspLintSetup(Args);         { C14: plain lsp's lint setup, lazily }
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;
@@ -34095,17 +34134,9 @@ begin
         end;
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
-      { PREPROCESS THE LSP'S LINT, exactly as `lint` does (the SetPreprocess call
-        in the lint verb above): didOpen/didSave lint through TAstParseCache, and
-        without this call it linted the RAW bytes, so every routine with
-        $IFDEF MSWINDOWS / $IFDEF POSIX alternative bodies published a false
-        parser-error on its second `end;` (79 on the RTL's System.IOUtils.pas,
-        where `lint` reports 0). The server is not bound to one .dproj, so the
-        profile is the platform built-ins unless --project names one.
-        Guard: tests\autotest\run_lsp_preprocess_guard.ps1. }
-      TAstParseCache.SetPreprocess(not Args.NoPreprocess,
-        ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
-      InstallFileProfileResolver(Args, DbList, ResolveIndexProfile(Args.ProjectPath, Args.CheckPlatform, ''));
+      { Preprocess the LSP's lint (C8) + per-file defines (C10): ConfigureLspLint,
+        the routine `lsp --proxy` runs too. }
+      ConfigureLspLint(Args, DbList);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
       var Ctl: TControlChannel:= nil;

@@ -176,6 +176,7 @@ type
     FTestFastPath    : Boolean;
     function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
     procedure WorkerLoop;
+    procedure EnsureLinter;
     procedure WarmUp;
     function  Enqueue(const AWork: TProc): Boolean;
     function  IsDirty(const APath: string): Boolean;
@@ -1052,6 +1053,17 @@ begin
   end;
 end;
 
+{ Merge worker only (no lock: the linter is touched on no other thread). The
+  first call runs Options.PrepareLint -- the CLI's lint preprocessing setup, the
+  same routine plain `lsp` runs at startup (C14) -- and then creates the linter,
+  so the first publish is already linted from the preprocessed text. }
+procedure TProxyMergeEngine.EnsureLinter;
+begin
+  if FLinter <> nil then Exit;
+  if Assigned(FOptions.PrepareLint) then FOptions.PrepareLint();
+  FLinter:= TLinter.Create('');
+end;
+
 { C>S, first didOpen only: builds what the enabled merges need on the merge
   worker, off the relay path (queued, never waited on). TLinter.Create loads
   every rule file, which takes seconds cold and would otherwise make the FIRST
@@ -1069,7 +1081,7 @@ begin
     procedure
     begin
       try
-        if FOptions.MergeDiagnostics and (FLinter = nil) then FLinter:= TLinter.Create('');
+        if FOptions.MergeDiagnostics then EnsureLinter;
         if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then Server;   { opens the index; a failure is reported there }
       finally
         TInterlocked.Exchange(FWarming, 0);
@@ -1791,7 +1803,7 @@ begin
           Arr: TJSONArray;
         begin
           try
-            if FLinter = nil then FLinter:= TLinter.Create('');
+            EnsureLinter;
             Arr:= TLspCompletion.BuildDiagnostics(FLinter, Path, nil);
             try
               Items:= Arr.ToJSON;

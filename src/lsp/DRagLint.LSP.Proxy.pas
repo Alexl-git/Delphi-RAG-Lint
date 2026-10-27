@@ -42,6 +42,10 @@ type
   /// <returns>The database paths; empty when none resolves.</returns>
   TLspDbResolver = reference to function: TArray<string>;
 
+  /// <summary>Installs the lint preprocessing the merge's diagnostics need
+  /// (C14): the CLI passes the same setup routine plain `lsp` runs at startup.</summary>
+  TLspLintSetup = reference to procedure;
+
   /// <summary>Everything the relay needs to start. All fields are optional;
   /// a zeroed record resolves DelphiLSP from the installed Studio and relays
   /// stdio.</summary>
@@ -117,6 +121,15 @@ type
     /// <remarks>It must write only to stderr: stdout carries the JSON-RPC
     /// stream. Called on the merge worker thread.</remarks>
     ResolveDbs: TLspDbResolver;
+    /// <summary>Called at most once, on the merge worker, before the merge's
+    /// linter is created: the CLI's lint preprocessing setup
+    /// (TAstParseCache.SetPreprocess + the per-file define resolver), the SAME
+    /// routine the plain `lsp` startup branch calls, so merged findings are linted
+    /// from the preprocessed text and not from the raw bytes (C14). nil = no
+    /// preprocessing (raw parse).</summary>
+    /// <remarks>Lazy, like ResolveDbs, so the relay's startup path still resolves
+    /// and opens no database. It must write only to stderr.</remarks>
+    PrepareLint: TLspLintSetup;
   end;
 
 const
