@@ -1204,6 +1204,12 @@ const
   { C1: budget for the out-of-process `lint --json` that --full-rules runs on each
     didOpen/didSave -- the same 8 s the plugin's live runner allows. }
   LSP_FULL_RULES_TIMEOUT_MS = 8000;
+  { LSP C12: the budget when the file's owning index is a platform library
+    (`library-*.sqlite`). A library unit runs neither the flow nor the type-aware
+    nor the project rules (C11/C12), and still measured 7.8 s on a 100%-CPU box,
+    a hair under 8 s. Twice the project budget is the margin; the server waits
+    this long only on a library file, and a project file keeps the 8 s above. }
+  LSP_FULL_RULES_LIBRARY_TIMEOUT_MS = 16000;
   { Bounded wait for the killed child to be reaped after TerminateProcess. }
   LSP_FULL_RULES_REAP_MS = 2000;
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
@@ -3635,6 +3641,16 @@ begin
   Result:= False;
   AJson:= '';
   if AFile = '' then Exit;
+  { LSP C12: the FIRST store that owns the file is the one the child lint picks
+    (it walks the same --db list in this order), so it alone decides the budget. }
+  var Budget: Cardinal:= LSP_FULL_RULES_TIMEOUT_MS;
+  for var I:= 0 to High(FStores) do
+    if FStores[I].FindFileIdByPath(AFile) > 0 then
+    begin
+      if (I <= High(FStorePaths)) and LowerCase(ExtractFileName(FStorePaths[I])).StartsWith('library-') then
+        Budget:= LSP_FULL_RULES_LIBRARY_TIMEOUT_MS;
+      Break;
+    end;
   TmpPath:= TPath.GetTempFileName;
   FillChar(Sa, SizeOf(Sa), 0);
   Sa.nLength       := SizeOf(Sa);
@@ -3662,7 +3678,7 @@ begin
     UniqueString(Cmd);
     if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
-      if WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_TIMEOUT_MS) <> WAIT_OBJECT_0 then
+      if WaitForSingleObject(Pi.hProcess, Budget) <> WAIT_OBJECT_0 then
       begin
         TerminateProcess(Pi.hProcess, 1);
         WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_REAP_MS);

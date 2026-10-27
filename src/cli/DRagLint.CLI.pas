@@ -14275,7 +14275,14 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
         Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
-      if LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) then
+      { LSP C12: a platform-library unit skips the type map too, for the flow
+        ruling's reason (LSP C11, below): its findings -- float equality, lossy
+        casts, FreeAndNil on an interface -- are type-correctness of code the
+        user cannot edit. Measured on System.IOUtils.pas against library-Win64:
+        0 findings for 0.5 s of the per-file budget. The structural AST checks
+        that follow keep running; they are what an RTL file still shows.
+        tests\autotest\run_lsp_library_margin_guard.ps1. }
+      if LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) and (not FlowIsLibrary) then
       begin
         TraceLintChecker('type-aware');
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
