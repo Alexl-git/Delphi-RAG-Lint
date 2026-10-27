@@ -30,6 +30,7 @@ interface
 
 uses
   System.SysUtils
+  , System.Generics.Collections
   , DRagLint.Core.Model  // dl:unit DRagLint.Core.Model accepted -- the DF_* kind constants and TDataFlowRow ARE the T0 contract this unit writes
   , TreeSitter
   ;
@@ -40,6 +41,15 @@ const
   DF_CFG_BLOCK_CAP = 2000;
 
 type
+  /// <summary>The routines one unit declares, keyed by lower-case name: per argument
+  /// position, True when SOME same-named routine of the unit has a var / out
+  /// parameter there. Built once per file by TDataFlowFacts.BuildCallees; it decides
+  /// which call arguments get an 'argout' source (see TDataFlowFacts.Collect).</summary>
+  /// <remarks>Owned by the caller of BuildCallees. Name-keyed on purpose: the
+  /// extractor sees one file, so overloads and same-named methods of different
+  /// classes are merged (any var/out at a position keeps that position).</remarks>
+  TDataFlowCallees = TDictionary<string, TArray<Boolean>>;
+
   /// <summary>Computes the data_flows rows of one routine from its tree-sitter
   /// subtree. Stateless apart from two process-wide counters; NOT thread-safe
   /// (the indexer's per-file loop is single-threaded).</summary>
@@ -56,6 +66,8 @@ type
       /// <param name="AOwnerFields">Field names of the owning class (and ancestors known
       /// to this DB), as declared; empty for a plain routine.</param>
       /// <param name="AGlobals">This unit's unit-level variable names, as declared.</param>
+      /// <param name="ACallees">This unit's routines (BuildCallees); nil = none known.
+      /// Not owned.</param>
       /// <returns>The rows, deduplicated, at most DF_ROW_CAP; nil when nothing is
       /// proven or the body is pure asm. FileId is left 0 (PutDataFlows takes it from
       /// the file tx).</returns>
@@ -63,10 +75,23 @@ type
       /// caught, a one-line stderr note names the routine, and nil is returned --
       /// silence over a wrong claim, and the file tx is not rolled back for it.
       /// Literals, nil, and values of numeric/boolean declared type emit nothing;
-      /// identifiers the var table cannot classify are refs (by position).</remarks>
+      /// identifiers the var table cannot classify are refs (by position).
+      /// An argument variable gets an 'argout' source (the callee may write it) only
+      /// when the callee may have a var / out parameter at that position: a callee
+      /// in ACallees decides by its mask (a position past every same-unit overload
+      /// is kept); otherwise a short built-in RTL list decides (value-only routines
+      /// drop, TryGetValue keeps position 1 only); every OTHER callee is unresolved
+      /// here and KEEPS its argout source -- the linter resolves the callee and
+      /// reads its outparam rows, so no taint the walk needs is lost.</remarks>
       class function Collect(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
                              const AOwnerFields: TArray<string>;
-                             const AGlobals: TArray<string>): TArray<TDataFlowRow>; static;
+                             const AGlobals: TArray<string>;
+                             const ACallees: TDataFlowCallees): TArray<TDataFlowRow>; static;
+      /// <summary>The var/out masks of every routine ASymbols declares (parsed from
+      /// TSymbol.Signature), for Collect.</summary>
+      /// <param name="ASymbols">One file's parsed symbols; non-routine kinds are skipped.</param>
+      /// <returns>A new dictionary the CALLER frees (never nil).</returns>
+      class function BuildCallees(const ASymbols: TArray<TSymbol>): TDataFlowCallees; static;
       /// <summary>Routines that took the flow-insensitive fallback since process start
       /// (Skipped CFG or over DF_CFG_BLOCK_CAP blocks).</summary>
       /// <returns>The running count.</returns>
@@ -79,8 +104,7 @@ type
 implementation
 
 uses
-  System.Generics.Collections
-  , System.Generics.Defaults
+  System.Generics.Defaults
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.DataFlow
   , DRagLint.Analysis.Flow.Lattices
@@ -114,6 +138,23 @@ const
   { expression nodes that carry no source: literals, nil, booleans, and shapes with no ref to point at }
   TAINT_INERT_NODES: array[0..9] of string = ('literalString', 'literalNumber', 'literalChar', 'kNil', 'kTrue', 'kFalse',
     'inherited', 'exprTpl', 'typeref', 'comment');
+  { argout (lane ARGOUT): RTL routines with NO var/out parameter -- an argument
+    passed to one is never written by it. Consulted only for a callee this unit
+    does not declare. Name-keyed: a project routine of the same name in ANOTHER
+    unit with a var/out parameter would lose its argout source (accepted). }
+  TAINT_ARGOUT_NONE: array[0..58] of string = ('copy', 'trim', 'trimleft', 'trimright', 'lowercase',
+    'uppercase', 'ansilowercase', 'ansiuppercase', 'extractfileext', 'extractfilename', 'extractfilepath',
+    'extractfiledir', 'changefileext', 'expandfilename', 'includetrailingpathdelimiter',
+    'excludetrailingpathdelimiter', 'startsstr', 'startstext', 'endsstr', 'endstext', 'containsstr',
+    'containstext', 'matchstr', 'matchtext', 'indexstr', 'indextext', 'posex', 'lastdelimiter', 'ifthen',
+    'charinset', 'fileexists', 'directoryexists', 'forcedirectories', 'quotedstr', 'stringreplace', 'format',
+    'containskey', 'containsvalue', 'combine', 'getfullpath', 'ispathrooted', 'getdirectoryname',
+    'getextension', 'getfilename', 'getfilenamewithoutextension', 'readalltext', 'readallbytes',
+    'readalllines', 'writealltext', 'writeallbytes', 'exists', 'ismatch', 'addorsetvalue', 'addpair',
+    'createdirectory', 'getlastwritetime', 'leftstr', 'rightstr', 'midstr');
+  { RTL routines whose ONLY var/out parameter is at TAINT_ARGOUT_OUT1_POS (TryGetValue(Key, out Value)) }
+  TAINT_ARGOUT_OUT1: array[0..0] of string = ('trygetvalue');
+  TAINT_ARGOUT_OUT1_POS = 1;
   { the flow-insensitive walk iterates to a fixpoint, at most this many passes }
   DF_FLAT_PASSES = 8;
   { BaseIdent descends at most this many receiver levels (a malformed-tree guard, not a semantic limit) }
@@ -290,6 +331,7 @@ type
     FResultSlot : Integer;
     FFields     : TDictionary<string, string>;
     FGlobals    : TDictionary<string, string>;
+    FCallees    : TDataFlowCallees;
     FIterables  : TDictionary<string, TArray<TTSNode>>;
     FToks       : TList<TSrcTok>;
     FTokIdx     : TDictionary<string, Integer>;
@@ -315,6 +357,7 @@ type
     function EvalIdent(var St: TTaintVal; const N: TTSNode): TExprVal;
     function EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;
     function EvalCall(var St: TTaintVal; const N: TTSNode): TExprVal;
+    function ArgMayBeWritten(const ACallee: string; AIndex: Integer): Boolean;
     procedure ApplyAssignment(var St: TTaintVal; const N: TTSNode);
     procedure ApplyMemberWrite(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
     procedure ApplyStmtExpr(var St: TTaintVal; const E: TTSNode);
@@ -327,7 +370,7 @@ type
     procedure ScanBody(const N: TTSNode);
   public
     constructor Create(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
-                       const AOwnerFields, AGlobals: TArray<string>);
+                       const AOwnerFields, AGlobals: TArray<string>; const ACallees: TDataFlowCallees);
     destructor Destroy; override;
     function Bottom: TTaintVal;
     function Boundary: TTaintVal;
@@ -449,7 +492,7 @@ end;
 { ---- TCollector --------------------------------------------------------- }
 
 constructor TCollector.Create(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
-                              const AOwnerFields, AGlobals: TArray<string>);
+                              const AOwnerFields, AGlobals: TArray<string>; const ACallees: TDataFlowCallees);
 var
   S          : string;
   I, PCounter: Integer;
@@ -457,6 +500,7 @@ var
   LType      : string;
 begin
   inherited Create;
+  FCallees  := ACallees;
   FSym      := ASym;
   FProc     := AProc;
   FBody     := ABody;
@@ -920,13 +964,13 @@ begin
     for I:= 0 to High(ArgVals) do All:= ExprUnion(All, ArgVals[I]);
     ReceiveInto(St, BaseIdent(Recv), All);
   end;
-  { argout: a plain variable argument may be written by the callee }
+  { argout: a plain variable argument may be written by the callee (a var/out slot) }
   if not InList(Callee, TAINT_NOFLOW_RESULT) then
     for I:= 0 to High(ArgVals) do
     begin
       Arg:= Args.NamedChild(I);
       Slot:= SlotOf(Arg);
-      if (Slot < 0) or FSlotScalar[Slot] then Continue;
+      if (Slot < 0) or FSlotScalar[Slot] or not ArgMayBeWritten(Callee, I) then Continue;
       T:= Tok(DF_SRC_ARGOUT, I, CallLine, CallCol, Text(NameN));
       St.May[Slot] := SetUnion(St.May[Slot], [T * 2]);
       St.Must[Slot]:= SetUnion(St.Must[Slot], [T]);
@@ -936,6 +980,63 @@ begin
   { a method of a string-typed local/param (`S.Trim`, `S.Substring(1)`) derives from it }
   Slot:= SlotOf(BaseIdent(Recv));
   if (Slot >= 0) and FSlotString[Slot] then Result:= ExprUnion(Result, RecvVal);
+end;
+
+{ May the callee ACallee (lower case) write argument AIndex? A same-unit callee
+  answers by its var/out mask (a position past every overload: unknown, kept);
+  else the RTL lists; else unresolved here -- kept, the linter resolves it. }
+function TCollector.ArgMayBeWritten(const ACallee: string; AIndex: Integer): Boolean;
+var
+  Mask: TArray<Boolean>;
+begin
+  if Assigned(FCallees) and FCallees.TryGetValue(ACallee, Mask) then Exit((AIndex > High(Mask)) or Mask[AIndex]);
+  Result:= if InList(ACallee, TAINT_ARGOUT_OUT1) then AIndex = TAINT_ARGOUT_OUT1_POS else not InList(ACallee, TAINT_ARGOUT_NONE);
+end;
+
+{ Per declared parameter of signature text ASig ('(const A, B: string; var C): T'),
+  True when it is a var / out parameter. Splits on ';' at paren/bracket depth 0;
+  a leading [attribute] is skipped. No parameter list: empty. }
+function VarOutMask(const ASig: string): TArray<Boolean>;
+var
+  P, I, Depth, Start: Integer;
+  Groups            : TArray<string>;
+  G, Names, Modif   : string;
+  IsVar             : Boolean;
+begin
+  Result:= nil;
+  P:= Pos('(', ASig);
+  if P = 0 then Exit;
+  Groups:= nil;
+  Depth:= 0;
+  Start:= P + 1;
+  for I:= P + 1 to Length(ASig) do
+  begin
+    if CharInSet(ASig[I], ['(', '[']) then Inc(Depth)
+    else if CharInSet(ASig[I], [')', ']']) then
+    begin
+      if Depth = 0 then
+      begin
+        Groups:= Groups + [Copy(ASig, Start, I - Start)];
+        Break;
+      end;
+      Dec(Depth);
+    end
+    else if (ASig[I] = ';') and (Depth = 0) then
+    begin
+      Groups:= Groups + [Copy(ASig, Start, I - Start)];
+      Start:= I + 1;
+    end;
+  end;
+  for G in Groups do
+  begin
+    Names:= Trim(G);
+    if Names.StartsWith('[') and Names.Contains(']') then Names:= Trim(Copy(Names, Pos(']', Names) + 1, MaxInt));
+    if Names.Contains(':') then Names:= Trim(Copy(Names, 1, Pos(':', Names) - 1));
+    if Names = '' then Continue;
+    Modif:= LowerCase(Names.Split([' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty)[0]);
+    IsVar:= (Modif = 'var') or (Modif = 'out');
+    for I:= 0 to High(Names.Split([','])) do Result:= Result + [IsVar];
+  end;
 end;
 
 function TCollector.Eval(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@ea9b -- node-type dispatcher: one Exit per grammar node kind
@@ -1317,13 +1418,14 @@ end;
 
 class function TDataFlowFacts.Collect(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
                                       const AOwnerFields: TArray<string>;
-                                      const AGlobals: TArray<string>): TArray<TDataFlowRow>;
+                                      const AGlobals: TArray<string>;
+                                      const ACallees: TDataFlowCallees): TArray<TDataFlowRow>;
 var
   C: TCollector;
 begin
   Result:= nil;
   if AProc.IsNull or ABody.IsNull or (ABody.NodeType = 'asm') then Exit;
-  C:= TCollector.Create(ASym, AProc, ABody, ASrc, AOwnerFields, AGlobals);
+  C:= TCollector.Create(ASym, AProc, ABody, ASrc, AOwnerFields, AGlobals, ACallees);
   try
     try
       C.Run;
@@ -1337,6 +1439,31 @@ begin
     end;
   finally
     C.Free;
+  end;
+end;
+
+class function TDataFlowFacts.BuildCallees(const ASymbols: TArray<TSymbol>): TDataFlowCallees;
+var
+  S         : TSymbol;
+  Key       : string;
+  Mask, Old : TArray<Boolean>;
+  I         : Integer;
+begin
+  Result:= TDataFlowCallees.Create;
+  for S in ASymbols do
+  begin
+    if not (S.Kind in [skFunction, skProcedure, skMethod, skConstructor, skDestructor]) then Continue;  // dl:ok nonminimal-bool@d7d5 -- not (A in S) is the only spelling of set non-membership (the rule's own message says so)
+    { 'TFoo.Bar' (an implementation header) and 'Bar<T>' key as 'bar', the call's identifier }
+    Key:= LowerCase(S.Name);
+    if Key.Contains('<') then Key:= Copy(Key, 1, Pos('<', Key) - 1);
+    Key:= Copy(Key, LastDelimiter('.', Key) + 1, MaxInt);
+    Mask:= VarOutMask(S.Signature);
+    if Result.TryGetValue(Key, Old) then
+    begin
+      if Length(Old) > Length(Mask) then SetLength(Mask, Length(Old));
+      for I:= 0 to High(Old) do Mask[I]:= Mask[I] or Old[I];
+    end;
+    Result.AddOrSetValue(Key, Mask);
   end;
 end;
 

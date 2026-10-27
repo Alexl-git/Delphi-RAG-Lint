@@ -1157,6 +1157,7 @@ var
   FactsAst      : TSymbolFactsAst            ; { taint T1 }
   DfFieldsByParent: TDictionary<Integer, TArray<string>>; { taint T1: field names per in-array parent index, built once per file }
   DfGlobals     : TArray<string>             ; { taint T1: this file's unit-level variables }
+  DfCallees     : TDataFlowCallees           ; { lane ARGOUT: this file's routine var/out masks, built lazily, freed below }
   SymStartLines : TArray<Integer>            ; { adp2-docregion-fix: every symbol's StartLine, sorted ascending -- lets FindDocRegionAbove reject a region separated from its symbol by an intervening declaration }
   EnclosingByLine: TArray<Int64>             ; { v0.85 perf: line -> enclosing routine's db id, built once per file (see BuildEnclosingLineMap) }
 begin
@@ -1336,6 +1337,7 @@ begin
     Inc(GProfOpenTx, ProfNow - TProf);
     IdxToId:= TDictionary<Integer, Int64>.Create;
     DfFieldsByParent:= nil; { taint T1: built lazily by the facts loop, freed below }
+    DfCallees:= nil;
     try
       try
         // adp2-docregion-fix: every symbol's StartLine in this file, sorted
@@ -1501,7 +1503,9 @@ begin
             var OwnFields: TArray<string>;
             var OrigParent:= ParseRes.Symbols[I].ParentId;
             if (OrigParent < 0) or not DfFieldsByParent.TryGetValue(Integer(OrigParent), OwnFields) then OwnFields:= nil;
-            FStore.PutDataFlows(Token, TDataFlowFacts.Collect(Sym, FactsAst.Proc, FactsAst.Body, FactsAst.Src, OwnFields, DfGlobals));
+            { lane ARGOUT: this file's routines decide which arguments get an argout source }
+            if DfCallees = nil then DfCallees:= TDataFlowFacts.BuildCallees(ParseRes.Symbols);
+            FStore.PutDataFlows(Token, TDataFlowFacts.Collect(Sym, FactsAst.Proc, FactsAst.Body, FactsAst.Src, OwnFields, DfGlobals, DfCallees));
           end;
           // v23 (spec F1): hold the candidates for the facts-inherited pass.
           // Only a routine with an owning class AND something unclassified is
@@ -1554,6 +1558,7 @@ begin
       // path above: Clear only frees cached trees, it does not touch FStore.
       TAstParseCache.Clear;
       DfFieldsByParent.Free;
+      DfCallees.Free; { lane ARGOUT }
       IdxToId.Free;
       // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
       // termination cannot swallow COMPLETED lines from the tail of this log.
