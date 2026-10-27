@@ -54,6 +54,14 @@ type
     constructor Create;
   end;
 
+  TControlHolder = class
+  private
+    FPanel: TComponent;
+    FLabel: TLabel;
+  public
+    constructor Create;
+  end;
+
 implementation
 
 procedure Register(AList: TStringList);
@@ -107,6 +115,12 @@ constructor TIntfHolder.Create;
 begin
   inherited Create;
   FE:= TInterfacedObject.Create; {OK}
+end;
+
+constructor TControlHolder.Create;
+begin
+  inherited Create;
+  FLabel:= TLabel.Create(FPanel); {OK}
 end;
 
 end.
