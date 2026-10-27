@@ -168,4 +168,16 @@ begin
       Check('n13.split.line3.' + IntToStr(LCase), (Places[0].Line = 3) and (Places[0].Col = 17),
         IntToStr(Places[0].Line) + '/' + IntToStr(Places[0].Col));
   end;
+
+  // --- rlines: RuleLinesOnly splits like the model (CRLF, LF, lone CR, mixed) ---
+  for var LCase: Integer:= 0 to 3 do
+  begin
+    var LText: string:= '#use A' + LFirst[LCase] + '// c' + CYR + LSecond[LCase] + '#use B' + LFirst[LCase] + '#use C';
+    var LOut: TArray<string>:= RuleLinesOnly(LText).Split([#10]);
+    Check('rlines.count.' + IntToStr(LCase), Length(LOut) = 4, IntToStr(Length(LOut)));
+    if Length(LOut) = 4 then
+      Check('rlines.blanked.' + IntToStr(LCase),
+        (LOut[0] = '#use A') and (LOut[1] = '') and (LOut[2] = '#use B') and (LOut[3] = '#use C'),
+        string.Join('|', LOut));
+  end;
 end;
