@@ -65,9 +65,15 @@ try {
     try { return ($o.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
   }
   function StripLine([string]$t) { return ($t -replace '^line \d+: ', '') }
+  # Engine 1.36 echoes BOOK line numbers inside item text ("at line(s) 421, 424", "under #link at line 420")
+  # and as the item line and file of warnings (file = the book); a split book renumbers them. Keep the COUNT of lines, drop the numbers.
+  function BookLines([string]$t) {
+    $t = [regex]::Replace($t, 'at line\(s\) ([\d, ]+)', { param($m) 'at line(s) x' + (($m.Groups[1].Value -split ',').Count) })
+    return ($t -replace 'at line \d+', 'at line N')
+  }
   function ItemKeys($j) {
     @($j.items | Where-Object { $_.kind -ne 'migrate-check' } | ForEach-Object {
-      '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}' -f $_.kind, $_.instance, $_.path, $_.value, $_.old_value, $_.field, $_.from_type, $_.to_type, (Split-Path $_.file -Leaf), $_.line, (StripLine $_.text)
+      '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}' -f $_.kind, $_.instance, $_.path, $_.value, $_.old_value, $_.field, $_.from_type, $_.to_type, $(if ($_.file -and $_.field -ne 'warnings') { Split-Path $_.file -Leaf } else { '' }), $(if ($_.field -eq 'warnings') { 0 } else { $_.line }), (BookLines (StripLine $_.text))
     })
   }
   function WarnKeys($j) { @($j.warnings | Where-Object { $_ -notmatch '#migrate .* NOT applied' } | ForEach-Object { StripLine $_ }) }
@@ -108,15 +114,21 @@ try {
       Check 'C1 control: a BDE book with one #link deleted is detected (A2 goes red)' ($jx -and ((SigDiff $sb (Sig $jx $j2)) -ne '')) ''
     } else { Check 'C1 control book built' $false 'no "#link Active <- Active" in the BDE book' }
 
-    # C2: Book-2 with the TAutoIncField To-unit dropped must FAIL A2
+    # C2: Book-2 with one TAutoIncField #link deleted must FAIL A2. (Dropping the To-unit from the header is no longer
+    # visible in a dry run on engine 1.36: the unit is derived from the To class, so Uses is unchanged -- the old
+    # control only went red through book line numbers, which A2 now ignores.)
     $t2 = [IO.File]::ReadAllText($dd)
     $hdr = '#convert Data.DB.TAutoIncField -> FireDAC.Comp.DataSet.TFDAutoIncField, FireDAC.Comp.DataSet'
-    if ($t2.Contains($hdr)) {
+    $lnk = "#link FieldName <- FieldName
+"
+    $h2 = $t2.IndexOf($hdr)
+    $k2 = if ($h2 -ge 0) { $t2.IndexOf($lnk, $h2) } else { -1 }
+    if ($k2 -ge 0) {
       $broken2 = Join-Path $WorkDir 'dd-nounit.rules'
-      [IO.File]::WriteAllText($broken2, $t2.Replace($hdr, '#convert Data.DB.TAutoIncField -> FireDAC.Comp.DataSet.TFDAutoIncField'), [Text.Encoding]::ASCII)
+      [IO.File]::WriteAllText($broken2, $t2.Remove($k2, $lnk.Length), [Text.Encoding]::ASCII)
       $jy = Apply $fxA $broken2
-      Check 'C2 control: a Data.DB book with the To-unit dropped is detected (A2 goes red)' ($jy -and ((SigDiff $sb (Sig $jb $jy)) -ne '')) ''
-    } else { Check 'C2 control book built' $false 'TAutoIncField header not found' }
+      Check 'C2 control: a Data.DB book with one TAutoIncField #link deleted is detected (A2 goes red)' ($jy -and ((SigDiff $sb (Sig $jb $jy)) -ne '')) ''
+    } else { Check 'C2 control book built' $false 'no TAutoIncField #link FieldName in the Data.DB book' }
   }
 
   # ---- B: bytes -------------------------------------------------------------
@@ -152,6 +164,7 @@ try {
     Check 'C3 control: without "#remove DFM: Origin" in Book-2 the stale Origin survives (B1/B3 go red)' ($dU -and ((Get-Content "$dU\BdeSplitForm.dfm" -Raw) -match 'DBDEMOS\.customer\.CustNo')) ''
   }
 }
+catch { Write-Host ("FATAL: unhandled error: " + $_) -ForegroundColor Red; $script:Failed = $true }
 finally {
   if (Test-Path -LiteralPath $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }
 }
