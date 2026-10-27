@@ -1,0 +1,10 @@
+# Hits: the for/foreach header (16, 19, 21, 24): items added/removed while iterating, and the
+# forward-delete loop. Known FP the message mentions: a Break as the very next statement.
+# Non-hits: backward loop (36), foreach that mutates a DIFFERENT collection (39), forward loop deleting from another list (41).
+collection-modified-in-loop 16
+collection-modified-in-loop 19
+collection-modified-in-loop 21
+collection-modified-in-loop 24
+!collection-modified-in-loop 36
+!collection-modified-in-loop 39
+!collection-modified-in-loop 41

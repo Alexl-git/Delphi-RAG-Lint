@@ -1,0 +1,7 @@
+# Hits: interface type declaration without a GUID (6, 10).
+# Non-hits: guided interfaces (14, 19), a dispinterface (24).
+interface-without-guid 6
+interface-without-guid 10
+!interface-without-guid 14
+!interface-without-guid 19
+!interface-without-guid 24
