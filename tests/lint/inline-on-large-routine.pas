@@ -6,6 +6,8 @@ function WithTry(A: Integer): Integer; inline;
 function Long(A: Integer): Integer; inline;
 function Edge(A: Integer): Integer; inline;
 function NotInline(A: Integer): Integer;
+function Ovl(A: Integer): Integer; overload; inline;
+function Ovl(A, B: Integer): Integer; overload;
 
 implementation
 
@@ -75,6 +77,20 @@ begin
     Result := A;
   finally
     Result := Result + 1;
+  end;
+end;
+
+function Ovl(A: Integer): Integer;
+begin
+  Result := A;
+end;
+
+function Ovl(A, B: Integer): Integer;
+begin
+  try
+    Result := A + B;
+  except
+    Result := 0;
   end;
 end;
 

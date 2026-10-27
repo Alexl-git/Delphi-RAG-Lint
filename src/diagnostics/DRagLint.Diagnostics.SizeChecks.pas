@@ -53,6 +53,12 @@ const
   DEFAULT_MAX_INLINE_LINES = 20;
   SHORTSTRING_BYTES        = 256;
   BYTES_UNKNOWN            = 1;
+  SIZE_1                   = 1;
+  SIZE_2                   = 2;
+  SIZE_4                   = 4;
+  SIZE_8                   = 8;
+  SIZE_16                  = 16;
+  STRING_OPEN              = 'string[';
   BYTES_MAX                = High(Int64) div 4;
 
 { Byte size of a scalar element type by lower-cased name; BYTES_UNKNOWN for a
@@ -61,19 +67,39 @@ const
 function ScalarBytes(const ALow: string): Int64;
 begin
   if MatchStr(ALow, ['byte', 'shortint', 'boolean', 'bytebool', 'char', 'ansichar', 'utf8char']) then
-    Result:= 1
+    Result:= SIZE_1
   else if MatchStr(ALow, ['word', 'smallint', 'widechar', 'wordbool']) then
-    Result:= 2
+    Result:= SIZE_2
   else if MatchStr(ALow, ['integer', 'cardinal', 'longint', 'longword', 'single', 'longbool',
     'uint32', 'int32', 'dword', 'tdatetime']) then
-    Result:= 4
+    Result:= SIZE_4
   else if MatchStr(ALow, ['int64', 'uint64', 'double', 'real', 'currency', 'pointer', 'string',
     'ansistring', 'unicodestring', 'widestring', 'nativeint', 'nativeuint', 'tobject', 'comp']) then
-    Result:= 8
+    Result:= SIZE_8
   else if MatchStr(ALow, ['extended', 'variant']) then
-    Result:= 16
+    Result:= SIZE_16
   else
     Result:= BYTES_UNKNOWN;
+end;
+
+{ Element count of a dimension list `lo..hi,lo..hi` (whitespace removed); -1 when
+  a bound is not a plain integer literal, BYTES_MAX on overflow. }
+function DimCount(const ADims: string): Int64;
+var
+  D: string;
+  P, Q, Lo, Hi: Integer;
+begin
+  Result:= 1;
+  for D in SplitString(ADims, ',') do
+  begin
+    P:= Pos('..', D);
+    Lo:= StrToIntDef(Copy(D, 1, P - 1), MaxInt);
+    Hi:= StrToIntDef(Copy(D, P + 2, MaxInt), MaxInt);
+    if (P = 0) or (Lo = MaxInt) or (Hi = MaxInt) or (Hi < Lo) then Exit(-1);
+    Q:= Hi - Lo + 1;
+    if Result > BYTES_MAX div Q then Exit(BYTES_MAX);
+    Result:= Result * Q;
+  end;
 end;
 
 { Static byte size of a type text (whitespace already removed, lower-cased):
@@ -81,52 +107,45 @@ end;
   scalar. Returns -1 when a bound is not a plain integer literal. }
 function TypeBytes(const AText: string): Int64;
 var
-  Dims, Elem, D: string;
-  P, Q, Lo, Hi: Integer;
+  Dims: string;
+  P: Integer;
   Count, ElemBytes: Int64;
-  Parts: TArray<string>;
 begin
-  if StartsStr('string[', AText) and EndsStr(']', AText) then
+  if StartsStr(STRING_OPEN, AText) and EndsStr(']', AText) then
   begin
-    Result:= StrToIntDef(Copy(AText, 8, Length(AText) - 8), -1);
+    Result:= StrToIntDef(Copy(AText, Length(STRING_OPEN) + 1, Length(AText) - Length(STRING_OPEN) - 1), -1);
     if Result >= 0 then Inc(Result);
-    Exit;
-  end;
-  if AText = 'shortstring' then Exit(SHORTSTRING_BYTES);
-  if StartsStr('packedarray[', AText) then
-    Dims:= Copy(AText, Length('packedarray') + 1, MaxInt)
-  else if StartsStr('array[', AText) then
-    Dims:= Copy(AText, Length('array') + 1, MaxInt)
-  else
-    Exit(ScalarBytes(AText));
-  P:= Pos(']of', Dims);
-  if P = 0 then Exit(-1);
-  Elem:= Copy(Dims, P + 3, MaxInt);
-  Parts:= SplitString(Copy(Dims, 2, P - 2), ',');
-  Count:= 1;
-  for D in Parts do
+  end
+  else if AText = 'shortstring' then
+    Result:= SHORTSTRING_BYTES
+  else if StartsStr('array[', AText) or StartsStr('packedarray[', AText) then
   begin
-    P:= Pos('..', D);
-    if P = 0 then Exit(-1);
-    Lo:= StrToIntDef(Copy(D, 1, P - 1), MaxInt);
-    Hi:= StrToIntDef(Copy(D, P + 2, MaxInt), MaxInt);
-    if (Lo = MaxInt) or (Hi = MaxInt) or (Hi < Lo) then Exit(-1);
-    Q:= Hi - Lo + 1;
-    if Count > BYTES_MAX div Q then Exit(BYTES_MAX);
-    Count:= Count * Q;
-  end;
-  ElemBytes:= TypeBytes(Elem);
-  if ElemBytes < 0 then Exit(-1);
-  if (ElemBytes > 0) and (Count > BYTES_MAX div ElemBytes) then Exit(BYTES_MAX);
-  Result:= Count * ElemBytes;
+    Dims:= Copy(AText, Pos('[', AText) + 1, MaxInt);
+    P:= Pos(']of', Dims);
+    Count:= -1;
+    ElemBytes:= -1;
+    if P > 0 then
+    begin
+      Count:= DimCount(Copy(Dims, 1, P - 1));
+      ElemBytes:= TypeBytes(Copy(Dims, P + Length(']of'), MaxInt));
+    end;
+    if (Count < 0) or (ElemBytes < 0) then
+      Result:= -1
+    else if (ElemBytes > 0) and (Count > BYTES_MAX div ElemBytes) then
+      Result:= BYTES_MAX
+    else
+      Result:= Count * ElemBytes;
+  end
+  else
+    Result:= ScalarBytes(AText);
 end;
-
 class function TSizeChecker.Check(const AFile: string; const ACfg: TLintConfig;
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;
+  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- AStore and AFileId are fixed by the shared checker-gate signature; this AST-only checker needs no index
 var
   PF         : TParsedFile                 ;
   Findings   : TList<TLintFinding>         ;
   InlineNames: TDictionary<string, Boolean>;
+  DefCounts  : TDictionary<string, Integer>;
   StackMax   : Int64                       ;
   BoolMax    : Integer                     ;
   InlineMax  : Integer                     ;
@@ -164,11 +183,17 @@ var
   { Lower-cased type text with all whitespace removed. }
   function CompactType(const N: TTSNode): string;
   var
-    C: Char;
+    SB: TStringBuilder;
+    C : Char          ;
   begin
-    Result:= '';
-    for C in LowerCase(NodeStr(N)) do
-      if not CharInSet(C, [' ', #9, #10, #13]) then Result:= Result + C;
+    SB:= TStringBuilder.Create;
+    try
+      for C in LowerCase(NodeStr(N)) do
+        if not CharInSet(C, [' ', #9, #10, #13]) then SB.Append(C);
+      Result:= SB.ToString;
+    finally
+      SB.Free;
+    end;
   end;
 
   function HasKind(const N: TTSNode; const AKind: string): Boolean;
@@ -195,8 +220,9 @@ var
     (interface/class declaration) or on a defProc header / trailing attribute. }
   procedure CollectInline(const N: TTSNode);
   var
-    I: Integer;
+    I, Cnt: Integer;
     H: TTSNode;
+    Key: string;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'declProc' then
@@ -206,6 +232,9 @@ var
     else if N.NodeType = 'defProc' then
     begin
       H:= N.ChildByField('header');
+      Key:= BareName(H.ChildByField('name'));
+      DefCounts.TryGetValue(Key, Cnt);
+      DefCounts.AddOrSetValue(Key, Cnt + 1);
       if HasKind(H, 'kInline') or HasKind(N.ChildByField('trailingAttr'), 'kInline') then
         InlineNames.AddOrSetValue(BareName(H.ChildByField('name')), True);
     end;
@@ -286,6 +315,8 @@ var
   begin
     NameN:= N.ChildByField('header').ChildByField('name');
     if NameN.IsNull or not InlineNames.ContainsKey(BareName(NameN)) then Exit;
+    { overloaded name: the declProc/defProc pairing is ambiguous -- stay silent }
+    if DefCounts[BareName(NameN)] > 1 then Exit;
     Lines:= Integer(N.EndPoint.Row) - Integer(N.StartPoint.Row) + 1;
     HasTry:= HasKind(N, 'try');
     if (Lines <= InlineMax) and not HasTry then Exit;
@@ -321,11 +352,13 @@ begin
   InlineMax:= ACfg.ThresholdFor(RULE_INLINE, DEFAULT_MAX_INLINE_LINES);
   Findings:= TList<TLintFinding>.Create;
   InlineNames:= TDictionary<string, Boolean>.Create;
+  DefCounts:= TDictionary<string, Integer>.Create;
   try
     CollectInline(PF.Tree.RootNode);
     Visit(PF.Tree.RootNode, False);
     Result:= Findings.ToArray;
   finally
+    DefCounts.Free;
     InlineNames.Free;
     Findings.Free;
   end;
