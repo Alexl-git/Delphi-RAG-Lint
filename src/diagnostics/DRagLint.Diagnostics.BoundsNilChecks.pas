@@ -365,12 +365,31 @@ function TBnRun.BuildScope(const AProc: TTSNode): TDictionary<string, TDeclInfo>
     for I:= 0 to N.ChildCount - 1 do Walk(N.Child(I));
   end;
 
+  { Inline `var X := ...` / `const X = ...` / `for var X ...`: the type is inferred, so the name only SHADOWS an outer declaration. }
+  procedure WalkInline(const N: TTSNode);
+  var
+    T: string;
+    I: Integer;
+    Info: TDeclInfo;
+  begin
+    if N.IsNull then Exit;
+    T:= N.NodeType;
+    if (T = 'defProc') or (T = 'lambda') then Exit;
+    if (T = 'varDef') or (T = 'varAssignDef') or (T = 'constInline') then
+    begin
+      Info:= Default(TDeclInfo);
+      for I:= 0 to N.ChildCount - 1 do
+        if N.Child(I).NodeType = 'identifier' then Result.AddOrSetValue(LowerCase(Txt(N.Child(I))), Info);
+    end;
+    for I:= 0 to N.ChildCount - 1 do WalkInline(N.Child(I));
+  end;
 var
   I: Integer;
   T: string;
 begin
   Result:= TDictionary<string, TDeclInfo>.Create;
   Walk(AProc.ChildByField('header'));
+  WalkInline(AProc.ChildByField('body'));
   for I:= 0 to AProc.ChildCount - 1 do
   begin
     T:= AProc.Child(I).NodeType;
@@ -698,7 +717,9 @@ begin
       end;
     if OddCount = 1 then
     begin
+      { EndLine := X.StartLine after StartLine := X.StartLine is a one-line span, not a typo. }
       Hit:= False;
+      if not (ARows[OddIdx].P.StartsWith('end') and ARows[OddIdx].Q.StartsWith('start')) then
       for J:= 0 to ARows.Count - 1 do
         if (J <> OddIdx) and (ARows[J].Q = ARows[OddIdx].Q)
           and ((ARows.Count >= MIN_RUN_ROWS) or IsAxisPair(ARows[OddIdx].P, ARows[J].P)) then Hit:= True;
