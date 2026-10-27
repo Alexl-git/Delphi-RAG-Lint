@@ -58,4 +58,50 @@ begin
   I.DoIt;
 end;
 
+procedure UseFoo(pFoo: IFoo);
+begin
+  pFoo.DoIt;
+end;
+
+procedure UseObj(pFoo: TFoo);
+begin
+  pFoo.DoIt;
+end;
+
+{ BadPassed (INBOX W534): the object local is passed to a same-file routine whose
+  parameter is an INTERFACE, then freed manually -- the callee's interface
+  reference counts the object and frees it. The X.Free must fire. }
+procedure BadPassed;
+var
+  lImpl: TFoo;
+begin
+  lImpl := TFoo.Create;
+  UseFoo(lImpl);
+  lImpl.Free;
+end;
+
+{ BadPassedFreeAndNil: same, released with FreeAndNil. }
+procedure BadPassedFreeAndNil;
+var
+  lImpl: TFoo;
+begin
+  lImpl := TFoo.Create;
+  UseFoo(lImpl);
+  FreeAndNil(lImpl);
+end;
+
+{ SafePassedObj: the callee takes a CLASS-typed parameter -- no interface
+  reference exists, the manual free is correct. Must NOT fire. }
+procedure SafePassedObj;
+var
+  lImpl: TFoo;
+begin
+  lImpl := TFoo.Create;
+  try
+    UseObj(lImpl);
+  finally
+    lImpl.Free;
+  end;
+end;
+
 end.
