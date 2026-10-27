@@ -42,10 +42,10 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 2887 pass / 0 fail / 20 skip** on main after the #migrate D5/D6-B and conv-1026 (pre-run encoding question) merges (2026-10-26). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 2950 pass / 0 fail / 20 skip** on main after the ready-wave merges N13/N2/N4/DRV (2026-10-26, fa80b602). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
-  tests SKIP; first line says which). Baseline on the 1.33.0-alpha-20261021-122057 pin:
-  **2956 pass / 0 fail / 0 skip** (1.35.0-alpha-20261025-125433 pin, 2026-10-26, measured BEFORE the D5/D6-B merge added 20 tests; `enc.live.capability` PASSES). The old 5 "VARINSP fixture" failures were a fixture defect:
+  tests SKIP; first line says which). Baseline on the 1.35.1-alpha-20261026-134311 pin:
+  **3068 pass / 0 fail / 0 skip** (same main, 2026-10-26). The old 5 "VARINSP fixture" failures were a fixture defect:
   VARINSP is outside Micronite2027's compile closure, so its project DB never holds it; the picker / fill tests now use AssignGroups. A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -55,19 +55,19 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-unit-picker.ps1` 20 -- unit picker
   * `drive-unit-harvest.ps1` 21 -- Unit Rules harvest (`-ProofNoDestination`)
   * `drive-file-menu.ps1` 19 -- New / Save As / Exit, unsaved guard
-  * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
+  * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard` (FAILS 3/3 on main 2026-10-26: `owning.row.found` picks the Work-list filter list; backlog DRV-3)
   * `drive-engine-wait.ps1` 16 -- progress window, Cancel, retry, cached reload; N7 Save under the progress window (menu path + real Ctrl+S) refused, book untouched (the key check is a guard only: it cannot go RED on a pre-N1 exe)
   * `drive-book-depth.ps1` 21 -- `#depth` combo
   * `drive-convert-tab.ps1` 32 -- Convert tab end to end (`-ProofNoIndex`); N1: a real click on Convert under the progress window is reported; N7/N11 (`n7.*`): POSTED WM_COMMAND (Add..., Convert) and BM_CLICK (Delete) under the progress window are refused and reported, none runs (RED on a pre-InputGate exe: Open dialog over the window + a real Convert)
   * `drive-convert-batch.ps1` 22 -- B4 batch mode: 2 units in ONE convert-apply, batch note, `.BCK1` x4, then a `CONVRULES_BATCH=off` relaunch runs per-unit (`-ProofNoBatch` = RED). No retry since N11: every driver's `WaitIdle` also asks the editor (registered message `ConvRulesEditor.Busy`: 2 busy / 1 idle / no answer = blocked = busy), and `ConvRules.InputGate` refuses + reports a click that still lands in busy work
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
   * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
-  * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
+  * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`) (FAILS 22/1 on main 2026-10-26: `glyph.open.good` no "Loaded" in 30 s; backlog DRV-3)
   * `drive-convert-request.ps1` 28 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
   * `drive-qualify-fix.ps1` 21 -- qualify quick fix (`-ProofNoFix` = 16 pass / 5 fail; `-UseAlt` 25 (D4); `-QualifyAll` 23 (D6), `-ProofNoQualifyAll` = 10 / 2)
   * `drive-save-encoding.ps1` 15 -- Save question, File > Encoding, UTF-16 BOM note
-  * `drive-convert-encoding.ps1` 20 -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
+  * `drive-convert-encoding.ps1` 22 -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; N2: Yes keeps every place as note rows, Cancel adds none; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
   * `drive-migrate.ps1` 24 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks; D5 bulk DL_NONE, D6-B opens the row's book (`-ProofNoMigrate` = 13 / 7, `-ProofNoBulk` = 22 / 2)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
