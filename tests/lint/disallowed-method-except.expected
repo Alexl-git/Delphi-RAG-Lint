@@ -1,0 +1,3 @@
+# Same banned call as disallowed-method.pas, but the entry's except glob matches this
+# file's path, so the rule stays silent.
+!disallowed-method

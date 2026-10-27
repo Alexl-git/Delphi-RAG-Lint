@@ -1,0 +1,2 @@
+{ "disallowed": { "methods": [
+  { "name": "Sleep", "reason": "use TTask.Delay", "except": ["*disallowed-method-except*"] } ] } }

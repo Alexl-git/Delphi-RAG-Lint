@@ -1,0 +1,3 @@
+{ "disallowed": { "methods": [
+  { "name": "Sleep", "reason": "use TTask.Delay" },
+  { "name": "TFile.Delete", "reason": "use the recycle-bin helper" } ] } }

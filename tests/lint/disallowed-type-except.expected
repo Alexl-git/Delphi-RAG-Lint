@@ -1,0 +1,2 @@
+# Banned type used, but the entry's except glob matches this file: silent.
+!disallowed-type

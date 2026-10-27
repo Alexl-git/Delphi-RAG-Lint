@@ -34,6 +34,24 @@ const
   DEFAULT_EXCEPTIONS_ROOT = 'Exception';
 
 type
+  /// <summary>Raised by TLintConfig.Load when a config key is present but malformed
+  /// (v1: only the "disallowed" block is validated this strictly).</summary>
+  ELintConfigError = class(Exception);
+
+  /// <summary>One entry of the "disallowed" config block: an identifier the project
+  /// bans, why, and the files exempt from the ban.</summary>
+  /// <remarks>Plain value record. Name may be dotted (TFile.Delete); matching is
+  /// case-insensitive and textual (see TDisallowedChecker).</remarks>
+  TDisallowedEntry = record
+    /// <summary>Banned identifier or dotted identifier path; never empty.</summary>
+    Name  : string;
+    /// <summary>Why it is banned; shown in the finding. May be empty.</summary>
+    Reason: string;
+    /// <summary>Case-insensitive path globs (as exclude_paths); a file matching any
+    /// is exempt from this entry only.</summary>
+    Exempt: TArray<string>;
+  end;
+
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
   /// "naming" block. Empty-string prefixes disable that prefix check; empty
   /// ConstCase disables const casing. KeywordCase='' disables reserved-word-casing;
@@ -156,7 +174,19 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
+    /// <summary>Parses the "disallowed" block into DisallowedMethods / Types / Names.</summary>
+    /// <param name="ABlock">The "disallowed" JSON object.</param>
+    /// <param name="AReplace">True for a profile (lists replaced), False to append.</param>
+    /// <exception cref="ELintConfigError">Block, list or entry is malformed.</exception>
+    procedure ApplyDisallowedObject(const ABlock: TJSONObject; AReplace: Boolean);
   public
+    /// <summary>Entries of "disallowed"."methods" (disallowed-method rule). Empty when
+    /// absent, which keeps the rule silent.</summary>
+    DisallowedMethods: TArray<TDisallowedEntry>;
+    /// <summary>Entries of "disallowed"."types" (disallowed-type rule).</summary>
+    DisallowedTypes: TArray<TDisallowedEntry>;
+    /// <summary>Entries of "disallowed"."names" (disallowed-name rule).</summary>
+    DisallowedNames: TArray<TDisallowedEntry>;
     /// <summary>Naming conventions parsed from the "naming" block; always
     /// populated with TNamingConfig.Default when no block is present.</summary>
     Naming: TNamingConfig;
@@ -189,6 +219,13 @@ type
     /// replaces the list; the top level appends. Not written by
     /// TLintConfigWriter, which preserves the key verbatim.</remarks>
     PlatformDivergentAllow: TArray<string>;
+    /// <summary>True when AFilePath matches any glob in AGlobs (case-insensitive;
+    /// '/' and '\' equivalent). The matcher behind IsPathExcluded and the
+    /// per-entry "except" lists.</summary>
+    /// <param name="AFilePath">Full path of the file.</param>
+    /// <param name="AGlobs">Globs; empty entries are ignored.</param>
+    /// <returns>False for an empty list or empty path.</returns>
+    class function MatchesAnyGlob(const AFilePath: string; const AGlobs: TArray<string>): Boolean; static;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields
@@ -665,6 +702,67 @@ begin
   end;
 end;
 
+procedure TLintConfig.ApplyDisallowedObject(const ABlock: TJSONObject; AReplace: Boolean);
+
+  { One list key into AList; ALabel names it in errors. }
+  procedure ApplyEntries(const AKey: string; var AList: TArray<TDisallowedEntry>);
+  var
+    Arr  : TJSONArray;
+    V, G : TJSONValue;
+    O    : TJSONObject;
+    E    : TDisallowedEntry;
+    Idx  : Integer;
+  begin
+    if ABlock.GetValue(AKey) = nil then Exit;
+    if not (ABlock.GetValue(AKey) is TJSONArray) then
+      raise ELintConfigError.CreateFmt('config: disallowed.%s must be an array of objects', [AKey]);
+    Arr:= ABlock.GetValue(AKey) as TJSONArray;
+    if AReplace then AList:= nil;
+    Idx:= 0;
+    for V in Arr do
+    begin
+      if not (V is TJSONObject) then
+        raise ELintConfigError.CreateFmt('config: disallowed.%s[%d] must be an object with "name"', [AKey, Idx]);
+      O:= V as TJSONObject;
+      E:= Default(TDisallowedEntry);
+      if not (O.GetValue('name') is TJSONString) or (Trim(O.GetValue('name').Value) = '') then
+        raise ELintConfigError.CreateFmt('config: disallowed.%s[%d] needs a non-empty string "name"', [AKey, Idx]);
+      E.Name:= Trim(O.GetValue('name').Value);
+      if O.GetValue('reason') <> nil then
+      begin
+        if not (O.GetValue('reason') is TJSONString) then
+          raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].reason must be a string', [AKey, Idx]);
+        E.Reason:= O.GetValue('reason').Value;
+      end;
+      if O.GetValue('except') <> nil then
+      begin
+        if not (O.GetValue('except') is TJSONArray) then
+          raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].except must be an array of glob strings', [AKey, Idx]);
+        for G in (O.GetValue('except') as TJSONArray) do
+        begin
+          if not (G is TJSONString) then
+            raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].except holds a non-string', [AKey, Idx]);
+          E.Exempt:= E.Exempt + [G.Value];
+        end;
+      end;
+      AList:= AList + [E];
+      Inc(Idx);
+    end;
+  end;
+
+var
+  Pair: TJSONPair;
+begin
+  for Pair in ABlock do
+    if not (SameText(Pair.JsonString.Value, 'methods') or SameText(Pair.JsonString.Value, 'types')
+      or SameText(Pair.JsonString.Value, 'names')) then
+      raise ELintConfigError.CreateFmt('config: unknown key disallowed.%s (expected methods, types or names)',
+        [Pair.JsonString.Value]);
+  ApplyEntries('methods', DisallowedMethods);
+  ApplyEntries('types', DisallowedTypes);
+  ApplyEntries('names', DisallowedNames);
+end;
+
 procedure TLintConfig.ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
 
   { One top-level string-array key into AList: a profile (AReplace) replaces
@@ -727,6 +825,12 @@ begin
         FThreshValues:= FThreshValues + [StrToIntDef(Pair.JsonValue.Value, 0)];
       end;
     end;
+  end;
+  if AObj.GetValue('disallowed') <> nil then
+  begin
+    if not (AObj.GetValue('disallowed') is TJSONObject) then
+      raise ELintConfigError.Create('config: "disallowed" must be an object with methods/types/names lists');
+    ApplyDisallowedObject(AObj.GetValue('disallowed') as TJSONObject, AReplace);
   end;
   if AObj.GetValue('naming') is TJSONObject then
     ApplyNamingObject(AObj.GetValue('naming') as TJSONObject);
@@ -798,17 +902,22 @@ begin
 end;
 
 function TLintConfig.IsPathExcluded(const AFilePath: string): Boolean;
+begin
+  Result:= MatchesAnyGlob(AFilePath, FExcludePaths);
+end;
+
+class function TLintConfig.MatchesAnyGlob(const AFilePath: string; const AGlobs: TArray<string>): Boolean;
 var
   G: string;
 begin
   Result:= False;
-  if (Length(FExcludePaths) = 0) or (AFilePath = '') then Exit;
+  if (Length(AGlobs) = 0) or (AFilePath = '') then Exit;
   { MatchesMask on the LOWERCASED path, with '/' folded to '\': an author writes
     the glob one way and Windows hands us the other, and a filter that silently
     fails to match is the worst outcome here -- it reports a full scan while
     quietly linting what the config said to skip. }
   var P: string:= LowerCase(StringReplace(AFilePath, '/', '\', [rfReplaceAll]));
-  for G in FExcludePaths do
+  for G in AGlobs do
     if (G <> '') and MatchesMask(P, LowerCase(StringReplace(G, '/', '\', [rfReplaceAll]))) then
       Exit(True);
 end;
