@@ -66,6 +66,7 @@ uses
   , ConvRules.RuleChains in 'ConvRules.RuleChains.pas'
   , ConvRules.MigrateRun in 'ConvRules.MigrateRun.pas'
   , ConvRules.MigrateForm in 'ConvRules.MigrateForm.pas'
+  , ConvRules.ChainForm in 'ConvRules.ChainForm.pas'
   , ConvRules.MembersPanel in 'ConvRules.MembersPanel.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;

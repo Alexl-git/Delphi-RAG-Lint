@@ -16209,6 +16209,7 @@ begin
     TestRuleChainsMarks;
     TestRuleChainsMerge;
     TestRuleChainsSplit;
+    TestRuleChainsUi;
 
     FreeAndNil(GParseBook);
 

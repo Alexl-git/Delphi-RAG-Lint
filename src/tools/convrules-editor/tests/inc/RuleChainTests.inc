@@ -394,3 +394,50 @@ begin
     Books.Free;
   end;
 end;
+
+{ Task 4: the dialog's button gates, the session's asked set, the Merge status and
+  the stage-book append text (pure decisions behind ConvRules.ChainForm / MainForm). }
+procedure TestRuleChainsUi;
+var
+  Books : TObjectList<TRuleBook>;
+  LChain: TArray<TRuleChain>;
+  LCycle: TArray<TRuleChain>;
+  LUnit : TArray<TRuleChain>;
+  LDup  : TArray<TRuleChain>;
+  LKeys : TArray<string>;
+begin
+  Books:= TObjectList<TRuleBook>.Create(True);
+  try
+    LChain:= FindRuleChains(ChainMakeBook(Books, CHAIN_BOOK_CHAIN));
+    LCycle:= FindRuleChains(ChainMakeBook(Books, CHAIN_BOOK_CYCLE));
+    LUnit := FindRuleChains(ChainMakeBook(Books, CHAIN_BOOK_UNIT_SWAP));
+    LDup  := FindRuleChains(ChainMakeBook(Books, CHAIN_BOOK_DUP));
+    Check('chains.ui.merge.enabled', CanMergeAll(LChain) and CanMergeAll(LUnit) and CanMergeAll(LChain + LUnit), 'chain / unit chain');
+    Check('chains.ui.merge.disabled', (not CanMergeAll(nil)) and (not CanMergeAll(LChain + LCycle)) and (not CanMergeAll(LDup)), 'none / cycle / dup');
+    Check('chains.ui.split.enabled', CanSplitAll(LChain), 'chain');
+    Check('chains.ui.split.disabled', (not CanSplitAll(nil)) and (not CanSplitAll(LUnit)) and (not CanSplitAll(LChain + LCycle)), 'none / unit / cycle');
+    LKeys:= ChainKeysAsked(nil, LChain + LCycle);
+    Check('chains.ui.asked.add', (Length(LKeys) = 2) and (LKeys[0] = LChain[0].Key) and (LKeys[1] = LCycle[0].Key), string.Join('|', LKeys));
+    LKeys:= ChainKeysAsked([UpperCase(LChain[0].Key)], LChain + LUnit);
+    Check('chains.ui.asked.dedup', (Length(LKeys) = 2) and (LKeys[1] = LUnit[0].Key), string.Join('|', LKeys));
+    Check('chains.ui.asked.offer', Length(ChainsToOffer(LChain + LUnit, ChainKeysAsked(nil, LChain + LUnit))) = 0, 'asked once');
+    Check('chains.ui.merge.status', MergeStatusText(['TA -> TB -> TC'], nil) = 'Merged 1 chain(s): TA -> TB -> TC -- review the composed block, then Save',
+      MergeStatusText(['TA -> TB -> TC'], nil));
+    Check('chains.ui.merge.status.problems', MergeStatusText(['TA -> TB -> TC', 'TX -> TY -> TZ'], ['p1'])
+      = 'Merged 2 chain(s): TA -> TB -> TC, TX -> TY -> TZ -- review the composed block, then Save; not merged: p1',
+      MergeStatusText(['TA -> TB -> TC', 'TX -> TY -> TZ'], ['p1']));
+    Check('chains.ui.merge.status.none', MergeStatusText(nil, ['p1', 'p2']) = 'Nothing merged: p1; p2', MergeStatusText(nil, ['p1', 'p2']));
+    Check('chains.ui.append', StageAppendText('#depth 2' + CHAIN_CRLF + '#convert TX -> TY' + CHAIN_CRLF + '#link a <- b',
+        '#depth 2' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x' + CHAIN_CRLF)
+      = '#depth 2' + CHAIN_CRLF + '#convert TX -> TY' + CHAIN_CRLF + '#link a <- b' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x' + CHAIN_CRLF,
+      StageAppendText('#depth 2' + CHAIN_CRLF + '#convert TX -> TY' + CHAIN_CRLF + '#link a <- b',
+        '#depth 2' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x' + CHAIN_CRLF));
+    Check('chains.ui.append.mapping', StageAppendText('#convert TX -> TY' + CHAIN_CRLF,
+        '#depth 2' + CHAIN_CRLF + '#mapping M from E.TEnum to TC' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#apply M' + CHAIN_CRLF)
+      = '#convert TX -> TY' + CHAIN_CRLF + '#mapping M from E.TEnum to TC' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#apply M' + CHAIN_CRLF,
+      StageAppendText('#convert TX -> TY' + CHAIN_CRLF,
+        '#depth 2' + CHAIN_CRLF + '#mapping M from E.TEnum to TC' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#apply M' + CHAIN_CRLF));
+  finally
+    Books.Free;
+  end;
+end;

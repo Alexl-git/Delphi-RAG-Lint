@@ -65,7 +65,7 @@ function ChainPathText(const AChain: TRuleChain): string;
 /// <summary>The dialog row: 'chain TA -> TB -> TC (lines 3, 9)', 'cycle TA -> TB -> TA (lines 3, 9)', 'duplicate From TA (line 3 wins; 12 never applied)', 'unit chain A -> B -> C (lines 1, 2)'.</summary>
 /// <param name="AChain">The finding.</param>
 /// <returns>The row text; line numbers are node index + 1.</returns>
-function ChainRowText(const AChain: TRuleChain): string;  // dl:ok unused-public-symbol@0da8 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm / ChainForm in CHAIN-1 Task 4; the model tests already call it
+function ChainRowText(const AChain: TRuleChain): string;
 /// <summary>The warning mark for stage AStage (0-based) of AChain -- the exact strings are in the implementation constants and pinned by TestRuleChainsTexts.</summary>
 /// <param name="AChain">The finding.</param>
 /// <param name="AStage">0-based stage index into AChain.Stages.</param>
@@ -82,16 +82,16 @@ function CanSplitChain(const AChain: TRuleChain): Boolean;
 /// <summary>'' when none; else 'Rule chains: 1 chain, 2 duplicate From types -- see marked rules (Conversion > Rule chains...)' with only the non-zero counts, singular/plural by count.</summary>
 /// <param name="AChains">The findings.</param>
 /// <returns>The status text.</returns>
-function ChainStatusText(const AChains: TArray<TRuleChain>): string;  // dl:ok unused-public-symbol@1f26 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm / ChainForm in CHAIN-1 Task 4; the model tests already call it
+function ChainStatusText(const AChains: TArray<TRuleChain>): string;
 /// <summary>The findings to offer now: those with CanMerge or CanSplit whose Key is not in AAsked (case-insensitive).</summary>
 /// <param name="AChains">The findings.</param>
 /// <param name="AAsked">Keys already offered this session.</param>
 /// <returns>The findings still to offer.</returns>
-function ChainsToOffer(const AChains: TArray<TRuleChain>; const AAsked: TArray<string>): TArray<TRuleChain>;  // dl:ok unused-public-symbol@2f32 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm / ChainForm in CHAIN-1 Task 4; the model tests already call it
+function ChainsToOffer(const AChains: TArray<TRuleChain>; const AAsked: TArray<string>): TArray<TRuleChain>;
 /// <summary>Adds the warning mark of every finding to every node it involves (spec 5.2 M1); returns the number added; never adds a mark twice.</summary>
 /// <param name="ABook">The book whose nodes get the session marks; not owned.</param>
 /// <returns>The number of marks added.</returns>
-function StaticChainMarks(ABook: TRuleBook): Integer;  // dl:ok unused-public-symbol@30de -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm / ChainForm in CHAIN-1 Task 4; the model tests already call it
+function StaticChainMarks(ABook: TRuleBook): Integer;
 
 // ---- Task 2 (merge composition): TChainMerge, MergeChainPlan, ApplyChainMerge ----
 type
@@ -118,12 +118,12 @@ type
 /// <param name="AChain">A finding of FindRuleChains on ABook.</param>
 /// <returns>The plan; Problem is set (and nothing else valid) when the chain is not mergeable or its lines changed since detection.</returns>
 /// <remarks>Spec 5.4 A1-A9, A11. The last stage block stays in the book; only the first stage's range is replaced.</remarks>
-function MergeChainPlan(ABook: TRuleBook; const AChain: TRuleChain): TChainMerge;  // dl:ok unused-public-symbol@fff1 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm in CHAIN-1 Task 4; the model tests already call it
+function MergeChainPlan(ABook: TRuleBook; const AChain: TRuleChain): TChainMerge;
 /// <summary>Replace the planned range with the new lines (each parsed into a node, nodes moved in).</summary>
 /// <param name="ABook">The book the plan was made for; changed in place.</param>
 /// <param name="AMerge">A plan from MergeChainPlan.</param>
 /// <returns>The new header's node index (= AMerge.NodeIdx); -1 when AMerge.Problem is set or the range is no longer there.</returns>
-function ApplyChainMerge(ABook: TRuleBook; const AMerge: TChainMerge): Integer;  // dl:ok unused-public-symbol@0468 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm in CHAIN-1 Task 4; the model tests already call it
+function ApplyChainMerge(ABook: TRuleBook; const AMerge: TChainMerge): Integer;
 
 type
   /// <summary>Which headers go to which stage book (spec 4 "Stage").</summary>
@@ -138,30 +138,56 @@ type
 /// <param name="ABook">The book; not owned, not changed.</param>
 /// <param name="AChains">The findings of FindRuleChains(ABook).</param>
 /// <returns>The stage plan; links touching a cycle member are ignored, so those headers stay at stage 1.</returns>
-function SplitChainPlan(ABook: TRuleBook; const AChains: TArray<TRuleChain>): TChainSplit;  // dl:ok unused-public-symbol@d55b -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+function SplitChainPlan(ABook: TRuleBook; const AChains: TArray<TRuleChain>): TChainSplit;
 /// <summary>'C:\x\Book.rules' + 2 -> 'C:\x\Book.stage2.rules'.</summary>
 /// <param name="ABookPath">The book file path.</param>
 /// <param name="AStage">The 1-based stage number (2 or more).</param>
 /// <returns>The stage book path beside the book.</returns>
-function StageBookPath(const ABookPath: string; AStage: Integer): string;  // dl:ok unused-public-symbol@4539 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+function StageBookPath(const ABookPath: string; AStage: Integer): string;
 /// <summary>The text of one stage book: the '#depth N' line when ABook has a valid one, the #mapping groups named, then the blocks of AHeaderIdx verbatim (from SplitRulesBlocks of ABook.SaveToString), CRLF, trailing EOL.</summary>
 /// <param name="ABook">The source book; not owned, not changed.</param>
 /// <param name="AHeaderIdx">Header node indexes to carry.</param>
 /// <param name="AMappings">#mapping names whose declaration and clause lines are copied (not moved).</param>
 /// <returns>The stage book text.</returns>
-function StageBookText(ABook: TRuleBook; const AHeaderIdx: TArray<Integer>; const AMappings: TArray<string>): string;  // dl:ok unused-public-symbol@4459 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+function StageBookText(ABook: TRuleBook; const AHeaderIdx: TArray<Integer>; const AMappings: TArray<string>): string;
 /// <summary>The source without the moved blocks: JoinBlocks(SplitOut(...)) of ABook.SaveToString -- preamble and trailer untouched.</summary>
 /// <param name="ABook">The source book; not owned, not changed.</param>
 /// <param name="AMovedHeaderIdx">Header node indexes that moved to stage books.</param>
 /// <returns>The remaining book text.</returns>
-function RemainingBookText(ABook: TRuleBook; const AMovedHeaderIdx: TArray<Integer>): string;  // dl:ok unused-public-symbol@6383 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+function RemainingBookText(ABook: TRuleBook; const AMovedHeaderIdx: TArray<Integer>): string;
 /// <summary>The status line after a split: 'Split 2 block(s) into Book.stage2.rules -- convert with Book.rules first, then Book.stage2.rules (check both on the Convert tab, in that order)' plus '; copied #mapping M1, M2 into the stage book' when any.</summary>
 /// <param name="ABookPath">The book file path.</param>
 /// <param name="AStageFiles">The stage book paths written, stage 2 first.</param>
 /// <param name="AMoved">Number of blocks moved.</param>
 /// <param name="AMappings">The #mapping names copied.</param>
 /// <returns>The status text.</returns>
-function SplitStatusText(const ABookPath: string; const AStageFiles: TArray<string>; AMoved: Integer; const AMappings: TArray<string>): string;  // dl:ok unused-public-symbol@4cd0 -- REVIEWED 2026-10-27 consumer is ConvRules.MainForm SplitChains in CHAIN-1 Task 4; the model tests already call it
+function SplitStatusText(const ABookPath: string; const AStageFiles: TArray<string>; AMoved: Integer; const AMappings: TArray<string>): string;
+
+// ---- Task 4 (dialog and MainForm decisions) ----
+/// <summary>Whether the Rule chains dialog's Merge button is enabled: at least one finding checked and every checked one CanMergeChain (spec 5.3 O2).</summary>
+/// <param name="AChecked">The checked findings.</param>
+/// <returns>True when Merge applies to all of them.</returns>
+function CanMergeAll(const AChecked: TArray<TRuleChain>): Boolean;
+/// <summary>Whether the Rule chains dialog's Split button is enabled: at least one finding checked and every checked one CanSplitChain (spec 5.3 O2).</summary>
+/// <param name="AChecked">The checked findings.</param>
+/// <returns>True when Split applies to all of them.</returns>
+function CanSplitAll(const AChecked: TArray<TRuleChain>): Boolean;
+/// <summary>AAsked plus the Key of every finding in AListed not already in it (case-insensitive), order kept: the session's asked set after the dialog listed AListed (spec 5.3 O2, A10).</summary>
+/// <param name="AAsked">Keys asked so far.</param>
+/// <param name="AListed">The findings the dialog listed.</param>
+/// <returns>The new asked set.</returns>
+function ChainKeysAsked(const AAsked: TArray<string>; const AListed: TArray<TRuleChain>): TArray<string>;
+/// <summary>The status after Merge: 'Merged 2 chain(s): TA -> TB -> TC, TX -> TY -> TZ -- review the composed block, then Save' (spec 5.4 A10), plus '; not merged: p1; p2' for each refused plan; only the refusals when nothing merged ('Nothing merged: p1').</summary>
+/// <param name="AMerged">ChainPathText of every chain merged.</param>
+/// <param name="AProblems">MergeChainPlan.Problem of every chain refused.</param>
+/// <returns>The status text.</returns>
+function MergeStatusText(const AMerged, AProblems: TArray<string>): string;
+/// <summary>The text of an EXISTING stage book after a split appends to it: AExisting's blocks, its last block terminated, then AStage's blocks without AStage's '#depth' line (the existing book's own #depth governs).</summary>
+/// <param name="AExisting">The stage book's current text.</param>
+/// <param name="AStage">StageBookText of the blocks being moved.</param>
+/// <returns>The text to write; CRLF.</returns>
+/// <remarks>Spec 5.5 S2 (the Curation append rule). Duplicate headers are reported by the caller (DuplicateHeaders), not refused here.</remarks>
+function StageAppendText(const AExisting, AStage: string): string;
 
 
 implementation
@@ -1287,6 +1313,59 @@ begin
     [AMoved, string.Join(', ', LNames), ExtractFileName(ABookPath), string.Join(', then ', LNames)]);
   if Length(AMappings) > 0 then
     Result:= Result + '; copied #mapping ' + string.Join(', ', AMappings) + ' into the stage book';
+end;
+
+function CanMergeAll(const AChecked: TArray<TRuleChain>): Boolean;
+begin
+  Result:= Length(AChecked) > 0;
+  for var LChain: TRuleChain in AChecked do
+    if not CanMergeChain(LChain) then
+      Exit(False);
+end;
+
+function CanSplitAll(const AChecked: TArray<TRuleChain>): Boolean;
+begin
+  Result:= Length(AChecked) > 0;
+  for var LChain: TRuleChain in AChecked do
+    if not CanSplitChain(LChain) then
+      Exit(False);
+end;
+
+function ChainKeysAsked(const AAsked: TArray<string>; const AListed: TArray<TRuleChain>): TArray<string>;
+begin
+  Result:= Copy(AAsked);
+  for var LChain: TRuleChain in AListed do
+    if (LChain.Key <> '') and (IndexText(LChain.Key, Result) < 0) then
+      Result:= Result + [LChain.Key];
+end;
+
+function MergeStatusText(const AMerged, AProblems: TArray<string>): string;
+begin
+  if Length(AMerged) = 0 then
+    Exit('Nothing merged: ' + string.Join('; ', AProblems));
+  Result:= Format('Merged %d chain(s): %s -- review the composed block, then Save', [Length(AMerged), string.Join(', ', AMerged)]);
+  if Length(AProblems) > 0 then
+    Result:= Result + '; not merged: ' + string.Join('; ', AProblems);
+end;
+
+function StageAppendText(const AExisting, AStage: string): string;
+var
+  LLines: TArray<string>;
+  LKept : TArray<string>;
+  LInPre: Boolean;
+begin
+  // Only the preamble's #depth goes: the existing book's own #depth governs.
+  LLines:= AStage.Replace(#13#10, #10).Split([#10]);
+  LKept := nil;
+  LInPre:= True;
+  for var LLine: string in LLines do
+  begin
+    if StartsText('#convert', TrimLeft(LLine)) then
+      LInPre:= False;
+    if not (LInPre and StartsText('#depth', TrimLeft(LLine))) then
+      LKept:= LKept + [LLine];
+  end;
+  Result:= JoinBlocks(ConcatBlocks(SplitRulesBlocks(AExisting), SplitRulesBlocks(string.Join(#13#10, LKept))));
 end;
 
 end.
