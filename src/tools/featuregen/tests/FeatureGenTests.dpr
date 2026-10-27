@@ -3399,6 +3399,12 @@ begin
   Check('Menu.G4.WrappedPathPasses', Count('Choose drag-lint >'#10'Help > Effect Summary Legend.') = 0);
   Check('Menu.G4.DialogBehindLeafPasses', Count('drag-lint > About > Open Plugin Log') = 0);
   Check('Menu.G4.HeadingEndsQuote', Count('drag-lint > Help'#10#10'## Next') = 0);
+  // a path that does not start at the IDE menu (a Windows path) is not an IDE menu path
+  Check('Menu.G4.WindowsPathPasses', Count('Windows Settings > Apps > drag-lint > Uninstall') = 0);
+  Check('Menu.G4.WindowsPathInQuotesPasses', Count('Open "Settings > Apps > drag-lint > Uninstall" and remove it') = 0);
+  // positive controls: a stale path that starts at the root still fails, also behind the ide-menu: prefix
+  Check('Menu.G4.PrefixedStaleFails', Count('ide-menu:drag-lint > NoSuchItem') = 1);
+  Check('Menu.G4.RootedStaleAfterWindowsPathFails', Count('Apps > drag-lint > Uninstall, then drag-lint > NoSuchItem') = 1);
 end;
 
 procedure TestRuleCounts;
