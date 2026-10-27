@@ -52,18 +52,45 @@ before working on an item.**
   * **DONE (conv/namedrop, 2026-10-26): name-drop workaround removed** -- `ListCodeRefs` (`CODE_REFS_SQL`) now reads FIELD-resolved refs only; the unresolved-ref read and its local/param name-drop are gone; tests `coderefs.live.fields.only` / `.library.member.dropped`. Was: ENGINE (2026-10-26) says 1.35.1 already binds cross-unit
     implicit-Self reads/writes of inherited fields (7 shapes; guard lands with 1.36.0). Limit: members
     of a LIBRARY ancestor (TForm.Tag) still need the library store attached.
-  * **DRV-1** (S) drive-save-encoding `save.nonascii.asks` read '' from the warning (1 of 3 runs): same
+  * **DONE (conv/drvfix 1e42235c, merged ab1058a1, 2026-10-27): DRV-1** copy retry ported. Was: drive-save-encoding `save.nonascii.asks` read '' from the warning (1 of 3 runs): same
     lost-first-copy race DRV fixed in convert-encoding -- port the copy retry.
-  * **DRV-2** (S) drive-convert-tab N1/N7 precondition "progress window never appeared" (2 of 3 runs):
+  * **PARTLY DONE (conv/drvfix adbd042c): DRV-2** -- the engine call is now held (C8 child suspended), so the
+    progress-window precondition is deterministic; `n1.lost.click.reported` still flaky on warm runs ->
+    lane drv2b (conv/drv2b, suspected LostClickTimerFire vs AddSources status race). Was: drive-convert-tab N1/N7 precondition "progress window never appeared" (2 of 3 runs):
     the engine call is too fast to catch; make the fixture slower or hold the window deterministically.
   * **DONE (conv/drv3 4fdcf11d, 2026-10-27): DRV-3** driver defects, both 3x green. Side effect found: open
     status lost its line/rule counts since cd8cdc07 -> owner: counts must show (lane opencounts). Was: FAIL on main before the wave: owning-open 3/6 (`owning.row.found` picks the Work-list
     filter list), glyph-link 22/1 (`glyph.open.good` no "Loaded" in 30 s).
-  * **DRV-4** (S) gui.lock needs a heartbeat: a 30-min takeover broke a 38-min run (two editors).
-  * **DRV-5** (S) glyph-link, inherited-offer, qualify-fix, work-list do not ask the editor's busy
-    message (`ConvRulesEditor.Busy`) as the kit claims every driver does.
-  * **N4-1** (S) no GUI case for a mixed raise (some units refused): needs a fixture; 14 model checks cover it.
-  * **N13-1** (low) `BookPlaces` splits on LF only; the model also splits on a lone CR.
+  * **DONE (conv/drvfix 1e42235c, merged ab1058a1): DRV-4** tracked `tests\gui\gui-lock.ps1` with a
+    heartbeat. Was: gui.lock needs a heartbeat: a 30-min takeover broke a 38-min run (two editors).
+  * **DONE (conv/drvfix 1e42235c, merged ab1058a1): DRV-5** busy query added; all four drivers now ask
+    `ConvRulesEditor.Busy` (re-measured 2026-10-27). Was: glyph-link, inherited-offer, qualify-fix,
+    work-list did not ask the editor's busy message.
+  * **DONE (conv/n13 54cda2b1, merged c4728fd8): N4-1** drive-convert-encoding `mixed.*` case (3 units, one
+    raised) + `-ProofNoMixed` RED. Was: no GUI case for a mixed raise.
+  * **DONE (conv/n13 3c39d49d, merged c4728fd8): N13-1** `EncodingPlacesFor` splits via `BookLines` (CRLF,
+    LF, lone CR); tests `n13.split.*`. Still open: `RuleLinesOnly` splits on LF only (other callers).
+  * **DONE (conv/opencounts d88412a4, merged 274e5e73): opencounts** File > Open status shows
+    "Loaded <book> (<enc>): N line(s), N rule(s)" again (`OpenedStatusText`, model-tested).
+* 2026-10-27 small-items wave (merged to main d67dd619; model 2975/0/20 no engine):
+  * **DONE rlines** (f3ca6f07): `RuleLinesOnly` splits via `BookLines` (CRLF, LF, lone CR); output is
+    LF-joined, no trailing break (one caller re-splits); tests `rlines.*`.
+  * **DONE ndgate** (0892f00d, 90e53ab6): engine < 1.35.1 (or unreadable version) -> `ListCodeRefs`
+    fails with `FieldRefsGateNote` text instead of an empty answer; tests `ndgate.*`. No capability
+    exists for inherited-field binding, so the gate is the version.
+  * **DONE Q08** (7d8bfc66): `qualify.apply.retarget.requires.applied`; the mutant also dies on the
+    older `.skips.refused`, so Q08 was partly stale.
+  * **DONE ewait** (b7bc2fc9): `wait.reload.no.window` flake was a DRIVER defect (cached proptree
+    still opens DBs; slow-machine excuse timed `--version`). Excuse now times the real child; a
+    window before 350 ms always fails. RED with SHOW_DELAY_MS=0. **Owed:** a 16/16 run on an
+    unlocked desktop (`save.key.*` cannot send Ctrl+S while locked; lane skiplock makes them SKIP).
+  * **CLOSED by re-check:** B2 `RefusalHint` is gone from the index; B10 `inherited_code_unconverted`
+    capability is wired (Engine.pas CAPABILITY_INHERITED_CODE_UNCONVERTED).
+  * **migtypo** on conv/d2-split (34a9d25d): `#migrate TDBScreenCursors` -> `TDBScreenCursor`
+    (Data.DB enum, library-Win32 + Data.DB.pas:3190) in DataDB-to-FireDAC.rules; rides with the D2
+    merge (book-split guard will flag that one-line difference). Open question: does a book-wide
+    `#migrate` rename a TYPE name, or members only? `convrules\vendor\FireDAC_Migrate_BDE.rules:36`
+    keeps the typo (vendor copy, left as is).
 * 2026-10-26 (night) OWNER: main pushed (1b7a70d3..7c7746b4, 81 commits). Two owner inputs:
   * **D2 -> SPLIT (owner option, preferred)**: split BDE-to-FireDAC.rules into a BDE book and a
     "Book-2" with every rule unrelated to the BDE conversion. First step: classify the 43 book-wide

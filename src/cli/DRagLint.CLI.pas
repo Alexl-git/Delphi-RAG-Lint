@@ -19262,7 +19262,13 @@ end;
 /// <remarks>The .dfm sibling is included deliberately: TClosureResolver yields
 /// .pas/.inc only, so scoping strictly to it would silently drop every form's
 /// DFM findings from a project run. Membership is a whitelist -- a file the
-/// closure cannot see is out of scope, which is the entire point.</remarks>
+/// closure cannot see is out of scope, which is the entire point.
+/// The closure is preprocessed against the .dproj's ACTIVE build (its Config /
+/// Platform markers; --platform wins), the same build InstallFileProfileResolver
+/// gives the run's DEFINES (C10, owner D5), so a unit used only under an {$IFDEF}
+/// of the active config is in scope and one used only under an inactive config is
+/// not. A .dpr, or no project file, keeps the platform built-ins. Guard:
+/// run_lint_project_scope_active_config_guard.ps1.</remarks>
 function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>;
 var
   Resolver    : TClosureResolver                          ;
@@ -19283,7 +19289,10 @@ begin
   try
     var Dproj: string:= '';
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
-    Resolver.SetPreprocess(not AArgs.NoPreprocess, ResolveIndexProfile(Dproj, AArgs.CheckPlatform, ''));
+    var ScopeProfile: TDefineProfile:= ResolveIndexProfile('', AArgs.CheckPlatform, '');
+    if (Dproj <> '') and TFile.Exists(Dproj) then
+      ScopeProfile:= ResolveActiveBuild(Dproj, AArgs.CheckPlatform, '', True).Profile;
+    Resolver.SetPreprocess(not AArgs.NoPreprocess, ScopeProfile);
     { An unreadable/absent project file must surface as "no scope" -- which the
       caller turns into a usage error -- not as an unhandled exception. }
     CR:= Default(TClosureResult);
@@ -34139,6 +34148,8 @@ begin
       ConfigureLspLint(Args, DbList);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
+      if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
+      LSP.StartupPlatform:= Args.CheckPlatform;
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance

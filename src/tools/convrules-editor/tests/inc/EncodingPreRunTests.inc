@@ -36,8 +36,8 @@ begin
         ALevel:= tlAscii7;
     end;
 
-  // --- comment lines are blanked, line numbers kept ---
-  Check('prerun.rule.lines.only', RuleLinesOnly('// x' + CYR + #13#10 + '#use A') = #13#10 + '#use A',
+  // --- comment lines are blanked, line numbers kept, breaks normalised to LF ---
+  Check('prerun.rule.lines.only', RuleLinesOnly('// x' + CYR + #13#10 + '#use A') = #10 + '#use A',
     RuleLinesOnly('// x' + CYR + #13#10 + '#use A'));
 
   // --- every place (not one per character): book, line:col, code, the rule line, the unit ---
