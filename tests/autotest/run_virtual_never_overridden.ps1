@@ -6,7 +6,7 @@
 #   DrawC virtual abstract                       -> silent
 #   DrawD dynamic, no override                   -> FIRES (line 11)
 #   constructor Create virtual                   -> silent (metaclass construction is invisible to the index)
-# OFF by default: with no config the rule must be silent (positive control for the config below).
+# OFF by default: with no config and no --rule the rule must be silent (positive control for the config below).
 # Fix (risky): deletes the `virtual;` / `dynamic;` directive; expected\uV.fixed.pas is hand-written.
 # Usage: pwsh -File tests/autotest/run_virtual_never_overridden.ps1 [-Exe <path>]
 [CmdletBinding()]
@@ -22,7 +22,7 @@ try {
   $db = Join-Path $WorkDir 'fx.sqlite'
   $cfg = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\config.json"
   Check 'index exits 0' ((Invoke-G8Index $Exe $fx $db) -eq 0)
-  $off = Get-G8Findings $Exe $db $rule
+  $off = Get-G8Findings $Exe $db $rule -AllRules
   $f = Get-G8Findings $Exe $db $rule @('--config', $cfg)
   Show-G8Findings $f
   $lines = @($f | ForEach-Object { [int]$_.start_line } | Sort-Object)
@@ -41,7 +41,7 @@ try {
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule @('--config', $cfg)).Count -eq 0)
   # OFF by default is only meaningful beside the positive control above.
-  Check 'OFF by default: no config -> silent (control: the config run fired)' (($off.Count -eq 0) -and ($f.Count -eq 2))
+  Check 'OFF by default: no config, no --rule -> silent (control: the config run fired)' (($off.Count -eq 0) -and ($f.Count -eq 2))
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -278,7 +278,7 @@ $emitted = [ordered]@{
 # gap-rules wave (G0): gate ids whose emitting lane has not landed. A lane deletes its own ids from this table;
 # integration leaves it empty (D3 then bites again).
 $pendingEmit = [ordered]@{
-  'LINT_GATE_PROJECT_RULES' = @('dfm-event-handler-missing','dfm-password-edit-unmasked','uses-movable-to-implementation','virtual-never-overridden')
+  # lane G8 emptied its entry (LINT_GATE_PROJECT_RULES now emits all four of its ids)
 }
 foreach ($k in $emitted.Keys) {
   $gate = GateList $k

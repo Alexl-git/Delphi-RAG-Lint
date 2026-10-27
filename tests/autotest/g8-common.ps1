@@ -23,8 +23,10 @@ function Invoke-G8Index([string]$Exe, [string]$Dir, [string]$Db) {
   & $Exe index $Dir --db $Db 2>&1 | Out-Null
   return $LASTEXITCODE
 }
-function Get-G8Findings([string]$Exe, [string]$Db, [string]$Rule, [string[]]$Extra = @()) {
-  $raw = & $Exe lint-all --db $Db --rule $Rule --format json @Extra 2>$null
+function Get-G8Findings([string]$Exe, [string]$Db, [string]$Rule, [string[]]$Extra = @(), [switch]$AllRules) {
+  # -AllRules: no --rule flag (an explicit --rule opts an OFF-by-default rule in, so it cannot test OFF).
+  $ruleArgs = if ($AllRules) { @() } else { @('--rule', $Rule) }
+  $raw = & $Exe lint-all --db $Db @ruleArgs --format json @Extra 2>$null
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
   return ,@($f | Where-Object { $_.rule -eq $Rule })

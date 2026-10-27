@@ -119,6 +119,7 @@ uses
   DRagLint.Fix.Decl in '..\lint\fixers\DRagLint.Fix.Decl.pas',
   DRagLint.Fix.Store in '..\lint\fixers\DRagLint.Fix.Store.pas',
   DRagLint.Fix.Hygiene in '..\lint\fixers\DRagLint.Fix.Hygiene.pas',
+  DRagLint.Fix.ProjectWide in '..\lint\fixers\DRagLint.Fix.ProjectWide.pas',
   DRagLint.Fix.Security in '..\lint\fixers\DRagLint.Fix.Security.pas',
   DRagLint.Fix.Shape in '..\lint\fixers\DRagLint.Fix.Shape.pas',
   DRagLint.Fix.Typed in '..\lint\fixers\DRagLint.Fix.Typed.pas',

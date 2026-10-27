@@ -139,7 +139,7 @@ var
   R       : TReference                ;
   Uo      : TUnitUse                  ;
   U       : string                    ;
-  uStem   : string                    ;
+  UnitStem: string                    ;
   Row     : TUsesAuditRow             ;
   i       : Integer                   ;
 begin
@@ -158,7 +158,11 @@ begin
       try
         Lines.LoadFromFile(SrcPath);
         for i:= 0 to Lines.Count - 1 do
-          if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine:= i + 1; Break; end;
+          if SameText(Trim(Lines[i]), 'implementation') then
+          begin
+            ImplLine:= i + 1;
+            Break;
+          end;
       finally
         Lines.Free;
       end;
@@ -174,14 +178,14 @@ begin
 
     for Uo in FStore.GetUnitUsesForFile(AFileId) do
     begin
-      uStem:= LowerCase(Uo.UnitName);
+      UnitStem:= LowerCase(Uo.UnitName);
       { audit only project units we can actually see in the index }
-      if not FIndexedUnits.ContainsKey(uStem) then Continue;
-      if SameText(uStem, ThisStem) then Continue;
+      if not FIndexedUnits.ContainsKey(UnitStem) then Continue;
+      if SameText(UnitStem, ThisStem) then Continue;
 
       Row:= Default(TUsesAuditRow);
-      if (not RefIntf.ContainsKey(uStem)) and (not RefImpl.ContainsKey(uStem)) then Row.Verdict:= USES_VERDICT_UNUSED
-      else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) then Row.Verdict:= USES_VERDICT_MOVE
+      if (not RefIntf.ContainsKey(UnitStem)) and (not RefImpl.ContainsKey(UnitStem)) then Row.Verdict:= USES_VERDICT_UNUSED
+      else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(UnitStem)) then Row.Verdict:= USES_VERDICT_MOVE
       else Continue;
       Row.UnitName := Uo.UnitName;
       Row.Section  := Uo.Section;

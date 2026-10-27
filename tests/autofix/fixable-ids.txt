@@ -1,5 +1,6 @@
 boolean-comparison-true
 const-casing
+dfm-password-edit-unmasked
 doc-drift
 field-name-prefix
 local-field-prefix
@@ -21,3 +22,5 @@ type-name-prefix
 unused-local
 uppercase-compare
 uppercase-compare-always-false
+uses-movable-to-implementation
+virtual-never-overridden

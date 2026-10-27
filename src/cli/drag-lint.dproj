@@ -161,6 +161,7 @@
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Decl.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Store.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Hygiene.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.ProjectWide.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Security.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Shape.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Typed.pas"/>
