@@ -127,7 +127,22 @@ const
     can change. Guard: tests\preprocess\run_profile.ps1.
     (X6) a hard cast TEnum(x), extracted as a call ref, binds the enum type
     (resolver side; rides this re-parse). X2 is resolver-only. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.24.0-alpha';
+  { 1.24.0 -> 1.25.0 (2026-10-26, extract-136 = the 1.36.0 release, ONE re-parse for
+    the EXTRACT base, XT-RAISE, XT-POLY, XT-T11 and A7-I):
+    (E) a multi-line SQL.Add chain emits its table reads; non-ANSI identifiers and
+    paths index. Guards: tests\autotest\run_sql_reads_multiline_add.ps1,
+    run_index_nonansi_identifiers.ps1, run_index_nonansi_path.ps1.
+    (RAISE) `raise E` and an `on E: T do` handler emit refs of kind raise / handle.
+    Guard: tests\autotest\run_raise_handle_refs.ps1.
+    (POLY) a class-reference type emits kind classref; new tables dispatch_edges and
+    classref_args (additive, no schema bump). Guards: run_classref_kind.ps1,
+    tests\callresolve\run_dispatch_edges.ps1, run_forms_csv_v10.ps1.
+    (T11) untypable receivers record their receiver CST text. Guard:
+    tests\callresolve\run_receiver_cst_capture.ps1.
+    (A7-I) a PROJECT index preprocesses with the project's ACTIVE build config
+    (not Release); its fingerprint gains ;cfg=..;defs=.. (library / folder DBs keep
+    theirs). Guard: tests\autotest\run_index_active_config_guard.ps1. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.25.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -316,7 +331,14 @@ const
   /// cast TEnum(x) to the enum type (ResolveEnumCastRefs, no call edge). A MINOR: new
   /// classes of derived row. The reservation for C2.3 + the IsStub unification MOVES from
   /// 1.14.0 to 1.15.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.14.0-alpha';
+  /// <para>1.14.0-alpha -&gt; 1.15.0-alpha (2026-10-26, extract-136, rides the 1.25.0
+  /// extractor re-parse): E14 a bare read of a SCOPEDENUMS value declines, and warns
+  /// only on a type match (enum-bare-read-scoped); E4 binds a cross-unit implicit-Self
+  /// read of an inherited field; T-11 TypeReceiver kind 12 + the receiver_text fallback,
+  /// and R5 member access after a paren cast; POLY DispatchResolver writes dispatch_edges
+  /// (polymorphic form launches). A MINOR: new classes of derived row. The reservation
+  /// for C2.3 + the IsStub unification MOVES from 1.15.0 to 1.16.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.15.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
