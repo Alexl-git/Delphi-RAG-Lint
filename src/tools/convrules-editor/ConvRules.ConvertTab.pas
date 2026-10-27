@@ -1829,6 +1829,8 @@ begin
   Job.RunId             := FRunId; // keys this run's Work list rows (WorkRunOf)
   FRunRowsFrom:= Length(FRunRows); // a re-run appends its rows: its own tally starts here
   LExe:= FHost.ExePath;
+  // OUTENC: the worker's adapter never probes; it decodes as the tab's probe found.
+  var LUtf8: Boolean:= FEngineProbe.OutputUtf8;
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
   FRunRulesFolder:= FHost.GetRulesFolder();
@@ -1873,6 +1875,7 @@ begin
         LEng:= TEngineAdapter.Create(LExe, Job.Dbs);
         try
           LEng.CastLibFile:= LCastLib;
+          LEng.OutputUtf8 := LUtf8;
           RunConversion(Job, LEng,
             procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
             begin

@@ -393,6 +393,7 @@ type
       FInfoTimeoutMs : Cardinal       ;
       FFieldRefsNote : string         ;
       FFieldRefsAsked: Boolean        ;
+      FOutputUtf8    : Boolean        ;
       /// <param name="AArgs"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCaptureTimed(AArgs,
@@ -1311,6 +1312,13 @@ type
       /// <remarks>Writable so the model tests can use a short bound with a
       /// sleeping stand-in engine; the editor never changes it.</remarks>
       property InfoTimeoutMs: Cardinal read FInfoTimeoutMs write FInfoTimeoutMs;
+      /// <summary>True = every call passes --output-encoding utf8 and the pipes are decoded as
+      /// UTF-8; False = no flag, pipes decoded as CP_ACP (an engine before 1.36.0).</summary>
+      /// <remarks>Set by CapabilityProbeTimed and InfoOutput from the engine's `info --json`
+      /// version (ConvRules.OutputEncoding.SupportsOutputEncoding); both probes run WITHOUT the
+      /// flag, so a swapped-in older engine is re-detected. Writable so an adapter that never
+      /// probes (the Convert worker's own) takes the probing adapter's answer.</remarks>
+      property OutputUtf8: Boolean read FOutputUtf8 write FOutputUtf8;
   end;
 
 /// <summary>PURE: the engine flags for tree depth and progress.</summary>
@@ -1358,8 +1366,10 @@ function BatchApplyArgs(const AUnits: TArray<string>; const ARulesFile, ADbArgs,
 /// DBCS and single-byte paths are testable).</param>
 /// <returns>The text of APending + AChunk up to the last complete character. On a single-byte code page
 /// nothing is ever held back.</returns>
-/// <remarks>The engine output contract is ACP, not UTF-8 (ENGINE INBOX pending on a UTF-8 switch).
-/// Invalid bytes become U+FFFD or the code page's default, never an exception.</remarks>
+/// <remarks>An engine before 1.36.0 writes ACP; 1.36.0+ is asked for UTF-8 (OUTENC,
+/// TEngineAdapter.OutputUtf8), and ACodePage = CP_UTF8 holds back an incomplete UTF-8 sequence
+/// instead (ConvRules.OutputEncoding.Utf8CompletePrefixLen). Invalid bytes become U+FFFD or the
+/// code page's default, never an exception.</remarks>
 function DecodeAnsiChunk(var APending: TBytes; const AChunk: TBytes; ACodePage: Cardinal): string;
 
 /// <summary>PURE (R7): decodes what DecodeAnsiChunk still holds back at end of stream.</summary>
@@ -1457,6 +1467,7 @@ uses
   System.IOUtils
   , System.StrUtils
   , ConvRules.CapabilityProbe  // TryParseInfoCapabilities: the one info --json reader
+  , ConvRules.OutputEncoding   // OUTENC: --output-encoding utf8 and the pipe code page
         {$IFDEF MSWINDOWS}
   , Winapi.Windows {$ENDIF}
   ;
@@ -1740,6 +1751,9 @@ end;
 // in the next chunk) is excluded. Scanned forward: a trail byte may look like a lead byte.
 function AnsiCompletePrefixLen(const ABytes: TBytes; ACodePage: Cardinal): Integer;
 begin
+  // OUTENC: UTF-8 has no DBCS lead bytes; its boundary rule lives in ConvRules.OutputEncoding.
+  if ACodePage = CP_UTF8 then
+    Exit(Utf8CompletePrefixLen(ABytes));
   Result:= 0;
   while Result < Length(ABytes) do
   begin
@@ -1802,10 +1816,15 @@ var
 begin
   ACaps:= nil;
   AParsed:= False;
+  // OUTENC: asked WITHOUT --output-encoding -- an engine older than 1.36.0 refuses it.
+  FOutputUtf8:= False;
   // Its own short bound, not ENGINE_TIMEOUT_MS: this runs during start-up.
   Result:= RunCaptureTimed('info --json', FInfoTimeoutMs, Output);
   if Result = 0 then
+  begin
     AParsed:= TryParseInfoCapabilities(Output, ACaps);
+    FOutputUtf8:= SupportsOutputEncoding(Output);
+  end;
 end;
 
 function TEngineAdapter.VersionOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
@@ -1815,8 +1834,12 @@ end;
 
 function TEngineAdapter.InfoOutput(const ACancel: TCancelToken; out AOutput: string): Integer;
 begin
+  // OUTENC: asked WITHOUT --output-encoding, as in CapabilityProbeTimed.
+  FOutputUtf8:= False;
   // The backstop only: the wait window asks the user long before it (R2).
   Result:= RunCaptureStreaming('info --json', ENGINE_TIMEOUT_MS, nil, ACancel, AOutput);
+  if Result = 0 then
+    FOutputUtf8:= SupportsOutputEncoding(AOutput);
 end;
 const
   MS_PER_SECOND = 1000;
@@ -1884,6 +1907,7 @@ var
   Outcome  : Integer;
   PendOut  : TBytes;
   PendErr  : TBytes;
+  LCodePage: Cardinal;
 
   // Reads what APipe has ready right now, at most MAX_READS_PER_DRAIN chunks;
   // True when anything was read.
@@ -1906,7 +1930,7 @@ var
       var LRaw: TBytes;
       SetLength(LRaw, BytesRead);
       Move(Buf, LRaw[0], BytesRead);
-      AInto(DecodeAnsiChunk(APending, LRaw, CP_ACP)); // R7: a DBCS character split across two reads stays whole
+      AInto(DecodeAnsiChunk(APending, LRaw, LCodePage)); // R7 / OUTENC: a character split across two reads stays whole
       Result:= True;
     end;
   end;
@@ -1953,7 +1977,9 @@ begin
     // open after the child exits and the drain never sees EOF.
     SetHandleInformation(OutRead, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(ErrRead, HANDLE_FLAG_INHERIT, 0);
-    if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), OutWrite, ErrWrite, PI) then
+    // OUTENC: the flag goes LAST (global on 1.36.0+); read once so the pipes decode as asked.
+    LCodePage:= PipeCodePage(FOutputUtf8);
+    if not StartHiddenProcess(Format('"%s" %s%s', [FExePath, AArgs, OutputEncodingArgs(FOutputUtf8)]), OutWrite, ErrWrite, PI) then
       Exit;
     Started:= True;
     CloseIfOpen(OutWrite);
@@ -1993,8 +2019,8 @@ begin
           More:= Drain(OutRead, PendOut, ToOut);
           More:= Drain(ErrRead, PendErr, ToErr) or More;
         until not More;
-        ToOut(FlushAnsiPending(PendOut, CP_ACP)); // a lead byte with no trail byte, if any
-        ToErr(FlushAnsiPending(PendErr, CP_ACP));
+        ToOut(FlushAnsiPending(PendOut, LCodePage)); // a lead byte with no trail byte, if any
+        ToErr(FlushAnsiPending(PendErr, LCodePage));
         Break;
       end;
       if (ACancel <> nil) and ACancel.IsCancelled then
