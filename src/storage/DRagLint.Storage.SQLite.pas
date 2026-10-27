@@ -3682,8 +3682,11 @@ end;
 const
   DATA_FLOWS_COLS = 'file_id, symbol_id, owner_id, dst_kind, dst_line, dst_col, dst_index, dst_name, ' +
                     'dst_receiver, src_kind, src_index, src_line, src_col, src_name, via_local, cond';
-  SQL_FIELD_WRITERS_HEAD = 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE dst_kind = ''' + DF_DST_FIELD +
-                           ''' AND dst_name = :n COLLATE NOCASE AND owner_id IN (';
+  { a bare `F := e` (no receiver) in a descendant is a 'write' row: the extractor
+    classifies only the owner's own fields, so an inherited field arrives by name }
+  SQL_FIELD_WRITERS_HEAD = 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE (dst_kind = ''' + DF_DST_FIELD +
+                           ''' OR (dst_kind = ''' + DF_DST_WRITE + ''' AND dst_receiver = ''''))' +
+                           ' AND dst_name = :n COLLATE NOCASE AND owner_id IN (';
   SQL_FIELD_WRITERS_TAIL = ') ORDER BY file_id, dst_line, dst_col';
   SQL_PUT_DATA_FLOWS = 'INSERT INTO data_flows(' + DATA_FLOWS_COLS + ') VALUES (:fid, :sid, :own, :dk, ' +  // dl:ok sql-injection-concat@11f0 -- REVIEWED 2026-10-27: DATA_FLOWS_COLS is a compile-time const column list, no runtime value; every value is a bound :param
                        ':dl, :dc, :di, :dn, :dr, :sk, :si, :sl, :sc, :sn, :vl, :cd)';

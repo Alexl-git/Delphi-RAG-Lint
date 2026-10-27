@@ -84,7 +84,7 @@ try {
     $n = (& python -I -c $emptyFlows $db 2>&1) -join ' '
     Check 'fixture: extractor rows cleared' ($n -eq '0') "python said: $n"
     $n = (& python -I $rowsPy $db $fx taint 2>&1) -join ' '
-    Check 'fixture rows inserted (python sqlite3)' ($n -eq '40') "fixture_rows.py said: $n"
+    Check 'fixture rows inserted (python sqlite3)' ($n -eq '42') "fixture_rows.py said: $n"
     $n = (& python -I $rowsPy $lib $libFx minirtl 2>&1) -join ' '
     Check 'mini-library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
@@ -100,6 +100,7 @@ try {
     @('taint-sql-injection',     'uWeak.pas',    20, 'warning'),  # bare edtName.Text: weak, one severity lower
     @('taint-sql-injection',     'uField.pas',   31, 'error'),    # field written in Load, spliced in Run
     @('taint-sql-injection',     'uField.pas',   36, 'error'),    # descendant TCfg2 reads the ancestor's field
+    @('taint-sql-injection',     'uFieldUp.pas', 25, 'error'),    # mirror: descendant TChild writes it, ancestor TBase reads it
     @('taint-sql-injection',     'uList.pas',    19, 'error'),    # TStringList carrier: L.Add(src); ExecSQL(L.Text)
     @('taint-sql-injection',     'uList.pas',    21, 'error'),    # Q.SQL.Add(src)
     @('taint-sql-injection',     'uLambda.pas',  20, 'error'),    # captured local inside an anonymous method
@@ -126,7 +127,7 @@ try {
   Check 'no  uInput.pas (sources only; reported at the sink)' ((InUnit $f 'uInput.pas').Count -eq 0)
   Check 'exactly one finding in uCycle.pas (the cycle terminates)' ((InUnit $f 'uCycle.pas').Count -eq 1) "got $((InUnit $f 'uCycle.pas').Count)"
   Check 'exactly one finding in uCmd.pas (RunCmdConst passes a literal)' ((InUnit $f 'uCmd.pas').Count -eq 1) "got $((InUnit $f 'uCmd.pas').Count)"
-  Check 'total taint findings = 14' ($f.Count -eq 14) "got $($f.Count)"
+  Check 'total taint findings = 15' ($f.Count -eq 15) "got $($f.Count)"
 
   # ---- path ----
   $noPath = @($f | Where-Object { $null -eq $_.path -or @($_.path).Count -lt 2 })
