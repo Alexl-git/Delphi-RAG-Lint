@@ -1,0 +1,12 @@
+# Blocking call between Enter/Acquire/EnterCriticalSection/TMonitor.Enter and the matching Leave.
+wait-while-holding-lock 19
+wait-while-holding-lock 27
+wait-while-holding-lock 37
+wait-while-holding-lock 46
+# Leave of a DIFFERENT lock object does not release GLock: still held, still flagged.
+wait-while-holding-lock 54
+# After Leave / before Enter: not held.
+!wait-while-holding-lock 66
+!wait-while-holding-lock 71
+# Sleep inside a nested routine runs under its own (empty) lock state.
+!wait-while-holding-lock 79
