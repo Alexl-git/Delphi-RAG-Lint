@@ -163,6 +163,7 @@ uses
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
+  , DRagLint.Project.DefineProfile
   , DRagLint.FormsMap
   , DRagLint.MenuTree
   , DRagLint.MenuTree.Dfm
@@ -657,6 +658,7 @@ type
     // index AND lint verbs (per-config conditional resolution before parsing); --no-preprocess
     // reverts to the prior raw all-branch behaviour.
     NoPreprocess : Boolean    ; // --no-preprocess  disable the in-process directive preprocessor for this index run
+    BuildConfig  : string     ; // --build-config <name>  index: parse a PROJECT against this build config instead of its ACTIVE one ('' = the .dproj's Config marker)
     // Task 5: create-enum-helper CLI verb (--qname reuses QName; --db/--apply/
     // --no-backup/--json already shared). EnumMethodsStr is the raw --methods
     // CSV ('' = default all 6, parsed by DoCreateEnumHelper); EnumToString is
@@ -1431,6 +1433,7 @@ begin
     else if A = '--deep' then begin Result.Deep:= True; Result.DeepExplicit:= True; end
     else if A = '--shallow' then begin Result.Deep:= False; Result.DeepExplicit:= True; end
     else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
+    else if (A = '--build-config') and (i < ParamCount) then begin Inc(i); Result.BuildConfig:= ParamStr(i); end  // dl:ok multiple-statements-per-line@902e -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
@@ -2603,8 +2606,11 @@ end;
 // Library sections emit rootsCount (integer) instead of the full roots array
 // to keep output sane (libraries have hundreds of folders).
 // Caller owns + must free the returned object.
-function PlanToJson(const AManifest: TIndexManifest; const APlan: TIndexPlan): TJSONObject;
+function SectionIndexBuild(const AItem: TPlanSection; const ABuildConfig: string): TActiveBuild; forward;
+
+function PlanToJson(const AManifest: TIndexManifest; const APlan: TIndexPlan; const ABuildConfig: string = ''): TJSONObject;
 var
+  SecBuild : TActiveBuild ;
   JSettings: TJSONObject ;
   JSecObj  : TJSONObject ;
   JSections: TJSONArray  ;
@@ -2649,6 +2655,13 @@ begin
     JSecObj.AddPair('mode', ModeStr(PS.Mode));
     JSecObj.AddPair('db'      , PS.DbPath  );
     JSecObj.AddPair('platform', PS.Platform);
+    { A7-I: the build config the section would be parsed with ('' = no .dproj:
+      library / folder sections), so a dry run names the cause of a re-parse. }
+    SecBuild:= SectionIndexBuild(PS, ABuildConfig);
+    if SecBuild.Dproj = '' then JSecObj.AddPair('cfg', '')
+    else if SecBuild.Source = dsDelphiLsp then JSecObj.AddPair('cfg', '<json>')
+    else JSecObj.AddPair('cfg', SecBuild.Config);
+    JSecObj.AddPair('defs', SecBuild.Digest);
 
     if PS.Mode = smLibrary then
       // Library sections: emit count only (hundreds of folders)
@@ -2777,6 +2790,78 @@ begin
   if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
 end;
 
+/// <summary>A7-I: the full active build an INDEX run preprocesses a PROJECT section
+/// against: the .dproj's ACTIVE Config marker (or AConfig, which wins), the
+/// delphilsp.json -D set only when the .dproj has no Config marker (owner D1), the
+/// platform built-ins always unioned in.</summary>
+/// <param name="ADproj">Path to a .dproj, or '' for the built-ins build (library / folder sections).</param>
+/// <param name="APlatform">Section / --platform token; '' -&gt; Win64. It ALWAYS decides the platform: a
+/// Win64 library DB must not become Win32 because a project marker says so.</param>
+/// <param name="AConfig">--build-config; '' = the .dproj's own active Config marker.</param>
+/// <returns>The resolved build; Dproj = '' and Config = '' for the built-ins build.</returns>
+/// <remarks>Never raises. Unlike ResolveIndexProfile (kept as-is for lint / lsp / rename, which
+/// resolve Release) this reads the ACTIVE config.</remarks>
+function ResolveIndexBuild(const ADproj, APlatform, AConfig: string): TActiveBuild;
+begin
+  Result:= ResolveActiveBuild(ADproj, EffectiveIndexPlatform(APlatform), AConfig, True);
+end;
+
+/// <summary>The build an `index --all` section preprocesses with: the active build of its
+/// .dproj when it is a single-project closure section, the built-ins build otherwise.</summary>
+/// <param name="AItem">The plan section.</param>
+/// <param name="ABuildConfig">--build-config; '' = the project's own active config.</param>
+/// <returns>The resolved build (Dproj = '' for library / folder / multi-root sections).</returns>
+function SectionIndexBuild(const AItem: TPlanSection; const ABuildConfig: string): TActiveBuild;
+var
+  Dproj: string;
+begin
+  Dproj:= '';
+  if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) and
+     SameText(ExtractFileExt(AItem.Roots[0]), '.dproj') then
+    Dproj:= AItem.Roots[0];
+  Result:= ResolveIndexBuild(Dproj, AItem.Platform, ABuildConfig);
+end;
+
+/// <summary>The fingerprint limb a PROJECT build adds: ';cfg=&lt;config&gt;;defs=&lt;digest&gt;'.</summary>
+/// <param name="ABuild">The build the index run preprocesses with.</param>
+/// <returns>'' for a built-ins build (library / folder sections: their fingerprint stays
+/// byte-identical); ';cfg=&lt;json&gt;;defs=&lt;digest&gt;' LITERALLY when the define set came from
+/// delphilsp.json (Config is '' there: the IDE's effective set is no named config);
+/// otherwise the lowercased config name.</returns>
+/// <remarks>Changing the active config or the define set changes this limb, so the
+/// fingerprint gate re-parses exactly that DB; no extractor-version bump is involved.</remarks>
+function IndexCfgLimb(const ABuild: TActiveBuild): string;
+var
+  Cfg: string;
+begin
+  Result:= '';
+  if ABuild.Dproj = '' then Exit;
+  if ABuild.Source = dsDelphiLsp then Cfg:= '<json>' else Cfg:= LowerCase(ABuild.Config);
+  Result:= Format(';cfg=%s;defs=%s', [Cfg, ABuild.Digest]);
+end;
+
+/// <summary>The `defines cfg=.. source=.. defs=..` text naming where a project build's
+/// define set came from (cfg is the literal `&lt;json&gt;` for a delphilsp.json set).</summary>
+/// <param name="ABuild">The resolved build.</param>
+/// <returns>The text, without a prefix.</returns>
+function IndexDefinesText(const ABuild: TActiveBuild): string;
+const SOURCE_NAMES: array[TDefineSource] of string = ('builtins', 'dproj', 'delphilsp');
+var
+  Cfg: string;
+begin
+  if ABuild.Source = dsDelphiLsp then Cfg:= '<json>' else Cfg:= ABuild.Config;
+  Result:= Format('defines cfg=%s source=%s defs=%s', [Cfg, SOURCE_NAMES[ABuild.Source], ABuild.Digest]);
+end;
+
+/// <summary>Prints the one-line cause record of a section's define profile.</summary>
+/// <param name="ABuild">The resolved build.</param>
+/// <remarks>Silent for built-ins builds (library / folder sections).</remarks>
+procedure WriteIndexDefinesLine(const ABuild: TActiveBuild);
+begin
+  if ABuild.Dproj = '' then Exit;
+  Writeln(ErrOutput, 'index: ' + IndexDefinesText(ABuild));
+end;
+
 // v0.45 Task 7: build one plan item into its SQLite database.
 // Creates the Store + Indexer, applies filter + dedup roots, walks per mode,
 // then calls ResolveUnitUseTargets. Writes a one-line summary to stdout.
@@ -2811,12 +2896,12 @@ end;
   forward-declared rather than moved so the fingerprint policy stays next to the
   comment that explains it. }
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean; forward;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string): Boolean; forward;
 { The other half of the fingerprint gate: called ONLY after a walk finishes.
   See CommitIndexerFingerprint's own comment for why the stamp cannot happen up
   front. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
-  APreprocess: Boolean; const APlatform: string); forward;
+  APreprocess: Boolean; const APlatform, ACfgLimb: string); forward;
 
 
 /// <summary>
@@ -3476,7 +3561,7 @@ function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: st
 
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
-  AResolveOnly: Boolean = False): Boolean;
+  AResolveOnly: Boolean = False; const ABuildConfig: string = ''): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -3567,19 +3652,19 @@ begin
     // A single-project closure section resolves defines from its .dproj; every
     // other section uses the platform built-ins (library sections carry their
     // platform; folder/multi-root sections default to Win64).
-    var SectionDproj: string:= '';
-    if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) and
-       SameText(ExtractFileExt(AItem.Roots[0]), '.dproj') then
-      SectionDproj:= AItem.Roots[0];
+
     // Resolve the section profile ONCE and reuse it for both the indexer and
     // (PP-Task-10) the closure resolver, so uses-discovery and symbol-extraction
     // honour the SAME active define profile.
-    var SectionProfile: TDefineProfile:= ResolveIndexProfile(SectionDproj, AItem.Platform, '');
+    var SectionBuild: TActiveBuild:= SectionIndexBuild(AItem, ABuildConfig);
+    var SectionProfile: TDefineProfile:= SectionBuild.Profile;
+    var SectionCfgLimb: string:= IndexCfgLimb(SectionBuild);
     Indexer.SetPreprocess(APreprocess, SectionProfile);
+    if APreprocess then WriteIndexDefinesLine(SectionBuild);
     { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
       path is the one that builds the big shared indexes, so it is the one where
       a silently stale parse survives longest. }
-    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform);
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform, SectionCfgLimb);
 
     { RESOLVER STALENESS -- and this path needs it MORE than the single-root one,
       not less. `index --all --only <Section>` is what tools\reindex-all.ps1
@@ -3882,7 +3967,7 @@ begin
       produced by THIS engine -- only now may the fingerprint be recorded. A
       section that failed above exits before this point and deliberately leaves
       the OLD fingerprint in place, so the next run re-parses it. }
-    CommitIndexerFingerprint(Store, APreprocess, AItem.Platform);
+    CommitIndexerFingerprint(Store, APreprocess, AItem.Platform, SectionCfgLimb);
     { The manifest path must stamp the scan type too, and this is the site that
       matters MOST: nearly every project database is built through
       `index --all --only <Section>`, not through a bare `index`. Stamping only
@@ -4312,7 +4397,7 @@ begin
   begin
     if AArgs.AsJson then
     begin
-      JRoot:= PlanToJson(Manifest, Plan);
+      JRoot:= PlanToJson(Manifest, Plan, AArgs.BuildConfig);
       try
         Writeln(JRoot.Format(2));
       finally
@@ -4344,6 +4429,9 @@ begin
               PS.Name + (if PS.Platform <> '' then '[' + PS.Platform + ']' else ''),
               (function: string begin case PS.Mode of smFolderTree: Result:= 'folderTree'; smClosure: Result:= 'closure'; smLibrary: Result:= 'library'; else Result:= '?'; end; end)(),
               PS.DbPath]));
+          var DryBuild: TActiveBuild:= SectionIndexBuild(PS, AArgs.BuildConfig);
+          if DryBuild.Dproj <> '' then
+            Writeln('        ', IndexDefinesText(DryBuild));
           if PS.Mode = smLibrary then
           begin
             var DrySib: TArray<string>:= SiblingPlatformExcludes(PS.Platform, DryResolver.EnumRegistryPlatforms);
@@ -4391,7 +4479,7 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -4487,6 +4575,7 @@ begin
       // PP-Task-9: propagate --no-preprocess to the child so a parallel --all
       // build honours the raw all-branch request across every spawned worker.
       if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
+      if AArgs.BuildConfig <> '' then ChildCmdLine:= ChildCmdLine + ' --build-config "' + AArgs.BuildConfig + '"';
       { The MODE has to travel with the section, and did not have to before: when
         every section was recreated unconditionally there was nothing to
         propagate. A child that defaulted to --recompile would turn
@@ -5112,7 +5201,7 @@ begin
   Result:= Format('r=%s;schema=%d', [DRAGLINT_RESOLVER_VERSION, Expected]);
 end;
 
-function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform: string): string;
+function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform, ACfgLimb: string): string;
 var
   Found, Expected: Integer;
 begin
@@ -5141,7 +5230,10 @@ begin
     measure first. }
   Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
                   [DRAGLINT_EXTRACTOR_VERSION, Expected, Ord(APreprocess),
-                   LowerCase(EffectiveIndexPlatform(APlatform))]);
+                   LowerCase(EffectiveIndexPlatform(APlatform))]) + ACfgLimb;
+  { A7-I: ACfgLimb is ';cfg=<config>;defs=<digest>' for a PROJECT section and ''
+    for library / folder / ad-hoc sections, whose string is therefore byte-
+    identical to what it was before the limb existed. }
 end;
 
 { The `v=` limb of a stored indexer fingerprint, or '' when the stamp is absent
@@ -5243,11 +5335,11 @@ end;
 // mass reindex the project is holding off until the schema settles. Files gain
 // protection as they are next reindexed; --force-reparse covers the rest.
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string): Boolean;
 var
   Cur, Prev: string;
 begin
-  Cur := IndexerFingerprint(AStore, APreprocess, APlatform);
+  Cur := IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb);
   Prev:= AStore.GetMetaValue(INDEXER_FP_KEY);
   Result:= AForceArg or ((Prev <> '') and (Prev <> Cur));
   { Say which of the three reasons actually applies. --rebuild sets ForceReparse
@@ -5310,10 +5402,10 @@ end;
   from the beginning. That needs the per-file indexed_at_version column tracked
   in INBOX-index-runs-are-not-resumable; this is the correctness half only. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
-  APreprocess: Boolean; const APlatform: string);
+  APreprocess: Boolean; const APlatform, ACfgLimb: string);
 begin
   AStore.SetMetaValue(INDEXER_FP_KEY,
-                      IndexerFingerprint(AStore, APreprocess, APlatform));
+                      IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb));
   { The freshness stamp rides the fingerprint's guarantee rather than getting a
     site of its own: BOTH are written only after a walk that ran to completion,
     so an interrupted run leaves both untouched and the next run still knows it
@@ -5512,8 +5604,10 @@ begin
   // built-ins (--platform, default Win64). Build config defaults to Release.
   var PpPlatform: string:= AArgs.CheckPlatform;
   if PpPlatform = '' then PpPlatform:= 'Win64';
-  Indexer.SetPreprocess(not AArgs.NoPreprocess,
-    ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  var IdxBuild: TActiveBuild:= ResolveIndexBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig);
+  var IdxCfgLimb: string:= IndexCfgLimb(IdxBuild);
+  Indexer.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
+  if not AArgs.NoPreprocess then WriteIndexDefinesLine(IdxBuild);
   { SIZE GUARD ON THE INDEX PATH TOO (INBOX-library-reindex-25x-slower-on-large-db).
 
     SizeGuardCheck was wired only into the CONSUMER commands (lint / lsp /
@@ -5536,7 +5630,7 @@ begin
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform);
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
 
   { RESOLVER STALENESS -- the sibling question, asked separately because its
     remedy is minutes rather than the ~5 hours a reparse costs.
@@ -5647,8 +5741,7 @@ begin
           disagree about which $IFDEF branch is live -- a unit reachable only
           from an inactive branch would be pulled in and then parsed as though
           it were not compiled, and vice versa. }
-        Cl.SetPreprocess(not AArgs.NoPreprocess,
-          ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+        Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
@@ -6133,7 +6226,7 @@ begin
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
-    CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
+    CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
     { --watch: ResolverStale was read ONCE, before the loop. This tick derived
       the edges with the current resolver and stamped it, so a later tick must
       not clear every edge again (it did, on every tick of a new or restamped DB,
@@ -24496,7 +24589,10 @@ begin
 end; // function
 
 /// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
-/// [--config Release|Debug] -- diagnostic dump of the define-profile resolver.
+/// [--config Release|Debug] [--in FILE [--db DB]] -- diagnostic dump of the define-profile resolver.
+/// With --in FILE (LSP C10) it first prints dproj= / platform= / config= /
+/// source=builtins|dproj|delphilsp (the .dproj comes first, delphilsp.json only when it has no Config marker) / digest= lines and a blank line, then the symbols of
+/// the profile the FILE's own project's ACTIVE build gives it (built-ins when no .dproj owns it).
 /// With --dproj it resolves ProfileFromDproj (platform built-ins UNION the .dproj
 /// Base + selected-config DCC_Define symbols); without --dproj it dumps
 /// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
@@ -24507,25 +24603,39 @@ end; // function
 /// config.</param>
 /// <returns>0 always (a missing .dproj degrades to built-ins, never an error).</returns>
 function DoPpProfile(const AArgs: TArgs): Integer;
+const
+  SourceNames: array[TDefineSource] of string = ('builtins', 'dproj', 'delphilsp');
 var
   Platform: string        ;
   Config  : string        ;
   Profile : TDefineProfile;
   Defines : TArray<string>;
   Sym     : string        ;
+  Build   : TActiveBuild  ;
 begin
   Platform:= AArgs.CheckPlatform;
   if Platform = '' then Platform:= 'Win64';
   Config:= AArgs.WorkspaceConfig;
   if Config = '' then Config:= 'Release';
 
-  if AArgs.PpDproj <> '' then
-    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config)
-  else
+  Profile.Defines:= PlatformBuiltins(Platform);
+  Profile.NumericDefines:= nil;
+  if AArgs.InFile <> '' then
   begin
-    Profile.Defines:= PlatformBuiltins(Platform);
-    Profile.NumericDefines:= nil;
-  end;
+    { LSP C10: the profile of the file's OWN project's active build. }
+    TProjectProfileCache.Configure(AArgs.DbPaths, AArgs.ProjectPath, AArgs.CheckPlatform,
+      AArgs.WorkspaceConfig, Profile, True);
+    Build:= TProjectProfileCache.BuildForFile(AArgs.InFile);
+    Writeln('dproj=', if Build.Dproj = '' then '-' else Build.Dproj);
+    Writeln('platform=', Build.Platform);
+    Writeln('config=', if Build.Config = '' then '-' else Build.Config);
+    Writeln('source=', SourceNames[Build.Source]);
+    Writeln('digest=', if Build.Digest = '' then '-' else Build.Digest);
+    Writeln('');
+    Profile:= Build.Profile;
+  end
+  else if AArgs.PpDproj <> '' then
+    Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config);
 
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);
@@ -31084,7 +31194,7 @@ begin
     var Dproj: string:= '';
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
     Resolver.SetPreprocess(not AArgs.NoPreprocess,
-      ResolveIndexProfile(Dproj, AArgs.CheckPlatform, ''));
+      ResolveIndexBuild(Dproj, AArgs.CheckPlatform, AArgs.BuildConfig).Profile);
     CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
   finally
     Resolver.Free;
@@ -32377,7 +32487,7 @@ begin
           ProfileTgt:= AArgs.ProjectPath;
           if ProfileTgt = '' then ProfileTgt:= ProjectFile;
           Indexer2.SetPreprocess(not AArgs.NoPreprocess,
-            ResolveIndexProfile(ProfileTgt, AArgs.CheckPlatform, ''));
+            ResolveIndexBuild(ProfileTgt, AArgs.CheckPlatform, AArgs.BuildConfig).Profile);
 
           Members:= PairDfmSiblings(RR.ClosureFiles);
           Coh:= ComputeCoherence(Store, Members);
