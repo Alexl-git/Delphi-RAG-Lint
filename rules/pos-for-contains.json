@@ -1,0 +1,7 @@
+{
+  "id": "pos-for-contains",
+  "severity": "hint",
+  "category": "refactoring",
+  "message": "Comparing Pos(...) with 0 or 1 is a substring test -- use Contains (Pos > 0 / <> 0 / = 0) or StartsStr/StartsWith (Pos = 1).",
+  "warn_capture": "warn"
+}
