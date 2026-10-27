@@ -72,6 +72,25 @@ before working on an item.**
     LF, lone CR); tests `n13.split.*`. Still open: `RuleLinesOnly` splits on LF only (other callers).
   * **DONE (conv/opencounts d88412a4, merged 274e5e73): opencounts** File > Open status shows
     "Loaded <book> (<enc>): N line(s), N rule(s)" again (`OpenedStatusText`, model-tested).
+* 2026-10-27 small-items wave (merged to main d67dd619; model 2975/0/20 no engine):
+  * **DONE rlines** (f3ca6f07): `RuleLinesOnly` splits via `BookLines` (CRLF, LF, lone CR); output is
+    LF-joined, no trailing break (one caller re-splits); tests `rlines.*`.
+  * **DONE ndgate** (0892f00d, 90e53ab6): engine < 1.35.1 (or unreadable version) -> `ListCodeRefs`
+    fails with `FieldRefsGateNote` text instead of an empty answer; tests `ndgate.*`. No capability
+    exists for inherited-field binding, so the gate is the version.
+  * **DONE Q08** (7d8bfc66): `qualify.apply.retarget.requires.applied`; the mutant also dies on the
+    older `.skips.refused`, so Q08 was partly stale.
+  * **DONE ewait** (b7bc2fc9): `wait.reload.no.window` flake was a DRIVER defect (cached proptree
+    still opens DBs; slow-machine excuse timed `--version`). Excuse now times the real child; a
+    window before 350 ms always fails. RED with SHOW_DELAY_MS=0. **Owed:** a 16/16 run on an
+    unlocked desktop (`save.key.*` cannot send Ctrl+S while locked; lane skiplock makes them SKIP).
+  * **CLOSED by re-check:** B2 `RefusalHint` is gone from the index; B10 `inherited_code_unconverted`
+    capability is wired (Engine.pas CAPABILITY_INHERITED_CODE_UNCONVERTED).
+  * **migtypo** on conv/d2-split (34a9d25d): `#migrate TDBScreenCursors` -> `TDBScreenCursor`
+    (Data.DB enum, library-Win32 + Data.DB.pas:3190) in DataDB-to-FireDAC.rules; rides with the D2
+    merge (book-split guard will flag that one-line difference). Open question: does a book-wide
+    `#migrate` rename a TYPE name, or members only? `convrules\vendor\FireDAC_Migrate_BDE.rules:36`
+    keeps the typo (vendor copy, left as is).
 * 2026-10-26 (night) OWNER: main pushed (1b7a70d3..7c7746b4, 81 commits). Two owner inputs:
   * **D2 -> SPLIT (owner option, preferred)**: split BDE-to-FireDAC.rules into a BDE book and a
     "Book-2" with every rule unrelated to the BDE conversion. First step: classify the 43 book-wide
