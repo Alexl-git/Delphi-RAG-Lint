@@ -276,7 +276,7 @@ reFind's identifier-level rename. Recognised, **not decomposed**: the node is cl
 ```
 
 **Two shipped books, run in this order (D2 split, 2026-10-27).** `convrules\BDE-to-FireDAC.rules`
- keeps the `Bde.DBTables` rules (10 `#convert` blocks minus the 3 `Data.DB` ones) and its 28 book-wide
+ keeps the `Bde.DBTables` rules (10 `#convert` blocks minus the 3 `Data.DB` ones) and its 27 book-wide
 `#migrate` lines ABOVE the first `#convert` header: file-scope, so engine-inert, and the editor shows
  them as file-scope (no trailer special case). `convrules\DataDB-to-FireDAC.rules` (Book-2) holds the
 `Data.DB`-declared rules (3 blocks, `#remove HasConstraints`, `#remove DFM: Origin`, 15 `#migrate` lines)
