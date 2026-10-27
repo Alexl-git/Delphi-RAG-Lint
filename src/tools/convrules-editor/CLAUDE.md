@@ -42,10 +42,10 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 2950 pass / 0 fail / 20 skip** on main after the ready-wave merges N13/N2/N4/DRV (2026-10-26, fa80b602). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 3078 pass / 0 fail / 20 skip** on conv/chain1-impl after merging main 0db24e3c (CHAIN-1 included, 2026-10-27). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
-  tests SKIP; first line says which). Baseline on the 1.35.1-alpha-20261026-134311 pin:
-  **3068 pass / 0 fail / 0 skip** (same main, 2026-10-26). The old 5 "VARINSP fixture" failures were a fixture defect:
+  tests SKIP; first line says which). Baseline on the 1.36.0-alpha-20261027-142316 pin:
+  **3198 pass / 0 fail / 0 skip** (same branch, 2026-10-27). The old 5 "VARINSP fixture" failures were a fixture defect:
   VARINSP is outside Micronite2027's compile closure, so its project DB never holds it; the picker / fill tests now use AssignGroups. A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -69,6 +69,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-save-encoding.ps1` 15 -- Save question, File > Encoding, UTF-16 BOM note
   * `drive-convert-encoding.ps1` 29 (mixed.* N4-1; `-ProofNoMixed` = 28 / 1) -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; N2: Yes keeps every place as note rows, Cancel adds none; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
   * `drive-migrate.ps1` 24 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks; D5 bulk DL_NONE, D6-B opens the row's book (`-ProofNoMigrate` = 13 / 7, `-ProofNoBulk` = 22 / 2)
+  * `drive-rule-chains.ps1` 22 (measured on the 1.36.0 pin; the merged-book Save status carries a `[!]` validate prefix there) -- rule chains on Save: mark + status, dialog once per key, Conversion > Rule chains..., Split to `.stage2.rules` + Convert tab order, Merge, no dialog on close (`-ProofNoChain` = 5 / 0: the `proof.*` lines pass only when NO chain status / dialog / row appears)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
 ## Unit map (who owns which decision)
@@ -78,7 +79,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `SkipList` / `FormTypes` / `RuleCatalog` -- class-picker skip marks, form-type rows, rule catalog.
 * `UnitPick` (decisions) / `UnitPicker` (form) -- unit picker, Swap replacements.
 * `UsesHarvest` / `UnitStatus` (`TDestinationResolver`) / `UnitMask` -- Unit Rules harvest, classify, masks/filter.
-* `ValidateScope` -- scoped validation on Save, diagnostics -> rule marks, pending blocks.
+* `ValidateScope` -- scoped validation on Save, diagnostics -> rule marks, pending blocks, `AddStaticWarningMark` (the one way a static mark is added).
 * `Glyph` (decisions) / `GlyphForm` (dialog) -- G[I/N] expressions, count links, glyph notes.
 * `Inheritance` -- C8 analysis, offers, order warning, gate; `InheritanceEngine` -- its engine binders.
 * `ConvertRun` -- pure Convert decisions: backups, preflight, `ParseApplyJson`, row notes, progress text.
@@ -88,6 +89,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `ConvertTab` -- Convert tab UI (editor-only); `ConvertRequest` -- `convert-request/1` parse, validate, scope.
 * `WorkList` (pure) / `WorkListTab` (UI) -- pas_uses work list.
 * `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).
+* `RuleChains` (decisions) / `ChainForm` (dialog) -- CHAIN-1: chains, cycles, duplicate From, unit chains (`FindRuleChains`, marks, `MergeChainPlan` / `ApplyChainMerge`, `SplitChainPlan` / `StageBookPath` / `StageBookText`) and the Rule chains dialog (Merge / Split / Keep). Pure unit: no UI, engine or file I/O.
 * `ConvCatalog` / `Casts` -- cast options incl. `ckValue` (StripDB).
 * `TextEncoding` -- the encoding ladder, detection, round trip, pre-save decision, ReadTextDetect / WriteTextAtLevel.
 * `Engine` -- `TEngineAdapter`: every engine call (incl. `ApplyConversionBatch`, apply-batch/1), pipes, timeouts, capabilities, resolve cache.

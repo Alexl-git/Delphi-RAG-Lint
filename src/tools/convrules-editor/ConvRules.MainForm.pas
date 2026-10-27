@@ -59,6 +59,7 @@ uses
   , ConvRules.MembersPanel // A4: TMembersPanel, a field's type
   , ConvRules.ValidateScope // TValidateJob: a method parameter's type, so INTERFACE-visible
   , ConvRules.TextEncoding // TTextLevel: a field's type, so INTERFACE-visible; dl:unit ConvRules.TextEncoding accepted -- ASK_SAVE_FMT and LOST_CHARS_SHOWN are the save question's text and cap, they travel with PreSaveDecision's lost-character list
+  , ConvRules.RuleChains // CHAIN-1: TRuleChain types a field, so INTERFACE-visible
   ;
 
 const
@@ -235,7 +236,13 @@ type
         Save validates them anyway (ChangedBlockJobs' APending). Dropped whenever the
         book is replaced. }
       FValidatePending: TArray<string>;
-      FCastDefs     : TArray<TCastDef>; // shipped class-cast library (.castlib)
+      { CHAIN-1: Keys of the rule-chain findings the Rule chains dialog has listed this
+        session, so File > Save offers each one once (spec 5.3 O1); cleared when the
+        book is replaced (O5). FLastSaveChains: the findings of the last SaveBook, for
+        the offer DoSaveClick / DoSaveAsClick make after it. }
+      FChainsAsked   : TArray<string>;
+      FLastSaveChains: TArray<TRuleChain>;
+      FCastDefs    : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
       enum blocks were parsed and thrown away; the conversion catalog needs them
       to offer an enum target (TabcButtonLayout -> TdxButtonLayout). }
@@ -519,7 +526,35 @@ type
       /// <summary>File > Save As: SaveBook with the path always asked for.</summary>
       /// <param name="Sender">The menu item; unused.</param>
       procedure DoSaveAsClick(Sender: TObject);
-      /// <summary>File > New: after the unsaved-changes guard, opens an empty, unnamed book.</summary>
+      /// <summary>CHAIN-1: after File > Save / Save As, shows the Rule chains dialog with
+      /// every finding of that save when one of them can be merged or split and was not
+      /// listed before this session (spec 5.3 O1).</summary>
+      /// <remarks>Never called from SaveBook, so ConfirmDiscard (close, open) and
+      /// LowerBookForConvert never show the dialog (O3).</remarks>
+      procedure OfferRuleChains;
+      /// <summary>CHAIN-1: runs the Rule chains dialog over AChains, records every listed
+      /// key as asked, then merges (Merge) or splits (Split) the checked findings.</summary>
+      /// <param name="AChains">Findings of FindRuleChains(FBook); not empty.</param>
+      procedure RunChainDialog(const AChains: TArray<TRuleChain>);
+      /// <summary>Conversion > Rule chains...: the dialog over the CURRENT model's
+      /// findings, asked or not, without saving first (spec 5.3 O4).</summary>
+      /// <param name="Sender">The menu item; unused.</param>
+      procedure DoRuleChains(Sender: TObject);
+      /// <summary>CHAIN-1 Merge (spec 5.4): composes each checked finding in the model,
+      /// later headers first, re-finding each one by Key; never saves (A10).</summary>
+      /// <param name="AChains">The checked findings; each CanMergeChain.</param>
+      /// <remarks>A finding no longer found, or whose plan is refused (A11), is named in
+      /// the status and left as it is.</remarks>
+      procedure MergeChains(const AChains: TArray<TRuleChain>);
+      /// <summary>CHAIN-1 Split (spec 5.5): writes every later stage to its
+      /// &lt;base&gt;.stage&lt;k&gt;.rules book, then removes the moved blocks and saves the
+      /// source.</summary>
+      /// <param name="AChains">The checked findings; each CanSplitChain.</param>
+      /// <remarks>Every encoding question is asked before the first write, so a Cancel
+      /// writes nothing (S4). A source save that fails after the stage books were
+      /// written says so: the blocks then exist in both files (S3).</remarks>
+      procedure SplitChains(const AChains: TArray<TRuleChain>);
+      /// <summary>File > New:after the unsaved-changes guard, opens an empty, unnamed book.</summary>
       /// <param name="Sender">The menu item; unused.</param>
       procedure DoNew(Sender: TObject);
       /// <summary>File > Exit: closes the form; FormCloseQueryHandler runs the guard.</summary>
@@ -2770,6 +2805,7 @@ implementation
 uses
   System.StrUtils
   , System.Math
+  , System.Generics.Defaults // CHAIN-1: TComparer, MergeChains' order
   , System.Win.Registry
   , Vcl.Clipbrd
   , ConvRules.Units
@@ -2794,6 +2830,9 @@ uses
   , ConvRules.MigrateRun     // A4: MigrateChecksForBook
   , ConvRules.QualifyFix     // A2: ApplyQualifyPicks / QualifyStatusText behind the Convert host's QualifyBook
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
+  , ConvRules.ChainForm      // CHAIN-1: the Rule chains dialog
+  , ConvRules.BlockFile      // CHAIN-1: SplitBlocksFor, an existing stage book's blocks
+  , ConvRules.BlockOps       // CHAIN-1: DuplicateHeaders, the stage-book append warning
   , ConvRules.InputGate      // dl:unit ConvRules.InputGate accepted -- N7/N11: GateVerdict & co. behind AppMessage; LOST_COMMAND_CONVERT travels with LostCommandStatus (WMSetCursor names the Convert command by it)
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
@@ -3059,6 +3098,7 @@ begin
   FMiClearExamine:= AddMenuCmd(FMnuConversion, '&Clear marks', 'Drop the current examination and unmark all rows', DoClearExamine);
   AddMenuCmd(FMnuConversion, '-', '', nil);
   AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
+  AddMenuCmd(FMnuConversion, 'Rule c&hains...', 'List the rule chains, cycles, duplicate From types and unit chains of the open book; merge or split them', DoRuleChains);
   // C17: no shortcut (a main-menu shortcut fires inside every edit control).
   FMiReindex:= AddMenuCmd(FMnuConversion, '&Reindex project', ReindexMenuHint(GEditorProjectDb), DoReindexProject);
 
@@ -4767,6 +4807,8 @@ begin
   end;
   FSnapshot:= FBook.Snapshot;
   FValidatePending:= nil; // a different book: its blocks owe nothing
+  FChainsAsked    := nil; // CHAIN-1 O5: a replaced book is offered its chains afresh
+  FLastSaveChains := nil;
 end; // procedure
 
 { The rules that convert the selected class. Retired on 2026-09-16 when the tab
@@ -7698,6 +7740,7 @@ begin
   ApplyValidateMarks(FBook.Nodes.ToArray, ALineNodes, AJobs, R);
   // A4 (D8 = B): AFTER ApplyValidateMarks, which drops the non-syntax marks of every validated block.
   StaticMigrateMarks(FBook);
+  StaticChainMarks(FBook); // CHAIN-1 M1: after the migrate marks, never twice
   RefreshRuleMarks;
   FGrid.Invalidate;
   AIsError:= R.Errors > 0;
@@ -7948,7 +7991,8 @@ end; // procedure
 
 procedure TConvRulesForm.DoSaveClick(Sender: TObject);
 begin
-  DoSave(Sender);
+  if DoSave(Sender) then
+    OfferRuleChains;
 end;
 
 function TConvRulesForm.DoSave(Sender: TObject): Boolean;
@@ -7958,7 +8002,199 @@ end;
 
 procedure TConvRulesForm.DoSaveAsClick(Sender: TObject);
 begin
-  SaveBook(True);
+  if SaveBook(True) then
+    OfferRuleChains;
+end;
+
+{ ---- CHAIN-1 rule chains (spec 5.3-5.5; every decision is in ConvRules.RuleChains) ---- }
+
+procedure TConvRulesForm.OfferRuleChains;
+begin
+  if Length(ChainsToOffer(FLastSaveChains, FChainsAsked)) = 0 then
+    Exit; // O1/Q2: cycles and duplicates alone, or all asked already: marks and status only
+  RunChainDialog(FLastSaveChains);
+end;
+
+procedure TConvRulesForm.RunChainDialog(const AChains: TArray<TRuleChain>);
+var
+  LChecked: TArray<TRuleChain>;
+begin
+  var LResult: TModalResult:= TChainForm.Run(Self, AChains, LChecked);
+  FChainsAsked:= ChainKeysAsked(FChainsAsked, AChains); // Keep, Merge and Split all count as asked
+  case LResult of
+    mrYes: MergeChains(LChecked);
+    mrNo : SplitChains(LChecked);
+  end; // case
+end;
+
+procedure TConvRulesForm.DoRuleChains(Sender: TObject);
+begin
+  CommitPendingDepth; // the findings must see a #depth pick still waiting on its timer
+  var LChains: TArray<TRuleChain>:= FindRuleChains(FBook);
+  if Length(LChains) = 0 then
+  begin
+    SetStatus('Rule chains: none in this book -- no chain, cycle, duplicate From type or unit chain.');
+    Exit;
+  end;
+  RunChainDialog(LChains);
+end;
+
+procedure TConvRulesForm.MergeChains(const AChains: TArray<TRuleChain>);
+var
+  LOrder   : TArray<TRuleChain>;
+  LMerged  : TArray<string>;
+  LProblems: TArray<string>;
+  LFirstHdr: Integer;
+begin
+  // Later headers first: a merge replaces its first stage's range, and a range above
+  // an earlier one never moves it. Each finding is re-found by Key on the CURRENT
+  // model, since an earlier merge may have shifted its later stages.
+  LOrder:= Copy(AChains);
+  TArray.Sort<TRuleChain>(LOrder, TComparer<TRuleChain>.Construct(
+    function(const A, B: TRuleChain): Integer
+    begin
+      Result:= B.Stages[0].NodeIdx - A.Stages[0].NodeIdx;
+    end));
+  LMerged  := nil;
+  LProblems:= nil;
+  LFirstHdr:= -1;
+  for var LWanted: TRuleChain in LOrder do
+  begin
+    var LFound: Boolean:= False;
+    for var LNow: TRuleChain in FindRuleChains(FBook) do
+      if SameText(LNow.Key, LWanted.Key) then
+      begin
+        LFound:= True;
+        var LPlan: TChainMerge:= MergeChainPlan(FBook, LNow);
+        var LHdr: Integer:= if LPlan.Problem = '' then ApplyChainMerge(FBook, LPlan) else -1;
+        if LHdr >= 0 then
+        begin
+          LMerged  := [ChainPathText(LNow)] + LMerged; // file order in the status
+          LFirstHdr:= LHdr;
+        end
+        else
+          LProblems:= LProblems + [ChainPathText(LNow) + ': ' + (if LPlan.Problem <> '' then LPlan.Problem else 'its lines changed since it was found')];
+        Break;
+      end;
+    if not LFound then
+      LProblems:= LProblems + [ChainPathText(LWanted) + ': no longer in the book'];
+  end;
+  if Length(LMerged) > 0 then
+  begin
+    StaticChainMarks(FBook); // the last stage block stays: drop its old chain mark now, not at the next Save
+    SyncRawFromModel;
+    RefreshRulesList;
+    LoadGridForBlock(LFirstHdr); // selects the first merged block (FActiveHdr)
+  end;
+  var LText: string:= MergeStatusText(LMerged, LProblems);
+  if Length(LProblems) > 0 then
+    SetError(LText)
+  else
+    SetStatus(LText);
+end;
+
+procedure TConvRulesForm.SplitChains(const AChains: TArray<TRuleChain>);
+var
+  LPlan    : TChainSplit;
+  LPaths   : TArray<string>;
+  LTexts   : TArray<string>;
+  LLevels  : TArray<TTextLevel>;
+  LMoved   : TArray<Integer>;
+  LMappings: TArray<string>;
+  LWarns   : TArray<string>;
+  LDet     : TDetectedText;
+  LTotal   : Integer;
+  LNewLevel: TTextLevel;
+  LBackup  : string;
+begin
+  if FFilePath = '' then
+  begin
+    SetError('Split needs a saved book: File > Save As... first, so the stage books have a folder and a name.');
+    Exit;
+  end;
+  LPlan:= SplitChainPlan(FBook, AChains);
+  if Length(LPlan.Stages) <= 1 then
+  begin
+    SetStatus('Nothing to split: the checked chain(s) run into a cycle or a duplicate');
+    Exit;
+  end;
+  // 1) every stage book's text and level, and every encoding question, BEFORE any write (S4).
+  LPaths   := nil;
+  LTexts   := nil;
+  LLevels  := nil;
+  LMoved   := nil;
+  LMappings:= nil;
+  LWarns   := nil;
+  for var K: Integer:= 1 to High(LPlan.Stages) do
+  begin
+    var LPath : string:= StageBookPath(FFilePath, K + 1);
+    var LText : string:= StageBookText(FBook, LPlan.Stages[K], LPlan.Mappings[K]);
+    var LLevel: TTextLevel:= tlAscii7;
+    if TFile.Exists(LPath) then
+    begin
+      var LOld: string:= ReadTextDetect(LPath, LDet);
+      LLevel:= LDet.Level;
+      var LDups: TArray<string>:= DuplicateHeaders(SplitBlocksFor(LPath, LOld), SplitBlocksFor(LPath, LText));
+      if Length(LDups) > 0 then
+        LWarns:= LWarns + [Format('; WARNING %s already had %d of these header(s) (%s) -- it now holds two blocks for them',
+          [ExtractFileName(LPath), Length(LDups), string.Join(', ', LDups)])];
+      LText:= StageAppendText(LOld, LText);
+    end;
+    if not RoundTrips(LText, LLevel) then
+    begin
+      var LUp  : TTextLevel:= RaiseTarget(LLevel, NeededLevel(LText));
+      var LLost: TArray<TLostChar>:= LostChars(LText, LLevel, LOST_CHARS_SHOWN, LTotal);
+      if MessageDlg(SaveAskMessage(LPath, LLevel, LUp, LLost, LTotal), mtConfirmation, [mbYes, mbCancel], 0) <> mrYes then
+      begin
+        SetStatus('Split cancelled -- nothing was written');
+        Exit;
+      end;
+      LLevel:= LUp;
+    end;
+    LPaths := LPaths + [LPath];
+    LTexts := LTexts + [LText];
+    LLevels:= LLevels + [LLevel];
+    LMoved := LMoved + LPlan.Stages[K];
+    for var LName: string in LPlan.Mappings[K] do
+      if IndexText(LName, LMappings) < 0 then
+        LMappings:= LMappings + [LName];
+  end;
+  // 2) write the stage books (backup + the level answered above, so no question is left).
+  for var I: Integer:= 0 to High(LPaths) do
+  begin
+    var LFail: string:= '';
+    try
+      if not WriteTextAskingRaise(LPaths[I], LTexts[I], LLevels[I], nil, LNewLevel, LBackup) then
+        LFail:= 'the text does not fit ' + LevelName(LLevels[I]);
+    except
+      on E: Exception do
+        LFail:= E.Message;
+    end; // try
+    if LFail <> '' then
+    begin
+      SetError(Format('Split stopped: writing %s failed (%s). %d of %d stage book(s) written before it; %s is unchanged.',
+        [ExtractFileName(LPaths[I]), LFail, I, Length(LPaths), ExtractFileName(FFilePath)]));
+      Exit;
+    end;
+  end;
+  // 3) remove the moved blocks and save the source (S3; the chains are gone, so no dialog).
+  LoadText(RemainingBookText(FBook, LMoved), FFilePath);
+  var LNames: TArray<string>:= nil;
+  for var LPath: string in LPaths do
+    LNames:= LNames + [ExtractFileName(LPath)];
+  if not SaveBook(False) then
+  begin
+    SetError(Format('Wrote %d block(s) to %s, but %s could not be saved -- they now exist in BOTH files. %s',
+      [Length(LMoved), string.Join(', ', LNames), ExtractFileName(FFilePath), FLblStatus.Caption]));
+    Exit;
+  end;
+  var LText: string:= SplitStatusText(FFilePath, LPaths, Length(LMoved), LMappings) + string.Join('', LWarns);
+  if FStatusIsError then
+    SetError(LText + ' -- ' + FLblStatus.Caption) // keep a failed validation visible
+  else if Length(LWarns) > 0 then
+    SetError(LText)
+  else
+    SetStatus(LText);
 end;
 
 procedure TConvRulesForm.DoNew(Sender: TObject);
@@ -8034,6 +8270,7 @@ var
   Bak: string;
 begin
   Result:= False; // every early Exit below means nothing reached disk
+  FLastSaveChains:= nil; // CHAIN-1: a save that never reached disk offers nothing
   CommitPendingDepth; // a pick still waiting on its timer belongs in this save
   var LGuard: IInterface:= HourGlass;
   var LOldPath: string:= FFilePath;
@@ -8143,6 +8380,11 @@ begin
     var isError: Boolean;
     var verdict: string:= RunScopedValidate(outText, lineNodes, ChangedBlockJobs(FSnapshot, outText, FValidatePending), isError);
     var LSaveText: string:= Format('Saved %s%s (backup %s)%s.%s Validate: %s', [ExtractFileName(FFilePath), LLevelText, ExtractFileName(Bak), droppedMsg, LNoteText, verdict]);
+    // CHAIN-1 M3: the findings this save marked, named at the END of the status.
+    FLastSaveChains:= FindRuleChains(FBook);
+    var LChainText: string:= ChainStatusText(FLastSaveChains);
+    if LChainText <> '' then
+      LSaveText:= LSaveText + ' ' + LChainText;
     if isError then
       SetError(LSaveText)
     else
@@ -8152,7 +8394,12 @@ begin
     RefreshUnitList;
     var us: TUnitSets:= NormalizeUnitSets(FBook);
     if Length(us.Conflicts) > 0 then
-      SetError(Format('Note: unit conflicts (ADD wins): %s', [string.Join(', ', us.Conflicts)]));
+    begin
+      var LConflictText: string:= Format('Note: unit conflicts (ADD wins): %s', [string.Join(', ', us.Conflicts)]);
+      if LChainText <> '' then
+        LConflictText:= LConflictText + ' ' + LChainText; // CHAIN-1 M3: the chain note stays at the end
+      SetError(LConflictText);
+    end;
 
     { The folder just changed on disk, so the catalog is now one save out of date. Any
       type this save has newly ruled would keep painting as UN-RULED -- inviting a

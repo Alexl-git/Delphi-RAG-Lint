@@ -139,9 +139,13 @@
     "hash": "0df090711fc99761e69d0e835849a1f7baa1ddd99d9be7961d5d030bb97821b3",
     "version": "1.35.0-alpha"
   },
+  "features/convrules-rule-chains.md": {
+    "hash": "3a65a4df6061de0d3a8086d1c6412e7f9a7a33cb7f2bdb78504583487ccd59af",
+    "version": "1.35.1-alpha"
+  },
   "features/convrules-work-list.md": {
-    "hash": "b6be7f6bdaf03ac8a434ad3ea10231eaa5974a5e08103712549181d6f663bb14",
-    "version": "1.35.0-alpha"
+    "hash": "26736ab585de2b965c3fc548beb14905bdc6978684f2cf2ef6c963a7c6f9a791",
+    "version": "1.35.1-alpha"
   },
   "features/copy-all-diagnostics.md": {
     "hash": "274b7ec77a6d8c4d8e474c1f62508c3020f37b14ea1737859b643d3b5e167f4b",
@@ -332,7 +336,7 @@
     "version": "1.35.1-alpha"
   },
   "features/glyph-vacuum.md": {
-    "hash": "29de0d5c7bbab3121d533f8af76e2bf326344ddd83ab940e907167ff3de730dd",
+    "hash": "04405957f7ba15041236c7ad039e37e230e0b1c79ebda2a04f16450c62492353",
     "version": "1.35.1-alpha"
   },
   "features/go-to-declaration.md": {
@@ -480,7 +484,7 @@
     "version": "1.35.1-alpha"
   },
   "features/proptree.md": {
-    "hash": "23dbd76c057029c4fbece9a93ccb49bd9cae5cbf36b4f97fb6571d2f65c1d851",
+    "hash": "52e796f2ea2b9d5f9f41a617bf52ea35a32e12ef1cb52528a691e44edaf08b44",
     "version": "1.35.1-alpha"
   },
   "features/protocol-handler.md": {

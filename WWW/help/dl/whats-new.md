@@ -11,6 +11,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.35.1-alpha
 
+* [Rule chains (single-pass warning, merge / split)](features/convrules-rule-chains.md) -- ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books.
 * [Index a project against its active build config](features/index-build-config.md) -- Parses a project index against the project's active build config (the .dproj Config marker or delphilsp.json) instead of a fixed Release, with an override flag.
 
 ## 1.35.0-alpha

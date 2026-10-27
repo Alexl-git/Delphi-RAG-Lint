@@ -230,6 +230,7 @@ Rule-driven migration of legacy component types.
 | [Qualify #convert quick fix](convrules-editor-qualify-fix) | `ConvRulesEditor.exe` (Convert tab > Qualify #convert...); `ConvRulesEditor.exe` (Convert tab > Qualify all...) |  |
 | [Reindex project](convrules-editor-reindex-project) | `ConvRulesEditor.exe` (Conversion > Reindex project) |  |
 | [Rule book and source encoding](convrules-editor-encoding) | `ConvRulesEditor.exe` (File > Encoding); `ConvRulesEditor.exe` (File > Save); `ConvRulesEditor.exe` (Convert tab > Convert) |  |
+| [Rule chains (single-pass warning, merge / split)](convrules-editor-rule-chains) | `ConvRulesEditor.exe` (Conversion > Rule chains...); `ConvRulesEditor.exe` (File > Save (offer)) |  |
 | [Work list](convrules-editor-work-list) | `ConvRulesEditor.exe` (View > Work list) |  |
 
 ## Graphs and reports

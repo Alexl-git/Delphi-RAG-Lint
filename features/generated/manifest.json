@@ -6132,6 +6132,36 @@
       }
     },
     {
+      "id": "convrules-rule-chains",
+      "title": "Rule chains (single-pass warning, merge / split)",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.35.1-alpha",
+      "summary": "ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books",
+      "intro": "convert-apply is single pass, so TA -> TB plus TB -> TC leaves a TA as TB. The editor warns about this on Save and offers one click to merge the rules into TA -> TC or to split the stages into books the Convert tab runs in order.",
+      "wikiPage": "convrules-editor-rule-chains",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Conversion > Rule chains..."
+        },
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "File > Save (offer)"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-27",
+        "by": "CONVERTER",
+        "build": "1.35.1-alpha",
+        "surfaceHash": "eb7e135631f7a03a51a1fef17c2fcea14d88e68829273394dc0fe5a5cf5ffb33"
+      }
+    },
+    {
       "id": "convrules-work-list",
       "title": "Work list",
       "group": "component-conversion",
@@ -12045,7 +12075,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A bare name the index bound to a value of an enum declared under $SCOPEDENUMS ON -- the compiler admits only TEnum.Value there, so th... (bug-patterns, warning)",
+        "summary": "A bare name spelled like a value of a visible $SCOPEDENUMS ON enum -- warning when it binds to another symbol of that name and the ty... (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
