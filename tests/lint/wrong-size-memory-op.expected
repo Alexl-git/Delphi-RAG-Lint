@@ -1,0 +1,22 @@
+# (a) pointer var vs its pointee: FillChar(P^, SizeOf(P)) clears pointer-size bytes (26, 27)
+# (b) string element count used as a byte count: missing character-size factor (28, 29, 30)
+# (c) FillChar over a managed/reference variable (31 string, 32 TBytes, 33 interface)
+# Non-hits: SizeOf(P^) (45), plain record (46), * SizeOf(Char) (47), TBytes element = byte (48),
+# * 2 (49), ByteLength (50), plain Integer (51). Fields (66, 67) are silent by design: no visible declaration.
+wrong-size-memory-op 26
+wrong-size-memory-op 27
+wrong-size-memory-op 28
+wrong-size-memory-op 29
+wrong-size-memory-op 30
+wrong-size-memory-op 31
+wrong-size-memory-op 32
+wrong-size-memory-op 33
+!wrong-size-memory-op 45
+!wrong-size-memory-op 46
+!wrong-size-memory-op 47
+!wrong-size-memory-op 48
+!wrong-size-memory-op 49
+!wrong-size-memory-op 50
+!wrong-size-memory-op 51
+!wrong-size-memory-op 66
+!wrong-size-memory-op 67

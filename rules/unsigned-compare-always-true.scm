@@ -8,3 +8,26 @@
   rhs: (literalNumber) @zero) @warn
  (#eq? @zero "0")
  (#declared-type? @v "^(System\.)?(Cardinal|Byte|Word|LongWord|UInt32|UInt64|NativeUInt|DWORD|UIntPtr)$"))
+
+; Unsigned value compared with the largest value its own type can hold: `B > 255` is always false,
+; `B <= 255` always true (Byte; Word: 65535; Cardinal / LongWord / UInt32 / DWORD: 4294967295).
+((exprBinary
+  lhs: (identifier) @v
+  operator: [(kGt) (kLte)]
+  rhs: (literalNumber) @lim) @warn
+ (#eq? @lim "255")
+ (#declared-type? @v "^(System\.)?Byte$"))
+
+((exprBinary
+  lhs: (identifier) @v
+  operator: [(kGt) (kLte)]
+  rhs: (literalNumber) @lim) @warn
+ (#eq? @lim "65535")
+ (#declared-type? @v "^(System\.)?Word$"))
+
+((exprBinary
+  lhs: (identifier) @v
+  operator: [(kGt) (kLte)]
+  rhs: (literalNumber) @lim) @warn
+ (#eq? @lim "4294967295")
+ (#declared-type? @v "^(System\.)?(Cardinal|LongWord|UInt32|DWORD)$"))

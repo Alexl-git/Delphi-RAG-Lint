@@ -1,0 +1,8 @@
+{
+  "id": "overflow-before-widening",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Integer product computed in 32 bits and widened afterwards -- it can overflow before the assignment; cast an operand first (Int64(A) * B) (CWE-190).",
+  "warn_capture": "warn",
+  "fix": { "when_capture": "a", "replace": "Int64({a}) * {b}", "risky": true }
+}
