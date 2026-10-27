@@ -213,6 +213,11 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ConcurrencyChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DisallowedChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ModernizeChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.OwnershipChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.BoundsNilChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ExceptionThreadChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DeclParityChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParityExtChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CloneChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParseCache.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Cfg.pas"/>

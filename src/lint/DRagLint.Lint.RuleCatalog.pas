@@ -103,7 +103,9 @@ const
     'separate-query-from-modifier', 'ifdef-undefined-symbol', 'review-marker-reason-unreviewed',
     { clippy-parity wave (L0): OFF-by-default new built-ins }
     'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
-    'too-many-bool-fields', 'index-loop-to-for-in'];
+    'too-many-bool-fields', 'index-loop-to-for-in',
+    { gap-rules wave (G0): OFF-by-default new built-ins }
+    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -733,6 +735,29 @@ begin
     B('disallowed-name', 'policy', 'warning', 'Use of an identifier the project configuration disallows -- see the configured reason');
     B('index-loop-to-for-in', 'modernize', 'hint', 'Index loop only reads Items[I] -- a for..in loop is shorter and cannot go out of range', False);
     B('duplicate-unit-on-search-path', 'structure', 'warning', 'Two files with the same unit name are on the search path -- the compiler may pick the wrong one');
+    { gap-rules wave (G0): the 22 built-in ids of lanes G4-G8 }
+    B('field-created-not-freed', 'resource-lifetime', 'warning', 'Field created in a constructor is never freed by any method of the class -- the object leaks when the owner is destroyed');
+    B('free-of-owned-item', 'resource-lifetime', 'warning', 'Item freed by hand although its OwnsObjects container frees it too -- double free');
+    B('mismatched-alloc-free', 'resource-lifetime', 'warning', 'Memory released by a call from a different family than the one that allocated it (GetMem/Dispose, New/FreeMem, ...) -- heap corruption');
+    B('freeonterminate-then-wait', 'resource-lifetime', 'warning', 'WaitFor or Free on a thread that has FreeOnTerminate set -- the thread may already be gone');
+    B('begin-end-pair-not-in-finally', 'bug-patterns', 'warning', 'BeginUpdate/EndUpdate style pair whose closing call is missing or not in a finally -- an exception leaves the resource held');
+    B('nil-check-after-dereference', 'bug-patterns', 'warning', 'Reference is dereferenced and only afterwards tested against nil -- either the use is too early or the check is redundant');
+    B('address-of-local-returned', 'bug-patterns', 'warning', 'Address of a local variable or by-value parameter is returned -- it dangles once the routine exits');
+    B('constant-index-out-of-range', 'bug-patterns', 'warning', 'Literal index outside the declared array bounds (or S[0] on a 1-based string) -- range error or memory overrun');
+    B('copy-paste-assignment', 'bug-patterns', 'hint', 'Run of similar assignments where one right-hand side repeats another -- likely a copy-paste typo', False);
+    B('exception-escapes-thread', 'bug-patterns', 'warning', 'Thread body has no top-level try..except -- an unhandled exception silently ends the thread');
+    B('raise-in-destructor', 'bug-patterns', 'warning', 'raise inside a destructor -- an exception during cleanup aborts the rest of the teardown and leaks');
+    B('network-client-without-timeout', 'security', 'warning', 'Network client created without any timeout set -- a stalled peer blocks the caller indefinitely');
+    B('closure-captures-loop-local', 'bug-patterns', 'warning', 'Anonymous method captures a local assigned inside the loop and runs later -- every closure sees the last value');
+    B('hides-ancestor-virtual', 'bug-patterns', 'warning', 'Method has the same name as an ancestor virtual method but is neither override nor reintroduce -- the ancestor method is hidden');
+    B('needless-exit', 'dead-code', 'hint', 'Exit as the last statement of a routine does nothing -- remove it');
+    B('free-of-parameter', 'resource-lifetime', 'warning', 'Free of a by-value or const parameter -- the caller''s reference now dangles');
+    B('property-accessor-name', 'naming', 'info', 'Property accessor is not named F<Prop> / Get<Prop> / Set<Prop> -- the convention makes accessors findable');
+    B('unused-loop-variable', 'dead-code', 'hint', 'for-loop counter is never used in the body -- the loop only repeats; check the intent', False);
+    B('dfm-event-handler-missing', 'project-wide', 'warning', 'A .dfm names an event handler that the form class and its ancestors do not declare -- the form fails to load');
+    B('dfm-password-edit-unmasked', 'security', 'info', 'Edit control named like a password field has no PasswordChar -- the secret is shown on screen');
+    B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time');
+    B('virtual-never-overridden', 'project-wide', 'hint', 'Virtual method with no override anywhere in the project -- the virtual dispatch buys nothing', False);
     Result:= L.ToArray;
   finally
     L.Free;
