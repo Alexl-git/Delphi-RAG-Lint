@@ -8,3 +8,5 @@ copy-paste-assignment 28
 !copy-paste-assignment 40
 !copy-paste-assignment 46
 !copy-paste-assignment 53
+# non-hit: EndLine := M.StartLine closes a one-line span
+!copy-paste-assignment 65

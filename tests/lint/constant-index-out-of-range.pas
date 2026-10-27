@@ -74,4 +74,9 @@ begin
   FCells[9] := 1;
 end;
 
+procedure InlineShadow;
+begin
+  var FCells := LoadCells;
+  FCells[20] := 1;
+end;
 end.

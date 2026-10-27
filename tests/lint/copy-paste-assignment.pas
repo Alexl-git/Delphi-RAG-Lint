@@ -53,4 +53,15 @@ begin
   R.Right := A.Left;
 end;
 
+type
+  TSpan = record
+    StartLine, StartCol, EndLine: Integer;
+  end;
+
+procedure OneLineSpan(var F: TSpan; const M: TSpan);
+begin
+  F.StartLine := M.StartLine;
+  F.StartCol := M.StartCol;
+  F.EndLine := M.StartLine;
+end;
 end.

@@ -16,3 +16,5 @@ constant-index-out-of-range 73
 !constant-index-out-of-range 60
 !constant-index-out-of-range 68
 !constant-index-out-of-range 74
+# non-hit: inline var shadows the field of the same name
+!constant-index-out-of-range 80
