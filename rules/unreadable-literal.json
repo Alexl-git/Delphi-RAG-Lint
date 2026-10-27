@@ -1,0 +1,8 @@
+{
+  "id": "unreadable-literal",
+  "category": "modernize",
+  "severity": "hint",
+  "message": "Long numeric literal without digit separators -- write 1_000_000 (Delphi 13) so the magnitude reads at a glance.",
+  "warn_capture": "warn",
+  "enabled": true
+}
