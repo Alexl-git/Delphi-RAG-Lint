@@ -51,6 +51,8 @@ public static class W {
   [DllImport("kernel32.dll")] static extern bool ReadProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr s, out UIntPtr got);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   public struct RECT { public int L, T, R, B; }
+  [DllImport("user32.dll", EntryPoint="WindowFromPoint")] static extern IntPtr WFP(PT p);
+  public static IntPtr WindowFromPoint(int x, int y) { PT p; p.X = x; p.Y = y; return WFP(p); }
   public static List<IntPtr> Tops(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static List<IntPtr> Kids(IntPtr parent) { var r = new List<IntPtr>(); EnumChildWindows(parent, (h, l) => { r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
@@ -292,6 +294,18 @@ function WaitIdle($procId, $main, $sec) {
     $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
     if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
     Start-Sleep -Milliseconds 200
+  }
+  return $false
+}
+# DRV-2b: WaitIdle that also records every DISTINCT status line it sees (sampled every 50 ms) into
+# $script:trail -- tells "the notice was never raised" from "it was raised and then overwritten".
+function WaitIdleTrail($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $s = Status $main; if ($script:trail.Count -eq 0 -or $script:trail[-1] -ne $s) { $script:trail += $s }
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 50
   }
   return $false
 }
@@ -573,7 +587,10 @@ try {
   $disabled = -not [W]::IsWindowEnabled($main)
   if (($wait -ne [IntPtr]::Zero) -and $disabled) {
     $script:dbg = 'wait=({0},{1}) conv=({2},{3}) held={4}' -f [W]::Left($wait), [W]::Top($wait), [W]::Left($conv), [W]::Top($conv), [EngineHold]::Held()
+    $script:trail = @(Status $main)
     [W]::MouseClickFresh($conv)
+    $hit = [W]::WindowFromPoint([W]::Left($conv) + 5, [W]::Top($conv) + 5)
+    $script:dbg += (' hit={0}/{1}' -f [W]::Cls($hit), ($hit -eq $conv))
     # DRV-2: the lost-click notice is appended once the OPERATION ends, so it only survives a click made during the
     # operation's LAST engine call (between calls it can fire and be overwritten by the next status). Add... makes a
     # few C8 calls: each further child is held and clicked under too, until none starts for 3 s.
@@ -583,10 +600,11 @@ try {
         $w2 = WaitCls $p.Id 'TEngineWaitForm' 2
         if (($w2 -ne [IntPtr]::Zero) -and -not [W]::IsWindowEnabled($main)) { [W]::MouseClickFresh($conv) }
         Start-Sleep -Milliseconds 700; [void][EngineHold]::ResumeHeld(); $quiet = Get-Date
-      } else { Start-Sleep -Milliseconds 50 }
+      } else { $s = Status $main; if ($script:trail[-1] -ne $s) { $script:trail += $s }; Start-Sleep -Milliseconds 50 }
     }
     $held = [EngineHold]::Release()
-    [void](WaitIdle $p.Id $main 90)
+    [void](WaitIdleTrail $p.Id $main 90)
+    $script:dbg += ' trail=[' + ($script:trail -join ' >> ') + ']'
     $st = Status $main
     Check 'n1.click.under.progress' $true "(precondition: the click landed while the progress window disabled the editor) window=True disabled=$disabled"
     Check 'n1.lost.click.reported' ($st -match 'Convert was NOT started: it was clicked while the editor was busy \(.+\)\. Click Convert again\.$') ($st + ' | ' + $script:dbg)
