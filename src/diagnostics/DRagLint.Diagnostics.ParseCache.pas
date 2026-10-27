@@ -50,7 +50,8 @@ type
     /// <summary>Installs the per-file profile source ApplyPreprocess consults BEFORE the
     /// process-wide profile from SetPreprocess. nil restores the single profile.</summary>
     /// <param name="AResolver">Returns the profile for a path; an empty Defines array or an
-    /// exception means "use the process-wide profile" (fail-open, never silent).</param>
+    /// exception means "use the process-wide profile" (fail-open: the fault is swallowed and the
+    /// file keeps the pre-C10 treatment).</param>
     /// <remarks>Does not clear memoised entries (same contract as SetPreprocess). The CLI
     /// installs it once per verb, before the first Get; the LSP installs it at start-up and the
     /// resolver's own cache handles .dproj/.delphilsp.json changes per lookup.</remarks>

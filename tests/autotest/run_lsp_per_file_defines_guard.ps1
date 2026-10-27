@@ -17,6 +17,8 @@
        .dproj + App.delphilsp.json (-DMYFEATURE) -> didSave -> 0
     e  EXPLICIT --project alt\Other.dproj (lsp and lint): uUnit.pas -> >= 1 although the
        auto-discovered owner (App, Debug) would give 0
+    g  `lint uLoose.pas --project App.dproj`: a file no --db contains gets the explicit
+       project's ACTIVE build too (0), never its Release profile -- one profile per project
     f  `lsp --full-rules`: uUnit.pas -> 0, uLoose.pas -> >= 1 (the lint child inherits
        per-file defines through --db)
 
@@ -217,6 +219,11 @@ $e2 = CliLines $Unit @('--project', $Other)
 Check 'e lint --project Other.dproj: uUnit.pas >= 1 parser-error' ($e2.Count -ge 1) "cli=[$($e2 -join ',')]"
 $e3 = CliLines $Unit
 Check 'e control: lint without --project: 0' ($e3.Count -eq 0) "cli=[$($e3 -join ',')]"
+# g: ONE profile per explicit --project. A file the --db does not contain (uLoose.pas) gets the
+# SAME active-build profile (App = Debug, MYFEATURE on) as a member does, never the project's
+# Release profile. Control: (b) -- the same file without --project is >= 1.
+$g1 = CliLines $Loose @('--project', $Dproj)
+Check 'g lint uLoose.pas --project App.dproj (not a DB member): 0 parser-error' ($g1.Count -eq 0) "cli=[$($g1 -join ',')]"
 
 # ---------- f: --full-rules ----------
 Write-Host 'lsp --full-rules' -ForegroundColor Cyan

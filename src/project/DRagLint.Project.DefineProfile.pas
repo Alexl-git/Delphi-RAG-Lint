@@ -492,7 +492,7 @@ var
 begin
   if FindFirst(APath, faAnyFile, SR) = 0 then
   try
-    Result := Format('%d:%d', [Int64(SR.Time), SR.Size]);
+    Result := FormatDateTime('yyyymmddhhnnsszzz', SR.TimeStamp) + ':' + IntToStr(SR.Size); // ms resolution; SR.Time is the deprecated 2 s DOS stamp
   finally
     FindClose(SR);
   end

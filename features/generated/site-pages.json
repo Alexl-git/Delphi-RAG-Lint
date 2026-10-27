@@ -408,11 +408,11 @@
     "version": "1.35.1-alpha"
   },
   "features/lsp-full-rules.md": {
-    "hash": "7c5c535fed970df24c470c59678c2432869035c56e2ba9db2df78858f3391854",
+    "hash": "b8a39787c3bbfcbae08b25b5bd50072aab5ce6341d57f5a4d48fbabba6140d5f",
     "version": "1.35.1-alpha"
   },
   "features/lsp-protocol-extensions.md": {
-    "hash": "75321503e7cd672b3174d2cec968acc6090cc834b2ae924bcd65a10c8bea2926",
+    "hash": "997861520164c84a69fdf9bc9bc0b409ec1214a6eb8f80486ab1cdcf52579090",
     "version": "1.35.1-alpha"
   },
   "features/lsp-proxy-merge.md": {
@@ -424,7 +424,7 @@
     "version": "1.35.1-alpha"
   },
   "features/lsp.md": {
-    "hash": "67f4c1efda19acea69c78a7850c02d0631f839f7fa20dbeaa499de3c11b6132a",
+    "hash": "7980e9b92239261c70f35a560dacd74cdd73e75654bda85b2fb6f05ccae7be0a",
     "version": "1.35.1-alpha"
   },
   "features/maintenance.md": {

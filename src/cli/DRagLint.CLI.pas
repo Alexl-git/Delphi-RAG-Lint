@@ -2772,11 +2772,20 @@ end;
   the .dproj's own folder (one .dproj only); the platform is the project's active
   platform unless --platform was typed. Nothing to Clear: the LSP lint path calls
   ApplyPreprocess on every run (no memo) and TProjectProfileCache re-stamps the
-  .dproj / .delphilsp.json on every lookup. No-op under --no-preprocess. }
+  .dproj / .delphilsp.json on every lookup. No-op under --no-preprocess.
+  An explicit --project .dproj makes ITS active build the fallback too, so one run
+  never lints the same project with two profiles (a member with the active config, a
+  file the --db does not contain with Release). Guard: run_lsp_per_file_defines_guard
+  case g. }
 procedure InstallFileProfileResolver(const AArgs: TArgs; const ADbPaths: TArray<string>; const AFallback: TDefineProfile);
+var
+  Fallback: TDefineProfile;
 begin
   if AArgs.NoPreprocess then Exit;
-  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', AFallback, True);
+  Fallback:= AFallback;
+  if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath) then
+    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, '', True).Profile;
+  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', Fallback, True);
   TAstParseCache.SetProfileResolver(
     function(AFile: string): TDefineProfile
     begin
