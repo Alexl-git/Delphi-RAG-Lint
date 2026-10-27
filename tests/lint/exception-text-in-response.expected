@@ -1,0 +1,7 @@
+# E.Message/StackTrace/ToString sent in a response (14, 15, 16) fires; ShowMessage (17), a literal (18) and Log (19) must not
+exception-text-in-response 14
+exception-text-in-response 15
+exception-text-in-response 16
+!exception-text-in-response 17
+!exception-text-in-response 18
+!exception-text-in-response 19

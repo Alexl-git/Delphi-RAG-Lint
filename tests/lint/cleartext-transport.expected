@@ -1,0 +1,10 @@
+# http:// to Get/Post/URL (11,14,17) and UseTLS := utNoTLSSupport (15) fire; localhost (12), https (13), 127.0.0.1 (18), utUseImplicitTLS (16) and the XML namespace const (9) must not
+cleartext-transport 11
+cleartext-transport 14
+cleartext-transport 15
+cleartext-transport 17
+!cleartext-transport 9
+!cleartext-transport 12
+!cleartext-transport 13
+!cleartext-transport 16
+!cleartext-transport 18
