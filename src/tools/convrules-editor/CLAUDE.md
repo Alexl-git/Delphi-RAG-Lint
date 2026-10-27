@@ -69,6 +69,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-save-encoding.ps1` 15 -- Save question, File > Encoding, UTF-16 BOM note
   * `drive-convert-encoding.ps1` 29 (mixed.* N4-1; `-ProofNoMixed` = 28 / 1) -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; N2: Yes keeps every place as note rows, Cancel adds none; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
   * `drive-migrate.ps1` 24 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks; D5 bulk DL_NONE, D6-B opens the row's book (`-ProofNoMigrate` = 13 / 7, `-ProofNoBulk` = 22 / 2)
+  * `drive-rule-chains.ps1` TBD -- rule chains on Save (`-ProofNoChain`); count filled by CHAIN-1 Task 6
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 
 ## Unit map (who owns which decision)
@@ -78,7 +79,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `SkipList` / `FormTypes` / `RuleCatalog` -- class-picker skip marks, form-type rows, rule catalog.
 * `UnitPick` (decisions) / `UnitPicker` (form) -- unit picker, Swap replacements.
 * `UsesHarvest` / `UnitStatus` (`TDestinationResolver`) / `UnitMask` -- Unit Rules harvest, classify, masks/filter.
-* `ValidateScope` -- scoped validation on Save, diagnostics -> rule marks, pending blocks.
+* `ValidateScope` -- scoped validation on Save, diagnostics -> rule marks, pending blocks, `AddStaticWarningMark` (the one way a static mark is added).
 * `Glyph` (decisions) / `GlyphForm` (dialog) -- G[I/N] expressions, count links, glyph notes.
 * `Inheritance` -- C8 analysis, offers, order warning, gate; `InheritanceEngine` -- its engine binders.
 * `ConvertRun` -- pure Convert decisions: backups, preflight, `ParseApplyJson`, row notes, progress text.
@@ -88,6 +89,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `ConvertTab` -- Convert tab UI (editor-only); `ConvertRequest` -- `convert-request/1` parse, validate, scope.
 * `WorkList` (pure) / `WorkListTab` (UI) -- pas_uses work list.
 * `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).
+* `RuleChains` (decisions) / `ChainForm` (dialog) -- CHAIN-1: chains, cycles, duplicate From, unit chains (`FindRuleChains`, marks, `MergeChainPlan` / `ApplyChainMerge`, `SplitChainPlan` / `StageBookPath` / `StageBookText`) and the Rule chains dialog (Merge / Split / Keep). Pure unit: no UI, engine or file I/O.
 * `ConvCatalog` / `Casts` -- cast options incl. `ckValue` (StripDB).
 * `TextEncoding` -- the encoding ladder, detection, round trip, pre-save decision, ReadTextDetect / WriteTextAtLevel.
 * `Engine` -- `TEngineAdapter`: every engine call (incl. `ApplyConversionBatch`, apply-batch/1), pipes, timeouts, capabilities, resolve cache.

@@ -146,6 +146,7 @@ Rule-driven migration of legacy component types.
 | [Member migration (#migrate)](features/convrules-migrate-members.md) | ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list | 1.35.0-alpha |
 | [Qualify #convert quick fix](features/convrules-qualify-fix.md) | ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book | 1.31.5-alpha |
 | [Reindex project](features/convrules-reindex-project.md) | ConvRulesEditor command: incremental index --project of the editor's project index, cancellable | 1.26.7-alpha |
+| [Rule chains (single-pass warning, merge / split)](features/convrules-rule-chains.md) | ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books | 1.35.1-alpha |
 | [Work list](features/convrules-work-list.md) | ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses) | 1.28.2-alpha |
 | [glyph-vacuum](features/glyph-vacuum.md) | Measure every streamed glyph or picture under a tree before writing a glyph rule | 1.15.0-alpha |
 | [proptree](features/proptree.md) | Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties | 1.1.0-alpha |
