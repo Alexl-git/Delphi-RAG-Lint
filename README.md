@@ -842,7 +842,8 @@ predates it answers the standard `-32601`.
 * **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`. Add `--full-rules` (OFF by default) to
   publish the complete built-in rule set on every save instead of the subset; it runs `lint` out-of-process
   and reports its cost in ms on stderr. A platform-library unit (an RTL/VCL file covered by a `library-*.sqlite`)
-  skips the project and flow rules, in `lint` too: findings you cannot act on, and they blew the 8 s budget.
+  skips the project, flow and type-aware rules, in `lint` too: findings you cannot act on, and they blew the 8 s budget;
+  the LSP also gives such a file a 16 s budget instead of 8 s.
 
 `drag-lint lsp --proxy` is a different shape of the same server: instead of
 answering alone, it spawns RAD Studio's own `bin64\DelphiLSP.exe` and relays
