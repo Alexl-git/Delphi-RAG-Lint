@@ -1,0 +1,16 @@
+# Hits: by-value managed params never modified (string, interface, dynamic array).
+# FP shapes silent: const/var, ordinal, assigned, indexed-assigned, SetLength'd, @S,
+# virtual, override, event handler (Sender first).
+missing-const-param 34
+missing-const-param 39
+missing-const-param 44
+!missing-const-param 49
+!missing-const-param 54
+!missing-const-param 59
+!missing-const-param 64
+!missing-const-param 69
+!missing-const-param 74
+!missing-const-param 79
+!missing-const-param 85
+!missing-const-param 90
+!missing-const-param 95
