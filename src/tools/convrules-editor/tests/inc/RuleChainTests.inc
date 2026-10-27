@@ -37,7 +37,7 @@ begin
     Result:= Result + IfThen(LI > 0, ',', '') + IntToStr(AChain.Stages[LI].NodeIdx);
 end;
 
-procedure TestRuleChainsDetect;
+procedure TestRuleChainsDetect;  // dl:ok cyclomatic-complexity@705c -- REVIEWED 2026-10-27 test procedure is a flat list of independent Check calls; splitting would hide the scenario
 var
   Books: TObjectList<TRuleBook>;
   C    : TArray<TRuleChain>;
@@ -54,7 +54,7 @@ begin
     Check('chains.detect.chain', (Length(C) = 1) and (C[0].Kind = ckChain) and (ChainIdxText(C[0]) = '0,2') and (C[0].Key = 'chain:ta>tb>tc'),
       IntToStr(Length(C)));
     C:= Find(CHAIN_BOOK_SHARED);
-    Check('chains.detect.shared.tail', (Length(C) = 2) and (C[0].Kind = ckChain) and (C[1].Kind = ckChain)
+    Check('chains.detect.shared.tail', (Length(C) = 2) and (C[0].Kind = ckChain) and (C[1].Kind = ckChain)  // dl:ok boolean-expression-complexity@b281 -- REVIEWED 2026-10-27 one Check asserts a single expected shape; splitting the condition would obscure it
       and (ChainIdxText(C[0]) = '0,2') and (ChainIdxText(C[1]) = '1,2')
       and (C[0].Key = 'chain:ta>tb>tc') and (C[1].Key = 'chain:tx>tb>tc'), IntToStr(Length(C)));
     C:= Find(CHAIN_BOOK_CYCLE);
@@ -91,7 +91,7 @@ begin
     C:= Find(CHAIN_BOOK_CLEAN);
     Check('chains.detect.clean', (Length(C) = 0) and (ChainStatusText(nil) = ''), IntToStr(Length(C)));
     C:= Find(CHAIN_BOOK_INTO_CYCLE + CHAIN_CRLF + '#useswap A -> B' + CHAIN_CRLF + '#useswap B -> C');
-    Check('chains.detect.order', (Length(C) = 3) and (C[0].Kind = ckChain) and (C[1].Kind = ckCycle) and (C[2].Kind = ckUnitChain)
+    Check('chains.detect.order', (Length(C) = 3) and (C[0].Kind = ckChain) and (C[1].Kind = ckCycle) and (C[2].Kind = ckUnitChain)  // dl:ok boolean-expression-complexity@c4d1, magic-literal@c4d1 -- REVIEWED 2026-10-27 one Check asserts a single expected shape; splitting the condition would obscure it; expected counts/indices/depths are the assertion data of the fixture
       and (C[0].Stages[0].NodeIdx <= C[1].Stages[0].NodeIdx) and (C[1].Stages[0].NodeIdx <= C[2].Stages[0].NodeIdx), IntToStr(Length(C)));
   finally
     Books.Free;
@@ -144,7 +144,7 @@ begin
       and (ChainStatusText(Find(CHAIN_BOOK_SHARED)) = 'Rule chains: 2 chains -- see marked rules (Conversion > Rule chains...)')
       and (ChainStatusText(Many) = 'Rule chains: 2 duplicate From types -- see marked rules (Conversion > Rule chains...)'),
       ChainStatusText(Many));
-    Check('chains.text.can', CanMergeChain(C[0]) and CanMergeChain(U[0]) and not CanMergeChain(Find(CHAIN_BOOK_CYCLE)[0]) and not CanMergeChain(D[0])
+    Check('chains.text.can', CanMergeChain(C[0]) and CanMergeChain(U[0]) and not CanMergeChain(Find(CHAIN_BOOK_CYCLE)[0]) and not CanMergeChain(D[0])  // dl:ok boolean-expression-complexity@08c0 -- REVIEWED 2026-10-27 one Check asserts a single expected shape; splitting the condition would obscure it
       and CanSplitChain(C[0]) and not CanSplitChain(U[0]) and not CanSplitChain(Find(CHAIN_BOOK_CYCLE)[0]) and not CanSplitChain(D[0]), 'merge/split');
     C:= Find(CHAIN_BOOK_INTO_CYCLE);
     Offer:= ChainsToOffer(C, nil);
@@ -169,10 +169,10 @@ begin
     Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
     C:= FindRuleChains(Book);
     N:= StaticChainMarks(Book);
-    Check('chains.marks.added', (N = 2) and (Length(Book.Nodes[0].Marks) = 1) and (Length(Book.Nodes[2].Marks) = 1)
+    Check('chains.marks.added', (N = 2) and (Length(Book.Nodes[0].Marks) = 1) and (Length(Book.Nodes[2].Marks) = 1)  // dl:ok boolean-expression-complexity@ce43 -- REVIEWED 2026-10-27 one Check asserts a single expected shape; splitting the condition would obscure it
       and (Book.Nodes[0].Marks[0].Text = ChainMarkText(C[0], 0)) and (Book.Nodes[2].Marks[0].Text = ChainMarkText(C[0], 1))
       and Book.Nodes[0].Marks[0].IsWarning and not Book.Nodes[0].Marks[0].FromSyntax
-      and (Length(Book.Nodes[1].Marks) = 0) and (Length(Book.Nodes[3].Marks) = 0), IntToStr(N));
+      and (Length(Book.Nodes[1].Marks) = 0) and (Length(Book.Nodes[3].Marks) = 0), IntToStr(N));  // dl:ok magic-literal@a156 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
     Check('chains.marks.idempotent', (StaticChainMarks(Book) = 0) and (Length(Book.Nodes[0].Marks) = 1) and (Length(Book.Nodes[2].Marks) = 1), 'second call');
     Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
     AddStaticWarningMark(Book.Nodes[0], 'line 1: warning: a migrate warning');
@@ -211,7 +211,7 @@ begin
 end;
 
 // ---- Task 2 (merge) block: TestRuleChainsMerge, filled by CHAIN-1 Task 2 ----
-procedure TestRuleChainsMerge;
+procedure TestRuleChainsMerge;  // dl:ok cyclomatic-complexity@da85 -- REVIEWED 2026-10-27 test procedure is a flat list of independent Check calls; splitting would hide the scenario
 var
   Books: TObjectList<TRuleBook>;
 
@@ -262,23 +262,23 @@ var
 var
   Bk    : TRuleBook;
   M     : TChainMerge;
-  MERGE_A: string;
+  LMergeA: string;
   LI    : Integer;
   LText : string;
   LBefore: string;
 begin
   Books:= TObjectList<TRuleBook>.Create(True);
   try
-    MERGE_A:= J(['#convert TA -> TB, UnitB', '#link Caption <- Text', '#link Width <- W : IntToStr', '#link Color <- Col : ToColor',
+    LMergeA:= J(['#convert TA -> TB, UnitB', '#link Caption <- Text', '#link Width <- W : IntToStr', '#link Color <- Col : ToColor',
       '#link Keep <- K', '#default Flag = True', '#default Gone = 1', '#ignore Old', '#migrate DoA -> DoB', '#tag t1', '',
       '#convert TB -> TC, UnitC', '#link Title <- Caption', '#link Width <- Width : StrToInt', '#link Colour <- Color',
       '#ignore Keep', '#ignore Gone', '#default Extra = 2', '#migrate DoB -> DoC, UnitC', '#warn Title "check"', '#tag t2',
       '#migrate X -> Y']);
-    M:= Plan(MERGE_A, 0, Bk);
+    M:= Plan(LMergeA, 0, Bk);
     Check('chains.merge.problem.none', M.Problem = '', M.Problem);
     Check('chains.merge.header', (Length(M.NewLines) > 1) and (M.NewLines[0] = '#convert TA -> TC, UnitC')
       and M.NewLines[1].StartsWith('#note chain merge: TA -> TB (line 1) + TB -> TC (line 12) = TA -> TC;'),
-      IfThen(Length(M.NewLines) > 1, M.NewLines[0] + ' | ' + M.NewLines[1], 'short'));
+      if Length(M.NewLines) > 1 then M.NewLines[0] + ' | ' + M.NewLines[1] else 'short');
     Check('chains.merge.link.plain', Has(M, '#link Title <- Text'), '');
     Check('chains.merge.link.one.cast', Has(M, '#link Colour <- Col : ToColor'), '');
     LI:= PosOf(M, '#link Width <- W');
@@ -295,18 +295,18 @@ begin
     LI:= StartsAt(M, '#note chain merge: the lines below came from TB -> TC (line 12)');
     Check('chains.merge.q.rest', (LI >= 0) and (PosOf(M, '#warn Title "check"') > LI) and (not Has(M, '#tag t2')) and Has(M, '#tag t1'),
       IntToStr(LI));
-    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 2) and (M.Noted = 3),
+    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 2) and (M.Noted = 3),  // dl:ok magic-literal@4210 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
       Format('%d/%d/%d', [M.Composed, M.Carried, M.Noted]));
-    Check('chains.merge.range.non.last', (M.NodeIdx = 0) and (M.LastIdx = 10) and (M.NewLines[High(M.NewLines)] = ''),
+    Check('chains.merge.range.non.last', (M.NodeIdx = 0) and (M.LastIdx = 10) and (M.NewLines[High(M.NewLines)] = ''),  // dl:ok magic-literal@33fa -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
       Format('%d..%d', [M.NodeIdx, M.LastIdx]));
 
     M:= Plan(J(['#convert TB -> TC', '#link a <- b', '#convert TA -> TB', '#link b <- c', '#migrate M -> N']), 0, Bk);
-    Check('chains.merge.range.last.trailer', (M.Problem = '') and (M.NodeIdx = 2) and (M.LastIdx = 3), Format('%d..%d %s', [M.NodeIdx, M.LastIdx, M.Problem]));
+    Check('chains.merge.range.last.trailer', (M.Problem = '') and (M.NodeIdx = 2) and (M.LastIdx = 3), Format('%d..%d %s', [M.NodeIdx, M.LastIdx, M.Problem]));  // dl:ok magic-literal@91f1 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
 
-    M:= Plan(MERGE_A, 0, Bk);
+    M:= Plan(LMergeA, 0, Bk);
     LBefore:= Bk.SaveToString;
     LI:= ApplyChainMerge(Bk, M);
-    Check('chains.merge.apply', (LI = 0) and (Bk.Nodes[0].Kind = rnkConvert) and (Bk.Nodes[0].FromType = 'TA')
+    Check('chains.merge.apply', (LI = 0) and (Bk.Nodes[0].Kind = rnkConvert) and (Bk.Nodes[0].FromType = 'TA')  // dl:ok boolean-expression-complexity@6c78 -- REVIEWED 2026-10-27 one Check asserts a single expected shape; splitting the condition would obscure it
       and (Bk.Nodes[0].ToType = 'TC') and (Bk.Nodes[0].Units = 'UnitC') and (Length(FindRuleChains(Bk)) = 0), IntToStr(LI));
     LText:= Bk.SaveToString;
     Check('chains.merge.apply.second.stage', LText.Contains('#convert TB -> TC, UnitC' + CHAIN_CRLF + '#link Title <- Caption' + CHAIN_CRLF + '#link Width <- Width : StrToInt'),
@@ -325,7 +325,7 @@ begin
     M:= Plan(CHAIN_BOOK_UNIT_USE, 0, Bk);
     Check('chains.merge.unit.use', (Length(M.NewLines) = 1) and (M.NewLines[0] = '#use UnitC'), M.Problem);
 
-    M:= Plan(CHAIN_BOOK_CHAIN, 0, Bk);
+    Plan(CHAIN_BOOK_CHAIN, 0, Bk);
     Bk.Nodes.Delete(2);
     LBefore:= Bk.SaveToString;
     M:= MergeChainPlan(Bk, FindRuleChains(ChainMakeBook(Books, CHAIN_BOOK_CHAIN))[0]);
@@ -344,6 +344,8 @@ procedure TestRuleChainsSplit;
 const
   THREE = '#convert TA -> TB' + CHAIN_CRLF + '#link x <- y' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x'
     + CHAIN_CRLF + '#convert TC -> TD' + CHAIN_CRLF + '#link w <- z';
+  SPLIT_BOOK_PATH = 'C:\x\Book.rules';  // dl:ok hardcoded-absolute-path@e6e3 -- REVIEWED 2026-10-27 text only: path string is fed to pure functions, no file is touched
+  SPLIT_STAGE2_PATH = 'C:\x\Book.stage2.rules';  // dl:ok hardcoded-absolute-path@d288 -- REVIEWED 2026-10-27 text only: path string is fed to pure functions, no file is touched
   MAPPED = '#mapping M from E.TEnum to TC' + CHAIN_CRLF + '#convert TA -> TB' + CHAIN_CRLF + '#convert TB -> TC' + CHAIN_CRLF + '#apply M';
 var
   Books: TObjectList<TRuleBook>;
@@ -367,15 +369,15 @@ var
       Result:= Result + IfThen(LI > 0, ';', '') + '[';
       for LJ:= 0 to High(ASplit.Stages[LI]) do
         Result:= Result + IfThen(LJ > 0, ',', '') + IntToStr(ASplit.Stages[LI][LJ]);
-      Result:= Result + ']';
+      Result:= Result + ']';  // dl:ok concat-in-loop@845a -- REVIEWED 2026-10-27 bounded test helper (few stages), builds a short expected-text string
     end;
   end;
 
 begin
   Books:= TObjectList<TRuleBook>.Create(True);
   try
-    Check('chains.split.path', (StageBookPath('C:\x\Book.rules', 2) = 'C:\x\Book.stage2.rules')
-      and EndsText('.stage3.rules', StageBookPath('C:\x\Book.rules', 3)), StageBookPath('C:\x\Book.rules', 2));
+    Check('chains.split.path', (StageBookPath(SPLIT_BOOK_PATH, 2) = SPLIT_STAGE2_PATH)
+      and EndsText('.stage3.rules', StageBookPath(SPLIT_BOOK_PATH, 3)), StageBookPath(SPLIT_BOOK_PATH, 2));  // dl:ok magic-literal@4a95 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
     P:= Plan(CHAIN_BOOK_CHAIN);
     Check('chains.split.stages.two', StagesText(P) = '[0];[2]', StagesText(P));
     P:= Plan(THREE);
@@ -391,14 +393,14 @@ begin
       and (P.Mappings[1][0] = 'M'), StagesText(P));
 
     Book:= ChainMakeBook(Books, '#depth 3' + CHAIN_CRLF + CHAIN_BOOK_CHAIN);
-    Check('chains.split.text.depth', StartsText('#depth 3' + CHAIN_CRLF, StageBookText(Book, [3], nil)), StageBookText(Book, [3], nil));
+    Check('chains.split.text.depth', StartsText('#depth 3' + CHAIN_CRLF, StageBookText(Book, [3], nil)), StageBookText(Book, [3], nil));  // dl:ok magic-literal@4522 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
     Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
     Check('chains.split.text.blocks', StageBookText(Book, [2], nil) = '#convert TB -> TC' + CHAIN_CRLF + '#link z <- x' + CHAIN_CRLF,
       StageBookText(Book, [2], nil));
     Book:= ChainMakeBook(Books, '#depth 2' + CHAIN_CRLF + MAPPED);
     Check('chains.split.text.mappings',
-      StageBookText(Book, [3], ['M']) = '#depth 2' + CHAIN_CRLF + '#mapping M from E.TEnum to TC' + CHAIN_CRLF
-        + '#convert TB -> TC' + CHAIN_CRLF + '#apply M' + CHAIN_CRLF, StageBookText(Book, [3], ['M']));
+      StageBookText(Book, [3], ['M']) = '#depth 2' + CHAIN_CRLF + '#mapping M from E.TEnum to TC' + CHAIN_CRLF  // dl:ok magic-literal@e54f -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
+        + '#convert TB -> TC' + CHAIN_CRLF + '#apply M' + CHAIN_CRLF, StageBookText(Book, [3], ['M']));  // dl:ok magic-literal@97e6 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
     Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
     Check('chains.split.remaining', RemainingBookText(Book, [2]) = '#convert TA -> TB' + CHAIN_CRLF + '#link x <- y' + CHAIN_CRLF,
       RemainingBookText(Book, [2]));
@@ -408,11 +410,11 @@ begin
     Book:= ChainMakeBook(Books, CHAIN_BOOK_CHAIN);
     Check('chains.split.roundtrip', TrimRight(RemainingBookText(Book, [2]) + StageBookText(Book, [2], nil)) = TrimRight(Book.SaveToString),
       RemainingBookText(Book, [2]) + StageBookText(Book, [2], nil));
-    Check('chains.split.status', SplitStatusText('C:\x\Book.rules', ['C:\x\Book.stage2.rules'], 2, nil)
+    Check('chains.split.status', SplitStatusText(SPLIT_BOOK_PATH, [SPLIT_STAGE2_PATH], 2, nil)
       = 'Split 2 block(s) into Book.stage2.rules -- convert with Book.rules first, then Book.stage2.rules (check both on the Convert tab, in that order)',
-      SplitStatusText('C:\x\Book.rules', ['C:\x\Book.stage2.rules'], 2, nil));
+      SplitStatusText(SPLIT_BOOK_PATH, [SPLIT_STAGE2_PATH], 2, nil));
     Check('chains.split.status.mappings', EndsText('; copied #mapping M1, M2 into the stage book',
-      SplitStatusText('C:\x\Book.rules', ['C:\x\Book.stage2.rules'], 1, ['M1', 'M2'])), 'mapping tail');
+      SplitStatusText(SPLIT_BOOK_PATH, [SPLIT_STAGE2_PATH], 1, ['M1', 'M2'])), 'mapping tail');
   finally
     Books.Free;
   end;
