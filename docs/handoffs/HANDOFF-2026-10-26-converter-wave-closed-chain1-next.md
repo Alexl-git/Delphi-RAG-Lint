@@ -20,6 +20,12 @@ Session convrules-editor-31 (resumed). Supersedes HANDOFF-2026-10-26-converter-r
   into separate books run one after the other. ENGINE (delphi-rag-lint-65) was asked whether
   convert-apply works in one pass or chains (types, unit swaps, #link/#migrate). The answer should
   arrive as a `docs\INBOX-*engine-to-converter*` note. The DSL doc does not say.
+  **ANSWERED** in `docs\INBOX-engine-to-converter-chain1.md` (untracked): the engine runs a SINGLE PASS
+  against the original source, so TA ends as TB. The first #convert whose FromType matches wins; on a
+  uses swap, "ADD wins"; #migrate sites are collected once; #link is only partly traced. No chain test
+  exists, and ENGINE suggests a single-pass guard. So a chain in one book is silently NOT applied, and
+  CHAIN-1 warning + offer A->C / split books is the right fix. Chaining semantics would be an ENGINE
+  feature request.
 
 ## Resume point
 1. Run `check-engine-drift.ps1` and read any new INBOX note (the CHAIN-1 answer).
