@@ -1,0 +1,13 @@
+# Hits: bare-statement call of a curated must-use routine (14-19).
+# Non-hits: result tested (26, 28), result passed on (30), routine not on the list (31, 32).
+ignored-must-use-result 14
+ignored-must-use-result 15
+ignored-must-use-result 16
+ignored-must-use-result 17
+ignored-must-use-result 18
+ignored-must-use-result 19
+!ignored-must-use-result 26
+!ignored-must-use-result 28
+!ignored-must-use-result 30
+!ignored-must-use-result 31
+!ignored-must-use-result 32

@@ -1,0 +1,12 @@
+{
+  "id": "collection-modified-in-loop",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Collection is modified while it is being iterated -- items are skipped or EListError is raised; iterate 'downto 0' or collect first. (Not a bug when the next statement is Break/Exit.)",
+  "warn_capture": "warn",
+  "fix": {
+    "when_capture": "i",
+    "replace": "for {i} := {c}.Count - 1 downto 0 do {body}",
+    "risky": true
+  }
+}
