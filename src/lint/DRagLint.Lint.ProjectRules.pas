@@ -884,6 +884,76 @@ begin
   end;
 end;
 
+{ duplicate-unit-on-search-path (clippy-parity L11). Two indexed .pas files that
+  share a unit stem (case-insensitive) are both on the search path: the compiler
+  takes the first it finds and silently ignores the other.
+
+  Q6, MEASURED 2026-10-27: index membership does NOT evict the second file. The
+  compile closure dedupes by full path only (TProjectClosure EnqueueFile), a
+  directory index admits both, and FindUnitFile's first-file-wins only decides
+  which file a `uses` clause resolves to. So the DB really holds both rows and
+  this pass can see the collision by grouping file paths on their stem.
+  One finding per file in a group, naming the other file(s); dotted unit names
+  keep their dots (Vcl.Forms is one stem). Guarded by
+  tests\autotest\run_duplicate_unit_on_search_path.ps1. }
+function CollectDuplicateUnits(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Groups: TObjectDictionary<string, TList<string>>;
+  Paths : TList<string>;
+  Pair  : TPair<string, TList<string>>;
+  FileId: Int64;
+  Path  : string;
+  Stem  : string;
+  Other : TList<string>;
+  P     : string;
+  F     : TLintFinding;
+begin
+  Result:= nil;
+  Groups:= TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
+  try
+    for FileId in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(FileId);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      Stem:= LowerCase(ChangeFileExt(ExtractFileName(Path), ''));
+      if not Groups.TryGetValue(Stem, Paths) then
+      begin
+        Paths:= TList<string>.Create;
+        Groups.Add(Stem, Paths);
+      end;
+      if not Paths.Contains(Path) then Paths.Add(Path);
+    end;
+    for Pair in Groups do
+    begin
+      if Pair.Value.Count < 2 then Continue;
+      for P in Pair.Value do
+      begin
+        Other:= TList<string>.Create;
+        try
+          for Path in Pair.Value do
+            if Path <> P then Other.Add(Path);
+          F:= Default(TLintFinding);
+          F.RuleId   := 'duplicate-unit-on-search-path';
+          F.Severity := 'warning';
+          F.FilePath := P;
+          F.StartLine:= 1;
+          F.StartCol := 1;
+          F.EndLine  := 1;
+          F.EndCol   := 1;
+          F.Message  := Format('Unit %s also exists as %s -- two files with the same unit name are on the search path; the compiler uses the first one it finds',
+            [ChangeFileExt(ExtractFileName(P), ''), string.Join(', ', Other.ToArray)]);
+          Result:= Result + [F];
+        finally
+          Other.Free;
+        end;
+      end;
+    end;
+  finally
+    Groups.Free;
+  end;
+end;
+
+
 { Shared by the two uses-edge rules below (global-only-uses-edge and
   uses-global-census). Hoisted out of the first one when the second arrived:
   two copies of "which uses line is this edge" would be two places to get the
@@ -3631,6 +3701,10 @@ var
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
   RefdNames     : TDictionary<string, Boolean>;
+  { Lazily built for the own-unit tier of unused-public-symbol: lowercased reference
+    name -> the one file id every reference sits in, or -1 once a second file refers
+    to the same name. See IsOwnUnitOnly. }
+  OwnRefFile    : TDictionary<string, Int64>;
 
   function WantRule(const AId: string): Boolean;
   begin
@@ -3684,6 +3758,36 @@ var
   function IsReferenced(const ASym: TSymbol): Boolean;
   begin
     Result:= RefdIds.ContainsKey(ASym.Id) or RefdNames.ContainsKey(LowerCase(ASym.Name));
+  end;
+
+  { unused-public-symbol, own-unit-only tier (clippy visibility-could-be-reduced,
+    merged here L11): an exported routine that IS referenced, but only from the
+    file that declares it, could leave the interface section. NAME-keyed like
+    IsReferenced, so it is conservative the same way: any same-named reference in
+    another file (a homonym included) keeps the routine "used elsewhere" and
+    silent. The map costs one GetReferencesFromFile per file, built on first
+    use only. }
+  function IsOwnUnitOnly(const ASym: TSymbol): Boolean;
+  var
+    FileId: Int64;
+    R     : TReference;
+    Key   : string;
+    Prev  : Int64;
+  begin
+    if OwnRefFile = nil then
+    begin
+      OwnRefFile:= TDictionary<string, Int64>.Create;
+      for FileId in AStore.GetAllFileIds do
+        for R in AStore.GetReferencesFromFile(FileId) do
+        begin
+          Key:= LowerCase(R.NameText);
+          if not OwnRefFile.TryGetValue(Key, Prev) then
+            OwnRefFile.Add(Key, FileId)
+          else if Prev <> FileId then
+            OwnRefFile.AddOrSetValue(Key, -1);
+        end;
+    end;
+    Result:= OwnRefFile.TryGetValue(LowerCase(ASym.Name), Prev) and (Prev = ASym.FileId);
   end;
 
   { The unit stems of every symbol named AName, memoised for the whole run.
@@ -3920,6 +4024,7 @@ begin
   UnitHasInit  := TDictionary<string, Boolean>      .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
+  OwnRefFile := nil;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0; TDupD:= 0; TCens:= 0;
@@ -3950,6 +4055,10 @@ begin
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
     Inc(TGlob, Tick - T0); T0:= Tick;
+
+    { duplicate-unit-on-search-path: one pass over the file list, grouped by unit stem. }
+    if WantRule('duplicate-unit-on-search-path') then
+      for var Df in CollectDuplicateUnits(AStore) do Findings.Add(Df);
 
     { dfm-property-not-declared (R1): whole-DFM pass. OFF by default AND gated
       on OptedIn, for the reason that gate exists -- an ungated run would walk
@@ -4319,6 +4428,15 @@ begin
                 else
                   Add('unused-public-symbol', 'info',
                     Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
+              end
+              else if IsOwnUnitOnly(Sym) then
+              begin
+                { Own-unit tier. A SHARED unit (dl:shared) is skipped: a sibling
+                  project may call the routine, and this index cannot see it. }
+                var OPath: string:= AStore.GetFilePath(Sym.FileId);
+                if (OPath = '') or (Length(DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf(OPath)) <= 1) then
+                  Add('unused-public-symbol', 'hint',
+                    Format('Exported routine %s is only referenced within its own unit -- its visibility could be reduced (move it to the implementation section)', [Sym.Name]), Sym);
               end;
           end;
           Inc(TUpub, Tick - TS); TS:= Tick;
@@ -4394,6 +4512,7 @@ begin
     Result:= Findings.ToArray;
   finally
     RefdNames  .Free;
+    OwnRefFile .Free;
     RefdIds    .Free;
     UnitIndexed.Free;
     ExportsOfUnit.Free;
