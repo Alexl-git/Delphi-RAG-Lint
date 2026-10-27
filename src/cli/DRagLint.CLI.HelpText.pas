@@ -36,10 +36,10 @@ begin
   Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run] [--watch [--interval N]]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>]');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
   Writeln('                               members, the project-local units they transitively use, each one''s sibling');
@@ -450,10 +450,10 @@ begin
     Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
     Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
     Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
+    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run] [--watch [--interval N]]');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]');
+    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>]');
     Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
     Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
     Writeln('                               members, the project-local units they transitively use, each one''s sibling');
