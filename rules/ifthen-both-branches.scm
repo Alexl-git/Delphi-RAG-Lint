@@ -35,6 +35,7 @@
       (_) @b2)) @warn
   (#eq? @fn "IfThen")
   (#not-match? @b1 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+  (#not-eq? @b1 @b2)
 )
 
 (
@@ -47,6 +48,7 @@
   (#eq? @fn "IfThen")
   (#match?     @b1 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
   (#not-match? @b2 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+  (#not-eq? @b1 @b2)
 )
 
 ; Pattern C -- the 2-argument overload (StrUtils.IfThen's AFalse: string = ''
@@ -91,4 +93,20 @@
   (#eq? @fn "IfThen")
   (#eq? @b2exists "")
   (#not-match? @val "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+)
+
+; Pattern D -- identical then/else branches (autofix wave A1, 2026-10-27):
+; IfThen(C, X, X) is X whatever C is. Disjoint from A/B by (#not-eq? @b1 @b2) there;
+; the branch is not an inert literal (those stay silent, as above). The fix is risky:
+; it drops the evaluation of C and of the second X.
+(
+  (exprCall
+    entity: (identifier) @fn
+    args: (exprArgs
+      (_)
+      (_) @same
+      (_) @b2)) @warn
+  (#eq? @fn "IfThen")
+  (#eq? @same @b2)
+  (#not-match? @same "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
 )
