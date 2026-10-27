@@ -71,8 +71,11 @@ try {
     $t = [regex]::Replace($t, 'at line\(s\) ([\d, ]+)', { param($m) 'at line(s) x' + (($m.Groups[1].Value -split ',').Count) })
     return ($t -replace 'at line \d+', 'at line N')
   }
+  # Q4b (deliberate, owner-accepted): the BDE book now carries '#migrate UpdateRecordTypes -> FilterChanges' INSIDE
+  # the TTable/TQuery/TStoredProc blocks, so the engine applies it (migrate-applied) where the pre-split trailer was inert.
+  # That one item kind is excluded from the A2 multiset and asserted separately in A4 / B4.
   function ItemKeys($j) {
-    @($j.items | Where-Object { $_.kind -ne 'migrate-check' } | ForEach-Object {
+    @($j.items | Where-Object { $_.kind -ne 'migrate-check' -and -not ($_.kind -eq 'migrate-applied' -and $_.text -match 'UpdateRecordTypes') } | ForEach-Object {
       '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}' -f $_.kind, $_.instance, $_.path, $_.value, $_.old_value, $_.field, $_.from_type, $_.to_type, $(if ($_.file -and $_.field -ne 'warnings') { Split-Path $_.file -Leaf } else { '' }), $(if ($_.field -eq 'warnings') { 0 } else { $_.line }), (BookLines (StripLine $_.text))
     })
   }
@@ -101,6 +104,7 @@ try {
     $sb = Sig $base $null
     $su = Sig $jb $j2
     Check 'A2 BDE UNION Data.DB plans exactly the pre-split items / warnings / converted / unlinked / uses' ((SigDiff $sb $su) -eq '') ('differs in: ' + (SigDiff $sb $su))
+    Check 'A4 expected difference (Q4b): only the split BDE book applies the UpdateRecordTypes member migrate, exactly once' ((@($base.items | Where-Object { $_.kind -eq 'migrate-applied' -and $_.text -match 'UpdateRecordTypes' }).Count -eq 0) -and (@($jb.items | Where-Object { $_.kind -eq 'migrate-applied' -and $_.text -match 'UpdateRecordTypes -> .*FilterChanges' }).Count -eq 1)) ''
     Check 'A3 expected difference: the pre-split run echoed migrate-check items, the split runs none' ((@($base.items | Where-Object kind -eq 'migrate-check').Count -gt 0) -and (@($jb.items | Where-Object kind -eq 'migrate-check').Count -eq 0) -and (@($j2.items | Where-Object kind -eq 'migrate-check').Count -eq 0)) ''
 
     # C1: a BDE book with one #link deleted must FAIL A2
@@ -137,7 +141,7 @@ try {
       if ($l -match '^// drag-lint convert-apply ' -or $l -match '^//   backup: ') { continue }
       if ($l -match '^  .*FireDAC\.Comp\.') { '  ' + ((($l.Trim().TrimEnd(';') -split ',\s*') | Sort-Object) -join ', ') + ';' } else { $l }
     }
-    return ($o -join "`n")
+    return (($o -join "`n") -replace '\bFilterChanges\b', 'UpdateRecordTypes')
   }
   function Run-Sequence([string]$Name, [string[]]$Books) {
     $d = Copy-Fixture $Name
@@ -155,6 +159,7 @@ try {
     $dfmS = [IO.File]::ReadAllText("$dS\BdeSplitForm.dfm"); $dfmT = [IO.File]::ReadAllText("$dT\BdeSplitForm.dfm")
     Check 'B1 .dfm after BDE book then Data.DB book is byte-identical to the pre-split single book' ($dfmS -eq $dfmT) 'dfm differs'
     Check 'B2 .pas identical after dropping audit stamps and sorting the FireDAC uses units' ((PasNorm "$dS\BdeSplitForm.pas") -eq (PasNorm "$dT\BdeSplitForm.pas")) 'pas differs'
+    Check 'B4 expected difference (Q4b): only the split sequence rewrote UpdateRecordTypes to FilterChanges in the .pas' (([IO.File]::ReadAllText("$dT\BdeSplitForm.pas") -match 'Table1\.FilterChanges') -and ([IO.File]::ReadAllText("$dS\BdeSplitForm.pas") -notmatch 'FilterChanges')) ''
     Check 'B3 the TAutoIncField lost its BDE-format Origin; the unconverted TStringField kept its own' (($dfmT -notmatch 'DBDEMOS\.customer\.CustNo') -and ($dfmT -match "Origin = 'DBDEMOS\.customer\.Company'")) ''
     # C3: Book-2 without '#remove DFM: Origin' leaves the stale Origin
     $t3 = [IO.File]::ReadAllText($dd).Replace("`r`n#remove DFM: Origin`r`n", "`r`n")

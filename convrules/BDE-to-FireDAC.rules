@@ -181,6 +181,7 @@
 #migrate tiDirtyRead -> xiDirtyRead, FireDAC.Stan.Option
 #migrate tiReadCommitted -> xiReadCommitted, FireDAC.Stan.Option
 #migrate tiRepeatableRead -> xiRepeatableRead, FireDAC.Stan.Option
+// Q4b: TransIsolation stays file-scope: re-homed into the TDatabase block the engine refuses it (migrate-check: a dotted replacement is a template, not applied yet).
 #migrate TransIsolation -> TxOptions.Isolation
 #migrate TBatchMode -> TFDBatchMoveMode, FireDAC.Comp.BatchMove
 #migrate batAppend -> dmAppend, FireDAC.Comp.BatchMove
@@ -191,7 +192,7 @@
 
 //    (c) property renames whose source property is NOT on the published (DFM)
 //        surface of any block above, so no #link could carry them
-#migrate UpdateRecordTypes -> FilterChanges
+// UpdateRecordTypes -> FilterChanges lives in the TTable / TQuery / TStoredProc blocks (a member #migrate is block-scope).
 
 //    (d) class pairs that are TYPE renames, not component conversions: an
 //        abstract base class or a non-component, with no usable published
@@ -399,6 +400,7 @@
 #ignore Ranged
 #ignore AutoRefresh
 #ignore SessionName
+#migrate UpdateRecordTypes -> FilterChanges
 
 #convert Bde.DBTables.TQuery -> FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
 #note 81 source properties: 5 corpus-supplied, 68 auto-matched, 1 hand-linked
@@ -504,6 +506,7 @@
 #ignore Params
 #ignore AutoRefresh
 #ignore SessionName
+#migrate UpdateRecordTypes -> FilterChanges
 
 #convert Bde.DBTables.TUpdateSQL -> FireDAC.Comp.Client.TFDUpdateSQL, FireDAC.Comp.Client
 #note 5 source properties: 0 corpus-supplied, 5 auto-matched, 0 via #mapping,
@@ -618,6 +621,8 @@
 #ignore Params
 #ignore AutoRefresh
 #ignore SessionName
+#note Q4b: re-homed from the file-scope section (c); a member #migrate is only applied inside a block.
+#migrate UpdateRecordTypes -> FilterChanges
 
 #convert Bde.DBTables.TBatchMove -> FireDAC.Comp.BatchMove.TFDBatchMove, FireDAC.Comp.BatchMove
 #note 14 source properties: 0 corpus-supplied, 3 auto-matched, 1 via #mapping,
