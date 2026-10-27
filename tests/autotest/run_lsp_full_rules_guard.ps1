@@ -87,7 +87,8 @@ Check 'flag OFF: no full-rules cost line on stderr' ($off.Err -notmatch 'full-ru
 $on = RunLsp $Exe $DirtyF @('--full-rules') 'on'
 Check 'flag ON: missing-inherited-ctor IS published' ($on.Codes -contains 'missing-inherited-ctor') ''
 Check 'flag ON: code-after-exit IS published' ($on.Codes -contains 'code-after-exit') ''
-Check 'flag ON: source is drag-lint' ($on.Out -match '"source":"drag-lint"') ''
+# The fixture is in no --db, so the file is unowned: its source carries the unowned label (run_lsp_unowned_label_guard.ps1).
+Check 'flag ON: source is drag-lint (unowned)' ($on.Out -match '"source":"drag-lint \(unowned\)"') ''
 $m = [regex]::Match($on.Err, 'drag-lint lsp: full-rules (.+) (\d+) ms (\d+) findings')
 Check 'flag ON: stderr carries the cost line with numeric ms and count' $m.Success ("[" + $m.Value + "]")
 Check 'flag ON: reported finding count equals the published diagnostic count' `
