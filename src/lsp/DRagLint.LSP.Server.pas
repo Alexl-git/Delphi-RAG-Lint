@@ -2998,7 +2998,7 @@ procedure TLSPServer.HandleUsages(const AId: TJSONValue; const AParams: TJSONObj
   taken. This path is the one that keeps the answer identical.
 
   THE REPLY SHAPE IS THE CLI VERB'S, KEY FOR KEY: name, width, declarations,
-  reads, writes, calls, types, attributes, events, impact. That is not tidiness
+  reads, writes, calls, types, attributes, events, raises, handles, impact. That is not tidiness
   -- a client that can fall back to spawning the CLI must not have to parse two
   shapes, and a second shape drifts silently. run_lsp_usages_guard.ps1 asserts
   the two agree.
@@ -3016,6 +3016,8 @@ var
   JTypes : TJSONArray    ;
   JAttrs : TJSONArray    ;
   JEvents: TJSONArray    ;
+  JRaises: TJSONArray    ;
+  JHandles: TJSONArray   ;
   JImpact: TJSONArray    ;
   Nm     : string        ;
   Width  : string        ;
@@ -3048,6 +3050,8 @@ var
     else if Bucket = 'types'      then Result:= JTypes
     else if Bucket = 'attributes' then Result:= JAttrs
     else if Bucket = 'events'     then Result:= JEvents
+    else if Bucket = 'raises'     then Result:= JRaises
+    else if Bucket = 'handles'    then Result:= JHandles
     else Result:= JCalls;
   end;
 
@@ -3091,6 +3095,8 @@ begin
     JTypes := TJSONArray.Create;
     JAttrs := TJSONArray.Create;
     JEvents:= TJSONArray.Create;
+    JRaises:= TJSONArray.Create;
+    JHandles:= TJSONArray.Create;
     JImpact:= TJSONArray.Create;
 
     for St in FStores do
@@ -3130,6 +3136,8 @@ begin
     Res.AddPair('types'       , JTypes );
     Res.AddPair('attributes'  , JAttrs );
     Res.AddPair('events'      , JEvents);
+    Res.AddPair('raises'      , JRaises);
+    Res.AddPair('handles'     , JHandles);
     Res.AddPair('impact'      , JImpact);
     Reply.AddPair('result', Res);
     SendMessage(Reply);
