@@ -626,6 +626,7 @@ const
 var
   LDl    : TApplyRow;
   LOld   : TApplyRow;
+  LRaw, LStripped: string;
   LT     : TMigrateBookTarget;
   LAll   : TFunc<string, Boolean>;
   LNone  : TFunc<string, Boolean>;
@@ -641,7 +642,12 @@ begin
     LNamed:= LNamed and EndsText('\dlnone.rules', R.RulesFile);
   Check('migrate.d6.rules_file.parsed', LNamed, IntToStr(Length(LDl.PasUses)) + ' rows');
   // ... and an engine before it sends none: RulesFile stays '' (positive control).
-  LOld:= ParseApplyJson(TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\apply-pas-uses-1270.json'))), APPLY_FEATURES_ALL);
+  // The apply1270 fixture is re-captured per engine (make-capture.ps1) and since 1.36.0 carries rules_file too, so the pre-G7 shape
+  // is made by stripping the per-row key from it; the Check on LRaw proves the strip really removed something.
+  LRaw:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\apply-pas-uses-1270.json')));
+  LStripped:= ReplaceStr(LRaw, ',"rules_file":"Fix.rules"}', '}');
+  Check('migrate.d6.rules_file.strip', LStripped <> LRaw);
+  LOld:= ParseApplyJson(LStripped, APPLY_FEATURES_ALL);
   Check('migrate.d6.rules_file.absent', (Length(LOld.PasUses) > 0) and (LOld.PasUses[0].RulesFile = ''), IntToStr(Length(LOld.PasUses)));
 
   LAll:= function(APath: string): Boolean
