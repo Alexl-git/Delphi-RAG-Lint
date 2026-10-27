@@ -13241,6 +13241,16 @@ begin
   Result:= False;
 end;
 
+{ True when at least one taint rule survives this run's config (--disable, the
+  config's disabled list, a marker): the taint stage is the most expensive pass and
+  runs not at all when every rule it emits would be dropped. }
+function TaintWanted(const AKeep: TFunc<string, Boolean>): Boolean;
+begin
+  for var Id: string in LINT_GATE_TAINT do
+    if AKeep(Id) then Exit(True);
+  Result:= False;
+end;
+
 var
   { one stale-index note per process, however many files `lint` is asked about }
   GTaintStaleNoted: Boolean = False;
@@ -14838,7 +14848,7 @@ begin
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
           end;          { taint wave T2: the sinks of THIS file; the walk may leave it (callers, fields, library) }
-          if LintRuleWants(NarrowRule, LINT_GATE_TAINT) then
+          if LintRuleWants(NarrowRule, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, Marked)) then
           begin
             TraceLintChecker('taint');
             Findings:= Findings + RunTaintRules(FlowStore, FlowLibStore, [FlowFid], Cfg, NarrowRule, MyPath);
@@ -20847,7 +20857,7 @@ begin
     Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
       {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));  { taint wave T2: store-backed interprocedural taint over every file of the index }
   LintPhase('taint');
-  if LintRuleWants(Nr, LINT_GATE_TAINT) then
+  if LintRuleWants(Nr, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths))) then
     Findings:= Findings + RunTaintRules(Store, LibStore, Store.GetAllFileIds, Cfg, Nr, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
