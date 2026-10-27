@@ -70,7 +70,7 @@ interface
 
 uses
   System.SysUtils
-  , DRagLint.Core.Model
+  , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the DF_* kind constants ARE the data_flows contract T0 put in the model; the walker compares exactly those
   , DRagLint.Core.Interfaces
   ;
 
