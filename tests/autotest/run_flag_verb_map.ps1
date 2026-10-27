@@ -160,7 +160,9 @@ function Get-AliasTokenRx([string]$Alias) {
 # --output on check-ast (kept from lane 909fc131, without its --output|--out),
 # and despite (3) Apply / Fix leaving the pinned cross-verb set (refusal-only
 # reads, CliFlagVerbMap.ps1), which put --apply/--fix back into the count (+4).
-$BaselineCells = 108
+# 104/24 on 2026-10-27 (fix/help-out-json): the three remaining --json / --output cells whose code reads them
+# are now named -- lint-project --output, check-ast --json, serve --json (error-format switch). 107 -> 104.
+$BaselineCells = 104
 $BaselineVerbs = 24
 
 $Repo = (Resolve-Path $Repo).Path

@@ -1,5 +1,5 @@
 {
-  "product": "1.35.1-alpha",
+  "product": "1.36.0-alpha",
   "extractor": "1.25.0-alpha",
   "resolver": "1.15.0-alpha",
   "schema": 23,
@@ -3272,7 +3272,7 @@
         {
           "type": "cli",
           "verb": "lint-project",
-          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]",
+          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]",
           "flags": [
             {
               "name": "--db",
@@ -3290,7 +3290,7 @@
             }
           ],
           "helpOrder": 18,
-          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]"]
+          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]"]
         },
         {
           "type": "ide-menu",
@@ -3563,7 +3563,7 @@
         {
           "type": "cli",
           "verb": "check-ast",
-          "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]",
+          "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]",
           "flags": [
             {
               "name": "--db",
@@ -3578,7 +3578,7 @@
             }
           ],
           "helpOrder": 73,
-          "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]"]
+          "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
         }
       ],
       "audience": "both",
@@ -9682,7 +9682,7 @@
         {
           "type": "cli",
           "verb": "serve",
-          "usage": "drag-lint serve --db <file.sqlite> (MCP stdio server)",
+          "usage": "drag-lint serve --db <file.sqlite> [--json] (MCP stdio server)",
           "flags": [
             {
               "name": "--db",
@@ -9690,7 +9690,7 @@
             }
           ],
           "helpOrder": 22,
-          "help": ["  drag-lint serve              --db <file.sqlite>    (MCP stdio server)"]
+          "help": ["  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)"]
         }
       ],
       "audience": "both",

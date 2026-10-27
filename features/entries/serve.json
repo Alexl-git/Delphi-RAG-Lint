@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "serve",
-      "usage": "drag-lint serve --db <file.sqlite> (MCP stdio server)",
+      "usage": "drag-lint serve --db <file.sqlite> [--json] (MCP stdio server)",
       "flags": [
         {
           "name": "--db",
@@ -20,7 +20,7 @@
         }
       ],
       "helpOrder": 22,
-      "help": ["  drag-lint serve              --db <file.sqlite>    (MCP stdio server)"]
+      "help": ["  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)"]
     }
   ],
   "audience": "both",
