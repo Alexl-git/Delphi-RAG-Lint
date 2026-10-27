@@ -34,13 +34,9 @@ function Assert($name, $cond) {
 # Ids whose compliance row INT adds when their lane merges (plan section 5 rows marked NEW).
 # INT removes an id from this list in the same change that adds its row.
 $Pending = @(
-  'address-of-local-returned','begin-end-pair-not-in-finally','closure-captures-loop-local',
-  'constant-index-out-of-range','copy-paste-assignment','dfm-event-handler-missing',
-  'dfm-password-edit-unmasked','exception-escapes-thread','field-created-not-freed',
-  'free-of-owned-item','free-of-parameter','freeonterminate-then-wait','hides-ancestor-virtual',
-  'mismatched-alloc-free','needless-exit','network-client-without-timeout',
-  'nil-check-after-dereference','property-accessor-name','raise-in-destructor',
-  'unused-loop-variable','uses-movable-to-implementation','virtual-never-overridden'
+  'begin-end-pair-not-in-finally','field-created-not-freed','free-of-owned-item',
+  'free-of-parameter','freeonterminate-then-wait','hides-ancestor-virtual',
+  'mismatched-alloc-free','needless-exit','property-accessor-name','unused-loop-variable'
 )
 
 $rulesJson = & $exe rules --json --rules-dir $rulesDir 2>$null
