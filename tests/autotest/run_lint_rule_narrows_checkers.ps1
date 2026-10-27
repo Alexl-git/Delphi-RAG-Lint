@@ -275,13 +275,19 @@ $emitted = [ordered]@{
   'LINT_GATE_NAMING'        = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.NamingChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
   'LINT_GATE_DEAD_CODE'     = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
 }
+# gap-rules wave (G0): gate ids whose emitting lane has not landed. A lane deletes its own ids from this table;
+# integration leaves it empty (D3 then bites again).
+$pendingEmit = [ordered]@{
+  'LINT_GATE_PROJECT_RULES' = @('dfm-event-handler-missing','dfm-password-edit-unmasked','uses-movable-to-implementation','virtual-never-overridden')
+}
 foreach ($k in $emitted.Keys) {
   $gate = GateList $k
   $emit = @($emitted[$k])
   Check "D1 $k parsed from CLI.pas" ($gate.Count -gt 0) "($($gate.Count) id(s))"
   Check "D1 $k emit sites found" ($emit.Count -gt 0) "($($emit.Count) id(s))"
   $short = @($emit | Where-Object { $gate -notcontains $_ })
-  $gatePendingEmit = @()
+  # gap-rules wave (G0): ids already listed in a gate before their lane emits them (see $pendingEmit).
+  $gatePendingEmit = if ($pendingEmit.Contains($k)) { @($pendingEmit[$k]) } else { @() }
   $extra = @($gate | Where-Object { ($emit -notcontains $_) -and ($gatePendingEmit -notcontains $_) })
   Check "D2 $k carries every id its checker emits" ($short.Count -eq 0) `
     ("missing -> --rule answers 0 for: " + ($short -join ' '))

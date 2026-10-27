@@ -73,7 +73,22 @@ $Pending = @(
     'integer-division-to-float', 'stream-read-result-ignored', 'is-prefix-not-boolean',
     'halt-in-library', 'format-string-not-formatted', 'swap-without-temp',
     'undocumented-check-suppression', 'collapsible-if', 'is-not-operator',
-    'ifthen-to-if-expression', 'unreadable-literal'
+    'ifthen-to-if-expression', 'unreadable-literal',
+    # gap-rules wave (G0): the 41 new ids (22 built-in + 19 .scm). Integration empties these too.
+    'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free',
+    'freeonterminate-then-wait', 'begin-end-pair-not-in-finally', 'nil-check-after-dereference',
+    'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment',
+    'exception-escapes-thread', 'raise-in-destructor', 'network-client-without-timeout',
+    'closure-captures-loop-local', 'hides-ancestor-virtual', 'needless-exit', 'free-of-parameter',
+    'property-accessor-name', 'unused-loop-variable', 'dfm-event-handler-missing',
+    'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
+    'weak-hash-for-secret', 'cleartext-transport', 'cleartext-credential-storage',
+    'loadlibrary-relative-name', 'xml-external-entities-enabled', 'exception-text-in-response',
+    'fixed-random-seed', 'checks-disabled-directive', 'constructor-call-on-instance',
+    'indexof-result-unchecked', 'nil-returning-call-dereferenced', 'collection-modified-in-loop',
+    'sql-update-delete-without-where', 'ignored-must-use-result', 'interface-without-guid',
+    'guid-on-generic-interface', 'wrong-size-memory-op', 'overflow-before-widening',
+    'fresh-instance-as-argument'
 )
 
 # --- collect directives from every fixture ---

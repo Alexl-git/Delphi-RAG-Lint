@@ -209,6 +209,11 @@ uses
   , DRagLint.Diagnostics.ConcurrencyChecks
   , DRagLint.Diagnostics.DisallowedChecks
   , DRagLint.Diagnostics.ModernizeChecks
+  , DRagLint.Diagnostics.OwnershipChecks
+  , DRagLint.Diagnostics.BoundsNilChecks
+  , DRagLint.Diagnostics.ExceptionThreadChecks
+  , DRagLint.Diagnostics.DeclParityChecks
+  , DRagLint.Diagnostics.ParityExtChecks
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.FlowChecks
@@ -13133,12 +13138,13 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..17] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..21] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
-    'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path');
+    'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
+    'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
@@ -13194,7 +13200,18 @@ const
     'disallowed-method', 'disallowed-type', 'disallowed-name');
   LINT_GATE_MODERNIZE: array[0..0] of string = (
     'index-loop-to-for-in');
-
+  { Gap-rules wave (G0): one gate per new checker unit; same rule as above. }
+  LINT_GATE_OWNERSHIP: array[0..4] of string = (
+    'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free', 'freeonterminate-then-wait', 'begin-end-pair-not-in-finally');
+  LINT_GATE_BOUNDS_NIL: array[0..3] of string = (
+    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment');
+  LINT_GATE_EXCEPTION_THREAD: array[0..3] of string = (
+    'exception-escapes-thread', 'raise-in-destructor', 'network-client-without-timeout', 'closure-captures-loop-local');
+  LINT_GATE_DECL_PARITY: array[0..7] of string = (
+    'hides-ancestor-virtual', 'needless-exit', 'free-of-parameter', 'property-accessor-name', 'unused-loop-variable',
+    'property-references-itself', 'identical-then-else', 'interface-object-mixing');
+  LINT_GATE_PARITY_EXT: array[0..2] of string = (
+    'property-references-itself', 'identical-then-else', 'interface-object-mixing');
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
@@ -14638,6 +14655,27 @@ begin
       TraceLintChecker('modernize');
       if LintRuleWants(NarrowRule, LINT_GATE_MODERNIZE) then
         for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      { Gap-rules wave (G0): the five new per-file checker units. }
+      TraceLintChecker('ownership');
+      if LintRuleWants(NarrowRule, LINT_GATE_OWNERSHIP) then
+        for F in DRagLint.Diagnostics.OwnershipChecks.TOwnershipChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('boundsnil');
+      if LintRuleWants(NarrowRule, LINT_GATE_BOUNDS_NIL) then
+        for F in DRagLint.Diagnostics.BoundsNilChecks.TBoundsNilChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('exceptionthread');
+      if LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) then
+        for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('declparity');
+      if LintRuleWants(NarrowRule, LINT_GATE_DECL_PARITY) then
+        for F in DRagLint.Diagnostics.DeclParityChecks.TDeclParityChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('parityext');
+      if LintRuleWants(NarrowRule, LINT_GATE_PARITY_EXT) then
+        for F in DRagLint.Diagnostics.ParityExtChecks.TParityExtChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
@@ -20467,6 +20505,17 @@ begin
           for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
           for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        { Gap-rules wave (G0): the five new per-file checker units. }
+        if LintRuleWants(Nr, LINT_GATE_OWNERSHIP) then
+          for F in DRagLint.Diagnostics.OwnershipChecks.TOwnershipChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_BOUNDS_NIL) then
+          for F in DRagLint.Diagnostics.BoundsNilChecks.TBoundsNilChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_EXCEPTION_THREAD) then
+          for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_DECL_PARITY) then
+          for F in DRagLint.Diagnostics.DeclParityChecks.TDeclParityChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_PARITY_EXT) then
+          for F in DRagLint.Diagnostics.ParityExtChecks.TParityExtChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         ScanMark(31);
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
