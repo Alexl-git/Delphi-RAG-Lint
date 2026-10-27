@@ -78,7 +78,8 @@ type
   end;
 
 /// <summary>PURE: a book's text with every comment line (trimmed text starting with //) blanked;
-/// line breaks are kept, so line numbers do not move.</summary>
+/// line numbers do not move. Lines are split like BookLines (CRLF, LF, lone CR) and the result is
+/// joined with LF, so a book's breaks are normalised to LF (a trailing break is not kept).</summary>
 /// <param name="ABookText">The decoded book text.</param>
 /// <returns>The text the engine may write from.</returns>
 function RuleLinesOnly(const ABookText: string): string;
@@ -240,11 +241,11 @@ function RuleLinesOnly(const ABookText: string): string;
 var
   LLines: TArray<string>;
 begin
-  // Split on #10 only: a #13 stays on its line, so the joined text keeps every break as it was.
-  LLines:= ABookText.Split([#10]);
+  // Split like the model (BookLines: CRLF, LF and a lone CR); the result is joined with LF.
+  LLines:= BookLines(ABookText);
   for var I: Integer:= 0 to High(LLines) do
     if TrimLeft(LLines[I]).StartsWith(COMMENT_LEAD) then
-      LLines[I]:= if LLines[I].EndsWith(#13) then #13 else '';
+      LLines[I]:= '';
   Result:= string.Join(#10, LLines);
 end;
 
