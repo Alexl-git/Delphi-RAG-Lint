@@ -1,0 +1,10 @@
+# Config bans Sleep and TFile.Delete. Hits: bare call (12), qualified call (13).
+# Non-hits: other TFile method (14), longer identifier SleepEx (15), comment (16),
+# string (17), the routine declaration itself (20).
+disallowed-method 12
+disallowed-method 13
+!disallowed-method 14
+!disallowed-method 15
+!disallowed-method 16
+!disallowed-method 17
+!disallowed-method 20

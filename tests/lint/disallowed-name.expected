@@ -1,0 +1,10 @@
+# Config bans the identifier foo (case-insensitive). Hits: declaration (9), uses (12, 13).
+# Non-hits: another identifier (10), member access Rec.foo (14: a member of someone
+# else's record is not a binding of ours), comment (15), string literal (16).
+disallowed-name 9
+disallowed-name 12
+disallowed-name 13
+!disallowed-name 10
+!disallowed-name 14
+!disallowed-name 15
+!disallowed-name 16
