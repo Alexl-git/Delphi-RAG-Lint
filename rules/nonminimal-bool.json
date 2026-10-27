@@ -1,0 +1,7 @@
+{
+  "id": "nonminimal-bool",
+  "severity": "info",
+  "category": "dead-code",
+  "message": "Negated comparison can be written without not: use <> for not (A = B), = for not (A <> B); not (A in S) is the only spelling of set non-membership.",
+  "warn_capture": "warn"
+}

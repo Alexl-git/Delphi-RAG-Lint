@@ -1,0 +1,7 @@
+{
+  "id": "useless-format",
+  "severity": "info",
+  "category": "dead-code",
+  "message": "Format('%s', [X]) just converts X to a string -- use X directly (or a string conversion) instead of formatting.",
+  "warn_capture": "warn"
+}
