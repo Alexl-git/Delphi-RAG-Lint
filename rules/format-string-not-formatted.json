@@ -1,0 +1,7 @@
+{
+  "id": "format-string-not-formatted",
+  "category": "bug-patterns",
+  "severity": "info",
+  "message": "Format string has no '%' specifier -- nothing is formatted; use the string directly or add the missing specifier.",
+  "warn_capture": "warn"
+}

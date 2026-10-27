@@ -1,0 +1,7 @@
+{
+  "id": "swap-without-temp",
+  "category": "bug-patterns",
+  "severity": "warning",
+  "message": "A := B; B := A does not swap -- A is already overwritten, so B is assigned to itself. Use a temporary.",
+  "warn_capture": "warn"
+}

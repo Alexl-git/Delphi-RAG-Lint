@@ -33,6 +33,12 @@ begin
     N := 0;                                 // NOT_C: outer has else
   if A and B then
     Inc(N);                                 // NOT_D: already collapsed
+  if A then
+  begin
+    if B then
+      Inc(N);
+    Inc(N);                                 // NOT_E: block holds two statements (the anchor-free text check must see the second)
+  end;
 end;
 
 end.
