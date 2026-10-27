@@ -78,12 +78,14 @@ def rows(routine):
     return [dict(r) for r in c.execute(q, (routine, '%.' + routine))]
 routines = ['TrimParam','SinkParam','ViaLocal','Killed','Branch','Loop','LiteralOnly','Quoted',
             'NumericOnly','WithBody','ExitValue','SelfIndex','SetField','ReadField','SetGlobal',
-            'GetName','UseOut','ListCarrier','ShellRecord','LambdaCapture','BigRoutine','CapRoutine']
+            'GetName','UseOut','ListCarrier','ShellRecord','LambdaCapture','BigRoutine','CapRoutine',
+            'ArgValueOnly','ArgRtlValue','ArgUnresolved','ArgTryGet']
 out['rows'] = {r: rows(r) for r in routines}
 out['markers'] = {m: line_of(m) for m in ['M-TRIM','M-SINKPARAM','M-VIALOCAL-SRC','M-VIALOCAL-DST',
     'M-KILL-SRC','M-KILL-DST','M-BRANCH','M-LOOP','M-QUOTED','M-EXIT','M-SELFINDEX','M-SETFIELD',
     'M-READFIELD','M-SETGLOBAL','M-READGLOBAL','M-OUTPARAM','M-ARGOUT-CALL','M-ARGOUT-SINK',
-    'M-LIST','M-SHELLREC','M-LAMBDA']}
+    'M-LIST','M-SHELLREC','M-LAMBDA','M-ARGVAL-SINK','M-ARGRTL-SINK','M-ARGUNRES-CALL','M-ARGUNRES-SINK',
+    'M-ARGTRY-CALL','M-ARGTRY-K','M-ARGTRY-V']}
 out['total'] = c.execute('select count(*) from data_flows').fetchone()[0]
 out['orphans'] = c.execute('select count(*) from data_flows d left join symbols s on s.id = d.symbol_id where s.id is null').fetchone()[0]
 miss = c.execute("""select d.dst_kind, d.dst_line, d.dst_col, d.dst_name from data_flows d
@@ -139,6 +141,17 @@ Check 'unit global write GConn := A' (Has $Rw.SetGlobal { $_.dst_kind -eq 'globa
 Check 'unit global read Sink(GConn)' (Has $Rw.SetGlobal { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-READGLOBAL' -and $_.src_kind -eq 'global' -and $_.src_name -eq 'GConn' })
 Check 'out param S := ParamStr(1) -> outparam 0' (Has $Rw.GetName { $_.dst_kind -eq 'outparam' -and $_.dst_index -eq 0 -and $_.dst_name -eq 'S' -and $_.src_kind -eq 'ref' -and $_.src_name -eq 'ParamStr' })
 Check 'argout: GetName(N); Sink(N)' (Has $Rw.UseOut { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-ARGOUT-SINK' -and $_.src_kind -eq 'argout' -and $_.src_index -eq 0 -and $_.src_name -eq 'GetName' -and $_.src_line -eq $M.'M-ARGOUT-CALL' })
+Write-Host 'argout cut (lane ARGOUT): only var/out slots of a known callee, unresolved kept' -ForegroundColor Cyan
+$t = @($Rw.ArgValueOnly | Where-Object { $_.dst_line -eq $M.'M-ARGVAL-SINK' })
+Check 'ArgValueOnly: POSITIVE CONTROL -- the ParamStr ref reaches Sink(N)' (Has $t { $_.src_kind -eq 'ref' -and $_.src_name -eq 'ParamStr' }) "rows=$($t.Count)"
+Check 'NEGATIVE: same-unit value param TrimParam(N) -> no argout at Sink(N)' (-not (Has $t { $_.src_kind -eq 'argout' })) "argout=$(@($t | ? { $_.src_kind -eq 'argout' }).Count)"
+$t = @($Rw.ArgRtlValue | Where-Object { $_.dst_line -eq $M.'M-ARGRTL-SINK' })
+Check 'ArgRtlValue: POSITIVE CONTROL -- the ParamStr ref reaches Sink(N)' (Has $t { $_.src_kind -eq 'ref' -and $_.src_name -eq 'ParamStr' }) "rows=$($t.Count)"
+Check 'NEGATIVE: RTL value-only Trim(N) -> no argout at Sink(N)' (-not (Has $t { $_.src_kind -eq 'argout' })) "argout=$(@($t | ? { $_.src_kind -eq 'argout' }).Count)"
+Check 'unresolved ExternalFill(N) KEEPS its argout row' (Has $Rw.ArgUnresolved { $_.dst_line -eq $M.'M-ARGUNRES-SINK' -and $_.src_kind -eq 'argout' -and $_.src_name -eq 'ExternalFill' -and $_.src_index -eq 0 -and $_.src_line -eq $M.'M-ARGUNRES-CALL' })
+Check 'TryGetValue(K, V): argout at position 1 reaches Sink(V)' (Has $Rw.ArgTryGet { $_.dst_line -eq $M.'M-ARGTRY-V' -and $_.src_kind -eq 'argout' -and $_.src_name -eq 'TryGetValue' -and $_.src_index -eq 1 })
+Check 'NEGATIVE: TryGetValue(K, V): no argout at position 0 for Sink(K)' (-not (Has $Rw.ArgTryGet { $_.dst_line -eq $M.'M-ARGTRY-K' -and $_.src_kind -eq 'argout' }))
+Check 'ArgTryGet: POSITIVE CONTROL -- the ParamStr ref reaches Sink(K)' (Has $Rw.ArgTryGet { $_.dst_line -eq $M.'M-ARGTRY-K' -and $_.src_kind -eq 'ref' -and $_.src_name -eq 'ParamStr' })
 Check 'container: L.Add(A); Sink(L.Text)' (Has $Rw.ListCarrier { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-LIST' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 -and $_.via_local -eq 1 })
 Check 'record member: Info.lpFile := PChar(A); ShellExecuteEx(@Info)' (Has $Rw.ShellRecord { $_.dst_kind -eq 'arg' -and $_.dst_name -eq 'ShellExecuteEx' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 })
 Check 'record member write row Info.lpFile' (Has $Rw.ShellRecord { $_.dst_kind -eq 'write' -and $_.dst_name -eq 'lpFile' -and $_.dst_receiver -eq 'Info' -and $_.src_kind -eq 'param' })

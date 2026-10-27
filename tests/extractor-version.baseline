@@ -1063,4 +1063,10 @@
 #   src\analysis\DRagLint.Analysis.Cfg.pas, DataFlow.pas, Flow.Lattices.pas (owner Q5: they now decide
 #   stored rows). Pinned by tests\autotest\run_dataflow_facts.ps1 (RED on T0, green on T1).
 #   Superseded: 1.26.0-alpha|8b00b25aa4488d0761c960672cc9840551dbdacdc332c0757c53cd0cb15e423a
-1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
+#   2026-10-27 (lane ARGOUT, gaps/argout): re-pinned WITHIN 1.26.0-alpha (no index built under 1.26.0 from
+#   main yet). Size cut: an argout source is emitted only when the callee may write that argument --
+#   a same-unit callee by its var/out mask (TDataFlowFacts.BuildCallees, Core.Indexer passes it), else a
+#   built-in RTL list (value-only names drop; TryGetValue keeps position 1); every other callee is
+#   unresolved at extraction and KEEPS its argout. Pinned by tests\autotest\run_dataflow_facts.ps1.
+#   Superseded: 1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
+1.26.0-alpha|f26a8bd644fcbff0af143d20c45d7bed07131e37bbc43e15c616118594dfb0f0
