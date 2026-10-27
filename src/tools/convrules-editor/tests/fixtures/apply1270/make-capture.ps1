@@ -4,7 +4,9 @@
 # Usage: pwsh -NoProfile -File make-capture.ps1 -Pin <pin dir> [-OutDir <dir>] [-Library <library-Win64.sqlite>]
 #   -Pin      a pinned engine dir (third_party\engine-pinned\<version>-<stamp>): the exe, tree-sitter DLLs,
 #             casts.castlib and rules\ are copied into a scratch STAGE; the pin itself and dll-win64 are never run.
-#   -Root     the folder the capture projects (and the staged engine) are built in; default a new temp folder. An\r\n#             existing Root is reused and overwritten in place (idempotent: sources rewritten, index incremental).\r\n#   -OutDir   where the captures are written (default: this folder, i.e. the checked-in fixtures).
+#   -Root     the folder the capture projects (and the staged engine) are built in; default a new temp folder. An
+#             existing Root is reused and overwritten in place (idempotent: sources rewritten, index incremental).
+#   -OutDir   where the captures are written (default: this folder, i.e. the checked-in fixtures).
 #   -Library  the Win64 library index (read-only --db). Default: C:\Projects\.drag-lint\library-Win64.sqlite.
 # The staged engine gets its OWN drag-lint.json (indexes.outDir = the scratch stage, no sections), so no real
 # project DB is touched; each capture indexes Fix.dpr into its own scratch Fix.sqlite.
