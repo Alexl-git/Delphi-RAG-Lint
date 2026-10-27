@@ -15011,6 +15011,14 @@ begin
     Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel')]);
     Check('qualify.apply.retarget.skips.refused', (Length(Outs) = 2) and (not Outs[0].Applied) and (not Outs[1].Applied)
       and (Outs[0].NodeIndex = 0) and (Pos('already qualified', Outs[1].Reason) > 0), Outs[1].Reason);
+    // Q08: the refused pick 0 (from side already qualified) carries NodeIndex 0, but pick 1 is the OTHER side of the same
+    // stale line. Were a refused outcome a re-target source, ApplyAt(0) would qualify the to side of a header the run never saw;
+    // only an APPLIED outcome may be one, so pick 1 goes through FindQualifyTarget and is refused as stale, the book untouched.
+    Book:= Make('#convert Vcl.StdCtrls.TLabel -> TSolo');
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]);
+    Check('qualify.apply.retarget.requires.applied', (Length(Outs) = 2) and (not Outs[0].Applied) and (Outs[0].NodeIndex = 0)  // dl:ok boolean-expression-complexity@41d8 -- REVIEWED 2026-10-27 one Check asserts a single expected outcome shape; splitting the condition would obscure it
+      and (not Outs[1].Applied) and (Outs[1].NodeIndex = -1) and (Pos('no longer reads', Outs[1].Reason) > 0)
+      and (Book.Nodes[0].ToType = 'TSolo') and (not Book.Nodes[0].Dirty), Outs[1].Reason + ' / ' + Book.Nodes[0].ToType);
     // Two different headers: the lines are listed, plural.
     Book:= Make(HDR + CRLF + '#link A <- B' + CRLF + '#link C <- D' + CRLF + '#convert TButton -> TSolo');
     FixB:= F0;
