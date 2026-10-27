@@ -54,7 +54,8 @@ is modelled, and wherever the target types a with member wins), a bare name can
 bind to an enum value the compiler would not have chosen. Verify such a binding
 against the declaration. A bare read of a `{$SCOPEDENUMS ON}` value is never
 bound to the value since resolver E14 (1.36.0); lint rule `enum-bare-read-scoped`
-reports it -- a warning when the name binds to another symbol, a hint when unbound.
+reports it -- a warning when the name binds to another symbol and the types say
+the enum may be meant, a hint when unbound.
 Qualified reads (`TEnum.Value`) are unaffected.
 
 ## Reaching it in the IDE
