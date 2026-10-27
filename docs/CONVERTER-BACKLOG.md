@@ -21,7 +21,7 @@ before working on an item.**
   level and lossless down-convert is impossible: warn, list each place (book, line:col, U+XXXX, rule,
   target unit), ask up-convert vs change rules. Editor side incl. the lone-surrogate no-op RaiseTo,
   C-1 verify and B2 RefusalHint delete: ENGINE's lane CONV (wt conv-1026); CONVERTER reviews it.
-* Open: D2 owner decision (BDE tail: 15 of 43 `#migrate` lines are member form); L1
+* D2 DONE on conv/d2-split (2026-10-27; split books + Q4b merged to main only after review): BDE + Data.DB books, guard `run_convert_book_split.ps1` green on pin 1.36.0-alpha-20261027-142316. REMAINING: Q6 'Book-2 before BDE book' ValidateScope warning (waits for CHAIN-1). Was open: D2 owner decision (BDE tail: 15 of 43 `#migrate` lines are member form); L1
   fix/conv-apply-read-encoding (Convert.Apply ANSI reads, to ENGINE for merge); L2 #migrate D5 + D6-B;
   L4 VARINSP 5 with-engine fails; non-ANSI identifiers in the index = ENGINE EXTRACT, 1.36.0;
   re-pin + baseline after ENGINE's next deploy.

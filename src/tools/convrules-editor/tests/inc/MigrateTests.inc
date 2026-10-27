@@ -104,16 +104,53 @@ begin
         if MigrateRefusal(N) = MIGRATE_REFUSAL_UNITS then
           Inc(LRefUnits);
       end;
-    // MEASURED 2026-10-26: the spec's "units on every line" (section 3) is wrong -- 15 of the 43
-    // tail lines are member form (dcrDefault -> gcrDefault, IsAlias -> IsConnectionDef, ...),
-    // 25 carry units, 3 are scoped / dotted. Pinned so a corpus edit is noticed.
-    Check('migrate.bde.tail', (LAll = 43) and (LMember = 15) and (LRefUnits = 25) and (B.SaveToString = LText),
+    // MEASURED 2026-10-26 on the old 43-line tail: 15 member form, 25 with units, 3 scoped / dotted.
+    // D2 split 2026-10-27 moved the 15 Data.DB lines to DataDB-to-FireDAC.rules; MEASURED after the
+    // split: 28 lines, 11 member form, 14 with units, 3 scoped / dotted. Q4b (2026-10-27) re-homed
+    // UpdateRecordTypes into the TTable/TQuery/TStoredProc blocks: 27 + 3 = 30 lines, 13 member form. Pinned so a corpus edit is noticed.
+    Check('migrate.bde.tail', (LAll = 30) and (LMember = 13) and (LRefUnits = 14) and (B.SaveToString = LText),
       Format('all=%d member=%d units=%d roundtrip=%s', [LAll, LMember, LRefUnits, BoolToStr(B.SaveToString = LText, True)]));
   finally
     B.Free;
   end;
 end;
 
+procedure TestDataDbBook;
+var
+  LPath: string;
+  B    : TRuleBook;
+  LText: string;
+  LAll : Integer;
+begin
+  LPath:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), '..\..\..\..\convrules\DataDB-to-FireDAC.rules'));
+  if not TFile.Exists(LPath) then
+  begin
+    Skip('datadb.book', 'no ' + LPath);
+    Exit;
+  end;
+  LText:= TFile.ReadAllText(LPath);
+  var LBlocks: TRuleBlocks:= SplitRulesBlocks(LText);
+  var LConverts: Integer:= 0;
+  for var LBlock: TRuleBlock in LBlocks do
+    if LBlock.Kind = rbkConvert then
+      Inc(LConverts);
+  Check('datadb.book.headers', (LConverts = 3) and (CountDirectiveInText(LText, '#convert') = 3), IntToStr(LConverts));
+  Check('datadb.book.no.trailer', (Length(LBlocks) = 4) and (LBlocks[0].Kind = rbkPreamble), 'preamble + 3 rules, no trailing block');
+  Check('datadb.book.remove.hasconstraints', Pos('#remove HasConstraints' + #13#10, LText) > 0, 'travels with the TAutoIncField block');
+  Check('datadb.book.no.bde.type', Pos('#convert Bde.', LText) = 0, 'every rule is Data.DB-declared');
+  Check('datadb.book.apply.integrity', CheckApplyIntegrity(LText).OK, 'no #apply without its #mapping: ' + CheckApplyIntegrity(LText).Summary);
+  B:= TRuleBook.Create;
+  try
+    B.LoadFromString(LText);
+    LAll:= 0;
+    for var N: TRuleNode in B.Nodes do
+      if N.Kind = rnkMigrate then
+        Inc(LAll);
+    Check('datadb.book.migrate', (LAll = 15) and (B.SaveToString = LText), Format('migrate=%d roundtrip=%s', [LAll, BoolToStr(B.SaveToString = LText, True)]));
+  finally
+    B.Free;
+  end;
+end;
 procedure TestMigrateBlocks;
 var
   B   : TRuleBook;

@@ -156,10 +156,12 @@ function SecondToken(const ALine: string): string;
 /// <returns>Blocks in file order; JoinBlocks reproduces AText byte for byte.</returns>
 /// <remarks>
 /// The trailing block exists because file-scope directives after the last
-/// '#convert' would otherwise be mis-attributed to that one rule -- in
-/// convrules\BDE-to-FireDAC.rules that is 43 '#migrate' lines sitting inside the
-/// TBatchMove block, which composing a subset without TBatchMove would silently
-/// drop. It is emitted only when that closing run actually contains a file-scope
+/// '#convert' would otherwise be mis-attributed to that one rule -- before the
+/// D2 split (2026-10-27) convrules\BDE-to-FireDAC.rules ended in 43 '#migrate'
+/// lines sitting inside the TBatchMove block, which composing a subset without
+/// TBatchMove would silently drop. The shipped books no longer end that way (the
+/// lines are file-scope above the first '#convert'), but a book from elsewhere
+/// may. It is emitted only when that closing run actually contains a file-scope
 /// directive, so a book merely ending in a comment is split exactly as before.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.BlockFile.SplitBlocksFor (ConvRules.BlockFile.pas)</para>
@@ -438,10 +440,10 @@ end; // function
 const { Directives that are FILE-scope: they belong to the BOOK, not to any one
     #convert block.
 
-    MEASURED against convrules\BDE-to-FireDAC.rules on 2026-09-09: the preamble
+    MEASURED against convrules\BDE-to-FireDAC.rules on 2026-09-09 (before the D2
+    split moved its 43-line #migrate tail above the first #convert): the preamble
     (lines 1-145) carries only #mapping / #remove / #unuse, block bodies carry
-    only #apply / #ignore / #link / #note, and the 43-line tail carries only
-    #migrate. #use / #useswap set a unit name like #unuse, so they are file-scope
+    only #apply / #ignore / #link / #note, and the tail carried only #migrate. #use / #useswap set a unit name like #unuse, so they are file-scope
     too. #default is deliberately ABSENT -- convrules\sample.rules:7 has it inside
     a #convert body, so it is body-scope and must not open a trailing block.
     #depth (engine 1.20.6) is a book setting, top level before the first #convert. }

@@ -99,3 +99,8 @@ them carry units, and 3 are scoped or dotted. 15 are in member form, for example
 `dcrDefault -> gcrDefault` and `IsAlias -> IsConnectionDef` (measured 2026-10-26). The
 Members list shows the 28 that are not in member form as `legacy`, each with the engine's
 reason.
+
+*D2 split (2026-10-27).* The 43 lines no longer live in one trailer: the 28 BDE ones sit above the first
+`#convert` of `BDE-to-FireDAC.rules` (file-scope), and the 15 `Data.DB` ones moved to
+`DataDB-to-FireDAC.rules` (run it after the BDE book). `UpdateRecordTypes -> FilterChanges` now sits inside
+ the TTable / TQuery / TStoredProc blocks and is applied by the engine.
