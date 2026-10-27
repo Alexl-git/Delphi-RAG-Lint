@@ -1,0 +1,20 @@
+# 22 A[0], 23 A[4] on array[1..3]; 32 A[-3] on array[-2..2]; 41/42 S[0] on string/UnicodeString; 67 const Names[2]; 73 field FCells[10]
+constant-index-out-of-range 22
+constant-index-out-of-range 23
+constant-index-out-of-range 32
+constant-index-out-of-range 41
+constant-index-out-of-range 42
+constant-index-out-of-range 67
+constant-index-out-of-range 73
+# non-hits: in range (24 25 33 43 68 74), ShortString S[0] (51), dynamic array (59 60)
+!constant-index-out-of-range 24
+!constant-index-out-of-range 25
+!constant-index-out-of-range 33
+!constant-index-out-of-range 43
+!constant-index-out-of-range 51
+!constant-index-out-of-range 59
+!constant-index-out-of-range 60
+!constant-index-out-of-range 68
+!constant-index-out-of-range 74
+# non-hit: inline var shadows the field of the same name
+!constant-index-out-of-range 80

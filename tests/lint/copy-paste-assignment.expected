@@ -1,0 +1,12 @@
+# OFF rule (config.json). 13: 3 rows, the 2nd copies the 1st rhs; 21: 4 rows, the 3rd copies the 2nd; 28: axis pair Left/Top only
+copy-paste-assignment 13
+copy-paste-assignment 21
+copy-paste-assignment 28
+# non-hits: lone odd row (33), all distinct (39 40), different sources (46), non-axis pair (53)
+!copy-paste-assignment 33
+!copy-paste-assignment 39
+!copy-paste-assignment 40
+!copy-paste-assignment 46
+!copy-paste-assignment 53
+# non-hit: EndLine := M.StartLine closes a one-line span
+!copy-paste-assignment 65

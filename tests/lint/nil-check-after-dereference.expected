@@ -1,0 +1,12 @@
+# deref then check: 13 Assigned, 20 <> nil, 27 = nil, 34 index then not Assigned, 41 P^ then = nil
+nil-check-after-dereference 13
+nil-check-after-dereference 20
+nil-check-after-dereference 27
+nil-check-after-dereference 34
+nil-check-after-dereference 41
+# non-hits: check first (47), reassigned between (56), earlier deref is itself guarded (64), check in a nested routine (72), Free before check (84)
+!nil-check-after-dereference 47
+!nil-check-after-dereference 56
+!nil-check-after-dereference 64
+!nil-check-after-dereference 72
+!nil-check-after-dereference 84

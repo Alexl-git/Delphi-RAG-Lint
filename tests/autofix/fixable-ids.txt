@@ -3,6 +3,7 @@ collection-modified-in-loop
 const-casing
 constructor-call-on-instance
 dfm-password-edit-unmasked
+copy-paste-assignment
 doc-drift
 field-name-prefix
 interface-without-guid
