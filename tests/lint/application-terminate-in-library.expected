@@ -1,0 +1,7 @@
+# Application.Terminate in a unit (12) may end the whole app from code no caller can see
+# Other Application members (17), other receivers (18) and Halt (19, halt-in-library's job) must not fire
+# The program/.dpr is exempt: see halt-in-library-program.pas
+application-terminate-in-library 12
+!application-terminate-in-library 17
+!application-terminate-in-library 18
+!application-terminate-in-library 19

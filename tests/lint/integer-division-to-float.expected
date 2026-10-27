@@ -1,0 +1,11 @@
+# Float-typed local assigned an integer `div` (15, 16, 17, 18): the fraction is already gone
+# Integer target (19), real division `/` (20, 21) and `*` (22) must not fire
+# Known FP shape: `D := (A div B) * 1.0` is not flagged (rhs top operator is not div) -- no guess
+integer-division-to-float 15
+integer-division-to-float 16
+integer-division-to-float 17
+integer-division-to-float 18
+!integer-division-to-float 19
+!integer-division-to-float 20
+!integer-division-to-float 21
+!integer-division-to-float 22
