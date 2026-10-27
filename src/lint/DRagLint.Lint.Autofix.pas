@@ -40,9 +40,6 @@ function IsFixableRule(const ARuleId: string): Boolean;
 /// <returns>True for the naming fixes in OPT_IN_FIX_RULE_IDS.</returns>
 function IsOptInFixRule(const ARuleId: string): Boolean;
 
-/// <summary>Every rule id with a registered autofix, in declaration order.</summary>
-/// <returns>A fresh copy of FIXABLE_RULE_IDS; the caller owns the array.</returns>
-function FixableRuleIds: TArray<string>;
 
 /// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
 /// a redundant-code cleanup).</summary>
@@ -75,7 +72,7 @@ function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCo
 /// An id the legacy FIXABLE_RULE_IDS chain already fixes is never handed to a
 /// registered fixer. Call it from a fixer unit's RegisterFixers, which this
 /// unit's initialization runs; not thread-safe after start-up.</remarks>
-procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False);
+procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False);  // dl:ok unused-public-symbol@1349 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
 
 /// <summary>Registers a per-file fixer for ARuleId (autofix wave A0).</summary>
 /// <param name="ARuleId">The rule id; compared case-insensitively.</param>
@@ -83,7 +80,15 @@ procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARis
 /// <param name="ARisky">True for a behaviour-CHANGING fix.</param>
 /// <remarks>Same contract as RegisterFixer; called once per file that has a
 /// finding of the rule.</remarks>
-procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False);
+procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False);  // dl:ok unused-public-symbol@2a36 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
+
+/// <summary>Installs THE generic sidecar fixer: the builder for every finding
+/// whose rule's .json carries a "fix" key (TLintFinding.FixKind).</summary>
+/// <param name="AFixer">The builder; DRagLint.Fix.Templates installs its own
+/// from its initialization.</param>
+/// <remarks>A hook rather than a uses: the fixer units use this unit, never
+/// the reverse, so no unit cycle forms (circular-uses).</remarks>
+procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
 
 /// <summary>Builds the ONE edit that wraps lines AFirstLine..ALastLine in
 /// try / finally / end.</summary>
@@ -97,7 +102,7 @@ procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARi
 /// <returns>False when the range is outside the file.</returns>
 /// <remarks>The protected lines are re-indented by two spaces; the finally
 /// body is written at AIndent + two spaces, one line per input line.</remarks>
-function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;
+function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;  // dl:ok unused-public-symbol@3d4c -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
   const AFinallyText, AIndent: string; out AEdit: TTextEdit): Boolean;
 
 /// <summary>Builds the edit that deletes the statement AFinding spans: the
@@ -128,7 +133,7 @@ function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEd
 /// <param name="AUnit">The unit name to add (RTL units only without a --db).</param>
 /// <param name="AEdit">Out: the insert edit.</param>
 /// <returns>True when an edit was built.</returns>
-function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;
+function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;  // dl:ok unused-public-symbol@b189 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
 
 /// <summary>The declared type of AName as seen from line ALine of APath: a
 /// same-routine local, parameter or inline var, or a unit-level var.</summary>
@@ -139,7 +144,7 @@ function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: stri
 /// not show one (a field, a with-member, an untyped inline var, a missing file).</returns>
 /// <remarks>The same scope walk as the .scm predicate #declared-type?, so a code
 /// fixer and a rule agree on what a local is.</remarks>
-function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;
+function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;  // dl:ok unused-public-symbol@77b7 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
 
 implementation
 
@@ -155,15 +160,6 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.QueryRules     { DeclaredTypeAt -- DeclTypeOf }
   , DRagLint.Lint.RuleCatalog    { IsSidecarFixRule -- a sidecar "fix" key makes a rule fixable }
-  , DRagLint.Fix.Templates
-  , DRagLint.Fix.Expr
-  , DRagLint.Fix.Stmt
-  , DRagLint.Fix.Decl
-  , DRagLint.Fix.Store
-  , DRagLint.Fix.Hygiene
-  , DRagLint.Fix.Security
-  , DRagLint.Fix.Shape
-  , DRagLint.Fix.Typed
   ;
 
 type
@@ -174,9 +170,16 @@ type
   end;
 
 var
-  { rule id -> fixer; case-insensitive. Filled at start-up by the fixer units'
-    RegisterFixers (called from this unit's initialization), read-only after. }
+  { rule id -> fixer; case-insensitive. Filled at start-up from the fixer
+    units' initialization sections, read-only after. }
   GFixers: TDictionary<string, TRegisteredFixer>;
+  { the generic sidecar fixer (DRagLint.Fix.Templates installs it) }
+  GSidecarFixer: TFindingFixer;
+
+procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
+begin
+  GSidecarFixer:= AFixer;
+end;
 
 function Fixers: TDictionary<string, TRegisteredFixer>;
 begin
@@ -275,18 +278,6 @@ begin
   Result:= False;
 end;
 
-function FixableRuleIds: TArray<string>;
-var
-  i: Integer;
-begin
-  SetLength(Result, Length(FIXABLE_RULE_IDS));
-  for i:= 0 to High(FIXABLE_RULE_IDS) do Result[i]:= FIXABLE_RULE_IDS[i];
-  { autofix wave A0: then the registered and sidecar ids the list does not hold }
-  for var Id: string in Fixers.Keys do
-    if not IsLegacyFixRule(Id) then Result:= Result + [Id];
-  for var Id: string in SidecarFixRuleIds do
-    if (not IsLegacyFixRule(Id)) and not Fixers.ContainsKey(Id) then Result:= Result + [Id];
-end;
 
 { Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
   human/AI orchestrator is warned. off-by-one-count appends ' - 1' to a loop
@@ -901,11 +892,11 @@ begin
         var RegEdits: TArray<TTextEdit>:= nil;
         if Fixers.TryGetValue(F.RuleId, RegFx) and Assigned(RegFx.Finding) then
           RegEdits:= RegFx.Finding(F, LinesFor(F.FilePath))
-        else if F.FixKind <> lfkNone then
-          RegEdits:= BuildSidecarFixEdits(F, LinesFor(F.FilePath));
+        else if (F.FixKind <> lfkNone) and Assigned(GSidecarFixer) then
+          RegEdits:= GSidecarFixer(F, LinesFor(F.FilePath));
         if Length(RegEdits) > 0 then
         begin
-          Result:= Result + RegEdits;  // dl:ok concat-in-loop@09c2 -- REVIEWED 2026-10-27: one or two edits per finding, the builder's own accumulate shape
+          Insert(RegEdits, Result, Length(Result));   { append }
           Inc(AFixableCount);
           if (F.FixKind <> lfkNone) and (F.FixUses <> '') then UsesWanted.AddPair(F.FilePath, F.FixUses);
         end;
@@ -954,7 +945,7 @@ begin
           var FxEdits: TArray<TTextEdit>:= FxPair.Value.PerFile(FxPath, AFindings, FxFixed);
           if Length(FxEdits) > 0 then
           begin
-            Result:= Result + FxEdits;  // dl:ok concat-in-loop@e488 -- REVIEWED 2026-10-27: one append per file, the unused-local loop's shape
+            Insert(FxEdits, Result, Length(Result));    { append }
             Inc(AFixableCount, FxFixed);
           end;
         end;
@@ -1182,19 +1173,10 @@ begin
 end;
 
 initialization
-  Fixers;
-  { every fixer unit registers once; each is a lane's home (A0 creates them empty) }
-  DRagLint.Fix.Templates.RegisterFixers;
-  DRagLint.Fix.Expr.RegisterFixers;
-  DRagLint.Fix.Stmt.RegisterFixers;
-  DRagLint.Fix.Decl.RegisterFixers;
-  DRagLint.Fix.Store.RegisterFixers;
-  DRagLint.Fix.Hygiene.RegisterFixers;
-  DRagLint.Fix.Security.RegisterFixers;
-  DRagLint.Fix.Shape.RegisterFixers;
-  DRagLint.Fix.Typed.RegisterFixers;
+  Fixers;   { created first; a fixer unit initialized earlier would create it lazily anyway }
 
 finalization
+  GSidecarFixer:= nil;
   GFixers.Free;
 
 end.

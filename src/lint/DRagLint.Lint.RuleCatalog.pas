@@ -331,9 +331,6 @@ procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
 /// <returns>True when RegisterSidecarFixRule was called for AId in this process.</returns>
 function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
 
-/// <summary>Every rule id registered as carrying a sidecar fix, sorted.</summary>
-/// <returns>A fresh array; empty when no sidecar with a "fix" key was seen.</returns>
-function SidecarFixRuleIds: TArray<string>;
 
 implementation
 
@@ -369,16 +366,6 @@ begin
   end;
 end;
 
-function SidecarFixRuleIds: TArray<string>;
-begin
-  TMonitor.Enter(GSidecarFixes);
-  try
-    Result:= GSidecarFixes.Keys.ToArray;
-  finally
-    TMonitor.Exit(GSidecarFixes);
-  end;
-  TArray.Sort<string>(Result, TIStringComparer.Ordinal);
-end;
 
 { True when a sidecar "fix" value (object or array of objects) has an entry
   marked "risky": true. }

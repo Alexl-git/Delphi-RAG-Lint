@@ -9,37 +9,24 @@ unit DRagLint.Fix.Templates;
 
 interface
 
-uses
-  System.Classes
-  , DRagLint.Core.Model
-  , DRagLint.Refactor.TextEdit
-  ;
-
-/// <summary>The edits for one finding that carries a sidecar fix.</summary>
-/// <param name="AFinding">A finding with FixKind other than lfkNone.</param>
-/// <param name="ALines">The finding's file as read by the autofix builder.</param>
-/// <returns>One edit, or none when the span is not in the file (a stale
-/// finding) or the fix cannot be placed safely.</returns>
-/// <remarks>A single-line span with single-line replacement text becomes a
-/// tekReplaceInLine guarded by the span's own text; anything that spans lines
-/// becomes a tekReplaceLines over StartLine..EndLine guarded by the first
-/// line. lfkDeleteStatement goes through Autofix.DeleteStatement. Pure.</remarks>
-function BuildSidecarFixEdits(const AFinding: TLintFinding; ALines: TStrings): TArray<TTextEdit>;
-
-/// <summary>Registers this unit's fixers with DRagLint.Lint.Autofix.</summary>
-/// <remarks>Called once from DRagLint.Lint.Autofix's initialization. The
-/// generic sidecar fixer is keyed on TLintFinding.FixKind, not on a rule id, so
-/// there is nothing to register; lane A1 adds only rules\*.json "fix" keys.</remarks>
-procedure RegisterFixers;
-
 implementation
 
 uses
   System.SysUtils
+  , System.Classes
+  , DRagLint.Core.Model
+  , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
   ;
 
-function BuildSidecarFixEdits(const AFinding: TLintFinding; ALines: TStrings): TArray<TTextEdit>;
+{ The edits for one finding that carries a sidecar fix: one edit, or none when
+  the span is not in the file (a stale finding) or the fix cannot be placed
+  safely. A single-line span with single-line replacement text becomes a
+  tekReplaceInLine guarded by the span's own text; anything that spans lines
+  becomes a tekReplaceLines over StartLine..EndLine guarded by the first line.
+  lfkDeleteStatement goes through Autofix.DeleteStatement. Pure. Lane A1 adds
+  only rules\*.json "fix" keys -- never Pascal here. }
+function BuildSidecarFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 var
   E      : TTextEdit;
   First  : string   ;
@@ -83,9 +70,7 @@ begin
   Result:= [E];
 end;
 
-procedure RegisterFixers;
-begin
-  { nothing to register -- see the declaration }
-end;
+initialization
+  RegisterSidecarFixer(BuildSidecarFixEdits);
 
 end.

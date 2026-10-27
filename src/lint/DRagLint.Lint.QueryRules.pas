@@ -352,22 +352,6 @@ type
 /// </remarks>
 function QueryRuleTimings: TArray<TQueryRuleTiming>;
 
-/// <summary>Parses a sidecar "fix" value (one object or an array of objects)
-/// into its entries.</summary>
-/// <param name="AValue">The JSON value of the "fix" key; nil gives no entries.</param>
-/// <returns>The valid entries in order; malformed objects are dropped.</returns>
-/// <remarks>See TSidecarFix for the grammar. Pure.</remarks>
-function ParseSidecarFix(const AValue: TJSONValue): TArray<TSidecarFix>;
-
-/// <summary>Expands a sidecar fix template: each {name} becomes the RAW text of
-/// the capture of that name (case-insensitive).</summary>
-/// <param name="ATemplate">The template text.</param>
-/// <param name="ANames">Capture names bound in the match.</param>
-/// <param name="ATexts">The captures' source texts, parallel to ANames.</param>
-/// <param name="AText">Out: the expanded text.</param>
-/// <returns>False when a {placeholder} is left unbound -- the entry then does
-/// not apply, so a half-expanded template is never written.</returns>
-function ExpandFixTemplate(const ATemplate: string; const ANames, ATexts: TArray<string>; out AText: string): Boolean;
 
 /// <summary>The declared type of AName as seen from byte offset AByte of a
 /// parsed file -- the same scope walk #declared-type? makes.</summary>
@@ -637,6 +621,82 @@ begin
   finally
     Code.Free;
   end;
+end;
+
+{ Parses a sidecar "fix" value (one object or an array of objects) into its
+  entries, in order; malformed objects are dropped. Grammar: TSidecarFix. }
+function ParseSidecarFix(const AValue: TJSONValue): TArray<TSidecarFix>;
+
+  procedure AddOne(const AObj: TJSONObject);
+  var
+    Fx: TSidecarFix;
+    V : TJSONValue ;
+  begin
+    Fx:= Default(TSidecarFix);
+    V:= AObj.GetValue('when_capture');
+    if V <> nil then Fx.WhenCapture:= Trim(V.Value);
+    V:= AObj.GetValue('uses');
+    if V <> nil then Fx.UsesUnit:= Trim(V.Value);
+    V:= AObj.GetValue('risky');
+    Fx.Risky:= (V <> nil) and SameText(V.Value, 'true');
+    if AObj.GetValue('replace') <> nil then
+    begin
+      Fx.Kind    := lfkReplace;
+      Fx.Template:= AObj.GetValue('replace').Value;
+    end
+    else if AObj.GetValue('delete') <> nil then
+    begin
+      V:= AObj.GetValue('delete');
+      if SameText(V.Value, 'span') then Fx.Kind:= lfkDeleteSpan
+      else if SameText(V.Value, 'statement') then Fx.Kind:= lfkDeleteStatement
+      else Exit;   { unknown delete target: the entry is ignored }
+    end
+    else Exit;     { neither replace nor delete: ignored }
+    Result:= Result + [Fx];
+  end;
+
+begin
+  Result:= nil;
+  if AValue is TJSONObject then AddOne(TJSONObject(AValue))
+  else if AValue is TJSONArray then
+    for var Item: TJSONValue in TJSONArray(AValue) do
+      if Item is TJSONObject then AddOne(TJSONObject(Item));
+end;
+
+{ Expands a sidecar fix template: each brace-wrapped capture name becomes the RAW
+  text of that capture (case-insensitive). False when a placeholder is left
+  unbound -- the entry then does not apply, so a half-expanded template is never
+  written. }
+function ExpandFixTemplate(const ATemplate: string; const ANames, ATexts: TArray<string>; out AText: string): Boolean;
+var
+  i   : Integer       ;
+  Ph  : TMatch        ;
+  Last: Integer       ;
+  SB  : TStringBuilder;
+begin
+  AText:= ATemplate;
+  { Every placeholder must be bound BEFORE anything is substituted: a capture's
+    own text may hold a brace comment such as (*x*) written with braces, which
+    must neither count as unbound nor be expanded again. }
+  for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
+    if IndexText(Ph.Groups[1].Value, ANames) < 0 then Exit(False);
+  { one pass over the template, so substituted text is never re-scanned }
+  SB:= TStringBuilder.Create;
+  try
+    Last:= 1;
+    for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
+    begin
+      SB.Append(Copy(ATemplate, Last, Ph.Index - Last));
+      i:= IndexText(Ph.Groups[1].Value, ANames);
+      SB.Append(if i <= High(ATexts) then ATexts[i] else Ph.Value);   { i >= 0: checked above }
+      Last:= Ph.Index + Ph.Length;
+    end;
+    SB.Append(Copy(ATemplate, Last, MaxInt));
+    AText:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+  Result:= True;
 end;
 
 constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
@@ -1454,76 +1514,6 @@ begin
     AFinding.FixUses:= Fx.UsesUnit;
     Exit;
   end;
-end;
-
-function ParseSidecarFix(const AValue: TJSONValue): TArray<TSidecarFix>;
-
-  procedure AddOne(const AObj: TJSONObject);
-  var
-    Fx: TSidecarFix;
-    V : TJSONValue ;
-  begin
-    Fx:= Default(TSidecarFix);
-    V:= AObj.GetValue('when_capture');
-    if V <> nil then Fx.WhenCapture:= Trim(V.Value);
-    V:= AObj.GetValue('uses');
-    if V <> nil then Fx.UsesUnit:= Trim(V.Value);
-    V:= AObj.GetValue('risky');
-    Fx.Risky:= (V <> nil) and SameText(V.Value, 'true');
-    if AObj.GetValue('replace') <> nil then
-    begin
-      Fx.Kind    := lfkReplace;
-      Fx.Template:= AObj.GetValue('replace').Value;
-    end
-    else if AObj.GetValue('delete') <> nil then
-    begin
-      V:= AObj.GetValue('delete');
-      if SameText(V.Value, 'span') then Fx.Kind:= lfkDeleteSpan
-      else if SameText(V.Value, 'statement') then Fx.Kind:= lfkDeleteStatement
-      else Exit;   { unknown delete target: the entry is ignored }
-    end
-    else Exit;     { neither replace nor delete: ignored }
-    Result:= Result + [Fx];
-  end;
-
-begin
-  Result:= nil;
-  if AValue is TJSONObject then AddOne(TJSONObject(AValue))
-  else if AValue is TJSONArray then
-    for var Item: TJSONValue in TJSONArray(AValue) do
-      if Item is TJSONObject then AddOne(TJSONObject(Item));
-end;
-
-function ExpandFixTemplate(const ATemplate: string; const ANames, ATexts: TArray<string>; out AText: string): Boolean;
-var
-  i   : Integer       ;
-  Ph  : TMatch        ;
-  Last: Integer       ;
-  SB  : TStringBuilder;
-begin
-  AText:= ATemplate;
-  { Every placeholder must be bound BEFORE anything is substituted: a capture's
-    own text may hold a brace comment such as (*x*) written with braces, which
-    must neither count as unbound nor be expanded again. }
-  for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
-    if IndexText(Ph.Groups[1].Value, ANames) < 0 then Exit(False);
-  { one pass over the template, so substituted text is never re-scanned }
-  SB:= TStringBuilder.Create;
-  try
-    Last:= 1;
-    for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
-    begin
-      SB.Append(Copy(ATemplate, Last, Ph.Index - Last));
-      i:= IndexText(Ph.Groups[1].Value, ANames);
-      SB.Append(if i <= High(ATexts) then ATexts[i] else Ph.Value);   { i >= 0: checked above }
-      Last:= Ph.Index + Ph.Length;
-    end;
-    SB.Append(Copy(ATemplate, Last, MaxInt));
-    AText:= SB.ToString;
-  finally
-    SB.Free;
-  end;
-  Result:= True;
 end;
 
 { True when ScmPath sits below a sub-directory (relative to ARulesDir) named `rules`. }
