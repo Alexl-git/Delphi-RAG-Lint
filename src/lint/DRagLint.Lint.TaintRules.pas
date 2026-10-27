@@ -186,7 +186,7 @@ type
   end;
 
   /// <summary>Counters for the DRAGLINT_DEBUG / DRAGLINT_PROFILE stderr line
-  /// `taint: sinks N, keys N, rows read N, library hops N, hits N, partial keys N, N ms`.</summary>
+  /// `taint: sinks N, keys N, rows read N, library hops N, hits N, partial keys N, depth caps N, N ms`.</summary>
   TTaintStats = record
     /// <summary>Sink sites examined (one per site and rule).</summary>
     Sinks      : Integer;
@@ -200,6 +200,9 @@ type
     Hits       : Integer;
     /// <summary>Sinks whose answer is partial (a cap or max_rounds was reached).</summary>
     PartialKeys: Integer;
+    /// <summary>Evaluations cut at the walk-depth guard (TAINT_EVAL_DEPTH_CAP memo keys in flight
+    /// plus nested row evaluations): that branch answers "unknown" (no hit), never a stack overflow.</summary>
+    DepthCaps  : Integer;
     /// <summary>Wall time of Check.</summary>
     ElapsedMs  : Int64  ;
     /// <summary>True when the project store has no data_flows table, or the table is empty
@@ -207,7 +210,7 @@ type
     /// stale-index note; no findings.</summary>
     StaleIndex : Boolean;
     /// <summary>The stats as the one stderr line the CLI prints under DRAGLINT_DEBUG.</summary>
-    /// <returns>`taint: sinks N, keys N, rows read N, library hops N, hits N, partial keys N, N ms`.</returns>
+    /// <returns>`taint: sinks N, keys N, rows read N, library hops N, hits N, partial keys N, depth caps N, N ms`.</returns>
     function ToLine: string;
   end;
 
@@ -272,6 +275,10 @@ const
   DEFAULT_LIB    = 4;
   DEFAULT_ROUNDS = 4;
   DEFAULT_PATHS  = 3;
+  { memo keys in flight + nested EvalRows calls on one walk: every evaluator
+    recursion passes through one of the two, so this bounds the native stack
+    whatever max_depth is configured to }
+  TAINT_EVAL_DEPTH_CAP = 256;
   SEV_ERROR      = 'error';
   SEV_WARNING    = 'warning';
   SEV_INFO       = 'info';
@@ -335,6 +342,7 @@ type
     FStats       : TTaintStats;
     FMemo        : TDictionary<string, TMemoEntry>;
     FStack       : TDictionary<string, Boolean>;
+    FSites       : TDictionary<string, Boolean>;
     FRefs        : TDictionary<string, TArray<TReference>>;
     FRefFiles    : TDictionary<string, Boolean>;
     FEdges       : TDictionary<string, TArray<TCallEdge>>;
@@ -347,6 +355,7 @@ type
     FTypeIs      : TDictionary<string, Boolean>;
     FWeakRegex   : TRegEx;
     FLibDepth    : Integer;
+    FEvalDepth   : Integer;
     FCycleReads  : Integer;
     FRound       : Integer;
     FChanged     : Boolean;
@@ -374,6 +383,7 @@ type
     procedure Merge(var AAcc: TSummary; const AAdd: TSummary; AWithParams: Boolean);
     procedure MergeHop(var AAcc: TSummary; const AAdd: TSummary; const AHop: TLintLocation; AWeak: Boolean; AFieldInc: Integer);
     procedure AddParam(var AAcc: TSummary; AIdx: Integer);
+    function  DepthCapped(const AWhere: string): Boolean;
     function  Enter(const AKey: string; out ASum: TSummary; out AStartCycles: Integer): Boolean;
     procedure Leave(const AKey: string; const ASum: TSummary; AStartCycles: Integer);
     function  EvalRows(AStore: Integer; const X: TSymbol; const ARows: TArray<TDataFlowRow>): TSummary;
@@ -384,6 +394,7 @@ type
     function  SlotSummary(AStore: Integer; const T: TSymbol; const ASlot: string; AOutIdx: Integer): TSummary;
     function  CallersParam(const X: TSymbol; AIdx: Integer): TSummary;
     function  FieldSummary(AStore: Integer; const ARow: TDataFlowRow): TSummary;
+    function  IsInheritedField(AStore: Integer; const X: TSymbol; const AName: string): Boolean;
     function  GlobalSummary(AStore: Integer; const ARow: TDataFlowRow): TSummary;
     function  Top(AStore: Integer; const X: TSymbol; const ASum: TSummary): TSummary;
     function  Implementations(AStore: Integer; const T: TSymbol): TArray<TSymbol>;
@@ -663,8 +674,8 @@ end;
 
 function TTaintStats.ToLine: string;
 begin
-  Result:= Format('taint: sinks %d, keys %d, rows read %d, library hops %d, hits %d, partial keys %d, %d ms',
-    [Sinks, Keys, RowsRead, LibraryHops, Hits, PartialKeys, ElapsedMs]);
+  Result:= Format('taint: sinks %d, keys %d, rows read %d, library hops %d, hits %d, partial keys %d, depth caps %d, %d ms',
+    [Sinks, Keys, RowsRead, LibraryHops, Hits, PartialKeys, DepthCaps, ElapsedMs]);
 end;
 
 { ---- TTaintRules ------------------------------------------------------------- }
@@ -772,6 +783,7 @@ begin
   FCfg         := ACfg;
   FMemo        := TDictionary<string, TMemoEntry>.Create;
   FStack       := TDictionary<string, Boolean>.Create;
+  FSites       := TDictionary<string, Boolean>.Create;
   FRefs        := TDictionary<string, TArray<TReference>>.Create;
   FRefFiles    := TDictionary<string, Boolean>.Create;
   FEdges       := TDictionary<string, TArray<TCallEdge>>.Create;
@@ -789,6 +801,7 @@ destructor TTaintWalker.Destroy;
 begin
   FMemo.Free;
   FStack.Free;
+  FSites.Free;
   FRefs.Free;
   FRefFiles.Free;
   FEdges.Free;
@@ -1142,6 +1155,20 @@ begin
   end;
 end;
 
+{ The native-stack guard, whatever max_depth says: memo keys in flight plus nested
+  EvalRows calls. At TAINT_EVAL_DEPTH_CAP the branch answers unknown (no hit), the
+  sink is partial, the stats line counts it and DRAGLINT_DEBUG names the first one. }
+function TTaintWalker.DepthCapped(const AWhere: string): Boolean;
+begin
+  Result:= FStack.Count + FEvalDepth >= TAINT_EVAL_DEPTH_CAP;
+  if not Result then Exit;
+  FCapHit:= True;
+  Inc(FStats.DepthCaps);
+  if (FStats.DepthCaps = 1) and (GetEnvironmentVariable('DRAGLINT_DEBUG') <> '') then
+    Writeln(ErrOutput, Format('taint: walk depth cap %d reached at %s -- that branch is unknown',
+      [TAINT_EVAL_DEPTH_CAP, AWhere]));
+end;
+
 { Memo protocol. True = the caller computes the key (seeded in ASum with the
   previous round's partial answer) and must call Leave. False = ASum is the
   answer: a final memo entry, the partial set of a key on the stack (a cycle),
@@ -1165,7 +1192,7 @@ begin
     ASum:= E.Sum;
     Exit(False);
   end;
-  if FStack.Count >= FCfg.MaxDepth then
+  if (FStack.Count >= FCfg.MaxDepth) or DepthCapped(AKey) then
   begin
     FCapHit:= True;
     Inc(FCycleReads);   { the caller's answer is incomplete: re-query next round }
@@ -1198,15 +1225,40 @@ end;
 
 function TTaintWalker.EvalRows(AStore: Integer; const X: TSymbol; const ARows: TArray<TDataFlowRow>): TSummary;
 var
-  Row: TDataFlowRow;
+  Row    : TDataFlowRow;
+  SiteKey: string;
 begin
   Result:= Default(TSummary);
-  for Row in ARows do
-    if Row.SrcKind = DF_SRC_PARAM then AddParam(Result, Row.SrcIndex)
-    else if Row.SrcKind = DF_SRC_REF then Merge(Result, EvalRef(AStore, X, Row), True)
-    else if Row.SrcKind = DF_SRC_FIELD then Merge(Result, FieldSummary(AStore, Row), False)
-    else if Row.SrcKind = DF_SRC_GLOBAL then Merge(Result, GlobalSummary(AStore, Row), False)
-    else if Row.SrcKind = DF_SRC_ARGOUT then Merge(Result, EvalArgOut(AStore, X, Row), True);
+  if DepthCapped(X.QualifiedName) then Exit;
+  Inc(FEvalDepth);
+  try
+    for Row in ARows do
+      if Row.SrcKind = DF_SRC_PARAM then AddParam(Result, Row.SrcIndex)
+      else if (Row.SrcKind = DF_SRC_REF) or (Row.SrcKind = DF_SRC_ARGOUT) then
+      begin
+        { a call site already being evaluated on this walk (a loop-carried
+          S := F(S) makes F's argument derive from F's own result): it adds
+          nothing the other rows do not -- the least fixpoint -- so skip it, and
+          count it as a cycle read so an enclosing memo key is re-queried as partial }
+        SiteKey:= Format('%d|%d|%d|%d|%s|%d', [AStore, X.Id, Row.SrcLine, Row.SrcCol, Row.SrcKind, Row.SrcIndex]);
+        if FSites.ContainsKey(SiteKey) then
+        begin
+          Inc(FCycleReads);
+          Continue;
+        end;
+        FSites.Add(SiteKey, True);
+        try
+          if Row.SrcKind = DF_SRC_REF then Merge(Result, EvalRef(AStore, X, Row), True)
+          else Merge(Result, EvalArgOut(AStore, X, Row), True);
+        finally
+          FSites.Remove(SiteKey);
+        end;
+      end
+      else if Row.SrcKind = DF_SRC_FIELD then Merge(Result, FieldSummary(AStore, Row), False)
+      else if Row.SrcKind = DF_SRC_GLOBAL then Merge(Result, GlobalSummary(AStore, Row), False);
+  finally
+    Dec(FEvalDepth);
+  end;
 end;
 
 { A src 'ref' row: the value of the call / read at (SrcLine, SrcCol) inside X. }
@@ -1220,6 +1272,15 @@ var
   I   : Integer;
 begin
   Result:= Default(TSummary);
+  { 0. a bare read of a field the owner INHERITS: the extractor only classifies the
+    owner's own fields (T1 contract), so an ancestor's field arrives as a ref by
+    name and is resolved here -- then it is a field read like any other. }
+  if IsInheritedField(AStore, X, ARow.SrcName) then
+  begin
+    var FRow:= ARow;
+    FRow.SrcKind:= DF_SRC_FIELD;
+    Exit(FieldSummary(AStore, FRow));
+  end;
   R:= Resolve(AStore, X, ARow.FileId, ARow.SrcLine, ARow.SrcCol, ARow.SrcName);
   { a. a catalogued source }
   for Src in FCfg.Sources do
@@ -1502,6 +1563,29 @@ begin
   finally
     Leave(Key, Result, Cyc);
   end;
+end;
+
+{ True when AName, read bare inside routine X, is a field X's class inherits: the
+  class itself declares no member of that name (its own field would already be a
+  'field' row; any other own member hides the ancestor's), and the NEAREST resolved
+  ancestor declaring the name declares it as a field. }
+function TTaintWalker.IsInheritedField(AStore: Integer; const X: TSymbol; const AName: string): Boolean;
+var
+  P  : TSymbol;
+  C  : TSymbol;
+  Anc: TTypeAncestor;
+begin
+  Result:= False;
+  if (AName = '') or AName.Contains('.') or (X.ParentId <= 0) then Exit;
+  P:= Sym(AStore, X.ParentId);
+  if P.Kind <> skClass then Exit;
+  if FStores[AStore].FindChildSymbolByName(P.Id, AName).Id > 0 then Exit;
+  for Anc in FStores[AStore].GetTransitiveAncestors(P.Id) do
+    if Anc.Resolved and (Anc.SymbolId > 0) then
+    begin
+      C:= FStores[AStore].FindChildSymbolByName(Anc.SymbolId, AName);
+      if C.Id > 0 then Exit(C.Kind = skField);
+    end;
 end;
 
 { A src 'global' row: every writer of that unit variable. A writer in another file

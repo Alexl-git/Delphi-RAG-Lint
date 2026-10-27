@@ -2496,8 +2496,10 @@ type
     /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
     /// <returns>Rows ordered by (dst_kind, dst_index, dst_line, dst_col); empty when none.</returns>
     function GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
-    /// <summary>Every dst_kind='field' row writing field AName in a routine owned by
-    /// one of AOwnerIds (the caller passes the class, its ancestors and descendants).</summary>
+    /// <summary>Every row writing field AName in a routine owned by one of AOwnerIds
+    /// (the caller passes the class, its ancestors and descendants): dst_kind='field',
+    /// plus dst_kind='write' with an empty dst_receiver -- a bare write of a field the
+    /// owner inherits, which the extractor emits by name.</summary>
     /// <param name="AOwnerIds">data_flows.owner_id values to match; empty returns nothing.</param>
     /// <param name="AName">Field name, compared case-insensitively against dst_name.</param>
     /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>

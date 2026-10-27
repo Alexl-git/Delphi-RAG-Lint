@@ -12,7 +12,7 @@
 # (sanitised, parameterised, literal, re-assigned-before-sink, constant-only caller, a helper that
 # only forwards its parameter), the cycle terminating with exactly one finding, `path` in --json
 # (source first, sink last), `lint <file> --db` reporting the same sink as lint-all, the stale-
-# index note on an index without facts, and the POSITIVE CONTROL: with every built-in source
+# index note on an index whose data_flows is empty (and its absence on a fresh one), and the POSITIVE CONTROL: with every built-in source
 # disabled through a temp config the taint finding count is 0 (the guard can fail).
 #
 # Usage: pwsh -File tests\autotest\run_taint_rules.ps1 [-Exe <drag-lint.exe>] [-Mode fixture|real]
@@ -57,17 +57,34 @@ try {
   # lint <file> switch (LintLibraryDb). Either way never the machine's real library index.
   $common = @('--db', $db, '--db', $lib, '--json', '--quiet')
 
+  # Stale index: since T1 the extractor FILLS data_flows, so a fresh index is no longer stale.
+  # A real stale case is what every pre-1.26 DB looks like after Migrate -- the table exists
+  # and is EMPTY -- so empty a COPY of the fresh index (python sqlite3). Positive control: the
+  # fresh index itself must NOT print the note (else the note check could never fail).
+  $staleNoteRx = 'taint: this index has no data_flows facts'
+  $stale = Join-Path $tmp 'stale.sqlite'
+  [IO.File]::Copy($db, $stale, $true)
+  $emptyFlows = 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM data_flows"); c.commit(); print(c.execute("SELECT COUNT(*) FROM data_flows").fetchone()[0])'
+  $n = (& python -I -c $emptyFlows $stale 2>&1) -join ' '
+  Check 'stale copy: data_flows emptied' ($n -eq '0') "python said: $n"
+  $err = Join-Path $tmp 'stale.err'
+  $raw = & $exePath lint-all --db $stale --db $lib --json --quiet --config $empty 2>$err
+  $staleNote = (Get-Content $err -Raw) -match $staleNoteRx
+  $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
+  $pre = @(); if ($b -ge 0) { $pre = @($txt.Substring($b) | ConvertFrom-Json | Where-Object { $_.rule -like 'taint-*' }) }
+  Check 'stale index: one note on stderr' $staleNote "expected `"$staleNoteRx`""
+  Check 'stale index: no taint finding' ($pre.Count -eq 0) "got $($pre.Count)"
+  $freshErr = Join-Path $tmp 'fresh.err'
+  & $exePath lint-all @common --config $empty 2>$freshErr | Out-Null
+  $freshNote = (Get-Content $freshErr -Raw) -match $staleNoteRx
+  Check 'fresh index: no stale note (positive control)' (-not $freshNote) 'the note fired on an index the extractor filled'
+
   if ($Mode -eq 'fixture') {
-    # an index whose data_flows is EMPTY (what every pre-1.26 DB looks like after Migrate)
-    $err = Join-Path $tmp 'stale.err'
-    $raw = & $exePath lint-all @common --config $empty 2>$err
-    $staleNote = (Get-Content $err -Raw) -match 'taint: this index has no data_flows facts'
-    $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-    $pre = @(); if ($b -ge 0) { $pre = @($txt.Substring($b) | ConvertFrom-Json | Where-Object { $_.rule -like 'taint-*' }) }
-    Check 'stale index: one note on stderr' $staleNote 'expected "taint: this index has no data_flows facts"'
-    Check 'stale index: no taint finding' ($pre.Count -eq 0) "got $($pre.Count)"
+    # fixture mode measures the HAND rows only: drop what the extractor wrote first
+    $n = (& python -I -c $emptyFlows $db 2>&1) -join ' '
+    Check 'fixture: extractor rows cleared' ($n -eq '0') "python said: $n"
     $n = (& python -I $rowsPy $db $fx taint 2>&1) -join ' '
-    Check 'fixture rows inserted (python sqlite3)' ($n -eq '40') "fixture_rows.py said: $n"
+    Check 'fixture rows inserted (python sqlite3)' ($n -eq '42') "fixture_rows.py said: $n"
     $n = (& python -I $rowsPy $lib $libFx minirtl 2>&1) -join ' '
     Check 'mini-library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
@@ -83,6 +100,7 @@ try {
     @('taint-sql-injection',     'uWeak.pas',    20, 'warning'),  # bare edtName.Text: weak, one severity lower
     @('taint-sql-injection',     'uField.pas',   31, 'error'),    # field written in Load, spliced in Run
     @('taint-sql-injection',     'uField.pas',   36, 'error'),    # descendant TCfg2 reads the ancestor's field
+    @('taint-sql-injection',     'uFieldUp.pas', 25, 'error'),    # mirror: descendant TChild writes it, ancestor TBase reads it
     @('taint-sql-injection',     'uList.pas',    19, 'error'),    # TStringList carrier: L.Add(src); ExecSQL(L.Text)
     @('taint-sql-injection',     'uList.pas',    21, 'error'),    # Q.SQL.Add(src)
     @('taint-sql-injection',     'uLambda.pas',  20, 'error'),    # captured local inside an anonymous method
@@ -109,7 +127,7 @@ try {
   Check 'no  uInput.pas (sources only; reported at the sink)' ((InUnit $f 'uInput.pas').Count -eq 0)
   Check 'exactly one finding in uCycle.pas (the cycle terminates)' ((InUnit $f 'uCycle.pas').Count -eq 1) "got $((InUnit $f 'uCycle.pas').Count)"
   Check 'exactly one finding in uCmd.pas (RunCmdConst passes a literal)' ((InUnit $f 'uCmd.pas').Count -eq 1) "got $((InUnit $f 'uCmd.pas').Count)"
-  Check 'total taint findings = 14' ($f.Count -eq 14) "got $($f.Count)"
+  Check 'total taint findings = 15' ($f.Count -eq 15) "got $($f.Count)"
 
   # ---- path ----
   $noPath = @($f | Where-Object { $null -eq $_.path -or @($_.path).Count -lt 2 })

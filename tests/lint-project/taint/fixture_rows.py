@@ -44,6 +44,8 @@ uWeak|uWeak.TfrmWeak.Go|arg|edtName.Text|ExecSQL|0|GConn|ref|-1|edtName.Text|Tex
 uField|uField.TCfg.Load|field|FSql := ParamStr(2)|FSql|-1||ref|-1|FSql := ParamStr(2)|ParamStr|0|0
 uField|uField.TCfg.Run|arg|GConn.ExecSQL(FSql)|ExecSQL|0|GConn|field|-1||FSql|0|0
 uField|uField.TCfg2.Run2|arg|'select ' + FSql|ExecSQL|0|GConn|field|-1||FSql|0|0
+uFieldUp|uFieldUp.TBase.Exec|arg|GConn.ExecSQL(FCmd)|ExecSQL|0|GConn|field|-1||FCmd|0|0
+uFieldUp|uFieldUp.TChild.Load|write|FCmd := ParamStr(4)|FCmd|-1||ref|-1|FCmd := ParamStr(4)|ParamStr|0|0
 uGlobal|uGlobal.InitPath|global|GPath := ParamStr(3)|GPath|-1||ref|-1|GPath := ParamStr(3)|ParamStr|0|0
 uGlobal|uGlobal.DelPath|arg|DeleteFile(GPath)|DeleteFile|0||global|-1||GPath|0|0
 uGlobal|uGlobal.DelPath|arg|Create(ExtractFileName|Create|0|TFileStream|ref|-1|Create(ExtractFileName|ExtractFileName|0|0
