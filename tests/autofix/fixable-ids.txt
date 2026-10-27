@@ -33,3 +33,4 @@ wrong-size-memory-op
 overflow-before-widening
 uses-movable-to-implementation
 virtual-never-overridden
+needless-exit

@@ -123,6 +123,7 @@ uses
   DRagLint.Fix.Security in '..\lint\fixers\DRagLint.Fix.Security.pas',
   DRagLint.Fix.Shape in '..\lint\fixers\DRagLint.Fix.Shape.pas',
   DRagLint.Fix.Typed in '..\lint\fixers\DRagLint.Fix.Typed.pas',
+  DRagLint.Fix.DeclParity in '..\lint\fixers\DRagLint.Fix.DeclParity.pas',
   DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.Project.OwnRoots in '..\project\DRagLint.Project.OwnRoots.pas',

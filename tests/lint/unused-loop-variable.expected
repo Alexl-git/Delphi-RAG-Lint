@@ -1,0 +1,6 @@
+# Hits: loop variable unused in the body (19, 21).
+# Silent: the body references the variable (25), for-in loop (27).
+unused-loop-variable 19
+unused-loop-variable 21
+!unused-loop-variable 25
+!unused-loop-variable 27

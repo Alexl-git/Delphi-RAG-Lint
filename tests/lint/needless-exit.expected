@@ -1,0 +1,8 @@
+# Hits: trailing Exit; (23, 29) and trailing Exit(Result) (35).
+# Silent: Exit in a branch (41), Exit(42) with a non-Result argument (47), Exit followed by more code (53).
+needless-exit 23
+needless-exit 29
+needless-exit 35
+!needless-exit 41
+!needless-exit 47
+!needless-exit 53

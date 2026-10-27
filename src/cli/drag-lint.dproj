@@ -165,6 +165,7 @@
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Security.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Shape.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Typed.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.DeclParity.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ClassMetrics.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.DocRules.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
