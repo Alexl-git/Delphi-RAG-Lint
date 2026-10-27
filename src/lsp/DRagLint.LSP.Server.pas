@@ -26,6 +26,7 @@ uses
   , DRagLint.Resolver.TypeAt
   , DRagLint.Lint    .Linter
   , DRagLint.LSP     .Completion
+  , DRagLint.LSP     .SyntaxTree  { C15: ParseDelphiUtf8 -- the preprocessed parse }
   , DRagLint.Core    .LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Doc     .Facts     { v(ADP2 T9): TDocFactsBuilder.Build -- hover's Phase-2 facts }
   , DRagLint.Doc     .Regions   { v(ADP2 T9): TDocRegions.FormatPhase2FactLines -- the shared formatter }
@@ -1211,6 +1212,18 @@ const
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
   LSP_ERR_INTERNAL = -32603;
 
+{ C15: the explicit --project and --platform this server process was started with, as a
+  command-line fragment for the --full-rules lint child (leading space per flag; '' when
+  neither was typed -- nothing is invented, so the child resolves its profile exactly as the
+  in-process lint does). Values are quoted; a double quote inside a value is dropped. }
+function StartupProfileFlags: string;
+begin
+  Result:= '';
+  for var I:= 1 to ParamCount - 1 do
+    if SameText(ParamStr(I), '--project') or SameText(ParamStr(I), '--platform') then
+      Result:= Result + ' ' + LowerCase(ParamStr(I)) + ' "' + StringReplace(ParamStr(I + 1), '"', '', [rfReplaceAll]) + '"';
+end;
+
 type
   { S0: the ILspServerContext a feature is handed. A thin forwarder: every
     answer is the server's own method, so a feature cannot drift from what the
@@ -1787,7 +1800,6 @@ end;
 
 function TLSPServer.IdentifierAtPosition(const APath: string; ALine, ACol: Integer): string;
 var
-  Parser: TTSParser;
   Tree  : TTSTree  ;
   Source: TBytes   ;
   Node  : TTSNode  ;
@@ -1803,16 +1815,11 @@ begin
   var FromOverlay: Boolean;
   Source:= TLiveDocuments.ReadBytes(APath, FromOverlay);
   if not FromOverlay then Source:= EnsureUtf8Bytes(Source);
-  Parser:= nil;
-  Tree  := nil;
+  // C15: the C9 preprocessed parse (inactive IFDEF branches blanked, length-preserving, so
+  // Source still slices the identifier text) with a bounded read callback.
+  Tree:= ParseDelphiUtf8(Source, APath);
+  if Tree = nil then Exit;
   try
-    Parser:= TTSParser.Create;
-    Parser.Language:= tree_sitter_delphi13;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
-        - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
-          Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
-
     Node:= FindSmallestNamedAt(Tree.RootNode, ALine, ACol);
     if Node.IsNull then Exit;
     // Prefer an identifier-shaped node. If the smallest enclosing is e.g.
@@ -1851,7 +1858,6 @@ begin
     Result:= Trim(NodeTextLocal(Node, Source));
   finally
     Tree.Free;
-    Parser.Free;
   end; // try
 end; // function
 
@@ -3671,6 +3677,7 @@ begin
     Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json';
     for var DbP in FStorePaths do
       if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
+    Cmd:= Cmd + StartupProfileFlags;  { C15: the in-process lint's profile, not a different one }
     UniqueString(Cmd);
     if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try

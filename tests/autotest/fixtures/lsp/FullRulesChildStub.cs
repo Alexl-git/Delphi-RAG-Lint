@@ -10,6 +10,8 @@ static class FullRulesChildStub {
   static int Main() {
     string marker = Environment.GetEnvironmentVariable("STUB_MARKER");
     if (!String.IsNullOrEmpty(marker)) File.WriteAllText(marker, "ran");
+    string argvFile = Environment.GetEnvironmentVariable("STUB_ARGV_FILE");
+    if (!String.IsNullOrEmpty(argvFile)) File.WriteAllLines(argvFile, Environment.GetCommandLineArgs());  // LSP C15: one argument per line
     string mode = Environment.GetEnvironmentVariable("STUB_MODE");
     if (mode == "sleep") { Thread.Sleep(60000); return 0; }
     if (mode == "badjson") { Console.Out.Write("this is not json"); return 0; }
