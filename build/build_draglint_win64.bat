@@ -123,6 +123,25 @@ if errorlevel 1 (
 )
 echo OK: staged Win64 drag-lint.exe + tree-sitter companions
 
+REM The LSP switch (drag-lint-switch.exe) ships beside the engine and was never built
+REM here: the deployed copy went stale (lacked --params / --vscode --on|--off).
+REM Staged through stage-engine.ps1 like the engine. Guard:
+REM tests\autotest\run_release_ships_switch_guard.ps1.
+pushd "%ROOT%\src\tools\lsp-switch"
+msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal drag-lint-switch.dproj
+if errorlevel 1 (
+  popd
+  echo ERROR: drag-lint-switch.dproj build failed
+  exit /b 1
+)
+popd
+pwsh -NoProfile -File "%ROOT%\build\stage-engine.ps1" -FreshExe "%ROOT%\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe" -Target "%ROOT%\third_party\dll-win64\drag-lint-switch.exe"
+if errorlevel 1 (
+  echo ERROR: failed to stage %ROOT%\third_party\dll-win64\drag-lint-switch.exe
+  exit /b 1
+)
+echo OK: staged Win64 drag-lint-switch.exe
+
 REM The draglint:// protocol handler ships beside the engine: Build-Installer
 REM throws without drag-lint-open.exe, so every engine build also builds it.
 call "%HERE%build_uri_handler.bat"

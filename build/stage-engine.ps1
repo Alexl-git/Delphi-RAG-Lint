@@ -76,6 +76,10 @@ $ErrorActionPreference = 'Stop'
 $Target   = [System.IO.Path]::GetFullPath($Target)
 $FreshExe = [System.IO.Path]::GetFullPath($FreshExe)
 
+# The image name being staged (drag-lint.exe, drag-lint-switch.exe, ...): holders
+# are matched on it, and the engine-only ide-release hold-off runs only for the engine.
+$ImageName = [System.IO.Path]::GetFileName($Target)
+
 function Try-Copy {
   try { Copy-Item -LiteralPath $FreshExe -Destination $Target -Force -ErrorAction Stop; return $true }
   catch { return $false }
@@ -91,7 +95,7 @@ function Get-Holders {
   # ExecutablePath is the authoritative "is this process running THAT file".
   # A name match would also catch the VS Code client, which since extension
   # v1.4 runs its own private copy and is not a holder.
-  @(Get-CimInstance Win32_Process -Filter "Name='drag-lint.exe'" -ErrorAction SilentlyContinue |
+  @(Get-CimInstance Win32_Process -Filter "Name='$ImageName'" -ErrorAction SilentlyContinue |
       Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $Target) })
 }
 
@@ -110,7 +114,7 @@ if ($holders.Count -eq 0) {
 }
 
 # 1 -- stop the RESPAWN before stopping the process, or the kill loses the race.
-if (Test-Path -LiteralPath $FreshExe) {
+if ((Test-Path -LiteralPath $FreshExe) -and ($ImageName -ieq 'drag-lint.exe')) {
   try {
     & $FreshExe ide-release --seconds $HoldSeconds 2>$null | Out-Null
     Write-Host ("  asked the IDE plugin to hold off for {0}s (it respawns on its own afterwards)" -f $HoldSeconds)
