@@ -1,4 +1,4 @@
-# Guard: uses-movable-to-implementation (gap-rules wave, lane G8, project-wide, hint).
+# Guard: uses-movable-to-implementation (gap-rules wave, lane G8, project-wide, hint, OFF by default).
 #
 # Fixture tests\lint-project\uses-movable-to-implementation: uA.pas has an interface uses of
 #   uB (only the implementation calls BProc)  -> FIRES (line 6)
@@ -6,6 +6,8 @@
 #   uD (referenced nowhere)                    -> silent (that is unused-unit-in-uses, not this rule)
 # Fix: removes the entry from the interface uses and adds it to the implementation uses;
 # expected\uA.fixed.pas is hand-written. Second run is a no-op.
+# OFF by default (false positives: reference-to-function signatures leave no ref; the autofix would
+# move a still-needed unit): no config and no --rule -> silent; --rule or the config opts in.
 # Usage: pwsh -File tests/autotest/run_uses_movable_to_implementation.ps1 [-Exe <path>]
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
@@ -18,7 +20,10 @@ $rule = 'uses-movable-to-implementation'
 try {
   $fx = New-G8Scratch $rule $WorkDir
   $db = Join-Path $WorkDir 'fx.sqlite'
+  $cfg = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\config.json"
   Check 'index exits 0' ((Invoke-G8Index $Exe $fx $db) -eq 0)
+  $off = Get-G8Findings $Exe $db $rule -AllRules
+  $viaCfg = Get-G8Findings $Exe $db $rule @('--config', $cfg) -AllRules
   $f = Get-G8Findings $Exe $db $rule
   Show-G8Findings $f
   Check 'positive: uB flagged on uA.pas line 6' (@($f | Where-Object { $_.file_path -match 'uA\.pas$' -and [int]$_.start_line -eq 6 }).Count -eq 1)
@@ -34,6 +39,8 @@ try {
   & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule).Count -eq 0)
+  Check 'OFF by default: no config, no --rule -> silent (control: --rule fired)' (($off.Count -eq 0) -and ($f.Count -eq 1))
+  Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 1)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

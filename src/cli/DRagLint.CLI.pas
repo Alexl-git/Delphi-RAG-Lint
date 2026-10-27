@@ -12525,10 +12525,10 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..8] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..9] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
-    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden');
+    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden', 'uses-movable-to-implementation');
   LINT_GATE_CLASS_METRICS: array[0..9] of string = (
     'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
     'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
@@ -20130,6 +20130,8 @@ begin
       OptIn:= OptIn + ['assert-with-side-effect'];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn:= OptIn + ['virtual-never-overridden'];
+    if Cfg.ShouldKeep('uses-movable-to-implementation', {ADefaultDisabled=}True) then   { G8 }
+      OptIn:= OptIn + ['uses-movable-to-implementation'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -20611,6 +20613,8 @@ begin
       OptIn2:= OptIn2 + ['assert-with-side-effect'];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
+    if LoadLintConfig(AArgs).ShouldKeep('uses-movable-to-implementation', {ADefaultDisabled=}True) then   { G8 }
+      OptIn2:= OptIn2 + ['uses-movable-to-implementation'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge

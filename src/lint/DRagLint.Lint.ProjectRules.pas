@@ -4544,14 +4544,15 @@ begin
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
       for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
-    { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
-      default and walk one table each; virtual-never-overridden is OFF by default and scans every
-      file's symbols, so it is OptedIn-gated like the other opt-in whole-store rules. }
+    { gap-rules wave, lane G8. The two DFM rules are ON by default and walk one table each;
+      virtual-never-overridden (scans every file's symbols) and uses-movable-to-implementation
+      (false positives: a type used only in a `reference to function` signature records no ref, and
+      the autofix would move a still-needed unit) are OFF by default, so OptedIn-gated. }
     if WantRule('dfm-event-handler-missing') then
       for var Hf in CollectDfmEventHandlerMissing(AStore, ALibraryStore) do Findings.Add(Hf);
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
-    if WantRule('uses-movable-to-implementation') then
+    if WantRule('uses-movable-to-implementation') and OptedIn('uses-movable-to-implementation') then
       for var Um in CollectUsesMovableToImplementation(AStore, AOnlyFileId) do Findings.Add(Um);
     if WantRule('virtual-never-overridden') and OptedIn('virtual-never-overridden') then
       for var Vn in CollectVirtualNeverOverridden(AStore, ALibraryStore) do Findings.Add(Vn);
