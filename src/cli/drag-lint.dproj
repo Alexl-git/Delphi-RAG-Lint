@@ -152,6 +152,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.Parse.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.UsesAudit.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Autofix.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Templates.pas"/>
@@ -160,6 +161,7 @@
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Decl.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Store.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Hygiene.pas"/>
+        <DCCReference Include="..\lint\fixers\DRagLint.Fix.ProjectWide.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Security.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Shape.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.Typed.pas"/>

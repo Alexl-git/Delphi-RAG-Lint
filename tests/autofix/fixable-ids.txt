@@ -2,6 +2,7 @@ boolean-comparison-true
 collection-modified-in-loop
 const-casing
 constructor-call-on-instance
+dfm-password-edit-unmasked
 doc-drift
 field-name-prefix
 interface-without-guid
@@ -27,3 +28,5 @@ uppercase-compare-always-false
 xml-external-entities-enabled
 wrong-size-memory-op
 overflow-before-widening
+uses-movable-to-implementation
+virtual-never-overridden
