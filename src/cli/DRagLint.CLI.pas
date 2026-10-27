@@ -34139,6 +34139,8 @@ begin
       ConfigureLspLint(Args, DbList);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
+      if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
+      LSP.StartupPlatform:= Args.CheckPlatform;
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance
