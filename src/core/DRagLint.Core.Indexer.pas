@@ -72,6 +72,9 @@ type
       FPreprocessEnabled: Boolean                          ; { PP-Task-9: run Preprocess before parsing }
       FProfile        : TDefineProfile                     ; { PP-Task-9: active define profile when preprocessing }
       FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
+      FIncludeContext : Boolean                            ; { lane INC: parse an .inc from its host's include site }
+      FIncSearchPaths : TArray<string>                     ; { lane INC: the build's search path for include resolution }
+      FIncContexts    : TDictionary<string, TBytes>        ; { lane INC: lowercase .inc path -> host-context bytes, first host wins }
       FForceReparse   : Boolean                            ; { INBOX 2.3: bypass the incremental skip for this whole run }
       { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). '' = off.
 
@@ -131,6 +134,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
+      // Lane INC: remember each active include site's host-context bytes
+      // (first host wins) and record the host's include list in the store.
+      procedure RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
       /// <param name="AExtension"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->IParser -- Observed: nil.</returns>
       /// <remarks>
@@ -505,6 +511,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+      /// <summary>Lane INC: include-context indexing for a project run; see
+      /// IIndexer.SetIncludeContext.</summary>
+      /// <param name="AEnabled">True for a project-scoped, preprocessed run.</param>
+      /// <param name="ASearchPaths">The build's absolute search path.</param>
+      /// <remarks>Clears the contexts remembered so far.</remarks>
+      procedure SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
       /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
       /// this run analysed that HELD unclassified identifiers, resolves the
       /// owning class's transitive ancestors (GetTransitiveAncestors -- which
@@ -579,6 +591,8 @@ begin
     out). FProfile stays empty (an empty profile = no seeded defines). }
   FPreprocessEnabled := False;
   FPreprocessFellBack:= False;
+  FIncludeContext    := False;
+  FIncContexts       := TDictionary<string, TBytes>.Create;
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
   FWalkFilter:= TWalkFilter.Create;
   FTestFailFileName:= GetEnvironmentVariable('DRAGLINT_INDEX_TEST_FAIL_FILE');
@@ -599,6 +613,7 @@ begin
   FIntern.Free;
   FHeld.Free;
   FIgnoreStack.Free;
+  FIncContexts.Free;
   FStore:= nil;
   inherited;
 end;
@@ -812,6 +827,40 @@ begin
   FPreprocessEnabled := AEnabled;
   FProfile           := AProfile;
   FPreprocessFellBack:= False;
+end;
+
+procedure TIndexer.SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
+begin
+  FIncludeContext:= AEnabled;
+  FIncSearchPaths:= ASearchPaths;
+  FIncContexts.Clear;
+end;
+
+procedure TIndexer.RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
+var
+  Paths: TList<string>;
+  Seen : TList<string>;
+  Site : TPPIncludeSite;
+begin
+  Paths:= TList<string>.Create;
+  Seen := TList<string>.Create;
+  try
+    for Site in ASites do
+    begin
+      var Key: string:= LowerCase(TPath.GetFullPath(Site.Path));
+      if not FIncContexts.ContainsKey(Key) then FIncContexts.Add(Key, Site.Resolved);
+      // Case-insensitive: one file spelled JEDI.inc and JEDI.INC is one include.
+      if not Seen.Contains(Key) then
+      begin
+        Seen.Add(Key);
+        Paths.Add(Site.Path);
+      end;
+    end;
+    FStore.SetFileIncludes(AHostPath, Paths.ToArray);
+  finally
+    Seen.Free;
+    Paths.Free;
+  end;
 end;
 
 procedure TIndexer.LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
@@ -1223,8 +1272,16 @@ begin
     "unknown". Both halves fail toward re-parsing. }
   var MayResume: Boolean:= (FResumeFingerprint <> '') and
                            SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
+  { Lane INC: an .inc whose host was parsed THIS run carries that host's
+    context (the bytes the preprocessor produced under the host's live defines
+    at the directive). Its context can change while its own bytes do not, so it
+    is always re-parsed -- and it is only here because its host was. }
+  var IncCtx: TBytes:= nil;
+  var HasIncCtx: Boolean:= FIncludeContext and FPreprocessEnabled
+    and SameText(ExtractFileExt(AFilePath), '.inc')
+    and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
   // N-06: ...unless an include it took a uses clause from changed since its parse.
-  if ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
+  if (not HasIncCtx) and ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
     and not FStore.IncludeOriginsChanged(AFilePath) then
   begin
     Inc(FSkippedUpToDate);
@@ -1253,7 +1310,16 @@ begin
   // symbol/ref span the parser emits still maps 1:1 back to the original file
   // with NO source map. A per-file exception must NOT hard-fail the whole run:
   // log once, then index the RAW UTF-8 for that file (pre-Task-9 behaviour).
-  if FPreprocessEnabled and not IsBinaryDfm then
+  if HasIncCtx then
+  begin
+    { Lane INC: the host's view of this include. Same length as the raw .inc
+      (offset identity), so every span is an .inc position; transcoded like the
+      raw bytes are when the .inc is not UTF-8. No sites: an .inc is never a
+      host, and its nested includes were reported by the host's own run. }
+    ParseBytes:= EnsureUtf8Bytes(IncCtx);
+    IncSites  := nil;
+  end
+  else if FPreprocessEnabled and not IsBinaryDfm then
   begin
     try
       // v(2026-08-16, INBOX-parse-error-shellshock-units): 'defines-only', NOT
@@ -1273,6 +1339,7 @@ begin
       PpOpts.Profile    := FProfile;
       PpOpts.IncludeMode:= 'defines-only';
       PpOpts.BaseDir    := TPath.GetDirectoryName(AFilePath);
+      PpOpts.SearchPaths:= FIncSearchPaths; // lane INC: empty unless a project run set it
       // N-06: the 3-arg overload also hands back each active include's child
       // output, so a uses clause inside it can be extracted below. Same bytes.
       ParseBytes:= Preprocess(Utf8, PpOpts, IncSites);
@@ -1287,6 +1354,8 @@ begin
   end
   else
     ParseBytes:= Utf8;
+  if FIncludeContext and MatchText(ExtractFileExt(AFilePath), ['.pas', '.dpr', '.dpk']) then
+    RememberIncludeSites(AFilePath, IncSites);
   Inc(GProfPre, ProfNow - TPre);
   var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);

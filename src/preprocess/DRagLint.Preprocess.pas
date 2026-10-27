@@ -240,14 +240,17 @@ end;
 // its immediate subdirs -- stopping when the filesystem root is reached. Returns
 // the resolved absolute path if it exists, '' otherwise (caller blanks the
 // directive; offsets stay 1:1). An empty ABaseDir or an unresolvable name yields
-// ''. A rooted AName is honored as-is.
-function ResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean): string;
+// ''. A rooted AName is honored as-is. Lane INC: ASearchPaths (the build's
+// search path) are tried after ABaseDir and before the widened search.
+function ResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean;
+  const ASearchPaths: TArray<string>): string;
 var
   P    : string ;
   Dir  : string ;
   Sub  : string ;
   Lvl  : Integer;
   Parent: string;
+  SP   : string ;
 begin
   Result:= '';
   if (AName = '') or (ABaseDir = '') then Exit;
@@ -260,31 +263,38 @@ begin
     Exit;
   end;
 
-  // Pass 1: ABaseDir itself (the strict, pre-#2 behavior).
-  Result:= TryResolveIn(AName, ABaseDir);
-  if Result <> '' then Exit;
-  if not ANearSearch then Exit;
+  // Pass 1: ABaseDir itself (the strict, pre-#2 behavior); pass 1b (lane INC):
+  // then the build's search path, in order.
+  for SP in [ABaseDir] + ASearchPaths do
+  begin
+    if SP = '' then Continue;
+    Result:= TryResolveIn(AName, SP);
+    if Result <> '' then Exit;
+  end;
 
   // Pass 2: nearest-first widened search. Level 0 = ABaseDir's immediate subdirs
   // (ABaseDir itself was already tried above). Levels 1..SEARCH_LEVELS = the
   // parent dir itself + its immediate subdirs. Stop when GetDirectoryName no
-  // longer changes (filesystem root).
+  // longer changes (filesystem root). Skipped entirely when not ANearSearch.
   Dir:= TPath.GetFullPath(ABaseDir);
-  for Lvl:= 0 to SEARCH_LEVELS do
+  if ANearSearch then
   begin
-    if Lvl > 0 then
+    for Lvl:= 0 to SEARCH_LEVELS do
     begin
-      Result:= TryResolveIn(AName, Dir);
-      if Result <> '' then Exit;
+      if Lvl > 0 then
+      begin
+        Result:= TryResolveIn(AName, Dir);
+        if Result <> '' then Exit;
+      end;
+      for Sub in SubdirsOf(Dir) do
+      begin
+        Result:= TryResolveIn(AName, Sub);
+        if Result <> '' then Exit;
+      end;
+      Parent:= TPath.GetDirectoryName(Dir);
+      if (Parent = '') or (Parent = Dir) then Break;
+      Dir:= Parent;
     end;
-    for Sub in SubdirsOf(Dir) do
-    begin
-      Result:= TryResolveIn(AName, Sub);
-      if Result <> '' then Exit;
-    end;
-    Parent:= TPath.GetDirectoryName(Dir);
-    if (Parent = '') or (Parent = Dir) then Break;
-    Dir:= Parent;
   end;
 end;
 
@@ -302,6 +312,7 @@ procedure PreprocessInto(
   ANumeric: TDictionary<string, Integer>;
   const AIncludeMode, ABaseDir: string;
   ANearSearch: Boolean;
+  const ASearchPaths: TArray<string>;
   ADepth: Integer;
   ASites: TList<TPPIncludeSite>;
   var AOut: TBytes;
@@ -375,7 +386,7 @@ var
     SiteIdx  : Integer;
     K        : Integer;
   begin
-    Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch);
+    Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch, ASearchPaths);
     if Resolved = '' then Exit; // unresolved -> nothing to apply (blank only)
     SubBytes:= TFile.ReadAllBytes(Resolved);
     SetLength(SubOut, Length(SubBytes)); // throwaway (child text is discarded)
@@ -401,7 +412,7 @@ var
     // threaded through so a nested {$I} resolves nearest-first from there too.
     PreprocessInto(
       SubBytes, ADefines, ANumeric, AIncludeMode,
-      TPath.GetDirectoryName(Resolved), ANearSearch, ADepth + 1, ASites, SubOut, SubPos);
+      TPath.GetDirectoryName(Resolved), ANearSearch, ASearchPaths, ADepth + 1, ASites, SubOut, SubPos);
     if SiteIdx >= 0 then
     begin
       Site:= ASites[SiteIdx];
@@ -568,7 +579,7 @@ begin
       is passed through as the very same array. }
     PreprocessInto(
       NeutralizeMultilineStrings(AUtf8), Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
-      AOptions.NearSearch, 0, ASites, Result, OutPos);
+      AOptions.NearSearch, AOptions.SearchPaths, 0, ASites, Result, OutPos);
   finally
     Numeric.Free;
     Defines.Free;

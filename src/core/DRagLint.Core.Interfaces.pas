@@ -230,10 +230,21 @@ type
     /// <param name="APath">The host file, as for FileIsUpToDate.</param>
     /// <returns>False for a host with no include rows, an unindexed path, or a
     /// DB without the origin columns.</returns>
-    /// <remarks>Only includes that ALREADY contributed a uses row are watched: an
-    /// include that gains its first uses clause is seen when the host itself
-    /// changes or the run is forced. Read-only.</remarks>
-    function IncludeOriginsChanged(const APath: string): Boolean;    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
+    /// <remarks>Lane INC: also watches every include recorded for APath by
+    /// SetFileIncludes (consts, code, defines -- not only uses-bearing ones), so
+    /// in a project DB editing or deleting any include re-parses each includer.
+    /// Read-only.</remarks>
+    function IncludeOriginsChanged(const APath: string): Boolean;
+    /// <summary>Lane INC: records the include files AHostPath took in its last
+    /// parse (every active include, nested ones too), replacing any earlier list.
+    /// IncludeOriginsChanged reads it back.</summary>
+    /// <param name="AHostPath">The host file, as for FileIsUpToDate.</param>
+    /// <param name="AIncludes">Absolute include paths; empty clears the record.</param>
+    /// <remarks>Stored in schema_meta under the key 'file_includes:' plus the
+    /// lowercased stored host path (one row per host, values separated by '|'),
+    /// so no schema change is needed. A row for a host that later leaves the DB
+    /// is inert: it is only read for that host's own path.</remarks>
+    procedure SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
     // schema_meta key. Used to carry the INDEXER FINGERPRINT -- see
     // TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
     // byte-identical file. '' when the key (or the table) is absent.
@@ -2869,6 +2880,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+    /// <summary>Lane INC: turns on include-context indexing for a PROJECT
+    /// run. A host unit's active include sites (nested ones too) are
+    /// remembered; when the walk then reaches that .inc it is parsed from the
+    /// bytes the preprocessor produced UNDER THE HOST'S live defines at the
+    /// directive, not standalone, and it is always re-parsed (its context can
+    /// change while its own bytes do not). Each host also records the includes
+    /// it took (ISymbolStore.SetFileIncludes), so editing or deleting one
+    /// re-parses every includer.</summary>
+    /// <param name="AEnabled">True for a project-scoped run with preprocessing
+    /// on. False (the default) keeps the standalone .inc parse.</param>
+    /// <param name="ASearchPaths">The build's absolute search path; an include
+    /// name is tried there after the includer's own folder.</param>
+    /// <remarks>Call before the walk. The walk must reach a host before its
+    /// includes (ExpandProjectScope orders .inc files last); an .inc reached
+    /// first is parsed standalone. When several hosts include one .inc, the
+    /// first host parsed this run supplies its context.</remarks>
+    procedure SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
     /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
     /// this run analysed that HELD unclassified identifiers, resolves the
     /// owning class's transitive ancestors (GetTransitiveAncestors -- which

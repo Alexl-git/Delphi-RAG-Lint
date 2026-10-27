@@ -3037,6 +3037,7 @@ begin
   try
     for F in AClosureFiles do
     begin
+      if SameText(ExtractFileExt(F), '.inc') then Continue; // lane INC: added last, below
       AddOnce(F);
       if SameText(ExtractFileExt(F), '.pas') then
       begin
@@ -3060,6 +3061,12 @@ begin
       end
       else if TFile.Exists(ProjAbs) then AddOnce(ProjAbs); // a bare .dpr/.dpk
     end;
+
+    { Lane INC: include files LAST, after every host (the program file too), so
+      the indexer has seen each includer's include site -- and parses the .inc
+      under that host's defines -- before it reaches the .inc itself. }
+    for F in AClosureFiles do
+      if SameText(ExtractFileExt(F), '.inc') then AddOnce(F);
 
     Result:= Scope.ToArray;
   finally
@@ -3894,6 +3901,7 @@ begin
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
               for W in CR.Warnings do Writeln('  ', W);
+              Indexer.SetIncludeContext(APreprocess, CR.SearchPaths); // lane INC: as in DoIndex
               { Same scope expansion as `index --project` (sibling .dfm + the
                 project file). Before this, closure sections indexed .pas/.inc
                 only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
@@ -5814,6 +5822,9 @@ begin
           it were not compiled, and vice versa. }
         Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        { Lane INC: each .inc is parsed in its includer's define context, with
+          include names resolved on the same search path the closure used. }
+        Indexer.SetIncludeContext(not AArgs.NoPreprocess, CR.SearchPaths);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
         { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
