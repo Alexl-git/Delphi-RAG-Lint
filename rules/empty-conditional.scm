@@ -4,3 +4,10 @@
 ((if (kThen) @warn .))
 ; Empty else:  the 'ifElse' node ends right after 'else' (kElse is its last child).
 ((ifElse (kElse) @warn .))
+; FixInsight W505 shapes (G9): 'if c then else s' -- the then branch is absent, so
+; kThen is directly followed by kElse.
+((ifElse (kThen) @warn . (kElse)))
+; 'if c then begin end' / 'if c then begin end else s' -- the then branch is an
+; empty begin..end block (nothing between kBegin and kEnd).
+((if (kThen) @warn . (block (kBegin) . (kEnd))))
+((ifElse (kThen) @warn . (block (kBegin) . (kEnd))))
