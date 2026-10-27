@@ -18,7 +18,7 @@ unit DRagLint.Diagnostics.ExprChecks;
     misleading-indentation  : if / while / for / foreach / with whose body is ONE simple
                               statement, followed by a statement on its own line indented
                               deeper than the construct: it reads as guarded but is not.
-                              Lines indented with tabs are skipped (columns not comparable). }
+                              Indentation is compared tabs-vs-tabs or spaces-vs-spaces; MIXED indentation is skipped. }
 
 interface
 
@@ -63,6 +63,7 @@ const
   SIMPLE_BODY_BLOCKERS = 'block;if;ifElse;while;for;foreach;with;repeat;case;try;';
   BYTE_LF              = 10;
   BYTE_SPACE           = 32;
+  BYTE_TAB             = 9;
   FOLLOW_STATEMENTS    = 'assignment;statement;if;ifElse;while;for;foreach;repeat;case;try;with;raise;block;';
 
 function NodeText(const N: TTSNode; const ASrc: TBytes): string;
@@ -196,26 +197,77 @@ begin
   Result:= LowerCase(Result);
 end;
 
-{ Number of leading blanks of the line holding AByte, or -1 when AByte is not the first
-  non-blank on its line or the leading run contains a tab. }
-function LeadingBlanks(const ASrc: TBytes; AByte: Integer): Integer;
+{ Indentation of the line holding AByte: the blank count, with AKind = space or tab. -1 when AByte is
+  not the first non-blank on its line, or the run MIXES tabs and spaces. }
+function LeadingIndent(const ASrc: TBytes; AByte: Integer; out AKind: Char): Integer;
 var
   LineStart, P: Integer;
 begin
   LineStart:= AByte;
   while (LineStart > 0) and (ASrc[LineStart - 1] <> BYTE_LF) do Dec(LineStart);
   Result:= 0;
+  AKind:= ' ';
   P:= LineStart;
   while (P < AByte) and (Result >= 0) do
   begin
-    if ASrc[P] <> BYTE_SPACE then Result:= -1
-    else Inc(Result);
+    if (ASrc[P] <> BYTE_SPACE) and (ASrc[P] <> BYTE_TAB) then Result:= -1
+    else
+    begin
+      if Result = 0 then AKind:= Chr(ASrc[P]);
+      if Chr(ASrc[P]) = AKind then Inc(Result) else Result:= -1;
+    end;
     Inc(P);
   end;
 end;
 
-class function TExprChecker.Check(const AFile: string; const ACfg: TLintConfig;
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;
+{ True when the indents are comparable (same kind, or one is empty) and AInner is deeper than AOuter. }
+function IndentDeeper(AOuter: Integer; AOuterKind: Char; AInner: Integer; AInnerKind: Char): Boolean;
+begin
+  Result:= (AOuter >= 0) and (AInner > AOuter)
+    and ((AOuterKind = AInnerKind) or (AOuter = 0));
+end;
+
+{ Operands of a constant bit-mask comparison: ((X and|or Mask) =|<> V) with both literals. }
+function BitMaskPieces(const N: TTSNode; const ASrc: TBytes; out AV, AM: Int64; out AIsAnd: Boolean): Boolean;
+var
+  Op, L, R, Inner, Inside, A, B: TTSNode;
+  OpTxt: string;
+begin
+  Result:= False;
+  AV:= 0;
+  AM:= 0;
+  AIsAnd:= False;
+  Op:= N.ChildByField('operator');
+  OpTxt:= Trim(NodeText(Op, ASrc));
+  L:= Unparen(N.ChildByField('lhs'));
+  R:= Unparen(N.ChildByField('rhs'));
+  if (not Op.IsNull) and ((OpTxt = '=') or (OpTxt = '<>')) and (not L.IsNull) and (not R.IsNull) then
+  begin
+    if L.NodeType = 'literalNumber' then
+    begin
+      Inner:= R;
+      Inside:= L;
+    end
+    else
+    begin
+      Inner:= L;
+      Inside:= R;
+    end;
+    Op:= Inner.ChildByField('operator');
+    if (Inner.NodeType = 'exprBinary') and LiteralValue(Inside, ASrc, AV) and (not Op.IsNull) then
+    begin
+      OpTxt:= LowerCase(Trim(NodeText(Op, ASrc)));
+      A:= Unparen(Inner.ChildByField('lhs'));
+      B:= Unparen(Inner.ChildByField('rhs'));
+      AIsAnd:= OpTxt = 'and';
+      Result:= ((OpTxt = 'and') or (OpTxt = 'or'))
+        and (LiteralValue(A, ASrc, AM) or LiteralValue(B, ASrc, AM));
+    end;
+  end;
+end;
+
+class function TExprChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@ae41 -- REVIEWED 2026-10-27: gate-fixed checker signature shared by all LINT_GATE_* checkers; these rules need no config
+  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: gate-fixed checker signature; pure-AST rules need no symbol store
 var
   PF      : TParsedFile;
   Src     : TBytes;
@@ -242,39 +294,12 @@ var
   { ---- bad-bit-mask ---- }
   procedure CheckBitMask(const N: TTSNode);
   var
-    Op, L, R, Inner, A, B: TTSNode;
-    OpTxt: string;
     V, M: Int64;
-    Inside: TTSNode;
-    Bad: Boolean;
+    IsAnd, Bad: Boolean;
   begin
-    Op:= N.ChildByField('operator');
-    if Op.IsNull then Exit;
-    OpTxt:= Trim(NodeText(Op, Src));
-    if (OpTxt <> '=') and (OpTxt <> '<>') then Exit;
-    L:= Unparen(N.ChildByField('lhs'));
-    R:= Unparen(N.ChildByField('rhs'));
-    if L.IsNull or R.IsNull then Exit;
-    if L.NodeType = 'literalNumber' then
-    begin
-      Inner:= R;
-      Inside:= L;
-    end
-    else
-    begin
-      Inner:= L;
-      Inside:= R;
-    end;
-    if (Inner.NodeType <> 'exprBinary') or (not LiteralValue(Inside, Src, V)) then Exit;
-    Op:= Inner.ChildByField('operator');
-    if Op.IsNull then Exit;
-    OpTxt:= LowerCase(Trim(NodeText(Op, Src)));
-    A:= Unparen(Inner.ChildByField('lhs'));
-    B:= Unparen(Inner.ChildByField('rhs'));
-    if (not LiteralValue(A, Src, M)) and (not LiteralValue(B, Src, M)) then Exit;
-    Bad:= False;
-    if OpTxt = 'and' then Bad:= (V and (not M)) <> 0
-    else if OpTxt = 'or' then Bad:= (M and (not V)) <> 0;
+    if not BitMaskPieces(N, Src, V, M, IsAnd) then Exit;
+    if IsAnd then Bad:= (V and (not M)) <> 0
+    else Bad:= (M and (not V)) <> 0;
     if Bad then
       EmitAt(N, 'bad-bit-mask',
         'Bit-mask comparison is constant: the compared value has bits the mask can never produce',
@@ -442,6 +467,7 @@ var
   procedure CheckIndent(const AParent: TTSNode);
   var
     I, J, Indent, NextIndent: Integer;
+    IKind, NKind: Char;
     Stmt, Body, Nxt: TTSNode;
     T: string;
   begin
@@ -461,10 +487,10 @@ var
         end;
       if Nxt.IsNull or (Pos(Nxt.NodeType + ';', FOLLOW_STATEMENTS) = 0) then Continue;
       if Nxt.StartPoint.Row <= Stmt.EndPoint.Row then Continue;
-      Indent    := LeadingBlanks(Src, Integer(Stmt.StartByte));
-      NextIndent:= LeadingBlanks(Src, Integer(Nxt.StartByte));
+      Indent    := LeadingIndent(PF.RawSrc, Integer(Stmt.StartByte), IKind);
+      NextIndent:= LeadingIndent(PF.RawSrc, Integer(Nxt.StartByte), NKind);
       if (Indent < 0) or (NextIndent < 0) then Continue;
-      if NextIndent > Indent then
+      if IndentDeeper(Indent, IKind, NextIndent, NKind) then
         EmitAt(Nxt, 'misleading-indentation',
           Format('Statement is indented as if controlled by the %s at line %d, but it is not',
             [T, Integer(Stmt.StartPoint.Row) + 1]), 'warning');
