@@ -391,6 +391,8 @@ type
       FLongCallRunner: TLongCallRunner;
       FLastCancelled : Boolean        ;
       FInfoTimeoutMs : Cardinal       ;
+      FFieldRefsNote : string         ;
+      FFieldRefsAsked: Boolean        ;
       /// <param name="AArgs"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCaptureTimed(AArgs,
@@ -896,7 +898,7 @@ type
       /// AUnitPas is not in ADb's files (a second read, made only when no ref matched:
       /// an unindexed unit is unknown, never "no uses"). True with [] and no engine
       /// call when AClassName is not a plain identifier.</returns>
-      /// <remarks>Needs engine 1.35.1+: it binds implicit-Self uses of an inherited
+      /// <remarks>Needs engine 1.35.1+ (FieldRefsGateNote; an older or unreadable version answers False with that note in AError, once per adapter): it binds implicit-Self uses of an inherited
       /// field to the field, cross-unit (read, write, call / member receiver, argument,
       /// Self., with) -- an older engine leaves them unresolved and this answers no uses.
       /// A LIBRARY ancestor's member (TForm.Tag) is unresolved without the library store
@@ -2537,7 +2539,21 @@ begin
   if not IsPlainIdentifier(AClassName) then
     Exit(True);
   LWhat:= 'code-ref listing of ' + AClassName;
-  if not SqlRowsOfDb(ADb, Format(CODE_REFS_SQL, [SqlQuoted(AUnitPas), AClassName]), LWhat, True, LRows, AError) then
+  // ndgate: an engine older than 1.35.1 binds no inherited-field uses; say so, never answer [].
+  if not FFieldRefsAsked then
+  begin
+    var LVersion, LText: string;
+    LText:= '';
+    if VersionOutput(nil, LVersion) = 0 then
+      LText:= EngineVersionText(LVersion);
+    FFieldRefsNote:= FieldRefsGateNote(LText);
+    FFieldRefsAsked:= True;
+  end;
+  if FFieldRefsNote <> '' then
+  begin
+    AError:= FFieldRefsNote;
+    Exit(False);
+  end;  if not SqlRowsOfDb(ADb, Format(CODE_REFS_SQL, [SqlQuoted(AUnitPas), AClassName]), LWhat, True, LRows, AError) then
     Exit(False);
   ARefs:= CodeRefsOfRows(LRows);
   if Length(ARefs) > 0 then
