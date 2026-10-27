@@ -15016,7 +15016,7 @@ begin
     // only an APPLIED outcome may be one, so pick 1 goes through FindQualifyTarget and is refused as stale, the book untouched.
     Book:= Make('#convert Vcl.StdCtrls.TLabel -> TSolo');
     Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]);
-    Check('qualify.apply.retarget.requires.applied', (Length(Outs) = 2) and (not Outs[0].Applied) and (Outs[0].NodeIndex = 0)
+    Check('qualify.apply.retarget.requires.applied', (Length(Outs) = 2) and (not Outs[0].Applied) and (Outs[0].NodeIndex = 0)  // dl:ok boolean-expression-complexity@41d8 -- REVIEWED 2026-10-27 one Check asserts a single expected outcome shape; splitting the condition would obscure it
       and (not Outs[1].Applied) and (Outs[1].NodeIndex = -1) and (Pos('no longer reads', Outs[1].Reason) > 0)
       and (Book.Nodes[0].ToType = 'TSolo') and (not Book.Nodes[0].Dirty), Outs[1].Reason + ' / ' + Book.Nodes[0].ToType);
     // Two different headers: the lines are listed, plural.
