@@ -56,7 +56,8 @@ before working on an item.**
     lost-first-copy race DRV fixed in convert-encoding -- port the copy retry.
   * **DRV-2** (S) drive-convert-tab N1/N7 precondition "progress window never appeared" (2 of 3 runs):
     the engine call is too fast to catch; make the fixture slower or hold the window deterministically.
-  * **DRV-3** (M) FAIL on main before the wave: owning-open 3/6 (`owning.row.found` picks the Work-list
+  * **DONE (conv/drv3 4fdcf11d, 2026-10-27): DRV-3** driver defects, both 3x green. Side effect found: open
+    status lost its line/rule counts since cd8cdc07 -> owner: counts must show (lane opencounts). Was: FAIL on main before the wave: owning-open 3/6 (`owning.row.found` picks the Work-list
     filter list), glyph-link 22/1 (`glyph.open.good` no "Loaded" in 30 s).
   * **DRV-4** (S) gui.lock needs a heartbeat: a 30-min takeover broke a 38-min run (two editors).
   * **DRV-5** (S) glyph-link, inherited-offer, qualify-fix, work-list do not ask the editor's busy
@@ -68,6 +69,8 @@ before working on an item.**
     "Book-2" with every rule unrelated to the BDE conversion. First step: classify the 43 book-wide
     `#migrate` lines + the blocks (BDE vs not); BDE book keeps its book-wide lines ABOVE the first
     `#convert` header (rule A; check the engine's scoping first). No trailer special case needed.
+  * **CHAIN-1 spec + plan DONE (8917176d, 6 tasks; owner Q1-Q8 open) / D2 plan DONE (2c53947e; owner Q1-Q7 open)** --
+    docs\superpowers\specs\2026-10-27-converter-chain1-design.md, plans\2026-10-27-converter-chain1.md, plans\2026-10-27-converter-d2-book-split.md.
   * **CHAIN-1 (new, M, needs ENGINE answer first)**: rules A->B and B->C in one book. Owner: warn and
     offer an A->C rule, or offer to move them to separate books run one after the other. FIRST ask
     ENGINE whether convert-apply applies a book in ONE pass (each node matched against the original
