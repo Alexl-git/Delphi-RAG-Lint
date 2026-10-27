@@ -3840,7 +3840,7 @@ begin
   Check('blockfile.trailing.bde.exists', Trailing = -1, 'the split BDE book ends in its last #convert: ' + IntToStr(Trailing));
   Check('blockfile.trailing.bde.is.last', (Blocks[High(Blocks)].Kind = rbkConvert) and (LastConvert = High(Blocks)), 'the last block is the TBatchMove rule');
   Check(
-    'blockfile.trailing.bde.migrate.count', CountDirectiveIn(Blocks, 0, '#migrate') = 28, 'want 28 #migrate in the preamble, got ' + IntToStr(CountDirectiveIn(Blocks, 0, '#migrate'))
+    'blockfile.trailing.bde.migrate.count', CountDirectiveIn(Blocks, 0, '#migrate') = 27, 'want 27 #migrate in the preamble, got ' + IntToStr(CountDirectiveIn(Blocks, 0, '#migrate'))
   );
   Check(
     'blockfile.trailing.bde.tbatchmove.clean', CountDirectiveIn(Blocks, LastConvert, '#migrate') = 0,
@@ -4102,20 +4102,20 @@ begin
   Check('select.bde.no.trailer', (B[0].Kind = rbkPreamble) and (B[7].Kind = rbkConvert), 'D2 split: preamble + 7 rules, no trailing block');
 
   { Nothing selected: the preamble only (221 lines, incl. the 28 file-scope #migrate). }
-  Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 221, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
+  Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 222, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
   Check(
     'select.bde.none.content',
-    (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#convert') = 0) and (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#migrate') = 28),
-    'file-scope only: no rules, all 28 #migrate');
+    (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#convert') = 0) and (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#migrate') = 27),
+    'file-scope only: no rules, all 27 #migrate');
 
   { TDatabase is the block that carries '#apply BdeTransIsolation' (line 184) --
     NOT TQuery, as the parent plan wrongly said. 221 + 41 = 262. }
-  Check('select.bde.tdatabase.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 262, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
+  Check('select.bde.tdatabase.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 263, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
   Check('select.bde.tdatabase.carries.apply', Pos('#apply BdeTransIsolation', JoinBlocks(SelectForCompose(B, [2]))) > 0, 'the selected rule keeps its #apply');
   Check(
     'select.bde.tdatabase.carries.mapping', Pos('#mapping BdeTransIsolation from', JoinBlocks(SelectForCompose(B, [2]))) > 0,
     'and the preamble brought the declaration that #apply names');
-  Check('select.bde.tbatchmove.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [7])))) = 250, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [7]))))));
+  Check('select.bde.tbatchmove.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [7])))) = 251, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [7]))))));
 
   SetLength(All, 7);
   for i:= 0 to 6 do
@@ -4327,7 +4327,7 @@ begin
 
     t:= WS.ComposeSelected(Rep);
     { 221 preamble + 20 TSession + 41 TDatabase. }
-    Check('ws.sel.bde.lines', Length(SplitRawLines(t)) = 282, IntToStr(Length(SplitRawLines(t))));
+    Check('ws.sel.bde.lines', Length(SplitRawLines(t)) = 283, IntToStr(Length(SplitRawLines(t))));
     Check('ws.sel.bde.integrity', CheckApplyIntegrity(t).OK, 'the composed job must be self-consistent: ' + CheckApplyIntegrity(t).Summary);
     Check('ws.sel.bde.smaller', Length(SplitRawLines(t)) < 650, 'and it must actually be a SUBSET of the book');
   finally

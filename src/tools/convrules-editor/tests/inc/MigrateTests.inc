@@ -106,8 +106,9 @@ begin
       end;
     // MEASURED 2026-10-26 on the old 43-line tail: 15 member form, 25 with units, 3 scoped / dotted.
     // D2 split 2026-10-27 moved the 15 Data.DB lines to DataDB-to-FireDAC.rules; MEASURED after the
-    // split: 28 lines, 11 member form, 14 with units, 3 scoped / dotted. Pinned so a corpus edit is noticed.
-    Check('migrate.bde.tail', (LAll = 28) and (LMember = 11) and (LRefUnits = 14) and (B.SaveToString = LText),
+    // split: 28 lines, 11 member form, 14 with units, 3 scoped / dotted. Q4b (2026-10-27) re-homed
+    // UpdateRecordTypes into the TTable/TQuery/TStoredProc blocks: 27 + 3 = 30 lines, 13 member form. Pinned so a corpus edit is noticed.
+    Check('migrate.bde.tail', (LAll = 30) and (LMember = 13) and (LRefUnits = 14) and (B.SaveToString = LText),
       Format('all=%d member=%d units=%d roundtrip=%s', [LAll, LMember, LRefUnits, BoolToStr(B.SaveToString = LText, True)]));
   finally
     B.Free;
