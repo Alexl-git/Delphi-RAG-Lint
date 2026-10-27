@@ -321,7 +321,7 @@ begin
           QIns.Prepare;
           while not QSrc.Eof do
           begin
-            QIns.ParamByName('fn').AsWideString:= QSrc.FieldByName('FN'            ).AsString;
+            QIns.ParamByName('fn').AsWideString:= QSrc.FieldByName('FN'            ).AsString;  // dl:ok field-by-name-in-loop@866a -- REVIEWED 2026-10-26 (extract-136 review): pre-existing loop shape, the branch only switched the param setter to AsWideString; a one-shot snapshot import of a few hundred rows, not a hot path
             QIns.ParamByName('tn').AsWideString:= QSrc.FieldByName('TN'            ).AsString;
             QIns.ParamByName('dl').AsWideString:= QSrc.FieldByName('DISPLAY_LABEL' ).AsString;
             QIns.ParamByName('df').AsWideString:= QSrc.FieldByName('DISPLAY_FORMAT').AsString;
@@ -382,7 +382,7 @@ begin
             QIns.ParamByName('rs'  ).AsWideString := QSrc.FieldByName('REFRESH_SQL'      ).AsString;
             QIns.ParamByName('ng'  ).AsWideString := QSrc.FieldByName('NAME_GENERATOR'   ).AsString;
             QIns.ParamByName('kf'  ).AsWideString := QSrc.FieldByName('KEY_FIELD'        ).AsString;
-            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
+            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;  // dl:ok duplicate-code@a4b1 -- REVIEWED 2026-10-26 (extract-136 review): one column-copy loop per snapshot table; each reads its own source columns into its own insert, so the shared shape is the table list, not a helper
             QIns.ParamByName('uomf').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');
             QIns.ParamByName('c'  ).AsWideString := QSrc.FieldByName('CONDITIONS' ).AsString;
             QIns.ParamByName('ver').AsInteger:= QSrc.FieldByName('FIB$VERSION').AsInteger;
@@ -423,7 +423,7 @@ begin
           QIns.Prepare;
           while not QSrc.Eof do
           begin
-            QIns.ParamByName('en').AsWideString:= QSrc.FieldByName('ENUMTYPE').AsString;
+            QIns.ParamByName('en').AsWideString:= QSrc.FieldByName('ENUMTYPE').AsString;  // dl:ok field-by-name-in-loop@78ff -- REVIEWED 2026-10-26 (extract-136 review): pre-existing loop shape, the branch only switched the param setter to AsWideString; a one-shot snapshot import of a few hundred rows, not a hot path
             QIns.ParamByName('vc').AsWideString:= QSrc.FieldByName('EVALUE'  ).AsString;
             QIns.ParamByName('vl').AsWideString:= QSrc.FieldByName('ESTRING' ).AsString;
             QIns.ParamByName('sa').AsLargeInt:= SnapshotAt;

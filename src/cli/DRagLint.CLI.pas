@@ -97,7 +97,7 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Core.CliError
-  , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }
+  , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
   , System.SysUtils
   , System.Classes
@@ -5668,7 +5668,7 @@ begin
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);  // dl:ok duplicate-code@08f6 -- REVIEWED 2026-10-26 (extract-136 review): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
 
   { RESOLVER STALENESS -- the sibling question, asked separately because its
     remedy is minutes rather than the ~5 hours a reparse costs.
