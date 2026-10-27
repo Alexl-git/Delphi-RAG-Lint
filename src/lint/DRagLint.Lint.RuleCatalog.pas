@@ -10,7 +10,8 @@ interface
 
 uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.JSON, System.IOUtils, System.Hash;
+  System.JSON, System.IOUtils, System.Hash,
+  DRagLint.Lint.Compliance;
 
 const
   { THE complexity thresholds. ONE definition, read by BOTH the rule catalog
@@ -153,6 +154,7 @@ type
     Source         : string;  // 'builtin' | 'scm'
     DefaultEnabled : Boolean;
     Params         : TArray<TRuleParam>;
+    Compliance     : TComplianceLabels;  // rules\compliance.json row; empty when unlabelled
   end;
 
   /// <summary>Per-category and total rule counts for the catalog summary.</summary>
@@ -176,6 +178,8 @@ type
   /// </remarks>
   TRuleCatalog = class
   public
+    /// <summary>Set by the last <see cref="BuildCatalog"/>: the compliance.json error text, '' when fine.</summary>
+    class var ComplianceError: string;
     /// <summary>The in-code registry of all built-in rules (no .scm).</summary>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: L.ToArray.</returns>
     /// <remarks>
@@ -806,9 +810,11 @@ var
   Sc    : TRuleInfo;
   Res   : TList<TRuleInfo>;
   Id    : string;
+  Labels: TComplianceTable;
 begin
   if ARulesDir <> '' then Dir:= ARulesDir
   else Dir:= TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
+  Labels:= TComplianceTable.Shared(ARulesDir, ComplianceError);
 
   ById:= TDictionary<string, TRuleInfo>.Create;
   Order:= TList<string>.Create;
@@ -823,6 +829,7 @@ begin
       Files:= TDirectory.GetFiles(Dir, '*.json', TSearchOption.soAllDirectories);
       for F in Files do
       begin
+        if SameText(TPath.GetFileName(F), 'compliance.json') then Continue; { label data, not a rule sidecar }
         Raw:= '';
         try Raw:= TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;
         Root:= TJSONObject.ParseJSONValue(Raw);
@@ -866,6 +873,7 @@ begin
       for Id in Order do
       begin
         R:= ById[Id];
+        Labels.TryGet(R.Id, R.Compliance);
         if (ACategory = '') or SameText(R.Category, ACategory) then Res.Add(R);
       end;
       Res.Sort(TComparer<TRuleInfo>.Construct(
