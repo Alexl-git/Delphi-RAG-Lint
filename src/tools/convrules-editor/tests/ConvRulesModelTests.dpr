@@ -1940,6 +1940,25 @@ begin
   Pre:= Preflight(Books, [], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
+  // --- BookOrderNote (D2 Q6): Book-2 listed before the BDE book ---
+  Check('convertrun.order.book2.first', Pos('before', BookOrderNote(['c\convrules\DataDB-to-FireDAC.rules', 'c\convrules\BDE-to-FireDAC.rules'])) > 0,
+    BookOrderNote(['c\convrules\DataDB-to-FireDAC.rules', 'c\convrules\BDE-to-FireDAC.rules']));
+  Check('convertrun.order.bde.first', BookOrderNote(['c\BDE-to-FireDAC.rules', 'c\DataDB-to-FireDAC.rules']) = '');
+  Check('convertrun.order.book2.alone', BookOrderNote(['c\DataDB-to-FireDAC.rules']) = '');
+  Check('convertrun.order.nocase', BookOrderNote(['x\datadb-to-firedac.RULES', 'x\bde-to-firedac.rules', 'x\Other.rules']) <> '');
+  Check('convertrun.order.other.books', BookOrderNote(['x\Other.rules', 'x\BDE-to-FireDAC.rules']) = '');
+  Books:= [Default(TBookEntry), Default(TBookEntry)];
+  Books[0].Path:= 'c\DataDB-to-FireDAC.rules';
+  Books[0].Checked:= True;
+  Books[0].Kind:= bkConvertOnly;
+  Books[1].Path:= 'c\BDE-to-FireDAC.rules';
+  Books[1].Checked:= True;
+  Books[1].Kind:= bkMixed;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
+  Check('convertrun.order.preflight.note', Pre.Ok and (Length(Pre.Notes) = 1) and (Pos('BDE book', Pre.Notes[0]) > 0), string.Join(' | ', Pre.Notes));
+  Books[1].Checked:= False;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
+  Check('convertrun.order.preflight.unchecked.bde', Length(Pre.Notes) = 0, string.Join(' | ', Pre.Notes));
   // --- ParseApplyJson (schema apply/1) ---
   Row:= ParseApplyJson('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":3,' +
     '"converted":["Label1: TLabel -> TStaticText"],"access_sites":[],"creator_sites":[],' +
