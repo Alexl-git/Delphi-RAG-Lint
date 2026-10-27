@@ -22,3 +22,6 @@ unused-local
 uppercase-compare
 uppercase-compare-always-false
 xml-external-entities-enabled
+unused-private-member
+discarded-effect-free-result
+doc-orphan-block

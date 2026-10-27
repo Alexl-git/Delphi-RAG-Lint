@@ -1,11 +1,15 @@
 <#
-  Lane A5 negative controls for the store-backed fixers (DRagLint.Fix.Store):
-  every case below is a finding the fixer must DECLINE, so the file keeps its
-  bytes after `lint --fix --apply --db <scratch>`. Positive cases live in
-  tests\autofix\fixtures\<id>\ (run_fix_fixtures.ps1).
+  Lane A5 store-backed fixers (DRagLint.Fix.Store): the cases the generic
+  harness cannot drive. Cases 1-3 are findings the fixer must DECLINE, so the
+  file keeps its bytes after the --fix --apply run. Case 4 is the positive
+  discarded-effect-free-result case: that rule runs in lint-all only (a bare
+  `lint --file --db` never reports it), so it is driven through lint-all and
+  compared to store-fixes\discarded-effect-free-result\upure.fixed.pas.
+  Other positive cases: tests\autofix\fixtures\<id>\ (run_fix_fixtures.ps1).
     1. unused-private-member, overloaded private method             -> declined
     2. unused-private-member, stale index (second run, no reindex)  -> declined
     3. discarded-effect-free-result as the lone `then` statement    -> declined
+    4. discarded-effect-free-result, a bare call line               -> deleted
   Each case also checks the rule FIRES (positive control), so a silent rule
   cannot pass it. Exit 0 = all pass.
 #>
@@ -32,7 +36,11 @@ function FixOnce($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
   try { & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } finally { Pop-Location }
 }
-function Fires($C, [string]$Rule, [string[]]$Extra) {
+function FixAll($C, [string]$Rule, [string[]]$Extra) {
+  Push-Location $C.Dir
+  try { & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } finally { Pop-Location }
+}
+function Fires($C,[string]$Rule, [string[]]$Extra) {
   $raw = & $exePath lint --file $C.File --db $C.Db --rule $Rule --json @Extra 2>$null | Out-String
   try { return @(@($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }).Count } catch { return -1 }
 }
@@ -71,8 +79,21 @@ $c3 = NewCase 'then' @(
   'procedure Run(X: Integer);', 'begin', '  if X > 0 then', '    Twice(5);', '  Writeln(X);', 'end;', '', 'end.')
 $before = [IO.File]::ReadAllText($c3.File)
 Check 'then: the rule fires (positive control)' ((Fires $c3 'discarded-effect-free-result' @('--config', $cfg)) -ge 1)
-FixOnce $c3 'discarded-effect-free-result' @('--config', $cfg)
+FixAll $c3 'discarded-effect-free-result' @('--config', $cfg)
 Check 'then: file unchanged' ([IO.File]::ReadAllText($c3.File) -eq $before)
 
-Write-Host "store-fix negatives: $pass passed, $fail failed"
+# 4. positive: the bare call line is deleted (lint-all) and matches the hand-written result
+$src4 = Join-Path $PSScriptRoot 'store-fixes\discarded-effect-free-result'
+$c4 = NewCase 'pure' @('unit upure;')
+[IO.File]::Copy((Join-Path $src4 'upure.pas'), $c4.File, $true)
+Push-Location $c4.Dir
+try { & $exePath index $c4.Dir --db $c4.Db *> (Join-Path $c4.Dir '_index2.log') } finally { Pop-Location }
+Check 'pure: the rule fires (positive control)' ((Fires $c4 'discarded-effect-free-result' @('--config', $cfg)) -ge 1)
+FixAll $c4 'discarded-effect-free-result' @('--config', $cfg)
+Check 'pure: lint-all --fix --apply matches upure.fixed.pas' ([IO.File]::ReadAllText($c4.File) -eq [IO.File]::ReadAllText((Join-Path $src4 'upure.fixed.pas')))
+Push-Location $c4.Dir
+try { & $exePath index $c4.Dir --db $c4.Db *> (Join-Path $c4.Dir '_reindex.log') } finally { Pop-Location }
+Check 'pure: the rule no longer fires after a reindex' ((Fires $c4 'discarded-effect-free-result' @('--config', $cfg)) -eq 0)
+
+Write-Host "store fixes: $pass passed, $fail failed"
 exit $(if ($fail -eq 0) { 0 } else { 1 })
