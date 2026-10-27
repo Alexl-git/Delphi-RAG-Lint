@@ -1,6 +1,6 @@
 # WWW + publicity -- weekly checklist (owner: WEBSITE stream)
 
-Every Monday a Windows pop-up (scheduled task `DL-Publicity-Weekly`) points here. Work the
+Every Monday the Outlook reminder (09:00, owner's preferred reminder) points here. Work the
 list top to bottom; write the week's results in the WEBSITE handoff, not in this file. Edit
 this file when a standing item changes.
 
@@ -31,8 +31,10 @@ this file when a standing item changes.
 4. Never publish a help set that documents unreleased behaviour: `publish.ps1` builds from
    the working tree.
 
-Pending now: 1.36.0 + the Clippy wave (239 rules). Held for it: the help set from 40b9db28
-and ENGINE's circular-uses diff for sections 05/07/08.
+Pending now (owner via ENGINE, 2026-10-27): NO new rule/feature articles until the release
+that ships 1.36.0 + the Clippy wave + the 32-rule triage + compliance labels; ENGINE messages
+the facts. Held for it: the help set from 40b9db28, ENGINE's circular-uses diff for sections
+05/07/08, and the FixInsight migration article (research: `docs\lint\fixinsight-parity\`).
 
 ## 3. Discoverability (weekly, 10 minutes)
 
@@ -55,8 +57,10 @@ and ENGINE's circular-uses diff for sections 05/07/08.
 * ENGINE: the 32-candidate rule triage + compliance labels (CWE / CERT / MISRA on every
   matching rule, in rules --json, lint --json and SARIF; labelled findings rank higher),
   Fable plan. Queued after the 1.36 re-parse and the Clippy release.
-* Owner decision: Lazarus / FPC, staged (FPC-enabled grammar + CLI + LSP first, native
-  Lazarus plugin only on measured demand).
+* Lazarus / FPC (owner ruling 2026-10-27): first a grammar fork (`tree-sitter-delphi-fpc`
+  or similar); later maybe a drag-lint.exe FPC switch (Delphi default) that turns off
+  Delphi-only rules and needs an FPC platform library. Nothing further for now: no Lazarus
+  IDE plugin.
 
 ## 6. Site health (weekly)
 
