@@ -1,0 +1,8 @@
+# a network client created in the routine (24, 50) or as a field (83) with no timeout assignment fires; one with a timeout set (36, 62, 84) or not created here (77) must not
+network-client-without-timeout 24
+network-client-without-timeout 50
+network-client-without-timeout 83
+!network-client-without-timeout 36
+!network-client-without-timeout 62
+!network-client-without-timeout 84
+!network-client-without-timeout 76
