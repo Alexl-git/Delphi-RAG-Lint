@@ -1,0 +1,9 @@
+# range/overflow checks off and writeable consts on (10, 16, 17, 18, 19) fire; {$R *.dfm} (3), {$R+} (4, 14) must not
+checks-disabled-directive 10
+checks-disabled-directive 16
+checks-disabled-directive 17
+checks-disabled-directive 18
+checks-disabled-directive 19
+!checks-disabled-directive 3
+!checks-disabled-directive 4
+!checks-disabled-directive 14

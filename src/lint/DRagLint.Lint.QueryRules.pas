@@ -863,6 +863,9 @@ begin
     begin
       if ANameRx = '' then Exit(True);
       Nm:= Cur.ChildByField('name');
+      { a defProc carries its name on the header (declProc), not on itself }
+      if Nm.IsNull and (ANodeType = 'defProc') then
+        Nm:= Cur.ChildByField('header').ChildByField('name');
       if not Nm.IsNull then
         try
           if TRegEx.IsMatch(NodeText(Nm, ASource), ANameRx) then Exit(True);

@@ -1,0 +1,7 @@
+{
+  "id": "fixed-random-seed",
+  "severity": "info",
+  "category": "security",
+  "message": "RandSeed set to a constant -- Random becomes predictable (CWE-336). Fine for tests/simulations; use Randomize (and a CSPRNG for secrets) otherwise.",
+  "warn_capture": "warn"
+}
