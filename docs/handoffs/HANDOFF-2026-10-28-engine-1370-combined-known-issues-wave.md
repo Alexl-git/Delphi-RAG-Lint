@@ -45,3 +45,10 @@ y-class (extractor-hashed) fixes must merge BEFORE EXT-FREEZE or be folded into 
 4. gaps/a7 LAST; INT2 (review list: old handoff UPDATE 13:40 + ledger); fingerprint == freeze check.
 5. Bump 1.37.0-alpha, build, featuregen verify, tell CONVERTER, deploy, swap DBs, stage install, notify owner.
 Owner items: push main; plugin BPL (IDE closed, after clifix); Micronite in article screenshots?; IDE test day.
+
+## UPDATE 17:00 -- read the ledger tail C:\TEMP\claude\lanes\gaps\LEDGER.md (10:55-17:00) first
+* Freeze = gaps/ext + xj-7 + ki-exta (FREEZE-PREP lane) + ext-plat (PlatformBuiltins 8 platforms); one baseline recompute; ORM3 Win64 + libraryResolve ON; libraries first.
+* 1.37.0: PREPARE release from stage3 (bump, build, pack, staged), DO NOT publish; publish only at 98% weekly tokens with 1.38 far; discard if 1.38 ships.
+* 1.38 lanes (branch list in ledger): XERJ 1/3/4/5/6/8, ki-*, DEC-13/15, enumrules, dg-d0 (surface only; D1-D6 -> 1.38.1), lf-ready/marker/order, cv-migtype, ki-fp, ki-d7, D6 lab; queued RB-5 x3, lf-docs, plugin settings writer; LSP team READY: client 6e30cd5c, setup ceeb25c2.
+* Plans: docs\superpowers\plans\2026-10-28-{known-issues-137,xerj-features-137,rb5-interface-dispatch-hps,two-way-modernize-downgrade,library-first-resolve}-plan.md (untracked; commit with INT2).
+* Owner: 4-hourly status report (cron, session-only -- recreate after /clear); push main (9269c588) owed; IDE smoke test.
