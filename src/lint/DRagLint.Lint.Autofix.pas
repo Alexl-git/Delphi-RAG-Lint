@@ -95,7 +95,7 @@ function FixOwnerKey(const AFinding: TLintFinding): string;
 /// An id the legacy FIXABLE_RULE_IDS chain already fixes is never handed to a
 /// registered fixer. Call it from a fixer unit's RegisterFixers, which this
 /// unit's initialization runs; not thread-safe after start-up.</remarks>
-procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False);  // dl:ok unused-public-symbol@1349 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
+procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False);
 
 /// <summary>Registers a per-file fixer for ARuleId (autofix wave A0).</summary>
 /// <param name="ARuleId">The rule id; compared case-insensitively.</param>
@@ -103,7 +103,7 @@ procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARis
 /// <param name="ARisky">True for a behaviour-CHANGING fix.</param>
 /// <remarks>Same contract as RegisterFixer; called once per file that has a
 /// finding of the rule.</remarks>
-procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False);  // dl:ok unused-public-symbol@2a36 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
+procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False);
 
 /// <summary>Installs THE generic sidecar fixer: the builder for every finding
 /// whose rule's .json carries a "fix" key (TLintFinding.FixKind).</summary>
@@ -135,7 +135,7 @@ function AutofixStore: ISymbolStore;
 /// <returns>False when the range is outside the file.</returns>
 /// <remarks>The protected lines are re-indented by two spaces; the finally
 /// body is written at AIndent + two spaces, one line per input line.</remarks>
-function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;  // dl:ok unused-public-symbol@3d4c -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
+function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;
   const AFinallyText, AIndent: string; out AEdit: TTextEdit): Boolean;
 
 /// <summary>Builds the edit that deletes the statement AFinding spans: the
@@ -166,7 +166,7 @@ function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEd
 /// <param name="AUnit">The unit name to add (RTL units only without a --db).</param>
 /// <param name="AEdit">Out: the insert edit.</param>
 /// <returns>True when an edit was built.</returns>
-function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;  // dl:ok unused-public-symbol@b189 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
+function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;
 
 /// <summary>The declared type of AName as seen from line ALine of APath: a
 /// same-routine local, parameter or inline var, or a unit-level var.</summary>
@@ -177,7 +177,7 @@ function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: stri
 /// not show one (a field, a with-member, an untyped inline var, a missing file).</returns>
 /// <remarks>The same scope walk as the .scm predicate #declared-type?, so a code
 /// fixer and a rule agree on what a local is.</remarks>
-function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;  // dl:ok unused-public-symbol@77b7 -- REVIEWED 2026-10-27: autofix-wave scaffold API (plan 1.4), called by lanes A1-A6 / G1-G9
+function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;
 
 implementation
 

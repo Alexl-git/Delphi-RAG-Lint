@@ -55,7 +55,6 @@ uses
   , System.Generics.Collections
   , System.RegularExpressions
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   ;
 

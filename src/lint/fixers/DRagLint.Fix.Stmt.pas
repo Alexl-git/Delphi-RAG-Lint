@@ -49,7 +49,7 @@ function IsSideEffectFree(const ANode: TTSNode): Boolean;  // dl:ok unused-publi
 /// identical-then-else fixer (ParityExtChecks, block and call shapes) and
 /// delegates the shape it declines to this function, so exactly one fixer per
 /// rule id is registered.</remarks>
-function FixIdenticalAssignmentBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok unused-public-symbol@4846 -- REVIEWED 2026-10-27: lane G9's identical-then-else fixer delegates its declined single-statement shape here at the gaps/int merge
+function FixIdenticalAssignmentBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 
 implementation
 

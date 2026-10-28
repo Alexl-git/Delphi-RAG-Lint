@@ -516,7 +516,6 @@ begin
     else if (FSection = secSkip) and (AText = ';') then FSection:= secNone
     else if (FState = dsStart) and (L <> '') and HandleSectionKeyword(L) then
     // section switched
-    else if (FState = dsTypeBody) and (L = 'interface') then HandleDecl(AText, L, AIsIdent, AEscaped)
     else
       HandleDecl(AText, L, AIsIdent, AEscaped);
   end;

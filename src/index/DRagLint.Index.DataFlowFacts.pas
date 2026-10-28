@@ -1452,7 +1452,7 @@ begin
   Result:= TDataFlowCallees.Create;
   for S in ASymbols do
   begin
-    if not (S.Kind in [skFunction, skProcedure, skMethod, skConstructor, skDestructor]) then Continue;  // dl:ok nonminimal-bool@d7d5 -- not (A in S) is the only spelling of set non-membership (the rule's own message says so)
+    if S.Kind not in [skFunction, skProcedure, skMethod, skConstructor, skDestructor] then Continue;
     { 'TFoo.Bar' (an implementation header) and 'Bar<T>' key as 'bar', the call's identifier }
     Key:= LowerCase(S.Name);
     if Key.Contains('<') then Key:= Copy(Key, 1, Pos('<', Key) - 1);

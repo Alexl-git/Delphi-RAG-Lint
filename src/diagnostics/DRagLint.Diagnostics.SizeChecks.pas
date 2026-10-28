@@ -40,7 +40,6 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   ;
 

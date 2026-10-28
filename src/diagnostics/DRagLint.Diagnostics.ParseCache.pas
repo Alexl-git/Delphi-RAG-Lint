@@ -303,7 +303,7 @@ begin
     try
       var FileProfile: TDefineProfile:= FResolver(AFile);
       if Length(FileProfile.Defines) > 0 then Result:= FileProfile;
-    except // dl:ok try-except-swallowed@52aa -- REVIEWED 2026-10-26 fail-open by contract: a resolver fault keeps the process-wide profile
+    except
       on E: Exception do Result:= FProfile;
     end;
 end;
@@ -330,7 +330,7 @@ begin
     PpOpts.BaseDir    := TPath.GetDirectoryName(AHostFile);
     PpOpts.SearchPaths:= ASearchPaths;
     Preprocess(NormalizeLoneCR(EnsureUtf8Bytes(TFile.ReadAllBytes(AHostFile))), PpOpts, Result);
-  except // dl:ok try-except-swallowed -- REVIEWED 2026-10-27 fail-open by contract: no context, the include is linted standalone
+  except
     on E: Exception do Result:= nil;
   end;
 end;

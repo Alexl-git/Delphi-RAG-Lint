@@ -82,6 +82,8 @@ var
   Ch         : Char;
 begin
   Result:= False;
+  ASemiLine:= 0;
+  ASemiCol:= 0;
   Depth:= 0;
   for I:= AFirst to Min(ALines.Count, AFirst + DECL_MAX_HEADER) do
   begin
@@ -125,6 +127,8 @@ function DcParseHead(const ALine: string; out AKind, AQName: string): Boolean;
 var
   M: TMatch;
 begin
+  AKind:= '';
+  AQName:= '';
   M:= TRegEx.Match(ALine, DECL_ROUTINE_HEAD + '\s+([^\s(;:]+)', [roIgnoreCase]);
   Result:= M.Success;
   if Result then
@@ -141,6 +145,8 @@ var
   Rx       : string;
 begin
   Result:= False;
+  AFirst:= 0;
+  ALast:= 0;
   Rx:= '^\s*' + TRegEx.Escape(AClass) + '\s*(?:<[^>]*>)?\s*=\s*(?:packed\s+)?(?:class|object)\b(?!\s+of\b)(?!\s*;)';
   for I:= 1 to ALines.Count do
     if TRegEx.IsMatch(ALines[I - 1], Rx, [roIgnoreCase]) then
@@ -286,6 +292,7 @@ var
 begin
   Result:= False;
   ABegin:= 0;
+  AEnd:= 0;
   Ind:= DcIndentOf(ALines[AKeyLine - 1]);
   for I:= AHeaderLast + 1 to ALines.Count do
     if DcIndentOf(ALines[I - 1]) = Ind then
@@ -712,6 +719,10 @@ var
   SemiLine, SemiCol: Integer;
 begin
   Result:= False;
+  AQName:= '';
+  AHeader:= '';
+  ABegin:= 0;
+  AEnd:= 0;
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   if not DcParseHead(ALines[AFinding.StartLine - 1], Kind, AQName) or (Kind <> AKeyword) then Exit;
   if not DcHeaderEnd(ALines, AFinding.StartLine, SemiLine, SemiCol) then Exit;
@@ -767,6 +778,7 @@ function DcClassPrefixEdit(const AFinding: TLintFinding; ALines: TStringList; AL
 var
   M: TMatch;
 begin
+  AEdit:= Default(TTextEdit);
   M:= TRegEx.Match(ALines[ALine - 1], DECL_ROUTINE_HEAD, [roIgnoreCase]);
   Result:= M.Success and not StartsText('class', Trim(ALines[ALine - 1]));
   if not Result then Exit;

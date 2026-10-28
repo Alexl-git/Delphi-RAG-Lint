@@ -668,8 +668,8 @@ begin
     Paths.Add(BaseDir);
     try
       ParseDprojSearchPaths(TFile.ReadAllText(ADproj), BaseDir, Paths);
-    except // dl:ok try-except-swallowed -- REVIEWED 2026-10-27 never raises by contract: an unreadable .dproj gives just its folder
-      on E: Exception do ;
+    except // dl:ok try-except-swallowed@6cec -- REVIEWED 2026-10-27 never raises by contract: an unreadable .dproj gives just its folder
+      on E: Exception do ;  // dl:ok empty-on-handler@1c60 -- REVIEWED 2026-10-27: same contract as the except above -- an unreadable .dproj gives just its folder
     end;
     Result:= Paths.ToStringArray;
   finally
