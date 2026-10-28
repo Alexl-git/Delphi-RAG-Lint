@@ -340,6 +340,52 @@ begin
   end;
 end; // function
 
+{ Library calls (item 4 / C3): one query per target id, counted from the stored
+  external_target; nothing is bound here, so a project indexed without a library
+  gets count 0 and the line stays out of the bundle. ACount is incremented (the
+  caller's bundle starts zeroed); ATop receives at most LIBRARY_CALLS_TOP targets,
+  most-called first, ties in first-seen order. Split out of TContextBundler.Build
+  to keep that routine under the cyclomatic-complexity limit. }
+procedure CollectLibraryCalls(const AStore: ISymbolStore; const ATargetIds: TArray<Int64>;
+  var ACount: Integer; var ATop: TArray<string>);
+var
+  LibCounts: TDictionary<string, Integer>;
+  LibOrder : TList<string>               ;
+  Seen     : Integer                     ;
+  Best     : Integer                     ;
+begin
+  LibCounts:= TDictionary<string, Integer>.Create;
+  try
+    LibOrder:= TList<string>.Create;
+    try
+      for var TId: Int64 in ATargetIds do
+        for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
+          if LR.ExternalTarget <> '' then
+          begin
+            Inc(ACount);
+            if LibCounts.TryGetValue(LR.ExternalTarget, Seen) then LibCounts[LR.ExternalTarget]:= Seen + 1
+            else
+            begin
+              LibCounts.Add(LR.ExternalTarget, 1);
+              LibOrder.Add(LR.ExternalTarget);
+            end;
+          end;
+      while (Length(ATop) < LIBRARY_CALLS_TOP) and (LibOrder.Count > 0) do
+      begin
+        Best:= 0;
+        for var K: Integer:= 1 to LibOrder.Count - 1 do
+          if LibCounts[LibOrder[K]] > LibCounts[LibOrder[Best]] then Best:= K;
+        ATop:= ATop + [LibOrder[Best]];
+        LibOrder.Delete(Best);
+      end;
+    finally
+      LibOrder.Free;
+    end;
+  finally
+    LibCounts.Free;
+  end;
+end; // procedure
+
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
   AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
@@ -593,40 +639,7 @@ begin
     Result.Callers[I]:= BC;
   end;
 
-  // Library calls (item 4 / C3): one query per target id, counted from the stored
-  // external_target; nothing is bound here, so a project indexed without a library
-  // gets count 0 and the line stays out of the bundle.
-  var LibCounts: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
-  try
-    var LibOrder: TList<string>:= TList<string>.Create;
-    try
-      for var TId: Int64 in TargetIds do
-        for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
-          if LR.ExternalTarget <> '' then
-          begin
-            Inc(Result.LibraryCallCount);
-            var Seen: Integer;
-            if LibCounts.TryGetValue(LR.ExternalTarget, Seen) then LibCounts[LR.ExternalTarget]:= Seen + 1
-            else
-            begin
-              LibCounts.Add(LR.ExternalTarget, 1);
-              LibOrder.Add(LR.ExternalTarget);
-            end;
-          end;
-      while (Length(Result.LibraryCallTop) < LIBRARY_CALLS_TOP) and (LibOrder.Count > 0) do
-      begin
-        var Best: Integer:= 0;
-        for var K: Integer:= 1 to LibOrder.Count - 1 do
-          if LibCounts[LibOrder[K]] > LibCounts[LibOrder[Best]] then Best:= K;
-        Result.LibraryCallTop:= Result.LibraryCallTop + [LibOrder[Best]];
-        LibOrder.Delete(Best);
-      end;
-    finally
-      LibOrder.Free;
-    end;
-  finally
-    LibCounts.Free;
-  end;
+  CollectLibraryCalls(AStore, TargetIds, Result.LibraryCallCount, Result.LibraryCallTop);
 
   // Impact summary (for refactor/delete verbs)
   if SameText(AVerb, 'refactor') or SameText(AVerb, 'delete') then Result.ImpactSummary:= AStore.FindTransitiveCallers(CallerName, 2);
