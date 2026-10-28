@@ -12193,6 +12193,18 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
+    { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
+      finding's (two rules rewriting one span) is withheld WHOLE and reported
+      deferred; the next --fix pass re-lints and applies it.
+      tests\autofix\run_fix_overlap_deferred.ps1. }
+    var DeferredOwners: TArray<string>;
+    Edits:= DeferConflictingFixes(Edits, DeferredOwners);
+    if Length(DeferredOwners) > 0 then
+    begin
+      Dec(FixCount, Length(DeferredOwners));
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) deferred -- their edits overlap an earlier fix in this pass; ' +
+        'run --fix again to apply them.', [Length(DeferredOwners)]));
+    end;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
@@ -12214,10 +12226,17 @@ begin
           one edit on its own StartLine. }
         var EditLineKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
         try
-          for var Ed: TTextEdit in Edits do EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+          { OWNED edits first (BuildAutofixEdits stamps Owner = FixOwnerKey of the finding
+            whose fixer returned them): a fix that edits away from its line -- a uses
+            entry, a FreeAndNil before inherited, doc lines above -- is still its
+            finding's. The (file, line) match stays only for UNOWNED edits (the
+            store-backed builders: doc-drift, naming, raise-bare-exception, per-file fixers). }
+          for var Ed: TTextEdit in Edits do
+            if Ed.Owner <> '' then EditedKeys.AddOrSetValue(Ed.Owner, True)
+            else EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
           for F in Targeted do
             if IsFixableRule(F.RuleId) and EditLineKeys.ContainsKey(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine)) then
-              EditedKeys.AddOrSetValue( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId), True);
+              EditedKeys.AddOrSetValue(FixOwnerKey(F), True);
         finally
           EditLineKeys.Free;
         end;
@@ -12226,7 +12245,7 @@ begin
         try
           for F in Targeted do
           begin
-            var HasEdit: Boolean:= EditedKeys.ContainsKey( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId));
+            var HasEdit: Boolean:= EditedKeys.ContainsKey(FixOwnerKey(F));
             JObj:= TJSONObject.Create;
             JObj.AddPair('file' , F.FilePath);
             JObj.AddPair('line' , TJSONNumber.Create(F.StartLine));
@@ -12235,6 +12254,7 @@ begin
             JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply and HasEdit));
             JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
             JObj.AddPair('risky' , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+            if MatchText(FixOwnerKey(F), DeferredOwners) then JObj.AddPair('deferred', TJSONBool.Create(True));
             { Multi-project rename: the owners and, when it applies, why the
               rename was dropped (spec criterion 14). Absent for a
               single-project unit. }
@@ -12532,6 +12552,13 @@ const
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden', 'uses-movable-to-implementation');
+  { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
+    opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
+    is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
+    -- so the IDE gutter and lint-all agree. Every other PROJECT_RULES_OPTIN_GATED
+    id ships OFF and stays --rule-only on this verb.
+    tests\autotest\run_lint_file_discarded_effect_free.ps1. }
+  LINT_FILE_OPTIN_ON: array[0..0] of string = ('discarded-effect-free-result');
   LINT_GATE_CLASS_METRICS: array[0..9] of string = (
     'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
     'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
@@ -12922,7 +12949,8 @@ end;
 /// that IS accounted by a finding this run produced (a within-file pair) is
 /// unaffected; lint-all still reports an unused marker for every rule here.
 /// The OptedIn-gated project rules (PROJECT_RULES_OPTIN_GATED, e.g. uses-global-census) are listed
-/// in every run, index or not: Run is handed no opt-in list, so none is evaluated (--rule<id> excepted).</remarks>
+/// in every run, index or not: Run is handed no opt-in list for them, so none is evaluated (--rule<id>
+/// excepted) -- except LINT_FILE_OPTIN_ON, which DoLint opts in whenever the store holds the file.</remarks>
 function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArray<string>;
 
   procedure AddAll(const AIds: array of string);
@@ -12938,10 +12966,10 @@ begin
     AddAll(LINT_GATE_DOC_DRIFT);
     AddAll(['missing-doc']);
   end;
-  { OptedIn-gated project rules: not evaluated by any `lint <file>` run, index or not
-    (Run gets no opt-in list), except the one --rule names. }
+  { OptedIn-gated project rules: not evaluated by a `lint <file>` run, index or not,
+    except the one --rule names and, with a store, the ON ones in LINT_FILE_OPTIN_ON. }
   for var Gated: string in PROJECT_RULES_OPTIN_GATED do
-    if not SameText(Gated, AArgs.Rule) then AddAll([Gated]);
+    if (not SameText(Gated, AArgs.Rule)) and not (AStoreSeen and MatchText(Gated, LINT_FILE_OPTIN_ON)) then AddAll([Gated]);
   if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr', UNIT_NOT_IN_LIBRARY_RULE_ID]);
   if not AStoreSeen then
   begin
@@ -13678,9 +13706,59 @@ begin
     { .dpr joins .pas/.inc: lint-all scans a .dpr with these same AST checks (fixed 2026-08-16),
       so the per-file verb must too or the editor's gutter hides them (1.20.6 T3;
       tests\autotest\run_lint_dpr_parity.ps1). .dpk stays out: lint-all does not scan it. }
-    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')
-       or SameText(ExtractFileExt(EffPath), '.dpr')) then
+    { A DIRECTORY IS THE UNION OF ITS FILES (lane DIRLINT, 2026-10-27).
+      This block used to be gated on TFile.Exists(EffPath), so `lint <dir>` ran
+      the .scm pass above and NONE of the built-in checkers below: over
+      tests\lint, try-except-swallowed 0 vs 12, nil-check-after-dereference 0
+      vs 5, exception-escapes-thread 0 vs 3, while the .scm rules agreed. A
+      zero that means "not looked at" read as a clean folder.
+
+      Now every scanned .pas/.inc/.dpr of the walk runs this same block, with
+      the same flags, as if it had been linted alone: its own .scm findings are
+      handed to it as Findings (the block filters them per file -- the
+      string-equality drop, DropNonStringConcat, the buffer reconcile) and its
+      result is collected per file, so one file's store cannot filter another
+      file's findings. A single file stays byte-identical: one target, no
+      bucketing. tests\autotest\run_lint_dir_union_parity.ps1. }
+    var LintRoot      : string         := EffPath;
+    var LintDirMode   : Boolean        := (not TFile.Exists(EffPath)) and TDirectory.Exists(EffPath);
+    var PerFileTargets: TArray<string> := nil;
+    if LintDirMode then
     begin
+      for var PT: string in ScannedFiles do
+        if MatchText(ExtractFileExt(PT), ['.pas', '.inc', '.dpr']) then PerFileTargets:= PerFileTargets + [PT];
+    end
+    else if TFile.Exists(EffPath) and MatchText(ExtractFileExt(EffPath), ['.pas', '.inc', '.dpr']) then
+      PerFileTargets:= [EffPath];
+    var DirPending: TObjectDictionary<string, TList<TLintFinding>> := nil;
+    var DirOut    : TList<TLintFinding>                            := nil;
+    try
+    if LintDirMode then
+    begin
+      DirPending:= TObjectDictionary<string, TList<TLintFinding>>.Create([doOwnsValues]);
+      DirOut    := TList<TLintFinding>.Create;
+      for var PT: string in PerFileTargets do DirPending.AddOrSetValue(LowerCase(PT), TList<TLintFinding>.Create);
+      for var DF: TLintFinding in Findings do
+      begin
+        var Bucket: TList<TLintFinding>;
+        if DirPending.TryGetValue(LowerCase(DF.FilePath), Bucket) then Bucket.Add(DF) else DirOut.Add(DF);
+      end;
+      Findings:= nil;
+      { The two project-file checks above are gated on a FILE target too; they
+        already take a file list, so the directory hands them the whole set. }
+      var DirProj: string := IfdefProjectFile(AArgs, AArgs.DbPath);
+      if (DirProj <> '') and (Length(PerFileTargets) > 0) then
+      begin
+        if (NarrowRule = '') or SameText(NarrowRule, IFDEF_UNDEFINED_RULE_ID) then
+          DirOut.AddRange(TIfdefUndefinedCheck.CheckFiles(PerFileTargets, DirProj, LoadLintConfig(AArgs).IfdefAllow, nil));
+        if (NarrowRule = '') or SameText(NarrowRule, PLATFORM_DIVERGENT_RULE_ID) then
+          DirOut.AddRange(TPlatformDivergentCheck.CheckFiles(PerFileTargets, DirProj, LoadLintConfig(AArgs).PlatformDivergentAllow, nil));
+      end;
+    end;
+    for var PerFile: string in PerFileTargets do
+    begin
+      EffPath:= PerFile;
+      if LintDirMode then Findings:= DirPending[LowerCase(PerFile)].ToArray;
       var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { THE STORE IS RESOLVED ONCE, HERE, FOR EVERY PER-FILE CHECKER BELOW.
 
@@ -14126,12 +14204,17 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES) then
           begin
             TraceLintChecker('project-rules');
+            { The ON opt-in-gated rules (LINT_FILE_OPTIN_ON), through the same
+              ShouldKeep(False) gate lint-all uses, so --disable still turns them off. }
+            var FileOptIn: TArray<string>:= nil;
+            for var OnId: string in LINT_FILE_OPTIN_ON do
+              if Cfg.ShouldKeep(OnId, {ADefaultDisabled=}False) then FileOptIn:= FileOptIn + [OnId];
             var WholeGraph: TFunc<string, TArray<TLintFinding>>:=
               WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
                                  RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid, WholeGraph) do
+                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
@@ -14178,7 +14261,18 @@ begin
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
-    end; // if
+      if LintDirMode then
+      begin
+        DirOut.AddRange(Findings);
+        Findings:= nil;
+      end;
+    end; // for PerFile
+    if LintDirMode then Findings:= DirOut.ToArray;
+    finally
+      EffPath:= LintRoot;
+      DirPending.Free;
+      DirOut.Free;
+    end;
   end; // if
   { The store-backed quick-fixes -- the six naming rules, doc-drift and
     missing-doc -- all sit behind `if AStore <> nil` in FinalizeAndOutput, and

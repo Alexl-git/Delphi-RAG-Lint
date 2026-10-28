@@ -3528,6 +3528,9 @@ end; // function
 /// statement -- <c>Name(args);</c> or <c>Rcv.Name(args);</c> alone on its line.
 /// Such a call cannot do anything, so discarding its result is dead code.</summary>
 /// <param name="AStore">The project index; must carry the purity columns.</param>
+/// <param name="AOnlyFileId">0 = every file. Otherwise only call sites IN that file are
+/// judged (`lint <file>`): the routine set is still the whole store's, so the
+/// answer for that file is unchanged, and no other caller file is read.</param>
 /// <returns>One finding per discarded call, anchored at the call line. Empty on
 /// an index whose <c>purity</c> stage has not run (every verdict is -1).</returns>
 /// <remarks>THE SUMMARY DECIDES, NEVER "is a function": a routine that returns a
@@ -3538,7 +3541,7 @@ end; // function
 /// (spec 14.1's named false positive), and the name must begin a dotted segment
 /// so <c>OtherTwice(3);</c> cannot be read as a call to <c>Twice</c>. Never
 /// raises; an unreadable file yields no finding for its call sites.</remarks>
-function CollectDiscardedEffectFreeResult(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectDiscardedEffectFreeResult(const AStore: ISymbolStore; AOnlyFileId: Int64): TArray<TLintFinding>;
 const
   CInheritedKw = 'inherited ';
   { A receiver may only be a dotted chain of identifiers. }
@@ -3730,6 +3733,9 @@ begin
       for var C in AStore.FindResolvedCallers(Sym.Id) do
       begin
         if (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
+        var CFid: Int64;
+        if not FileIdOf.TryGetValue(C.FullPath, CFid) then CFid:= 0;
+        if (AOnlyFileId > 0) and (CFid <> AOnlyFileId) then Continue;
         var L: TArray<string>:= LinesOf(C.FullPath);
         if (L = nil) or (C.CallSiteLine > Length(L)) then Continue;
         if not StartsNewStatement(L, C.CallSiteLine) then Continue;
@@ -3737,7 +3743,7 @@ begin
         var Fd: TLintFinding:= Default(TLintFinding);
         Fd.RuleId    := 'discarded-effect-free-result';
         Fd.FilePath  := C.FullPath;
-        if not FileIdOf.TryGetValue(C.FullPath, Fd.FileId) then Fd.FileId:= 0;
+        Fd.FileId    := CFid;
         Fd.StartLine := C.CallSiteLine;
         Fd.EndLine   := C.CallSiteLine;
         Fd.StartCol  := 1;
@@ -4516,7 +4522,7 @@ begin
       resolved-callers query per proven routine for 14.1, which a post-hoc
       config filter would hide perfectly while still charging for it. }
     if WantRule('discarded-effect-free-result') and OptedIn('discarded-effect-free-result') then
-      for var Pf1 in CollectDiscardedEffectFreeResult(AStore) do Findings.Add(Pf1);
+      for var Pf1 in CollectDiscardedEffectFreeResult(AStore, AOnlyFileId) do Findings.Add(Pf1);
     if WantRule('query-name-with-effect') and OptedIn('query-name-with-effect') then
       for var Pf2 in CollectQueryNameWithEffect(AStore) do Findings.Add(Pf2);
     { assert-with-side-effect (INBOX 2026-09-23 rule 4): same gate, same reason. }
