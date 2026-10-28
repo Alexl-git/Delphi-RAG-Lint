@@ -20,6 +20,14 @@ unit DRagLint.Lint.TaintRules;
 ///   SOURCE     { "id": str (unique), "name": str (qualified 'Vcl.StdCtrls.TCustomEdit.Text'
 ///                or bare 'ParamStr'), "kind": "call"|"read", "confidence": "certain"|"weak",
 ///                "enabled": bool (default true; false = second-order, on via second_order),
+///                "categories": [ "sql"|"cmd"|"path", ... ] (optional; default every rule --
+///                under an unlisted rule the value is TRUSTED and the branch stops clean;
+///                an unknown category raises ELintConfigError),
+///                "trusted_args": [ str, ... ] (optional; a 'call' whose argument list, read
+///                from the source line at the call and trimmed, equals one of these
+///                case-insensitively is TRUSTED: `0` = ParamStr(0), the module path;
+///                `'APPDATA'` = an OS known folder; an argument list that does not close on
+///                the call's line never matches),
 ///                "note": str (optional) }                                 -> TTaintSourceEntry
 ///   SINK       { "id": str (unique), "rule": one of the TAINT_RULE_* ids, "name": str (leaf
 ///                name of the call or written member), "kind": "call"|"write",
@@ -108,6 +116,14 @@ type
     Enabled   : Boolean;
     /// <summary>Free text.</summary>
     Note      : string ;
+    /// <summary>TAINT_CAT_SQL / _CMD / _PATH values this source is attacker data for; empty =
+    /// every rule. Under a rule whose category is not listed the value is trusted: the
+    /// branch stops clean, as at a sanitizer.</summary>
+    Categories: TArray<string>;
+    /// <summary>Argument lists (as written, trimmed, compared case-insensitively) that make a
+    /// 'call' source trusted: `0` for ParamStr (the module path), `'APPDATA'` for
+    /// GetEnvironmentVariable (an OS known folder). Empty = every call is a source.</summary>
+    TrustedArgs: TArray<string>;
   end;
 
   /// <summary>One SINK catalogue row (rules\taint-sinks.json "sinks"[]).</summary>
@@ -349,6 +365,7 @@ type
     FEdgeRoutines: TDictionary<string, Boolean>;
     FSyms        : TDictionary<string, TSymbol>;
     FPaths       : TDictionary<string, string>;
+    FLines       : TDictionary<string, TArray<string>>;
     FRoutineRows : TDictionary<string, TArray<TDataFlowRow>>;
     FMembers     : TDictionary<Int64, Int64>;
     FProjNames   : TDictionary<string, Boolean>;
@@ -362,6 +379,7 @@ type
     FCapHit      : Boolean;
     function  Sym(AStore: Integer; AId: Int64): TSymbol;
     function  PathOf(AStore: Integer; AFileId: Int64): string;
+    function  CallArgText(AStore: Integer; AFileId: Int64; ALine, ACol: Integer): string;
     function  ShortName(AStore: Integer; const ASym: TSymbol): string;
     function  RefsAt(AStore: Integer; AFileId: Int64; ALine, ACol: Integer): TArray<TReference>;
     function  EdgesOf(AStore: Integer; AEnclosing, ARefId: Int64): TArray<TCallEdge>;
@@ -561,11 +579,12 @@ begin
   Result:= V as TJSONObject;
 end;
 
-procedure AppendSources(const AObj: TJSONObject; var ACfg: TTaintConfig);
+procedure AppendSources(const AObj: TJSONObject; var ACfg: TTaintConfig; const AWhat: string);
 var
   E  : TJSONValue;
   O  : TJSONObject;
   Src: TTaintSourceEntry;
+  Cat: string;
 begin
   for E in JArr(AObj, 'sources') do
     if E is TJSONObject then
@@ -578,6 +597,11 @@ begin
       Src.Confidence:= JStr(O, 'confidence', CONF_CERTAIN);
       Src.Enabled   := JBool(O, 'enabled', True);
       Src.Note      := JStr(O, 'note', '');
+      Src.Categories:= JStrs(O, 'categories');
+      Src.TrustedArgs:= JStrs(O, 'trusted_args');
+      for Cat in Src.Categories do
+        if not MatchText(Cat, [TAINT_CAT_SQL, TAINT_CAT_CMD, TAINT_CAT_PATH]) then
+          raise ELintConfigError.CreateFmt('taint: source "%s" in %s names unknown category "%s"', [Src.Id, AWhat, Cat]);
       if Src.Name <> '' then ACfg.Sources:= ACfg.Sources + [Src];
     end;
 end;
@@ -639,7 +663,7 @@ end;
 procedure AppendEntries(const AObj: TJSONObject; var ACfg: TTaintConfig; var ADisable: TArray<string>;
                         const AWhat: string);
 begin
-  AppendSources(AObj, ACfg);
+  AppendSources(AObj, ACfg, AWhat);
   AppendSinks(AObj, ACfg, AWhat);
   AppendPropagators(AObj, ACfg);
   ADisable:= ADisable + JStrs(AObj, 'disable');
@@ -790,6 +814,7 @@ begin
   FEdgeRoutines:= TDictionary<string, Boolean>.Create;
   FSyms        := TDictionary<string, TSymbol>.Create;
   FPaths       := TDictionary<string, string>.Create;
+  FLines       := TDictionary<string, TArray<string>>.Create;
   FRoutineRows := TDictionary<string, TArray<TDataFlowRow>>.Create;
   FMembers     := nil;
   FProjNames   := TDictionary<string, Boolean>.Create;
@@ -808,6 +833,7 @@ begin
   FEdgeRoutines.Free;
   FSyms.Free;
   FPaths.Free;
+  FLines.Free;
   FRoutineRows.Free;
   FMembers.Free;
   FProjNames.Free;
@@ -834,6 +860,50 @@ begin
   if FPaths.TryGetValue(K, Result) then Exit;
   Result:= FStores[AStore].GetFilePath(AFileId);
   FPaths.Add(K, Result);
+end;
+
+{ The argument list of the call whose name starts at (ALine, ACol), as written and
+  trimmed; '' when the file is unreadable or the list does not close on that line. }
+function TTaintWalker.CallArgText(AStore: Integer; AFileId: Int64; ALine, ACol: Integer): string;
+var
+  K    : string;
+  Lines: TArray<string>;
+  Path : string;
+  S    : string;
+  P    : Integer;
+  Start: Integer;
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Result:= '';
+  K:= Format('%d|%d', [AStore, AFileId]);
+  if not FLines.TryGetValue(K, Lines) then
+  begin
+    Lines:= nil;
+    Path := PathOf(AStore, AFileId);
+    if (Path <> '') and TFile.Exists(Path) then Lines:= TFile.ReadAllLines(Path);
+    FLines.Add(K, Lines);
+  end;
+  if (ALine < 1) or (ALine > Length(Lines)) or (ACol < 1) then Exit;
+  S:= Lines[ALine - 1];
+  P:= ACol;
+  while (P <= Length(S)) and CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(P);
+  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+  if (P > Length(S)) or (S[P] <> '(') then Exit;
+  Start:= P + 1;
+  Depth:= 0;
+  InStr:= False;
+  while P <= Length(S) do
+  begin
+    if S[P] = '''' then InStr:= not InStr
+    else if (not InStr) and (S[P] = '(') then Inc(Depth)
+    else if (not InStr) and (S[P] = ')') then
+    begin
+      Dec(Depth);
+      if Depth = 0 then Exit(Trim(Copy(S, Start, P - Start)));
+    end;
+    Inc(P);
+  end;
 end;
 
 function TTaintWalker.ShortName(AStore: Integer; const ASym: TSymbol): string;
@@ -1286,6 +1356,10 @@ begin
   for Src in FCfg.Sources do
     if NameMatches(Src.Name, R, ARow.FileId, Weak) then
     begin
+      { a source this rule trusts (ParamStr under path-traversal), or a trusted argument
+        (ParamStr(0)): clean, not walked into }
+      if (Src.Categories <> nil) and not InStrs(FCat, Src.Categories) then Exit;
+      if (Src.TrustedArgs <> nil) and InStrs(CallArgText(AStore, ARow.FileId, ARow.SrcLine, ARow.SrcCol), Src.TrustedArgs) then Exit;
       AddHit(Result, SourceHit(AStore, X, ARow,
         if OwnerSeg(Src.Name) <> '' then OwnerSeg(Src.Name) + '.' + LastSeg(Src.Name) else LastSeg(Src.Name),
         Src.Kind, '', Weak or R.Weak or SameText(Src.Confidence, CONF_WEAK)));
@@ -1422,6 +1496,7 @@ begin
   for Src in FCfg.Sources do
     if SameText(Src.Kind, KIND_CALL) and NameMatches(Src.Name, R, ARow.FileId, Weak) then
     begin
+      if (Src.Categories <> nil) and not InStrs(FCat, Src.Categories) then Exit;
       AddHit(Result, SourceHit(AStore, X, ARow, LastSeg(Src.Name), Src.Kind, ' (out argument)',
         Weak or R.Weak or SameText(Src.Confidence, CONF_WEAK)));
       Exit;

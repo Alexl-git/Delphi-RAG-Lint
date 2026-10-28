@@ -46,11 +46,14 @@ uField|uField.TCfg.Run|arg|GConn.ExecSQL(FSql)|ExecSQL|0|GConn|field|-1||FSql|0|
 uField|uField.TCfg2.Run2|arg|'select ' + FSql|ExecSQL|0|GConn|field|-1||FSql|0|0
 uFieldUp|uFieldUp.TBase.Exec|arg|GConn.ExecSQL(FCmd)|ExecSQL|0|GConn|field|-1||FCmd|0|0
 uFieldUp|uFieldUp.TChild.Load|write|FCmd := ParamStr(4)|FCmd|-1||ref|-1|FCmd := ParamStr(4)|ParamStr|0|0
-uGlobal|uGlobal.InitPath|global|GPath := ParamStr(3)|GPath|-1||ref|-1|GPath := ParamStr(3)|ParamStr|0|0
+uGlobal|uGlobal.InitPath|global|GPath := GetEnv|GPath|-1||ref|-1|GPath := GetEnv|GetEnvironmentVariable|0|0
 uGlobal|uGlobal.DelPath|arg|DeleteFile(GPath)|DeleteFile|0||global|-1||GPath|0|0
 uGlobal|uGlobal.DelPath|arg|Create(ExtractFileName|Create|0|TFileStream|ref|-1|Create(ExtractFileName|ExtractFileName|0|0
-uGlobal|uGlobal.DelPath|arg|Create(ExtractFileName|ExtractFileName|0||ref|-1|Create(ExtractFileName|ParamStr|0|0
+uGlobal|uGlobal.DelPath|arg|Create(ExtractFileName|ExtractFileName|0||ref|-1|Create(ExtractFileName|GetEnvironmentVariable|0|0
+uGlobal|uGlobal.DelPath|arg|TFileStream.Create(GetEnv|Create|0|TFileStream|ref|-1|TFileStream.Create(GetEnv|GetEnvironmentVariable|0|0
 uGlobal|uGlobal.DelPath|arg|TFileStream.Create(ParamStr|Create|0|TFileStream|ref|-1|TFileStream.Create(ParamStr|ParamStr|0|0
+uGlobal|uGlobal.DelPath|arg|Create(ExpandFileName|Create|0|TFileStream|ref|-1|Create(ExpandFileName|ExpandFileName|0|0
+uGlobal|uGlobal.DelPath|arg|Create(ExpandFileName|ExpandFileName|0||ref|-1|Create(ExpandFileName|ParamStr|0|0
 uOut|uOut.GetName|outparam|S := ParamStr(1)|S|0||ref|-1|S := ParamStr(1)|ParamStr|0|0
 uOut|uOut.UseOut|arg|WinExec(|WinExec|0||argout|0|GetName(N)|GetName|1|0
 uList|uList.UseList|arg|L.Add(ParamStr(1))|Add|0|L|ref|-1|L.Add(ParamStr(1))|ParamStr|0|0
@@ -60,6 +63,11 @@ uShellEx|uShellEx.Launch|arg|ShellExecuteEx(@Info)|ShellExecuteEx|0||ref|-1|PCha
 uLambda|uLambda.RunLambda|arg|GConn.ExecSQL(S)|ExecSQL|0|GConn|ref|-1|S := ParamStr(1)|ParamStr|1|0
 uCmd|uCmd.RunCmd|arg|CreateProcess(nil|CreateProcess|1||param|0||ACmd|0|0
 uCmd|uCmd.RunCmdFromArg|arg|RunCmd(ParamStr(1))|RunCmd|0||ref|-1|RunCmd(ParamStr(1))|ParamStr|0|0
+uSelf|uSelf.SpawnSelf|arg|CreateProcess(nil|CreateProcess|1||param|0||ACmd|0|0
+uSelf|uSelf.RunSelf|arg|SpawnSelf(ParamStr(0)|SpawnSelf|0||ref|-1|SpawnSelf(ParamStr(0)|ParamStr|0|0
+uSelf|uSelf.RunArgOne|arg|SpawnSelf(ParamStr( 1|SpawnSelf|0||ref|-1|SpawnSelf(ParamStr( 1|ParamStr|0|0
+uSelf|uSelf.CacheKnown|arg|('LocalAppData')|DeleteFile|0||ref|-1|('LocalAppData')|GetEnvironmentVariable|0|0
+uSelf|uSelf.CacheCustom|arg|('MY_CACHE')|DeleteFile|0||ref|-1|('MY_CACHE')|GetEnvironmentVariable|0|0
 """
 
 # tests\lint-project\taint-lib\lib -- the mini library (indexed into a temp LIBRARY db)
