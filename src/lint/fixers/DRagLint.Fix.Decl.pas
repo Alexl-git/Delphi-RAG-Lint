@@ -525,7 +525,9 @@ begin
   begin
     AHeaderSpans.Add(TPair<Integer, Integer>.Create(M.Index, M.Index + M.Length));
     Mask:= '';
-    if M.Groups[2].Success then
+    { Groups holds only up to the last group that PARTICIPATED: a header without a
+      parameter list has no Groups[2], and indexing it raises. }
+    if (M.Groups.Count > 2) and M.Groups[2].Success then
       for Part in DcSplitTop(M.Groups[2].Value, ';') do
       begin
         Colon:= Pos(':', Part);
