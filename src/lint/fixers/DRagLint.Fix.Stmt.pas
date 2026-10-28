@@ -908,7 +908,9 @@ var
 begin
   AStmt:= Default(TTSNode);
   A:= Ancestor(AFx.NodeAt(ALine, ACol), 'assignment');
+  { `var X: T := V` is an assignment whose lhs is the declaration: dropping it drops X itself }
   Result:= (not A.IsNull) and StartsAt(A.ChildByField('lhs'), ALine, ACol)
+    and (A.ChildByField('lhs').NodeType <> 'varAssignDef')
     and (A.ChildByField('operator').NodeType = 'kAssign') and IsSideEffectFree(A.ChildByField('rhs'));
   if not Result then Exit;
   AStmt:= ListMember(A);
