@@ -607,6 +607,16 @@ begin
     Masks.Free;
   end;
 end;
+{ True when the file uses AName (bare or as the last segment of a dotted path) where a variable is required:
+  the first argument of Inc / Dec / Include / Exclude, or the operand of @ -- a property cannot stand there. }
+function DcFieldUsedAsVariable(ALines: TStringList; const AName: string): Boolean;
+var
+  Esc: string;
+begin
+  Esc:= TRegEx.Escape(AName);
+  Result:= TRegEx.IsMatch(ALines.Text, '\b(?:Inc|Dec|Include|Exclude)\s*\(\s*(?:\w+\.)*' + Esc + '\b', [roIgnoreCase]) or
+    TRegEx.IsMatch(ALines.Text, '@\s*(?:\w+\.)*' + Esc + '\b', [roIgnoreCase]);
+end;
 { public-field: `X: T;` in a public section -> a same-named property `property X: T read FX write FX;` plus a
   private `FX: T;` (in the class's first `private` section, else in a new `private` section opened just above the
   `public` line). Same name, so no call site changes. Declines for anything but a lone, comment-free `X: T;` with a
@@ -627,6 +637,7 @@ begin
   if (AFinding.StartCol < 1) or (AFinding.EndCol > Length(Line) + 1) then Exit;
   Name:= Copy(Line, AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
   if DcFieldPassedAsVarArg(ALines, Name) then Exit;   { decline: passed as var/out }
+  if DcFieldUsedAsVariable(ALines, Name) then Exit;   { decline: Inc / Dec / @ target }
   M:= TRegEx.Match(Line, '^(\s*)' + TRegEx.Escape(Name) + '\s*:\s*([^\s;=\[\(]+)\s*;\s*$', [roIgnoreCase]);
   if not M.Success or (Length(M.Groups[1].Value) <> AFinding.StartCol - 1) then Exit;
   Ind:= M.Groups[1].Value;
