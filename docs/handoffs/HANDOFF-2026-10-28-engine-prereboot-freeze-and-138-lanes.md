@@ -60,6 +60,9 @@ src\tools\featuregen\FeatureGen.DocsCheck.pas (ki-docscheck copy), tests\autofix
 -> diff vs branches, then [IO.File]::Delete with absolute paths. RuleCatalog.pas deletion is not ours.
 18 agent worktrees kept for owner review (audit csv in the old session scratchpad); xj-5a..d worktrees left.
 
+## ext-dirword detail (gates the freeze)
+Grammar lane: drag-lint wt ext-dirword 8b95cf7e (RED runner) + grammar wt C:\Projects\tree-sitter-delphi13-wt\ext-dirword a26b6bb (variant A NOT shippable: 7 regressions, +4 Indy breaks). Next: variants C/D per C:\TEMP\claude\lanes\gaps\agent-ext-dirword\STATE.md, DLL build, ORM3/RTL counts. Est 2-4 h. If it drags, ASK the owner: freeze without it (grammar fix later needs another re-parse) or wait.
+
 ## Next action after the reboot
 1. Recreate the status cron. 2. Collect the 4 WIP lanes' STATE.md, re-dispatch (ext-dirword first).
 3. FREEZE-FINAL when ext-dirword is green -> re-parse. 4. Start RB-5 + lf-docs + plugin writer lanes and INT2
