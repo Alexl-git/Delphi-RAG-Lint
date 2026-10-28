@@ -2,9 +2,9 @@
 #   (%LOCALAPPDATA%\drag-lint\engine-hold) -- one per-user file, not a per-test
 #   one -- and asserts on `ide-release --status` around it, so a concurrent
 #   sibling that takes or clears the hold flips this runner's answer. Its
-#   staging-recovery case is also timing-windowed (hold the target, sleep 3,
-#   release mid-retry, expect 'staging blocked' within 40s), which CPU
-#   contention perturbs. FOUND BY THE -Jobs 8 A/B, not by the census: the
+#   staging-recovery case is also timing-windowed (hold the target until the
+#   stager reports 'staging blocked', release mid-retry, expect the copy
+#   within 40s), which CPU contention perturbs. FOUND BY THE -Jobs 8 A/B, not by the census: the
 #   census asked only whether a runner writes the staged EXE (none does), and
 #   this runner's shared state is a DIFFERENT global it never looked at.
 <#
@@ -287,12 +287,27 @@ if (Test-Path -LiteralPath $stager) {
     $LASTEXITCODE
   } -ArgumentList $stager, @{ fresh = $fresh; target = $target }
 
-  Start-Sleep -Seconds 3
+  # Release only once the stager has SEEN the lock. This used to be a fixed
+  # `Start-Sleep 3`, but Start-Job + a child pwsh take ~3.3s to start on a
+  # loaded box (measured 2026-10-28, CPU at 100% under parallel batteries), so
+  # the lock was gone before the first copy attempt: the stager took the
+  # ordinary path, printed nothing, and the 'staging blocked' check failed on
+  # a run that exercised no recovery at all. Waiting for the stager's own
+  # 'staging blocked' line makes the lock certain to be hit. If it never
+  # appears the stream is released after 30s anyway and the check below fails,
+  # so the assertion is unchanged.
+  $early     = @()
+  $waitUntil = (Get-Date).AddSeconds(30)
+  while (((Get-Date) -lt $waitUntil) -and ($job.State -eq 'Running')) {
+    $early += @(Receive-Job $job)
+    if (($early -join "`n") -match 'staging blocked') { break }
+    Start-Sleep -Milliseconds 200
+  }
   # Release mid-retry: the recovery must notice and finish the copy.
   $stream.Close(); $stream.Dispose()
 
   $done = Wait-Job $job -Timeout 40
-  $out  = Receive-Job $job
+  $out  = @($early) + @(Receive-Job $job)
   Remove-Job $job -Force -ErrorAction SilentlyContinue
 
   Check 'the recovery finished rather than hanging' ($null -ne $done) ''
