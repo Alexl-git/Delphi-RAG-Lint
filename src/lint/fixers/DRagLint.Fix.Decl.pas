@@ -313,6 +313,12 @@ end;
 
 { ------------------------------------------------------------------ inherited-bare }
 
+{ True when a class declaration line in the file declares procedure AMeth with the override directive. }
+function DcDeclaredOverride(ALines: TStringList; const AMeth: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(ALines.Text, '^\s*procedure\s+' + TRegEx.Escape(AMeth) + '\b[^\r\n]*\boverride\s*;', [roIgnoreCase, roMultiLine]);
+end;
+
 { inherited-bare: `inherited;` -> `inherited <Method>(<param names>);` from the enclosing implementation header.
   Declines for a function (the bare form forwards the result), for a constructor WITH parameters (a bare
   `inherited;` there legally reaches an ancestor constructor of a different signature, e.g. TObject.Create),
@@ -337,6 +343,8 @@ begin
   if not DcBodyRange(ALines, H, SemiLine, BodyBegin, BodyEnd) then Exit;
   if (AFinding.StartLine <= BodyBegin) or (AFinding.StartLine >= BodyEnd) then Exit;
   Meth:= Copy(QName, LastDelimiter('.', QName) + 1, MaxInt);
+  { a procedure that is not declared override may have no ancestor method of its name (an event handler): decline }
+  if (Kind = 'procedure') and not DcDeclaredOverride(ALines, Meth) then Exit;
   Text:= DcHeaderText(ALines, H, SemiLine);
   Names:= TList<string>.Create;
   try
