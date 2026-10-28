@@ -157,6 +157,7 @@ Check 'record member: Info.lpFile := PChar(A); ShellExecuteEx(@Info)' (Has $Rw.S
 Check 'record member write row Info.lpFile' (Has $Rw.ShellRecord { $_.dst_kind -eq 'write' -and $_.dst_name -eq 'lpFile' -and $_.dst_receiver -eq 'Info' -and $_.src_kind -eq 'param' })
 Check 'G5 hard-cast write TEditStub(O).Text := A gives a write row' (Has $Rw.HardCast { $_.dst_kind -eq 'write' -and $_.dst_name -eq 'Text' -and $_.dst_line -eq $M.'M-G5WRITE' -and $_.src_kind -eq 'param' -and $_.src_index -eq 1 })
 Check 'G5 hard-cast read X := TEditStub(O).Text gives a src ref row' (Has $Rw.HardCast { $_.src_kind -eq 'ref' -and $_.src_name -eq 'Text' -and $_.src_line -eq $M.'M-G5READ' })
+Check 'G5 hard-cast read keeps the receiver taint: O reaches Sink(X) (no recall loss vs. before G5)' (Has $Rw.HardCast { $_.dst_kind -eq 'arg' -and $_.dst_name -eq 'Sink' -and $_.dst_line -eq $M.'M-G5SINK' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 })
 Check 'lambda body sees the captured local (cond 1)' (Has $Rw.LambdaCapture { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-LAMBDA' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 -and $_.cond -eq 1 })
 
 Write-Host 'Fallback and cap' -ForegroundColor Cyan
