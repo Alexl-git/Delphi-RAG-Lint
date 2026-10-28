@@ -35,10 +35,13 @@ uses
 /// VER370). 'Win64' -> mswindows, win64, cpu64bits, cpux86_64, unicode,
 /// conditionalexpressions, compiler_version_37, ver370. 'Win32' -> mswindows,
 /// win32, cpux86, unicode, conditionalexpressions, compiler_version_37, ver370
-/// (no win64/cpu64bits/cpux86_64). Platform match is case-insensitive; an
-/// unknown platform falls back to the Win64 set.</summary>
-/// <param name="APlatform">'Win64' or 'Win32' (case-insensitive). Empty or
-/// unknown defaults to Win64.</param>
+/// (no win64/cpu64bits/cpux86_64). Win64x, Linux64, OSX64, OSXARM64, Android,
+/// Android64, iOSDevice64 and iOSSimARM64 each get their own POSIX / CPU / OS
+/// set (see the constants in the implementation for the source). Platform
+/// match is case-insensitive; an unknown platform falls back to the Win64
+/// set.</summary>
+/// <param name="APlatform">A Delphi 13 target platform name listed above
+/// (case-insensitive). Empty or unknown defaults to Win64.</param>
 /// <returns>Lowercased built-in define names.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -252,19 +255,51 @@ const
   PLATFORM_ENABLED_PATTERN = '<Platform\s+value="([^"]+)"\s*>\s*True\s*</Platform>';
 
 function PlatformBuiltins(const APlatform: string): TArray<string>;
+const
+  // Present on every Delphi 13 / RAD Studio 37 target.
+  COMMON = ',unicode,conditionalexpressions,compiler_version_37,ver370';
+  // Per-platform predefined conditionals. Source for every row below:
+  // Embarcadero DocWiki "Conditional compilation (Delphi)", predefined
+  // conditionals table (platform / CPU / OS groups), transcribed from the
+  // published table; the docwiki MCP was unreachable on 2026-10-28 and no RTL
+  // source ships under Studio\37.0\source, so a live IDE check is still due.
+  // Win32 / Win64 rows are the original sets and must not change.
+  WIN32_SET  = 'mswindows,win32,cpux86';
+  WIN64_SET  = 'mswindows,win64,cpu64bits,cpux86_64';
+  // DocWiki: Win64x (LLVM-based Windows 64) is a Windows 64 target: WIN64,
+  // MSWINDOWS, CPUX64, CPU64BITS.
+  WIN64X_SET = 'mswindows,win64,cpu64bits,cpux64';
+  // DocWiki: LINUX, LINUX64, POSIX, POSIX64, CPUX64, CPU64BITS, EXTERNALLINKER.
+  LINUX64_SET = 'linux,linux64,posix,posix64,cpux64,cpu64bits,externallinker';
+  // DocWiki: MACOS, MACOS64, OSX, OSX64, POSIX, POSIX64, CPU64BITS, with
+  // CPUX64 (Intel) or CPUARM + CPUARM64 (Apple silicon); EXTERNALLINKER.
+  OSX64_SET    = 'macos,macos64,osx,osx64,posix,posix64,cpux64,cpu64bits,externallinker';
+  OSXARM64_SET = 'macos,macos64,osx,osx64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
+  // DocWiki: ANDROID + ANDROID32 / ANDROID64, POSIX + POSIX32 / POSIX64, CPUARM
+  // (+ CPUARM32 / CPUARM64), CPU32BITS / CPU64BITS. LINUX is NOT defined.
+  ANDROID_SET   = 'android,android32,posix,posix32,cpuarm,cpuarm32,cpu32bits,externallinker';
+  ANDROID64_SET = 'android,android64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
+  // DocWiki: IOS, IOS64, IOSDEVICE, IOSDEVICE64 (device) or IOSSIMULATOR
+  // (simulator), plus MACOS, POSIX, POSIX64, CPUARM, CPUARM64, CPU64BITS.
+  IOSDEV64_SET = 'ios,ios64,iosdevice,iosdevice64,macos,macos64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
+  IOSSIM64_SET = 'ios,ios64,iossimulator,macos,macos64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
+var
+  Spec: string;
 begin
-  // Shared across every Windows platform for Delphi 13 / RAD Studio 37.
-  if SameText(APlatform, 'Win32') then
-    Result := TArray<string>.Create(
-      'mswindows', 'win32', 'cpux86',
-      'unicode', 'conditionalexpressions', 'compiler_version_37', 'ver370')
+  if SameText(APlatform, 'Win32') then Spec := WIN32_SET
+  else if SameText(APlatform, 'Win64x') then Spec := WIN64X_SET
+  else if SameText(APlatform, 'Linux64') then Spec := LINUX64_SET
+  else if SameText(APlatform, 'OSX64') then Spec := OSX64_SET
+  else if SameText(APlatform, 'OSXARM64') then Spec := OSXARM64_SET
+  else if SameText(APlatform, 'Android') then Spec := ANDROID_SET
+  else if SameText(APlatform, 'Android64') then Spec := ANDROID64_SET
+  else if SameText(APlatform, 'iOSDevice64') then Spec := IOSDEV64_SET
+  else if SameText(APlatform, 'iOSSimARM64') then Spec := IOSSIM64_SET
   else
     // Win64 is the default (also for unknown/empty platforms).
-    Result := TArray<string>.Create(
-      'mswindows', 'win64', 'cpu64bits', 'cpux86_64',
-      'unicode', 'conditionalexpressions', 'compiler_version_37', 'ver370');
+    Spec := WIN64_SET;
+  Result := SplitString(Spec + COMMON, ',');
 end;
-
 // Map a config name to its RAD Studio Cfg_N alias the way the IDE templates
 // lay it out: Release -> Cfg_2, Debug -> Cfg_1. Only the FALLBACK now, for a
 // config name the .dproj itself does not declare (see ConfigChain).
@@ -281,8 +316,11 @@ end;
 // anything else -- including empty/unknown -- is the Win64 default.
 function PlatformGroupSuffix(const APlatform: string): string;
 begin
-  if SameText(APlatform, 'Win32') then
-    Result := 'Win32'
+  // Every platform with built-ins above has its own group suffix (Base_Linux64);
+  // anything else keeps the Win64 default.
+  if MatchText(APlatform, ['Win32', 'Win64x', 'Linux64', 'OSX64', 'OSXARM64',
+    'Android', 'Android64', 'iOSDevice64', 'iOSSimARM64']) then
+    Result := APlatform
   else
     Result := 'Win64';
 end;
