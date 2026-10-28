@@ -322,6 +322,8 @@ uses
   DRagLint.Charts.Q.RoundTrip in '..\charts\DRagLint.Charts.Q.RoundTrip.pas',
   DRagLint.CLI.CycleFix in 'DRagLint.CLI.CycleFix.pas',
   DRagLint.CLI.HelpText in 'DRagLint.CLI.HelpText.pas',
+  DRagLint.CLI.LibraryReady in 'DRagLint.CLI.LibraryReady.pas',
+  DRagLint.CLI.LibraryMarker in 'DRagLint.CLI.LibraryMarker.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
