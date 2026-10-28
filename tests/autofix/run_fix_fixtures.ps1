@@ -121,8 +121,7 @@ try {
         $txt = & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | Out-String
         Check "${tag}: second run is a no-op ('autofix: no fixable findings')" ($txt -match 'autofix: no fixable findings') $txt.Trim()
         Check "${tag}: second run left the bytes unchanged" (BytesEqual $before ([IO.File]::ReadAllBytes($copy)))
-        # 3. the rule no longer fires (a --db case is re-indexed first: the fix changed the source)
-        if (Test-Path (Join-Path $dir.FullName "$case.db-needed")) { & $exePath index $scr --db $db *> (Join-Path $scr '_reindex.log') }
+        # 3. the rule no longer fires (a --db case was re-indexed after the fix, above)
         $raw3 = & $exePath lint --file $copy --rule $id --json @extra 2>$null | Out-String
         $left = -1; try { $left = @(@($raw3 | ConvertFrom-Json) | Where-Object { $_.rule -eq $id }).Count } catch { $left = -1 }
         Check "${tag}: '$id' no longer fires on the fixed file (got $left)" ($left -eq 0) $raw3.Trim()
