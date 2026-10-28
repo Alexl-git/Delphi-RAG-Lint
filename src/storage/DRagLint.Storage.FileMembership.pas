@@ -163,6 +163,12 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 /// shared cache means table-level SQLITE_LOCKED the busy timeout does not
 /// retry, and pragmas leaking between connections. Pinned by
 /// tests\autotest\run_sharedcache_private_pin.ps1.
+/// TRANSACTIONS START WITH BEGIN IMMEDIATE (TxOptions.Isolation = xiSnapshot):
+/// the writer lock is taken at StartTransaction, so a caller that reads inside
+/// its transaction and writes what it read can no longer have a second writer
+/// commit in between (the intermittent FOREIGN KEY failure of the resolve
+/// passes). A second writer now waits on the busy timeout instead; guard:
+/// tests\autotest\run_index_two_writers_fk.ps1.
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
@@ -300,6 +306,7 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
+  , FireDAC.Stan.Option { TFDTxIsolation: xiSnapshot }
   , FireDAC.Stan.Def
   , FireDAC.Stan.Param
   , FireDAC.Phys.SQLite
@@ -376,6 +383,12 @@ begin
   AConn.Params.Values['JournalMode']:= 'WAL';   { R16: a writer restores WAL, never leaves it }
   AConn.Params.Values['Synchronous']:= 'Normal';
   ArmBusyTimeout(AConn, ABusyTimeoutMs);
+  { Item 12 (two writers on one DB): xiSnapshot is FireDAC's BEGIN IMMEDIATE on SQLite
+    (FireDAC.Phys.SQLite), so StartTransaction takes the RESERVED lock AT BEGIN, not at
+    the first write. A resolve pass reads its candidate ids after its StartTransaction
+    and so reads and writes under one lock; a second writer waits on the busy timeout
+    instead of re-issuing the ids between the pass's reads and its writes. }
+  AConn.TxOptions.Isolation:= xiSnapshot;
   AConn.LoginPrompt:= False;
   AConn.Connected  := True;
 end; // procedure
