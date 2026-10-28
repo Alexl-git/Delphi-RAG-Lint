@@ -51,7 +51,7 @@ $Allowlist = @(
     'inline-comment-in-multiline-args', 'instability', 'interface-reference-cycle',
     'layering-violation', 'line-too-long', 'local-field-prefix', 'low-cohesion', 'method-too-long',
     'middle-man', 'missing-doc', 'nested-with', 'outputdebugstring', 'parser-error',
-    'query-name-with-effect', 'redundant-as-tobject',
+    'query-name-with-effect',
     'repeated-type-switch', 'review-marker-malformed', 'review-marker-placeholder-hash',
     'review-marker-reason-unreviewed', 'review-marker-stale', 'review-marker-unused',
     'stat-gated-destructive', 'too-many-children', 'too-many-locals', 'unbalanced-begin-end',

@@ -1,0 +1,4 @@
+# POSITIVE CONTROLS for used-before-assignment-fp-shapes: scalar (27), untouched array (34) and a record field never assigned (46) must still fire.
+used-before-assignment 27
+used-before-assignment 34
+used-before-assignment 46

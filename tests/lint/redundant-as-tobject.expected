@@ -1,0 +1,2 @@
+# positive control: a class-typed operand (Sender: TObject) still fires.
+redundant-as-tobject 11
