@@ -563,12 +563,13 @@ try {
   if ($main -eq [IntPtr]::Zero) { return }
   Start-Sleep -Seconds 2
   # DRV-2b: the start-up work (book load, engine probes) runs behind the InputGate; a menu command posted then is
-  # refused like any other (seen: 'active tabs: Classes' + busy=True, then every later step cascaded): the library unit-list
-  # query blocked the main thread for over 60 s while other sessions held the library DB. Wait (up to the engine timeout) until idle.
+  # refused like any other (seen: 'active tabs: Classes' + busy=True, then every later step cascaded). Wait (up to the
+  # engine timeout) until idle. (The 60 s+ block seen while other sessions held the library DB is NOT start-up: it is the
+  # library unit-list read on the first Add..., not this wait.)
   [void](WaitIdle $p.Id $main 180)
 
   # --- 1. Conversion > Convert... shows the Convert tab ---
-  # The start-up work comes in bursts (two 'info' probes, then the library unit list); a 2 s idle gap between them
+  # The start-up work comes in bursts (two 'info' probes, then the book load); a 2 s idle gap between them
   # satisfies WaitIdle, and a command posted into the next burst is refused. So: up to 3 tries, each after WaitIdle.
   for ($try = 1; $try -le 3; $try++) {
     $invoked = [W]::InvokeMenu($main, 'Conversion|Convert...')
