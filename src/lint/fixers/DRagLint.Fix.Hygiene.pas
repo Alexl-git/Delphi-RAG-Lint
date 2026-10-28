@@ -2,10 +2,11 @@ unit DRagLint.Fix.Hygiene;
 
 { Lane A6 -- hygiene fixers of the autofix wave
   (docs\superpowers\plans\2026-10-27-autofix-wave-plan.md): comments, whitespace,
-  review markers and doc tags. Seven rules:
+  review markers and doc tags. Eight rules:
     commented-out-code                delete the comment (whole lines, or a trailing comment)
     doc-param-not-in-signature        delete the /// <param> tag the signature lacks
     inline-comment-in-multiline-args  hoist a trailing // comment above the statement
+    line-too-long                     re-wrap an over-long /// line at blanks (added 2026-10-28, lane B-DOC)
     misleading-indentation            re-indent the statement to its controlling statement
     multiple-statements-per-line      split the line at the statement boundary
     review-marker-placeholder-hash    write the computed hash over the placeholder
@@ -28,9 +29,16 @@ uses
   , DRagLint.Lint.Autofix
   , DRagLint.Lint.ReviewMarker
   , DRagLint.Lint.RuleCatalog
+  , DRagLint.Doc.Regions  { line-too-long: WrapFactLine + DOC_FACT_MAX_COLS, the managed-fact writer's own wrap }
   ;
 
 const
+  { line-too-long: the longest line dcc64 compiles at every file offset (DeadCodeChecks.MAX_SAFE_LINE_LEN). }
+  MAX_SAFE_LINE_LEN = 1020;
+  DOC_LINE_TOKEN    = '///';
+  FENCE_BEGIN       = '<!-- drag-lint:auto BEGIN -->';
+  FENCE_END         = '<!-- drag-lint:auto END -->';
+  FACT_PARA         = '<para>';
   MARKER_TOKEN = 'dl:ok';
   PARAM_CLOSE  = '</param>';
   STMT_END_WORDS: array[0..9] of string = ('begin', 'then', 'do', 'else', 'try', 'finally', 'except', 'of',
@@ -434,7 +442,98 @@ begin
   Result:= [DropTrailingComment(AFinding, AFinding.StartLine, Line, CCol)];
 end;
 
+{ True when line AIdx (0-based) of ALines lies inside a `drag-lint:auto BEGIN .. END` fence: the nearest fence
+  marker above it, within the same run of /// lines, is a BEGIN. }
+function InsideManagedFence(ALines: TStringList; AIdx: Integer): Boolean;
+begin
+  for var K:= AIdx - 1 downto 0 do
+  begin
+    var T: string:= TrimLeft(ALines[K]);
+    if not T.StartsWith(DOC_LINE_TOKEN) then Exit(False);
+    if T.Contains(FENCE_END) then Exit(False);
+    if T.Contains(FENCE_BEGIN) then Exit(True);
+  end;
+  Result:= False;
+end;
+
+{ Breaks APrefix + AText into lines of at most DOC_FACT_MAX_COLS columns, each starting with APrefix: at the
+  rightmost blank inside the budget that follows ',' or ';', else at the rightmost blank; one blank is dropped at
+  each break. The managed-fact writer's own policy (WrapFactLine), applied to any doc text. nil when a single token
+  is longer than the budget -- no break leaves every line under the limit. }
+function WrapDocText(const APrefix, AText: string): TArray<string>;
+var
+  Rest  : string;
+  Budget: Integer;
+  B     : Integer;
+  Top   : Integer;
+begin
+  Result:= nil;
+  Rest  := AText;
+  Budget:= DOC_FACT_MAX_COLS - Length(APrefix);
+  if Budget < 2 then Exit;
+  while Length(Rest) > Budget do
+  begin
+    Top:= Budget + 1;
+    B:= 0;
+    for var K:= Top downto 2 do
+      if (Rest[K] = ' ') and CharInSet(Rest[K - 1], [',', ';']) then
+      begin
+        B:= K;
+        Break;
+      end;
+    if B = 0 then
+      for var K:= Top downto 2 do
+        if Rest[K] = ' ' then
+        begin
+          B:= K;
+          Break;
+        end;
+    if B = 0 then Exit(nil);
+    Result:= Result + [APrefix + Copy(Rest, 1, B - 1)];
+    Rest:= Copy(Rest, B + 1, MaxInt);
+  end;
+  Result:= Result + [APrefix + Rest];
+end;
+
+{ line-too-long: re-wraps an over-long `///` line at blanks so every line is under the compiler-safe limit. Inside
+  the managed fence only a <para> fact line is wrapped, and exactly as the writer wraps it (WrapFactLine), because
+  the fence readers fold a split <para> back and nothing else; a legacy fence line declines. Declines for any line
+  that is not a `///` comment (code, `//`, braces) and when no break gets every line under the limit. }
+function FixLineTooLong(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Line  : string;
+  Prefix: string;
+  Text  : string;
+  Wrap  : TArray<string>;
+  E     : TTextEdit;
+begin
+  Result:= nil;
+  if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
+  Line:= ALines[AFinding.StartLine - 1];
+  if not TrimLeft(Line).StartsWith(DOC_LINE_TOKEN) then Exit;
+  Prefix:= LeadingWs(Line) + DOC_LINE_TOKEN;
+  if Copy(Line, Length(Prefix) + 1, 1) = ' ' then Prefix:= Prefix + ' ';
+  Text:= Copy(Line, Length(Prefix) + 1, MaxInt);
+  if InsideManagedFence(ALines, AFinding.StartLine - 1) then
+  begin
+    if not Text.StartsWith(FACT_PARA) then Exit;
+    Wrap:= WrapFactLine(Prefix, Text);
+  end
+  else
+    Wrap:= WrapDocText(Prefix, Text);
+  if Length(Wrap) < 2 then Exit;
+  for var W in Wrap do
+    if Length(W) > MAX_SAFE_LINE_LEN then Exit;
+  E:= NewEdit(AFinding, tekReplaceLines);
+  E.Line      := AFinding.StartLine;
+  E.EndLine   := AFinding.StartLine;
+  E.ExpectText:= Line;
+  E.Text      := string.Join(#13#10, Wrap);
+  Result:= [E];
+end;
+
 initialization
+  RegisterFixer('line-too-long', FixLineTooLong);
   RegisterFixer('commented-out-code', FixCommentedOutCode);
   RegisterFixer('doc-param-not-in-signature', FixDocParamNotInSignature);
   RegisterFixer('inline-comment-in-multiline-args', FixInlineCommentInMultilineArgs);

@@ -2374,7 +2374,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "lint --fix repairs findings of the 109 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+      "summary": "lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
       "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
       "wikiPage": "autofix-wave",
       "surfaces": [
@@ -2386,7 +2386,7 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
         "surfaceHash": "2a0c69e37582c448ad563d32de5f3bd835f13bcfcb200846aa29d4c9697781e2"
@@ -14090,7 +14090,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Line longer than 1020 characters -- dcc64 compiles it only at some file offsets (F2069) (structure, warning)",
+        "summary": "Line longer than 1020 characters -- dcc64 compiles it only at some file offsets (F2069) (structure, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {

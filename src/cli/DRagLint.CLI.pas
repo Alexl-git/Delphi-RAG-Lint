@@ -73,21 +73,18 @@ const
 /// (Args); DoTop (Args); DoImportLog (Args); DoGraph (Args); DoTodos (Args); DoHover
 /// (Args); DoContrastSelfTest; DoImpact (Args); DoWiring (Args); DoSurface (Args);
 /// DoOutline (Args); DoCompare (Args).</returns>
-/// <exception cref="EConvertApplyWrite"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoConvertApply: cannot write %s: %s -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: cannot write %s: the file is read-only -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s (+1 more)</exception>
-/// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
-/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: --delphi-lsp-bits must be 32 or 64, got: %s; via DRagLint.CLI.ParseArgs: --merge-budget-ms must be a non-negative whole number of milliseconds, got: %s; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit (+116 more)</para>
-/// <para>Complexity: 124 (cyclomatic, outer body), 361 lines (full implementation)</para>
+/// <para>Calls: Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst (+123 more)</para>
+/// <para>Complexity: 135 (cyclomatic, outer body), 393 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
+/// <seealso cref="DRagLint.CLI.ConfigureLspLint"/>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
 /// <seealso cref="DRagLint.CLI.DoBenchContext"/>
-/// <seealso cref="DRagLint.CLI.DoButterfly"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;

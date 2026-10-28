@@ -107,3 +107,4 @@ unused-unit-in-uses
 empty-procedure-body
 classname-string-compare
 property-accessor-name
+line-too-long
