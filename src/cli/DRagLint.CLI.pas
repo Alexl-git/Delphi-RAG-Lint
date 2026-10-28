@@ -957,6 +957,7 @@ function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
   the implementation) needs it, and the implementation sits beside the manifest
   helpers near DoResolveDbsList. }
 function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: string): string; forward;
+function PlatformFromDprojFile(const ADproj: string): string; forward;
 { Forward: DoLint needs the project's scoped closure for unit-not-in-dpr's third
   direction, and BuildProjectFileScope is defined some 3,000 lines below it. }
 function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>; forward;
@@ -3709,6 +3710,34 @@ begin
        SameText(ExpandFileName(ExpandSectionDb(AManifest, Sec)), ExpandFileName(ADb)) then Exit(True);
 end;
 
+var
+  { The explicit --platform of this `index --all` run ('' = none). TPlanSection.Platform
+    is '' for closure / folder sections (ResolvePlan, src\index -- extractor-hashed, so not
+    touched), so the explicit choice has to reach BuildPlanItem some other way. }
+  GIndexAllPlatformArg: string = '';
+
+/// <summary>The platform whose library a manifest section resolves against.</summary>
+/// <param name="AItem">The plan item; closure roots are the .dpr/.dproj the section builds.</param>
+/// <returns>Explicit --platform, else the item's own platform, else the active platform of the
+/// section's .dproj. '' (after one visible NOTE) when none is known; never a silent Win32.</returns>
+/// <remarks>Before this a closure section arrived with Platform = '' and the library was picked
+/// from the CWD / manifest default, so a Win64 project could bind against library-Win32.</remarks>
+function SectionLibraryPlatform(const AItem: TPlanSection): string;
+begin
+  Result:= GIndexAllPlatformArg;
+  if Result = '' then Result:= AItem.Platform;
+  if Result = '' then
+    for var Root in AItem.Roots do
+    begin
+      var Dproj: string:= ChangeFileExt(Root, '.dproj');
+      if TFile.Exists(Dproj) then Result:= PlatformFromDprojFile(Dproj);
+      if Result <> '' then Break;
+    end;
+  if Result = '' then
+    Writeln('  NOTE: platform of section "', AItem.Name, '" is unknown (no --platform, no .dproj platform); ',
+            'the library is picked from the manifest default platform -- pass --platform.');
+end;
+
 { Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
 
@@ -4103,7 +4132,8 @@ begin
     if RanCalls then
     begin
       { item 4: the opt-in library store, opened once for both stages; none when the key is off. }
-      var SectionLibs: TArray<ISymbolStore>:= ManifestLibraryStores(AItem.LibraryResolve and (AItem.Mode <> smLibrary), AItem.Platform, AItem.DbPath);
+      var SectionLibs: TArray<ISymbolStore>:= ManifestLibraryStores(AItem.LibraryResolve and (AItem.Mode <> smLibrary),
+        (if AItem.LibraryResolve and (AItem.Mode <> smLibrary) then SectionLibraryPlatform(AItem) else AItem.Platform), AItem.DbPath);
       Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
       Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
@@ -4492,6 +4522,7 @@ begin
   // Build platform filter from --platform (reuses CheckPlatform field).
   if AArgs.CheckPlatform <> '' then PlatFilter:= [AArgs.CheckPlatform]
   else PlatFilter:= nil;
+  GIndexAllPlatformArg:= AArgs.CheckPlatform;
 
   // Resolve the full build plan.
   Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
@@ -4565,6 +4596,16 @@ begin
       Exit(2);
     end;
   end; // if
+
+  { Library-first (owner 2026-10-28, library-first-resolve plan s.2.6): every smLibrary item
+    runs before any project item, always -- a project section's resolve pass can then find its
+    platform library READY. A stable partition done here, not in Index.Plan.pas (extractor-hashed). }
+  begin
+    var Ordered: TArray<TPlanSection>:= nil;
+    for var Lib in Plan.Items do if Lib.Mode = smLibrary then Ordered:= Ordered + [Lib];
+    for var Prj in Plan.Items do if Prj.Mode <> smLibrary then Ordered:= Ordered + [Prj];
+    Plan.Items:= Ordered;
+  end;
 
   if AArgs.DryRun then
   begin
@@ -4717,6 +4758,14 @@ begin
   try
     for i:= 0 to TotalSections - 1 do
     begin
+      { Phase barrier: the last library child must be reaped before the first project child
+        starts (library-first). A failed wait is handled by the WaitBroken block below. }
+      if (i > 0) and (Plan.Items[i - 1].Mode = smLibrary) and (Plan.Items[i].Mode <> smLibrary) then
+        while (PoolCount > 0) and not WaitBroken do
+        begin
+          WaitBroken:= not ReapOneChild(ProcHandles, ProcItemIdx, PoolCount, DoneItem, ExitCode);
+          if (not WaitBroken) and (ExitCode <> 0) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[DoneItem])];
+        end;
       // Drain one slot from pool if it is full.
       while PoolCount >= EffJobs do
       begin
@@ -4739,7 +4788,8 @@ begin
 
       // Build child command line.
       ChildCmdLine:= '"' + SelfExe + '" index --all --only "' + Plan.Items[i].Name + '"';
-      if Plan.Items[i].Platform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + Plan.Items[i].Platform + '"';
+      if Plan.Items[i].Platform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + Plan.Items[i].Platform + '"'
+      else if AArgs.CheckPlatform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + AArgs.CheckPlatform + '"';
       { Only when the caller gave one -- see the block above. With no --config
         the child rediscovers the SAME manifest from the EngineDir and CWD it
         inherits, which is what the parent did. }
@@ -30367,10 +30417,22 @@ begin
   except
     Exit;
   end;
+  Result:= PlatformFromDprojFile(DprojFile);
+end; // function DetectPlatformFromDproj
 
+/// <summary>Reads the active platform of ONE .dproj: its <c>&lt;Platform Condition=...&gt;</c> element.</summary>
+/// <param name="ADproj">Path of the .dproj; an unreadable or platform-less file yields ''.</param>
+/// <returns>'Win32', 'Win64', or '' when the file names neither.</returns>
+function PlatformFromDprojFile(const ADproj: string): string;
+var
+  Xml: string ;
+  P1 : Integer;
+  P2 : Integer;
+begin
+  Result:= '';
   // Parse <Platform Condition="'$(Platform)'==''">Win64</Platform>
   try
-    Xml:= TFile.ReadAllText(DprojFile);
+    Xml:= TFile.ReadAllText(ADproj);
   except
     Exit;
   end;
@@ -30392,7 +30454,7 @@ begin
     P1:= Pos('<Platform Condition=', Xml, P2);
     if P1 = 0 then Break;
   end;
-end; // function DetectPlatformFromDproj
+end; // function PlatformFromDprojFile
 
 // v0.45 Task 9: resolve the DB list for consumer commands (query/lsp/serve)
 // when the user supplied no --db flags.
