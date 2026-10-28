@@ -94,6 +94,7 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Core.CliError
+  , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
   , System.SysUtils
@@ -645,6 +646,7 @@ type
     GhostOverlays: string; // --overlays <manifest>
     // v0.57: text-constant search (Tasks 3-8)
     TextQuery    : string ; // --text "<phrase>"
+    ConceptQuery : string ; // --concept "<words>" (xj-5 concept search)
     TextAnyOrder : Boolean; // --any-order
     TextSubstring: Boolean; // --substring
     NearQName    : string ; // query --text --near <QName> (call-graph neighbourhood filter)
@@ -798,6 +800,8 @@ begin
   Writeln('       ^ STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///.');
   Writeln('         Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception.');
   Writeln('         --kind literal is what this returned before comments were indexed.');
+  Writeln('  Find by meaning / doc prose (name unknown)?  drag-lint query --concept "<words>" --db <db>');
+  Writeln('       ^ BM25-ranked over identifier words (ApplyDelta = "apply delta") + doc summary/remarks.');
   Writeln('  Which files reference unit U?         drag-lint query unit-usage --unit U --db <db>');
   Writeln('       ^ omit --in for the project-wide answer; add --in <F.pas> to ask about ONE file.');
   Writeln('       ^ for an RTL/VCL/third-party unit pass the platform library DB too');
@@ -1876,6 +1880,11 @@ begin
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
     else if (A = '--text') and (i < ParamCount) then begin Inc(i); Result.TextQuery:= ParamStr(i); end
+    else if (A = '--concept') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ConceptQuery:= ParamStr(i);  // dl:ok duplicate-code@33b9 -- the one-value flag shape every ParseArgs branch repeats; folding it is a ParseArgs refactor, not this lane
+    end
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True
@@ -4154,6 +4163,8 @@ begin
       Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
     else
       Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
+    { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
+    Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
     { The checkpoint below folds the -wal in and is NOT free on a multi-gigabyte
       index, so it is announced too: it is the last thing between the operator
       and the section summary, and an unannounced pause there reads exactly like
@@ -6460,6 +6471,8 @@ begin
       Stage('', 'purity', procedure begin TPurityStage.Run(Store); end)
     else
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
+    { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
+    Stage('', 'search', procedure begin Store.BuildSymbolSearch; end);
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
@@ -6608,6 +6621,8 @@ begin
     Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
   else
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
+  { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
+  Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -8245,6 +8260,109 @@ begin
 end; // procedure
 
 
+/// <summary>drag-lint query --concept: ranked BM25 search over identifier words
+/// (camelCase split) and doc-comment prose, for the "I know what it does, not
+/// what it is called" question.</summary>
+/// <param name="AArgs">Parsed CLI args. ConceptQuery is the free-text words;
+/// Limit caps the hits (default 20); Kind optionally filters (comma-separated);
+/// AsJson selects JSON output.</param>
+/// <returns>0 when there were hits; 1 when none; 2 on a usage error or an
+/// unreadable --db; 3 when the index has no concept-search table yet
+/// (ConceptSearchReady False) -- a one-line note goes to stderr.</returns>
+/// <remarks>Read-only. Searches the first resolved DB only. Score is -bm25 over
+/// (tokens 3, summary 2, remarks 1); larger ranks first.</remarks>
+function DoQueryConcept(const AArgs: TArgs): Integer;
+const
+  CONCEPT_DEFAULT_LIMIT  = 20;
+  CONCEPT_EXIT_NOT_READY = 3;
+var
+  PathsToScan: TArray<string>;
+  DbPath     : string        ;
+  Store      : ISymbolStore  ;
+  Lim        : Integer       ;
+  Hits       : TArray<TConceptHit>;
+  H          : TConceptHit   ;
+  AllCount   : Integer       ;
+  Rank       : Integer       ;
+  RoOk       : Boolean       ;
+  JRoot      : TJSONObject   ;
+  JArr       : TJSONArray    ;
+  JObj       : TJSONObject   ;
+  JMatched   : TJSONArray    ;
+  Col        : string        ;
+begin
+  if not ExplicitDbsExist(AArgs, 'query --concept') then Exit(2);
+  if Trim(AArgs.ConceptQuery) = '' then
+  begin
+    Writeln('ERROR: query --concept requires words');
+    Exit(2);
+  end;
+  if AArgs.Limit > 0 then Lim:= AArgs.Limit else Lim:= CONCEPT_DEFAULT_LIMIT;
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+  if (Length(PathsToScan) = 0) or not TFile.Exists(PathsToScan[0]) then
+  begin
+    Writeln('ERROR: database not found; pass --db <file.sqlite> (run "drag-lint index <path>" first).');
+    Exit(2);
+  end;
+  DbPath:= PathsToScan[0];
+  Store:= OpenReadOnlyStore(DbPath, RoOk);
+  if not RoOk then
+  begin
+    StaleDbRefusesRun(AArgs, 'query --concept', DbPath);
+    Exit(2);
+  end;
+  if not Store.ConceptSearchReady then
+  begin
+    Writeln(ErrOutput, 'note: this index has no concept-search table yet; run "drag-lint index" on it once -- it backfills from the existing rows, no re-parse.');
+    Exit(CONCEPT_EXIT_NOT_READY);
+  end;
+  Hits:= Store.SearchConcept(AArgs.ConceptQuery, Lim, AArgs.Kind);
+  AllCount:= 0;
+  for H in Hits do if H.AllTerms then Inc(AllCount);
+  if AArgs.AsJson then
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('query', AArgs.ConceptQuery);
+      JRoot.AddPair('count', TJSONNumber.Create(Length(Hits)));
+      JRoot.AddPair('allTermsCount', TJSONNumber.Create(AllCount));
+      JArr:= TJSONArray.Create;
+      JRoot.AddPair('hits', JArr);
+      Rank:= 0;
+      for H in Hits do
+      begin
+        Inc(Rank);
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('rank', TJSONNumber.Create(Rank));
+        JObj.AddPair('qname', H.QualifiedName);
+        JObj.AddPair('kind', H.Kind);
+        JObj.AddPair('file', H.FilePath);
+        JObj.AddPair('line', TJSONNumber.Create(H.Line));
+        JObj.AddPair('score', TJSONNumber.Create(H.Score));
+        JMatched:= TJSONArray.Create;
+        for Col in H.Matched.Split([',']) do if Col <> '' then JMatched.Add(Col);
+        JObj.AddPair('matched', JMatched);
+        JObj.AddPair('allTerms', TJSONBool.Create(H.AllTerms));
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JRoot.ToJSON);
+    finally
+      JRoot.Free;
+    end; // try
+  end // if
+  else
+  begin
+    Writeln(Format('concept "%s": %d hit(s) (%d match every word)', [AArgs.ConceptQuery, Length(Hits), AllCount]));
+    Rank:= 0;
+    for H in Hits do
+    begin
+      Inc(Rank);
+      Writeln(Format('  %d  %.2f  %-10s %s   %s:%d   [%s]', [Rank, H.Score, H.Kind, H.QualifiedName, H.FilePath, H.Line, H.Matched]));
+    end;
+  end;
+  if Length(Hits) > 0 then Result:= 0 else Result:= 1;
+end; // function
+
 { ---------------------------------------------------------------------------
   query --name-like <term> -- substring search over symbol NAMES.
 
@@ -8382,6 +8500,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'query') then Exit(2);
   // v0.57 Task 8: text-content search routes to its own handler.
   if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
+  if AArgs.ConceptQuery <> '' then Exit(DoQueryConcept(AArgs));
   // substring/discovery search over NAMES (distinct from --name, whose
   // contract stays exact-plus-edit-distance-fallback).
   if AArgs.NameLike <> '' then Exit(DoQueryNameLike(AArgs));
@@ -32465,6 +32584,24 @@ begin
   end;
 end; // function
 
+/// <summary>selftest ident-words: runs SelfTestIdentWords (concept search splitter).</summary>
+/// <returns>0 and IDENTWORDS-OK on success, 1 and IDENTWORDS-FAIL otherwise.</returns>
+function DoSelfTestIdentWords: Integer;
+var
+  Failure: string;
+begin
+  if SelfTestIdentWords(Failure) then
+  begin
+    Writeln('IDENTWORDS-OK');
+    Result:= 0;
+  end
+  else
+  begin
+    Writeln('IDENTWORDS-FAIL: ', Failure);
+    Result:= 1;
+  end;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -32483,10 +32620,11 @@ begin
   else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
   else if AArgs.SubCommand = 'studio-root'   then Result:= DoSelfTestStudioRoot
   else if AArgs.SubCommand = 'fact-wrap'     then Result:= DoSelfTestFactWrap
+  else if AArgs.SubCommand = 'ident-words'   then Result:= DoSelfTestIdentWords
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap, ident-words');
     Result:= 2;
   end;
 end; // function
@@ -33052,6 +33190,7 @@ begin
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
             Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
+            Stage('  ', 'search',       procedure begin Store.BuildSymbolSearch; end);   { xj-5: concept-search table, incremental }
           end;
 
           // Recompile + refresh compiler_findings for the whole project when

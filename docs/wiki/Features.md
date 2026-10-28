@@ -107,6 +107,7 @@ Find symbols, callers, callees, text and types in the index.
 | [helpers-of](helpers-of) | `helpers-of`; drag-lint > Inspect Symbol > Helpers of Type... |  |
 | [Hover at Cursor](Hover-at-Cursor) | drag-lint > Hover at Cursor; `hover` |  |
 | [outline](outline) | `outline`; drag-lint > Show Structure |  |
+| [query --concept](concept-search) | `query` |  |
 | [query --kind --all](query-kind-all) | `query` |  |
 | [query --name-like](query-name-like) | `query` |  |
 | [query --text --near](query-text-near) | `query` |  |

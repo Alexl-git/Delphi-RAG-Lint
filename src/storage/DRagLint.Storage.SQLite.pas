@@ -2195,6 +2195,21 @@ type
       /// (pre-purity index: a writable open migrates them in first).</returns>
       /// <remarks>Implements ISymbolStore.PurityNeedsRun.</remarks>
       function PurityNeedsRun: Boolean;
+      /// <summary>Concept-search stage: syncs symbol_search with symbols.</summary>
+      /// <returns>Rows inserted.</returns>
+      /// <remarks>Implements ISymbolStore.BuildSymbolSearch (see there).</remarks>
+      function BuildSymbolSearch: Integer;
+      /// <summary>True when SearchConcept can answer on this DB.</summary>
+      /// <returns>See ISymbolStore.ConceptSearchReady.</returns>
+      /// <remarks>Implements ISymbolStore.ConceptSearchReady.</remarks>
+      function ConceptSearchReady: Boolean;
+      /// <summary>Ranked concept search (query --concept).</summary>
+      /// <param name="AWords">Free-text question.</param>
+      /// <param name="ALimit">Maximum rows; &lt; 1 means 20.</param>
+      /// <param name="AKinds">Comma-separated kind filter; '' = all.</param>
+      /// <returns>See ISymbolStore.SearchConcept.</returns>
+      /// <remarks>Implements ISymbolStore.SearchConcept.</remarks>
+      function SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string = ''): TArray<TConceptHit>;
       /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
       /// the purity stage (one query instead of one per routine).</summary>
       /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
@@ -3548,13 +3563,15 @@ implementation
 uses
   System.Generics.Defaults
   , System.StrUtils
+  , System.Character
   , System.IOUtils
   , System.Math
   , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
-  , DRagLint.Storage.Schema
+  , DRagLint.Storage.Schema  // dl:unit DRagLint.Storage.Schema accepted -- the DDL constants exist only for this store: Migrate is their one reader, so they travel together
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY: ClearAllFiles stamps it (B-23) }
   , DRagLint.Query  .Fuzzy
+  , DRagLint.Query.IdentWords { SplitIdentifierWords: concept-search tokens (BuildSymbolSearch) }
   { DRagLint.Index.CallResolver (v14, D5: the receiver-typing engine for
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
@@ -4612,6 +4629,20 @@ begin
     PrintTriggerCount('string_literals triggers after DROP');
     Writeln('WARNING: FTS5 unavailable in sqlite3.dll; ' +
             'text-search index (string_literals) will not be updated.');
+  end;
+  { XERJ item 5: concept-search tables. Derived data (filled by the search index stage),
+    no SCHEMA_VERSION bump. Without FTS5 the three triggers are dropped so a cascade from
+    symbols never reaches a missing fts5 module. }
+  if FFts5Available then
+  begin
+    for I := Low(SCHEMA_DDL_SYMBOL_SEARCH) to High(SCHEMA_DDL_SYMBOL_SEARCH) do
+      TryExec(SCHEMA_DDL_SYMBOL_SEARCH[I]);
+  end
+  else
+  begin
+    TryExec('DROP TRIGGER IF EXISTS symbol_search_ai');
+    TryExec('DROP TRIGGER IF EXISTS symbol_search_ad');
+    TryExec('DROP TRIGGER IF EXISTS symbol_search_au');
   end;
   { v9: additive body-span columns for pre-v9 symbols tables. CREATE TABLE IF
     NOT EXISTS never adds columns to an existing table, so ALTER explicitly
@@ -9737,6 +9768,448 @@ begin
     stage fills them. Probing the column would itself be "no such column". }
   if not HasEffectCols then Exit(True);
   Result:= ProbeExists('SELECT 1 FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL LIMIT 1');
+end; // function
+
+function ConceptCutSpans(const AText, AOpen, AClose: string): string;
+{ Drops every `OPEN` .. `CLOSE` span from AText (an unterminated OPEN drops the rest). }
+var
+  A, B: Integer;
+begin
+  Result:= AText;
+  A:= Pos(AOpen, Result);
+  while A > 0 do
+  begin
+    B:= PosEx(AClose, Result, A + Length(AOpen));
+    if B = 0 then
+      Result:= Copy(Result, 1, A - 1)
+    else
+      Delete(Result, A, B + Length(AClose) - A);
+    A:= Pos(AOpen, Result);
+  end; // while
+end; // function
+
+
+{ XERJ item 5 (concept search) helpers. Unit-level, not class members, so the class
+  declaration stays untouched. None is named Upsert/Put/Insert/Write/Resolve (the
+  extractor and resolver guards slice this unit by routine name). }
+/// <summary>Reduces a doc-comment body to plain prose for symbol_search.summary / remarks:
+/// drops the generated drag-lint:auto blocks (their "Called from:" qnames are noise), other
+/// HTML comments and XML tags, strips comment prefixes and brackets (///, //, {, }, (*, *)),
+/// decodes &amp;lt; &amp;gt; &amp;amp; and collapses whitespace.</summary>
+/// <param name="AText">Raw summary / remarks / doc-literal text; may be ''.</param>
+/// <returns>Single-line plain text, '' when nothing is left.</returns>
+function ConceptStripDocMarkup(const AText: string): string;
+var
+  S, Line: string;
+  Lines  : TArray<string>;
+  SB     : TStringBuilder;
+  A, B   : Integer;
+begin
+  S:= ConceptCutSpans(AText, '<!-- drag-lint:auto BEGIN -->', '<!-- drag-lint:auto END -->');
+  S:= ConceptCutSpans(S, '<!--', '-->');
+  A:= Pos('<', S);
+  while A > 0 do
+  begin
+    B:= PosEx('>', S, A + 1);
+    if B = 0 then Break;
+    Delete(S, A, B - A + 1);
+    Insert(' ', S, A);
+    A:= PosEx('<', S, A + 1);
+  end; // while
+  Lines:= S.Replace(#13, '').Split([#10]);
+  SB:= TStringBuilder.Create;
+  try
+    for Line in Lines do
+    begin
+      S:= Line.Trim;
+      while S.StartsWith('/') do S:= S.Substring(1);
+      if S.StartsWith('(*') then S:= S.Substring(2);
+      if S.StartsWith('{') then S:= S.Substring(1);
+      if S.EndsWith('*)') then S:= S.Substring(0, Length(S) - 2);
+      if S.EndsWith('}') then S:= S.Substring(0, Length(S) - 1);
+      SB.Append(S.Trim).Append(' ');
+    end; // for
+    S:= SB.ToString;
+  finally
+    SB.Free;
+  end; // try
+  S:= S.Replace('&lt;', '<').Replace('&gt;', '>').Replace('&amp;', '&');
+  Result:= '';
+  for Line in S.Split([' ', #9], TStringSplitOptions.ExcludeEmpty) do
+    Result:= Result + IfThen(Result = '', '', ' ') + Line;
+end; // function
+
+const
+  { Prefix length that stands in for a porter stem when ConceptMatchedColumns guesses which column matched. }
+  CONCEPT_STEM_LEN      = 5;
+  { query --concept row cap when the caller passes no positive limit. }
+  CONCEPT_DEFAULT_LIMIT = 20;
+  CONCEPT_STOP_WORDS = ' a an and are as at be by do does for from how in is it of on or that the this to what when where which who why with ';
+
+{ The distinct, lower-cased, stop-word-free FTS terms of a free-text question. }
+function ConceptTerms(const AWords: string): TArray<string>;
+var
+  L  : TList<string>;
+  Tok, W: string;
+  AllDigits: Boolean;
+  C  : Char;
+begin
+  L:= TList<string>.Create;
+  try
+    for Tok in AWords.Split([' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty) do
+      for W in SplitIdentifierWords(Tok).Split([' '], TStringSplitOptions.ExcludeEmpty) do
+      begin
+        AllDigits:= True;
+        for C in W do
+          if not C.IsDigit then AllDigits:= False;
+        if (Length(W) < 2) and not AllDigits then Continue;
+        if Pos(' ' + W + ' ', CONCEPT_STOP_WORDS) > 0 then Continue;
+        if not L.Contains(W) then L.Add(W);
+      end; // for
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end; // try
+end; // function
+
+{ Column names (tokens, summary, remarks) whose text contains the first
+  min(Length, 5) chars of any term -- an approximation of the porter stemming. }
+function ConceptMatchedColumns(const ATerms: TArray<string>; const ATokens, ASummary, ARemarks: string): string;
+  function Hit(const AText: string): Boolean;
+  var
+    T, Stem: string;
+    Low    : string;
+  begin
+    Low:= AText.ToLower;
+    for T in ATerms do
+    begin
+      Stem:= Copy(T, 1, Min(Length(T), CONCEPT_STEM_LEN));
+      if Pos(Stem, Low) > 0 then Exit(True);
+    end; // for
+    Result:= False;
+  end; // function
+begin
+  Result:= '';
+  if Hit(ATokens ) then Result:= 'tokens';
+  if Hit(ASummary) then Result:= Result + IfThen(Result = '', '', ',') + 'summary';
+  if Hit(ARemarks) then Result:= Result + IfThen(Result = '', '', ',') + 'remarks';
+end; // function
+
+function TSQLiteSymbolStore.BuildSymbolSearch: Integer;
+{ Doc attribution (xj-5 integration, 2026-10-28): string_literals.symbol_id of a
+  kind='doc' row is the ENCLOSING scope (the unit or the class), not the symbol
+  the comment documents -- on TableTools every doc literal pointed at a unit,
+  class, record, enum or interface, none at a method. Grouping by symbol_id
+  piled every member's prose onto its class. So a doc literal is attributed by
+  POSITION instead: consecutive doc lines form one block, and the block belongs
+  to the symbol(s) declared on the first line after it that starts a symbol,
+  provided that line is at most DOC_GAP lines below the block (an attribute
+  line may sit between). A block with no declaration right below it is
+  dropped. Only the files that own a missing row are read. }
+const
+  DOC_GAP      = 2;   { lines allowed between a doc block and its declaration }
+  MAX_IN_FILES = 500; { above this many files, read every doc literal instead of an IN list }
+type
+  TSearchRow = record
+    Id                     : Int64;
+    FileId, StartLine      : Integer;
+    Tokens, Summary, Remarks: string;
+  end;
+var
+  Q, Ins   : TFDQuery;
+  Rows     : TList<TSearchRow>;
+  R        : TSearchRow;
+  I        : Integer;
+  Name, Parent, DocSummary, FileFilter, BlockText, Key: string;
+  FileSet  : TDictionary<Integer, Boolean>;
+  Starts   : TDictionary<Integer, TList<Integer>>;
+  DocByDecl: TDictionary<string, string>;
+  FileIds  : TArray<Integer>;
+  CurFile, BlockEnd, LitFile, LitStart, LitEnd: Integer;
+  FldId, FldName, FldPName, FldDSum, FldDRem, FldFile, FldStart, FldEnd, FldText: TField;
+  Block    : TStringBuilder;
+  IdText   : TArray<string>;
+
+  procedure FlushBlock;
+  var
+    L     : TList<Integer>;
+    Target, Idx: Integer;
+    Prior : string;
+  begin
+    BlockText:= Block.ToString;
+    Block.Clear;
+    if (BlockText = '') or (not Starts.TryGetValue(CurFile, L)) then
+    begin
+      BlockText:= '';
+      Exit;
+    end;
+    { first declaration line strictly below the block }
+    L.BinarySearch(BlockEnd + 1, Idx);
+    if Idx < L.Count then
+    begin
+      Target:= L[Idx];
+      if Target - BlockEnd <= DOC_GAP + 1 then
+      begin
+        Key:= IntToStr(CurFile) + ':' + IntToStr(Target);
+        if DocByDecl.TryGetValue(Key, Prior) then BlockText:= Prior + ' ' + BlockText;
+        DocByDecl.AddOrSetValue(Key, BlockText);
+      end;
+    end;
+    BlockText:= '';
+  end; // procedure
+
+begin
+  Result:= 0;
+  if not FFts5Available then Exit;
+  if not (TableExists('symbol_search') and TableExists('symbol_search_fts')) then Exit;
+  Rows     := TList<TSearchRow>.Create;
+  FileSet  := TDictionary<Integer, Boolean>.Create;
+  Starts   := TObjectDictionary<Integer, TList<Integer>>.Create([doOwnsValues]);
+  DocByDecl:= TDictionary<string, string>.Create;
+  Block    := TStringBuilder.Create;
+  Q        := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT s.id, s.name, p.name AS pname, d.summary AS dsum, d.remarks AS drem, s.file_id, s.start_line ' +
+                 'FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id ' +
+                 'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
+                 'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
+                 'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
+    Q.Open;
+    FldId   := Q.FieldByName('id');
+    FldName := Q.FieldByName('name');
+    FldPName:= Q.FieldByName('pname');
+    FldDSum := Q.FieldByName('dsum');
+    FldDRem := Q.FieldByName('drem');
+    FldFile := Q.FieldByName('file_id');
+    FldStart:= Q.FieldByName('start_line');
+    while not Q.Eof do
+    begin
+      Name      := FldName.AsString;
+      Parent    := FldPName.AsString;
+      DocSummary:= ConceptStripDocMarkup(FldDSum.AsString);
+      R.Id       := FldId.AsLargeInt;
+      R.FileId   := FldFile.AsInteger;
+      R.StartLine:= FldStart.AsInteger;
+      R.Tokens   := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
+      R.Summary  := DocSummary;
+      R.Remarks  := ConceptStripDocMarkup(FldDRem.AsString);
+      if R.Tokens = '' then R.Tokens:= Name.ToLower;
+      Rows.Add(R);
+      FileSet.AddOrSetValue(R.FileId, True);
+      Q.Next;
+    end; // while
+    Q.Close;
+    { Positional doc attribution for the rows symbol_docs left without a summary. }
+    if Rows.Count > 0 then
+    begin
+      FileIds:= FileSet.Keys.ToArray;
+      FileFilter:= '';
+      if Length(FileIds) <= MAX_IN_FILES then
+      begin
+        SetLength(IdText, Length(FileIds));
+        for I:= 0 to High(FileIds) do IdText[I]:= IntToStr(FileIds[I]);
+        FileFilter:= ' AND file_id IN (' + string.Join(',', IdText) + ')';
+      end;
+      Q.SQL.Text:= 'SELECT DISTINCT file_id, start_line FROM symbols WHERE 1 = 1' + FileFilter + ' ORDER BY file_id, start_line';  // dl:ok sql-injection-concat@7486 -- FileFilter is built only from IntToStr of file ids read from the DB
+      Q.Open;
+      while not Q.Eof do
+      begin
+        LitFile:= Q.Fields[0].AsInteger;
+        if not Starts.ContainsKey(LitFile) then Starts.Add(LitFile, TList<Integer>.Create);
+        Starts[LitFile].Add(Q.Fields[1].AsInteger);
+        Q.Next;
+      end; // while
+      Q.Close;
+      Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
+                   'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
+      Q.Open;
+      CurFile:= -1;
+      BlockEnd:= -1;
+      FldFile := Q.FieldByName('file_id');
+      FldStart:= Q.FieldByName('start_line');
+      FldEnd  := Q.FieldByName('end_line');
+      FldText := Q.FieldByName('text');
+      while not Q.Eof do
+      begin
+        LitFile := FldFile.AsInteger;
+        LitStart:= FldStart.AsInteger;
+        LitEnd  := FldEnd.AsInteger;
+        if (LitFile <> CurFile) or (LitStart > BlockEnd + 1) then
+        begin
+          FlushBlock;
+          CurFile:= LitFile;
+        end;
+        if Block.Length > 0 then Block.Append(' ');
+        Block.Append(FldText.AsString);
+        BlockEnd := LitEnd;
+        Q.Next;
+      end; // while
+      FlushBlock;
+      Q.Close;
+      for I:= 0 to Rows.Count - 1 do
+        if (Rows[I].Summary = '') and DocByDecl.TryGetValue(IntToStr(Rows[I].FileId) + ':' + IntToStr(Rows[I].StartLine), BlockText) then
+        begin
+          R:= Rows[I];
+          R.Summary:= ConceptStripDocMarkup(BlockText);
+          Rows[I]:= R;
+        end;
+    end;
+    Ins:= TFDQuery.Create(nil);
+    try
+      Ins.Connection:= FConn;
+      Ins.SQL.Text:= 'INSERT INTO symbol_search(symbol_id, tokens, summary, remarks) ' +
+                     'VALUES (:sid, :tok, :sum, :rem)';
+      Ins.ParamByName('sid').DataType:= ftLargeint;
+      Ins.ParamByName('tok').DataType:= ftWideMemo;
+      Ins.ParamByName('sum').DataType:= ftWideMemo;
+      Ins.ParamByName('rem').DataType:= ftWideMemo;
+      Ins.Prepare;
+      FConn.StartTransaction;
+      try
+        Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
+        Q.ExecSQL;
+        for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
+        begin
+          Ins.ParamByName('sid').AsLargeInt:= R.Id;
+          Ins.ParamByName('tok').Value:= R.Tokens;
+          if R.Summary = '' then Ins.ParamByName('sum').Clear else Ins.ParamByName('sum').Value:= R.Summary;
+          if R.Remarks = '' then Ins.ParamByName('rem').Clear else Ins.ParamByName('rem').Value:= R.Remarks;
+          Ins.ExecSQL;
+        end; // for
+        FConn.Commit;
+      except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
+        FConn.Rollback;
+        raise;
+      end;
+    finally
+      Ins.Free;
+    end; // try
+    Result:= Rows.Count;
+  finally
+    Q.Free;
+    Block.Free;
+    DocByDecl.Free;
+    Starts.Free;
+    FileSet.Free;
+    Rows.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.ConceptSearchReady: Boolean;
+begin
+  Result:= False;
+  try
+    if not (TableExists('symbol_search_fts') and TableExists('symbol_search')) then Exit;
+    Result:= ProbeExists('SELECT 1 FROM symbol_search LIMIT 1') or
+             not ProbeExists('SELECT 1 FROM symbols WHERE kind IN (' + CONCEPT_SEARCH_KINDS + ') LIMIT 1');  // dl:ok sql-injection-concat@1b60 -- CONCEPT_SEARCH_KINDS is a compile-time const, no input reaches it
+  except  // dl:ok bare-except@79dc -- contract: any failure (locked DB, missing fts5 module) means "not ready", never a crash
+    Result:= False;
+  end;
+end; // function
+
+function TSQLiteSymbolStore.SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string): TArray<TConceptHit>;
+var
+  Terms : TArray<string>;
+  Hits  : TList<TConceptHit>;
+  Seen  : TList<Int64>;
+  Kinds : TArray<string>;
+
+  procedure RunPass(const AMatch: string; AAllTerms: Boolean; AMax: Integer);
+  var
+    Q  : TFDQuery;
+    I  : Integer;
+    H  : TConceptHit;
+    Sql: string;
+    ColSid, ColQn, ColKd, ColPth, ColLn, ColSc, ColTok, ColSm, ColRmk: TField;
+  begin
+    Sql:= 'SELECT s.id AS sid, s.qualified_name AS qn, s.kind AS kd, f.path AS fpath, s.start_line AS ln, ' +
+          '-bm25(symbol_search_fts, 3.0, 2.0, 1.0) AS sc, ss.tokens AS tok, ss.summary AS sm, ss.remarks AS rmk ' +
+          'FROM symbol_search_fts JOIN symbol_search ss ON ss.symbol_id = symbol_search_fts.rowid ' +
+          'JOIN symbols s ON s.id = ss.symbol_id JOIN files f ON f.id = s.file_id ' +
+          'WHERE symbol_search_fts MATCH :q';
+    if Length(Kinds) > 0 then
+    begin
+      Sql:= Sql + ' AND s.kind IN (';
+      for I:= 0 to High(Kinds) do Sql:= Sql + IfThen(I = 0, '', ',') + ':k' + IntToStr(I);
+      Sql:= Sql + ')';
+    end;
+    Sql:= Sql + ' ORDER BY sc DESC, s.qualified_name LIMIT :n';
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text:= Sql;
+      Q.ParamByName('q').AsString:= AMatch;
+      Q.ParamByName('n').AsInteger:= AMax;
+      for I:= 0 to High(Kinds) do Q.ParamByName('k' + IntToStr(I)).AsString:= Kinds[I];
+      Q.Open;
+      ColSid:= Q.FieldByName('sid');
+      ColQn := Q.FieldByName('qn');
+      ColKd := Q.FieldByName('kd');
+      ColPth:= Q.FieldByName('fpath');
+      ColLn := Q.FieldByName('ln');
+      ColSc := Q.FieldByName('sc');
+      ColTok:= Q.FieldByName('tok');
+      ColSm := Q.FieldByName('sm');
+      ColRmk:= Q.FieldByName('rmk');
+      while not Q.Eof do
+      begin
+        H.SymbolId     := ColSid.AsLargeInt;
+        if not Seen.Contains(H.SymbolId) then
+        begin
+          H.QualifiedName:= ColQn.AsString;
+          H.Kind         := ColKd.AsString;
+          H.FilePath     := ColPth.AsString;
+          H.Line         := ColLn.AsInteger;
+          H.Score        := ColSc.AsFloat;
+          H.Matched      := ConceptMatchedColumns(Terms, ColTok.AsString, ColSm.AsString, ColRmk.AsString);
+          H.AllTerms     := AAllTerms;
+          Hits.Add(H);
+          Seen.Add(H.SymbolId);
+        end;
+        Q.Next;
+      end; // while
+    finally
+      Q.Free;
+    end; // try
+  end; // procedure
+
+var
+  T, MatchAnd, MatchOr, K: string;
+  KList: TList<string>;
+begin
+  Result:= nil;
+  if ALimit < 1 then ALimit:= CONCEPT_DEFAULT_LIMIT;
+  Terms:= ConceptTerms(AWords);
+  if (Length(Terms) = 0) or not ConceptSearchReady then Exit;
+  KList:= TList<string>.Create;
+  try
+    for K in AKinds.Split([','], TStringSplitOptions.ExcludeEmpty) do
+      if Trim(K) <> '' then KList.Add(LowerCase(Trim(K)));
+    Kinds:= KList.ToArray;
+  finally
+    KList.Free;
+  end; // try
+  MatchAnd:= '';
+  MatchOr := '';
+  for T in Terms do
+  begin
+    K:= '"' + T.Replace('"', '""') + '"';
+    MatchAnd:= MatchAnd + IfThen(MatchAnd = '', '', ' ') + K;
+    MatchOr := MatchOr  + IfThen(MatchOr  = '', '', ' OR ') + K;
+  end; // for
+  Hits:= TList<TConceptHit>.Create;
+  Seen:= TList<Int64>.Create;
+  try
+    RunPass(MatchAnd, True, ALimit);
+    if (Length(Terms) > 1) and (Hits.Count < ALimit) then
+      RunPass(MatchOr, False, ALimit + Hits.Count);
+    while Hits.Count > ALimit do Hits.Delete(Hits.Count - 1);
+    Result:= Hits.ToArray;
+  finally
+    Seen.Free;
+    Hits.Free;
+  end; // try
 end; // function
 
 function TSQLiteSymbolStore.GetAllSymbolFacts: TArray<TSymbolFacts>;

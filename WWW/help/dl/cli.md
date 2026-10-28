@@ -1308,7 +1308,7 @@ Described in [purge-locals](features/purge-locals.md).
 Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity.
 
 ```text
-drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]
+drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>
 drag-lint query hints --db <file.sqlite> [--name <code>] [--rule <severity>]
 drag-lint query find [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]
 drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json] (transitive class/interface hierarchy)
@@ -1324,15 +1324,17 @@ drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--jso
 | `--db` | `<file.sqlite>` |  |  |
 | `--name` | `<code>` |  |  |
 | `--rule` | `<severity>` |  |  |
+| `--concept` | `<words>` |  |  |
+| `--limit` | `N` |  |  |
+| `--kind` | `<k,...>` |  |  |
+| `--json` |  |  |  |
 | `--doc-tag` | `X` |  |  |
 | `--doc-contains` | `Y` |  |  |
 | `--decl-contains` | `Z` |  |  |
 | `--no-docs` |  |  |  |
-| `--kind` | `K` |  |  |
 | `--unit` | `U` |  |  |
 | `--public` |  |  |  |
 | `--of` | `<ancestor>` |  |  |
-| `--json` |  |  |  |
 | `--context` | `N` |  |  |
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
 | `--case-sensitive` |  |  |  |
@@ -1349,6 +1351,7 @@ drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--jso
 Described in:
 
 * [Compiler Hints](features/compiler-hints.md)
+* [query --concept](features/concept-search.md)
 * [Find Undocumented (public)](features/find-undocumented-public.md)
 * [query ancestors](features/query-ancestors.md)
 * [query descendants](features/query-descendants.md)

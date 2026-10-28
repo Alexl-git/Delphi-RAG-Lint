@@ -1,0 +1,62 @@
+{
+  "id": "concept-search",
+  "title": "query --concept",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.36.0-alpha",
+  "summary": "Ranked BM25 concept search over identifier words and doc-comment prose",
+  "intro": "Read this when you know what the code does but not what it is called. It ranks symbols by how well their camelCase-split name and their doc-comment summary and remarks match your words, best first, with no re-parse needed to enable it.",
+  "wikiPage": "concept-search",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "example": "drag-lint query --concept \"apply row changes\" --db <db>",
+      "usage": "drag-lint query --concept \"<words>\" [--limit N] [--kind k,...] [--json] --db <db>",
+      "flags": [
+        {
+          "name": "--concept",
+          "arg": "<words>"
+        },
+        {
+          "name": "--limit",
+          "arg": "N"
+        },
+        {
+          "name": "--kind",
+          "arg": "<k,...>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "pitfalls": ["approximate matched column: first 5 letters of a word stand in for porter stemming.", "no synonyms and no embeddings: remove does not find delete.", "exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse)."],
+  "questions": [
+    {
+      "ask": "Which code does something like this, when I do not know the name?",
+      "command": "drag-lint query --concept \"<words>\" --db <db>"
+    },
+    {
+      "ask": "How do I restrict concept search to classes?",
+      "command": "drag-lint query --concept \"<words>\" --kind class --db <db>"
+    },
+    {
+      "ask": "What does exit code 3 mean?",
+      "command": "drag-lint index --project <X.dproj> --db <db>"
+    }
+  ],
+  "verified": {
+    "date": "2026-10-28",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "c73edad718722a1a20cc1fcc44d128e1fe9acb6685d625d6c7a639627f8cafb9"
+  }
+}

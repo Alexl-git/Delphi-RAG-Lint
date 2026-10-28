@@ -358,6 +358,40 @@ const
     'CREATE TRIGGER IF NOT EXISTS string_literals_au AFTER UPDATE ON string_literals BEGIN' +
     '  INSERT INTO string_fts(string_fts, rowid, text) VALUES (''delete'', old.id, old.text);' +
     '  INSERT INTO string_fts(rowid, text) VALUES (new.id, new.text); END');
+
+  /// <summary>XERJ item 5 (concept search): the derived symbol_search table, its
+  /// FTS5 mirror and the three sync triggers. Kept OUT of SCHEMA_DDL on purpose
+  /// (Migrate loops SCHEMA_DDL_FTS5_FIRST..High only in the trigram branch):
+  /// Migrate runs these through TryExec when FTS5 is available and otherwise
+  /// drops the three triggers so a cascade from symbols never reaches a missing
+  /// fts5 module. Derived data only: filled by the `search` index stage
+  /// (ISymbolStore.BuildSymbolSearch), never by the extractor.</summary>
+  SCHEMA_DDL_SYMBOL_SEARCH: array[0..4] of string = (
+    'CREATE TABLE IF NOT EXISTS symbol_search (' +
+    '  symbol_id INTEGER PRIMARY KEY REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  tokens TEXT NOT NULL, summary TEXT, remarks TEXT)',
+    'CREATE VIRTUAL TABLE IF NOT EXISTS symbol_search_fts USING fts5(' +
+    '  tokens, summary, remarks, content=''symbol_search'', content_rowid=''symbol_id'',' +
+    '  tokenize=''porter unicode61'')',
+    'CREATE TRIGGER IF NOT EXISTS symbol_search_ai AFTER INSERT ON symbol_search BEGIN' +
+    '  INSERT INTO symbol_search_fts(rowid, tokens, summary, remarks)' +
+    '  VALUES (new.symbol_id, new.tokens, new.summary, new.remarks); END',
+    'CREATE TRIGGER IF NOT EXISTS symbol_search_ad AFTER DELETE ON symbol_search BEGIN' +
+    '  INSERT INTO symbol_search_fts(symbol_search_fts, rowid, tokens, summary, remarks)' +
+    '  VALUES (''delete'', old.symbol_id, old.tokens, old.summary, old.remarks); END',
+    'CREATE TRIGGER IF NOT EXISTS symbol_search_au AFTER UPDATE ON symbol_search BEGIN' +
+    '  INSERT INTO symbol_search_fts(symbol_search_fts, rowid, tokens, summary, remarks)' +
+    '  VALUES (''delete'', old.symbol_id, old.tokens, old.summary, old.remarks);' +
+    '  INSERT INTO symbol_search_fts(rowid, tokens, summary, remarks)' +
+    '  VALUES (new.symbol_id, new.tokens, new.summary, new.remarks); END');
+
+  /// <summary>symbols.kind values concept search indexes, as the body of a SQL
+  /// IN (...) list. Excluded on purpose (noise): param, local_var, enum_value,
+  /// initialization, finalization.</summary>
+  CONCEPT_SEARCH_KINDS =
+    '''unit'',''class'',''interface'',''record'',''type'',''enum'',''method'',''function'',' +
+    '''procedure'',''constructor'',''destructor'',''property'',''field'',''const'',''var'',' +
+    '''component'',''form''';
 implementation
 
 end.

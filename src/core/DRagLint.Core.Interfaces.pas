@@ -160,6 +160,33 @@ type
     property Managed: TDictionary<string, Boolean> read FManaged;
   end;
 
+  /// <summary>One ranked answer of ISymbolStore.SearchConcept (query --concept):
+  /// a symbol whose identifier words or doc prose match a natural-language
+  /// question.</summary>
+  /// <remarks>Score is the FTS5 bm25() value NEGATED so that larger = better;
+  /// it is comparable only within one result set. Matched names the
+  /// symbol_search columns that contain at least one query term, comma
+  /// separated, from {tokens, summary, remarks}.</remarks>
+  TConceptHit = record
+    /// <summary>symbols.id of the hit.</summary>
+    SymbolId     : Int64;
+    /// <summary>symbols.qualified_name.</summary>
+    QualifiedName: string;
+    /// <summary>symbols.kind (method, function, class, ...).</summary>
+    Kind         : string;
+    /// <summary>files.path of the declaring file.</summary>
+    FilePath     : string;
+    /// <summary>symbols.start_line (1-based).</summary>
+    Line         : Integer;
+    /// <summary>-bm25(symbol_search_fts, 3.0, 2.0, 1.0); larger ranks first.</summary>
+    Score        : Double;
+    /// <summary>Columns that matched: 'tokens', 'summary', 'remarks', comma separated.</summary>
+    Matched      : string;
+    /// <summary>True when every query term matched (the AND pass); False for
+    /// an OR-pass fill row.</summary>
+    AllTerms     : Boolean;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+434 more)</para>
@@ -2552,6 +2579,39 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PurityNeedsRun: Boolean;
+    /// <summary>Concept-search stage (XERJ item 5): brings the derived
+    /// symbol_search table (and, through its triggers, symbol_search_fts) in
+    /// line with symbols. Deletes rows whose symbol is gone, then inserts one
+    /// row per searchable symbol (kinds in CONCEPT_SEARCH_KINDS) that has none:
+    /// tokens = SplitIdentifierWords(name) + parent name split + lower(name),
+    /// summary/remarks = symbol_docs, else the tag-stripped doc-comment
+    /// literal.</summary>
+    /// <returns>Rows inserted (0 on an up-to-date table, and 0 when the
+    /// sqlite3.dll has no FTS5 -- the table is then never created).</returns>
+    /// <remarks>Derived data only: never touches symbols, refs or any
+    /// extracted row, so it costs no re-parse and no SCHEMA_VERSION bump.
+    /// One transaction. Idempotent. A re-indexed file deletes its symbols,
+    /// whose rows cascade out of symbol_search, so the NOT-EXISTS fill keeps
+    /// incremental runs consistent.</remarks>
+    function BuildSymbolSearch: Integer;
+    /// <summary>True when SearchConcept can answer: FTS5 is available, the
+    /// symbol_search_fts table exists, and symbol_search is non-empty or the
+    /// DB has no searchable symbol.</summary>
+    /// <returns>False on a DB indexed before concept search existed (the
+    /// next `index` run backfills it, no re-parse).</returns>
+    function ConceptSearchReady: Boolean;
+    /// <summary>Ranked natural-language search over identifier words and
+    /// doc prose (query --concept).</summary>
+    /// <param name="AWords">Free text; each word is split like an identifier
+    /// (so "ApplyDelta" and "apply delta" are the same query), lower-cased,
+    /// stop words dropped, and FTS-quoted (no MATCH syntax leaks through).</param>
+    /// <param name="ALimit">Maximum rows returned; values &lt; 1 mean 20.</param>
+    /// <param name="AKinds">Comma-separated symbols.kind filter; '' = all
+    /// searchable kinds.</param>
+    /// <returns>AND-pass hits (every term matched) by score, then OR-pass
+    /// hits not already returned, by score; empty when nothing matches or
+    /// ConceptSearchReady is False.</returns>
+    function SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string = ''): TArray<TConceptHit>;
     /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
     /// the purity stage (one query instead of one per routine).</summary>
     /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>

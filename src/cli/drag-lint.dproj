@@ -136,6 +136,7 @@
         <DCCReference Include="..\core\DRagLint.Core.FileTime.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DocComments.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
+        <DCCReference Include="..\query\DRagLint.Query.IdentWords.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Callers.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.HoverModel.pas"/>
         <DCCReference Include="..\query\DRagLint.Symbol.Describe.pas"/>

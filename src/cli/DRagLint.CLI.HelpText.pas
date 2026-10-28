@@ -454,6 +454,11 @@ begin
   Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
   Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
   Writeln('       see wiki page: query-text-near');
+  Writeln('  drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>');
+  Writeln('       ^ approximate matched column: first 5 letters of a word stand in for porter stemming.');
+  Writeln('       ^ no synonyms and no embeddings: remove does not find delete.');
+  Writeln('       ^ exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse).');
+  Writeln('       see wiki page: concept-search');
 end;
 
 procedure WriteFlagAliases;
