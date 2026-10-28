@@ -1154,7 +1154,7 @@ begin
         AutoFixCB.Left    := LM + (GrpW - AFW);
         AutoFixCB.Width   := AFW;
         AutoFixCB.Caption := 'auto-fix';
-        AutoFixCB.Checked := FCfg.IsAutoFix(Rule.Id);
+        AutoFixCB.Checked := not FCfg.IsAutoFixOff(Rule.Id); // every fix is on by default (1.37.0); unchecked = autofix_off
         AutoFixCB.Anchors := [akTop, akRight];
         FAutoFixCBs.AddOrSetValue(Rule.Id, AutoFixCB);
       end;
@@ -1437,16 +1437,15 @@ begin
     end;
   end;
 
-  { Collect auto-fix state from the per-rule 'auto-fix' checkboxes. SetAutoFix
-    REPLACES the whole array, so toggling a box OFF removes its id (AddAutoFix
-    is append-only and would not remove -- do NOT use it here). Only fixable
-    rules ever get a box, so only fixable ids can appear. }
-  var AFIds: TArray<string>:= nil;
+  { Collect the brake from the per-rule 'auto-fix' checkboxes: every fix is ON by
+    default (1.37.0), so an UNCHECKED box is what is saved, as "autofix_off". SetAutoFixOff
+    REPLACES the whole array. Only fixable rules ever get a box. }
+  var AFOffIds: TArray<string>:= nil;
   if FAutoFixCBs <> nil then
     for var Pair in FAutoFixCBs do
-      if Pair.Value.Checked then
-        AFIds:= AFIds + [Pair.Key];
-  Cfg.SetAutoFix(AFIds);
+      if not Pair.Value.Checked then
+        AFOffIds:= AFOffIds + [Pair.Key];
+  Cfg.SetAutoFixOff(AFOffIds);
 
   { Branch destination: base config or named profile }
   var Target: string:= Trim(FCboProfile.Text);

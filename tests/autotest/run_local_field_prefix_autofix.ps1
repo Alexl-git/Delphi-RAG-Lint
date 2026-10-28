@@ -90,18 +90,18 @@ Check 'no F-prefixed local survives' (-not ($after -cmatch '\bFHandle\b|\bFLastE
 Check 'a local named exactly the prefix is left alone' ($after -cmatch '(?m)^\s*F: Integer;')
 Check 'a local stripping to a digit-leading name is left alone' ($after -cmatch '(?m)^\s*F1: Integer;')
 
-# --- 2. NOT OPTED IN: nothing is applied (positive control) ------------------
+# --- 2. BRAKED by "autofix_off": nothing is applied (positive control) --------
 $noOptIn = Join-Path $WorkDir 'nooptin'
-Setup $noOptIn ''
+Setup $noOptIn '{ "autofix_off": ["local-field-prefix"] }'
 $before2 = [System.IO.File]::ReadAllText((Join-Path $noOptIn 'uLFP.pas'))
 $out2 = & $Exe lint-all --db (Join-Path $noOptIn 'fx.sqlite') --rules-dir $RulesDir `
-             --rule local-field-prefix --fix --apply --no-backup 2>&1 | Out-String
+             --config (Join-Path $noOptIn 'cfg.json') --rule local-field-prefix --fix --apply --no-backup 2>&1 | Out-String
 $after2 = [System.IO.File]::ReadAllText((Join-Path $noOptIn 'uLFP.pas'))
 # -ceq, NOT -eq: PowerShell string comparison is case-INSENSITIVE by default, and
 # this fix changes only letter presence/case. A case-blind compare reported an
 # applied rename as "unchanged" during triage.
-Check 'without opt-in the file is untouched' ($before2 -ceq $after2)
-Check 'and it SAYS why (not opted in)' ($out2 -match 'not opted in')
+Check 'with autofix_off the file is untouched' ($before2 -ceq $after2)
+Check 'and it SAYS why (autofix_off)' ($out2 -match 'autofix_off')
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

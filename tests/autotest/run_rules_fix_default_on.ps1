@@ -141,7 +141,7 @@ end.
     (((Txt (Join-Path $d6 'uForm.pas')) -cmatch 'procedure ButtonClick') -and ((Txt (Join-Path $d6 'uForm.dfm')) -cmatch 'OnClick = ButtonClick')) (Say $o 'autofix')
 
   # binary .dfm: TPF0 header then the handler name as a length-prefixed string
-  $bin = [Text.Encoding]::ASCII.GetBytes("TPF0") + [byte[]](0x08) + [Text.Encoding]::ASCII.GetBytes("TfrmMain") + [byte[]](0x00, 0x07) + [Text.Encoding]::ASCII.GetBytes("OnClick") + [byte[]](0x06, 0x0B) + [Text.Encoding]::ASCII.GetBytes("buttonClick") + [byte[]](0x00, 0x00)
+  $bin = [byte[]]([Text.Encoding]::ASCII.GetBytes("TPF0") + [byte[]](0x08) + [Text.Encoding]::ASCII.GetBytes("TfrmMain") + [byte[]](0x00, 0x07) + [Text.Encoding]::ASCII.GetBytes("OnClick") + [byte[]](0x06, 0x0B) + [Text.Encoding]::ASCII.GetBytes("buttonClick") + [byte[]](0x00, 0x00))
   $d7 = NewProject 'FormBin' @{ 'uForm.pas' = $form; 'uForm.dfm' = $bin }
   $p7 = Join-Path $d7 'uForm.pas'; $b7 = Join-Path $d7 'uForm.dfm'
   $pre = Txt $p7; $hb = (Get-FileHash $b7).Hash

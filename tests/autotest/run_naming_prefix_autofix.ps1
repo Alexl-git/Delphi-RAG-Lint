@@ -263,12 +263,12 @@ Check 'CASE3: no stale lower-case bare myclass decl remains (declaration site on
   (-not ($after3 -cmatch '(?<![.\w])myclass\s*=\s*class')) $after3
 
 # =============================================================================
-# OPT-IN GATE: same type-name-prefix fixture, but "autofix" does NOT list
-# type-name-prefix -> registered-fixable (rules --json) but not permitted ->
+# BRAKE (1.37.0: every fix is default-ON): same type-name-prefix fixture, but "autofix_off" LISTS
+# type-name-prefix -> registered-fixable (rules --json) but braked ->
 # identifier UNCHANGED.
 # =============================================================================
 Write-Host ''
-Write-Host 'OPT-IN GATE: type-name-prefix not opted in via AutoFixIds' -ForegroundColor Cyan
+Write-Host 'BRAKE: type-name-prefix listed in autofix_off' -ForegroundColor Cyan
 $gateDir = Join-Path $WorkDir 'gate'
 $gateSrc = Join-Path $gateDir 'src'
 New-Item -ItemType Directory $gateSrc | Out-Null
@@ -278,9 +278,9 @@ $gateCfg  = Join-Path $gateDir 'drag-lint-lint.json'
 
 Write-Ascii $gateFile $Case3Fixture
 $gateBefore = Get-Content -Raw $gateFile
-# "autofix" deliberately omits type-name-prefix (opts in an UNRELATED rule
-# instead, so the config isn't simply "no autofix at all").
-'{ "autofix": ["field-name-prefix"], "naming": { "type_prefix": { "class": "T" } } }' | Out-File -FilePath $gateCfg -Encoding ascii
+# "autofix_off" lists type-name-prefix (the retired "autofix" key is ignored,
+# so a stray legacy opt-in could not make this pass vacuously).
+'{ "autofix": ["type-name-prefix"], "autofix_off": ["type-name-prefix"], "naming": { "type_prefix": { "class": "T" } } }' | Out-File -FilePath $gateCfg -Encoding ascii
 
 & $Exe index $gateSrc --db $gateDb 2>&1 | Out-Null
 Check 'GATE: index exits 0' ($LASTEXITCODE -eq 0)
@@ -291,7 +291,7 @@ Write-Host ($gateOut -join "`n")
 
 $gateAfter = Get-Content -Raw $gateFile
 Check 'GATE: exit code 0 even though nothing was fixed' ($gateExit -eq 0) "exit=$gateExit"
-Check 'GATE: type decl UNCHANGED (still myclass, registered-fixable but not opted in)' `
+Check 'GATE: type decl UNCHANGED (still myclass, registered-fixable but braked by autofix_off)' `
   ($gateAfter -cmatch 'myclass\s*=\s*class') $gateAfter
 Check 'GATE: file is byte-identical to the pre-fix fixture (no edit applied at all)' `
   ($gateAfter -ceq $gateBefore) 'gate file drifted from source fixture'

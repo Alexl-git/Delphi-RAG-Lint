@@ -57,7 +57,7 @@ type
     /// <param name="APath">The drag-lint-lint.json to write; created when absent.</param>
     /// <param name="ACfg">The configuration whose writer-owned keys are written.</param>
     /// <remarks>
-    /// Writer-owned top-level keys -- disabled, enabled, autofix, severity,
+    /// Writer-owned top-level keys -- disabled, enabled, autofix (dropped: retired), autofix_off, severity,
     /// thresholds, naming, ifdef_allow -- come from ACfg and REPLACE what the
     /// file held; every other key (profiles, exclude_paths, ...) is preserved
     /// verbatim. ifdef_allow is written only when ACfg.IfdefAllow is non-empty,
@@ -124,7 +124,8 @@ begin
   // disabled / enabled arrays
   Result.AddPair('disabled', ArrayToJsonArr(ACfg.DisabledIds));
   Result.AddPair('enabled',  ArrayToJsonArr(ACfg.EnabledIds));
-  Result.AddPair('autofix',  ArrayToJsonArr(ACfg.AutoFixIds));
+  // "autofix" is retired (1.37.0, read and ignored): only the brake is written.
+  Result.AddPair('autofix_off', ArrayToJsonArr(ACfg.AutoFixOffIds));
 
   // severity object
   SevObj:= TJSONObject.Create;
@@ -290,8 +291,8 @@ class procedure TLintConfigWriter.SaveToFile(const APath: string;
   const ACfg: TLintConfig);
 { Writer-owned top-level keys; all others are preserved from an existing file. }
 const
-  OwnedKeys: array[0..6] of string = (
-    'disabled', 'enabled', 'autofix', 'severity', 'thresholds', 'naming', 'ifdef_allow');
+  OwnedKeys: array[0..7] of string = (
+    'disabled', 'enabled', 'autofix', 'autofix_off', 'severity', 'thresholds', 'naming', 'ifdef_allow');
 var
   Json   : string;
   k   : Integer;
