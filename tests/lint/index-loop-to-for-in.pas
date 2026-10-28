@@ -105,4 +105,37 @@ begin
     Use(A[I]);
 end;
 
+procedure MissDelete(L: TList<Integer>);
+var
+  I: Integer;
+begin
+  for I := 0 to L.Count - 1 do
+  begin
+    Use(L[I]);
+    L.Delete(0);
+  end;
+end;
+
+procedure MissAdd(L: TList<Integer>);
+var
+  I: Integer;
+begin
+  for I := 0 to L.Count - 1 do
+  begin
+    Use(L[I]);
+    L.Add(0);
+  end;
+end;
+
+procedure MissSetLength(var A: TArray<Integer>);
+var
+  I: Integer;
+begin
+  for I := 0 to High(A) do
+  begin
+    Use(A[I]);
+    SetLength(A, 1);
+  end;
+end;
+
 end.

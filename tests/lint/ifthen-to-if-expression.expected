@@ -1,11 +1,16 @@
-# Hit: line 8 (if/else, both branches assign the same target).
-# Non-hits: 17 (already an if-expression, no statement if), 18 (branches assign
-# different targets), 23 (no else), 26 (else branch is not an assignment).
-# Known FP shape: a branch with side effects in the condition-dependent RHS is
-# still equivalent in an if-expression (only the taken branch is evaluated), so
-# no FP there; compound targets (A.B := ..) fire when both sides match.
+# Hits: line 9 (if/else, both branches assign the same target) and line 17
+# (X := IfThen(C, 1, 2) -- call form with two inert literal branches, so the
+# if-expression is behaviour-identical).
+# Non-hits: 18 (IfThen with a non-literal branch: IfThen evaluates both
+# arguments, an if-expression only one, so the swap is not equivalent -- that
+# shape belongs to ifthen-both-branches), 23 (already an if-expression, no
+# statement if), 24 (branches assign different targets), 28 (no else),
+# 30 (else branch is not an assignment).
+# Known FP shape: compound targets (A.B := ..) fire when both sides match.
 ifthen-to-if-expression 9
-!ifthen-to-if-expression 17
+ifthen-to-if-expression 17
 !ifthen-to-if-expression 18
-!ifthen-to-if-expression 22
+!ifthen-to-if-expression 23
 !ifthen-to-if-expression 24
+!ifthen-to-if-expression 28
+!ifthen-to-if-expression 30

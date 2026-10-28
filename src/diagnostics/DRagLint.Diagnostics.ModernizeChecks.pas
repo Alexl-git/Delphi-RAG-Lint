@@ -48,6 +48,11 @@ const
   LENGTH_SUFFIX = ')-1';
   COUNT_SUFFIX  = '.count-1';
   ITEMS_SUFFIX  = '.items';
+  { Methods that change a container's size or order: a loop body calling one is not a pure read. }
+  MUTATOR_METHODS: array[0..9] of string = ('add', 'addrange', 'insert', 'delete', 'deleterange',
+    'remove', 'removeat', 'extract', 'clear', 'setcount');
+  { RTL routines that resize or edit their first argument in place. }
+  MUTATOR_ROUTINES: array[0..2] of string = ('setlength', 'delete', 'insert');
 
 type
   /// <summary>Per-loop state shared by the body scan helpers.</summary>
@@ -131,6 +136,32 @@ begin
   Result:= (not P.IsNull) and (P.NodeType = 'assignment') and SameSpan(P.ChildByField('lhs'), Cur);
 end;
 
+{ True when the call/expression N resizes or edits the loop's container: C.Add(..),
+  C.Delete(..), C.Clear, SetLength(C, ..). Such a body can raise or skip items when
+  rewritten as for-in, so the loop is left alone. }
+function MutatesContainer(const N: TTSNode; const ACtx: TLoopCtx): Boolean;
+var
+  Ent, Name: string;
+  Args: TTSNode;
+begin
+  Result:= False;
+  if N.NodeType = 'exprCall' then
+    Ent:= Squash(NodeText(ACtx.Src, N.ChildByField('entity')))
+  else if N.NodeType = 'exprDot' then
+    Ent:= Squash(NodeText(ACtx.Src, N))
+  else Exit;
+  if StartsStr(ACtx.Container + '.', Ent) then
+  begin
+    Name:= Copy(Ent, Length(ACtx.Container) + 2, MaxInt);
+    Exit(MatchStr(Name, MUTATOR_METHODS));
+  end;
+  if (N.NodeType = 'exprCall') and MatchStr(Ent, MUTATOR_ROUTINES) then
+  begin
+    Args:= N.ChildByField('args');
+    Result:= (not Args.IsNull) and (Args.NamedChildCount > 0)
+      and (Squash(NodeText(ACtx.Src, Args.NamedChild(0))) = ACtx.Container);
+  end;
+end;
 { Walks the loop body: every mention of the loop variable must be the sole
   index of a read-only C[I] / C.Items[I]; anything else marks the loop Bad. }
 procedure ScanBody(const N: TTSNode; var ACtx: TLoopCtx);
@@ -141,6 +172,11 @@ var
   IsIdx: Boolean;
 begin
   if ACtx.Bad or N.IsNull then Exit;
+  if MutatesContainer(N, ACtx) then
+  begin
+    ACtx.Bad:= True;
+    Exit;
+  end;
   if N.NodeType = 'identifier' then
   begin
     if SameText(NodeText(ACtx.Src, N), ACtx.LoopVar) then ACtx.Bad:= True;

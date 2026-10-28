@@ -12,3 +12,5 @@ is-prefix-not-boolean 16
 !is-prefix-not-boolean 12
 !is-prefix-not-boolean 17
 !is-prefix-not-boolean 18
+!is-prefix-not-boolean 23
+!is-prefix-not-boolean 28
