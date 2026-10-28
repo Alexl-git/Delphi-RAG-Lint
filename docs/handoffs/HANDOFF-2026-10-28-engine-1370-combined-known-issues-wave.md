@@ -34,6 +34,10 @@ Fable triage agent (this session) re-measures every Known-issues + ENGINE Upcomi
 `docs\superpowers\plans\2026-10-28-known-issues-137-plan.md` (verdicts + lane briefs gaps/ki-<x> off 7a9a322a).
 y-class (extractor-hashed) fixes must merge BEFORE EXT-FREEZE or be folded into the EXT lane.
 
+## Release split (owner 11:15, supersedes the 1.37-only reading above)
+1.37.0 = the re-parse build: only y-class (extractor) items, merged before EXT-FREEZE (incl. XERJ 3/5 extraction parts if y).
+1.38.0 = the PUBLISHED release: all other known issues + XERJ items 1-5 (plan docs\superpowers\plans\2026-10-28-xerj-features-137-plan.md), built in parallel lanes during the 4-5 h re-parse. Publish 1.38.0 with minimal known issues; stop early only at 98% weekly tokens.
+
 ## Next (in order)
 1. Read the KI plan; dispatch FIX-NOW lanes in parallel (sonnet/haiku per brief); URGENT y-items -> EXT first.
 2. Collect EXT -> merge gaps/ext into stage2 (EXT-FREEZE) -> library pre-parse into SCRATCH copies.
