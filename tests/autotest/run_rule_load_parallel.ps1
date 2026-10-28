@@ -54,6 +54,20 @@ if ($cores -ge 4) {
 } else {
   Write-Host "  [SKIP] parallel ratio: only $cores logical CPUs"
 }
+# A query that does not compile and a duplicate id must still be reported, in
+# order, without crashing: the parallel loader hands each compiled query to its
+# rule, and a broken one once was freed twice (EAccessViolation after the
+# RULE-LOAD-FAIL line).
+$bad = Join-Path ([IO.Path]::GetTempPath()) ("dl-ruleload-" + [Guid]::NewGuid().ToString('N'))
+[void](New-Item -ItemType Directory -Path (Join-Path $bad 'sub'))
+Copy-Item (Join-Path $rulesDir 'bare-except.*') $bad
+Copy-Item (Join-Path $rulesDir 'bare-except.*') (Join-Path $bad 'sub')
+[IO.File]::WriteAllText((Join-Path $bad 'zz-broken.scm'), "((exprCall (nosuchnode)) @warn`r`n")
+$bo = (& $Exe lint $fixture --rules-dir $bad 2>&1 | ForEach-Object { "$_" }) -join "`n"
+Check 'broken .scm reported as RULE-LOAD-FAIL' ($bo -match 'RULE-LOAD-FAIL .*zz-broken\.scm: tree-sitter query compile failed') ''
+Check 'duplicate .scm reported as RULE-DUPLICATE-ID' ($bo -match 'RULE-DUPLICATE-ID bare-except') ''
+Check 'no crash after a failed rule load' (($bo -notmatch 'FATAL') -and ($bo -match '\d+ finding\(s\)')) ''
+[IO.Directory]::Delete($bad, $true)
 Check 'single-file lint inside the IDE 8 s budget' ($total -lt 8.0) ("best={0:n2} s" -f $total)
 
 Write-Host ''
