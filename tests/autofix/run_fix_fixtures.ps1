@@ -7,7 +7,7 @@
     tests\autofix\fixtures\<rule-id>\<case>.config.json   optional: passed as --config
                                                            (an OFF rule needs {"enabled":["<id>"]})
     tests\autofix\fixtures\<rule-id>\<case>.extra-args    optional: extra CLI tokens for every run of the case (--project-rules)
-    tests\autofix\fixtures\<rule-id>\<case>.db-needed     optional marker: the case directory is
+    tests\autofix\fixtures\<rule-id>\<case>.leaves        optional: integer N -- findings of <id> that legitimately remain after the fix\r\n                                                           (declined / report-only lines); default 0\r\n    tests\autofix\fixtures\<rule-id>\<case>.db-needed     optional marker: the case directory is
                                                            indexed into a scratch DB and --db is passed
     tests\autofix\fixtures\<rule-id>\_rules\              optional: a rules folder passed as --rules-dir to every
                                                            run of the directory's cases -- a test-only .scm rule
@@ -124,7 +124,8 @@ try {
         # 3. the rule no longer fires
         $raw3 = & $exePath lint --file $copy --rule $id --json @extra 2>$null | Out-String
         $left = -1; try { $left = @(@($raw3 | ConvertFrom-Json) | Where-Object { $_.rule -eq $id }).Count } catch { $left = -1 }
-        Check "${tag}: '$id' no longer fires on the fixed file (got $left)" ($left -eq 0) $raw3.Trim()
+        $want = 0; $lf = Join-Path $dir.FullName "$case.leaves"; if (Test-Path $lf) { $want = [int](Get-Content $lf -Raw).Trim() }
+        Check "${tag}: '$id' fires on the fixed file exactly $want time(s) (got $left)" ($left -eq $want) $raw3.Trim()
       } finally { Pop-Location }
       # 4. compile the expected result
       if ($canCompile) {
