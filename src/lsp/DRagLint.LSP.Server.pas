@@ -2858,8 +2858,11 @@ begin
   Result:= '';
   if AProjectDb = '' then Exit;
   var Marked: string:= GetEnvironmentVariable('DRAGLINT_LSP_TEST_MARK_INCOMPLETE');
+  { The test marker behaves like the real one: a successful writer run clears it. }
+  var Done: TReindexRun;
   if (Marked <> '') and SameText(ExpandFileName(Marked), ExpandFileName(AProjectDb)) then
-    Exit('needs re-resolve (test marker)');
+    if FReindex.TryGetValue(LowerCase(AProjectDb), Done) and (Done.State = risDone) then Exit('')
+    else Exit('needs re-resolve (test marker)');
   { lf-marker (gaps/lf-marker cb98fe76): schema_meta.library_resolve_state =
     JSON (state: pending|bound, platform, library, reason, ...); missing or
     empty = no marker. Only `pending` is incomplete. The key is spelled here

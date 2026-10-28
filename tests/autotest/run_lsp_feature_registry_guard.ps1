@@ -58,6 +58,7 @@ function Frame($o) {
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
+$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $env:TEMP 'drag-lint-no-context-defaults.json'  # LSP-1 CORE: hover/notice text never depends on the user's real defaults
 if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory $WorkDir | Out-Null
 $src = Join-Path $WorkDir 'src'; New-Item -ItemType Directory $src | Out-Null
