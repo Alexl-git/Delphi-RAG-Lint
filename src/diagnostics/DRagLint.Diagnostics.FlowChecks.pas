@@ -685,6 +685,67 @@ begin
   end;
 end;
 
+/// <summary>Store-free type classification for used-before-assignment: maps
+/// the lower-cased name of every type this FILE declares to True when EVERY
+/// declaration of that name is a CLASS (a declClass whose shape token is
+/// kClass), else False.</summary>
+/// <param name="ARoot">The parsed file's root node.</param>
+/// <param name="ASrc">The file's source bytes.</param>
+/// <param name="AKinds">Filled in place; the caller owns it.</param>
+/// <remarks>Consulted only when ResolveTypeCategory answers tcUnknown (no store,
+/// or a file the store has not indexed). A same-unit declaration is a fact, not a guess: no `T`-prefix
+/// convention is used, because records and classes share it. A name declared
+/// twice with different shapes (a local `type TFoo = record` shadowing a unit
+/// `TFoo = class`) answers False, so a shadowed name never fires. Records parse
+/// as declClass too (shape token kRecord), as do `object` types; both answer
+/// False.</remarks>
+procedure CollectSameUnitClassKinds(const ARoot: TTSNode; const ASrc: TBytes;
+  AKinds: TDictionary<string, Boolean>);
+
+  function IsClassShape(const ATypeN: TTSNode): Boolean;
+  var I: Integer; T: string; Cls: TTSNode;
+  begin
+    Result := False;
+    if ATypeN.IsNull then Exit;
+    { the `type` field is either the declClass itself or a wrapper holding it
+      (same two shapes AstChecks' class-name collectors accept) }
+    Cls := ATypeN;
+    if Cls.NodeType <> 'declClass' then
+    begin
+      Cls := Default(TTSNode);
+      for I := 0 to ATypeN.ChildCount - 1 do
+        if ATypeN.Child(I).NodeType = 'declClass' then begin Cls := ATypeN.Child(I); Break; end;
+      if Cls.IsNull then Exit;
+    end;
+    for I := 0 to Cls.ChildCount - 1 do
+    begin
+      T := Cls.Child(I).NodeType;
+      if T = 'kClass' then Exit(True);
+      if (T = 'kRecord') or (T = 'kObject') then Exit;
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer; NmN: TTSNode; Nm: string; IsCls, Prev: Boolean;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NmN := N.ChildByField('name');
+      if not NmN.IsNull then
+      begin
+        Nm := LowerCase(Trim(NodeStr(NmN, ASrc)));
+        IsCls := IsClassShape(N.ChildByField('type'));
+        if AKinds.TryGetValue(Nm, Prev) then IsCls := IsCls and Prev;
+        if Nm <> '' then AKinds.AddOrSetValue(Nm, IsCls);
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Walk(ARoot);
+end;
 /// <summary>Tests whether AConstructorNode (an already-confirmed constructor
 /// call/dot-expr per ExprIsConstructor) transfers ownership of the created
 /// object to a VCL owner, per TComponent's owner-parenting contract: a
@@ -2386,6 +2447,7 @@ var
   OwnsOracle: TCallArgOwns;
   RecMethodDef: TRecordMethodDefPredicate;
   ParamMode   : TParamModeLookup;
+  SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -2462,10 +2524,28 @@ var
               var QualifiedLocalWrite: Boolean := (BaseIx >= 0)
                  and (AssignmentTargetIndex(It.Node, PF.Src, Vars) < 0)
                  and (Vars.Get(BaseIx).Kind = vkLocal);
-              if QualifiedLocalWrite and (AStore <> nil)
-                 and (Reads.IndexOf(BaseIx) < 0)
-                 and (AStore.ResolveTypeCategory(Vars.Get(BaseIx).TypeText, AFileId) = tcClass) then
-                Reads.Add(BaseIx);
+              { When the store cannot classify the type (no store: `lint <file>`
+                with nothing resolved; or a file the store has not indexed, which
+                is what a fixture or a freshly edited unit is) only a class THIS
+                unit declares qualifies -- see CollectSameUnitClassKinds. }
+              var IsClassBase: Boolean := False;
+              if QualifiedLocalWrite and (Reads.IndexOf(BaseIx) < 0) then
+              begin
+                var Cat: TTypeCategory := tcUnknown;
+                if AStore <> nil then Cat := AStore.ResolveTypeCategory(Vars.Get(BaseIx).TypeText, AFileId);
+                if Cat = tcUnknown then
+                begin
+                  if SameUnitClassKinds = nil then
+                  begin
+                    SameUnitClassKinds := TDictionary<string, Boolean>.Create;
+                    CollectSameUnitClassKinds(PF.Tree.RootNode, PF.Src, SameUnitClassKinds);
+                  end;
+                  IsClassBase := SameUnitClassKinds.TryGetValue(
+                    LowerCase(Trim(Vars.Get(BaseIx).TypeText)), IsClassBase) and IsClassBase;
+                end
+                else IsClassBase := Cat = tcClass;
+              end;
+              if IsClassBase then Reads.Add(BaseIx);
             end
             else
               CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
@@ -3504,11 +3584,13 @@ begin
   else
     ParamMode := nil;
 
+  SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
     Result := Findings.ToArray;
   finally
+    SameUnitClassKinds.Free;
     Findings.Free;
   end;
 end;
