@@ -82,6 +82,14 @@ function PlatformGapNote(const AUnit: string; const AWin32, AWin64: TArray<strin
 /// name at the end. The first spelling picked is kept.</returns>
 function AddPickedUnit(const AChosen: TArray<string>; const AUnit, AExclude: string): TArray<string>;
 
+/// <summary>STARTUP2: the status line when the user cancelled loading the unit
+/// lists (project / Win32 / Win64 library) behind the progress window.</summary>
+/// <returns>What it means -- the picker lists and the Unit Rules classification lack
+/// the lists not loaded -- and that the next pick or classify loads them again.</returns>
+/// <remarks>Pure. A cancelled list is never kept, so it is asked for again; a list
+/// loaded before the cancel stays.</remarks>
+function PickListsCancelledText: string;
+
 implementation
 
 uses
@@ -197,6 +205,11 @@ begin
   if (U = '') or SameText(U, Trim(AExclude)) or ContainsText(AChosen, U) then
     Exit;
   Result:= Result + [U];
+end;
+
+function PickListsCancelledText: string;
+begin
+  Result:= 'Unit lists not loaded (cancelled): the unit picker and the Unit Rules classification lack them (MISSING is over-reported). The next pick or classify loads them again.';
 end;
 
 end.

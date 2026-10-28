@@ -12,7 +12,8 @@
 #   tests\gui\gui-lock.ps1. -ProofNoChain drops the second #convert: the negative control --
 #   save1.status.chains, save1.dialog and save1.dialog.row must then FAIL, reported as proof.* PASS.
 # Fixtures under a fresh %TEMP%\rulechains-<id> folder, deleted on exit.
-param([string]$Exe, [switch]$ProofNoChain)Add-Type -TypeDefinition @'
+param([string]$Exe, [switch]$ProofNoChain)
+Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class W {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
