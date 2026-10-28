@@ -8,6 +8,8 @@
 #   rewrite the line above to end in ';' (dogfood 2026-10-27: the removal was dropped, E2004).
 # uF/uG/uH/uI (lane IATOM): the house LEADING-COMMA layout -- first / middle / last (; own line) /
 #   last (; on the entry) interface entry; the implementation insert follows that clause's layout.
+# uL (lane IATOM): a column-aligned dotted name (`uM   .Sub`) with a trailing { comment } -- the engine
+#   source's own shape -- moves compacted; uM.Sub.pas is its unit.
 # uJ (lane IATOM, written at run time -- it is UTF-8): ATOMICITY. The removal edit no longer matches
 #   the file at apply time, so the WHOLE fix (removal + implementation insert) is declined: the file
 #   is left byte-identical (before IATOM the insert landed alone -> E2004) and --json says declined.
@@ -36,16 +38,17 @@ try {
   Check 'positive: uB flagged on uA.pas line 6' (@($f | Where-Object { $_.file_path -match 'uA\.pas$' -and [int]$_.start_line -eq 6 }).Count -eq 1)
   Check 'positive: uB flagged on uE.pas line 11 (last entry)' (@($f | Where-Object { $_.file_path -match 'uE\.pas$' -and [int]$_.start_line -eq 11 }).Count -eq 1)
   Check 'positive: leading-comma uB flagged in uF/uG/uH/uI (line 10)' (@($f | Where-Object { $_.file_path -match 'u[FGHI]\.pas$' -and [int]$_.start_line -eq 10 }).Count -eq 4)
-  Check 'negative: uC (used in the interface) and uD (unused) not flagged' ($f.Count -eq 6)
-  Check 'message names the unit and points at uses-fix' (($f.Count -eq 6) -and ($f[0].message -match 'uB') -and ($f[0].message -match 'uses-fix'))
-  Check 'severity is hint' (($f.Count -eq 6) -and ($f[0].severity -eq 'hint'))
+  Check 'positive: aligned dotted name + trailing comment, and the next entry, flagged in uL' (@($f | Where-Object { $_.file_path -match 'uL\.pas$' }).Count -eq 2)
+  Check 'negative: uC (used in the interface) and uD (unused) not flagged' ($f.Count -eq 8)
+  Check 'message names the unit and points at uses-fix' (($f.Count -eq 8) -and ($f[0].message -match 'uB') -and ($f[0].message -match 'uses-fix'))
+  Check 'severity is hint' (($f.Count -eq 8) -and ($f[0].severity -eq 'hint'))
   # --- fix
   $pas = Join-Path $fx 'uA.pas'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uA.fixed.pas"
   & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
   Check 'fix: result is byte-identical to expected\uA.fixed.pas' (Test-G8BytesEqual $pas $want)
   Check 'fix: last entry -- result is byte-identical to expected\uE.fixed.pas' (Test-G8BytesEqual (Join-Path $fx 'uE.pas') (Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uE.fixed.pas"))
-  foreach ($u in 'uF','uG','uH','uI') {
+  foreach ($u in 'uF','uG','uH','uI','uL') {
     Check ("fix: leading-comma -- result is byte-identical to expected\$u.fixed.pas") (Test-G8BytesEqual (Join-Path $fx "$u.pas") (Join-Path $PSScriptRoot "..\lint-project\$rule\expected\$u.fixed.pas"))
   }
   $before = [IO.File]::ReadAllBytes($pas)
@@ -74,8 +77,8 @@ try {
   Check 'drift: --json row says declined, not applied' (($jRow.Count -eq 1) -and ($jRow[0].declined -eq $true) -and ($jRow[0].applied -eq $false) -and ([string]$jRow[0].decline_reason -ne '')) $jRaw.Trim()
   $jTxt = & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-String
   Check 'drift: text summary reports the declined fix' ($jTxt -match '1 declined') $jTxt.Trim()
-  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 6)
-  Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 6)
+  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 8)
+  Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 8)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
