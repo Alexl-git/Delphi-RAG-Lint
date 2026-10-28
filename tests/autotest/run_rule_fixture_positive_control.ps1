@@ -61,25 +61,14 @@ $Allowlist = @(
     'used-unit-not-resolvable', 'uses-global-census', 'with-hides-outer-symbol', 'with-statement',
     'writeln-in-source'
 )
-# The 43 ids of the clippy-parity wave (23 built-in + 20 .scm). Integration step 4 empties this list.
-$Pending = @(
-    'loop-condition-invariant', 'for-bound-modified-in-body', 'infinite-loop-no-exit',
-    'redundant-continue-exit', 'else-after-exit', 'unconditional-recursion', 'bad-bit-mask',
-    'invalid-regex-literal', 'double-dictionary-lookup', 'case-same-branches',
-    'misleading-indentation', 'missing-const-param', 'local-shadows-field',
-    'method-could-be-static', 'large-stack-local', 'too-many-bool-fields',
-    'inline-on-large-routine', 'wait-while-holding-lock', 'disallowed-method', 'disallowed-type',
-    'disallowed-name', 'index-loop-to-for-in', 'duplicate-unit-on-search-path', 'identity-op',
-    'nonminimal-bool', 'mixed-case-hex', 'approx-constant', 'useless-format', 'suboptimal-math',
-    'manual-inrange', 'pos-for-contains', 'unsigned-compare-always-true',
-    'integer-division-to-float', 'stream-read-result-ignored', 'is-prefix-not-boolean',
-    'halt-in-library', 'format-string-not-formatted', 'swap-without-temp',
-    'undocumented-check-suppression', 'collapsible-if', 'is-not-operator',
-    'ifthen-to-if-expression', 'unreadable-literal',
-    # taint wave T2 (2026-10-27): store-backed; their fixtures are tests\autotest\run_taint_rules.ps1 +
-    # run_taint_library.ps1 (tests\lint-project\taint*). INT empties these with the others.
-    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal'
-)
+# Store-backed / project-wide ids whose fixtures live in their own runner, not in tests\lint (added by INT lane IPC):
+#   taint-*                       -> tests\autotest\run_taint_rules.ps1 + run_taint_library.ps1 (tests\lint-project\taint*)
+#   duplicate-unit-on-search-path -> tests\autotest\run_duplicate_unit_on_search_path.ps1
+#   pp-unresolved-if              -> tests\autotest\run_index_pp_consts.ps1
+$Allowlist += @('taint-sql-injection', 'taint-command-injection', 'taint-path-traversal',
+    'duplicate-unit-on-search-path', 'pp-unresolved-if')
+# The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
+$Pending = @()
 
 # --- collect directives from every fixture ---
 $hits = @{}; $negs = @{}
