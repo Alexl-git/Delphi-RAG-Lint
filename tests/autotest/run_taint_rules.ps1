@@ -84,7 +84,7 @@ try {
     $n = (& python -I -c $emptyFlows $db 2>&1) -join ' '
     Check 'fixture: extractor rows cleared' ($n -eq '0') "python said: $n"
     $n = (& python -I $rowsPy $db $fx taint 2>&1) -join ' '
-    Check 'fixture rows inserted (python sqlite3)' ($n -eq '45') "fixture_rows.py said: $n"
+    Check 'fixture rows inserted (python sqlite3)' ($n -eq '50') "fixture_rows.py said: $n"
     $n = (& python -I $rowsPy $lib $libFx minirtl 2>&1) -join ' '
     Check 'mini-library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
@@ -108,6 +108,8 @@ try {
     @('taint-command-injection', 'uShellEx.pas', 18, 'error'),    # record member Info.lpFile -> ShellExecuteEx(@Info)
     @('taint-command-injection', 'uCmd.pas',     18, 'error'),    # RunCmd(ParamStr(1)) -> CreateProcess
     @('taint-path-traversal',    'uGlobal.pas',  25, 'warning'),  # unit global written in InitPath -> DeleteFile
+    @('taint-command-injection', 'uSelf.pas',    20, 'error'),    # SpawnSelf(ParamStr( 1 )) -> CreateProcess: the TP twin of RunSelf's ParamStr(0)
+    @('taint-path-traversal',    'uSelf.pas',    40, 'warning'),  # GetEnvironmentVariable('MY_CACHE'): the TP twin of :35
     @('taint-path-traversal',    'uGlobal.pas',  28, 'warning')   # TFileStream.Create(GetEnvironmentVariable(..)): the TP twin of :30
   )
   foreach ($p in $pos) {
@@ -127,10 +129,13 @@ try {
   # TAINTFP 2026-10-27: ParamStr is not a CWE-22 source (taint-sources.json "categories")
   Check 'no  uGlobal.pas:30 (ParamStr names the whole path: not a path-traversal source)' ((At $f 'taint-path-traversal' 'uGlobal.pas' 30).Count -eq 0)
   Check 'no  uGlobal.pas:32 (ExpandFileName(ParamStr): same, through a propagator)' ((At $f 'taint-path-traversal' 'uGlobal.pas' 32).Count -eq 0)
+  $self = At $f 'taint-command-injection' 'uSelf.pas' 20
+  Check 'uSelf.pas:20 once, from RunArgOne only (ParamStr(0) is the module path: trusted_args)' ($self.Count -eq 1 -and @($self[0].path)[0].line -eq 30) $(if ($self.Count) { "$($self.Count) finding(s), first source line $(@($self[0].path)[0].line)" })
+  Check "no  uSelf.pas:35 (GetEnvironmentVariable('LocalAppData') is an OS known folder: trusted_args)" ((At $f 'taint-path-traversal' 'uSelf.pas' 35).Count -eq 0)
   Check 'no  uInput.pas (sources only; reported at the sink)' ((InUnit $f 'uInput.pas').Count -eq 0)
   Check 'exactly one finding in uCycle.pas (the cycle terminates)' ((InUnit $f 'uCycle.pas').Count -eq 1) "got $((InUnit $f 'uCycle.pas').Count)"
   Check 'exactly one finding in uCmd.pas (RunCmdConst passes a literal)' ((InUnit $f 'uCmd.pas').Count -eq 1) "got $((InUnit $f 'uCmd.pas').Count)"
-  Check 'total taint findings = 15' ($f.Count -eq 15) "got $($f.Count)"
+  Check 'total taint findings = 17' ($f.Count -eq 17) "got $($f.Count)"
 
   # ---- path ----
   $noPath = @($f | Where-Object { $null -eq $_.path -or @($_.path).Count -lt 2 })

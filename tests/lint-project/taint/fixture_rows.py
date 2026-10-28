@@ -63,6 +63,11 @@ uShellEx|uShellEx.Launch|arg|ShellExecuteEx(@Info)|ShellExecuteEx|0||ref|-1|PCha
 uLambda|uLambda.RunLambda|arg|GConn.ExecSQL(S)|ExecSQL|0|GConn|ref|-1|S := ParamStr(1)|ParamStr|1|0
 uCmd|uCmd.RunCmd|arg|CreateProcess(nil|CreateProcess|1||param|0||ACmd|0|0
 uCmd|uCmd.RunCmdFromArg|arg|RunCmd(ParamStr(1))|RunCmd|0||ref|-1|RunCmd(ParamStr(1))|ParamStr|0|0
+uSelf|uSelf.SpawnSelf|arg|CreateProcess(nil|CreateProcess|1||param|0||ACmd|0|0
+uSelf|uSelf.RunSelf|arg|SpawnSelf(ParamStr(0)|SpawnSelf|0||ref|-1|SpawnSelf(ParamStr(0)|ParamStr|0|0
+uSelf|uSelf.RunArgOne|arg|SpawnSelf(ParamStr( 1|SpawnSelf|0||ref|-1|SpawnSelf(ParamStr( 1|ParamStr|0|0
+uSelf|uSelf.CacheKnown|arg|('LocalAppData')|DeleteFile|0||ref|-1|('LocalAppData')|GetEnvironmentVariable|0|0
+uSelf|uSelf.CacheCustom|arg|('MY_CACHE')|DeleteFile|0||ref|-1|('MY_CACHE')|GetEnvironmentVariable|0|0
 """
 
 # tests\lint-project\taint-lib\lib -- the mini library (indexed into a temp LIBRARY db)
