@@ -128,6 +128,15 @@ re-parsed, the schema version and extractor version do not change. Until then
 rows follow their symbol (a deleted or re-parsed symbol's row cascades away and
 is rebuilt by the next stage run).
 
+Doc prose is attributed by POSITION, not by `string_literals.symbol_id`: that
+column names the ENCLOSING scope (unit or class), so grouping by it would pile
+every member's comment onto its class. A run of consecutive `///` lines belongs
+to the declaration on the first symbol line at most 2 lines below it (an
+attribute line may sit between); `symbol_docs.summary` wins when present.
+
+Cost (measured 2026-10-28 on a copy of drag-lint's own index, 49,834 symbols):
+first backfill 15,720 rows in 8.4 s; an up-to-date run adds 0.1 s.
+
 ### Limits
 
 * The `matched` column list is approximate. It reports a column when its text
