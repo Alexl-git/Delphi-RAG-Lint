@@ -1584,10 +1584,10 @@ Described in [shared-unit](features/shared-unit.md).
 
 ### shutdown
 
-Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them.
+Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
 
 ```text
-drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running `lsp` engines to stand down: close every store, exit 0)
+drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
 ```
 
 | Flag | Argument | Meaning | Default |

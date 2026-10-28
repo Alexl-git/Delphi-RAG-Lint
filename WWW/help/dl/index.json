@@ -2222,7 +2222,7 @@
   {
     "id": "shutdown",
     "title": "shutdown",
-    "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
+    "summary": "Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced",
     "group": "maintenance",
     "order": 120012,
     "since": "0.6.0-alpha",

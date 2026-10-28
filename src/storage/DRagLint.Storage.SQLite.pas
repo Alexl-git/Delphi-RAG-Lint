@@ -132,6 +132,14 @@ function IsDuplicateColumnError(const pError: Exception): Boolean;
 procedure ExecAdditiveDDL(const pConn: TFDConnection; const pSql: string);
 
 type
+  /// <summary>Between-files gate (DEC-13): called by OpenFileTx before it opens a file transaction.</summary>
+  TFileTxGate = reference to procedure(AStore: TObject);
+
+var
+  /// <summary>Set by a batch verb that listens on the control channel; nil otherwise. Called on the indexing thread with NO transaction open, so the gate may checkpoint, close the store and end the process.</summary>
+  GFileTxGate: TFileTxGate;
+
+type
   /// <summary>One resolver answer for one ref -- the shape of
   /// TCallResolver.ResolveTypeUse and TCallResolver.ResolveEnumCast.</summary>
   /// <remarks>Returns the bound symbol id, or 0 with AReason naming the decline.</remarks>
@@ -1157,6 +1165,9 @@ type
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
+      /// <summary>Checkpoints the WAL (TRUNCATE) and closes the connection so no -wal/-shm sidecar survives; the store is unusable afterwards.</summary>
+      /// <remarks>Maintenance stand-down only (DEC-13); call with no file transaction open.</remarks>
+      procedure CloseForStandDown;
       function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
       /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
       /// <param name="ASymbol"><!-- drag-lint:auto type -->const TSymbol</param>
@@ -5924,11 +5935,18 @@ begin
   Result:= NormalizeStoredPathSpelling(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
 end;
 
+procedure TSQLiteSymbolStore.CloseForStandDown;
+begin
+  Checkpoint;
+  if Assigned(FConn) and FConn.Connected then FConn.Close;
+end;
+
 function TSQLiteSymbolStore.OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
 var
   Q : TFDQuery;
   NP: string  ;
 begin
+  if Assigned(GFileTxGate) then GFileTxGate(Self); { DEC-13: between files, no tx open }
   NP:= NormalizeStoredPath(APath);
   { V-C: the corpus size BEFORE this run's first write -- read ahead of the
     upsert, which would otherwise count the run's first new file as old. }

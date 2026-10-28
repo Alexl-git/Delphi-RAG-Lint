@@ -5,14 +5,14 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.6.0-alpha",
-  "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
-  "intro": "Read this when you need to rebuild an index that running engines hold open: shutdown asks the running lsp engines to close their stores and stand down, without killing them (only --force terminates an engine that does not answer).",
+  "summary": "Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced",
+  "intro": "Read this when you need to rebuild an index that running engines hold open, or replace a running engine: shutdown asks the running engines (lsp, cycles --fix, and the long index and lint-all runs) to close their stores and stand down, without killing them (only --force terminates an engine that does not answer). An index run stops between files with its database consistent and the same command resumes; the installer and build\\stage-engine.ps1 use this channel first.",
   "wikiPage": "Features",
   "surfaces": [
     {
       "type": "cli",
       "verb": "shutdown",
-      "usage": "drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running `lsp` engines to stand down: close every store, exit 0)",
+      "usage": "drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)",
       "flags": [
         {
           "name": "--db",
@@ -33,7 +33,7 @@
         }
       ],
       "helpOrder": 45,
-      "help": ["  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)", "                               transport: a Windows NAMED PIPE, never a TCP port -- \\\\.\\pipe\\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an", "                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Only an", "                               engine started in lsp mode listens (one-shot verbs and `serve` do not). --all (the default) asks every", "                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.", "                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps", "                               running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says", "                               ESCALATING when it does. Every honoured or refused request is audited on the engine's stderr and in", "                               %LOCALAPPDATA%\\drag-lint\\control-channel-audit.log (who asked: pid + exe, when)."]
+      "help": ["  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)", "                               transport: a Windows NAMED PIPE, never a TCP port -- \\\\.\\pipe\\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an", "                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in", "                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every", "                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.", "                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps", "                               running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says", "                               ESCALATING when it does. Every honoured or refused request is audited on the engine's stderr and in", "                               %LOCALAPPDATA%\\drag-lint\\control-channel-audit.log (who asked: pid + exe, when)."]
     }
   ],
   "audience": "both",
@@ -54,9 +54,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "79b21c85841d45de1e634588ee8fbd5c00aae1fc2e95b1a777267681e3c3e26d"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "8ba4649409adec2cb508df4209125d229d8eaf8183d7f6e3491e34000166125f"
   }
 }

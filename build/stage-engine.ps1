@@ -50,8 +50,13 @@ param(
   [Parameter(Mandatory = $true)] [string] $FreshExe,
   [Parameter(Mandatory = $true)] [string] $Target,
   [int] $TimeoutSec = 45,
-  [int] $HoldSeconds = 120
+  [int] $HoldSeconds = 120,
+  [int] $StandDownWaitSec = 30,
+  # Which engines the channel-first stop addresses: every engine of this user by default;
+  # a test names ITS OWN database so it never stands down the owner's real IDE engines.
+  [string] $StandDownDb = ''
 )
+$StandDownScope = if ($StandDownDb) { @('--db', $StandDownDb) } else { @('--all') }
 
 $ErrorActionPreference = 'Stop'
 
@@ -123,6 +128,26 @@ if ((Test-Path -LiteralPath $FreshExe) -and ($ImageName -ieq 'drag-lint.exe')) {
   }
 }
 
+# 1a -- CHANNEL FIRST (DEC-13, owner 2026-10-28): ask every running engine to stand
+# down CLEANLY through the control channel before anything is killed. lsp, cycles --fix,
+# index (single root, --project, --all) and lint-all all listen; an index run stops
+# between files with its database consistent and the same command resumes. `--wait`
+# gives a busy engine time to reach a safe point; one that does not comply is left to
+# 1b (an indexer) or 2 (the last resort). Engines older than the channel have no pipe
+# and fall through exactly as before.
+if ($holders.Count -gt 0 -and (Test-Path -LiteralPath $FreshExe) -and ($ImageName -ieq 'drag-lint.exe')) {
+  try {
+    $sd = (& $FreshExe shutdown @StandDownScope --wait $StandDownWaitSec 2>&1 | Out-String).Trim()
+    Write-Host ("  asked the running engines to stand down (shutdown {0} --wait {1}):" -f ($StandDownScope -join ' '), $StandDownWaitSec)
+    foreach ($ln in ($sd -split "`r?`n")) { if ($ln) { Write-Host ("    " + $ln) } }
+  } catch {
+    Write-Host "  channel stop failed: $($_.Exception.Message)" -ForegroundColor Yellow
+  }
+  # The exiting reply is sent BEFORE the process is gone: give the stood-down engines a moment to leave.
+  $leaveBy = (Get-Date).AddSeconds($(if ($sd -match 'exiting') { 15 } else { 0 }))
+  do { $holders = Get-Holders; if ($holders.Count -eq 0) { break }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $leaveBy)
+  if ($holders.Count -eq 0) { Write-Host '  every holder stood down through the channel; nothing was killed' -ForegroundColor Green }
+}
 # 1b -- REFUSE TO KILL AN INDEXING RUN. A holder whose command line is an
 # `index` invocation is not an editor waiting to respawn: it is a scan that can
 # be hours deep, and a full `index --all` after an extractor bump is a FIVE HOUR

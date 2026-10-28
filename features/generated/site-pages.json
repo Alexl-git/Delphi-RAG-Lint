@@ -392,8 +392,8 @@
     "version": "1.35.1-alpha"
   },
   "features/ide-release.md": {
-    "hash": "9d8fb795dc81617877166f2b8f1b5624b8cefc7631783e23721a9d172758cbf1",
-    "version": "1.35.1-alpha"
+    "hash": "77bdf590c8b3a88d9a72390b2d20a665a05cba7ea547cc4c0104d9305e79407d",
+    "version": "1.36.0-alpha"
   },
   "features/impact-blast-radius-symbol.md": {
     "hash": "b9b3c9601060c011f574e1647be38193995c30ce525e2bed80e129f0aff39a08",
@@ -668,8 +668,8 @@
     "version": "1.36.0-alpha"
   },
   "features/shutdown.md": {
-    "hash": "039b382b24dc5ac4117d4ca7e3864532070008481abed210edffb1a8d336d03a",
-    "version": "1.35.1-alpha"
+    "hash": "d8e803ca650676d93990b3196602833aaaaeffc8aa8cd3cd99935ecead72ed24",
+    "version": "1.36.0-alpha"
   },
   "features/sql.md": {
     "hash": "7ee57f50efbf16f8e5c23672d7b55cf60c0f0c4c5bc252f0d57a032835299865",
