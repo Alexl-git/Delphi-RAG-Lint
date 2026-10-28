@@ -58,6 +58,9 @@ type
     DedupExcludeRoots: TArray<string>;
     /// <summary>Walk filter derived from global + per-section settings.</summary>
     Filter: TWalkFilter;
+    /// <summary>The section's "libraryResolve" opt-in (item 4): open the platform library as an
+    /// extra store for this section's call-resolve pass. False for library sections.</summary>
+    LibraryResolve: Boolean;
   end; // record
 
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
@@ -371,6 +374,7 @@ begin
         PS.DbPath:= ExpandSectionDb(AManifest, Sec);
         PS.Roots:= ResolveRoots(Sec, AManifest.RootDir, Mode);
         PS.Filter:= BuildFilter(AManifest, Sec);
+        PS.LibraryResolve:= Sec.LibraryResolve;
         Items.Add(PS);
       end;
     end; // for

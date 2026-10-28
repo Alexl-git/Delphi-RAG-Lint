@@ -24,8 +24,8 @@
     "version": "1.33.0-alpha"
   },
   "features/auto-document-whole-project.md": {
-    "hash": "e9babca33d5ec13779d02be1514d9f4f2994b2fe79daf7ac3de370061460ba71",
-    "version": "1.35.1-alpha"
+    "hash": "f85db5e89454b20793bb8ce36c3a453bf924a2bf3c30d302328cd47831750a24",
+    "version": "1.36.0-alpha"
   },
   "features/autofix-wave.md": {
     "hash": "7100e4de6e9fb3c5d5de7e50bf05ce0cea73de99fa1378222303053ff78ed0bc",
@@ -280,8 +280,8 @@
     "version": "1.35.1-alpha"
   },
   "features/find-callees.md": {
-    "hash": "43462af60e56ed78090e33b5cc207ec4eef4993a15ffc97a64996a2a819cb26a",
-    "version": "1.35.1-alpha"
+    "hash": "f3aa59089b2fcf77ea59eaa45c4c06b06a9e4e64dd279f58424107aeebd21c31",
+    "version": "1.36.0-alpha"
   },
   "features/find-dead-code.md": {
     "hash": "46f7183956649c52ae8686e8e8ae867b9377abb97c89c6ac3b90bce282ce5712",

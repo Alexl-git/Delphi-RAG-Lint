@@ -7,7 +7,7 @@ group: indexing
 order: 10001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Auto-Document Whole Project
@@ -29,7 +29,7 @@ Full flag list: [document in the CLI reference](../cli.md#document).
 | `--db` | `<file.sqlite>` |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
-| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve (value receivers typed by name bind too; the manifest key libraryResolve opts a section in). |  |
 | `--max-file-kb` | `N` |  |  |
 | `--no-use-ignore` |  |  |  |
 | `--no-sql-ms` |  |  |  |

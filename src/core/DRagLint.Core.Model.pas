@@ -749,6 +749,10 @@ type
     // carries no direction of its own). '' when there is no member_accesses
     // row. Filled by FindCallersByName only; `usages` buckets on it.
     AccessMode: string;
+    // item 4 (untypable receivers): refs.receiver_type_text and refs.external_target of the
+    // call ref, filled by GetUnresolvedCallsFromSymbol only ('' when NULL or absent column).
+    ReceiverTypeText: string;
+    ExternalTarget  : string;
   end;
 
   /// <summary>v14 (D5): one resolved call-site edge, written by the

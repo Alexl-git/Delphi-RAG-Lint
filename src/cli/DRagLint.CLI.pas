@@ -130,6 +130,7 @@ uses
   , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
+  , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
@@ -981,6 +982,7 @@ function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; f
   wraps RefreshProjectIndex, which sits beside convert-apply far below. }
 function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
+function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
@@ -3657,6 +3659,44 @@ begin
   end;
 end;
 
+/// <summary>The extra (library) stores a manifest section's call-resolve pass opens when the
+/// section opts in with "libraryResolve": true (item 4).</summary>
+/// <param name="ALibraryResolve">The section's key; False returns no store at all.</param>
+/// <param name="APlatform">The section's platform token ('' = the manifest default platform).</param>
+/// <param name="AOwnDb">The DB being built; a library that IS this DB is never opened against itself.</param>
+/// <returns>The platform library opened like --library-db (read-only use, never written), or an
+/// empty array with one stdout NOTE when the library index cannot be found.</returns>
+/// <remarks>Default OFF: the 2026-10-25 ruling is that no run attaches a library nobody named.
+/// The key is the explicit, per-section, reviewable form of naming it.</remarks>
+function ManifestLibraryStores(ALibraryResolve: Boolean; const APlatform, AOwnDb: string): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  if not ALibraryResolve then Exit;
+  var LibArgs: TArgs:= Default(TArgs);
+  LibArgs.CheckPlatform:= APlatform;
+  var LibDb: string:= ResolveLibraryDb(LibArgs);
+  if (LibDb = '') or not TFile.Exists(LibDb) then
+  begin
+    Writeln('  NOTE: libraryResolve is on but no library index was found; resolving without it.');
+    Exit;
+  end;
+  if SameText(ExpandFileName(LibDb), ExpandFileName(AOwnDb)) then Exit;
+  LibArgs.LibraryDbs:= [LibDb];
+  Result:= OpenLibraryStores(LibArgs);
+end;
+
+/// <summary>True when the manifest section that owns ADb opts in with "libraryResolve".</summary>
+/// <param name="AManifest">The manifest the run loaded.</param>
+/// <param name="ADb">The DB the run writes.</param>
+/// <returns>False for library sections (never resolved against a library) and for any DB no section owns.</returns>
+function ManifestSectionLibraryResolve(const AManifest: TIndexManifest; const ADb: string): Boolean;
+begin
+  Result:= False;
+  for var Sec: TIndexSection in AManifest.Sections do
+    if Sec.LibraryResolve and (Sec.Source <> 'registry-libraries') and
+       SameText(ExpandFileName(ExpandSectionDb(AManifest, Sec)), ExpandFileName(ADb)) then Exit(True);
+end;
+
 { Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
 
@@ -4050,8 +4090,10 @@ begin
        Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
     if RanCalls then
     begin
-      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end); { v14 (D5): resolve call sites to target symbols }
-      Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch; end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
+      { item 4: the opt-in library store, opened once for both stages; none when the key is off. }
+      var SectionLibs: TArray<ISymbolStore>:= ManifestLibraryStores(AItem.LibraryResolve and (AItem.Mode <> smLibrary), AItem.Platform, AItem.DbPath);
+      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
@@ -6350,8 +6392,12 @@ begin
        ResolverStale or AArgs.ResolveOnly;
     if RanCalls then
     begin
-      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end); { v14 (D5) + v21 cross-DB }
-      Stage('', 'dispatch', procedure begin Store.ResolveDispatch(OpenLibraryStores(AArgs)); end); { 2026-10-26: libraries only recognise a library `class of` param type }
+      { item 4: --library-db wins; else the section's "libraryResolve" opt-in; else no extra store. }
+      var RunLibs: TArray<ISymbolStore>:= OpenLibraryStores(AArgs);
+      if Length(RunLibs) = 0 then
+        RunLibs:= ManifestLibraryStores(ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), AArgs.CheckPlatform, ResolvedDb);
+      Stage('', 'calls', procedure begin Store.ResolveCallTargets(RunLibs); end); { v14 (D5) + v21 cross-DB }
+      Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
     else
       Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
@@ -24734,13 +24780,109 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>v14 (D5 T9): drag-lint find-callees --qname X [--json] --db PATH --
+type
+  /// <summary>Counters of find-callees' external (library-bound) callee pass.</summary>
+  TExternalCalleeTally = record
+    /// <summary>External callees listed (stored external_target, or bound now by the oracle).</summary>
+    Listed: Integer;
+    /// <summary>Unresolved calls with a known receiver type that a library COULD bind but
+    /// none is open; reported as "M external (library not open)".</summary>
+    NotOpen: Integer;
+  end;
+
+/// <summary>The library index find-callees opens beside the project index (item 4).</summary>
+/// <param name="AArgs">Parsed args: DbPaths (a second --db) and LibraryDbs (--library-db).</param>
+/// <param name="AProjectDb">In: --db (first). Out: the project DB, unchanged unless a
+/// manifest-classified library was named first.</param>
+/// <returns>An explicit --library-db (never 'none'), else a second --db that is not the
+/// project DB, else ''. Existence is not checked here; the caller degrades to "not open".</returns>
+/// <remarks>Never reads the manifest to GUESS a library: opening one nobody named would make
+/// the answer depend on a machine-level setting (the 2026-10-25 no-attach ruling).</remarks>
+function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string;
+begin
+  Result:= '';
+  if Length(AArgs.DbPaths) > 1 then
+  begin
+    var Lib: string;
+    SplitConsumerDbs(AArgs, AArgs.DbPaths, AProjectDb, Lib);
+    if AProjectDb = '' then AProjectDb:= AArgs.DbPath;
+    if Lib = '' then
+      for var D: string in AArgs.DbPaths do
+        if TFile.Exists(D) and not SameText(ExpandFileName(D), ExpandFileName(AProjectDb)) then
+          begin
+            Lib:= D;
+            Break;
+          end;
+    Result:= Lib;
+  end;
+  if (Result = '') and (Length(AArgs.LibraryDbs) > 0) and not SameText(AArgs.LibraryDbs[0], 'none') then
+    Result:= AArgs.LibraryDbs[0];
+end;
+
+/// <summary>Lists the library-bound callees of one routine: its unresolved call refs that carry
+/// a stored external_target ("edge") or whose receiver_type_text the oracle binds against the
+/// open library right now ("oracle").</summary>
+/// <param name="AStore">The project store.</param>
+/// <param name="AOracle">Oracle over the open library stores (an empty list declines everything).</param>
+/// <param name="ALibraryOpen">True when at least one library store is open.</param>
+/// <param name="ASymbolId">The enclosing routine.</param>
+/// <param name="AJson">Receives one object per external callee, or nil for text output.</param>
+/// <param name="ATally">Incremented.</param>
+/// <remarks>Binds only through TLibraryOracle (exactly one type, exactly one member); a decline
+/// lists nothing. A site whose type text is known but whose library is not open only counts
+/// toward NotOpen, so the answer says what it could not see instead of staying silent.</remarks>
+procedure EmitExternalCallees(const AStore: ISymbolStore; AOracle: TLibraryOracle; ALibraryOpen: Boolean;
+  ASymbolId: Int64; AJson: TJSONArray; var ATally: TExternalCalleeTally);
+begin
+  for var R: TReference in AStore.GetUnresolvedCallsFromSymbol(ASymbolId) do
+  begin
+    var QName: string:= R.ExternalTarget;
+    var Via  : string:= 'edge';
+    if QName = '' then
+    begin
+      if R.ReceiverTypeText = '' then Continue;
+      if not ALibraryOpen then
+      begin
+        Inc(ATally.NotOpen);
+        Continue;
+      end;
+      var Dot: Integer:= Pos('.', R.ReceiverTypeText);
+      var TypeText: string:= (if Dot > 0 then Copy(R.ReceiverTypeText, 1, Dot - 1) else R.ReceiverTypeText);
+      var Pending : string:= (if Dot > 0 then Copy(R.ReceiverTypeText, Dot + 1, MaxInt) else '');
+      var UsedUnits: TArray<string>:= nil;
+      for var U: TUnitUse in AStore.GetUnitUsesForFile(R.FileId) do UsedUnits:= UsedUnits + [LowerCase(U.UnitName)];
+      var Reason: string;
+      QName:= AOracle.Bind(TypeText, Pending, R.NameText, ekCall, UsedUnits, Reason);
+      if QName = '' then Continue;
+      Via:= 'oracle';
+    end;
+    Inc(ATally.Listed);
+    if AJson <> nil then
+    begin
+      var JObj:= TJSONObject.Create;
+      JObj.AddPair('target_qname', QName);
+      JObj.AddPair('confidence'  , 'library');
+      JObj.AddPair('external'    , TJSONTrue.Create);
+      JObj.AddPair('via'         , Via);
+      JObj.AddPair('receiver_type', R.ReceiverTypeText);
+      AJson.AddElement(JObj);
+    end
+    else Writeln(Format('  -> %s   (library, %s)', [QName, (if Via = 'edge' then 'by name' else 'resolved now')]));
+  end; // for R
+end;
+
+/// <summary>v14 (D5 T9): drag-lint find-callees --qname X [--json] --db PATH
+/// [--db LIBRARY | --library-db LIBRARY] --
 /// the mirror of find-callers --resolved: every RESOLVED outgoing call made
 /// from inside routine X's body (via call_edges), rendered as the target's
 /// qualified name + confidence. X is resolved via FindSymbolsByQualifiedName;
 /// an overloaded/duplicate qname is handled by unioning the callees of every
 /// matching symbol. A routine with no resolved outgoing calls prints "0
-/// callee(s)" (text) / an empty array (json) -- a valid, non-error answer.</summary>
+/// callee(s)" (text) / an empty array (json) -- a valid, non-error answer.
+/// Item 4: library-bound callees follow the resolved ones, marked "(library"
+/// in text and {"external": true, "via": "edge"|"oracle"} in json; with no
+/// library open the text ends "M external (library not open)" for the sites a
+/// library could bind.</summary>
 /// <param name="AArgs">Parsed CLI args; QName is the calling routine, DbPath the index.</param>
 /// <returns>0 when the store opened OK and --qname resolved to at least one symbol
 /// (even with zero callees); 1 if --qname does not resolve to any symbol; 2 on
@@ -24754,17 +24896,42 @@ var
   E      : TCallEdge        ;
   QName  : string           ;
   Total  : Integer          ;
+  Ext    : TExternalCalleeTally;
+  Oracle : TLibraryOracle   ;
 begin
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint find-callees --qname X [--json] --db PATH'); Exit (2 ); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint find-callees --qname X [--json] --db PATH [--db LIBRARY | --library-db LIBRARY]');
+    Exit(2);
+  end;
+  var ProjectDb: string:= AArgs.DbPath;
+  var LibraryDb: string:= FindCalleesLibraryDb(AArgs, ProjectDb);
+  if not FileExists(ProjectDb) then
+  begin
+    Writeln(Format('Database not found: %s', [ProjectDb]));
+    Exit(2);
+  end;
   var RoOk: Boolean;
-  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(1);
 
   Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Targets) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
+  { The library is opened read-only and never written; a library that cannot be
+    opened degrades to "library not open" with one stderr line, never an error. }
+  var LibStores: TArray<ISymbolStore>:= nil;
+  if LibraryDb <> '' then
+  begin
+    var LibOk: Boolean;
+    var LibStore: ISymbolStore:= OpenReadOnlyStore(LibraryDb, LibOk, {AQuiet=}True);
+    if LibOk then LibStores:= [LibStore]
+    else Writeln(ErrOutput, 'NOTE: find-callees: the library index could not be opened (', LibraryDb, '); treated as not open.');
+  end;
+
   Total:= 0;
+  Ext:= Default(TExternalCalleeTally);
+  Oracle:= TLibraryOracle.Create(LibStores);
   var JOut: TJSONArray:= nil;
   if AArgs.AsJson then JOut:= TJSONArray.Create;
   try
@@ -24785,11 +24952,19 @@ begin
         else Writeln(Format('  %s  [%s]', [QName, E.Confidence]));
         Inc(Total);
       end; // for E
+      EmitExternalCallees(Store, Oracle, Length(LibStores) > 0, T.Id, JOut, Ext);
     end; // for T
     if AArgs.AsJson then Writeln(JOut.Format(2))
-    else if Total = 0 then Writeln('0 callee(s)');
+    else
+    begin
+      if (Total = 0) and (Ext.Listed = 0) then Writeln('0 callee(s)');
+      if (Ext.Listed > 0) or (Ext.NotOpen > 0) then
+        Writeln(Format('%d resolved + %d external%s', [Total, Ext.Listed,
+          (if Ext.NotOpen > 0 then Format('; %d external (library not open)', [Ext.NotOpen]) else '')]));
+    end;
   finally
     JOut.Free;
+    Oracle.Free;
   end; // try
   Result:= 0;
 end; // function

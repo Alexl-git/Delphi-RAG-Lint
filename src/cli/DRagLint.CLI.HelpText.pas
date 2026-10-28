@@ -27,6 +27,9 @@ begin
   Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
   Writeln('                               cross-DB rung runs last), so adding a library can never change an edge that already existed.');
   Writeln('                               Answers only when exactly ONE type and ONE member match; absence beats a guess.');
+  Writeln('                               A value receiver typed by NAME binds too (S.Read with S: TStream -> System.Classes.TStream.Read; refs.receiver_type_text');
+  Writeln('                               records the type). Without the flag, a manifest section opts in with "libraryResolve": true (default false):');
+  Writeln('                               index --all / index --project then open the platform library for the resolve pass only.');
   Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
   Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
   Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
@@ -319,7 +322,9 @@ begin
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
-  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
+  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)');
+  Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
+  Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
@@ -458,6 +463,9 @@ begin
     Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
     Writeln('                               cross-DB rung runs last), so adding a library can never change an edge that already existed.');
     Writeln('                               Answers only when exactly ONE type and ONE member match; absence beats a guess.');
+    Writeln('                               A value receiver typed by NAME binds too (S.Read with S: TStream -> System.Classes.TStream.Read; refs.receiver_type_text');
+    Writeln('                               records the type). Without the flag, a manifest section opts in with "libraryResolve": true (default false):');
+    Writeln('                               index --all / index --project then open the platform library for the resolve pass only.');
     Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
     Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
     Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
@@ -1018,7 +1026,9 @@ begin
   end;
   if pVerb = 'find-callees' then
   begin
-    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
+    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)');
+    Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
+    Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
     Exit;
   end;
   if pVerb = 'ambiguous-calls' then

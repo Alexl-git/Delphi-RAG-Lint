@@ -146,6 +146,7 @@ type
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
     strict private
       FConn                  : TFDConnection;
+      FRtyColumn             : Integer      ; { item 4: refs.receiver_type_text present? 0 unknown, 1 yes, 2 no }
       FQInsertFile           : TFDQuery     ;
       FQUpsertFile           : TFDQuery     ;
       FQInsertSymbol         : TFDQuery     ;
@@ -337,6 +338,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ProbeExists(const ASQL: string): Boolean;
+      /// <summary>Item 4 type filter of the Called-from name bucket: removes from AList (and the parallel
+      /// ARtyList) every candidate whose receiver_type_text names a type that resolves in THIS store and is
+      /// neither the owner, nor one of its ancestors, nor one of its descendants.</summary>
+      /// <param name="AOwnerTypeName">The target's owning type (leaf name).</param>
+      /// <param name="AList">Candidates; filtered in place.</param>
+      /// <param name="ARtyList">receiver_type_text per candidate, same order and length as AList.</param>
+      /// <remarks>Keeps (unknown is not foreign): an empty or NULL type text, a text with pending segments
+      /// ('T.seg'), and a type this store does not declare (a library type). Ancestors are kept because a
+      /// call through a base type reaches the owner's override. Not thread-safe.</remarks>
+      procedure DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
       /// <summary>True when ResolveCallTargets may restrict itself to the refs
       /// this instance's writes can have affected.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ScopedResolveDeclineReason
@@ -6893,6 +6904,9 @@ var
   ScopeC: string                ; { the reach CTE, or '' }
   ScopeP: string                ; { the reach predicate, or '' }
   RcvP  : string                ; { v20: the receiver predicate, or '' }
+  RtyCol: string                ; { item 4: the receiver_type_text select term }
+  RtyList: TList<string>        ; { item 4: receiver_type_text per row of List }
+  UnknownRty: Boolean           ; { item 4: the column is absent (pre-item-4 DB) }
 begin
   { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
     the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
@@ -7019,12 +7033,18 @@ begin
     '                    AND sv.kind IN (''local_var'',''param'',''field'',''property'',''var'',''const''))) ';
 
   List:= TList<TResolvedCaller>.Create;
+  RtyList:= TList<string>.Create;
+  { A DB older than the column reads '' for every row (keep everything). }
+  if FRtyColumn = 0 then
+    FRtyColumn:= (if ProbeExists('SELECT 1 FROM pragma_table_info(''refs'') WHERE name = ''receiver_type_text''') then 1 else 2);
+  UnknownRty:= FRtyColumn = 2;
+  RtyCol:= (if UnknownRty then ''''' AS rty ' else 'r.receiver_type_text AS rty ');
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= ScopeC +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ' +
-      '       r.receiver_text ' +
+      '       r.receiver_text, ' + RtyCol +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
@@ -7062,14 +7082,99 @@ begin
       else R.ReceiverText:= Q.FieldByName('receiver_text').AsString;
       R.Confidence:= 'unverified';
       List.Add(R);
+      RtyList.Add(Q.FieldByName('rty').AsString);
       Q.Next;
     end; // while
+    Q.Close;
+    { item 4 TYPE FILTER -- see FoldForeignTypedCallers. }
+    if (Trim(AOwnerTypeName) <> '') and not UnknownRty then DropForeignTypedCallers(AOwnerTypeName, List, RtyList);
     Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
+    RtyList.Free;
   end; // try
 end; // function
+
+procedure TSQLiteSymbolStore.DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
+var
+  Related : TStringList;
+  Declared: TDictionary<string, Boolean>;
+  Q       : TFDQuery;
+
+  procedure Load(const ASql: string);
+  begin
+    Q.SQL.Text:= ASql;
+    Q.ParamByName('o').AsWideString:= AOwnerTypeName;
+    Q.Open;
+    try
+      while not Q.Eof do
+      begin
+        Related.Add(Q.Fields[0].AsString);
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end;
+  end;
+
+  function DeclaredHere(const ATypeName: string): Boolean;
+  begin
+    if Declared.TryGetValue(LowerCase(ATypeName), Result) then Exit;
+    Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :t COLLATE NOCASE AND kind IN (''class'',''interface'',''record'',''type'') LIMIT 1';
+    Q.ParamByName('t').AsWideString:= ATypeName;
+    Q.Open;
+    try
+      Result:= not Q.Eof;
+    finally
+      Q.Close;
+    end;
+    Declared.Add(LowerCase(ATypeName), Result);
+  end;
+
+begin
+  Related := nil;
+  Declared:= nil;
+  Q       := nil;
+  try
+    for var i: Integer:= AList.Count - 1 downto 0 do
+    begin
+      var Rty: string:= ARtyList[i];
+      if (Rty = '') or Rty.Contains('.') or SameText(Rty, AOwnerTypeName) then Continue;
+      if Related = nil then
+      begin
+        Related := TStringList.Create;
+        Related.Sorted       := True;
+        Related.Duplicates   := dupIgnore;
+        Related.CaseSensitive:= False;
+        Declared:= TDictionary<string, Boolean>.Create;
+        Q:= TFDQuery.Create(nil);
+        Q.Connection:= FConn;
+        { descendants (any kind: an implementer of an interface owner is one) and ancestors, by NAME }
+        Load('WITH RECURSIVE d(name) AS (' +
+             ' SELECT s.name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  WHERE ta.ancestor_name = :o COLLATE NOCASE' +
+             ' UNION' +
+             ' SELECT s.name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  JOIN d ON ta.ancestor_name = d.name COLLATE NOCASE) SELECT name FROM d');
+        Load('WITH RECURSIVE a(name) AS (' +
+             ' SELECT ta.ancestor_name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  WHERE s.name = :o COLLATE NOCASE AND s.kind IN (''class'',''interface'',''record'',''type'')' +
+             ' UNION' +
+             ' SELECT ta.ancestor_name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  JOIN a ON s.name = a.name COLLATE NOCASE) SELECT name FROM a');
+      end;
+      if Related.IndexOf(Rty) >= 0 then Continue;
+      if not DeclaredHere(Rty) then Continue; { a library type: unknown is not foreign }
+      AList.Delete(i);
+      ARtyList.Delete(i);
+    end;
+  finally
+    Q.Free;
+    Declared.Free;
+    Related.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
 var
@@ -7134,6 +7239,9 @@ begin
     var EColF : TField:= Q.FieldByName('end_col'   );
     { FindField: a pre-v20 DB has no receiver_text, which reads as '' (bare). }
     var RcvF  : TField:= Q.FindField('receiver_text');
+    { item 4: both columns are additive (Migrate); a DB older than the engine reads '' }
+    var RtyF  : TField:= Q.FindField('receiver_type_text');
+    var ExtF  : TField:= Q.FindField('external_target');
     while not Q.Eof do
     begin
       R:= Default(TReference);
@@ -7147,6 +7255,8 @@ begin
       R.EndCol           := EColF.AsInteger;
       R.EnclosingSymbolId:= AEnclosingSymbolId;
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
+      if (RtyF <> nil) and not RtyF.IsNull then R.ReceiverTypeText:= RtyF.AsString;
+      if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
       List.Add(R);
       Q.Next;
     end;
