@@ -203,6 +203,11 @@ type
     /// (category, id). When ACategory&lt;&gt;'' only that category is returned.</summary>
     /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
     /// <param name="ACategory"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="AWithLabels">True (default): fill each rule's Compliance from
+    /// rules\compliance.json and set ComplianceError. False: skip that file entirely --
+    /// Compliance stays empty and ComplianceError is left untouched -- for a caller that
+    /// only needs the rule ids (the review-marker pass), which saves the compliance.json
+    /// parse.</param>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -218,7 +223,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildCatalog(const ARulesDir: string = '';
-      const ACategory: string = ''): TArray<TRuleInfo>; static;
+      const ACategory: string = ''; AWithLabels: Boolean = True): TArray<TRuleInfo>; static;
     /// <summary>Totals + per-category counts over ACatalog.</summary>
     /// <param name="ACatalog"><!-- drag-lint:auto type -->const TArray&lt;TRuleInfo&gt;</param>
     /// <returns><!-- drag-lint:auto type -->TCatalogSummary</returns>
@@ -877,7 +882,7 @@ begin
     Result:= 'other';  { writeln-in-source, outputdebugstring, compiler-magic-comments, assert-call, inherited-bare, concat-in-loop }
 end;
 
-class function TRuleCatalog.BuildCatalog(const ARulesDir, ACategory: string): TArray<TRuleInfo>;
+class function TRuleCatalog.BuildCatalog(const ARulesDir, ACategory: string; AWithLabels: Boolean): TArray<TRuleInfo>;
 var
   Dir   : string;
   ById  : TDictionary<string, TRuleInfo>;
@@ -895,7 +900,8 @@ var
 begin
   if ARulesDir <> '' then Dir:= ARulesDir
   else Dir:= TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
-  Labels:= TComplianceTable.Shared(ARulesDir, ComplianceError);
+  Labels:= nil;
+  if AWithLabels then Labels:= TComplianceTable.Shared(ARulesDir, ComplianceError);
 
   ById:= TDictionary<string, TRuleInfo>.Create;
   Order:= TList<string>.Create;
@@ -958,7 +964,7 @@ begin
       for Id in Order do
       begin
         R:= ById[Id];
-        Labels.TryGet(R.Id, R.Compliance);
+        if Labels <> nil then Labels.TryGet(R.Id, R.Compliance);
         if (ACategory = '') or SameText(R.Category, ACategory) then Res.Add(R);
       end;
       Res.Sort(TComparer<TRuleInfo>.Construct(

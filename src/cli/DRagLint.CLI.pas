@@ -10898,9 +10898,25 @@ begin
         than half the catalogue, and leaving them out meant a dl:ok naming one was
         never reported unused -- it fails safe, but it silently under-counts, which
         is exactly wrong when the target is zero findings. BuildCatalog('') reads
-        the default <exe-dir>\rules. }
-      for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog('', '') do
-        Known.AddOrSetValue(LowerCase(RI.Id), True);
+        the default <exe-dir>\rules.
+        BUILT ON THE FIRST MARKER, NOT UP FRONT (lane PERF2, 2026-10-28): the
+        catalogue is every rules\*.json sidecar plus compliance.json, 0.06-0.10 s
+        per `lint` process at 95 rules, paid by every file whether or not it holds
+        a single dl:ok -- the [after-checkers] phase went 0.03 -> 0.25 s. Only the
+        ids are needed here, so the compliance labels are skipped too. Pinned by
+        run_rule_load_parallel.ps1 ([after-checkers] median). }
+      var KnownBuilt: Boolean:= False;
+      var IsKnownRule: TFunc<string, Boolean>:=
+        function(AId: string): Boolean
+        begin
+          if not KnownBuilt then
+          begin
+            for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog('', '', {AWithLabels=}False) do
+              Known.AddOrSetValue(LowerCase(RI.Id), True);
+            KnownBuilt:= True;
+          end;
+          Result:= Known.ContainsKey(LowerCase(AId));
+        end;
       for var SF: string in AScannedFiles do
       begin
         Lines:= LinesOf(SF);
@@ -10934,7 +10950,7 @@ begin
               quotes a realistic hash (`bare-except@7f3a`) or a placeholder id
               (`<rule-id>`), and neither passes both tests. }
             for M in TReviewMarkers.EmbeddedMarkers(Lines[LN - 1], (LN <= Length(InBlock)) and InBlock[LN - 1]) do
-              if Known.ContainsKey(LowerCase(M.RuleId)) and TReviewMarkers.IsPlaceholderHash(M.Hash) then
+              if TReviewMarkers.IsPlaceholderHash(M.Hash) and IsKnownRule(M.RuleId) then
                 EmitHint(SF, LN, 'review-marker-placeholder-hash',
                   Format('dl:ok for "%s" sits in a block or doc comment and carries the placeholder @%s -- only a ' +
                          '`//` line comment is read as a marker, so this suppresses NOTHING. Re-review, then ' +
@@ -10970,7 +10986,7 @@ begin
               colon is correct too and lands with the sleep-in-vcl scoping fix,
               so that activating those 11 markers does not launder 11 findings
               they have said they do not accept. }
-            if not Known.ContainsKey(LowerCase(M.RuleId)) then
+            if not IsKnownRule(M.RuleId) then
             begin
               EmitHint(SF, LN, 'review-marker-malformed',
                 { EVERY accepted form, or this message lies to the one reader who
