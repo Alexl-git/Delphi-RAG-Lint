@@ -1543,9 +1543,13 @@ var
   List    : TList<TQueryRule>;
   Seen    : TDictionary<string, string>;
   FirstAt : string           ;
+  Wall    : TStopwatch       ;
+  SumTicks: Int64            ;
 begin
   SetLength(Result, 0);
   if not TDirectory.Exists(ARulesDir) then Exit;
+  Wall:= TStopwatch.StartNew;
+  SumTicks:= 0;
   Files:= TDirectory.GetFiles(ARulesDir, '*.scm', TSearchOption.soAllDirectories);
   // Key = rule id + file name: one id may legitimately span several forms (hardcoded-credential
   // const + assignment), but the same id in the same-named file twice is a stray copy.
@@ -1560,7 +1564,9 @@ begin
       JsonPath:= ChangeFileExt(ScmPath, '.json');
       try
         Source:= TFile.ReadAllText(ScmPath, TEncoding.UTF8);
+        var T0: Int64:= TStopwatch.GetTimeStamp;
         Rule:= TQueryRule.Create(ALanguage, Source, ScmPath, JsonPath);
+        Inc(SumTicks, TStopwatch.GetTimeStamp - T0);
         if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
         begin
           Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
@@ -1574,6 +1580,9 @@ begin
       end;
     end;
     Result:= List.ToArray;
+    if RuleProfileArmed then
+      Writeln(ErrOutput, Format('[rule-load] %d rules compiled: wall %.3f s, cpu-sum %.3f s',
+        [Length(Result), Wall.Elapsed.TotalSeconds, SumTicks / TStopwatch.Frequency], TFormatSettings.Invariant));
   finally
     Seen.Free;
     List.Free;
