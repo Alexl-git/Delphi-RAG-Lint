@@ -372,6 +372,18 @@
     "verb": "query"
   },
   {
+    "id": "query-text-near",
+    "title": "query --text --near",
+    "summary": "Keeps only text hits in routines within N call-graph hops of a symbol",
+    "group": "search-navigation",
+    "order": 20021,
+    "since": "1.37.0-alpha",
+    "file": "features/query-text-near.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
+  },
+  {
     "id": "query-type-usage",
     "title": "query type-usage",
     "summary": "Answers one question, of a list of type names, about one file",

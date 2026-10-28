@@ -1107,6 +1107,14 @@ type
     EndCol   : Integer;
   end;
 
+  /// <summary>One symbol in a call-graph neighbourhood returned by
+  /// ISymbolStore.FindSymbolsWithinHops: its qualified name and the fewest hops
+  /// that reach it from the seed (0 = the seed itself).</summary>
+  TSymbolHop = record
+    QualifiedName: string ;
+    Hop          : Integer;
+  end;
+
   /// <summary>A text-search hit returned by ISymbolStore.SearchText: a
   /// TStringLiteral enriched with the file path and enclosing qualified name.</summary>
   /// <remarks>

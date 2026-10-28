@@ -156,6 +156,7 @@
   "query-find-callers": "query-find-callers",
   "query-kind-all": "query-kind-all",
   "query-name-like": "query-name-like",
+  "query-text-near": "query-text-near",
   "query-type-usage": "query-type-usage",
   "query-typecat": "query-typecat",
   "query-unit-usage": "query-unit-usage",

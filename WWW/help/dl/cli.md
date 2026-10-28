@@ -1337,6 +1337,11 @@ drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--jso
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
 | `--case-sensitive` |  |  |  |
 | `--exact` |  |  |  |
+| `--text` | `"<phrase>"` |  |  |
+| `--near` | `<QName>` |  |  |
+| `--hops` | `1..3` |  |  |
+| `--hops-uses` |  |  |  |
+| `--near-boost` |  |  |  |
 | `--in` | `<file.pas>` |  |  |
 | `--names` | `A` |  |  |
 | `--names-file` | `<f>` |  |  |
@@ -1350,6 +1355,7 @@ Described in:
 * [query find-callers](features/query-find-callers.md)
 * [query --kind --all](features/query-kind-all.md)
 * [query --name-like](features/query-name-like.md)
+* [query --text --near](features/query-text-near.md)
 * [query type-usage](features/query-type-usage.md)
 * [query typecat](features/query-typecat.md)
 * [query unit-usage](features/query-unit-usage.md)

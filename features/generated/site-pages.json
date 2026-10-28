@@ -543,6 +543,10 @@
     "hash": "64b487fd8cdca0cf2888cf15a4e0ec21e23aaa245a5f47884a95442afe69c271",
     "version": "1.36.0-alpha"
   },
+  "features/query-text-near.md": {
+    "hash": "b73330759930e41bcb5ed83d2a410d4d3368c9455b6515fe7b9516dd2a643981",
+    "version": "1.36.0-alpha"
+  },
   "features/query-type-usage.md": {
     "hash": "79488356bdc83f46804eab73ce13424a858963e287ae9f67cb548574abcbd9a2",
     "version": "1.36.0-alpha"

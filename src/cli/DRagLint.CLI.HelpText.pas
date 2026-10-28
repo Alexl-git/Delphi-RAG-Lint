@@ -450,6 +450,10 @@ begin
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
+  Writeln('  drag-lint query --text "<phrase>" --near <QName> [--hops 1..3] [--hops-uses] [--near-boost] [--db ...] [--json]');
+  Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
+  Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
+  Writeln('       see wiki page: query-text-near');
 end;
 
 procedure WriteFlagAliases;

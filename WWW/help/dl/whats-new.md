@@ -15,6 +15,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
+* [query --text --near](features/query-text-near.md) -- Keeps only text hits in routines within N call-graph hops of a symbol.
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md) -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink.
 
 ## 1.36.0-alpha

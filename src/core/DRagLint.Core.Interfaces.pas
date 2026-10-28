@@ -2031,6 +2031,22 @@ type
     /// </remarks>
     function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
       const AKind: string = ''): TArray<TStringLitMatch>;
+    /// <summary>The call-graph neighbourhood of one symbol, for
+    /// `query --text --near`: every symbol reachable from the seed within
+    /// AHops hops, CALLERS and CALLEES alike (one hop = one resolved call
+    /// edge), each with the fewest hops that reach it.</summary>
+    /// <param name="ASeedId">symbols.id of the seed; it comes back at hop 0.</param>
+    /// <param name="AHops">Maximum hop count; callers pass 1..3.</param>
+    /// <param name="AUsesEdges">True also adds unit-uses edges: every routine
+    /// (a symbol with an implementation body) of a unit that uses, or is used
+    /// by, a unit within AHops uses-hops of the seed's unit, at that hop.</param>
+    /// <returns>One row per distinct qualified name (overloads collapse to the
+    /// smallest hop); the seed alone when it has no edges.</returns>
+    /// <remarks>Read-only; one recursive CTE over call_edges and refs. Names,
+    /// not ids, are returned because a text hit carries its routine's qualified
+    /// name, not its id.</remarks>
+    function FindSymbolsWithinHops(ASeedId: Int64; AHops: Integer;
+      AUsesEdges: Boolean): TArray<TSymbolHop>;
 
     // v14 (D5): resolved call-target edges (call_edges table).
     /// <summary>Insert or replace the resolved call edge for one ref (ref_id is
