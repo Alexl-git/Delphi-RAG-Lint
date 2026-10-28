@@ -1883,3 +1883,7 @@ Win64 **Debug**, not Release.
 Never invoke the engine by bare name -- `NoDefaultCurrentDirectoryInExePath` is
 set, so `drag-lint ...` resolves off PATH to a stale build. Use `.\drag-lint.exe`
 or a full path.
+
+#### Two index runs on one database (2026-10-28, backlog item 12)
+
+Two writers on one DB are serialised by `BEGIN IMMEDIATE`: the writer connection takes the lock at StartTransaction and every post-walk resolve pass (calls, ancestry, helpers, unit-uses, dispatch) opens its transaction ABOVE its candidate reads. Before, a second writer's per-file reindex could re-issue symbol ids between a pass's reads and its writes (`FOREIGN KEY constraint failed`, or a silently wrong ancestor id). The second writer may still fail `database is locked` after the 5 s busy timeout while a long whole-DB calls pass holds the lock (ruling R1: left as is). Guard: `tests\autotest\run_index_two_writers_fk.ps1`.
