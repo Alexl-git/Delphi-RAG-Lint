@@ -511,6 +511,10 @@
     "hash": "e201756d0a6863f7b2f5b228fb6e5c34a8f5be5f8384cb461473925171860987",
     "version": "1.35.1-alpha"
   },
+  "features/project-context.md": {
+    "hash": "3939838977070c9af40e80f2aa68f342cc8d75829e24421c7ddc4c6921406d0f",
+    "version": "1.36.0-alpha"
+  },
   "features/project-facts.md": {
     "hash": "44981c3c7581bdcbd9f607f51ce09b9781729f7ab92b65b684bc289fc05d39f2",
     "version": "1.35.1-alpha"

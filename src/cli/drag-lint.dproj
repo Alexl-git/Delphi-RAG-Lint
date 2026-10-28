@@ -324,6 +324,7 @@
     <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas"/>
     <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceAdapters.pas"/>
     <DCCReference Include="..\project\DRagLint.Project.DefineProfile.pas"/>
+    <DCCReference Include="..\core\DRagLint.Project.ContextFile.pas"/>
     <DCCReference Include="..\project\DRagLint.Project.Facts.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Diff.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.ReportHeader.pas"/>

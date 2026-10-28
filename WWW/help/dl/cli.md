@@ -1252,6 +1252,25 @@ drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--incl
 
 Described in [preprocess-file](features/preprocess-file.md).
 
+### project-context
+
+Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness.
+
+```text
+drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--output <file>] [--json] [--check] (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<x.dproj\|x.dpr>` |  |  |
+| `--platform` | `P` |  |  |
+| `--config` | `C` |  |  |
+| `--output` | `<file>` |  |  |
+| `--json` |  |  |  |
+| `--check` |  |  |  |
+
+Described in [project-context](features/project-context.md).
+
 ### project-facts
 
 Report what the build does: defines that are on and what sets each, imports, output paths and packages.

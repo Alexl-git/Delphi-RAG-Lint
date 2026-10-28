@@ -152,6 +152,7 @@
   "output-encoding": "output-encoding",
   "pp-profile": "pp-profile",
   "preprocess-file": "preprocess-file",
+  "project-context": "project-context",
   "proptree": "proptree",
   "purge-locals": "purge-locals",
   "query-ancestors": "query-ancestors",

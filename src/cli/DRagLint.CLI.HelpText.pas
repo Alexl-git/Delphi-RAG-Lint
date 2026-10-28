@@ -474,6 +474,8 @@ begin
   Writeln('       see wiki page: concept-search');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
   Writeln('       see wiki page: rules');
+  Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--output <file>] [--json] [--check] (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
+  Writeln('       see wiki page: project-context');
 end;
 
 procedure WriteFlagAliases;

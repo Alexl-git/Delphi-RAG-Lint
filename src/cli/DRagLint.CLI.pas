@@ -166,6 +166,7 @@ uses
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
   , DRagLint.Project.Resolver
+  , DRagLint.Project.ContextFile
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
@@ -16880,6 +16881,90 @@ end; // function
     is no such data".
   --------------------------------------------------------------------------- }
 
+
+{ ---------------------------------------------------------------------------
+  drag-lint project-context -- write / check <base>.dlcontext.json.
+  --------------------------------------------------------------------------- }
+
+/// <summary>drag-lint project-context: writes (or with --check verifies) the
+/// project-context file beside a project.</summary>
+/// <param name="AArgs">ProjectPath (--project) = .dproj or .dpr; CheckPlatform
+/// (--platform) and ConfigPath (--config) override the active selection; Output
+/// (--out) overrides the destination; AsJson prints the file text; WikiCheck
+/// (--check) verifies instead of writing.</param>
+/// <returns>0 written / fresh; 1 --check found the file missing, unreadable or stale;
+/// 2 usage error (no project, missing file, a .dpr with no .dproj and no
+/// --platform/--config).</returns>
+/// <remarks>Touches no index and needs no --db. Writes only the context file.</remarks>
+function DoProjectContext(const AArgs: TArgs): Integer;
+var
+  Proj, Dproj, Target, Why: string;
+  Ctx, Disk, Want: DRagLint.Project.ContextFile.TProjectContext;
+begin
+  Proj:= AArgs.ProjectPath;
+  if Proj = '' then
+  begin
+    Writeln('ERROR: project-context needs --project <x.dproj|x.dpr>');
+    Exit(2);
+  end;
+  Proj:= TPath.GetFullPath(Proj);
+  if not TFile.Exists(Proj) then
+  begin
+    Writeln('ERROR: project file not found: ', Proj);
+    Exit(2);
+  end;
+  Dproj:= Proj;
+  if not SameText(ExtractFileExt(Proj), '.dproj') then
+  begin
+    Dproj:= TPath.ChangeExtension(Proj, '.dproj');
+    if not TFile.Exists(Dproj) then Dproj:= '';
+  end;
+  if (Dproj = '') and ((AArgs.CheckPlatform = '') or (AArgs.ConfigPath = '')) then
+  begin
+    Writeln('ERROR: no .dproj: run dl-project-setup.exe or pass --platform/--config');
+    Exit(2);
+  end;
+  Target:= if AArgs.Output <> '' then TPath.GetFullPath(AArgs.Output) else DRagLint.Project.ContextFile.ContextFileFor(Proj);
+
+  if AArgs.WikiCheck then
+  begin
+    Why:= '';
+    if not TFile.Exists(Target) then Why:= 'missing: ' + Target
+    else if not DRagLint.Project.ContextFile.TryLoadProjectContext(Target, Disk) then Why:= 'unreadable or wrong schema: ' + Target
+    else if Disk.Stale then Why:= 'stale: ' + Disk.SourceFile + ' changed since the context was written (SHA-1 differs)'
+    else
+    begin
+      Want:= DRagLint.Project.ContextFile.BuildProjectContext(if Dproj <> '' then Dproj else Proj, AArgs.CheckPlatform, AArgs.ConfigPath);
+      if (AArgs.CheckPlatform <> '') and not SameText(Disk.Platform, Want.Platform) then
+        Why:= 'stale: platform is ' + Disk.Platform + ', asked for ' + Want.Platform
+      else if (AArgs.ConfigPath <> '') and not SameText(Disk.Config, Want.Config) then
+        Why:= 'stale: config is ' + Disk.Config + ', asked for ' + Want.Config;
+    end;
+    if Why <> '' then
+    begin
+      Writeln(Why);
+      Exit(1);
+    end;
+    if AArgs.AsJson then Writeln(TFile.ReadAllText(Target, TEncoding.UTF8))
+    else Writeln('fresh: ', Target);
+    Exit(0);
+  end;
+
+  Ctx:= DRagLint.Project.ContextFile.BuildProjectContext(if Dproj <> '' then Dproj else Proj, AArgs.CheckPlatform, AArgs.ConfigPath);
+  Ctx.GeneratedBy:= 'drag-lint project-context ' + DRAGLINT_VERSION;
+  try
+    DRagLint.Project.ContextFile.SaveProjectContext(Ctx, Target);
+  except
+    on E: Exception do
+    begin
+      Writeln('ERROR: cannot write ', Target, ': ', E.Message);
+      Exit(1);
+    end;
+  end;
+  if AArgs.AsJson then Writeln(TFile.ReadAllText(Target, TEncoding.UTF8))
+  else Writeln(System.SysUtils.Format('wrote %s (%s, %s, %d defines)', [Target, Ctx.Platform, Ctx.Config, Length(Ctx.Defines)]));
+  Result:= 0;
+end;
 
 { ---------------------------------------------------------------------------
   drag-lint ide-release -- ask a running IDE plugin to let go of the engine.
@@ -35260,6 +35345,7 @@ begin
     else if Args.Command = 'sql'               then Result:= DoSql             (Args)
     else if Args.Command = 'wiki'              then Result:= DoWiki            (Args)
     else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
+    else if Args.Command = 'project-context'   then Result:= DoProjectContext  (Args)
     else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)

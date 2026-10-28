@@ -2040,6 +2040,18 @@
     "verb": "sql"
   },
   {
+    "id": "project-context",
+    "title": "project-context",
+    "summary": "Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness",
+    "group": "editor-integration",
+    "order": 110018,
+    "since": "1.36.0-alpha",
+    "file": "features/project-context.md",
+    "menus": [],
+    "context": [],
+    "verb": "project-context"
+  },
+  {
     "id": "serve",
     "title": "serve",
     "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
