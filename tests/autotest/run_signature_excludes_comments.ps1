@@ -31,19 +31,23 @@ try {
   Push-Location $WorkDir
   try {
     $null = & $Exe index $fx --db $db --library-db none 2>&1 | Out-String
-    $j = & $Exe sql --db $db --json --query "SELECT name, signature FROM symbols WHERE name IN ('MethodWithComment','MethodWithBlock','LineCommented','BlockCommented','DefaultValued')" 2>$null | Out-String
+    $j = & $Exe sql --db $db --json --query "SELECT name, signature FROM symbols WHERE name IN ('MethodWithComment','MethodWithBlock','LineCommented','BlockCommented','DefaultValued','TProcWithBlock','ArrConst')" 2>$null | Out-String
     $hover = & $Exe hover --qname uSigComment.LineCommented --db $db --format md 2>&1 | Out-String
   } finally { Pop-Location }
   # sql --json rows are POSITIONAL arrays: [0]=name, [1]=signature.
   $rows = @((($j | ConvertFrom-Json).rows) | ForEach-Object { ,@([string]$_[0], [string]$_[1]) })
-  Check 'symbols rows found for the 5 fixture routines' ($rows.Count -ge 5) ("rows=" + $rows.Count)
+  Check 'symbols rows found for the 7 fixture symbols' ($rows.Count -ge 7) ("rows=" + $rows.Count)
   foreach ($r in $rows) {
-    if ($r[0] -eq 'DefaultValued') { continue }
+    if ($r[0] -in 'DefaultValued','TProcWithBlock','ArrConst') { continue }
     $clean = ($r[1] -notmatch '//|\{|\(\*|dl:ok') -and ($r[1] -match 'pB')
     Check ("{0}: signature carries no comment" -f $r[0]) $clean ("sig='" + $r[1] + "'")
   }
   $dv = @($rows | Where-Object { $_[0] -eq 'DefaultValued' } | ForEach-Object { $_[1] }) -join '|'
   Check 'positive control: default value kept (pB: Integer = 3)' ($dv -match 'pB: Integer = 3') ("sig='" + $dv + "'")
+  $pt = @($rows | Where-Object { $_[0] -eq 'TProcWithBlock' } | ForEach-Object { $_[1] }) -join '|'
+  Check 'procedural-type signature carries no inline block comment' (($pt -match 'Info: DWORD') -and ($pt -notmatch '\{|\(\*|//')) ("sig='" + $pt + "'")
+  $ac = @($rows | Where-Object { $_[0] -eq 'ArrConst' } | ForEach-Object { $_[1] }) -join '|'
+  Check 'array const value carries no trailing line comment' (($ac -match '1,\s*2') -and ($ac -notmatch '//')) ("sig='" + $ac + "'")
   Check 'hover LineCommented shows no dl:ok' (($hover -match '`pB`') -and ($hover -notmatch 'dl:ok')) ''
 } finally {
   if (Test-Path $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }

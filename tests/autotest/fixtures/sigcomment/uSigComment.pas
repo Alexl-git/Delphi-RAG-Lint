@@ -15,6 +15,16 @@ procedure LineCommented(const pA: Integer; // dl:ok too-many-parameters@0000 rea
 function BlockCommented(pA: Integer { block note }; (* star note *) pB: Integer): Integer;
 function DefaultValued(pA: Integer; pB: Integer = 3): Integer;
 
+type
+  TProcWithBlock = function(hServer: THandle; Info: DWORD{ TInfoClass }; pB: Integer): BOOL; stdcall;
+
+const
+  ArrConst: array[0..1] of Integer = //
+  (//
+    1, //
+    2 //
+  );
+
 implementation
 
 procedure TSigHost.MethodWithComment(const pA: Integer; // dl:ok too-many-parameters@0000 reason

@@ -1800,7 +1800,7 @@ begin
   if TypeName = '' then Exit;
   { A parameter list can wrap across lines; collapse runs of whitespace so the
     stored signature is one readable line, as TypeTextOf already does for fields. }
-  Target:= CollapseWhitespace(NodeText(RefNode, AState.Source));
+  Target:= CollapseWhitespace(NodeTextSansComments(RefNode, AState.Source));
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
@@ -2105,12 +2105,13 @@ begin
   { defaultValue is a grammar FIELD: `defaultValue: (defaultValue (kEq) <expr>)`.
     kEq is a NAMED node in this grammar -- four separate bugs in this file came
     from assuming keyword tokens are anonymous -- so the value is the first
-    named child that is not it, not simply child 0. }
+    named child that is not it (and not a comment extra, which a trailing //  after
+    the =  makes the FIRST child), not simply child 0. }
   ValNode:= Default(TTSNode);
   DefNode:= ANode.ChildByField('defaultValue');
   if not DefNode.IsNull then
     for i:= 0 to DefNode.NamedChildCount - 1 do
-      if DefNode.NamedChild(i).NodeType <> 'kEq' then
+      if (DefNode.NamedChild(i).NodeType <> 'kEq') and (DefNode.NamedChild(i).NodeType <> 'comment') then
       begin
         ValNode:= DefNode.NamedChild(i);
         Break;
