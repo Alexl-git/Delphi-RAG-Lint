@@ -52,6 +52,26 @@ try {
     Check 'no-edit: fixable=false'          ($t3.fixable -eq $false)
     Check 'no-edit: applied=false (no edit)' ($t3.applied -eq $false)
   }
+
+  # OFF-LINE EDITS (lane DIRLINT, 2026-10-27): a fix whose edits are ALL away from
+  # the finding's line -- field-created-not-freed inserts FreeAndNil before
+  # `inherited` in the destructor and adds System.SysUtils to a uses clause --
+  # must still report applied=true. The row used to be matched to an edit by
+  # (file, StartLine), so such a fixer reported applied=false while the file
+  # changed, and lanes padded fixers with identity edits on the finding's span.
+  $dtorSrc = Join-Path $PSScriptRoot 'fixtures\field-created-not-freed\dtor.pas'
+  $dtor    = Join-Path $scratch 'dtor.pas'
+  $dtorTxt = [IO.File]::ReadAllText($dtorSrc).Replace("implementation`r`n`r`nuses`r`n  System.SysUtils;`r`n", "implementation`r`n")
+  [IO.File]::WriteAllText($dtor, $dtorTxt, [Text.Encoding]::ASCII)
+  Check 'off-line: fixture has no System.SysUtils' (-not $dtorTxt.Contains('System.SysUtils'))
+  $raw4 = & $exePath lint --file $dtor --fix --fix-rule field-created-not-freed --json --apply --no-backup 2>$null | Out-String
+  $arr4 = $null; try { $arr4 = @($raw4 | ConvertFrom-Json) } catch { $arr4 = $null }
+  $t4 = $arr4 | Where-Object { $_.rule -eq 'field-created-not-freed' } | Select-Object -First 1
+  Check 'off-line: finding present' ($null -ne $t4)
+  $after = [IO.File]::ReadAllText($dtor)
+  Check 'off-line: FreeAndNil inserted'        ($after.Contains('FreeAndNil(FX);'))
+  Check 'off-line: System.SysUtils added'      ($after.Contains('System.SysUtils'))
+  if ($null -ne $t4) { Check 'off-line: applied=true' ($t4.applied -eq $true) }
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

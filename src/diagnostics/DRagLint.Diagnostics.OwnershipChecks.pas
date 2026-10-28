@@ -1155,13 +1155,8 @@ begin
   if (B < 1) or (E < B + 2) or (E > ALines.Count) then Exit;
   if not (IsSingleStatementLine(ALines[B - 1]) and IsSingleStatementLine(ALines[E - 1])) then Exit;
   if not WrapInTryFinally(AFinding.FilePath, ALines, B + 1, E - 1, Trim(ALines[E - 1]), LeadingBlanks(ALines[B - 1]), Wrap) then Exit;
-  { One edit anchored on the Begin line: the CLI's applied/preview row matches an
-  edit to its finding by line, so the edit must start where the finding does. }
-  Wrap.Kind      := tekReplaceLines;
-  Wrap.Line      := B;
-  Wrap.EndLine   := E;
-  Wrap.Text      := ALines[B - 1] + sLineBreak + Wrap.Text;
-  Wrap.ExpectText:= ALines[B - 1];
+  { The wrap replaces B+1..E-1; the End call it moved into the finally goes too. }
+  Wrap.EndLine:= E;
   Result:= [Wrap];
 end;
 
@@ -1174,7 +1169,7 @@ var
   Dot, I, J    : Integer;
   Indent, BodyI: string;
   Anchor       : Integer;
-  E, U, Ident  : TTextEdit;
+  E, U         : TTextEdit;
 begin
   Result:= nil;
   Dot:= Pos('.', AFinding.SymbolName);
@@ -1201,21 +1196,7 @@ begin
         E.Text      := BodyI + 'FreeAndNil(' + Fld + ');';
         E.ExpectLine:= Anchor;
         E.ExpectText:= Trim(ALines[Anchor - 1]);
-        { identity edit on the finding's own span: the CLI's applied/preview row matches
-          an edit to its finding by line, and the real edit is in the destructor }
         Result:= [E];
-        if (AFinding.StartLine = AFinding.EndLine) and (AFinding.StartLine <= ALines.Count) then
-        begin
-          Ident:= Default(TTextEdit);
-          Ident.FilePath  := AFinding.FilePath;
-          Ident.Kind      := tekReplaceInLine;
-          Ident.Line      := AFinding.StartLine;
-          Ident.Col       := AFinding.StartCol;
-          Ident.EndCol    := AFinding.EndCol;
-          Ident.ExpectText:= Copy(ALines[AFinding.StartLine - 1], AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
-          Ident.Text      := Ident.ExpectText;
-          if Ident.ExpectText <> '' then Result:= Result + [Ident];
-        end;
         if EnsureImplUses(AFinding.FilePath, ALines, 'System.SysUtils', U) then Result:= Result + [U];
         Exit;
       end;

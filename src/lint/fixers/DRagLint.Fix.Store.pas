@@ -47,15 +47,6 @@ begin
   Result.EndLine := ALast;
 end;
 
-{ Delete AFirst..ALast as edits of which one STARTS on AAnchor (the finding's
-  line): the --fix JSON reports a finding as applied only when an edit begins
-  on its StartLine, so lines above the anchor go in a second edit. }
-function DeleteAround(const APath: string; AFirst, AAnchor, ALast: Integer): TArray<TTextEdit>;
-begin
-  Result:= [DeleteLines(APath, AAnchor, ALast)];
-  if AFirst < AAnchor then Result:= Result + [DeleteLines(APath, AFirst, AAnchor - 1)];
-end;
-
 { First line (1-based) of the run of '///' lines directly above ALine. }
 function DocRunStart(ALines: TStrings; ALine: Integer): Integer;
 begin
@@ -143,7 +134,7 @@ begin
   if M.Success then
   begin
     if SameText(M.Groups['name'].Value, Name) then
-      Result:= DeleteAround(AFinding.FilePath, DocRunStart(ALines, AFinding.StartLine), AFinding.StartLine, AFinding.StartLine);
+      Result:= [DeleteLines(AFinding.FilePath, DocRunStart(ALines, AFinding.StartLine), AFinding.StartLine)];
     Exit;
   end;
   if not IsDeletableMethodDecl(Line, Name) then Exit;
@@ -151,8 +142,8 @@ begin
   if (TypeName = '') or not FindBody(ALines, TypeName, Name, First, Last) then Exit;
   { one blank line after the body goes with it, so no double gap is left }
   if (Last < ALines.Count) and (Trim(ALines[Last]) = '') then Inc(Last);
-  Result:= DeleteAround(AFinding.FilePath, DocRunStart(ALines, AFinding.StartLine), AFinding.StartLine, AFinding.StartLine)
-    + [DeleteLines(AFinding.FilePath, DocRunStart(ALines, First), Last)];
+  Result:= [DeleteLines(AFinding.FilePath, DocRunStart(ALines, AFinding.StartLine), AFinding.StartLine),
+    DeleteLines(AFinding.FilePath, DocRunStart(ALines, First), Last)];
 end;
 
 { discarded-effect-free-result: delete the call line. Declines when the line
@@ -208,7 +199,7 @@ begin
        and TRegEx.IsMatch(Trim(ALines[First - 2]), '^///\s*<summary>.*</summary>$')
        and Trim(ALines[Last]).StartsWith('/// <summary>') then Dec(First);
   end;
-  Result:= DeleteAround(AFinding.FilePath, First, AFinding.StartLine, Last);
+  Result:= [DeleteLines(AFinding.FilePath, First, Last)];
 end;
 
 initialization
