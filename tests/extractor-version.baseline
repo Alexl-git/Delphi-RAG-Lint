@@ -1113,4 +1113,11 @@
 #   reports the binary-DFM diagnostic instead of a text parse error / EEncodingError skip. Controller recomputes at freeze.
 #   Superseded: 1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
 # 2026-10-28 freeze merge: E1b + xj-7 + ki-exta, 1.26.0-alpha, no bump
-1.26.0-alpha|7dd7877fe935d3ae54d29bfaa453eb233362e9f7a397dfbbd0b9991c8657ab73
+#   Superseded: 1.26.0-alpha|7dd7877fe935d3ae54d29bfaa453eb233362e9f7a397dfbbd0b9991c8657ab73
+# 2026-10-28 lane rb5-gen (RB-5 P2+P3): hash re-pinned WITHOUT a bump. WHY NO BUMP: the only src\index byte change is
+#   DispatchResolver.pas (ResolveImplements no longer skips generic interfaces; NarrowByParamTypes / ParamTypeKey
+#   narrow same-arity implements ties). DispatchResolver runs in the RESOLVE pass and writes only dispatch_edges --
+#   resolver surface (tests\resolver-surface.txt), billed by DRAGLINT_RESOLVER_VERSION 1.16.0 -> 1.17.0-alpha;
+#   remedy index --all --resolve-only. No symbol/ref/uses/call-edge row emitted at parse time changes.
+#   Precedent: the 2026-09-16 CallResolver re-pin above. Model.pas is outside the hashed surface.
+1.26.0-alpha|9a5c75a9f13d8988a7fe73836e9ce89d6fd9cd757fb8ff7f1d939800f34daf94

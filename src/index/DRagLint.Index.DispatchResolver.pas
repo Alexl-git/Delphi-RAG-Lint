@@ -55,7 +55,7 @@ type
     NoBase      : Integer; // an override whose chain ends without a virtual of that name
     External    : Integer; // the chain reaches an ancestor with no local id (library) first
     NoImpl      : Integer; // an interface method no method of the implementing chain answers
-    Generic     : Integer; // generic interfaces, skipped in v1
+    Generic     : Integer; // (class, generic interface) pairs resolved by bare name (skipped before resolver 1.17.0-alpha)
     Indirect    : Integer; // a classref argument that is not a bare class name (variable, call, ClassType)
     Stale       : Integer; // a call site in a file changed since it was indexed
     Unread      : Integer; // a call site whose argument list could not be read
@@ -93,6 +93,7 @@ type
     procedure LoadTypes;
     procedure LoadUses;
     function  ArityMatches(const ABaseSig, AImplSig: string): Boolean;
+    procedure NarrowByParamTypes(const ABaseSig: string; AHits: TList<Int64>; AHitSigs: TList<string>);
     procedure AddEdge(ABase, AImpl: Int64; const AKind, AConf: string);
     procedure ResolveOverrides;
     procedure ResolveImplements;
@@ -114,7 +115,13 @@ type
     /// ancestor's virtual of that name and arity. Implements: each interface a
     /// class LISTS (transitively through interface ancestors) -> the nearest
     /// method of that name and arity on the class's chain; subclasses are
-    /// reached through the override edges, never directly. ClassRefArgs: a bare
+    /// reached through the override edges, never directly. A GENERIC interface
+    /// (IStore&lt;T&gt;, listed as IStore&lt;Integer&gt; or IStore&lt;T&gt;) is
+    /// resolved like any other: its ancestor row already names the bare
+    /// interface, and arity does not depend on the type arguments. Several
+    /// same-arity candidates are narrowed to the one whose parameter type list
+    /// equals the interface method's; when that does not leave exactly one,
+    /// every arity hit is written 'ambiguous'. ClassRefArgs: a bare
     /// class name passed to a parameter whose type is a class reference.</remarks>
     procedure Run;
     /// <summary>dispatch_edges rows, unique on (BaseId, ImplId).</summary>
@@ -152,6 +159,80 @@ begin
   if not Result then Exit;
   for var i:= 2 to Length(S) do
     if not (IsIdentChar(S[i]) or (S[i] = '.')) then Exit(False);
+end;
+
+/// <summary>The parameter part of a routine signature as a comparable key:
+/// per parameter, its modifier and declared type, lower-case, without names,
+/// default values or whitespace. `(var A: Integer; const B, C: string = 'x')`
+/// gives `var:integer;const:string;const:string;`.</summary>
+/// <remarks>Only the text inside the first top-level parentheses counts, so the
+/// return type never takes part (Delphi overloads cannot differ by it). An
+/// untyped parameter (`var ABuffer`) has an empty type. Parentheses, brackets
+/// and angle brackets nest, so a `;` inside them never splits a group.</remarks>
+function ParamTypeKey(const ASignature: string): string;
+var
+  Depth, Open, Close, Start: Integer;
+  Inner, Names, TypeText, Modifier: string;
+  Groups: TList<string>;
+begin
+  Result:= '';
+  Open:= Pos('(', ASignature);
+  if Open = 0 then Exit;
+  Depth:= 0;
+  Close:= 0;
+  for var i:= Open to Length(ASignature) do
+  begin
+    if CharInSet(ASignature[i], ['(', '[', '<']) then Inc(Depth)
+    else if CharInSet(ASignature[i], [')', ']', '>']) then Dec(Depth);
+    if Depth = 0 then
+    begin
+      Close:= i;
+      Break;
+    end;
+  end;
+  if Close = 0 then Exit;
+  Inner:= Copy(ASignature, Open + 1, Close - Open - 1);
+  Groups:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    for var i:= 1 to Length(Inner) + 1 do
+    begin
+      if (i > Length(Inner)) or ((Depth = 0) and (Inner[i] = ';')) then
+      begin
+        Groups.Add(Trim(Copy(Inner, Start, i - Start)));
+        Start:= i + 1;
+      end
+      else if CharInSet(Inner[i], ['(', '[', '<']) then Inc(Depth)
+      else if CharInSet(Inner[i], [')', ']', '>']) then Dec(Depth);
+    end;
+    for var G in Groups do
+    begin
+      if G = '' then Continue;
+      var Decl:= G;
+      var Eq:= Pos('=', Decl);
+      if Eq > 0 then Decl:= Trim(Copy(Decl, 1, Eq - 1));
+      var Colon:= Pos(':', Decl);
+      Names   := Trim(if Colon > 0 then Copy(Decl, 1, Colon - 1) else Decl);
+      TypeText:= if Colon > 0 then Copy(Decl, Colon + 1, MaxInt) else '';
+      Modifier:= '';
+      var Sp:= Pos(' ', Names);
+      if Sp > 0 then
+      begin
+        var W:= LowerCase(Copy(Names, 1, Sp - 1));
+        if MatchStr(W, ['const', 'var', 'out', 'constref']) then
+        begin
+          Modifier:= W;
+          Names:= Trim(Copy(Names, Sp + 1, MaxInt));
+        end;
+      end;
+      TypeText:= LowerCase(StringReplace(StringReplace(TypeText, ' ', '', [rfReplaceAll]), #9, '', [rfReplaceAll]));
+      for var k:= 1 to Length(Names.Split([','])) do
+        Result:= Result + Modifier + ':' + TypeText + ';';
+    end;
+  finally
+    Groups.Free;
+  end;
 end;
 
 function LastSegment(const S: string): string;
@@ -337,6 +418,31 @@ begin
   Result:= not (BKnown and IKnown) or ((BMin = IMin) and (BMax = IMax));
 end;
 
+procedure TDispatchResolver.NarrowByParamTypes(const ABaseSig: string; AHits: TList<Int64>; AHitSigs: TList<string>);
+var
+  Key : string;
+  Keep: Int64;
+  N   : Integer;
+begin
+  { Same-arity overloads (IABZMemoryStream.Read x20 on ORM3 CLIENT) tie on
+    arity; the implementing method repeats the interface method's parameter
+    types, so an exact type-list match picks it. Narrowing only: unless exactly
+    ONE hit matches (a generic T against Integer matches none), the hits stay. }
+  if AHits.Count < 2 then Exit;
+  Key := ParamTypeKey(ABaseSig);
+  Keep:= 0;
+  N   := 0;
+  for var i:= 0 to AHits.Count - 1 do
+    if ParamTypeKey(AHitSigs[i]) = Key then
+    begin
+      Inc(N);
+      Keep:= AHits[i];
+    end;
+  if N <> 1 then Exit;
+  AHits.Clear;
+  AHits.Add(Keep);
+end;
+
 procedure TDispatchResolver.AddEdge(ABase, AImpl: Int64; const AKind, AConf: string);
 var
   E: TDispatchEdge;
@@ -418,10 +524,12 @@ var
   Cur    : Int64;
   Anc    : Int64;
   IsGen  : Boolean;
+  HitSigs: TList<string>;
 begin
-  Todo:= TList<Int64>.Create;
-  Seen:= TDictionary<Int64, Boolean>.Create;
-  Hits:= TList<Int64>.Create;
+  Todo   := TList<Int64>.Create;
+  Seen   := TDictionary<Int64, Boolean>.Create;
+  Hits   := TList<Int64>.Create;
+  HitSigs:= TList<string>.Create;
   try
     for Pair in FKindOf do
     begin
@@ -441,21 +549,25 @@ begin
       end;
       for Intf in Seen.Keys do
       begin
-        if FGenericOf.TryGetValue(Intf, IsGen) and IsGen then
-        begin
-          Inc(FCounters.Generic);
-          Continue;
-        end;
+        { Resolver 1.17.0-alpha (RB-5 P2): generic interfaces are no longer
+          skipped -- the ancestor row of `IStore<Integer>` already resolves to
+          the bare IStore, and name + arity do not depend on the type arguments. }
+        if FGenericOf.TryGetValue(Intf, IsGen) and IsGen then Inc(FCounters.Generic);
         if not FMethods.TryGetValue(Intf, IMeths) then Continue;
         for IM in IMeths do
         begin
           Hits.Clear;
+          HitSigs.Clear;
           Cur:= Pair.Key;
           for var Depth:= 1 to CHAIN_MAX_DEPTH do
           begin
             if FMethods.TryGetValue(Cur, Ms) then
               for B in Ms do
-                if (B.Name = IM.Name) and ArityMatches(IM.Signature, B.Signature) then Hits.Add(B.Id);
+                if (B.Name = IM.Name) and ArityMatches(IM.Signature, B.Signature) then
+                begin
+                  Hits.Add(B.Id);
+                  HitSigs.Add(B.Signature);
+                end;
             if Hits.Count > 0 then Break;
             if not FParentOf.TryGetValue(Cur, Anc) then
             begin
@@ -469,12 +581,14 @@ begin
             end;
             Cur:= Anc;
           end; // for Depth
+          NarrowByParamTypes(IM.Signature, Hits, HitSigs);
           for var H in Hits do
             AddEdge(IM.Id, H, DISPATCH_KIND_IMPLEMENTS, if Hits.Count = 1 then DISPATCH_CONF_CERTAIN else DISPATCH_CONF_AMBIGUOUS);
         end; // for IM
       end; // for Intf
     end; // for Pair
   finally
+    HitSigs.Free;
     Hits.Free;
     Seen.Free;
     Todo.Free;
