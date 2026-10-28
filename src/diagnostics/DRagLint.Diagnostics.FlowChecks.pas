@@ -714,7 +714,11 @@ procedure CollectSameUnitClassKinds(const ARoot: TTSNode; const ASrc: TBytes;
     begin
       Cls := Default(TTSNode);
       for I := 0 to ATypeN.ChildCount - 1 do
-        if ATypeN.Child(I).NodeType = 'declClass' then begin Cls := ATypeN.Child(I); Break; end;
+        if ATypeN.Child(I).NodeType = 'declClass' then
+        begin
+          Cls := ATypeN.Child(I);
+          Break;
+        end;
       if Cls.IsNull then Exit;
     end;
     for I := 0 to Cls.ChildCount - 1 do
