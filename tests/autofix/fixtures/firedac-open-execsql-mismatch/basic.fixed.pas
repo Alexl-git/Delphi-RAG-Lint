@@ -4,6 +4,9 @@ interface
 
 implementation
 
+uses
+  FireDAC.Comp.Client;
+
 procedure Run(Q: TFDQuery);
 begin
   Q.SQL.Text:= 'UPDATE t SET x = 1';

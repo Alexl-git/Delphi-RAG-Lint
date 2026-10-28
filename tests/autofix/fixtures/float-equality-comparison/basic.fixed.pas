@@ -5,7 +5,8 @@ interface
 implementation
 
 uses
-  System.SysUtils, System.Math;
+  System.Math,
+  System.SysUtils;
 
 procedure Run(A, B: Double);
 begin
