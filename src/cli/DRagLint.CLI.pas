@@ -794,6 +794,8 @@ begin
   Writeln('       ^ STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///.');
   Writeln('         Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception.');
   Writeln('         --kind literal is what this returned before comments were indexed.');
+  Writeln('  Find by meaning / doc prose (name unknown)?  drag-lint query --concept "<words>" --db <db>');
+  Writeln('       ^ BM25-ranked over identifier words (ApplyDelta = "apply delta") + doc summary/remarks.');
   Writeln('  Which files reference unit U?         drag-lint query unit-usage --unit U --db <db>');
   Writeln('       ^ omit --in for the project-wide answer; add --in <F.pas> to ask about ONE file.');
   Writeln('       ^ for an RTL/VCL/third-party unit pass the platform library DB too');
@@ -1870,7 +1872,11 @@ begin
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
     else if (A = '--text') and (i < ParamCount) then begin Inc(i); Result.TextQuery:= ParamStr(i); end
-    else if (A = '--concept') and (i < ParamCount) then begin Inc(i); Result.ConceptQuery:= ParamStr(i); end
+    else if (A = '--concept') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ConceptQuery:= ParamStr(i);
+    end
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True

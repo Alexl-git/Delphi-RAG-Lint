@@ -85,7 +85,6 @@ begin
   Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]');
-  Writeln('  drag-lint query              --concept "<words>"  ranked BM25 search over identifier words (camelCase split) + doc-comment prose; [--limit N] [--kind k,...] [--json]');
   Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
   Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
   Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');
@@ -445,6 +444,11 @@ begin
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
+  Writeln('  drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>');
+  Writeln('       ^ approximate matched column: first 5 letters of a word stand in for porter stemming.');
+  Writeln('       ^ no synonyms and no embeddings: remove does not find delete.');
+  Writeln('       ^ exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse).');
+  Writeln('       see wiki page: concept-search');
 end;
 
 procedure WriteFlagAliases;
@@ -534,7 +538,6 @@ begin
     Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
     Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
     Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]');
-    Writeln('  drag-lint query              --concept "<words>"  ranked BM25 search over identifier words (camelCase split) + doc-comment prose; [--limit N] [--kind k,...] [--json]');
     Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
     Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
     Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');

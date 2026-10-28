@@ -1578,8 +1578,9 @@
       ],
       "verified": {
         "date": "2026-10-28",
-        "by": "alexanderl",
-        "build": "1.36.0-alpha"
+        "by": "ENGINE",
+        "build": "1.36.0-alpha",
+        "surfaceHash": "c73edad718722a1a20cc1fcc44d128e1fe9acb6685d625d6c7a639627f8cafb9"
       }
     },
     {

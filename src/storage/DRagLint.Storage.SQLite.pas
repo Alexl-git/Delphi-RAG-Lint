@@ -9723,6 +9723,10 @@ begin
 end; // function
 
 const
+  { Prefix length that stands in for a porter stem when ConceptMatchedColumns guesses which column matched. }
+  CONCEPT_STEM_LEN      = 5;
+  { query --concept row cap when the caller passes no positive limit. }
+  CONCEPT_DEFAULT_LIMIT = 20;
   CONCEPT_STOP_WORDS = ' a an and are as at be by do does for from how in is it of on or that the this to what when where which who why with ';
 
 { The distinct, lower-cased, stop-word-free FTS terms of a free-text question. }
@@ -9762,7 +9766,7 @@ function ConceptMatchedColumns(const ATerms: TArray<string>; const ATokens, ASum
     Low:= AText.ToLower;
     for T in ATerms do
     begin
-      Stem:= Copy(T, 1, Min(Length(T), 5));
+      Stem:= Copy(T, 1, Min(Length(T), CONCEPT_STEM_LEN));
       if Pos(Stem, Low) > 0 then Exit(True);
     end; // for
     Result:= False;
@@ -9775,27 +9779,75 @@ begin
 end; // function
 
 function TSQLiteSymbolStore.BuildSymbolSearch: Integer;
+{ Doc attribution (xj-5 integration, 2026-10-28): string_literals.symbol_id of a
+  kind='doc' row is the ENCLOSING scope (the unit or the class), not the symbol
+  the comment documents -- on TableTools every doc literal pointed at a unit,
+  class, record, enum or interface, none at a method. Grouping by symbol_id
+  piled every member's prose onto its class. So a doc literal is attributed by
+  POSITION instead: consecutive doc lines form one block, and the block belongs
+  to the symbol(s) declared on the first line after it that starts a symbol,
+  provided that line is at most DOC_GAP lines below the block (an attribute
+  line may sit between). A block with no declaration right below it is
+  dropped. Only the files that own a missing row are read. }
+const
+  DOC_GAP      = 2;   { lines allowed between a doc block and its declaration }
+  MAX_IN_FILES = 500; { above this many files, read every doc literal instead of an IN list }
 type
   TSearchRow = record
     Id                     : Int64;
+    FileId, StartLine      : Integer;
     Tokens, Summary, Remarks: string;
   end;
 var
-  Q, Ins: TFDQuery;
-  Rows  : TList<TSearchRow>;
-  R     : TSearchRow;
-  Name, Parent, DocSummary, Lits: string;
+  Q, Ins   : TFDQuery;
+  Rows     : TList<TSearchRow>;
+  R        : TSearchRow;
+  I        : Integer;
+  Name, Parent, DocSummary, FileFilter, BlockText, Key: string;
+  FileSet  : TDictionary<Integer, Boolean>;
+  Starts   : TDictionary<Integer, TList<Integer>>;
+  DocByDecl: TDictionary<string, string>;
+  FileIds  : TArray<Integer>;
+  CurFile, BlockEnd, LitFile, LitStart, LitEnd: Integer;
+
+  procedure FlushBlock;
+  var
+    L     : TList<Integer>;
+    Target, Idx: Integer;
+    Prior : string;
+  begin
+    if (BlockText = '') or (not Starts.TryGetValue(CurFile, L)) then
+    begin
+      BlockText:= '';
+      Exit;
+    end;
+    { first declaration line strictly below the block }
+    L.BinarySearch(BlockEnd + 1, Idx);
+    if Idx < L.Count then
+    begin
+      Target:= L[Idx];
+      if Target - BlockEnd <= DOC_GAP + 1 then
+      begin
+        Key:= IntToStr(CurFile) + ':' + IntToStr(Target);
+        if DocByDecl.TryGetValue(Key, Prior) then BlockText:= Prior + ' ' + BlockText;
+        DocByDecl.AddOrSetValue(Key, BlockText);
+      end;
+    end;
+    BlockText:= '';
+  end; // procedure
+
 begin
   Result:= 0;
   if not FFts5Available then Exit;
   if not (TableExists('symbol_search') and TableExists('symbol_search_fts')) then Exit;
-  Rows:= TList<TSearchRow>.Create;
-  Q   := TFDQuery.Create(nil);
+  Rows     := TList<TSearchRow>.Create;
+  FileSet  := TDictionary<Integer, Boolean>.Create;
+  Starts   := TObjectDictionary<Integer, TList<Integer>>.Create([doOwnsValues]);
+  DocByDecl:= TDictionary<string, string>.Create;
+  Q        := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT s.id, s.name, p.name, d.summary, d.remarks, ' +
-                 '(SELECT group_concat(l.text, '' '') FROM string_literals l ' +
-                 'WHERE l.symbol_id = s.id AND l.kind = ''doc'') ' +
+    Q.SQL.Text:= 'SELECT s.id, s.name, p.name AS pname, d.summary AS dsum, d.remarks AS drem, s.file_id, s.start_line ' +
                  'FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id ' +
                  'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
                  'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
@@ -9803,19 +9855,73 @@ begin
     Q.Open;
     while not Q.Eof do
     begin
-      Name      := Q.Fields[1].AsString;
-      Parent    := Q.Fields[2].AsString;
-      DocSummary:= ConceptStripDocMarkup(Q.Fields[3].AsString);
-      Lits      := Q.Fields[5].AsString;
-      R.Id      := Q.Fields[0].AsLargeInt;
-      R.Tokens  := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
-      R.Summary := IfThen(DocSummary <> '', DocSummary, ConceptStripDocMarkup(Lits));
-      R.Remarks := ConceptStripDocMarkup(Q.Fields[4].AsString);
+      Name      := Q.FieldByName('name').AsString;
+      Parent    := Q.FieldByName('pname').AsString;
+      DocSummary:= ConceptStripDocMarkup(Q.FieldByName('dsum').AsString);
+      R.Id       := Q.FieldByName('id').AsLargeInt;
+      R.FileId   := Q.FieldByName('file_id').AsInteger;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.Tokens   := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
+      R.Summary  := DocSummary;
+      R.Remarks  := ConceptStripDocMarkup(Q.FieldByName('drem').AsString);
       if R.Tokens = '' then R.Tokens:= Name.ToLower;
       Rows.Add(R);
+      FileSet.AddOrSetValue(R.FileId, True);
       Q.Next;
     end; // while
     Q.Close;
+    { Positional doc attribution for the rows symbol_docs left without a summary. }
+    if Rows.Count > 0 then
+    begin
+      FileIds:= FileSet.Keys.ToArray;
+      FileFilter:= '';
+      if Length(FileIds) <= MAX_IN_FILES then
+      begin
+        for I:= 0 to High(FileIds) do
+          FileFilter:= FileFilter + IfThen(I > 0, ',', '') + IntToStr(FileIds[I]);
+        FileFilter:= ' AND file_id IN (' + FileFilter + ')';
+      end;
+      Q.SQL.Text:= 'SELECT DISTINCT file_id, start_line FROM symbols WHERE 1 = 1' + FileFilter + ' ORDER BY file_id, start_line';  // dl:ok sql-injection-concat@7486 -- FileFilter is built only from IntToStr of file ids read from the DB
+      Q.Open;
+      while not Q.Eof do
+      begin
+        LitFile:= Q.Fields[0].AsInteger;
+        if not Starts.ContainsKey(LitFile) then Starts.Add(LitFile, TList<Integer>.Create);
+        Starts[LitFile].Add(Q.Fields[1].AsInteger);
+        Q.Next;
+      end; // while
+      Q.Close;
+      Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
+                   'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
+      Q.Open;
+      CurFile:= -1;
+      BlockEnd:= -1;
+      BlockText:= '';
+      while not Q.Eof do
+      begin
+        LitFile := Q.FieldByName('file_id').AsInteger;
+        LitStart:= Q.FieldByName('start_line').AsInteger;
+        LitEnd  := Q.FieldByName('end_line').AsInteger;
+        if (LitFile <> CurFile) or (LitStart > BlockEnd + 1) then
+        begin
+          FlushBlock;
+          CurFile:= LitFile;
+        end;
+        if BlockText <> '' then BlockText:= BlockText + ' ';
+        BlockText:= BlockText + Q.FieldByName('text').AsString;
+        BlockEnd := LitEnd;
+        Q.Next;
+      end; // while
+      FlushBlock;
+      Q.Close;
+      for I:= 0 to Rows.Count - 1 do
+        if (Rows[I].Summary = '') and DocByDecl.TryGetValue(IntToStr(Rows[I].FileId) + ':' + IntToStr(Rows[I].StartLine), BlockText) then
+        begin
+          R:= Rows[I];
+          R.Summary:= ConceptStripDocMarkup(BlockText);
+          Rows[I]:= R;
+        end;
+    end;
     Ins:= TFDQuery.Create(nil);
     try
       Ins.Connection:= FConn;
@@ -9839,7 +9945,7 @@ begin
           Ins.ExecSQL;
         end; // for
         FConn.Commit;
-      except  // dl:ok bare-except@xj5 -- rollback-then-reraise: every exception must undo the partial write, and none is swallowed
+      except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
         FConn.Rollback;
         raise;
       end;
@@ -9849,6 +9955,9 @@ begin
     Result:= Rows.Count;
   finally
     Q.Free;
+    DocByDecl.Free;
+    Starts.Free;
+    FileSet.Free;
     Rows.Free;
   end; // try
 end; // function
@@ -9859,8 +9968,8 @@ begin
   try
     if not (TableExists('symbol_search_fts') and TableExists('symbol_search')) then Exit;
     Result:= ProbeExists('SELECT 1 FROM symbol_search LIMIT 1') or
-             not ProbeExists('SELECT 1 FROM symbols WHERE kind IN (' + CONCEPT_SEARCH_KINDS + ') LIMIT 1');
-  except  // dl:ok bare-except@xj6 -- contract: any failure (locked DB, missing fts5 module) means "not ready", never a crash
+             not ProbeExists('SELECT 1 FROM symbols WHERE kind IN (' + CONCEPT_SEARCH_KINDS + ') LIMIT 1');  // dl:ok sql-injection-concat@1b60 -- CONCEPT_SEARCH_KINDS is a compile-time const, no input reaches it
+  except  // dl:ok bare-except@79dc -- contract: any failure (locked DB, missing fts5 module) means "not ready", never a crash
     Result:= False;
   end;
 end; // function
@@ -9879,8 +9988,8 @@ var
     H  : TConceptHit;
     Sql: string;
   begin
-    Sql:= 'SELECT s.id, s.qualified_name, s.kind, f.path, s.start_line, ' +
-          '-bm25(symbol_search_fts, 3.0, 2.0, 1.0) AS sc, ss.tokens, ss.summary, ss.remarks ' +
+    Sql:= 'SELECT s.id AS sid, s.qualified_name AS qn, s.kind AS kd, f.path AS fpath, s.start_line AS ln, ' +
+          '-bm25(symbol_search_fts, 3.0, 2.0, 1.0) AS sc, ss.tokens AS tok, ss.summary AS sm, ss.remarks AS rmk ' +
           'FROM symbol_search_fts JOIN symbol_search ss ON ss.symbol_id = symbol_search_fts.rowid ' +
           'JOIN symbols s ON s.id = ss.symbol_id JOIN files f ON f.id = s.file_id ' +
           'WHERE symbol_search_fts MATCH :q';
@@ -9901,15 +10010,15 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        H.SymbolId     := Q.Fields[0].AsLargeInt;
+        H.SymbolId     := Q.FieldByName('sid').AsLargeInt;
         if not Seen.Contains(H.SymbolId) then
         begin
-          H.QualifiedName:= Q.Fields[1].AsString;
-          H.Kind         := Q.Fields[2].AsString;
-          H.FilePath     := Q.Fields[3].AsString;
-          H.Line         := Q.Fields[4].AsInteger;
-          H.Score        := Q.Fields[5].AsFloat;
-          H.Matched      := ConceptMatchedColumns(Terms, Q.Fields[6].AsString, Q.Fields[7].AsString, Q.Fields[8].AsString);
+          H.QualifiedName:= Q.FieldByName('qn').AsString;
+          H.Kind         := Q.FieldByName('kd').AsString;
+          H.FilePath     := Q.FieldByName('fpath').AsString;
+          H.Line         := Q.FieldByName('ln').AsInteger;
+          H.Score        := Q.FieldByName('sc').AsFloat;
+          H.Matched      := ConceptMatchedColumns(Terms, Q.FieldByName('tok').AsString, Q.FieldByName('sm').AsString, Q.FieldByName('rmk').AsString);
           H.AllTerms     := AAllTerms;
           Hits.Add(H);
           Seen.Add(H.SymbolId);
@@ -9926,7 +10035,7 @@ var
   KList: TList<string>;
 begin
   Result:= nil;
-  if ALimit < 1 then ALimit:= 20;
+  if ALimit < 1 then ALimit:= CONCEPT_DEFAULT_LIMIT;
   Terms:= ConceptTerms(AWords);
   if (Length(Terms) = 0) or not ConceptSearchReady then Exit;
   KList:= TList<string>.Create;
