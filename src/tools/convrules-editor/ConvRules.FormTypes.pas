@@ -438,6 +438,20 @@ function ApplyNamedFilterToRows(const ARows: TFormTypeRows; const APatterns: TAr
 /// never "non-visual" on no evidence.</remarks>
 function DescendantSetsCancelledText: string;
 
+/// <summary>LIBDESC: the status line when the user cancelled loading the From / To class
+/// lists behind the progress window.</summary>
+/// <returns>That the class pickers stay empty and are loaded again on the next need.</returns>
+/// <remarks>Pure. A cancelled load keeps no partial list.</remarks>
+function ClassListsCancelledText: string;
+
+/// <summary>LIBDESC: the status line when the engine FAILED to list the descendants of
+/// one or more ancestors (not a cancel).</summary>
+/// <param name="AAncestors">The ancestors whose load failed (e.g. TControl).</param>
+/// <param name="AReasons">The engine's error text per ancestor, same order; '' = none given.</param>
+/// <returns>'' when AAncestors is empty; else the ancestors with their reasons, that the rows show [?], and that the next Examine asks again.</returns>
+/// <remarks>Pure. A failed load is never cached, so the retry is real.</remarks>
+function DescendantSetsFailedText(const AAncestors, AReasons: TArray<string>): string;
+
 implementation
 
 uses
@@ -790,6 +804,25 @@ end; // function
 function DescendantSetsCancelledText: string;
 begin
   Result:= 'Class sets not loaded (cancelled): every form type shows [?] (visual or not unknown). Examine a form again to load them.';
+end; // function
+
+function ClassListsCancelledText: string;
+begin
+  Result:= 'Class lists not loaded (cancelled): the From / To pickers stay empty. Open a picker again to load them.';
+end; // function
+
+function DescendantSetsFailedText(const AAncestors, AReasons: TArray<string>): string;
+begin
+  Result:= '';
+  for var i:= 0 to High(AAncestors) do
+  begin
+    var LPart: string:= AAncestors[i];
+    if (i <= High(AReasons)) and (AReasons[i] <> '') then
+      LPart:= LPart + ' (' + AReasons[i] + ')';
+    Result:= if Result = '' then LPart else Result + ', ' + LPart;
+  end;
+  if Result <> '' then
+    Result:= 'Class sets not loaded: ' + Result + ' -- every form type shows [?] (visual or not unknown). Examine a form again to retry.';
 end; // function
 
 end.

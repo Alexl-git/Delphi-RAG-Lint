@@ -142,6 +142,7 @@ type
       FPickW32Loaded : Boolean       ;
       FPickW64Loaded : Boolean       ;
       FPickLoading   : Boolean       ; // EnsurePickLists' progress window is up: no second load from its pump
+      FClassesLoading: Boolean       ; // LoadAllClasses' progress window is up: no second load from its pump
       FTabUnits     : TTabSheet             ; // the Unit Rules page; "is it active?" checks
       FTabConvert    : TTabSheet             ; // the Convert page; drops go to FConvertTab while it is active
       FConvertTab    : TConvertTab           ; // checked rule books x source units
@@ -1173,7 +1174,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function LoadDescendantSet(const AAncestor: string): TStringList;
+      function LoadDescendantSet(const AAncestor: string; out AErr: string): TStringList;
       /// <summary>How many rules in the catalog claim ATypeName; 0 or 1 is healthy.</summary>
       /// <param name="ATypeName">A bare or qualified type name.</param>
       /// <returns>The number of sites, so a caller can render "+N DUPLICATE".</returns>
@@ -2265,7 +2266,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure LoadAllClasses;
+      function LoadAllClasses: Boolean;
       /// <summary><!-- drag-lint:auto sum -->Falls back to a tiny built-in set if either
       /// query yields nothing so the New Conversion flow always works. Each side's DB set
       /// = its platform's library index + the shared project DB (additive, so
@@ -4213,9 +4214,11 @@ begin
   FCbTo  .Items.Clear;
   Screen.Cursor:= crHourGlass;
   try
-    LoadAllClasses;
+    var LClassesOk: Boolean:= LoadAllClasses;
     var LNote: string:= '';
-    var LWarn: Boolean:= False;
+    var LWarn: Boolean:= not LClassesOk;
+    if not LClassesOk then
+      LNote:= ' Class lists NOT loaded (cancelled); pick a class to load them again.';
     if Length(FHarvest) > 0 then
     begin
       ReclassifyHarvest; // rebuilds the resolver for the new TO platform
@@ -4235,23 +4238,51 @@ begin
   end;
 end; // procedure
 
-procedure TConvRulesForm.LoadAllClasses;
+function TConvRulesForm.LoadAllClasses: Boolean;
 var
   FromNames: TArray<string>;
   ToNames  : TArray<string>;
   Err      : string        ;
+  ToErr    : string        ;
+  FromOk   : Boolean       ;
+  ToOk     : Boolean       ;
 begin
+  Result:= True;
   if (Length(FFromClasses) > 0) and (Length(FToClasses) > 0) then Exit; // already loaded
+  // A load reached from inside the progress window's own message pump: the load in
+  // progress answers it (the caller sees the lists as they are now).
+  if FClassesLoading then
+    Exit(False);
 
-  // FROM: TComponent descendants of the FROM platform's library (+ project).
-  if not FEngine.ListDescendantsOf('TComponent', FromDbSet, FromNames, Err)
-     or (Length(FromNames) = 0) then
+  // LIBDESC: the two library-wide ListDescendantsOf calls run behind the progress
+  // window (the editor keeps answering, Cancel works). The worker touches no VCL and
+  // writes only these locals; DB sets are read here, on the main thread.
+  var LFromDbs: TArray<string>:= FromDbSet;
+  var LToDbs  : TArray<string>:= ToDbSet;
+  FClassesLoading:= True;
+  try
+    var LGuard: IInterface:= HourGlass; // dl:ok write-only-local@8f1f -- REVIEWED 2026-10-27 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
+    var LDone: Boolean:= FEngine.RunInLongCall('Loading the From / To class lists',
+      procedure
+      begin
+        // FROM: TComponent descendants of the FROM platform's library (+ project).
+        FromOk:= FEngine.ListDescendantsOf('TComponent', LFromDbs, FromNames, Err) and (Length(FromNames) > 0);
+        // TO: TControl descendants of the TO platform's library (+ project).
+        ToOk  := FEngine.ListDescendantsOf('TControl', LToDbs, ToNames, ToErr) and (Length(ToNames) > 0);
+      end);
+    if not LDone then
+    begin
+      // Cancelled: keep the previous (empty) state, never a partial set; the next need asks again.
+      SetError(ClassListsCancelledText);
+      Exit(False);
+    end;
+  finally
+    FClassesLoading:= False;
+  end;
+  if not FromOk then
     FromNames:= ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit', 'TOvcTable', 'TTable'];
   FFromClasses:= FromNames;
-
-  // TO: TControl descendants of the TO platform's library (+ project).
-  if not FEngine.ListDescendantsOf('TControl', ToDbSet, ToNames, Err)
-     or (Length(ToNames) = 0) then
+  if not ToOk then
     ToNames:= ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit', 'TcxGrid'];
   FToClasses:= ToNames;
 
@@ -4277,8 +4308,8 @@ begin
   SetStatus('Loading classes from the Library scan (first time only)...');
   try
     Application.ProcessMessages;
-    LoadAllClasses;
-    SetStatus(Format('%d source (From) + %d target (To) classes available. Type to filter.', [Length(FFromClasses), Length(FToClasses)]));
+    if LoadAllClasses then
+      SetStatus(Format('%d source (From) + %d target (To) classes available. Type to filter.', [Length(FFromClasses), Length(FToClasses)]));
   finally
     Screen.Cursor:= crDefault;
   end;
@@ -5427,9 +5458,6 @@ var
   Parts: TArray<TFormTypeRows>;
   Old  : TFormTypeRows        ;
   Txt  : string               ;
-  Names: TArray<string>       ;
-  Err  : string               ;
-  N    : string               ;
   i    : Integer              ;
   j    : Integer              ;
 begin
@@ -5464,19 +5492,35 @@ begin
   begin
     var LGuard: IInterface:= HourGlass;
     var LSets: TArray<TStringList>:= [nil, nil, nil];
+    var LErrs: TArray<string>:= ['', '', ''];
+    var LNames: TArray<string>:= ['TControl', 'TComponent', 'TPersistent'];
     try
       if FEngine.RunInLongCall('Loading the TControl / TComponent / TPersistent class sets',
         procedure
         begin
-          LSets[0]:= LoadDescendantSet('TControl'   );
-          LSets[1]:= LoadDescendantSet('TComponent' );
-          LSets[2]:= LoadDescendantSet('TPersistent');
+          for var k:= 0 to 2 do
+            LSets[k]:= LoadDescendantSet(LNames[k], LErrs[k]);
         end) then
       begin
-        FVisualSet    := LSets[0];
-        FComponentSet := LSets[1];
-        FPersistentSet:= LSets[2];
-        LSets:= nil; // owned by the form now
+        // LIBDESC: all three or none. A failed set is NOT cached (the next Examine
+        // asks again) and its reason is said once on the status line.
+        var LFailNames: TArray<string>:= nil;
+        var LFailWhy  : TArray<string>:= nil;
+        for var k:= 0 to 2 do
+          if LSets[k] = nil then
+          begin
+            LFailNames:= LFailNames + [LNames[k]];
+            LFailWhy  := LFailWhy   + [LErrs[k]];
+          end;
+        if LFailNames = nil then
+        begin
+          FVisualSet    := LSets[0];
+          FComponentSet := LSets[1];
+          FPersistentSet:= LSets[2];
+          LSets:= nil; // owned by the form now
+        end
+        else
+          SetError(DescendantSetsFailedText(LFailNames, LFailWhy));
       end
       else
         SetError(DescendantSetsCancelledText);
@@ -5510,18 +5554,18 @@ begin
   RefreshFormTypes;
 end; // procedure
 
-function TConvRulesForm.LoadDescendantSet(const AAncestor: string): TStringList;
+function TConvRulesForm.LoadDescendantSet(const AAncestor: string; out AErr: string): TStringList;
 var
   Names: TArray<string>;
-  Err  : string        ;
   N    : string        ;
 begin
+  Result:= nil; // a FAILED load is nil + AErr, never an empty set the caller would cache
+  if not FEngine.ListDescendantsOf(AAncestor, Names, AErr) then
+    Exit;
   Result:= TStringList.Create;
   Result.Sorted       := True;
   Result.Duplicates   := dupIgnore;
   Result.CaseSensitive:= False;
-  if not FEngine.ListDescendantsOf(AAncestor, Names, Err) then
-    Exit;
   for N in Names do
     if Trim(N) <> '' then
       Result.Add(Trim(N));

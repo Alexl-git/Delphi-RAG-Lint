@@ -10284,6 +10284,13 @@ begin
   // A cancelled load is said, with its consequence and how it is retried (never stale-silent).
   Check('longcall.sets.cancelled.text', ContainsText(DescendantSetsCancelledText, 'cancelled') and ContainsText(DescendantSetsCancelledText, '[?]') and ContainsText(DescendantSetsCancelledText, 'again'), DescendantSetsCancelledText);
   Check('longcall.picklists.cancelled.text', ContainsText(PickListsCancelledText, 'cancelled') and ContainsText(PickListsCancelledText, 'MISSING') and ContainsText(PickListsCancelledText, 'again'), PickListsCancelledText);
+
+  // LIBDESC: a FAILED set load is said once with the ancestor and the engine's reason; nothing failed = no text.
+  var LFailed: string:= DescendantSetsFailedText(['TControl', 'TPersistent'], ['engine exited 2', '']);
+  Check('libdesc.failed.text.names', ContainsText(LFailed, 'TControl') and ContainsText(LFailed, 'engine exited 2') and ContainsText(LFailed, '[?]') and ContainsText(LFailed, 'again'), LFailed);
+  Check('libdesc.failed.text.noreason', ContainsText(DescendantSetsFailedText(['TPersistent'], ['']), 'TPersistent'), DescendantSetsFailedText(['TPersistent'], ['']));
+  Check('libdesc.classes.cancelled.text', ContainsText(ClassListsCancelledText, 'cancelled') and ContainsText(ClassListsCancelledText, 'again'), ClassListsCancelledText);
+  Check('libdesc.failed.text.none', DescendantSetsFailedText([], []) = '', DescendantSetsFailedText([], []));
 end;
 { ResolveClassQName answers are cached for the session (job C6 follow-up): every
   rule click resolved its From and To classes again (0.5-1.2 s each), so even a
