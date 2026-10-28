@@ -5720,7 +5720,24 @@ begin
   if ManifestWriteRefused('index', TargetManifest) then Exit(2);
   var CwdManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
   if ManifestWriteRefused('index', CwdManifest) then Exit(2);
-  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget, TargetManifest);
+  { A CWD "db" KEY MAY NOT REDIRECT A WRITE THAT IS NOT UNDER IT (INBOX 2026-09-29 4b-1;
+    guard run_index_cwd_config_db_anchor.ps1). The .drag-lint.json found by walking up
+    from the CWD can belong to a different tree; honouring its "db" for a target outside
+    that tree overwrote another project's index. Ignored with a warning; --db still wins. }
+  var IdxArgs: TArgs:= AArgs;
+  if IdxArgs.DbFromConfig then
+  begin
+    var CfgDir: string:= IncludeTrailingPathDelimiter(TPath.GetFullPath(ExtractFilePath(IdxArgs.DbConfigFile)));
+    if not IncludeTrailingPathDelimiter(TPath.GetFullPath(IndexTarget)).StartsWith(CfgDir, True) then
+    begin
+      Writeln(ErrOutput, 'WARNING: index: ignoring the "db" key of ', IdxArgs.DbConfigFile,
+        ' -- the target ', IndexTarget, ' is not under that file''s folder; pass --db to choose the database.');
+      IdxArgs.DbPaths     := nil;
+      IdxArgs.DbPath      := '';
+      IdxArgs.DbFromConfig:= False;
+    end;
+  end;
+  var ResolvedDb: string:= ResolveIndexDb(IdxArgs, IndexTarget, TargetManifest);
   if ResolvedDb = '' then
   begin
     { A project target's refusal (two claimants, or no manifest) was already
@@ -5737,8 +5754,8 @@ begin
     user typed no --db -- and it may belong to another project's tree (INBOX
     2026-09-29 item 4b). Say where it came from, on its own line so a reader of
     the Database: line is unaffected. }
-  if AArgs.DbFromConfig and SameText(ResolvedDb, AArgs.DbPath) then
-    Writeln('          (the "db" key of ', AArgs.DbConfigFile, '; pass --db to write elsewhere)');
+  if IdxArgs.DbFromConfig and SameText(ResolvedDb, IdxArgs.DbPath) then
+    Writeln('          (the "db" key of ', IdxArgs.DbConfigFile, '; pass --db to write elsewhere)');
 
   { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
     for a manifest item; this single-target path never did, because the old
