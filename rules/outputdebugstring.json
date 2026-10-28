@@ -3,5 +3,5 @@
   "severity": "info",
   "message": "OutputDebugString -- debug output left in code; remove it or guard with {$IFDEF DEBUG}.",
   "warn_capture": "warn",
-  "fix": { "delete": "statement", "risky": true }
+  "fix": { "when_capture": "inblk", "delete": "statement", "risky": true }
 }

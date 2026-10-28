@@ -4,6 +4,13 @@ interface
 
 implementation
 
+uses
+  System.SysUtils;
+
+procedure DoIt;
+begin
+end;
+
 procedure P;
 begin
   try

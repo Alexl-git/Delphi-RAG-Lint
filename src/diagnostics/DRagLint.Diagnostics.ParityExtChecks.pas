@@ -52,6 +52,7 @@ uses
   System.Classes
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
+  , DRagLint.Fix.Stmt
   ;
 
 type
@@ -641,7 +642,7 @@ end;
 { identical-then-else, block / call shapes  ->  the then branch alone. Only when the
   condition holds no call (it could have a side effect). Registered RISKY: a bare
   identifier in the condition might still be a parameterless function. }
-function FixIdenticalBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@0456 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch
+function FixIdenticalBlockBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@0456 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch
 var
   PF                : TParsedFile;
   Run               : TParityRun;
@@ -704,6 +705,15 @@ begin
   finally
     Body.Free;
   end;
+end;
+
+{ identical-then-else, the registered entry point: block / call shapes first, then the
+  single-assignment shape that FixIdenticalBlockBranches declines (lane A3's
+  FixIdenticalAssignmentBranches). One RegisterFixer per rule id. }
+function FixIdenticalBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+begin
+  Result:= FixIdenticalBlockBranches(F, ALines);
+  if Result = nil then Result:= FixIdenticalAssignmentBranches(F, ALines);
 end;
 
 class function TParityExtChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@5fb0 -- REVIEWED 2026-10-27: fixed checker signature shared by every gate (CLI.pas); these rules are same-file and need neither config nor store

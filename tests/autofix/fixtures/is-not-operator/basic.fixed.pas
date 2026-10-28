@@ -4,6 +4,9 @@ interface
 
 implementation
 
+uses
+  System.Classes;
+
 function P(O: TObject): Boolean;
 begin
   Result := (O is not TComponent);
