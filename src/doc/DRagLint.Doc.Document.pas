@@ -245,7 +245,7 @@ uses
   System.IOUtils, System.Generics.Collections,
   DRagLint.Doc.Facts, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
-  DRagLint.Doc.SharedFacts;
+  DRagLint.Doc.SharedFacts, DRagLint.Doc.Harvest;
 
 { C14: the caller edges TDocFactsBuilder refused this RUN (see
   TDocFacts.SkippedCallers), reported as ONE stderr line when the unit
@@ -522,6 +522,22 @@ begin
       Dec(L);
     end
     else Break;
+  end;
+end;
+
+// First line of the run of own-line `// dl:` markers directly above ADeclLine
+// (ADeclLine itself when there is none). A generated doc block is inserted
+// ABOVE this run so a marker stays adjacent to its method (defect B).
+function DlMarkerRunStart(const ASrc: string; ADeclLine: Integer): Integer;
+var
+  L: Integer;
+begin
+  Result:= ADeclLine;
+  L     := ADeclLine - 1;
+  while (L >= 1) and IsDlMarkerLine(ExtractSourceSpan(ASrc, L, L)) do
+  begin
+    Result:= L;
+    Dec(L);
   end;
 end;
 
@@ -1555,7 +1571,7 @@ begin
     E:= Default(TTextEdit);
     E.FilePath:= Path;
     E.Kind    := tekInsertLines;
-    E.Line    := ASym.StartLine - 1; // insert AFTER (StartLine-1) => at StartLine
+    E.Line    := DlMarkerRunStart(Src, ASym.StartLine) - 1; // insert AFTER (n-1) => at n, above any dl: marker run
     E.Text    := Merged;
     StampAnchor(E, ASym);
     Result.Edits:= Result.Edits + [E];

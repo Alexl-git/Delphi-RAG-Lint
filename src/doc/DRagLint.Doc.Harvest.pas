@@ -195,6 +195,16 @@ procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: str
 /// </remarks>
 function HarvestReasonToString(const AReason: THarvestReason): string;
 
+/// <summary>True when ALine is an own-line `// dl:...` engine marker (a dl:ok
+/// review or a dl:bk bookmark), not prose.</summary>
+/// <param name="ALine">One physical source line; indentation is ignored.</param>
+/// <returns>True for `// dl:...` (also `//dl:...`); False for prose, `///` doc
+/// lines and trailing comments.</returns>
+/// <remarks>Pure. Such a line is never documentation text: harvest walks past it
+/// and `document --apply` inserts its block above it (owner ruling 2026-09-22,
+/// DECISION-2026-10-28-comment-anchors, defect B).</remarks>
+function IsDlMarkerLine(const ALine: string): Boolean;
+
 implementation
 
 uses
@@ -607,6 +617,14 @@ begin
   end;
 end;
 
+function IsDlMarkerLine(const ALine: string): Boolean;
+var
+  T: string;
+begin
+  T:= Trim(ALine);
+  Result:= T.StartsWith('//') and (not T.StartsWith('///')) and Trim(Copy(T, 3, MaxInt)).StartsWith('dl:');
+end;
+
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;
 var
   Infos    : TArray<TLineInfo>;
@@ -625,6 +643,7 @@ var
   AllSep   : Boolean          ;
   SeenText : Boolean          ; // a comment line has been accumulated already
   Blanks   : Integer          ; // blank lines crossed BELOW the block so far
+  Markers  : Integer          ; // own-line `// dl:` markers between the block and the declaration
 begin
   Result.Reason   := hrNone;
   Result.RawLines := nil;
@@ -651,6 +670,14 @@ begin
   // IMMEDIATELY above this comment", and a blank-line boundary means the walk
   // never reached whatever is above it, so there is no stop line to reason about.
   Bottom := ADeclLine - 2;
+  { `// dl:ok` / `// dl:bk<N>` lines directly above the declaration are engine
+    markers, never documentation: walk past them (DECISION-2026-10-28 defect B). }
+  Markers:= 0;
+  while (Bottom >= 0) and IsDlMarkerLine(ASrcLines[Bottom]) do
+  begin
+    Dec(Bottom);
+    Inc(Markers);
+  end;
   Top    := Bottom + 1;  // empty range until something is accumulated
   StopIdx:= -1;
   HitDoc := False;
@@ -689,7 +716,7 @@ begin
   if (StopIdx >= 0) and IsEndStop(Infos[StopIdx].Text) then
   begin
     HugsEnd := (Top = StopIdx + 1);          // no blank between end; and the comment
-    GapBelow:= (Bottom < ADeclLine - 2);     // a blank between the comment and the declaration
+    GapBelow:= (Bottom < ADeclLine - 2 - Markers);     // a blank between the comment and the declaration
     if HugsEnd and GapBelow then begin Result.Reason:= hrTrailer; Exit; end;
   end;
 

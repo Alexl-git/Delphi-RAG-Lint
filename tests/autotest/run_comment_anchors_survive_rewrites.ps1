@@ -8,7 +8,7 @@
        taking its trailing `// dl:bk7` with it.
     B. `document --apply` copies an own-line `// dl:ok ...` comment above a method into
        the generated <summary>, so the marker text now exists twice.
-  Expected today: FAIL on both (exit 1). No fix is part of this commit.
+  Fixed on gaps/ki-d7: A keeps the dl: comment as an own-line comment; B skips dl: markers when harvesting and inserts the block above them.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -77,7 +77,9 @@ $dB = New-Fixture 'b' $unitB
 & $exePath document --unit (Join-Path $dB 'Fx.pas') --apply --no-backup --db (Join-Path $dB 'x.sqlite') *> $null
 $outB = [IO.File]::ReadAllText((Join-Path $dB 'Fx.pas'))
 $n = ([regex]::Matches($outB,'marker before')).Count
-Check 'B positive control: a doc block was generated' ($outB -match '///\s*<summary>')
+Check 'B positive control: a doc block was generated' ($outB -match '///\s*<param')
+Check 'B no <summary> carries marker prose' ($outB -notmatch '(?s)<summary>[^<]*marker before')
+Check 'B doc block sits ABOVE the marker, marker adjacent to the method' ($outB -match '(?s)///[^\r\n]*\r\n(\s*///[^\r\n]*\r\n)*\s*// dl:ok[^\r\n]*\r\n\s*procedure Run')
 Check 'B marker text appears exactly once' ($n -eq 1) ("count=$n")
 
 try { [IO.Directory]::Delete($scratch,$true) } catch { }
