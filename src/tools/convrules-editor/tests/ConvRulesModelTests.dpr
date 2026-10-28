@@ -15858,6 +15858,18 @@ begin
 end;
 
 { Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+{ STARTUP: the library unit list (one multi-GB `sql` read on the main thread) loads only
+  for harvested rows the user is looking at -- never for a Destination edit losing focus
+  with nothing harvested, nor for the Convert tab feeding the harvest behind its back. }
+procedure TestClassifyDeferred;
+begin
+  Check('classify.deferred.empty.offscreen', ClassifyDeferred(0, False), '(nothing harvested, Unit Rules not shown)');
+  Check('classify.deferred.empty.onscreen', ClassifyDeferred(0, True), '(Destination edit left with nothing harvested: no library read)');
+  Check('classify.deferred.rows.offscreen', ClassifyDeferred(3, False), '(Convert tab Add...: rows wait for the Unit Rules tab)');
+  Check('classify.now.rows.onscreen', not ClassifyDeferred(3, True), '(rows on screen are classified at once)');
+  Check('classify.pending.note', Pos('Unit Rules tab', CLASSIFY_PENDING_NOTE) > 0, '(the deferral is said, never silent)');
+end;
+
 { ConvRules.InputGate (N7/N11) -- the one queue filter of the main window: while the
   editor is busy (an engine wait, an hourglass section's nested pump) a click or a
   command for the main form is refused and reported, never run inside the pump and
@@ -16318,6 +16330,7 @@ begin
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
     TestInputGate;
+    TestClassifyDeferred;
     TestCapabilityProbe;
     TestEncodingLevels;
     TestEncodingReaders;

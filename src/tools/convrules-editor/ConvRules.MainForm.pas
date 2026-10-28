@@ -158,6 +158,7 @@ type
       FLblHarvest    : TLabel                ; // 'N listed, M masked, F filtered'
       FHarvest       : TArray<THarvestedUnit>; // accumulated, unclassified; session state only
       FHarvestRows   : TArray<TUnitRow>      ; // FHarvest classified by FResolver
+      FClassifyPending: Boolean              ; // STARTUP: FHarvestRows wait for the Unit Rules tab (ClassifyDeferred)
       FResolver      : TDestinationResolver  ; // nil until a destination loads; rebuilt by every classify (EnsureResolver)
       FDestNote      : string                ; // appended to harvest status lines
       FDestWarn      : Boolean               ; // FDestNote holds a WARNING (degraded answer): report via SetError
@@ -2060,8 +2061,15 @@ type
       /// then carries every note for the status line (destination unreadable,
       /// library list unavailable, macro entries skipped, TO = Both); FDestWarn is
       /// set when the note is a warning that must go out through SetError. Errors
-      /// are reported through FDestNote/FDestWarn, never raised.</remarks>
-      function  EnsureResolver: Boolean;
+      /// are reported through FDestNote/FDestWarn, never raised.
+      /// ALoadLibrary = False (STARTUP: a deferred classify, ClassifyDeferred) skips
+      /// EnsurePickLists: the resolver gets an empty library list and must not
+      /// classify; the .dproj/.dpr checks and their notes run as always.</remarks>
+      function  EnsureResolver(ALoadLibrary: Boolean): Boolean;
+      /// <summary>Unit Rules tab OnShow: classifies a harvest whose classification
+      /// was deferred while the tab was not on screen (FClassifyPending).</summary>
+      /// <param name="Sender">The Unit Rules tab sheet (unused).</param>
+      procedure UnitsTabShow(Sender: TObject);
       /// <summary>Classifies every harvested unit against the destination
       /// (EnsureResolver, so the destination is re-read) into FHarvestRows, then
       /// refreshes the list.</summary>
@@ -2072,7 +2080,10 @@ type
       /// destination every row is UnknownStatus. A classification that raises part
       /// way leaves the remaining rows UnknownStatus, appends the error to FDestNote
       /// and sets FDestWarn; errors are reported, never raised -- the caller puts
-      /// FDestNote on the status line.</remarks>
+      /// FDestNote on the status line. STARTUP: when ClassifyDeferred says so (no
+      /// rows, or the Unit Rules tab not showing) the library unit list is NOT read,
+      /// every row stays UnknownStatus, FClassifyPending is set for rows and
+      /// FDestNote says so; UnitsTabShow classifies them.</remarks>
       procedure ReclassifyHarvest;
       /// <summary>Merges AAdded into the harvest, reclassifies and reports.</summary>
       /// <param name="AAdded">Harvested units.</param>
@@ -3681,6 +3692,7 @@ begin
   TabUnits:= TTabSheet.Create(FTabs); TabUnits.PageControl:= FTabs;
   TabUnits.Caption:= 'Unit Rules';
   FTabUnits:= TabUnits;
+  FTabUnits.OnShow:= UnitsTabShow; // STARTUP: a deferred harvest is classified here
   BuildHarvestStrip(TabUnits);
   // The six authoring buttons that used to sit on a 64px panel here are now the
   // Uses Units menu; the tab keeps the list they act on.
@@ -8915,7 +8927,7 @@ begin
   FHarvestStrip.Height:= RowTop; // one line per row until the rows are laid out and resize
 end;
 
-function TConvRulesForm.EnsureResolver: Boolean;
+function TConvRulesForm.EnsureResolver(ALoadLibrary: Boolean): Boolean;
 var
   Dproj   : string;
   Plat    : TConvPlatform;
@@ -8950,14 +8962,20 @@ begin
       Exit(False);
     end;
     Members:= ReadDprMembers(TFile.ReadAllText(Settings.MainSource), ExtractFileDir(Settings.MainSource));
-    EnsurePickLists(Plat);
-    if Plat = cpWin32 then
+    if not ALoadLibrary then
     begin
+      Lib  := nil; // a deferred classify: this resolver classifies nothing
+      LibOk:= True;
+    end
+    else if Plat = cpWin32 then
+    begin
+      EnsurePickLists(Plat);
       Lib  := FPickWin32;
       LibOk:= FPickW32Loaded;
     end
     else
     begin
+      EnsurePickLists(Plat);
       Lib  := FPickWin64;
       LibOk:= FPickW64Loaded;
     end;
@@ -8991,7 +9009,13 @@ var
   i      : Integer;
 begin
   var LGuard: IInterface:= HourGlass;  // dl:ok write-only-local@8f1f -- REVIEWED 2026-09-28 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
-  HasDest:= EnsureResolver;
+  // STARTUP: the library unit list is read only for rows on screen; otherwise the
+  // Unit Rules tab's OnShow classifies (UnitsTabShow).
+  var LDeferred: Boolean:= ClassifyDeferred(Length(FHarvest), FTabUnits.Showing); // not ActivePage: OnShow runs before it moves
+  FClassifyPending:= LDeferred and (Length(FHarvest) > 0);
+  HasDest:= EnsureResolver(not LDeferred);
+  if FClassifyPending and HasDest then
+    FDestNote:= FDestNote + CLASSIFY_PENDING_NOTE;
   // Sized and defaulted up front, so a classification that stops part-way
   // leaves every remaining row UnknownStatus rather than uninitialised.
   SetLength(FHarvestRows, Length(FHarvest));
@@ -9000,7 +9024,7 @@ begin
     FHarvestRows[i].Harvest:= FHarvest[i];
     FHarvestRows[i].Status := UnknownStatus;
   end;
-  if HasDest then
+  if HasDest and not LDeferred then
   try
     for i:= 0 to High(FHarvest) do
       FHarvestRows[i].Status:= FResolver.Classify(FHarvest[i].UnitName);
@@ -9020,6 +9044,17 @@ begin
   Result:= Trim(FRulesFolder);
   if Result = '' then
     Result:= ExtractFilePath(FFilePath);
+end;
+
+procedure TConvRulesForm.UnitsTabShow(Sender: TObject);
+begin
+  if not FClassifyPending then
+    Exit;
+  ReclassifyHarvest; // the tab is on screen now: loads the library list (first time only)
+  if FDestWarn then
+    SetError('Unit Rules: harvest classified.' + FDestNote)
+  else
+    SetStatus('Unit Rules: harvest classified.' + FDestNote);
 end;
 
 procedure TConvRulesForm.ConvertTabShow(Sender: TObject);
