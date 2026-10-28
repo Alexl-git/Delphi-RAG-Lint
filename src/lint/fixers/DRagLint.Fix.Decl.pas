@@ -502,10 +502,109 @@ end;
 
 { ------------------------------------------------------------------------ public-field }
 
+const
+  DECL_HEADER_RE = '\b(?:procedure|function|constructor|destructor)\s+(?:\w+\.)*(\w+)\s*(?:\(((?:[^()]|\([^()]*\))*)\))?';
+  DECL_CALL_RE   = '\b(\w+)\s*\(';
+
+{ Per routine name declared in the file: one char per parameter position, '1' = var/out, '0' = other (overloads
+  OR-ed together). AHeaderSpans receives the [start, end) 1-based text range of every header so calls scanning skips them. }
+procedure DcVarParamMasks(const AText: string; AMasks: TDictionary<string, string>; AHeaderSpans: TList<TPair<Integer, Integer>>);
+var
+  M: TMatch;
+  Part, Mod1, NamePart, Old, Mask, Merged: string;
+  Colon, I, N: Integer;
+begin
+  for M in TRegEx.Matches(AText, DECL_HEADER_RE, [roIgnoreCase, roSingleLine]) do
+  begin
+    AHeaderSpans.Add(TPair<Integer, Integer>.Create(M.Index, M.Index + M.Length));
+    Mask:= '';
+    if M.Groups[2].Success then
+      for Part in DcSplitTop(M.Groups[2].Value, ';') do
+      begin
+        Colon:= Pos(':', Part);
+        NamePart:= if Colon > 0 then Trim(Copy(Part, 1, Colon - 1)) else Trim(Part);
+        Mod1:= if TRegEx.IsMatch(NamePart, '^(?:var|out)\b', [roIgnoreCase]) then '1' else '0';
+        NamePart:= TRegEx.Replace(NamePart, '^(?:var|out|const)\s+', '', [roIgnoreCase]);
+        N:= Length(DcSplitTop(NamePart, ','));
+        Mask:= Mask + StringOfChar(Mod1[1], N);   // dl:ok concat-in-loop@e14b -- REVIEWED 2026-10-27: one char per parameter, a handful per header
+      end;
+    if AMasks.TryGetValue(LowerCase(M.Groups[1].Value), Old) then
+    begin
+      Merged:= StringOfChar('0', Max(Length(Old), Length(Mask)));
+      for I:= 1 to Length(Merged) do
+        if ((I <= Length(Old)) and (Old[I] = '1')) or ((I <= Length(Mask)) and (Mask[I] = '1')) then Merged[I]:= '1';
+      Mask:= Merged;
+    end;
+    AMasks.AddOrSetValue(LowerCase(M.Groups[1].Value), Mask);
+  end;
+end;
+
+{ True when the argument list starting at the '(' at AOpen (1-based) of AText has, at a var/out position of AMask,
+  an argument that is AName or a dotted path ending in AName. }
+function DcArgHitsField(const AText: string; AOpen: Integer; const AMask, AName: string): Boolean;
+var
+  I, Depth, Pos1: Integer;
+  Args: TArray<string>;
+begin
+  Result:= False;
+  Depth:= 0;
+  for I:= AOpen to Length(AText) do
+  begin
+    if AText[I] = '(' then Inc(Depth)
+    else if AText[I] = ')' then
+    begin
+      Dec(Depth);
+      if Depth = 0 then
+      begin
+        Args:= DcSplitTop(Copy(AText, AOpen + 1, I - AOpen - 1), ',');
+        for Pos1:= 0 to High(Args) do
+          if (Pos1 < Length(AMask)) and (AMask[Pos1 + 1] = '1') and
+             TRegEx.IsMatch(Trim(Args[Pos1]), '^(?:\w+\.)*' + TRegEx.Escape(AName) + '$', [roIgnoreCase]) then Exit(True);
+        Exit;
+      end;
+    end;
+  end;
+end;
+
+{ True when the file passes AName (bare or as the last segment of a dotted path) to a routine declared in the SAME
+  file at a position where that routine's parameter is var/out -- a property cannot be passed there. }
+function DcFieldPassedAsVarArg(ALines: TStringList; const AName: string): Boolean;
+var
+  Masks    : TDictionary<string, string>;
+  Spans    : TList<TPair<Integer, Integer>>;
+  Text     : string;
+  M        : TMatch;
+  Mask     : string;
+  Span     : TPair<Integer, Integer>;
+  InHeader : Boolean;
+begin
+  Result:= False;
+  Text:= ALines.Text;
+  Masks:= TDictionary<string, string>.Create;
+  Spans:= TList<TPair<Integer, Integer>>.Create;
+  try
+    DcVarParamMasks(Text, Masks, Spans);
+    for M in TRegEx.Matches(Text, DECL_CALL_RE, [roIgnoreCase]) do
+    begin
+      if not Masks.TryGetValue(LowerCase(M.Groups[1].Value), Mask) then Continue;
+      InHeader:= False;
+      for Span in Spans do
+        if (M.Index >= Span.Key) and (M.Index < Span.Value) then InHeader:= True;
+      if InHeader then Continue;
+      if DcArgHitsField(Text, M.Index + M.Length - 1, Mask, AName) then Exit(True);
+    end;
+  finally
+    Spans.Free;
+    Masks.Free;
+  end;
+end;
 { public-field: `X: T;` in a public section -> a same-named property `property X: T read FX write FX;` plus a
   private `FX: T;` (in the class's first `private` section, else in a new `private` section opened just above the
   `public` line). Same name, so no call site changes. Declines for anything but a lone, comment-free `X: T;` with a
-  whitespace-free type, when `FX` already exists in the class, or when the section is not a plain `public`. }
+  whitespace-free type, when `FX` already exists in the class, when the section is not a plain `public`, or (decline
+  reason "passed as var/out") when the same file passes the field -- bare or as `Obj.X` -- as an argument at a var/out
+  parameter position of a routine declared in that file: a property cannot be a var/out argument, so the fix would stop
+  that call compiling. Registered RISKY: a var/out use in another unit is invisible to this per-file fixer. }
 function FixPublicField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 var
   Line, Name, TypeText, Ind: string;
@@ -518,6 +617,7 @@ begin
   Line:= ALines[AFinding.StartLine - 1];
   if (AFinding.StartCol < 1) or (AFinding.EndCol > Length(Line) + 1) then Exit;
   Name:= Copy(Line, AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
+  if DcFieldPassedAsVarArg(ALines, Name) then Exit;   { decline: passed as var/out }
   M:= TRegEx.Match(Line, '^(\s*)' + TRegEx.Escape(Name) + '\s*:\s*([^\s;=\[\(]+)\s*;\s*$', [roIgnoreCase]);
   if not M.Success or (Length(M.Groups[1].Value) <> AFinding.StartCol - 1) then Exit;
   Ind:= M.Groups[1].Value;
@@ -728,7 +828,7 @@ initialization
   RegisterFixer('inherited-bare', FixInheritedBare);
   RegisterFixer('inline-on-large-routine', FixInlineOnLargeRoutine);
   RegisterFixer('missing-const-param', FixMissingConstParam);
-  RegisterFixer('public-field', FixPublicField);
+  RegisterFixer('public-field', FixPublicField, True);
   RegisterFixer('destructor-without-override', FixDestructorWithoutOverride, True);
   RegisterFixer('missing-inherited-dtor', FixMissingInheritedDtor, True);
   RegisterFixer('missing-inherited-ctor', FixMissingInheritedCtor, True);
