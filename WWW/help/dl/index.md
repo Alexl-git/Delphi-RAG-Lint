@@ -70,7 +70,7 @@ Rules, autofix, suppression markers and project-wide checks.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 109 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |

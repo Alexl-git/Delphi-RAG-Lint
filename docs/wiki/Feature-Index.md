@@ -467,7 +467,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [large-stack-local](rules#large-stack-local) -- complexity, info
 * [layering-violation](rules#layering-violation) -- project-wide, warning
 * [length-zero-compare](rules#length-zero-compare) -- bug-patterns, info, fixable
-* [line-too-long](rules#line-too-long) -- structure, warning
+* [line-too-long](rules#line-too-long) -- structure, warning, fixable
 * [loadlibrary-relative-name](rules#loadlibrary-relative-name) -- security, warning
 * [local-field-prefix](rules#local-field-prefix) -- naming, info, fixable
 * [local-shadows-field](rules#local-shadows-field) -- structure, info

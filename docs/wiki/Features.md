@@ -127,7 +127,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**284 rules. 109 have an auto-fix. 242 are on by default.** 191 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**284 rules. 110 have an auto-fix. 242 are on by default.** 191 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -148,8 +148,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | resource-lifetime | 14 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
-| structure | 12 | 5 |
-| **Total** | **284** | **109** |
+| structure | 12 | 6 |
+| **Total** | **284** | **110** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -168,7 +168,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 284 rules, 109 fixable; `rules` |  |
+| [Lint rules](rules) | 284 rules, 110 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
