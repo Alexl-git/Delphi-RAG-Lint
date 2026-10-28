@@ -2808,7 +2808,7 @@ begin
   Plat:= EffectiveIndexPlatform(APlatform); // library / no-project fallback (plan default)
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
-  if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
+  if ADproj = '' then Result:= BuiltinsProfile(Plat); // lane INC2: + CompilerVersion and the default switches
 end;
 
 /// <summary>A7-I: the full active build an INDEX run preprocesses a PROJECT section
@@ -20172,6 +20172,64 @@ const
   LINTALL_SCAN_PCT    = 90;
   LINTALL_TAIL_PHASES = 14;
 
+{ Lane INC2: LINT AN INCLUDE FROM THE BYTES THE INDEXER PARSED. A project index
+  parses each .inc from its includer's include site (lane INC, TIndexer.
+  SetIncludeContext: the host's live defines at the directive, first host wins),
+  so lint-all registers the same bytes with TAstParseCache before the scan: the
+  hosts are walked in the index's file order, only those whose recorded include
+  list (SetFileIncludes) names an include in AFiles are re-preprocessed, and each
+  include takes the first host that reaches it. Positions stay the include's own
+  lines (offset identity); the include is linted once however many units include
+  it. An include no recorded host reaches is linted standalone -- as it was
+  indexed. Returns how many includes got a host context. }
+function InstallLintIncludeContexts(const AStore: ISymbolStore; const AFiles: TArray<string>;
+  const AProjectPath: string): Integer;
+var
+  Pending: TDictionary<string, Boolean>;
+  Paths  : TDictionary<string, TArray<string>>;
+begin
+  Result:= 0;
+  TAstParseCache.ClearIncludeContexts;
+  Pending:= TDictionary<string, Boolean>.Create;
+  Paths  := TDictionary<string, TArray<string>>.Create;
+  try
+    for var F: string in AFiles do
+      if SameText(ExtractFileExt(F), '.inc') then Pending.AddOrSetValue(LowerCase(TPath.GetFullPath(F)), True);
+    if Pending.Count = 0 then Exit;
+    for var Fid: Int64 in AStore.GetAllFileIds do
+    begin
+      if Pending.Count = 0 then Break;
+      var Host: string:= AStore.GetFilePath(Fid);
+      if not MatchText(ExtractFileExt(Host), ['.pas', '.dpr', '.dpk']) then Continue;
+      var Listed: string:= AStore.GetMetaValue(FILE_INCLUDES_META_KEY + LowerCase(Host));
+      var Wanted: Boolean:= False;
+      for var L: string in Listed.Split(['|']) do
+        if (L <> '') and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
+      if not Wanted then Continue;
+      { The build's search path, as the closure walk resolved includes against it. }
+      var Dproj: string:= AProjectPath;
+      if not SameText(ExtractFileExt(Dproj), '.dproj') then Dproj:= TProjectProfileCache.BuildForFile(Host).Dproj;
+      var SP: TArray<string>:= nil;
+      if (Dproj <> '') and not Paths.TryGetValue(LowerCase(Dproj), SP) then
+      begin
+        SP:= TClosureResolver.ProjectSearchPaths(Dproj);
+        Paths.Add(LowerCase(Dproj), SP);
+      end;
+      for var Site: TPPIncludeSite in TAstParseCache.HostIncludeSites(Host, SP) do
+      begin
+        var Key: string:= LowerCase(TPath.GetFullPath(Site.Path));
+        if not Pending.ContainsKey(Key) then Continue;
+        TAstParseCache.SetIncludeContext(Site.Path, Site.Resolved);
+        Pending.Remove(Key);
+        Inc(Result);
+      end;
+    end;
+  finally
+    Paths.Free;
+    Pending.Free;
+  end;
+end;
+
 { --file / --in used to be accepted by lint-all and IGNORED, so a "scoped"
   `lint-all --rule doc-drift --fix --file X` planned the whole project (1.31.5
   B-11). One unit is `lint`'s job; say so instead of pretending. True = refused
@@ -20403,7 +20461,9 @@ begin
       .dpr bodies are where Application.CreateForm, initialization order and
       top-level exception handling live -- exactly the code worth linting.
       See docs\INBOX-lint-all-never-scans-dpr-files.md. }
-    if (SameText(ExtractFileExt(PasPath), '.pas') or SameText(ExtractFileExt(PasPath), '.dpr'))
+    { Lane INC2: .dpk and .inc too -- every file the indexer parses as Pascal. An
+      include is linted from its includer's context (InstallLintIncludeContexts). }
+    if MatchText(ExtractFileExt(PasPath), ['.pas', '.dpr', '.dpk', '.inc'])
        and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
@@ -20439,6 +20499,7 @@ begin
     rule, which is computed from every other rule's findings (LintNarrowRule);
     the report is still filtered to AArgs.Rule in FinalizeAndOutput. }
   var Nr: string:= LintNarrowRule(AArgs.Rule);
+  if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   Linter.OnlyRuleId:= Nr;
@@ -24893,6 +24954,34 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>Lane INC2: the value and switch lines pp-profile prints after the
+/// defines: each effective numeric value as 'name=value' and each switch state as
+/// '$x+' / '$x-' (the last pair per name wins), each group sorted.</summary>
+/// <param name="AProfile">The resolved profile.</param>
+/// <returns>The lines, values first.</returns>
+function PpProfileValueLines(const AProfile: TDefineProfile): TArray<string>;
+var
+  Nums: TDictionary<string, Integer>;
+  Sws : TDictionary<string, Boolean>;
+  A, B: TArray<string>;
+begin
+  A:= nil;
+  B:= nil;
+  Nums:= TDictionary<string, Integer>.Create;
+  Sws := TDictionary<string, Boolean>.Create;
+  try
+    for var N in AProfile.NumericDefines do Nums.AddOrSetValue(LowerCase(N.Key), N.Value);
+    for var S in AProfile.Switches do Sws.AddOrSetValue(LowerCase(S.Key), S.Value);
+    for var N in Nums do A:= A + [Format('%s=%d', [N.Key, N.Value])];
+    for var S in Sws do B:= B + ['$' + S.Key + (if S.Value then '+' else '-')];
+  finally
+    Sws.Free;
+    Nums.Free;
+  end;
+  TArray.Sort<string>(A);
+  TArray.Sort<string>(B);
+  Result:= A + B;
+end;
 /// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
 /// [--config Release|Debug] [--in FILE [--db DB]] -- diagnostic dump of the define-profile resolver.
 /// With --in FILE (LSP C10) it first prints dproj= / platform= / config= /
@@ -24902,7 +24991,9 @@ end; // function
 /// Base + selected-config DCC_Define symbols); without --dproj it dumps
 /// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
 /// lowercased symbol per line, so tests/preprocess/run_profile.ps1 can grep for
-/// membership. --platform defaults to Win64, --config to Release.</summary>
+/// membership; then (lane INC2) the effective values as 'name=value' and the switch
+/// states as '$x+' / '$x-' (PpProfileValueLines). --platform defaults to Win64,
+/// --config to Release.</summary>
 /// <param name="AArgs">Parsed CLI args; PpDproj (--dproj) the project;
 /// CheckPlatform (--platform) the target; WorkspaceConfig (--config) the
 /// config.</param>
@@ -24923,8 +25014,7 @@ begin
   Config:= AArgs.WorkspaceConfig;
   if Config = '' then Config:= 'Release';
 
-  Profile.Defines:= PlatformBuiltins(Platform);
-  Profile.NumericDefines:= nil;
+  Profile:= BuiltinsProfile(Platform);
   if AArgs.InFile <> '' then
   begin
     { LSP C10: the profile of the file's OWN project's active build. }
@@ -24945,6 +25035,10 @@ begin
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);
   for Sym in Defines do
+    Writeln(Sym);
+  { Lane INC2: then the effective values ('name=value', sorted) and switch states
+    ('$x+' / '$x-', sorted) -- never mistakable for a define name. }
+  for Sym in PpProfileValueLines(Profile) do
     Writeln(Sym);
   Result:= 0;
 end; // function

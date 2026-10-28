@@ -246,7 +246,7 @@ type
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindUnitFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
+      class procedure ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
 
       // ---- source text scanning ------------------------------------------------
 
@@ -331,6 +331,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALibraryRoots: TArray<string>);
+      /// <summary>Lane INC2: the search path a project's walk resolves units and
+      /// includes against, as Resolve builds it for a .dproj: the project folder first,
+      /// then each existing DCC_UnitSearchPath directory (macros skipped).</summary>
+      /// <param name="ADproj">The .dproj path.</param>
+      /// <returns>Absolute directories; just the folder when the file cannot be read.</returns>
+      /// <remarks>Never raises. lint-all uses it to rebuild an include's host context.</remarks>
+      class function ProjectSearchPaths(const ADproj: string): TArray<string>;
 
       /// <summary>PP-Task-10: enable/disable per-config directive preprocessing of source
       /// content before its `uses` clause is scanned. When enabled, a unit
@@ -649,7 +656,28 @@ begin
   end;
 end;
 
-procedure TClosureResolver.ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
+class function TClosureResolver.ProjectSearchPaths(const ADproj: string): TArray<string>;
+var
+  Paths  : TStringList;
+  BaseDir: string;
+begin
+  BaseDir:= TPath.GetDirectoryName(TPath.GetFullPath(ADproj));
+  Paths:= TStringList.Create;
+  try
+    Paths.CaseSensitive:= False;
+    Paths.Add(BaseDir);
+    try
+      ParseDprojSearchPaths(TFile.ReadAllText(ADproj), BaseDir, Paths);
+    except // dl:ok try-except-swallowed -- REVIEWED 2026-10-27 never raises by contract: an unreadable .dproj gives just its folder
+      on E: Exception do ;
+    end;
+    Result:= Paths.ToStringArray;
+  finally
+    Paths.Free;
+  end;
+end;
+
+class procedure TClosureResolver.ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
 var
   Pat     : string          ;
   Matches : TMatchCollection;

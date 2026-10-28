@@ -27,6 +27,7 @@ interface
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   DRagLint.Preprocess.Types;
 
 /// <summary>Returns the built-in compiler defines for the given target
@@ -54,8 +55,10 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// the config chain (each Cfg_N and its Cfg_N_&lt;Platform&gt; group), applied in
 /// order, where a DCC_Define without $(DCC_Define) REPLACES the inherited set.
 /// Symbols are lowercased and deduped. A missing or unparseable .dproj returns
-/// just PlatformBuiltins(APlatform) -- it never raises. NumericDefines is left
-/// empty (Task 7 scope is Defines only).</summary>
+/// just PlatformBuiltins(APlatform) -- it never raises. Lane INC2: a valued
+/// define (DEBUG2=3) defines DEBUG2 and adds debug2 -&gt; 3 to NumericDefines,
+/// after CompilerNumerics; Switches are CompilerDefaultSwitches then
+/// DprojEffectiveSwitches.</summary>
 /// <param name="ADprojPath">Path to the .dproj; missing/unreadable -> builtins
 /// only.</param>
 /// <param name="APlatform">Target platform for the built-ins (default caller
@@ -88,8 +91,12 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDprojDefine = record
-    /// <summary>The symbol as spelled in the .dproj (first spelling wins).</summary>
+    /// <summary>The symbol as spelled in the .dproj (first spelling wins), without
+    /// any '=VALUE' part.</summary>
     Name : string;
+    /// <summary>Lane INC2: the text after '=' of a valued define (DEBUG2=3 -> '3');
+    /// '' for a plain symbol. The last group that sets the symbol wins.</summary>
+    Value: string;
     /// <summary>The group alias that added it to the current set: 'Base',
     /// 'Base_Win32', 'Cfg_1', 'Cfg_3_Win64', ...</summary>
     Group: string;
@@ -173,14 +180,57 @@ function DprojGroupChain(const AContent, APlatform, AConfig: string): TArray<str
 /// </remarks>
 function DprojEnabledPlatforms(const AContent: string): TArray<string>;
 
+/// <summary>Lane INC2: splits one define token the way a DCC_Define list or a
+/// dcc -D option spells it: 'NAME' or 'NAME=VALUE'. Both halves are trimmed.</summary>
+/// <param name="AToken">One token, e.g. 'DEBUG2=3' or 'FEATX'.</param>
+/// <param name="AName">Receives the symbol ('' for a token such as '=3').</param>
+/// <param name="AValue">Receives the text after the first '=', '' when none.</param>
+/// <returns>True when the token carries a non-empty value.</returns>
+/// <remarks>Pure. Never raises.</remarks>
+function SplitDefineToken(const AToken: string; out AName, AValue: string): Boolean;
+
+/// <summary>Lane INC2: the compiler's own numeric constants an {$IF} can test
+/// for Delphi 13 / RAD Studio 37: CompilerVersion and RTLVersion, both 37
+/// (the integer part; the evaluator is integer-only).</summary>
+/// <returns>Lowercased name / value pairs.</returns>
+/// <remarks>Pure.</remarks>
+function CompilerNumerics: TArray<TPair<string, Integer>>;
+
+/// <summary>Lane INC2: dcc's switch states with no .dproj option and no source
+/// directive, for {$IFOPT}: B- C+ D+ G+ H+ I+ J- L+ M- O+ P+ Q- R- T- U- V+ W-
+/// X+ Y+.</summary>
+/// <returns>Lowercased letter / on pairs.</returns>
+/// <remarks>Pure.</remarks>
+function CompilerDefaultSwitches: TArray<TPair<string, Boolean>>;
+
+/// <summary>Lane INC2: the switch states a .dproj sets for one config +
+/// platform: each DCC_ switch property (DCC_RangeChecking -> R,
+/// DCC_Optimize -> O, DCC_DebugInformation -> D, ...) as the LAST group of
+/// DprojGroupChain that sets it leaves it; 'false' and '0' are off, any other
+/// value on.</summary>
+/// <param name="AContent">The .dproj text.</param>
+/// <param name="APlatform">The platform group suffix, used verbatim.</param>
+/// <param name="AConfig">A config name or 'Base'; mapped as in
+/// DprojEffectiveDefines.</param>
+/// <returns>Lowercased letter / on pairs, only for properties the .dproj
+/// sets.</returns>
+/// <remarks>Pure: reads only AContent. Never raises.</remarks>
+function DprojEffectiveSwitches(const AContent, APlatform, AConfig: string): TArray<TPair<string, Boolean>>;
+
+/// <summary>Lane INC2: the profile of a build with no project: the platform
+/// built-in symbols, CompilerNumerics and CompilerDefaultSwitches.</summary>
+/// <param name="APlatform">As for PlatformBuiltins.</param>
+/// <returns>The profile.</returns>
+/// <remarks>Pure.</remarks>
+function BuiltinsProfile(const APlatform: string): TDefineProfile;
+
 implementation
 
 uses
   System.Classes,
   System.StrUtils,
   System.IOUtils,
-  System.RegularExpressions,
-  System.Generics.Collections;
+  System.RegularExpressions;
 
 // The MSBuild recursion token that terminates every DCC_Define list -- dropped
 // when splitting a DCC_Define value into concrete symbols.
@@ -244,7 +294,7 @@ end;
 // wrong group: '$(Base_Win64)' does not contain '$(Base)', and '$(Cfg_10)'
 // does not contain '$(Cfg_1)'. The config-selector groups carry no
 // DCC_Define, so they are passed over.
-function TryDccDefineInGroup(const AContent, AConditionNeedle: string;
+function TryPropertyInGroup(const AContent, AConditionNeedle, AProperty: string;
   out AValue: string): Boolean;
 var
   M : TMatch;
@@ -257,7 +307,7 @@ begin
   begin
     if ContainsText(M.Groups[1].Value, AConditionNeedle) then
     begin
-      DM := TRegEx.Match(M.Groups[2].Value, '<DCC_Define>(.*?)</DCC_Define>',
+      DM := TRegEx.Match(M.Groups[2].Value, '<' + AProperty + '>(.*?)</' + AProperty + '>',
         [roIgnoreCase, roSingleLine]);
       if DM.Success then
       begin
@@ -267,6 +317,13 @@ begin
     end;
     M := M.NextMatch;
   end;
+end;
+
+// The DCC_Define of that group (lane INC2: TryPropertyInGroup generalises it).
+function TryDccDefineInGroup(const AContent, AConditionNeedle: string;
+  out AValue: string): Boolean;
+begin
+  Result := TryPropertyInGroup(AContent, AConditionNeedle, 'DCC_Define', AValue);
 end;
 
 // Read the config-selector groups -- Condition
@@ -354,6 +411,7 @@ var
   Value  : string;
   Part   : string;
   Sym    : string;
+  Val    : string;
   Def    : TDprojDefine;
   Order  : TList<TDprojDefine>;
   Seen   : TDictionary<string, Integer>;
@@ -382,15 +440,20 @@ begin
         // Drop blanks and MSBuild property references, the recursion token
         // included -- a macro cannot be expanded here.
         if (Sym = '') or StartsStr('$(', Sym) then Continue;
+        // Lane INC2: 'DEBUG2=3' defines DEBUG2 and carries the value 3.
+        SplitDefineToken(Trim(Part), Sym, Val);
+        if Sym = '' then Continue;
         if Seen.TryGetValue(LowerCase(Sym), Idx) then
         begin
           Def := Order[Idx];
           if IndexText(Alias, Def.Groups) < 0 then Def.Groups := Def.Groups + [Alias];
+          if Val <> '' then Def.Value := Val;
           Order[Idx] := Def;
           Continue;
         end;
         Seen.Add(LowerCase(Sym), Order.Count);
         Def.Name   := Sym;
+        Def.Value  := Val;
         Def.Group  := Alias;
         Def.Groups := [Alias];
         Order.Add(Def);
@@ -435,6 +498,93 @@ begin
   end;
 end;
 
+function SplitDefineToken(const AToken: string; out AName, AValue: string): Boolean;
+var
+  Eq: Integer;
+begin
+  Eq := Pos('=', AToken);
+  if Eq = 0 then
+  begin
+    AName  := Trim(AToken);
+    AValue := '';
+  end
+  else
+  begin
+    AName  := Trim(Copy(AToken, 1, Eq - 1));
+    AValue := Trim(Copy(AToken, Eq + 1, MaxInt));
+  end;
+  Result := AValue <> '';
+end;
+
+const
+  // Delphi 13 = RAD Studio 37: CompilerVersion 37.0, RTLVersion 37.0.
+  COMPILER_VERSION_37 = 37;
+  // dcc's default switch states (letter + sign), no option and no directive.
+  DEFAULT_SWITCHES: array[0..18] of string = (
+    'b-', 'c+', 'd+', 'g+', 'h+', 'i+', 'j-', 'l+', 'm-', 'o+',
+    'p+', 'q-', 'r-', 't-', 'u-', 'v+', 'w-', 'x+', 'y+');
+  // The .dproj property that sets each switch, and its letter. Parallel arrays.
+  SWITCH_PROPERTIES: array[0..18] of string = (
+    'DCC_FullBooleanEvaluations', 'DCC_AssertionsAtRuntime', 'DCC_DebugInformation',
+    'DCC_ImportedDataReferences', 'DCC_LongStrings', 'DCC_IOChecking',
+    'DCC_WriteableConstants', 'DCC_LocalDebugSymbols', 'DCC_RunTimeTypeInfo',
+    'DCC_Optimize', 'DCC_OpenStringParams', 'DCC_IntegerOverflowCheck',
+    'DCC_RangeChecking', 'DCC_TypedAtParameter', 'DCC_PentiumSafeDivide',
+    'DCC_StrictVarStrings', 'DCC_GenerateStackFrames', 'DCC_ExtendedSyntax',
+    'DCC_SymbolReferenceInfo');
+  SWITCH_PROPERTY_LETTERS: array[0..18] of string = (
+    'b', 'c', 'd', 'g', 'h', 'i', 'j', 'l', 'm', 'o',
+    'p', 'q', 'r', 't', 'u', 'v', 'w', 'x', 'y');
+
+function CompilerNumerics: TArray<TPair<string, Integer>>;
+begin
+  Result := [TPair<string, Integer>.Create('compilerversion', COMPILER_VERSION_37),
+             TPair<string, Integer>.Create('rtlversion', COMPILER_VERSION_37)];
+end;
+
+function CompilerDefaultSwitches: TArray<TPair<string, Boolean>>;
+var
+  S: string;
+begin
+  Result := nil;
+  for S in DEFAULT_SWITCHES do
+    Result := Result + [TPair<string, Boolean>.Create(S[1], S[2] = '+')];
+end;
+
+function DprojEffectiveSwitches(const AContent, APlatform, AConfig: string): TArray<TPair<string, Boolean>>;
+var
+  Aliases: TArray<string>;
+  Alias  : string;
+  Value  : string;
+  Last   : string;
+  Found  : Boolean;
+  K      : Integer;
+begin
+  Result := nil;
+  Aliases := DprojGroupChain(AContent, APlatform, AConfig);
+  for K := Low(SWITCH_PROPERTIES) to High(SWITCH_PROPERTIES) do
+  begin
+    Found := False;
+    Last  := '';
+    for Alias in Aliases do
+      if TryPropertyInGroup(AContent, '$(' + Alias + ')', SWITCH_PROPERTIES[K], Value) then
+      begin
+        Found := True;
+        Last  := Trim(Value);
+      end;
+    if Found then
+      Result := Result + [TPair<string, Boolean>.Create(SWITCH_PROPERTY_LETTERS[K],
+        not (SameText(Last, 'false') or (Last = '0')))];
+  end;
+end;
+
+function BuiltinsProfile(const APlatform: string): TDefineProfile;
+begin
+  Result.Defines        := PlatformBuiltins(APlatform);
+  Result.NumericDefines := CompilerNumerics;
+  Result.Switches       := CompilerDefaultSwitches;
+end;
+
 function ProfileFromDproj(const ADprojPath, APlatform, AConfig: string): TDefineProfile;
 var
   Seen   : TDictionary<string, Byte>;
@@ -442,9 +592,12 @@ var
   Content: string;
   Sym    : string;
   Def    : TDprojDefine;
+  Num    : Integer;
 begin
   Result.Defines := nil;
-  Result.NumericDefines := nil;
+  // Lane INC2: the compiler's own values first; the .dproj's override them.
+  Result.NumericDefines := CompilerNumerics;
+  Result.Switches       := CompilerDefaultSwitches;
 
   Seen  := TDictionary<string, Byte>.Create;
   Order := TList<string>.Create;
@@ -475,7 +628,12 @@ begin
           Seen.Add(Sym, 0);
           Order.Add(Sym);
         end;
+        // Lane INC2: DEBUG2=3 -> {$IF DEBUG2 = 3}. A non-integer value only defines.
+        if (Def.Value <> '') and TryStrToInt(Def.Value, Num) then
+          Result.NumericDefines := Result.NumericDefines + [TPair<string, Integer>.Create(Sym, Num)];
       end;
+      Result.Switches := Result.Switches +
+        DprojEffectiveSwitches(Content, PlatformGroupSuffix(APlatform), AConfig);
     end;
 
     Result.Defines := Order.ToArray;
