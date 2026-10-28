@@ -140,7 +140,9 @@ Rule-driven migration of legacy component types.
 | [convert-apply #migrate (member rename / DL_NONE)](features/convert-apply-migrate.md) | #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site | 1.22.0-alpha |
 | [convert-scaffold](features/convert-scaffold.md) | Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type | 1.1.0-alpha |
 | [convert-validate](features/convert-validate.md) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees | 1.1.0-alpha |
+| [Progress window and busy guard](features/convrules-busy-guard.md) | ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs | 1.35.0-alpha |
 | [Convert progress](features/convrules-convert-progress.md) | ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab | 1.26.7-alpha |
+| [Curate rule books](features/convrules-curate.md) | ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk | 1.20.0-alpha |
 | [ConvRulesEditor](features/convrules-editor.md) | Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27) | 0.0.0 |
 | [Rule book and source encoding](features/convrules-encoding.md) | ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel) | 1.35.0-alpha |
 | [Member migration (#migrate)](features/convrules-migrate-members.md) | ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list | 1.35.0-alpha |

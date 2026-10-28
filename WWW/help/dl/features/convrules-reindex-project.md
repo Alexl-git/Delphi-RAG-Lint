@@ -4,10 +4,10 @@ title: Reindex project
 summary: "ConvRulesEditor command: incremental index --project of the editor's project index, cancellable"
 product: DL
 group: component-conversion
-order: 60010
+order: 60012
 since: 1.26.7-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.36.0-alpha
 ---
 
 # Reindex project
@@ -39,6 +39,12 @@ refreshed; run it again.
 The project index must have its project file beside its `_D-RAG` folder
 (`<dir>\_D-RAG\<Name>.sqlite` -> `<dir>\<Name>.dproj`). Without it the command
 refuses with the same text Convert uses.
+
+### Where to click
+
+**Conversion > Reindex project**
+1. Choose Conversion > Reindex project
+2. Wait for the progress window, or press Cancel (run it again after a cancel)
 
 ---
 

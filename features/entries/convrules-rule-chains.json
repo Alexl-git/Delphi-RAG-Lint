@@ -21,10 +21,25 @@
     }
   ],
   "audience": "both",
+  "questions": [
+    {
+      "ask": "Why does my TA -> TB plus TB -> TC book leave a TA as TB?",
+      "command": "ConvRulesEditor.exe > Conversion > Rule chains... (convert-apply is single pass; Merge to TA -> TC or Split into stage books)"
+    },
+    {
+      "ask": "How do I run the stage books in the right order?",
+      "command": "ConvRulesEditor.exe > Conversion > Convert... > check the books in order (Move Up / Move Down)"
+    }
+  ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-28",
+    "by": "CONVERTER"
+  },
   "verified": {
-    "date": "2026-10-27",
+    "date": "2026-10-28",
     "by": "CONVERTER",
-    "build": "1.35.1-alpha",
+    "build": "1.36.0-alpha",
     "surfaceHash": "eb7e135631f7a03a51a1fef17c2fcea14d88e68829273394dc0fe5a5cf5ffb33"
   }
 }

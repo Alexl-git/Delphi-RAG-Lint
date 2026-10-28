@@ -21,3 +21,9 @@ refreshed; run it again.
 The project index must have its project file beside its `_D-RAG` folder
 (`<dir>\_D-RAG\<Name>.sqlite` -> `<dir>\<Name>.dproj`). Without it the command
 refuses with the same text Convert uses.
+
+## Where to click
+
+**Conversion > Reindex project**
+1. Choose Conversion > Reindex project
+2. Wait for the progress window, or press Cancel (run it again after a cancel)

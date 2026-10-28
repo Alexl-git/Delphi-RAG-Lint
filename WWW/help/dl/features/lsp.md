@@ -7,7 +7,7 @@ group: editor-integration
 order: 110010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # lsp
@@ -238,6 +238,10 @@ the user-level registration in `state.vscdb` is not read or written. Guard:
 `tests\autotest\run_lsp_switch_vscode_guard.ps1`.
 
 Limits: a mcp.json containing comments (JSONC) cannot be parsed, so the tool exits 3 and leaves the file untouched. The rewritten file is JSON-equal to the original, not byte-equal (indentation is normalised to 2 spaces); the untouched original is kept in the .bak.
+
+### Diagnostics for a file no index owns
+
+Plain `drag-lint lsp` publishes lint findings for every opened file. When no loaded index owns the file (for example another worktree's copy of a unit), the findings are computed from the buffer alone and are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"`, so you can tell they are not backed by a project index. Owned files keep `"drag-lint"`. Guard: `tests\autotest\run_lsp_unowned_label_guard.ps1`.
 
 ---
 

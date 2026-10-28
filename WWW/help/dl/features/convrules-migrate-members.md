@@ -4,7 +4,7 @@ title: "Member migration (#migrate)"
 summary: "ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list"
 product: DL
 group: component-conversion
-order: 60008
+order: 60010
 since: 1.35.0-alpha
 status: shipped
 updated: 1.36.0-alpha
@@ -122,6 +122,18 @@ reason.
 `#convert` of `BDE-to-FireDAC.rules` (file-scope), and the 15 `Data.DB` ones moved to
 `DataDB-to-FireDAC.rules` (run it after the BDE book). `UpdateRecordTypes -> FilterChanges` now sits inside
  the TTable / TQuery / TStoredProc blocks and is applied by the engine.
+
+### Where to click
+
+**Work list tab > Migrate...**
+1. Choose View > Work list (after a Convert run)
+2. Select one or more member rows, click Migrate...
+3. Pick a rename or DL_NONE, then Save the book
+
+**Classes tab > Members list > Add...**
+1. Open the Classes tab and select a #convert block
+2. Under the #link grid, click Add... in the Members list
+3. Enter Old -> New or DL_NONE, then File > Save
 
 ---
 
