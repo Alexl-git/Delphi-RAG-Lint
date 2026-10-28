@@ -4,10 +4,10 @@ title: Rebuild Index for This Project
 summary: Walks a project's .dproj compile closure and (re)builds its index
 product: DL
 group: indexing
-order: 10006
+order: 10007
 since: 0.2.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Rebuild Index for This Project

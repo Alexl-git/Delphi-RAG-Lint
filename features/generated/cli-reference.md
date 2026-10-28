@@ -884,6 +884,7 @@ Described in:
 
 * [Auto-Document Whole Project](../../docs/wiki/Auto-Document-Whole-Project.md)
 * [Format Whole Project with YADF](../../docs/wiki/Format-Whole-Project-with-YADF.md)
+* [Include-file indexing and IF evaluation](../../docs/wiki/inc-indexing.md)
 * [Index a project against its active build config](../../docs/wiki/index-build-config.md)
 * [Rebuild Index for This Project](../../docs/wiki/Rebuild-Index-for-This-Project.md)
 * [Rescan this unit](../../docs/wiki/Rescan-this-unit.md)
@@ -938,10 +939,10 @@ Described in [link-orm](../../docs/wiki/link-orm.md).
 
 ### lint
 
-Puts every lint finding for the current unit onto the clipboard, starting from the Structure form.
+lint --fix repairs findings of the 109 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -950,6 +951,7 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -958,6 +960,7 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 
 Described in:
 
+* [Autofix for fixable rules](../../docs/wiki/autofix-wave.md)
 * [Copy All Diagnostics](../../docs/wiki/Copy-All-Diagnostics.md)
 * [Copy Diagnostics (Current File)](../../docs/wiki/Copy-Diagnostics-Current-File.md)
 * [Fix all in unit](../../docs/wiki/Fix-all-in-unit.md)
@@ -969,10 +972,10 @@ Described in:
 
 ### lint-all
 
-Applies autofixes for every fixable finding across the whole project, starting from the Structure form.
+Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]
+drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -983,6 +986,7 @@ drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--di
 | `--disable` |  |  |  |
 | `--output` | `<report.txt>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--quiet` |  | suppress per-file progress lines written to stderr |  |
 | `--lint-third-party` |  |  |  |
 | `--no-preprocess` |  |  |  |
@@ -992,8 +996,10 @@ drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--di
 
 Described in:
 
+* [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
 * [Fix all in project](../../docs/wiki/Fix-all-in-project.md)
 * [Run Lint All (Full Report)](../../docs/wiki/Run-Lint-All-Full-Report.md)
+* [Taint analysis (SQL, command, path)](../../docs/wiki/taint-analysis.md)
 * [type-name-prefix: expected letter from the ancestor chain](../../docs/wiki/Type-Name-Prefix-Origin.md)
 
 ### lint-project
@@ -1438,21 +1444,24 @@ Described in:
 
 ### rules
 
-Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock.
+Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 
 ```text
-drag-lint rules [--json] [--category <name>] [--rules-dir <dir>] - list every lint rule (catalog)
+drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--json` |  |  |  |
 | `--category` | `<name>` |  |  |
+| `--standard` | `cwe\|cert\|misra` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 
 Described in:
 
+* [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
 * [drag-lint: Project Rules](../../docs/wiki/drag-lint-Project-Rules.md)
+* [Gap-wave lint rules](../../docs/wiki/gap-wave-rules.md)
 * [Lint rules](../../docs/wiki/rules.md)
 
 ### safe-delete

@@ -4,10 +4,10 @@ title: Fix all in unit
 summary: Applies autofixes for every fixable finding in the current unit, starting from the Structure form
 product: DL
 group: linting
-order: 30007
+order: 30009
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Fix all in unit
@@ -28,6 +28,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -108,7 +109,7 @@ Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes no source file and no index. With `--apply`, naming fixes may
 first reindex stale owning project indexes. Always dry-run first.
 
-Only rules marked fixable are applied; 23 of the 195 rules are fixable
+Only rules marked fixable are applied; 109 of the 284 rules are fixable
 (`drag-lint rules --json` reports a `fixable` field per rule).
 
 ### What it needs

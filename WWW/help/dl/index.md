@@ -16,6 +16,7 @@ Build and maintain the per-project and library indexes.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Auto-Document Whole Project](features/auto-document-whole-project.md) | Writes DocInsight documentation into every public declaration a project owns | 0.1.0-alpha |
+| [Include-file indexing and IF evaluation](features/inc-indexing.md) | Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint | 1.37.0-alpha |
 | [Index a project against its active build config](features/index-build-config.md) | Parses a project index against the project's active build config (the .dproj Config marker or delphilsp.json) instead of a fixed Release, with an override flag | 1.35.1-alpha |
 | [migrate-dbs](features/migrate-dbs.md) | Moves project index databases into each project's own D-RAG folder, matching the current index layout | 1.3.0-alpha |
 | [pp-profile](features/pp-profile.md) | Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line | 0.92.0-alpha |
@@ -69,6 +70,8 @@ Rules, autofix, suppression markers and project-wide checks.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 109 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
 | [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) | Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard | 1.28.3-alpha |
@@ -80,6 +83,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix it](features/fix-it.md) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling | 0.1.0-alpha |
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
+| [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |
 | [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first | 0.1.0-alpha |
 | [lint-project](features/lint-project.md) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | 0.48.0-alpha |
 | [Lint rules](features/lint-rules.md) | Every lint rule the engine ships, imported from rules --json | 0.2.0-alpha |
@@ -89,6 +93,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
 | [Run Lint All (Full Report)](features/run-lint-all-full-report.md) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check | 0.61.0-alpha |
+| [Taint analysis (SQL, command, path)](features/taint-analysis.md) | taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink | 1.37.0-alpha |
 | [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter | 1.31.4-alpha |
 
 ## Documentation

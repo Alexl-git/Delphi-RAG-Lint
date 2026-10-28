@@ -4,10 +4,10 @@ title: Copy All Diagnostics
 summary: Puts every lint finding for the current unit onto the clipboard, starting from the Structure form
 product: DL
 group: linting
-order: 30001
+order: 30003
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Copy All Diagnostics
@@ -28,6 +28,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |

@@ -75,6 +75,7 @@ Build and maintain the per-project and library indexes.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
+| [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
 | [migrate-dbs](migrate-dbs) | `migrate-dbs`; drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG... |  |
 | [pp-profile](pp-profile) | `pp-profile` |  |
@@ -126,30 +127,34 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**195 rules. 23 have an auto-fix. 165 are on by default.** 142 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**284 rules. 109 have an auto-fix. 242 are on by default.** 191 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 55 | 6 |
-| complexity | 11 | - |
-| data-flow | 9 | - |
-| dead-code | 12 | 6 |
-| documentation | 5 | 2 |
-| firedac | 3 | - |
+| bug-patterns | 87 | 33 |
+| complexity | 13 | 2 |
+| data-flow | 9 | 2 |
+| dead-code | 19 | 15 |
+| documentation | 5 | 4 |
+| firedac | 3 | 3 |
 | metrics | 8 | - |
-| naming | 11 | 8 |
-| other | 6 | - |
-| platform | 10 | - |
-| project-wide | 23 | - |
-| refactoring | 11 | - |
-| resource-lifetime | 8 | 1 |
-| review-markers | 5 | - |
-| security | 10 | - |
-| structure | 8 | - |
-| **Total** | **195** | **23** |
+| modernize | 4 | 4 |
+| naming | 13 | 9 |
+| other | 11 | 3 |
+| platform | 10 | 4 |
+| policy | 3 | - |
+| project-wide | 26 | 6 |
+| refactoring | 20 | 8 |
+| resource-lifetime | 14 | 7 |
+| review-markers | 5 | 2 |
+| security | 22 | 2 |
+| structure | 12 | 5 |
+| **Total** | **284** | **109** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [Autofix for fixable rules](autofix-wave) | `lint` |  |
+| [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
@@ -161,8 +166,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix it](Fix-it) | Structure form: Fix it; `lint`; `uses-fix` |  |
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
+| [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 195 rules, 23 fixable; `rules` |  |
+| [Lint rules](rules) | 284 rules, 109 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
@@ -170,6 +176,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
+| [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 
 ## Documentation

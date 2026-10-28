@@ -1,0 +1,30 @@
+{
+  "id": "compliance-labels",
+  "title": "Compliance labels (CWE, CERT, MISRA)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.37.0-alpha",
+  "summary": "Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field",
+  "intro": "Read this when you must show which lint rules map to CWE, CERT or MISRA, or restrict a run to one standard. Labelled findings print their ids with --labels, and the cwe, cert, misra and cwe-top25 profiles select the labelled rules.",
+  "wikiPage": "compliance-labels",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "rules",
+      "example": "drag-lint rules --standard cwe"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <db> --profile cwe-top25 --labels"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-27",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "a45da9f0fa1d879de55ffde5444d4d175d142844beb778c034f3d19e4281e009"
+  }
+}
