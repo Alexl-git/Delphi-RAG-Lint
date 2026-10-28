@@ -12720,10 +12720,9 @@ begin
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
   try
-    { ITEM 12: the transaction opens BEFORE the candidate reads below (ConnectWriter makes
-      it BEGIN IMMEDIATE), so the ids read in steps 1-1b are the ids written. Before this a
-      second writer re-issuing a file's symbol ids in between made this pass write a WRONG
-      type_ancestors.ancestor_symbol_id (no FK to say so). }
+    { ITEM 12: the transaction (BEGIN IMMEDIATE) opens BEFORE the candidate reads below, so
+      the ids read in steps 1-1b are the ids written; a second writer re-issuing them in
+      between used to write a WRONG type_ancestors.ancestor_symbol_id (no FK to say so). }
     FConn.StartTransaction;
     try
     Q.Connection:= FConn;
@@ -13752,8 +13751,8 @@ begin
   CastBound      := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
-  except
-    FConn.Rollback; { the lock taken above must not outlive a failed set-up }
+  except // dl:ok bare-except@4bef -- rollback and RE-RAISE: the lock taken above must not outlive a failed set-up
+    FConn.Rollback;
     raise;
   end;
   { Split out because it is O(symbols) and independent of how many refs this run
