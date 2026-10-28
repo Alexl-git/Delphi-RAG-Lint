@@ -69,6 +69,7 @@ uses
   DRagLint.Wiring in '..\core\DRagLint.Wiring.pas',
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
+  DRagLint.Core.ContextDefaults in '..\core\DRagLint.Core.ContextDefaults.pas',
   DRagLint.Project.ContextFile in '..\core\DRagLint.Project.ContextFile.pas',
   DRagLint.Core.LintBudget in '..\core\DRagLint.Core.LintBudget.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
