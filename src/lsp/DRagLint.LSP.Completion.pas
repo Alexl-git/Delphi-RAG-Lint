@@ -1296,7 +1296,9 @@ begin
       if (DiagLine < AStartLine) or (DiagLine > AEndLine) then Continue;
 
       var DSource := Diag.GetValue('source');
-      if (DSource = nil) or (DSource.Value <> 'drag-lint') then Continue;
+      { 'drag-lint (unowned)' = the same findings on a file no store owns (HandleDidOpenOrSave, 9df8eab3):
+        still drag-lint's, so they still get the dl:ok action. }
+      if (DSource = nil) or ((DSource.Value <> 'drag-lint') and (DSource.Value <> 'drag-lint (unowned)')) then Continue;
 
       { Get the line text and create the marker. }
       if (DiagLine - 1) >= Lines.Count then Continue;
