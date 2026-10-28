@@ -532,7 +532,7 @@
       "status": "shipped",
       "since": "1.20.4-alpha",
       "summary": "Add a new project to the manifest so index --all and the IDE can see it",
-      "intro": "Read this when a new project is not yet known to drag-lint. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.",
+      "intro": "Read this when drag-lint does not know a new project. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -573,9 +573,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-28",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "4caeb5467c27dc1118726ace2ce053ad97a7adc4c79a7110df17756bb42caa55"
       }
     },

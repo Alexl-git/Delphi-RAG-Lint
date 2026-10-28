@@ -237,6 +237,7 @@ uses
   , FeatureGen.Output
   , FeatureGen.Wiki
   , FeatureGen.Site
+  , FeatureGen.DocsCheck
   ;
 
 const
@@ -1049,6 +1050,14 @@ end;
 { ---- the runner ---- }
 
 type
+  TAllowRow = record
+    Check: string;
+    Scope: string;
+    Token: string;
+    Why: string;
+    Used: Boolean;
+  end;
+
   TFamilyDef = record
     Name: string;
     Path: string;
@@ -1066,6 +1075,15 @@ type
     FNotes: TList<string>;
     FFamilies: TList<TFamilyDef>;
     FChildren: TObjectList<TJSONObject>;
+    FDocsReady: Boolean;
+    FBlocks: TVerbBlocks;
+    FSrc: string;
+    FAllow: TArray<TAllowRow>;
+    FSourceMap: TJSONObject;
+    procedure EnsureDocs;
+    function Waived(const pCheck, pScope, pToken: string): Boolean;
+    procedure ReportDocs(const pCheck, pScope: string; const pFound: TArray<TDocFinding>);
+    procedure CheckDocsStale(const pHand: TArray<TJSONObject>);
     procedure Fail(pCheck: Char; const pText: string);
     function ReadFamilyDefinition(const pPath: string; const pCtx: TCheckContext): TJSONObject;
     function GroupsAndTeams(const pCtx: TCheckContext): TArray<string>;
@@ -1112,6 +1130,8 @@ begin
     lF.Def.Free;
   FFamilies.Free;
   FChildren.Free;
+  FBlocks.Free;
+  FSourceMap.Free;
   FNotes.Free;
   FFail.Free;
   inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
@@ -2478,6 +2498,126 @@ end;
 
 { Help-audit prose checks: A (G-1/G-2 wiki IDE section, G-3 line anchors) at every level; C (G-4 quoted menu
   paths, G-6 rule counts) when the live surface is there. A wiki page shared by several entries is read for C once. }
+const
+  DOCS_CONFIG = 'features\docs-check.json';
+  STALE_LISTED = 12;
+
+{ Loads, once, what the docs checks need: the --help verb blocks, the folded sources (C2) and docs-check.json. }
+procedure TChecker.EnsureDocs;
+var
+  lPath: string;
+  lCfg: TJSONObject;
+  lRow: TJSONValue;
+  lA: TAllowRow;
+begin
+  if FDocsReady then
+    Exit;
+  FDocsReady := True;
+  if (FLive <> nil) and (FLive.HelpText <> '') then
+    FBlocks := HelpVerbBlocks(FLive.HelpText);
+  FSrc := LoadFoldedSources(FRepo);
+  lPath := TPath.Combine(FRepo, DOCS_CONFIG);
+  if not TFile.Exists(lPath) then
+    Exit;
+  lCfg := ReadJsonObject(lPath);
+  try
+    for lRow in JItems(lCfg, 'allow') do
+    begin
+      lA.Check := UpperCase(JS(lRow, 'check'));
+      lA.Scope := LowerCase(JS(lRow, 'where'));
+      lA.Token := LowerCase(JS(lRow, 'token'));
+      lA.Why := JS(lRow, 'why');
+      lA.Used := False;
+      if IsBlank(lA.Why) then
+        Fail('A', Format('%s: an allow row (%s %s %s) has no "why"; a waiver names its reason', [DOCS_CONFIG, lA.Check, lA.Scope, lA.Token]));
+      FAllow := FAllow + [lA];
+    end;
+    if JVal(lCfg, 'sources') is TJSONObject then
+      FSourceMap := TJSONObject(TJSONObject(JVal(lCfg, 'sources')).Clone);
+  finally
+    lCfg.Free;
+  end;
+end;
+
+function TChecker.Waived(const pCheck, pScope, pToken: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FAllow) do
+    if (FAllow[i].Check = pCheck) and (FAllow[i].Scope = LowerCase(pScope)) and (FAllow[i].Token = LowerCase(pToken)) then
+    begin
+      FAllow[i].Used := True;
+      Result := True;
+    end;
+end;
+
+procedure TChecker.ReportDocs(const pCheck, pScope: string; const pFound: TArray<TDocFinding>);
+var
+  lF: TDocFinding;
+begin
+  for lF in pFound do
+    if not Waived(pCheck, pScope, lF.Token) then
+      Fail('C', pCheck + ' ' + lF.Text);
+end;
+
+{ C4: a note, never a failure -- an entry verified before its verb's source last changed. }
+procedure TChecker.CheckDocsStale(const pHand: TArray<TJSONObject>);
+var
+  lGit, lLog, lVerified, lNewer, lId, lFirst: string;
+  lDates: TDictionary<string, string>;
+  lFiles: TList<string>;
+  lPaths: TList<string>;
+  lE: TJSONObject;
+  lS, lSrc: TJSONValue;
+  lCount: Integer;
+  lAll: TArray<string>;
+begin
+  lGit := FileSearch('git.exe', GetEnvironmentVariable('PATH'));
+  if (lGit = '') or not (TDirectory.Exists(TPath.Combine(FRepo, '.git')) or TFile.Exists(TPath.Combine(FRepo, '.git'))) then
+    Exit;
+  lLog := RunCapture(lGit, '-C "' + ExcludeTrailingPathDelimiter(FRepo) + '" log --name-only --format=@%cs --since=2026-01-01 -- src tools');
+  lDates := ParseGitFileDates(lLog);
+  lFiles := TList<string>.Create;
+  lPaths := TList<string>.Create;
+  try
+    lFiles.AddRange(lDates.Keys);
+    lAll := lFiles.ToArray;
+    lCount := 0;
+    lFirst := '';
+    for lE in pHand do
+    begin
+      lVerified := JS(VerificationOf(lE), 'date');
+      if (lVerified = '') or not SameText(JS(lE, 'status'), 'shipped') then
+        Continue;
+      lId := JS(lE, 'id');
+      lPaths.Clear;
+      if (FSourceMap <> nil) and (JVal(FSourceMap, lId) is TJSONArray) then
+      begin
+        for lSrc in TJSONArray(JVal(FSourceMap, lId)) do
+          lPaths.Add(LowerCase(ItemText(lSrc)).Replace('\', '/'));
+      end
+      else
+        for lS in JItems(lE, 'surfaces') do
+          if SameText(JS(lS, 'type'), 'cli') then
+            lPaths.AddRange(ConventionSources(JS(lS, 'verb'), lAll));
+      lNewer := SourceChangedAfter(lVerified, lPaths.ToArray, lDates);
+      if lNewer <> '' then
+      begin
+        Inc(lCount);
+        if lCount <= STALE_LISTED then
+          lFirst := lFirst + (if lFirst = '' then '' else ', ') + Format('%s (verified %s, source changed %s)', [lId, lVerified, lNewer]);
+      end;
+    end;
+    if lCount > 0 then
+      FNotes.Add(Format('docs-stale: %d shipped entries were verified before their verb''s source last changed (first %d listed): %s -- re-read the entry, then featuregen verify (a note, not a failure)',
+        [lCount, Min(lCount, STALE_LISTED), lFirst]));
+  finally
+    lPaths.Free;
+    lFiles.Free;
+    lDates.Free;
+  end;
+end;
 procedure TChecker.CheckProse(const pEntries: TArray<TJSONObject>);
 var
   lE: TJSONObject;
@@ -2488,7 +2628,12 @@ var
   lFirstUse: Boolean;
   lGenerated: TArray<string>;
   lFmt: TJSONObject;
-  lG: TJSONValue;
+  lG, lS: TJSONValue;
+  lPageVerbs: TDictionary<string, TArray<string>>;
+  lOwn, lVerbs: TArray<string>;
+  lScope: string;
+  lIsWiki: Boolean;
+  i: Integer;
 begin
   // a generated page (site-format.json generatedWikiPages: Home, Features, ...) is not the entry's prose
   lGenerated := nil;
@@ -2503,7 +2648,16 @@ begin
     end;
   end;
   lSeen := TList<string>.Create;
+  lPageVerbs := TDictionary<string, TArray<string>>.Create;
   try
+    for lE in pEntries do
+      for lS in JItems(lE, 'surfaces') do
+        if SameText(JS(lS, 'type'), 'cli') and (JS(lE, 'wikiPage') <> '') then
+        begin
+          lVerbs := nil;
+          lPageVerbs.TryGetValue(LowerCase(JS(lE, 'wikiPage')), lVerbs);
+          lPageVerbs.AddOrSetValue(LowerCase(JS(lE, 'wikiPage')), lVerbs + [JS(lS, 'verb')]);
+        end;
     for lE in pEntries do
     begin
       lId := JS(lE, 'id');
@@ -2528,8 +2682,24 @@ begin
         lTexts[High(lTexts)].Where := 'docs\wiki\' + lPage + '.md';
         lTexts[High(lTexts)].Text := lWiki;
       end;
+      EnsureDocs;
+      lOwn := nil;
+      for lS in JItems(lE, 'surfaces') do
+        if SameText(JS(lS, 'type'), 'cli') then
+          lOwn := lOwn + [JS(lS, 'verb')];
       for lT in lTexts do
       begin
+        lIsWiki := lT.Where.StartsWith('docs\wiki\');
+        lScope := (if lIsWiki then lPage else lId);
+        lVerbs := lOwn;
+        if lIsWiki then
+          lPageVerbs.TryGetValue(LowerCase(lPage), lVerbs);
+        if FBlocks <> nil then
+          ReportDocs('C1', lScope, FlagProblems(lId, lT.Where, lT.Text, FBlocks, lVerbs));
+        if FSrc <> '' then
+          ReportDocs('C2', lScope, PathProblems(lId, lT.Where, lT.Text, FSrc));
+        if SameText(JS(lE, 'status'), 'shipped') then
+          ReportDocs('C3', lScope, PhraseProblems(lId, lT.Where, lT.Text));
         if FLive.HasMenuTree then
           for lPr in MenuProseProblems(lId, lT.Where, lT.Text, FLive.MenuNodes) do
             Fail('C', lPr);
@@ -2539,8 +2709,12 @@ begin
       end;
     end;
   finally
+    lPageVerbs.Free;
     lSeen.Free;
   end;
+  for i := 0 to High(FAllow) do
+    if not FAllow[i].Used then
+      FNotes.Add(Format('docs-check: allow row %s %s %s matched nothing -- remove it', [FAllow[i].Check, FAllow[i].Scope, FAllow[i].Token]));
 end;
 
 procedure TChecker.Run;
@@ -2688,6 +2862,7 @@ begin
     if not FSkipGenerated then
       CheckGenerated;
     CheckStale(lHand);
+    CheckDocsStale(lHand);
   finally
     lCtx.Free;
   end;

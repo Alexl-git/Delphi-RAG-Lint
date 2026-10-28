@@ -14,7 +14,7 @@ updated: 1.36.0-alpha
 
 Add a new project to the manifest so index --all and the IDE can see it.
 
-Read this when a new project is not yet known to drag-lint. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.
+Read this when drag-lint does not know a new project. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.
 
 ## How to run it
 

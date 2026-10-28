@@ -23,6 +23,7 @@ uses
   , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
   , FeatureGen.HelpText in 'FeatureGen.HelpText.pas'
   , FeatureGen.Wiki in 'FeatureGen.Wiki.pas'
+  , FeatureGen.DocsCheck in 'FeatureGen.DocsCheck.pas'
   , FeatureGen.Check in 'FeatureGen.Check.pas'
   , FeatureGen.Audit in 'FeatureGen.Audit.pas'
   , FeatureGen.Commands in 'FeatureGen.Commands.pas'

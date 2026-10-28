@@ -568,8 +568,8 @@
     "version": "1.35.1-alpha"
   },
   "features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md": {
-    "hash": "cd631d2fecd67f92db0cbc7276c8debdffcb3e50acb9223f15abd2bf5f2b6430",
-    "version": "1.35.1-alpha"
+    "hash": "e6e4973d92ce466f0785ea675929be8196a9549b4093befb08ec95f06ba44adf",
+    "version": "1.36.0-alpha"
   },
   "features/quick-fix-convert-public-field-to-property-at-cursor.md": {
     "hash": "8f15865f3da6581ea42f7c630d8cd7fbac4ba45de6f51eee1f7614e2fd856441",
@@ -588,7 +588,7 @@
     "version": "1.35.1-alpha"
   },
   "features/register-project.md": {
-    "hash": "672cb528327785d19cab172ebe5cb7c100f4606e4065c2cea675ccc93a9a87fd",
+    "hash": "2d3c8aaa15034a76ce26de1fc2dfece7b44b764112c926f96368d3e8db59b775",
     "version": "1.36.0-alpha"
   },
   "features/rename-symbol.md": {
@@ -664,8 +664,8 @@
     "version": "1.36.0-alpha"
   },
   "features/show-wiring-spring4d-di-dfm-events.md": {
-    "hash": "a76f7d1809ec0f9cd60bdbf35351d709b22a3ed36f32dd2d127f8464a43b4e1c",
-    "version": "1.35.1-alpha"
+    "hash": "f132dc3db1651c7f4b8252547bc39a021a27e189f52e6700a1c5dbcbf623cdf9",
+    "version": "1.36.0-alpha"
   },
   "features/shutdown.md": {
     "hash": "039b382b24dc5ac4117d4ca7e3864532070008481abed210edffb1a8d336d03a",
