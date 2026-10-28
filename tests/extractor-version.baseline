@@ -1105,4 +1105,7 @@
 # 2026-10-28 lane EXT E1b: re-pinned once more within unreleased 1.26.0-alpha, no bump. Procedural-type signature and
 #   array-const initializer now strip comment extras (NodeTextSansComments / skip comment as value node).
 #   Superseded: 1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
-1.26.0-alpha|0a258c0449063bf1b56057ea6dbda480550a2202ab44811acdd4398d80250c4d
+# 2026-10-28 (gaps/xj-7, xerj item 7): hash re-pinned WITHOUT a bump -- content-hash skip in TIndexer.IndexFile
+#   (a file whose sha256 matches is skipped even when its mtime moved, mtime refreshed). It only decides whether to
+#   re-parse, never what a parse emits, so it cannot affect extraction. Pinned by tests\autotest\run_index_content_hash_skip.ps1.
+1.26.0-alpha|PLACEHOLDER

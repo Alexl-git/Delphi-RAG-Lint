@@ -1281,9 +1281,15 @@ begin
     and SameText(ExtractFileExt(AFilePath), '.inc')
     and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
   // N-06: ...unless an include it took a uses clause from changed since its parse.
-  if (not HasIncCtx) and ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
+  { Content-hash skip (xerj item 7): the bytes are what the parse depends on, so a
+    file whose sha256 matches but whose mtime moved (git checkout, touch, copy) is as
+    up to date as one whose mtime did not. Same guards as above; the stored mtime is
+    refreshed so the next run takes the plain path. Cannot change what is extracted. }
+  if (not HasIncCtx) and ((not FForceReparse) or MayResume)
+    and (FStore.FileIsUpToDate(AFilePath, Mtime, Sha) or FStore.FileShaMatches(AFilePath, Sha))
     and not FStore.IncludeOriginsChanged(AFilePath) then
   begin
+    if not FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then FStore.RefreshFileMtime(AFilePath, Mtime);
     Inc(FSkippedUpToDate);
     Exit;
   end;

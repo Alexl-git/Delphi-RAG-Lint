@@ -223,6 +223,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+    /// <summary>Content-hash skip: True when APath is stored with this sha256, whatever its mtime.</summary>
+    /// <param name="APath">The file, as for FileIsUpToDate.</param>
+    /// <param name="ASha">sha256 of the file's current raw bytes.</param>
+    /// <returns>True when the stored row's sha256 equals ASha (the bytes are unchanged even if the mtime moved).</returns>
+    function FileShaMatches(const APath: string; const ASha: string): Boolean;
+    /// <summary>Content-hash skip: stores AMtimeUnix as APath's mtime without touching anything else, so the next run takes the plain up-to-date path.</summary>
+    /// <param name="APath">The file, as for FileIsUpToDate.</param>
+    /// <param name="AMtimeUnix">The file's current mtime, unix seconds.</param>
+    procedure RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
     /// <summary>N-06: True when APath took a uses clause from an include file
     /// (a unit_uses row with origin_path) and that include is now missing or
     /// was modified after APath's last parse -- so the host must be re-parsed
