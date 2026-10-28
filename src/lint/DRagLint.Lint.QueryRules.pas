@@ -805,7 +805,7 @@ begin
 
   if (FQuery = nil) or (FQuery.Query = nil) then
   begin
-    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, AErrOff, Ord(AErrType), AScmPath]);
+    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, AErrOff, Ord(AErrType), AScmPath]);  // dl:ok raise-bare-exception@0a61 -- REVIEWED 2026-10-28: internal compile failure of a shipped query; caught and reported by the rule loader, never a user-handled condition
   end;
 end; // constructor
 

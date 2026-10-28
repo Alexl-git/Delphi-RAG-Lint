@@ -35,7 +35,7 @@ uses
 /// parameterless FUNCTION in Delphi; the AST cannot tell, so it counts as
 /// side-effect free -- the same trade the autofix plan states for
 /// identical-then-else. Shared with G9's block-shaped identical-then-else.</remarks>
-function IsSideEffectFree(const ANode: TTSNode): Boolean;  // dl:ok unused-public-symbol@28a4 -- REVIEWED 2026-10-27: shared guard, public for lane G9 (identical-then-else block shape)
+function IsSideEffectFree(const ANode: TTSNode): Boolean;
 
 /// <summary>The identical-then-else fix for the SINGLE-STATEMENT shape the
 /// DeadCodeChecks finding reports (`if C then X := 1 else X := 1`): the if

@@ -64,12 +64,14 @@ type
     /// <param name="AId">Rule id.</param>
     /// <param name="AMeta">The rule's catalog metadata and labels.</param>
     /// <param name="ATaxIndex">Per standard (CWE, CERT, MISRA): that taxonomy's index in run.taxonomies.</param>
+    /// <returns>The new driver.rules[] object; the caller owns it.</returns>
     class function BuildRuleObject(const AId: string; const AMeta: TSarifRuleMeta;
       const ATaxIndex: TArray<Integer>): TJSONObject; static;
     /// <summary>Builds run.taxonomies: one toolComponent per standard that has at least one id.
     /// Caller owns the array.</summary>
     /// <param name="ATaxa">Per standard: the distinct taxon ids the run's rules carry.</param>
     /// <param name="ATaxIndex">Receives per standard the index its taxonomy got (0 when absent).</param>
+    /// <returns>The run.taxonomies array; the caller owns it.</returns>
     class function BuildTaxonomies(const ATaxa: TArray<TStringList>; out ATaxIndex: TArray<Integer>): TJSONArray; static;  public
     /// <summary>Renders the findings as a SARIF 2.1.0 run.</summary>
     /// <param name="AFindings">The surviving findings; may be empty.</param>
