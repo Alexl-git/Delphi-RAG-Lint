@@ -695,7 +695,7 @@ end;
 
 // A bare identifier: True/False, the numeric map, the caller's symbol table,
 // a defined symbol (evalExpr.js's bare-ident membership test), else unresolved.
-function TPPExprParser.ResolveName(const AId: string): TPPValue; // dl:ok too-many-exit-points@c174 -- REVIEWED 2026-10-27 one Exit per resolution tier, in precedence order
+function TPPExprParser.ResolveName(const AId: string): TPPValue; // dl:ok too-many-exit-points@5198 -- REVIEWED 2026-10-28 one Exit per resolution tier, in precedence order (EXT-E4: typed const tier)
 var
   N   : Integer;
   Key : string;

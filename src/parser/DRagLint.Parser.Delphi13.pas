@@ -135,7 +135,7 @@ end;
 
 // EXT-E1 (1.37.0): the text of ANode with every `comment` descendant replaced
 // by ONE space. Comments are tree-sitter extras, so a line comment carrying a
-// dl:ok marker after a parameter line, or a brace / paren-star block between
+// review marker after a parameter line, or a brace / paren-star block between
 // parameters, is a child of declArgs and NodeText carried it into
 // symbols.signature (and hover split it into a fake parameter name). The space
 // keeps the tokens on either side apart; callers collapse whitespace anyway.

@@ -341,10 +341,14 @@ begin
       if FInProgress.ContainsKey(Key) then Exit; // a uses cycle: the unit is mid-scan
       Decls:= Scan(Key, Path);
       if not Decls.TryGetValue(LowerCase(AName), D) then Exit;
-      if D.IsTypedConst then Exit(pnkTypedConst);
-      if not (D.IsTrueConst and D.HasValue) then Exit(pnkDeclared);
-      AValue:= D.Value;
-      Exit(pnkConst);
+      if D.IsTypedConst then Result:= pnkTypedConst
+      else if not (D.IsTrueConst and D.HasValue) then Result:= pnkDeclared
+      else
+      begin
+        AValue:= D.Value;
+        Result:= pnkConst;
+      end;
+      Exit;
     end;
     if not FAnswers.TryGetValue(Key + '.' + LowerCase(AName), A) then
     begin

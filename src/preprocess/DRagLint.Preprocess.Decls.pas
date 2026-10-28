@@ -321,7 +321,7 @@ begin
   if Result then FState:= dsStart;
 end;
 
-procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@4df6 -- REVIEWED 2026-10-27 the declaration state machine; one case arm per state  // dl:ok cyclomatic-complexity@9eb1 -- REVIEWED 2026-10-27 same state machine
+procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@8c61, cyclomatic-complexity@b95e -- REVIEWED 2026-10-28 the declaration state machine, one case arm per state (EXT-E4 added the typed-const flag)
 var
   Kw: Boolean;
 begin
