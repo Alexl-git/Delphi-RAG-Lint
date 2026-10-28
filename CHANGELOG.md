@@ -6,6 +6,7 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Added
+- `mcp-config --cursor` writes the MCP entry into `~\.cursor\mcp.json` (`"mcpServers"`, the VS Code entry shape); `--all` now covers Claude Code, VS Code and Cursor (a client that is not installed is `skipped`). New verb `init --project <file.dproj> [--dry-run]` runs `register-project --apply`, `index --project`, `resolve-dbs --project` and `mcp-config --all --db <that index>` in one command (`--dry-run` prints the four commands and runs none). Guards `tests\autotest\run_mcp_config_verb.ps1` (MC-CURSOR-*) and `tests\autotest\run_init_verb.ps1`; wiki `init-verb`, registry entry `init-wiring` (XERJ item 8).
 - `find-callees` lists library-bound callees after the resolved ones, marked `(library` (`--json`: `"external": true`, `"via": "edge"|"oracle"`). `edge` = the stored `refs.external_target`; `oracle` = bound at read time when the library index is named (a second `--db`, or `--library-db`) from `refs.receiver_type_text`. With no library open the text ends `M external (library not open)`. Guard `tests\autotest\run_find_callees_external.ps1`.
 - Manifest section key `"libraryResolve": true` (default false; the 2026-10-25 no-attach ruling stands): `index --all` / `index --project` open the platform library as an extra store for the call-resolve pass. Guard `tests\autotest\run_library_resolve_key.ps1`.
 

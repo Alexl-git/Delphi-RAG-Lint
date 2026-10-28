@@ -15,6 +15,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
+* [init: one command from a project to a wired AI client](features/init-wiring.md) -- Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command.
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md) -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink.
 
 ## 1.35.1-alpha
@@ -85,7 +86,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.26.1-alpha
 
 * [Where the charts find Graphviz](features/chart-engine-dot-lookup.md) -- The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default.
-* [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable.
+* [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) -- Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable.
 
 ## 1.22.0-alpha
 

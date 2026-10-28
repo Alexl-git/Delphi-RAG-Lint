@@ -1,25 +1,25 @@
 ---
 id: mcp-config-writer
-title: Register the MCP server (Claude Code, VS Code)
-summary: "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable"
+title: Register the MCP server (Claude Code, VS Code, Cursor)
+summary: "Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable"
 product: DL
 group: editor-integration
-order: 110015
+order: 110016
 since: 1.26.1-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
-# Register the MCP server (Claude Code, VS Code)
+# Register the MCP server (Claude Code, VS Code, Cursor)
 
-Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable.
+Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable.
 
-Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again.
+Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code, VS Code and Cursor can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again.
 
 ## How to run it
 
 ```text
-drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]
+drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]
 ```
 
 Example:
@@ -36,6 +36,7 @@ Full flag list: [mcp-config in the CLI reference](../cli.md#mcp-config).
 | --- | --- | --- | --- |
 | `--claude-code` |  |  |  |
 | `--vscode` |  |  |  |
+| `--cursor` |  |  |  |
 | `--all` |  |  |  |
 | `--remove` |  |  |  |
 | `--dry-run` |  |  |  |
@@ -53,7 +54,7 @@ No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
-**Adds drag-lint's MCP server (`drag-lint serve`) to Claude Code and VS Code in one command**, so an AI client can query the index without hand-editing JSON. The installer runs it with `--all` as an optional task; the verb is `drag-lint mcp-config`.
+**Adds drag-lint's MCP server (`drag-lint serve`) to Claude Code, VS Code and Cursor in one command**, so an AI client can query the index without hand-editing JSON. The installer runs it with `--all` as an optional task; the verb is `drag-lint mcp-config`.
 
 ### Running it
 
@@ -67,7 +68,8 @@ drag-lint mcp-config --all --remove
 
 * `--claude-code` -- user scope, the top-level `mcpServers` of `~\.claude.json`, by file edit (the verb never runs the `claude` CLI).
 * `--vscode` -- `servers` in `%APPDATA%\Code\User\mcp.json`.
-* `--all` -- both; a client that is not installed is skipped. Claude Code counts as installed with a `~\.claude` folder, an existing `CLAUDE_CONFIG_DIR` or an existing `.claude.json`; VS Code with `%APPDATA%\Code\User`.
+* `--cursor` -- `mcpServers` in `~\.cursor\mcp.json` (same entry as VS Code, no `env`); counts as installed with a `~\.cursor` folder or an existing `mcp.json`.
+* `--all` -- all three; a client that is not installed is skipped. Claude Code counts as installed with a `~\.claude` folder, an existing `CLAUDE_CONFIG_DIR` or an existing `.claude.json`; VS Code with `%APPDATA%\Code\User`.
 
 ### What it writes
 
@@ -83,7 +85,7 @@ drag-lint mcp-config --all --remove
 
 ### Related
 
-[serve](serve.md) -- the MCP server itself. Tests: `tests\autotest\run_mcp_config_verb.ps1` (scratch copies; it asserts the real config files are unchanged).
+[serve](serve.md) -- the MCP server itself. [init](init-wiring.md) -- registers, indexes and runs `mcp-config --all` for a project in one command. Tests: `tests\autotest\run_mcp_config_verb.ps1` (scratch copies; it asserts the real config files are unchanged).
 
 ---
 

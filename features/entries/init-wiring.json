@@ -1,0 +1,60 @@
+{
+  "id": "init-wiring",
+  "title": "init: one command from a project to a wired AI client",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.37.0-alpha",
+  "summary": "Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command",
+  "intro": "Run drag-lint init --project plus your project file once per project (try --dry-run first) and an AI client can query that project's index: it registers the project, builds the index, then points Claude Code, VS Code and Cursor at it. It only runs existing verbs, so each step can also be run by hand.",
+  "wikiPage": "init-verb",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "init",
+      "example": "--project C:\\Projects\\MyApp\\MyApp.dproj --dry-run",
+      "usage": "drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<file.dproj>"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--home-dir"
+        },
+        {
+          "name": "--appdata-dir"
+        }
+      ],
+      "helpOrder": 103,
+      "help": ["  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]", "                               runs register-project --apply, index --project, resolve-dbs --project, then mcp-config --all --db <that index>", "                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;", "                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code"]
+    }
+  ],
+  "audience": "both",
+  "aliases": ["connect claude code", "first run", "get started", "setup", "wire"],
+  "related": ["mcp-config-writer", "serve"],
+  "questions": [
+    {
+      "ask": "What would init do for my project? (writes nothing)",
+      "command": "drag-lint init --project C:\\Projects\\MyApp\\MyApp.dproj --dry-run"
+    },
+    {
+      "ask": "Set up drag-lint for my project and my AI client in one go",
+      "command": "drag-lint init --project C:\\Projects\\MyApp\\MyApp.dproj"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-10-28",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-10-28",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "60a79348130a60b041f071bddc4f50f352b4a90b264d04e18bb8554864164cbb"
+  }
+}

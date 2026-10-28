@@ -17,7 +17,7 @@ interface
 
 type
   /// <summary>The MCP clients whose user-level config this verb edits.</summary>
-  TMcpClient = (mcClaudeCode, mcVSCode);
+  TMcpClient = (mcClaudeCode, mcVSCode, mcCursor);
 
   /// <summary>One run of mcp-config against one client file.</summary>
   TMcpConfigRequest = record
@@ -25,7 +25,7 @@ type
     Client    : TMcpClient;
     /// <summary>The file to edit; '' = the client's default file.</summary>
     ConfigPath: string;
-    /// <summary>Where the Claude Code default file is looked for; '' = %USERPROFILE%. CLAUDE_CONFIG_DIR still wins.</summary>
+    /// <summary>Where the Claude Code and Cursor default files are looked for; '' = %USERPROFILE%. CLAUDE_CONFIG_DIR still wins for Claude Code.</summary>
     HomeDir   : string;
     /// <summary>Where the VS Code default file is looked for; '' = %APPDATA%.</summary>
     AppDataDir: string;
@@ -45,7 +45,7 @@ type
 
   /// <summary>What happened to one client file: the script's Target/Path/Action/Backup/Before/After.</summary>
   TMcpConfigResult = record
-    /// <summary>ClaudeCode or VSCode.</summary>
+    /// <summary>ClaudeCode, VSCode or Cursor.</summary>
     Target  : string;
     /// <summary>The file read (and written).</summary>
     Path    : string;
@@ -99,20 +99,32 @@ function McpEntryText(pClient: TMcpClient; const pEngine, pDbPath: string): stri
 /// array of those objects (plus Error and ExitCode). A refusal's reason also goes to stderr.</remarks>
 function RunMcpConfigVerbFromCommandLine: Integer;
 
-implementation
+/// <summary>Entry point of `drag-lint init`; parses ParamStr(2..) itself.</summary>
+/// <returns>0 when every step succeeded (or on --dry-run); 2 with usage on stderr when --project is missing, a flag
+/// is unknown or lacks its value, or the project file does not exist; otherwise the exit code of the step that
+/// failed (the run stops there).</returns>
+/// <remarks>Composed of existing verbs, each run as a child of this exe: (1) `register-project &lt;proj&gt; --apply`
+/// (the manifest section, a no-op when already registered), (2) `index --project &lt;proj&gt;`, (3) `resolve-dbs
+/// --project &lt;proj&gt;` to learn the project's index, (4) `mcp-config --all --db &lt;that index&gt;` (Claude Code,
+/// VS Code and Cursor; a client that is not installed is skipped). --dry-run prints those four command lines and runs
+/// NOTHING, so nothing is written. --home-dir / --appdata-dir are passed on to mcp-config (they move where the client
+/// files are looked for). Each step's output is echoed under a "step n/4" heading.</remarks>
+function RunInitVerbFromCommandLine: Integer;
 
+implementation
 uses
   Winapi.Windows,
   System.SysUtils,
   System.IOUtils,
   System.Generics.Collections,  // dl:ok unused-unit-in-uses@0dbd -- REVIEWED 2026-10-14: no symbol is named from it, but TJSONObject.Get / TJSONArray.Items are inline and expand through it; without it dcc emits H2443 at every call
-  System.JSON;
+  System.JSON,
+  DRagLint.Charts.Process;
 
 type
   { The verb's flags. tests\autotest\run_docs_sync_guard.ps1 reads MCP_CONFIG_FLAG_NAMES as the set this verb
     accepts (ParseArgs returns before its own chain for `mcp-config`), so keep the table and the parser one. }
   TMcpConfigFlag = (mfClaudeCode, mfVSCode, mfAll, mfRemove, mfDryRun, mfName, mfDb, mfEngine, mfConfigPath,
-    mfJson, mfHomeDir, mfAppDataDir);
+    mfJson, mfHomeDir, mfAppDataDir, mfCursor);
   TMcpClients = set of TMcpClient;
 
   { A refusal (EXIT_REFUSED) or a setup failure (EXIT_SETUP), carried out of the deep helpers to ApplyMcpConfig. }
@@ -135,11 +147,11 @@ type
 
 const
   MCP_CONFIG_FLAG_NAMES: array[TMcpConfigFlag] of string = ('--claude-code', '--vscode', '--all', '--remove',
-    '--dry-run', '--name', '--db', '--engine', '--config-path', '--json', '--home-dir', '--appdata-dir');
+    '--dry-run', '--name', '--db', '--engine', '--config-path', '--json', '--home-dir', '--appdata-dir', '--cursor');
   { the flags that take a value (the next ParamStr) }
   VALUE_FLAGS = [mfName, mfDb, mfEngine, mfConfigPath, mfHomeDir, mfAppDataDir];
-  TARGET_NAMES   : array[TMcpClient] of string = ('ClaudeCode', 'VSCode');
-  CONTAINER_NAMES: array[TMcpClient] of string = ('mcpServers', 'servers');
+  TARGET_NAMES   : array[TMcpClient] of string = ('ClaudeCode', 'VSCode', 'Cursor');
+  CONTAINER_NAMES: array[TMcpClient] of string = ('mcpServers', 'servers', 'mcpServers');
 
   EXIT_OK      = 0;
   EXIT_REFUSED = 1;
@@ -152,6 +164,8 @@ const
   CLAUDE_DIR_ENV   = 'CLAUDE_CONFIG_DIR';
   VSCODE_USER_DIR  = 'Code\User';
   VSCODE_FILE      = 'mcp.json';
+  CURSOR_DIR       = '.cursor';
+  CURSOR_FILE      = 'mcp.json';
   NONE_TEXT        = '(none)';
   MASK_TEXT        = '***';
   STAMP_FORMAT     = 'yyyymmdd-hhnnss';
@@ -432,6 +446,11 @@ begin
     if Dir = '' then Dir:= if pRequest.HomeDir <> '' then pRequest.HomeDir else GetEnvironmentVariable('USERPROFILE');
     Result:= TPath.Combine(Dir, CLAUDE_FILE);
   end
+  else if pRequest.Client = mcCursor then
+  begin
+    var Dir:= if pRequest.HomeDir <> '' then pRequest.HomeDir else GetEnvironmentVariable('USERPROFILE');
+    Result:= TPath.Combine(TPath.Combine(Dir, CURSOR_DIR), CURSOR_FILE);
+  end
   else
   begin
     var Dir:= if pRequest.AppDataDir <> '' then pRequest.AppDataDir else GetEnvironmentVariable('APPDATA');
@@ -454,6 +473,7 @@ begin
   end
   else
   begin
+    // VS Code and Cursor: the client's folder (or the file) must exist
     var Dir:= ExtractFileDir(pPath);
     Result:= TDirectory.Exists(Dir) or TFile.Exists(pPath);
     pWhy:= Dir + ' not found';
@@ -665,7 +685,7 @@ end;
 procedure WriteUsage;
 begin
   Writeln(ErrOutput, 'usage:');
-  Writeln(ErrOutput, '  drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] '
+  Writeln(ErrOutput, '  drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] '
     + '[--db <index>] [--engine <exe>] [--config-path <file>] [--json] [--home-dir <dir>] [--appdata-dir <dir>]');
 end;
 
@@ -712,6 +732,13 @@ begin
     end;
 end;
 
+{ How many clients the command line named. }
+function ClientCount(pClients: TMcpClients): Integer;
+begin
+  Result:= 0;
+  for var C in pClients do Inc(Result);
+end;
+
 { Reads ParamStr(2..) into pReq and the target set. Returns '' when the command line is usable, else the usage
   error to print. }
 function ParseFlags(var pReq: TMcpConfigRequest; out pClients: TMcpClients; out pJson: Boolean): string;
@@ -739,9 +766,10 @@ begin
     case Which of
       mfClaudeCode: Include(pClients, mcClaudeCode);
       mfVSCode    : Include(pClients, mcVSCode);
+      mfCursor    : Include(pClients, mcCursor);
       mfAll       :
         begin
-          pClients:= [mcClaudeCode, mcVSCode];
+          pClients:= [mcClaudeCode, mcVSCode, mcCursor];
           pReq.AllMode:= True;
         end;
       mfRemove    : pReq.Remove:= True;
@@ -757,9 +785,9 @@ begin
     Inc(I);
   end;
   if Result <> '' then Exit;
-  if pClients = [] then Result:= 'name a target: --claude-code, --vscode or --all'
-  else if (pReq.ConfigPath <> '') and (pClients <> [mcClaudeCode]) and (pClients <> [mcVSCode]) then
-    Result:= '--config-path names ONE file, so pass exactly one of --claude-code / --vscode with it'
+  if pClients = [] then Result:= 'name a target: --claude-code, --vscode, --cursor or --all'
+  else if (pReq.ConfigPath <> '') and (ClientCount(pClients) <> 1) then
+    Result:= '--config-path names ONE file, so pass exactly one of --claude-code / --vscode / --cursor with it'
   else if not ValidName(pReq.Name) then
     Result:= '--name ''' + pReq.Name + ''' must be letters, digits, ''_'', ''.'' or ''-''';
 end;
@@ -788,6 +816,136 @@ begin
   finally
     Arr.Free;
   end;
+end;
+
+{ ---- init: register + index + find the index + wire the clients, from existing verbs ---- }
+
+const
+  INIT_STEP_COUNT   = 4;
+  STEP_REGISTER     = 1;
+  STEP_INDEX        = 2;
+  STEP_RESOLVE      = 3;
+  STEP_WIRE         = 4;
+  INIT_TIMEOUT_MS   = 3_600_000;  // 1 h: a first full index of a large project
+  INIT_FIRST_FLAG   = 2;        // ParamStr(1) is `init`
+  SQLITE_EXT        = '.sqlite';
+
+type
+  TInitRequest = record
+    Project  : string;
+    DryRun   : Boolean;
+    HomeDir  : string;
+    AppDataDir: string;
+  end;
+
+procedure InitUsage(const pWhy: string);
+begin
+  Writeln(ErrOutput, 'drag-lint init: ' + pWhy);
+  Writeln(ErrOutput, 'usage:');
+  Writeln(ErrOutput, '  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]');
+end;
+
+{ '' when the command line is usable, else the reason. }
+function ParseInitFlags(var pReq: TInitRequest): string;
+begin
+  Result:= '';
+  var I:= INIT_FIRST_FLAG;
+  while (Result = '') and (I <= ParamCount) do
+  begin
+    var Flag:= ParamStr(I);
+    if Flag = '--dry-run' then pReq.DryRun:= True
+    else if (Flag = '--project') or (Flag = '--home-dir') or (Flag = '--appdata-dir') then
+    begin
+      if I = ParamCount then Result:= Flag + ' needs a value'
+      else
+      begin
+        Inc(I);
+        if Flag = '--project' then pReq.Project:= ParamStr(I)
+        else if Flag = '--home-dir' then pReq.HomeDir:= ParamStr(I)
+        else pReq.AppDataDir:= ParamStr(I);
+      end;
+    end
+    else Result:= 'unknown flag: ' + Flag;
+    Inc(I);
+  end;
+  if (Result = '') and (pReq.Project = '') then Result:= 'name the project: --project <file.dproj>';
+  if (Result = '') and not TFile.Exists(pReq.Project) then Result:= 'project file not found: ' + pReq.Project;
+end;
+
+{ The last stdout line that names a .sqlite file ('' when none). }
+function IndexPathFrom(const pStdOut: string): string;
+begin
+  Result:= '';
+  for var Line in pStdOut.Split([#13, #10], TStringSplitOptions.ExcludeEmpty) do
+    if SameText(ExtractFileExt(Trim(Line)), SQLITE_EXT) then Result:= Trim(Line);
+end;
+
+function EngineCommand(const pArgs: string): string;
+begin
+  Result:= QuoteArg(ParamStr(0)) + ' ' + pArgs;
+end;
+
+{ Runs one step, echoes its output under a heading; returns its exit code (-1 when it could not start). }
+function RunStep(pNo: Integer; const pTitle, pArgs: string; out pStdOut: string): Integer;
+begin
+  Writeln(Format('step %d/%d: %s', [pNo, INIT_STEP_COUNT, pTitle]));
+  Writeln('  ' + EngineCommand(pArgs));
+  var Res: TProcessResult;
+  pStdOut:= '';
+  if not RunCapture(EngineCommand(pArgs), '', INIT_TIMEOUT_MS, Res) then
+  begin
+    Writeln(ErrOutput, 'drag-lint init: could not start ' + ParamStr(0));
+    Exit(-1);
+  end;
+  pStdOut:= Res.StdOut;
+  if Res.StdOut <> '' then Write(Res.StdOut);
+  if Res.StdErr <> '' then Write(ErrOutput, Res.StdErr);
+  Result:= if Res.TimedOut then -1 else Res.ExitCode;
+end;
+
+function RunInitVerbFromCommandLine: Integer;
+begin
+  var Req:= Default(TInitRequest);
+  var Why:= ParseInitFlags(Req);
+  if Why <> '' then
+  begin
+    InitUsage(Why);
+    Exit(EXIT_SETUP);
+  end;
+
+  var Proj:= QuoteArg(ExpandFileName(Req.Project));
+  var Homes:= '';
+  if Req.HomeDir <> '' then Homes:= Homes + ' --home-dir ' + QuoteArg(Req.HomeDir);
+  if Req.AppDataDir <> '' then Homes:= Homes + ' --appdata-dir ' + QuoteArg(Req.AppDataDir);
+  var RegArgs:= 'register-project ' + Proj + ' --apply';
+  var IdxArgs:= 'index --project ' + Proj;
+  var ResArgs:= 'resolve-dbs --project ' + Proj;
+
+  if Req.DryRun then
+  begin
+    Writeln('init (dry run) -- nothing is run and nothing is written; the four steps would be:');
+    Writeln(Format('  1/%d  %s   (adds the project''s section to the manifest; no-op when already registered)', [INIT_STEP_COUNT, EngineCommand(RegArgs)]));
+    Writeln(Format('  2/%d  %s', [INIT_STEP_COUNT, EngineCommand(IdxArgs)]));
+    Writeln(Format('  3/%d  %s   (finds the index step 4 serves)', [INIT_STEP_COUNT, EngineCommand(ResArgs)]));
+    Writeln(Format('  4/%d  %s', [INIT_STEP_COUNT, EngineCommand('mcp-config --all --db <index from step 3>' + Homes)]));
+    Exit(EXIT_OK);
+  end;
+
+  var Out1: string;
+  Result:= RunStep(STEP_REGISTER, 'register the project in the manifest', RegArgs, Out1);
+  if Result = EXIT_OK then Result:= RunStep(STEP_INDEX, 'index the project', IdxArgs, Out1);
+  if Result = EXIT_OK then Result:= RunStep(STEP_RESOLVE, 'find the project''s index', ResArgs, Out1);
+  if Result = EXIT_OK then
+  begin
+    var Db:= IndexPathFrom(Out1);
+    if Db = '' then
+    begin
+      Writeln(ErrOutput, 'drag-lint init: resolve-dbs named no .sqlite index for ' + Req.Project);
+      Exit(EXIT_REFUSED);
+    end;
+    Result:= RunStep(STEP_WIRE, 'wire Claude Code, VS Code and Cursor', 'mcp-config --all --db ' + QuoteArg(Db) + Homes, Out1);
+  end;
+  if Result < 0 then Result:= EXIT_REFUSED;  // a step that could not start or timed out
 end;
 
 end.
