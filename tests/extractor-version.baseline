@@ -1094,4 +1094,8 @@
 #   true constants -- same file (active text only; typed consts excluded) and uses-clause units (project scan +
 #   library DB) -- plus arithmetic / xor / strings / Ord / SizeOf / Declared(), so a different branch and include can
 #   be indexed. Pinned by tests\autotest\run_index_pp_consts.ps1 + tests\preprocess\run_expr_ext.ps1.
-1.26.0-alpha|6ca1eacb94de48872caa82458f506c9afc6c9c70ffa5599ae7201e10814231fe
+#   2026-10-28 (lane R4X, gaps/r4x): re-pinned WITHIN 1.26.0-alpha (unreleased, no bump). The `on E: T do` handler
+#   variable emits a local_var symbol scoped to its handler (EmitHandlerVarSymbol), so E.Message types to T.
+#   Guard: tests\autotest\run_handler_var_symbol.ps1.
+#   Superseded: 1.26.0-alpha|6ca1eacb94de48872caa82458f506c9afc6c9c70ffa5599ae7201e10814231fe
+1.26.0-alpha|7047b26e9a536baf6db7079d1d28a167c634d75b95bd38c8522c0b3c6939d847
