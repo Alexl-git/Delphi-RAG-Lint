@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80004
 since: 1.20.1-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.36.0-alpha
 ---
 
 # Charts and the IDE
@@ -162,8 +162,8 @@ text search is enough. `charts\README.md` ("For AI agents") has the details.
 
 ### Where the answer goes
 
-One folder per answer, `charts\artifacts\<question>-<target>\` (change it with
-`-OutRoot`). Asking again overwrites it.
+One folder per answer under `%TEMP%\drag-lint-reports` (change the root with
+`--out-root <dir>`). Asking again overwrites it.
 
 | File | Chart questions | `round-trip` |
 |---|---|---|
@@ -245,7 +245,7 @@ file or the pipe:
   character, and anything but exactly one argument.
 
 A refusal exits 2 and writes one line to
-`%LOCALAPPDATA%\drag-lint\uri-handler.log`; the handler logs every link it
+`%LOCALAPPDATA%\drag-lint\logs\uri-handler.log`; the handler logs every link it
 handles there too, each logged message capped at 512 characters. A drive
 letter does not prove a file is local: a mapped drive can be a network share,
 so the handler reaches only servers you have already mapped, never one a link
@@ -337,8 +337,9 @@ them.
 * **No chart viewer inside RAD Studio.** Charts open in a browser.
 * **`round-trip` as a chart.** It answers in text today; a picture drawn from
   that text is the next step.
-* **One engine verb, `ask`.** Planned; until then the IDE menu and the
-  terminal both run the scripts.
+* **One engine verb, `ask`.** Shipped: `drag-lint ask` runs in-process, and the
+  IDE menu and the terminal both call it (the PowerShell scripts under
+  `charts\src` remain only as dev tooling).
 * `compare` (before / delta / after) is parked.
 
 ---

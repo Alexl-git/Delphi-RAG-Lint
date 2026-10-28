@@ -130,29 +130,27 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**289 rules. 110 have an auto-fix. 244 are on by default.** 196 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**195 rules. 23 have an auto-fix. 165 are on by default.** 142 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 88 | 33 |
-| complexity | 13 | 2 |
-| data-flow | 9 | 2 |
-| dead-code | 19 | 15 |
-| documentation | 5 | 4 |
-| firedac | 3 | 3 |
+| bug-patterns | 55 | 6 |
+| complexity | 11 | - |
+| data-flow | 9 | - |
+| dead-code | 12 | 6 |
+| documentation | 5 | 2 |
+| firedac | 3 | - |
 | metrics | 8 | - |
-| modernize | 4 | 4 |
-| naming | 13 | 9 |
-| other | 11 | 3 |
-| platform | 10 | 4 |
-| policy | 3 | - |
-| project-wide | 30 | 6 |
-| refactoring | 20 | 8 |
-| resource-lifetime | 14 | 7 |
-| review-markers | 5 | 2 |
-| security | 22 | 2 |
-| structure | 12 | 6 |
-| **Total** | **289** | **110** |
+| naming | 11 | 8 |
+| other | 6 | - |
+| platform | 10 | - |
+| project-wide | 23 | - |
+| refactoring | 11 | - |
+| resource-lifetime | 8 | 1 |
+| review-markers | 5 | - |
+| security | 10 | - |
+| structure | 8 | - |
+| **Total** | **195** | **23** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -171,7 +169,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 289 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 195 rules, 23 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |

@@ -12,7 +12,7 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)...",
-      "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...", "The callers (upward wing) and callees (downward wing) open together in the Call Graph view"]
+      "steps": ["Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...", "Type the qualified name of the routine in the prompt (the menu item asks for it and does not read the caret; Ctrl+Alt+B opens the same prompt)", "The callers (upward wing) and callees (downward wing) open together in the Call Graph view"]
     },
     {
       "type": "cli",
@@ -58,9 +58,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.36.0-alpha",
     "surfaceHash": "c4f979c316bc5ebd1802da4c21a3955568e851ca16b4761ee5ac53c162a1ddf3"
   }
 }

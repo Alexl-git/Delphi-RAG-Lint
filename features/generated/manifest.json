@@ -6733,7 +6733,7 @@
         {
           "type": "ide-menu",
           "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)...",
-          "steps": ["Put the caret on the routine in the editor", "Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...", "The callers (upward wing) and callees (downward wing) open together in the Call Graph view"]
+          "steps": ["Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...", "Type the qualified name of the routine in the prompt (the menu item asks for it and does not read the caret; Ctrl+Alt+B opens the same prompt)", "The callers (upward wing) and callees (downward wing) open together in the Call Graph view"]
         },
         {
           "type": "cli",
@@ -6779,9 +6779,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-28",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "c4f979c316bc5ebd1802da4c21a3955568e851ca16b4761ee5ac53c162a1ddf3"
       }
     },
@@ -7943,9 +7943,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-28",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "3e2981fe8d2ab29c4caaf037e99996c05b489ffff0bcd00827c00f55b2fc72af"
       }
     },
@@ -11617,66 +11617,6 @@
         "wikiAnchor": "abstract-method-instantiation"
       },
       {
-        "id": "rule.address-of-local-returned",
-        "title": "address-of-local-returned",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Address of a local variable or by-value parameter is returned -- it dangles once the routine exits (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule address-of-local-returned"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "address-of-local-returned"
-      },
-      {
-        "id": "rule.application-terminate-in-library",
-        "title": "application-terminate-in-library",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Application.Terminate in a unit may end the application -- callers outside the main form cannot see it (other, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule application-terminate-in-library"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "application-terminate-in-library"
-      },
-      {
-        "id": "rule.approx-constant",
-        "title": "approx-constant",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Literal approximates a well-known constant (Pi, E, Sqrt(2), Ln(2), golden ratio) -- use the named constant from System.Math/System for... (other, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule approx-constant"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "approx-constant"
-      },
-      {
         "id": "rule.assert-call",
         "title": "assert-call",
         "group": "linting",
@@ -11717,33 +11657,13 @@
         "wikiAnchor": "assert-with-side-effect"
       },
       {
-        "id": "rule.bad-bit-mask",
-        "title": "bad-bit-mask",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Bit-mask test that is always true or always false (e.g. X and 0 or X or -1 compared) -- the mask is wrong (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule bad-bit-mask"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "bad-bit-mask"
-      },
-      {
         "id": "rule.bare-except",
         "title": "bare-except",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class (bug-patterns, info, fixable)",
+        "summary": "Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class (bug-patterns, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -11755,26 +11675,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "bare-except"
-      },
-      {
-        "id": "rule.begin-end-pair-not-in-finally",
-        "title": "begin-end-pair-not-in-finally",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "BeginUpdate/EndUpdate style pair whose closing call is missing or not in a finally -- an exception leaves the resource held (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule begin-end-pair-not-in-finally"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "begin-end-pair-not-in-finally"
       },
       {
         "id": "rule.boolean-comparison-true",
@@ -11843,7 +11743,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Redundant if/else assigning True/False to Result. Write 'Result := <cond>' (or 'Result := not <cond>') directly (dead-code, info, fixable)",
+        "summary": "Redundant if/else assigning True/False to Result. Write 'Result := <cond>' (or 'Result := not <cond>') directly (dead-code, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -11877,33 +11777,13 @@
         "wikiAnchor": "case-magic-numbers"
       },
       {
-        "id": "rule.case-same-branches",
-        "title": "case-same-branches",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Case branches have identical bodies -- merge the labels or the branches are a copy-paste error (dead-code, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule case-same-branches"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "case-same-branches"
-      },
-      {
         "id": "rule.case-with-too-few-branches",
         "title": "case-with-too-few-branches",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "case has fewer than N branches -- an if is clearer (complexity, hint, fixable)",
+        "summary": "case has fewer than N branches -- an if is clearer (complexity, hint)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -11915,26 +11795,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "case-with-too-few-branches"
-      },
-      {
-        "id": "rule.checks-disabled-directive",
-        "title": "checks-disabled-directive",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Compiler safety directive switched off ({$R-} / {$Q-} / {$J+}) -- range/overflow checks stay off for the rest of the unit; scope it with {$R+}... (other, hint)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule checks-disabled-directive"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "checks-disabled-directive"
       },
       {
         "id": "rule.circular-uses",
@@ -11963,7 +11823,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Comparing ClassName to a string literal is fragile -- use 'is' or InheritsFrom() (bug-patterns, warning, fixable)",
+        "summary": "Comparing ClassName to a string literal is fragile -- use 'is' or InheritsFrom() (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -11977,73 +11837,13 @@
         "wikiAnchor": "classname-string-compare"
       },
       {
-        "id": "rule.cleartext-credential-storage",
-        "title": "cleartext-credential-storage",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Secret stored in clear text (CWE-312, CWE-256) -- WriteString of a password/secret/token key; encrypt it (DPAPI) or keep it in a secret s... (security, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule cleartext-credential-storage"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "cleartext-credential-storage"
-      },
-      {
-        "id": "rule.cleartext-transport",
-        "title": "cleartext-transport",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Cleartext transport (CWE-319) -- an http:// URL or TLS switched off; use https:// / UseTLS = utUseRequireTLS (security, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule cleartext-transport"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "cleartext-transport"
-      },
-      {
-        "id": "rule.closure-captures-loop-local",
-        "title": "closure-captures-loop-local",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Anonymous method captures a local assigned inside the loop and runs later -- every closure sees the last value (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule closure-captures-loop-local"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "closure-captures-loop-local"
-      },
-      {
         "id": "rule.code-after-exit",
         "title": "code-after-exit",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Unreachable code after Exit/raise/Break/Continue/Halt (bug-patterns, warning, fixable)",
+        "summary": "Unreachable code after Exit/raise/Break/Continue/Halt (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12077,53 +11877,13 @@
         "wikiAnchor": "cognitive-complexity"
       },
       {
-        "id": "rule.collapsible-if",
-        "title": "collapsible-if",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Nested if without else can be collapsed into one condition: if A and B then (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule collapsible-if"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "collapsible-if"
-      },
-      {
-        "id": "rule.collection-modified-in-loop",
-        "title": "collection-modified-in-loop",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Collection is modified while it is being iterated -- items are skipped or EListError is raised; iterate 'downto 0' or collec... (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule collection-modified-in-loop"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "collection-modified-in-loop"
-      },
-      {
         "id": "rule.commented-out-code",
         "title": "commented-out-code",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Comment appears to be commented-out code (assignment or call) (dead-code, hint, fixable)",
+        "summary": "Comment appears to be commented-out code (assignment or call) (dead-code, hint)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12257,46 +12017,6 @@
         "wikiAnchor": "constant-condition"
       },
       {
-        "id": "rule.constant-index-out-of-range",
-        "title": "constant-index-out-of-range",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Literal index outside the declared array bounds (or S[0] on a 1-based string) -- range error or memory overrun (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule constant-index-out-of-range"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "constant-index-out-of-range"
-      },
-      {
-        "id": "rule.constructor-call-on-instance",
-        "title": "constructor-call-on-instance",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Constructor called on an existing instance -- nothing is allocated; write 'X := TFoo.Create(..)' (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule constructor-call-on-instance"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "constructor-call-on-instance"
-      },
-      {
         "id": "rule.control-flow-in-finally",
         "title": "control-flow-in-finally",
         "group": "linting",
@@ -12317,33 +12037,13 @@
         "wikiAnchor": "control-flow-in-finally"
       },
       {
-        "id": "rule.copy-paste-assignment",
-        "title": "copy-paste-assignment",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Run of similar assignments where one right-hand side repeats another -- likely a copy-paste typo (bug-patterns, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule copy-paste-assignment"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "copy-paste-assignment"
-      },
-      {
         "id": "rule.create-inside-try",
         "title": "create-inside-try",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Object constructed as the first statement inside its try..finally -- construct before the try (resource-lifetime, warning, fixable)",
+        "summary": "Object constructed as the first statement inside its try..finally -- construct before the try (resource-lifetime, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12363,7 +12063,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Critical section acquired without a matching Leave/Release/TMonitor.Exit in finally (bug-patterns, error, fixable)",
+        "summary": "Critical section acquired without a matching Leave/Release/TMonitor.Exit in finally (bug-patterns, error)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12423,7 +12123,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Dataset opened without a matching Close in finally (firedac, warning, fixable)",
+        "summary": "Dataset opened without a matching Close in finally (firedac, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12523,7 +12223,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Obsolete RTL routine. Prefer TEncoding / modern string APIs (platform, info, fixable)",
+        "summary": "Obsolete RTL routine. Prefer TEncoding / modern string APIs (platform, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12543,7 +12243,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Destructor not declared 'override' -- hides the inherited destructor (leak) (resource-lifetime, warning, fixable)",
+        "summary": "Destructor not declared 'override' -- hides the inherited destructor (leak) (resource-lifetime, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12555,26 +12255,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "destructor-without-override"
-      },
-      {
-        "id": "rule.dfm-event-handler-missing",
-        "title": "dfm-event-handler-missing",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A .dfm names an event handler that the form class and its ancestors do not declare -- the form fails to load (project-wide, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule dfm-event-handler-missing"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "dfm-event-handler-missing"
       },
       {
         "id": "rule.dfm-hardcoded-credential",
@@ -12597,26 +12277,6 @@
         "wikiAnchor": "dfm-hardcoded-credential"
       },
       {
-        "id": "rule.dfm-password-edit-unmasked",
-        "title": "dfm-password-edit-unmasked",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Edit control named like a password field has no PasswordChar -- the secret is shown on screen (security, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule dfm-password-edit-unmasked"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "dfm-password-edit-unmasked"
-      },
-      {
         "id": "rule.dfm-property-not-declared",
         "title": "dfm-property-not-declared",
         "group": "linting",
@@ -12637,73 +12297,13 @@
         "wikiAnchor": "dfm-property-not-declared"
       },
       {
-        "id": "rule.disallowed-method",
-        "title": "disallowed-method",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Call to a method the project configuration disallows -- see the configured reason (policy, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule disallowed-method"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "disallowed-method"
-      },
-      {
-        "id": "rule.disallowed-name",
-        "title": "disallowed-name",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Use of an identifier the project configuration disallows -- see the configured reason (policy, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule disallowed-name"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "disallowed-name"
-      },
-      {
-        "id": "rule.disallowed-type",
-        "title": "disallowed-type",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Use of a type the project configuration disallows -- see the configured reason (policy, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule disallowed-type"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "disallowed-type"
-      },
-      {
         "id": "rule.discarded-effect-free-result",
         "title": "discarded-effect-free-result",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing (project-wide, info, fixable)",
+        "summary": "A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing (project-wide, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12763,7 +12363,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Managed facts block is attached to no declaration -- a previous --apply stacked it above an existing block (documentation, warning, fixable)",
+        "summary": "Managed facts block is attached to no declaration -- a previous --apply stacked it above an existing block (documentation, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12803,7 +12403,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A <param> tag names a parameter the routine does not declare (documentation, error, fixable)",
+        "summary": "A <param> tag names a parameter the routine does not declare (documentation, error)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12815,26 +12415,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "doc-param-not-in-signature"
-      },
-      {
-        "id": "rule.double-dictionary-lookup",
-        "title": "double-dictionary-lookup",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "ContainsKey followed by an indexed read looks the key up twice -- use TryGetValue (refactoring, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule double-dictionary-lookup"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "double-dictionary-lookup"
       },
       {
         "id": "rule.double-free",
@@ -12883,7 +12463,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Two 'on <Class>' handlers for the same class in one try -- the second is unreachable (bug-patterns, warning, fixable)",
+        "summary": "Two 'on <Class>' handlers for the same class in one try -- the second is unreachable (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -12917,46 +12497,6 @@
         "wikiAnchor": "duplicate-global-decl"
       },
       {
-        "id": "rule.duplicate-unit-on-search-path",
-        "title": "duplicate-unit-on-search-path",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Two files with the same unit name are on the search path -- the compiler may pick the wrong one (structure, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule duplicate-unit-on-search-path"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "duplicate-unit-on-search-path"
-      },
-      {
-        "id": "rule.else-after-exit",
-        "title": "else-after-exit",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "else after a branch that ends in Exit/raise/Continue/Break -- drop the else to cut nesting (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule else-after-exit"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "else-after-exit"
-      },
-      {
         "id": "rule.empty-case-branch",
         "title": "empty-case-branch",
         "group": "linting",
@@ -12983,7 +12523,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Empty then/else branch is a no-op -- a stray ';' after 'then'/'else', a missing statement, or an empty begin..end (bug-patterns, warning, fixable)",
+        "summary": "Empty then/else branch is a no-op -- likely a stray ';' after 'then'/'else' (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13083,7 +12623,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Empty procedure/function body (bug-patterns, info, fixable)",
+        "summary": "Empty procedure/function body (bug-patterns, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13103,7 +12643,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A bare name spelled like a value of a visible $SCOPEDENUMS ON enum -- warning when it binds to another symbol of that name a... (bug-patterns, warning, fixable)",
+        "summary": "A bare name spelled like a value of a visible $SCOPEDENUMS ON enum -- warning when it binds to another symbol of that name and the ty... (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13135,26 +12675,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "enum-helper-separate-units"
-      },
-      {
-        "id": "rule.enum-ordinal-cast",
-        "title": "enum-ordinal-cast",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A hard-coded enum ordinal -- a literal cast to an enum type TEnum(5), an enum's ordinal compared with a literal (Ord(X) = 3), or case... (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule enum-ordinal-cast"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "enum-ordinal-cast"
       },
       {
         "id": "rule.enum-ordinal-persisted",
@@ -13203,7 +12723,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Exception E...Create(...) constructed as a statement but never raised (bug-patterns, warning, fixable)",
+        "summary": "Exception E...Create(...) constructed as a statement but never raised (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13215,46 +12735,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "exception-constructed-but-not-raised"
-      },
-      {
-        "id": "rule.exception-escapes-thread",
-        "title": "exception-escapes-thread",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Thread body has no top-level try..except -- an unhandled exception silently ends the thread (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule exception-escapes-thread"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "exception-escapes-thread"
-      },
-      {
-        "id": "rule.exception-text-in-response",
-        "title": "exception-text-in-response",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Exception text sent in a response (CWE-209) -- log E.Message server-side and return a generic error to the client (security, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule exception-text-in-response"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "exception-text-in-response"
       },
       {
         "id": "rule.exhaustive-enum-case",
@@ -13343,7 +12823,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "FieldByName called inside a loop -- cache the field (firedac, warning, fixable)",
+        "summary": "FieldByName called inside a loop -- cache the field (firedac, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13355,26 +12835,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "field-by-name-in-loop"
-      },
-      {
-        "id": "rule.field-created-not-freed",
-        "title": "field-created-not-freed",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Field created in a constructor is never freed by any method of the class -- the object leaks when the owner is destroyed (resource-lifetime, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule field-created-not-freed"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "field-created-not-freed"
       },
       {
         "id": "rule.field-name-prefix",
@@ -13403,7 +12863,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Open vs ExecSQL does not match the SQL kind (firedac, warning, fixable)",
+        "summary": "Open vs ExecSQL does not match the SQL kind (firedac, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13417,33 +12877,13 @@
         "wikiAnchor": "firedac-open-execsql-mismatch"
       },
       {
-        "id": "rule.fixed-random-seed",
-        "title": "fixed-random-seed",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "RandSeed set to a constant -- Random becomes predictable (CWE-336). Fine for tests/simulations; use Randomize (and a CSPRNG for secrets) oth... (security, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule fixed-random-seed"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "fixed-random-seed"
-      },
-      {
         "id": "rule.float-equality-comparison",
         "title": "float-equality-comparison",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Floating-point value compared with = (bug-patterns, warning, fixable)",
+        "summary": "Floating-point value compared with = (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13455,26 +12895,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "float-equality-comparison"
-      },
-      {
-        "id": "rule.for-bound-modified-in-body",
-        "title": "for-bound-modified-in-body",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "For-loop bound or counter variable is modified in the body -- Delphi evaluates the bound once, so the change has no effect (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule for-bound-modified-in-body"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "for-bound-modified-in-body"
       },
       {
         "id": "rule.format-argument-count",
@@ -13517,73 +12937,13 @@
         "wikiAnchor": "format-specifier-type-mismatch"
       },
       {
-        "id": "rule.format-string-not-formatted",
-        "title": "format-string-not-formatted",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Format string has no '%' specifier -- nothing is formatted; use the string directly or add the missing specifier (bug-patterns, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule format-string-not-formatted"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "format-string-not-formatted"
-      },
-      {
-        "id": "rule.free-of-owned-item",
-        "title": "free-of-owned-item",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Item freed by hand although its OwnsObjects container frees it too -- double free (resource-lifetime, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule free-of-owned-item"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "free-of-owned-item"
-      },
-      {
-        "id": "rule.free-of-parameter",
-        "title": "free-of-parameter",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Free of a by-value or const parameter -- the caller's reference now dangles (resource-lifetime, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule free-of-parameter"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "free-of-parameter"
-      },
-      {
         "id": "rule.freeandnil-on-interface",
         "title": "freeandnil-on-interface",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "FreeAndNil on an interface reference (resource-lifetime, warning, fixable)",
+        "summary": "FreeAndNil on an interface reference (resource-lifetime, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13595,46 +12955,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "freeandnil-on-interface"
-      },
-      {
-        "id": "rule.freeonterminate-then-wait",
-        "title": "freeonterminate-then-wait",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "WaitFor or Free on a thread that has FreeOnTerminate set -- the thread may already be gone (resource-lifetime, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule freeonterminate-then-wait"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "freeonterminate-then-wait"
-      },
-      {
-        "id": "rule.fresh-instance-as-argument",
-        "title": "fresh-instance-as-argument",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A freshly created object is passed as an argument -- it leaks unless the callee takes ownership or the parameter is an interface (C... (resource-lifetime, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule fresh-instance-as-argument"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "fresh-instance-as-argument"
       },
       {
         "id": "rule.function-result-ignored",
@@ -13683,7 +13003,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "GetTickCount wraps after ~49.7 days -- use GetTickCount64 for elapsed-time calculations (platform, warning, fixable)",
+        "summary": "GetTickCount wraps after ~49.7 days -- use GetTickCount64 for elapsed-time calculations (platform, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13777,46 +13097,6 @@
         "wikiAnchor": "goto-statement"
       },
       {
-        "id": "rule.guid-on-generic-interface",
-        "title": "guid-on-generic-interface",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Generic interface carries a GUID -- all instantiations share it, so Supports / QueryInterface cannot tell them apart; drop the GUID o... (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule guid-on-generic-interface"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "guid-on-generic-interface"
-      },
-      {
-        "id": "rule.halt-in-library",
-        "title": "halt-in-library",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Halt/ExitProcess in a unit ends the whole process from code no caller can see -- raise an exception or return an error and let the main prog... (other, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule halt-in-library"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "halt-in-library"
-      },
-      {
         "id": "rule.hardcoded-absolute-path",
         "title": "hardcoded-absolute-path",
         "group": "linting",
@@ -13897,26 +13177,6 @@
         "wikiAnchor": "hardcoded-ip-address"
       },
       {
-        "id": "rule.hides-ancestor-virtual",
-        "title": "hides-ancestor-virtual",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Method has the same name as an ancestor virtual method but is neither override nor reintroduce -- the ancestor method is hidden (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule hides-ancestor-virtual"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "hides-ancestor-virtual"
-      },
-      {
         "id": "rule.high-coupling",
         "title": "high-coupling",
         "group": "linting",
@@ -13983,7 +13243,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "then and else branches are identical (dead-code, warning, fixable)",
+        "summary": "then and else branches are identical (dead-code, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -13995,26 +13255,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "identical-then-else"
-      },
-      {
-        "id": "rule.identity-op",
-        "title": "identity-op",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Identity operation (x+0, x-0, x*1, x div 1, x shl 0 ...) has no effect or is a constant -- drop it or write the intended value (dead-code, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule identity-op"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "identity-op"
       },
       {
         "id": "rule.ifdef-undefined-symbol",
@@ -14043,7 +13283,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "IfThen() evaluates both branches unconditionally -- side effects in either argument always execute. Use if/then/else instead (bug-patterns, warning, fixable)",
+        "summary": "IfThen() evaluates both branches unconditionally -- side effects in either argument always execute. Use if/then/else instead (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14057,113 +13297,13 @@
         "wikiAnchor": "ifthen-both-branches"
       },
       {
-        "id": "rule.ifthen-to-if-expression",
-        "title": "ifthen-to-if-expression",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Both branches assign the same target -- Delphi 13 allows X := if C then A else B in one statement (modernize, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule ifthen-to-if-expression"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "ifthen-to-if-expression"
-      },
-      {
-        "id": "rule.ignored-must-use-result",
-        "title": "ignored-must-use-result",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "The result of this call is its error report (False / 0 on failure) and is discarded -- test it, or raise via Win32Check / RaiseLastOS... (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule ignored-must-use-result"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "ignored-must-use-result"
-      },
-      {
-        "id": "rule.index-loop-to-for-in",
-        "title": "index-loop-to-for-in",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Index loop only reads Items[I] -- a for..in loop is shorter and cannot go out of range (modernize, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule index-loop-to-for-in"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "index-loop-to-for-in"
-      },
-      {
-        "id": "rule.indexof-result-unchecked",
-        "title": "indexof-result-unchecked",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "IndexOf/Pos result used directly as an index -- it is -1 (0 for Pos) when the item is absent; store it and test it first (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule indexof-result-unchecked"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "indexof-result-unchecked"
-      },
-      {
-        "id": "rule.infinite-loop-no-exit",
-        "title": "infinite-loop-no-exit",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Loop with a constant-true condition has no Exit/Break/raise -- it can never terminate (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule infinite-loop-no-exit"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "infinite-loop-no-exit"
-      },
-      {
         "id": "rule.inherited-bare",
         "title": "inherited-bare",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Bare 'inherited' call - verify it invokes the intended ancestor method (other, info, fixable)",
+        "summary": "Bare 'inherited' call - verify it invokes the intended ancestor method (other, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14203,7 +13343,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Inline comment inside a multi-line argument list (structure, warning, fixable)",
+        "summary": "Inline comment inside a multi-line argument list (structure, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14215,26 +13355,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "inline-comment-in-multiline-args"
-      },
-      {
-        "id": "rule.inline-on-large-routine",
-        "title": "inline-on-large-routine",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "inline on a long or try-containing routine -- the compiler will not inline it or code bloat outweighs the gain (complexity, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule inline-on-large-routine"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "inline-on-large-routine"
       },
       {
         "id": "rule.insecure-temp-file",
@@ -14277,26 +13397,6 @@
         "wikiAnchor": "instability"
       },
       {
-        "id": "rule.integer-division-to-float",
-        "title": "integer-division-to-float",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Integer `div` assigned to a floating-point variable -- the fraction is lost before the assignment; use `/` if a real quotient was meant (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule integer-division-to-float"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "integer-division-to-float"
-      },
-      {
         "id": "rule.interface-object-mixing",
         "title": "interface-object-mixing",
         "group": "linting",
@@ -14337,86 +13437,6 @@
         "wikiAnchor": "interface-reference-cycle"
       },
       {
-        "id": "rule.interface-without-guid",
-        "title": "interface-without-guid",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Interface declared without a GUID -- Supports / QueryInterface / 'as' cannot ask for it; add ['{...}'] (Ctrl+Shift+G in the IDE) (structure, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule interface-without-guid"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "interface-without-guid"
-      },
-      {
-        "id": "rule.invalid-regex-literal",
-        "title": "invalid-regex-literal",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Regular-expression literal does not compile -- the call will raise at run time (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule invalid-regex-literal"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "invalid-regex-literal"
-      },
-      {
-        "id": "rule.is-not-operator",
-        "title": "is-not-operator",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "not (X is T) can be written X is not T (Delphi 13) -- the negation then reads as part of the type test (modernize, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule is-not-operator"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "is-not-operator"
-      },
-      {
-        "id": "rule.is-prefix-not-boolean",
-        "title": "is-prefix-not-boolean",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Routine named Is/Has/Can... does not return Boolean -- the name promises a yes/no answer (naming, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule is-prefix-not-boolean"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "is-prefix-not-boolean"
-      },
-      {
         "id": "rule.large-magic-number",
         "title": "large-magic-number",
         "group": "linting",
@@ -14435,26 +13455,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "large-magic-number"
-      },
-      {
-        "id": "rule.large-stack-local",
-        "title": "large-stack-local",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Local variable is very large -- it can overflow the thread stack; allocate it on the heap (complexity, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule large-stack-local"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "large-stack-local"
       },
       {
         "id": "rule.layering-violation",
@@ -14483,7 +13483,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Length(s) compared to 0 -- use s = '' / s <> '' (bug-patterns, info, fixable)",
+        "summary": "Length(s) compared to 0 -- use s = '' / s <> '' (bug-patterns, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14503,7 +13503,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Line longer than 1020 characters -- dcc64 compiles it only at some file offsets (F2069) (structure, warning, fixable)",
+        "summary": "Line longer than 1020 characters -- dcc64 compiles it only at some file offsets (F2069) (structure, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14515,26 +13515,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "line-too-long"
-      },
-      {
-        "id": "rule.loadlibrary-relative-name",
-        "title": "loadlibrary-relative-name",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "LoadLibrary with a bare DLL name is searched for in the application/current directory (DLL hijack, CWE-427) -- load by full path (Extract... (security, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule loadlibrary-relative-name"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "loadlibrary-relative-name"
       },
       {
         "id": "rule.local-field-prefix",
@@ -14555,26 +13535,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "local-field-prefix"
-      },
-      {
-        "id": "rule.local-shadows-field",
-        "title": "local-shadows-field",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Local variable or parameter has the same name as a field of the class -- it hides the field and invites mistakes (structure, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule local-shadows-field"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "local-shadows-field"
       },
       {
         "id": "rule.local-var-casing",
@@ -14603,7 +13563,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Locale-sensitive conversion without a TFormatSettings -- behaves differently per regional settings; pass an explicit TFormatSett... (platform, warning, fixable)",
+        "summary": "Locale-sensitive conversion without a TFormatSettings -- behaves differently per regional settings; pass an explicit TFormatSettings (platform, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14615,26 +13575,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "locale-sensitive-conversion"
-      },
-      {
-        "id": "rule.loop-condition-invariant",
-        "title": "loop-condition-invariant",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Loop condition never changes inside the body -- the loop cannot end or never runs again (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule loop-condition-invariant"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "loop-condition-invariant"
       },
       {
         "id": "rule.loop-control-flag",
@@ -14757,26 +13697,6 @@
         "wikiAnchor": "magic-literal"
       },
       {
-        "id": "rule.manual-inrange",
-        "title": "manual-inrange",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Two-sided inclusive bounds check on one value -- System.Math.InRange(X, A, B) states the intent and evaluates X once (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule manual-inrange"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "manual-inrange"
-      },
-      {
         "id": "rule.message-chain",
         "title": "message-chain",
         "group": "linting",
@@ -14795,26 +13715,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "message-chain"
-      },
-      {
-        "id": "rule.method-could-be-static",
-        "title": "method-could-be-static",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Method never uses Self or any instance member -- make it a class function or a free routine (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule method-could-be-static"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "method-could-be-static"
       },
       {
         "id": "rule.method-pascalcase",
@@ -14877,66 +13777,6 @@
         "wikiAnchor": "middle-man"
       },
       {
-        "id": "rule.misleading-indentation",
-        "title": "misleading-indentation",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Statement is indented as if it were controlled by the preceding if/while/for but is not -- likely a missing begin/end (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule misleading-indentation"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "misleading-indentation"
-      },
-      {
-        "id": "rule.mismatched-alloc-free",
-        "title": "mismatched-alloc-free",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Memory released by a call from a different family than the one that allocated it (GetMem/Dispose, New/FreeMem, ...) --... (resource-lifetime, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule mismatched-alloc-free"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "mismatched-alloc-free"
-      },
-      {
-        "id": "rule.missing-const-param",
-        "title": "missing-const-param",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Parameter is never modified, assigned or passed as var -- declare it const to avoid a copy or refcount (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule missing-const-param"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "missing-const-param"
-      },
-      {
         "id": "rule.missing-doc",
         "title": "missing-doc",
         "group": "linting",
@@ -14963,7 +13803,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Constructor without an inherited call (bug-patterns, warning, fixable)",
+        "summary": "Constructor without an inherited call (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14983,7 +13823,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Destructor without an inherited call (bug-patterns, warning, fixable)",
+        "summary": "Destructor without an inherited call (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -14997,33 +13837,13 @@
         "wikiAnchor": "missing-inherited-dtor"
       },
       {
-        "id": "rule.mixed-case-hex",
-        "title": "mixed-case-hex",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Hex literal mixes upper- and lower-case digits -- pick one case so the value reads consistently (structure, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule mixed-case-hex"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "mixed-case-hex"
-      },
-      {
         "id": "rule.multiple-statements-per-line",
         "title": "multiple-statements-per-line",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Two or more statements share one source line (structure, hint, fixable)",
+        "summary": "Two or more statements share one source line (structure, hint)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15077,26 +13897,6 @@
         "wikiAnchor": "nativeint-truncation"
       },
       {
-        "id": "rule.needless-exit",
-        "title": "needless-exit",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Exit as the last statement of a routine does nothing -- remove it (dead-code, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule needless-exit"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "needless-exit"
-      },
-      {
         "id": "rule.nested-with",
         "title": "nested-with",
         "group": "linting",
@@ -15117,46 +13917,6 @@
         "wikiAnchor": "nested-with"
       },
       {
-        "id": "rule.network-client-without-timeout",
-        "title": "network-client-without-timeout",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Network client created without any timeout set -- a stalled peer blocks the caller indefinitely (security, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule network-client-without-timeout"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "network-client-without-timeout"
-      },
-      {
-        "id": "rule.nil-check-after-dereference",
-        "title": "nil-check-after-dereference",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Reference is dereferenced and only afterwards tested against nil -- either the use is too early or the check is redundant (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule nil-check-after-dereference"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "nil-check-after-dereference"
-      },
-      {
         "id": "rule.nil-comparison",
         "title": "nil-comparison",
         "group": "linting",
@@ -15175,46 +13935,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "nil-comparison"
-      },
-      {
-        "id": "rule.nil-returning-call-dereferenced",
-        "title": "nil-returning-call-dereferenced",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Member access on the result of a Find* routine that returns nil when nothing is found -- store the result and test it first (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule nil-returning-call-dereferenced"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "nil-returning-call-dereferenced"
-      },
-      {
-        "id": "rule.nonminimal-bool",
-        "title": "nonminimal-bool",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Negated comparison can be written without not: use <> for not (A = B), = for not (A <> B), A not in S for not (A in S) (dead-code, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule nonminimal-bool"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "nonminimal-bool"
       },
       {
         "id": "rule.not-assigned-interface",
@@ -15243,7 +13963,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "'not A = B' parses as '(not A) = B' -- likely a bug; write 'not (A = B)' (bug-patterns, warning, fixable)",
+        "summary": "'not A = B' parses as '(not A) = B' -- likely a bug; write 'not (A = B)' (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15263,7 +13983,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "'not X in S' parses as '(not X) in S' -- almost certainly a bug; write 'not (X in S)' (bug-patterns, warning, fixable)",
+        "summary": "'not X in S' parses as '(not X) in S' -- almost certainly a bug; write 'not (X in S)' (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15343,7 +14063,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "OutputDebugString -- debug output left in code; remove it or guard with {$IFDEF DEBUG} (other, info, fixable)",
+        "summary": "OutputDebugString -- debug output left in code; remove it or guard with {$IFDEF DEBUG} (other, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15357,33 +14077,13 @@
         "wikiAnchor": "outputdebugstring"
       },
       {
-        "id": "rule.overflow-before-widening",
-        "title": "overflow-before-widening",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Integer product computed in 32 bits and widened afterwards -- it can overflow before the assignment; cast an operand first (... (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule overflow-before-widening"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "overflow-before-widening"
-      },
-      {
         "id": "rule.overwrite-before-read",
         "title": "overwrite-before-read",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Value overwritten before it is read (data-flow, warning, fixable)",
+        "summary": "Value overwritten before it is read (data-flow, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15497,86 +14197,6 @@
         "wikiAnchor": "platform-divergent-define"
       },
       {
-        "id": "rule.pos-for-contains",
-        "title": "pos-for-contains",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Comparing Pos(...) with 0 or 1 is a substring test -- use Contains (Pos > 0 / <> 0 / = 0) or StartsStr/StartsWith (Pos = 1) (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule pos-for-contains"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "pos-for-contains"
-      },
-      {
-        "id": "rule.pp-unresolved-if",
-        "title": "pp-unresolved-if",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "$IF names a constant the index cannot resolve -- the directive was taken as False, so the wrong branch (and include) may be indexed (bug-patterns, hint)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule pp-unresolved-if"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "pp-unresolved-if"
-      },
-      {
-        "id": "rule.property-accessor-name",
-        "title": "property-accessor-name",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Property accessor is not named F<Prop> / Get<Prop> / Set<Prop> -- the convention makes accessors findable (naming, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule property-accessor-name"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "property-accessor-name"
-      },
-      {
-        "id": "rule.property-getter-with-effect",
-        "title": "property-getter-with-effect",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A property's read accessor is a method with a PROVEN self-field or global write (lazy initialisers and memos exempt) -- reading a proper... (project-wide, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule property-getter-with-effect"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "property-getter-with-effect"
-      },
-      {
         "id": "rule.property-references-itself",
         "title": "property-references-itself",
         "group": "linting",
@@ -15603,7 +14223,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Public field on a class breaks encapsulation -- expose it via a property (structure, info, fixable)",
+        "summary": "Public field on a class breaks encapsulation -- expose it via a property (structure, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15675,26 +14295,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "raise-bare-exception"
-      },
-      {
-        "id": "rule.raise-in-destructor",
-        "title": "raise-in-destructor",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "raise inside a destructor -- an exception during cleanup aborts the rest of the teardown and leaks (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule raise-in-destructor"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "raise-in-destructor"
       },
       {
         "id": "rule.raise-in-finally",
@@ -15775,26 +14375,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "redundant-cast"
-      },
-      {
-        "id": "rule.redundant-continue-exit",
-        "title": "redundant-continue-exit",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Continue or Exit as the last statement of a loop or routine does nothing -- remove it (dead-code, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule redundant-continue-exit"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "redundant-continue-exit"
       },
       {
         "id": "rule.redundant-not-not",
@@ -15903,7 +14483,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "'raise E;' resets the stack trace -- use a bare 'raise;' to re-raise and preserve the original origin (bug-patterns, warning, fixable)",
+        "summary": "'raise E;' resets the stack trace -- use a bare 'raise;' to re-raise and preserve the original origin (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15963,7 +14543,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "dl:ok carries a placeholder or malformed @hash (e.g. @0000) -- it suppresses nothing; re-record it with `allow` (review-markers, hint, fixable)",
+        "summary": "dl:ok carries a placeholder or malformed @hash (e.g. @0000) -- it suppresses nothing; re-record it with `allow` (review-markers, hint)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16023,7 +14603,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "dl:ok marker records a finding that no longer occurs -- remove the marker (review-markers, hint, fixable)",
+        "summary": "dl:ok marker records a finding that no longer occurs -- remove the marker (review-markers, hint)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16075,26 +14655,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "separate-query-from-modifier"
-      },
-      {
-        "id": "rule.side-effect-in-short-circuit",
-        "title": "side-effect-in-short-circuit",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A routine with a PROVEN effect is called in the right operand of a Boolean and/or -- short-circuit evaluation skips it whenever the left... (project-wide, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule side-effect-in-short-circuit"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "side-effect-in-short-circuit"
       },
       {
         "id": "rule.sizeof-pointer-assumption",
@@ -16177,26 +14737,6 @@
         "wikiAnchor": "sql-injection-concat"
       },
       {
-        "id": "rule.sql-update-delete-without-where",
-        "title": "sql-update-delete-without-where",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "UPDATE/DELETE literal without a WHERE clause changes every row -- add a WHERE, or mark an intended full-table statement with dl:ok (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule sql-update-delete-without-where"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "sql-update-delete-without-where"
-      },
-      {
         "id": "rule.stat-gated-destructive",
         "title": "stat-gated-destructive",
         "group": "linting",
@@ -16215,26 +14755,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "stat-gated-destructive"
-      },
-      {
-        "id": "rule.stream-read-result-ignored",
-        "title": "stream-read-result-ignored",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "TStream.Read/Write result ignored -- a short transfer goes unnoticed; check the returned count or use ReadBuffer/WriteBuffer (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule stream-read-result-ignored"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "stream-read-result-ignored"
       },
       {
         "id": "rule.string-equality-comparison",
@@ -16257,46 +14777,6 @@
         "wikiAnchor": "string-equality-comparison"
       },
       {
-        "id": "rule.suboptimal-math",
-        "title": "suboptimal-math",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Power(X, 2), Power(X, 0.5) and Sqrt(Sqr(A)+Sqr(B)) have dedicated cheaper and more accurate functions: Sqr, Sqrt, Hypot (refactoring, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule suboptimal-math"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "suboptimal-math"
-      },
-      {
-        "id": "rule.swap-without-temp",
-        "title": "swap-without-temp",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A := B; B := A does not swap -- A is already overwritten, so B is assigned to itself. Use a temporary (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule swap-without-temp"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "swap-without-temp"
-      },
-      {
         "id": "rule.syntax-error",
         "title": "syntax-error",
         "group": "linting",
@@ -16315,86 +14795,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "syntax-error"
-      },
-      {
-        "id": "rule.taint-command-injection",
-        "title": "taint-command-injection",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78) (security, error)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule taint-command-injection"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "taint-command-injection"
-      },
-      {
-        "id": "rule.taint-path-traversal",
-        "title": "taint-path-traversal",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Tainted data reaches a file-system path sink -- a catalogued source flows across routines into a file / directory API (CWE-22) (security, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule taint-path-traversal"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "taint-path-traversal"
-      },
-      {
-        "id": "rule.taint-sql-injection",
-        "title": "taint-sql-injection",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL... (security, error)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule taint-sql-injection"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "taint-sql-injection"
-      },
-      {
-        "id": "rule.too-many-bool-fields",
-        "title": "too-many-bool-fields",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Class has many Boolean fields -- they are probably a state machine or a set of flags in disguise (refactoring, info)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule too-many-bool-fields"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "too-many-bool-fields"
       },
       {
         "id": "rule.too-many-children",
@@ -16537,26 +14937,6 @@
         "wikiAnchor": "ui-access-in-thread"
       },
       {
-        "id": "rule.ui-access-in-thread-transitive",
-        "title": "ui-access-in-thread-transitive",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "A TThread.Execute reaches, through resolved calls not marshalled by Synchronize/Queue, a routine that touches the UI -- the call path... (project-wide, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule ui-access-in-thread-transitive"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "ui-access-in-thread-transitive"
-      },
-      {
         "id": "rule.unbalanced-begin-end",
         "title": "unbalanced-begin-end",
         "group": "linting",
@@ -16575,46 +14955,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unbalanced-begin-end"
-      },
-      {
-        "id": "rule.unconditional-recursion",
-        "title": "unconditional-recursion",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Routine calls itself on every path -- it recurses until the stack overflows (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule unconditional-recursion"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "unconditional-recursion"
-      },
-      {
-        "id": "rule.undocumented-check-suppression",
-        "title": "undocumented-check-suppression",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Range/overflow checking is switched off with no explaining comment just above -- say why it is safe (other, hint)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule undocumented-check-suppression"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "undocumented-check-suppression"
       },
       {
         "id": "rule.unit-name-matches-file",
@@ -16703,7 +15043,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Object created + freed without try-finally (resource-lifetime, warning, fixable)",
+        "summary": "Object created + freed without try-finally (resource-lifetime, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16715,26 +15055,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unprotected-object-free"
-      },
-      {
-        "id": "rule.unreadable-literal",
-        "title": "unreadable-literal",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Long numeric literal without digit separators -- write 1_000_000 (Delphi 13) so the magnitude reads at a glance (modernize, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule unreadable-literal"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "unreadable-literal"
       },
       {
         "id": "rule.unsafe-shellexecute",
@@ -16783,7 +15103,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Hard cast TFoo(x) of an object reference with no guarding 'x is TFoo' (bug-patterns, warning, fixable)",
+        "summary": "Hard cast TFoo(x) of an object reference with no guarding 'x is TFoo' (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16795,46 +15115,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unsafe-typecast-without-is"
-      },
-      {
-        "id": "rule.unsigned-compare-always-true",
-        "title": "unsigned-compare-always-true",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Unsigned value compared with 0 or with its own type maximum (>= 0 / <= 255 on a Byte are always true, < 0 / > 255 always false) -- th... (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule unsigned-compare-always-true"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "unsigned-compare-always-true"
-      },
-      {
-        "id": "rule.unused-enum-value",
-        "title": "unused-enum-value",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed prop... (project-wide, hint)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule unused-enum-value"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "unused-enum-value"
       },
       {
         "id": "rule.unused-local",
@@ -16855,26 +15135,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unused-local"
-      },
-      {
-        "id": "rule.unused-loop-variable",
-        "title": "unused-loop-variable",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "for-loop counter is never used in the body -- the loop only repeats; check the intent (dead-code, hint)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule unused-loop-variable"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "unused-loop-variable"
       },
       {
         "id": "rule.unused-parameter",
@@ -16903,7 +15163,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Private member is never referenced (project-wide, warning, fixable)",
+        "summary": "Private member is never referenced (project-wide, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16923,7 +15183,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Public symbol is never referenced (project-wide, info, fixable)",
+        "summary": "Public symbol is never referenced (project-wide, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16943,7 +15203,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Unit in uses is never referenced (project-wide, warning, fixable)",
+        "summary": "Unit in uses is never referenced (project-wide, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -17057,26 +15317,6 @@
         "wikiAnchor": "used-unit-not-resolvable"
       },
       {
-        "id": "rule.useless-format",
-        "title": "useless-format",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Format('%s', [X]) just converts X to a string -- use X directly (or a string conversion) instead of formatting (dead-code, info, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule useless-format"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "useless-format"
-      },
-      {
         "id": "rule.uses-global-census",
         "title": "uses-global-census",
         "group": "linting",
@@ -17097,26 +15337,6 @@
         "wikiAnchor": "uses-global-census"
       },
       {
-        "id": "rule.uses-movable-to-implementation",
-        "title": "uses-movable-to-implementation",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time (project-wide, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule uses-movable-to-implementation"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "uses-movable-to-implementation"
-      },
-      {
         "id": "rule.virtual-method-in-constructor",
         "title": "virtual-method-in-constructor",
         "group": "linting",
@@ -17135,66 +15355,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "virtual-method-in-constructor"
-      },
-      {
-        "id": "rule.virtual-never-overridden",
-        "title": "virtual-never-overridden",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Virtual method with no override anywhere in the project -- the virtual dispatch buys nothing (project-wide, hint, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule virtual-never-overridden"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "virtual-never-overridden"
-      },
-      {
-        "id": "rule.wait-while-holding-lock",
-        "title": "wait-while-holding-lock",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Blocking call (Synchronize, WaitFor, Sleep, SendMessage, dialog) while a lock is held -- risk of deadlock (bug-patterns, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule wait-while-holding-lock"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "wait-while-holding-lock"
-      },
-      {
-        "id": "rule.weak-hash-for-secret",
-        "title": "weak-hash-for-secret",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Weak hash/cipher (MD5, SHA-1, DES, RC4, SSLv2/3) in a routine that handles a secret (CWE-328, CWE-327) -- use SHA-256+ with a salted KDF... (security, warning)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule weak-hash-for-secret"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "weak-hash-for-secret"
       },
       {
         "id": "rule.weak-random-for-security",
@@ -17223,7 +15383,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Pointer cast to a 32-bit integer type -- unsafe on Win64 (platform, warning, fixable)",
+        "summary": "Pointer cast to a 32-bit integer type -- unsafe on Win64 (platform, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -17303,7 +15463,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Local assigned but never read (data-flow, info, fixable)",
+        "summary": "Local assigned but never read (data-flow, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -17335,46 +15495,6 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "writeln-in-source"
-      },
-      {
-        "id": "rule.wrong-size-memory-op",
-        "title": "wrong-size-memory-op",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Byte count does not match the buffer: SizeOf of the pointer instead of its pointee, Length of a string without the character... (bug-patterns, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule wrong-size-memory-op"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "wrong-size-memory-op"
-      },
-      {
-        "id": "rule.xml-external-entities-enabled",
-        "title": "xml-external-entities-enabled",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "XML external entities / DTD processing enabled (CWE-611, XXE) -- keep resolveExternals False and ProhibitDTD True for untrusted XML (security, warning, fixable)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule xml-external-entities-enabled"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "xml-external-entities-enabled"
       }
     ],
     "chart-questions": [
