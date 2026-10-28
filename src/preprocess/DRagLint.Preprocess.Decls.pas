@@ -38,6 +38,8 @@ type
   TPPDecl = record
     Name       : string;
     IsTrueConst: Boolean;
+    /// <summary>EXT-E4: a TYPED constant (`NAME: T = v`); never IsTrueConst.</summary>
+    IsTypedConst: Boolean;
     HasValue   : Boolean;
     Value      : TPPValue;
     InInterface: Boolean;
@@ -364,6 +366,12 @@ begin
         else if (AText = ':') and (FSection = secConst) then
         begin
           AddDecl(FName, False, False, Default(TPPValue)); // typed constant
+          var LTyped: TPPDecl;
+          if FDecls.TryGetValue(LowerCase(FName), LTyped) then
+          begin
+            LTyped.IsTypedConst:= True;
+            FDecls.AddOrSetValue(LowerCase(FName), LTyped);
+          end;
           FState:= dsSkipToSemi;
         end
         else if (AText = '<') and (FSection = secType) then

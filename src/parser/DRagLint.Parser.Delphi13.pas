@@ -3001,7 +3001,10 @@ begin
         var KQName: string;
         if AParentQualifiedName <> '' then KQName:= AParentQualifiedName + '.' + KName
         else KQName:= KName;
-        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode, ConstSignatureOf(ANode, AState.Source));
+        { EXT-E4: a TYPED constant (a `type` field) carries the 'typed' modifier;
+          the signature text stays as it was, so no consumer re-pins. }
+        var KMods: string:= if ANode.ChildByField('type').IsNull then '' else 'typed';
+        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode, ConstSignatureOf(ANode, AState.Source), KMods);
       end;
     end;
     // Walk children so a typed const's type emits a type_use ref.
