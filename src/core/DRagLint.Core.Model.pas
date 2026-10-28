@@ -363,7 +363,9 @@ const
   /// for C2.3 + the IsStub unification MOVES from 1.15.0 to 1.16.0-alpha.</para>
   /// <para>1.15.0-alpha -&gt; 1.16.0-alpha (2026-10-28, item 4): receiver_type_text +
   /// external binding of value receivers; guard tests\callresolve\run_receiver_type_text.ps1.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.16.0-alpha';
+  /// <para>1.16.0-alpha -&gt; 1.17.0-alpha (2026-10-28, INT138, ki-purity): a paren-less read
+  /// of a procedural-type variable scores efUnknown in the purity stage (FIX-3 part 2).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.17.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

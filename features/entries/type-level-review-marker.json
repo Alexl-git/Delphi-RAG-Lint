@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.36.0-alpha",
+  "since": "1.38.0-alpha",
   "summary": "One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit",
   "intro": "Read this when an enum mirrors ordinals stored outside the code (a DB byte, a wire protocol, streaming) and its filler values or ordinal casts are deliberate: one `dl:ok <rule-id>` on the type line reviews them all, instead of one marker per value or cast.",
   "wikiPage": "Type-Level-Review-Marker",

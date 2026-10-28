@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.36.0-alpha",
+  "since": "1.38.0-alpha",
   "summary": "Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported",
   "intro": "Read this when your code must still build on an older Delphi (12, 10.4, XE7 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.",
   "wikiPage": "target-compiler",

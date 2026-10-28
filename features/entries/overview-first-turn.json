@@ -4,7 +4,7 @@
   "group": "graphs-reports",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.36.0-alpha",
+  "since": "1.38.0-alpha",
   "summary": "One bounded call: freshness, counts, units by layer, top fan-in, entry points and forms",
   "intro": "Run this first: overview gives an agent the whole project in one bounded page, with every capped section saying how many rows it left out.",
   "wikiPage": "Overview-first-turn",

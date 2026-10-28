@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.37.0-alpha",
+  "since": "1.38.0-alpha",
   "summary": "Keeps only text hits in routines within N call-graph hops of a symbol",
   "intro": "Read this when a message or constant matches in many places and you only care about the ones near the code you are changing. It restricts a query --text search to routines within 1 to 3 call-graph hops of a seed symbol.",
   "wikiPage": "query-text-near",

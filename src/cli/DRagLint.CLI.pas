@@ -35708,7 +35708,7 @@ begin
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance
           control channel. ControlChannelEnabledFor is THE ONE place that
-          decides which modes listen (lsp only, provisionally). Started after
+          decides which modes listen (lsp, cycles, index, lint-all; DEC-13). Started after
           the stores are open so `status` names what is really held, and
           signalled after LSP.Free so `exiting` never precedes a closed store.
           Failing to listen is reported and is not fatal: an editor without a

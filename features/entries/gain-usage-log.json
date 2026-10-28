@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.36.0-alpha",
+  "since": "1.38.0-alpha",
   "summary": "Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day",
   "intro": "Read this to see what the index saves: gain sums the usage log that context, query and find-callers append to, per verb and per day, as tokens returned against the source they stood in for.",
   "wikiPage": "Gain-usage-log",

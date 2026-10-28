@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.36.0-alpha",
+  "since": "1.38.0-alpha",
   "summary": "Ranked BM25 concept search over identifier words and doc-comment prose",
   "intro": "Read this when you know what the code does but not what it is called. It ranks symbols by how well their camelCase-split name and their doc-comment summary and remarks match your words, best first, with no re-parse needed to enable it.",
   "wikiPage": "concept-search",
