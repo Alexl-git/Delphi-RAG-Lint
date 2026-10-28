@@ -36,6 +36,7 @@ function Check($n, $ok, $d = '') {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
+$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $env:TEMP 'drag-lint-no-context-defaults.json'  # LSP-1 CORE: hover/notice text never depends on the user's real defaults
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 
 # Fixture: missing-inherited-ctor and code-after-exit are built-in rules ON by default
