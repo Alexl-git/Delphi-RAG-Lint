@@ -103,7 +103,7 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 * On a NAMING finding (`const-casing`, `type-name-prefix`,
   `local-var-casing`, ...) "Fix it" RENAMES the symbol -- its declaration and
   every use the project index knows about (e.g. `wrStr` -> `WrStr`). Asking for
-  that ONE finding is the opt-in. It needs the project index, and is not
+  that ONE finding is an explicit request and wins even over `"autofix_off"`. It needs the project index, and is not
   offered without one. A naming fix runs a PREVIEW first (nothing written):
   when the unit is compiled by two or more indexed projects, a confirmation
   lists every one of them and the rename happens in all of them or in none --

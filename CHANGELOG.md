@@ -6,6 +6,7 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Changed
+- Autofix (lane A7): every autofix is ON by default, the eight naming renames included. The config key `"autofix": [...]` is read and ignored (one stderr note); the new `"autofix_off": [...]` is the only brake (the IDE Options "auto-fix" boxes now save it). `--fix-naming` is accepted and does nothing. `rules --json` keeps `fix_opt_in`, always false (deprecated). Safety nets replace the gate: a rename a binary form file references is skipped (`skipped (dfm-referenced): N`; a text .dfm row is rewritten with the .pas), a field read bare inside a `with` is skipped (`skipped (with-block): N`), and the dry run prints `rename: N symbol(s) across M project(s)`. Guard `run_rules_fix_default_on.ps1` (was `run_rules_fix_opt_in.ps1`).
 - `--help` names `--out-root <dir>` on compare (its code reads it); the flag-verb map baseline drops 104 -> 103 cells.
 - `--help` names `--output` on lint-project and `--json` on check-ast and serve (every verb whose code reads --out / --json now shows it); the flag-verb map baseline drops 108 -> 104 cells.
 

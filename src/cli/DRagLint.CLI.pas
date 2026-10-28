@@ -11674,6 +11674,8 @@ end;
 /// tests\autotest\run_rules_fix_default_on.ps1 A1). A binary one is opaque to the
 /// index, so the rename could not be proved complete and is skipped.</remarks>
 function NamingFixReferencedByBinaryForm(const AFinding: TLintFinding): Boolean;
+const
+  BINARY_FORM_MAGIC = 'TPF0'; // the first bytes of a binary .dfm / .fmx
 var
   Ext, FormFile, Ident, Body: string;
   Bytes: TBytes;
@@ -11688,9 +11690,9 @@ begin
     FormFile:= TPath.ChangeExtension(AFinding.FilePath, Ext);
     if not TFile.Exists(FormFile) then Continue;
     Bytes:= TFile.ReadAllBytes(FormFile);
-    if (Length(Bytes) < 4) or (Bytes[0] <> Ord('T')) or (Bytes[1] <> Ord('P')) or (Bytes[2] <> Ord('F')) or (Bytes[3] <> Ord('0')) then Continue;
+    if (Length(Bytes) < Length(BINARY_FORM_MAGIC)) or (TEncoding.ASCII.GetString(Bytes, 0, Length(BINARY_FORM_MAGIC)) <> BINARY_FORM_MAGIC) then Continue;
     Body:= TEncoding.ANSI.GetString(Bytes);
-    if Pos(LowerCase(Ident), LowerCase(Body)) > 0 then Exit(True);
+    if ContainsText(Body, Ident) then Exit(True);
   end;
 end;
 
