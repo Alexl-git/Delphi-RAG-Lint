@@ -203,7 +203,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.ProjectTags, DRagLint.Doc.Regions, DRagLint.Doc.SharedFacts, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocRegions = class
+  TDocRegions = class // dl:ok high-response@81ea -- response set 90 is the managed-block parser's helper surface; splitting it into a scanner class is a deferred refactor (1.37 backlog #28)
   private
     /// <summary>Removes any managed fenced block from S: everything from the
     /// first AUTO_BEGIN occurrence through the end of the line containing the

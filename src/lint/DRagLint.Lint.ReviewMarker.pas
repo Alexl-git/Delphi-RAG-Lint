@@ -1169,6 +1169,7 @@ var
   Piece : string;
   Edited: string;
   Tail  : string;
+  Parts : TArray<string>;
   M     : TReviewMarker;
 
   { Text of comment I: piece 0 also carries the code before the first tag. }
@@ -1184,6 +1185,7 @@ var
 
 begin
   AResult:= '';
+  Parts  := nil;
   CStart := ACStart;
   Pos0:= CStart + Pos(REVIEW_MARK, LowerCase(Copy(ALineText, CStart, MaxInt))) - 1 + Length(REVIEW_MARK);
   Starts:= [CStart];
@@ -1217,9 +1219,11 @@ begin
       Edited:= TReviewMarkers.InsertInto(Piece, ARuleId, AReason, AHash);
       Piece := Edited + (if I < High(Starts) then Tail else '');
     end;
-    AResult:= AResult + Piece;
+    Parts:= Parts + [Piece];
   end;
+  AResult:= string.Join('', Parts);
 end; // function
+
 class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string;
   const AHashOverride: string): string;
 var

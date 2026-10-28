@@ -573,6 +573,23 @@ var
   UsesWanted: TStringList                ;
   UsesDone  : TStringList                ;
 
+  { Records one in-line replacement of F's span [F.StartCol, AEndCol) with AText and counts it as fixable.
+    The eleven single-line fixes below all ended in this same ten-line block (duplicate-code). }
+  procedure AddReplaceEdit(const AF: TLintFinding; AEndCol: Integer; const AText: string);
+  var
+    Ed: TTextEdit;
+  begin
+    Ed:= Default(TTextEdit);
+    Ed.FilePath:= AF.FilePath;
+    Ed.Kind    := tekReplaceInLine;
+    Ed.Line    := AF.StartLine;
+    Ed.Col     := AF.StartCol;
+    Ed.EndCol  := AEndCol;
+    Ed.Text    := AText;
+    Result:= Result + [Ed];
+    Inc(AFixableCount);
+  end; // procedure
+
   function LinesFor(const APath: string): TStringList;
   begin
     if not Cache.TryGetValue(APath, Result) then
@@ -614,15 +631,7 @@ begin
           if (Length(Span) >= 2) and (Span[1] = '(') and (Span[Length(Span)] = ')') then
           begin
             Repl:= Copy(Span, 2, Length(Span) - 2); { strip the outer parens }
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= Repl;
-            Result:= Result + [E];
-            Inc(AFixableCount);
+            AddReplaceEdit(F, F.EndCol, Repl);
           end;
         end; // if
       end // if
@@ -653,15 +662,7 @@ begin
             begin
               Repl:= 'Assigned(' + NcLhs + ')';
               if NcNeg then Repl:= 'not ' + Repl;
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind    := tekReplaceInLine;
-              E.Line    := F.StartLine;
-              E.Col     := F.StartCol;
-              E.EndCol  := F.EndCol;
-              E.Text    := Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
+              AddReplaceEdit(F, F.EndCol, Repl);
             end;
           end;
         end; // if
@@ -708,15 +709,7 @@ begin
               begin
                 Repl:= 'SameText(' + UcInner + ', ' + UcLit + ')';
                 if UcNeg then Repl:= 'not ' + Repl;
-                E:= Default(TTextEdit);
-                E.FilePath:= F.FilePath;
-                E.Kind    := tekReplaceInLine;
-                E.Line    := F.StartLine;
-                E.Col     := F.StartCol;
-                E.EndCol  := F.EndCol;
-                E.Text    := Repl;
-                Result:= Result + [E];
-                Inc(AFixableCount);
+                AddReplaceEdit(F, F.EndCol, Repl);
               end;
             end;
           end; // if
@@ -764,15 +757,7 @@ begin
                 AfNew:= if ContainsText(AfFn, 'upper') then UpperCase(AfLit) else LowerCase(AfLit);
                 if (AfLit <> '') and (AfNew <> AfLit) then
                 begin
-                  E:= Default(TTextEdit);
-                  E.FilePath:= F.FilePath;
-                  E.Kind    := tekReplaceInLine;
-                  E.Line    := F.StartLine;
-                  E.Col     := F.StartCol;
-                  E.EndCol  := F.EndCol;
-                  E.Text    := Copy(Span, 1, AfClose + AfQuote - 1) + AfNew;
-                  Result:= Result + [E];
-                  Inc(AFixableCount);
+                  AddReplaceEdit(F, F.EndCol, Copy(Span, 1, AfClose + AfQuote - 1) + AfNew);
                 end;
               end;
             end;
@@ -800,15 +785,7 @@ begin
               var Inner: string:= Trim(Copy(Ln, OpenP + 1, CloseP - OpenP - 1));
               if Inner <> '' then
               begin
-                E:= Default(TTextEdit);
-                E.FilePath:= F.FilePath;
-                E.Kind:= tekReplaceInLine;
-                E.Line:= F.StartLine;
-                E.Col := F.StartCol;
-                E.EndCol:= CloseP + 1; { exclusive end -- one past the ')' }
-                E.Text:= Inner;
-                Result:= Result + [E];
-                Inc(AFixableCount);
+                AddReplaceEdit(F, CloseP + 1, Inner); { exclusive end -- one past the ')' }
               end;
             end;
           end; // if
@@ -835,15 +812,7 @@ begin
           end;
           if Ok and (Rest <> '') then
           begin
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= Rest;
-            Result:= Result + [E];
-            Inc(AFixableCount);
+            AddReplaceEdit(F, F.EndCol, Rest);
           end;
         end; // if
       end // if
@@ -872,15 +841,7 @@ begin
             Repl:= TrimRight(Copy(Span, 1, AsPos - 1));
             if Repl <> '' then
             begin
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind:= tekReplaceInLine;
-              E.Line  := F.StartLine;
-              E.Col   := F.StartCol;
-              E.EndCol:= F.EndCol;
-              E.Text:= Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
+              AddReplaceEdit(F, F.EndCol, Repl);
             end;
           end;
         end; // if
@@ -927,15 +888,7 @@ begin
               if Positive then Repl:= LhsText
               else if IsSingleTokenAtom(LhsText) then Repl:= 'not ' + LhsText
               else Repl:= 'not (' + LhsText + ')';
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind:= tekReplaceInLine;
-              E.Line  := F.StartLine;
-              E.Col   := F.StartCol;
-              E.EndCol:= F.EndCol;
-              E.Text:= Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
+              AddReplaceEdit(F, F.EndCol, Repl);
             end; // if
           end; // if
         end; // if
@@ -951,15 +904,7 @@ begin
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
           if (Span <> '') and (Span <> LowerCase(Span)) then
           begin
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= LowerCase(Span);
-            Result:= Result + [E];
-            Inc(AFixableCount);
+            AddReplaceEdit(F, F.EndCol, LowerCase(Span));
           end;
         end; // if
       end // if
@@ -989,15 +934,7 @@ begin
             Repl:= TrimLeft(Copy(Span, ThenEnd, MaxInt));
             if Repl <> '' then
             begin
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind:= tekReplaceInLine;
-              E.Line  := F.StartLine;
-              E.Col   := F.StartCol;
-              E.EndCol:= F.EndCol;
-              E.Text:= Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
+              AddReplaceEdit(F, F.EndCol, Repl);
             end;
           end;
         end; // if
@@ -1014,15 +951,7 @@ begin
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
           if Trim(Span) <> '' then
           begin
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= Span + ' - 1';
-            Result:= Result + [E];
-            Inc(AFixableCount);
+            AddReplaceEdit(F, F.EndCol, Span + ' - 1');
           end;
         end; // if
       end; // if

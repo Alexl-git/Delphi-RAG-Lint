@@ -2300,8 +2300,8 @@ var
     Body:= ADefProc.ChildByField('body');
     if Body.IsNull then Exit;
     if Body.NodeType = 'asm' then Exit;
-    if HasInherited(Body) then Exit;
-    if IsCtor and DelegatesToOwnCtor(Body) then Exit; { F1: a delegating constructor leaves ancestor init to its target }
+    { F1: a delegating constructor leaves ancestor init to its target }
+    if HasInherited(Body) or (IsCtor and DelegatesToOwnCtor(Body)) then Exit;
     P:= Hdr.StartPoint;
     F:= Default(TLintFinding);
     F.Severity:= 'warning';
