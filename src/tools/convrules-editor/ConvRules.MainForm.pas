@@ -230,6 +230,7 @@ type
       FLostClickTitle: string         ; // N1: the progress title the Convert click was lost under; '' = no notice pending
       FBusyTitle    : string          ; // N1: the running long call's title (RunLongCallTracked); '' = none
       FLostCommand  : string          ; // N7/N11: CommandName of the refused click FLostClickTitle reports
+      FGateHook     : HHOOK           ; // dlggap: the WH_GETMESSAGE hook that runs NativeLoopMessage; 0 = none
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCancelStatus : string          ; // the status text that cancel wrote; SetStatusAfterCancel keeps it while it is on screen
       { Keys (TValidateJob.Key) of blocks whose validation a Cancel cut short. The
@@ -2409,6 +2410,16 @@ type
       /// enabled check at all) and input that queued while the main thread was blocked.
       /// Sent messages never pass a queue and are not filtered.</remarks>
       procedure AppMessage(var Msg: TMsg; var Handled: Boolean);
+      /// <summary>The queue filter inside a native common dialog's own loop (dlggap): the
+      /// WH_GETMESSAGE hook passes every message removed from the queue here while NativeDialogUp.
+      /// A command for the main form (NativeLoopVerdict gvRefuse) becomes WM_NULL and arms
+      /// FLostClickTimer to report it once the dialog is gone; other main-form input (gvDrop)
+      /// becomes WM_NULL silently.</summary>
+      /// <param name="AMsg">The message the loop is about to dispatch; rewritten to WM_NULL when refused or dropped.</param>
+      /// <remarks>AppMessage cannot do this: Application.OnMessage is called by VCL pumps only,
+      /// never by a TOpenDialog / TSaveDialog / SelectDirectory loop, which therefore ran a posted
+      /// Save, Convert or Delete under the dialog. Main thread only.</remarks>
+      procedure NativeLoopMessage(var AMsg: TMsg);
       /// <summary>The caption of what a refused message would have clicked: a menu item
       /// (WM_COMMAND from a menu) or a TButton; '' when it is neither.</summary>
       /// <param name="AMsg">The refused message.</param>
@@ -2940,6 +2951,18 @@ end;
   TypeOfCell / LeafNameOf. }
 function GridRowMatchesFilter(const AFromCell, AToCell, AFromFilter, AToFilter: string): Boolean; forward;
 
+var
+  GGateForm: TConvRulesForm = nil; // dlggap: the form GateGetMsgHook filters for; nil = none
+
+{ dlggap: WH_GETMESSAGE hook of the main thread. Every loop that removes a message -- a native
+  common dialog's included, which never calls Application.OnMessage -- passes it here first. }
+function GateGetMsgHook(ACode: Integer; AWParam: WPARAM; ALParam: LPARAM): LRESULT; stdcall;
+begin
+  if (ACode = HC_ACTION) and (AWParam = PM_REMOVE) and (GGateForm <> nil) and NativeDialogUp then
+    GGateForm.NativeLoopMessage(PMsg(ALParam)^);
+  Result:= CallNextHookEx(0, ACode, AWParam, ALParam);
+end;
+
 { TConvRulesForm }
 
 constructor TConvRulesForm.Create(AOwner: TComponent);
@@ -2977,6 +3000,8 @@ begin
   OnCloseQuery:= FormCloseQueryHandler;
   Application.OnHint:= AppHint;
   Application.OnMessage:= AppMessage; // N7/N11: the one queue filter while busy
+  GGateForm:= Self;                   // dlggap: ... and the one under a native common dialog
+  FGateHook:= SetWindowsHookEx(WH_GETMESSAGE, @GateGetMsgHook, 0, GetCurrentThreadId);
   Visible:= True; // ensure the CreateNew form is shown by Run
 
   // Where the Open-form dialog resumes. --form's own folder wins over the stored
@@ -3034,6 +3059,10 @@ begin
     Application.OnHint:= nil;
   if TMethod(Application.OnMessage).Data = Self then
     Application.OnMessage:= nil;
+  if FGateHook <> 0 then
+    UnhookWindowsHookEx(FGateHook);
+  if GGateForm = Self then
+    GGateForm:= nil;
   FEngine.Free;
   FBook.Free;
   // Both are lazily created (FVisualSet only if the engine answered, FDeclUnits on
@@ -6130,8 +6159,6 @@ var
   U        : TUsageSet             ;
   L        : TPropLeaf             ;
   F        : string                ;
-  T        : string                ;
-  UnitParts: TArray<TArray<string>>;
   FromBare : string                ;
   DotPos   : Integer               ;
 begin
@@ -6827,6 +6854,24 @@ begin
     FLostClickTitle:= BusyTitleFor(FBusyTitle, FLblStatus.Caption);
     FLostClickTimer.Enabled:= True;
   end;
+end;
+
+procedure TConvRulesForm.NativeLoopMessage(var AMsg: TMsg);
+begin
+  if not HandleAllocated then
+    Exit;
+  var LInMain: Boolean:= (AMsg.hwnd <> 0) and (GetAncestor(AMsg.hwnd, GA_ROOT) = Handle);
+  var LVerdict: TGateVerdict:= NativeLoopVerdict(AMsg.message, NativeDialogUp, LInMain, GateTargetClass(AMsg.hwnd));
+  if LVerdict = gvPass then
+    Exit;
+  // As AppMessage: the first refusal is reported; LostNoticeDeferred holds it while the dialog disables the editor.
+  if (LVerdict = gvRefuse) and (FLostClickTitle = '') then
+  begin
+    FLostCommand   := CommandName(GateTargetCaption(AMsg));
+    FLostClickTitle:= NATIVE_DIALOG_BUSY_TITLE;
+    FLostClickTimer.Enabled:= True;
+  end;
+  AMsg.message:= WM_NULL; // the dialog's loop dispatches a no-op: the command never runs
 end;
 
 const

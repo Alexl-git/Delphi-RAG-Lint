@@ -20,6 +20,9 @@ unit ConvRules.InputGate;
   and dispatches a command posted to the disabled editor unseen (gateleak: Add...
   under the Add... dialog nested a second one). Those sites run their dialog through
   RunNativeDialog, the one re-entrancy guard -- and the one piece of state here.
+  RunNativeDialog only stops a second dialog; a command that opens none (a posted Save,
+  Convert, Delete) is refused inside those loops by NativeLoopVerdict, which the editor
+  applies from a WH_GETMESSAGE hook -- the one filter every loop on the thread passes (dlggap).
 
   No Winapi here: the message numbers are named below and pinned to Winapi by
   the model tests. }
@@ -161,7 +164,7 @@ type
 /// sees a WM_COMMAND posted to the disabled editor meanwhile: that loop dispatches it, and Add...
 /// posted under the Add... dialog nested a second one. The refusal is silent and reads as a
 /// cancelled dialog: only a posted command gets here (Windows drops a user's click on a disabled
-/// window). Not covered: a command that opens no dialog still runs under one. NOT pure -- the one
+/// window). A command that opens no dialog is refused before it gets here (NativeLoopVerdict). NOT pure -- the one
 /// process-wide flag of this unit; main thread only. The flag is cleared when AExecute returns or
 /// raises.</remarks>
 function RunNativeDialog(const AExecute: TNativeDialogRun): Boolean;
@@ -169,6 +172,29 @@ function RunNativeDialog(const AExecute: TNativeDialogRun): Boolean;
 /// <summary>Whether a native common dialog run by RunNativeDialog is up.</summary>
 /// <returns>True from the moment RunNativeDialog calls AExecute until it returns or raises.</returns>
 function NativeDialogUp: Boolean;
+
+const
+  /// <summary>What a command refused under a native common dialog (NativeLoopVerdict) names as the
+  /// busy work in its notice (LostCommandStatus).</summary>
+  NATIVE_DIALOG_BUSY_TITLE = 'a file or folder dialog was open';
+
+/// <summary>PURE (dlggap, 2026-10-28): what to do with one message a native common dialog's own
+/// message loop removes from the queue -- the queue filter for the loops GateVerdictFor never sees.</summary>
+/// <param name="AMsg">The message number (TMsg.message).</param>
+/// <param name="ADialogUp">NativeDialogUp now.</param>
+/// <param name="ATargetInMainForm">As for GateVerdict: the message's window is the main form or one
+/// of its child windows. The dialog itself is not, so its own buttons, keys and list always pass.</param>
+/// <param name="AWndClass">As for IsSelectionClass; '' = unknown.</param>
+/// <returns>gvPass while no dialog is up (Application.OnMessage owns the VCL pumps then); else
+/// GateVerdictFor with the editor busy: a WM_COMMAND or BM_CLICK for the main form -- Save, Convert,
+/// Delete, any menu item or button -- is gvRefuse, other main-form input gvDrop, the rest gvPass
+/// (paint, timers: the refusal's notice waits on a timer until the dialog is gone).</returns>
+/// <remarks>Root cause it answers: RunNativeDialog only stops a SECOND dialog; a command that opens
+/// no dialog, posted to the disabled editor while one is up, was dispatched by the dialog's loop and
+/// ran (a Save, a Convert under File > Open). TConvRulesForm applies this from a WH_GETMESSAGE hook,
+/// which every loop on the thread passes, native ones included; refused like N7/N11 and reported
+/// once the dialog closes.</remarks>
+function NativeLoopVerdict(AMsg: Cardinal; ADialogUp, ATargetInMainForm: Boolean; const AWndClass: string): TGateVerdict;
 
 implementation
 uses
@@ -269,6 +295,13 @@ end;
 function NativeDialogUp: Boolean;
 begin
   Result:= GNativeDialogUp;
+end;
+
+function NativeLoopVerdict(AMsg: Cardinal; ADialogUp, ATargetInMainForm: Boolean; const AWndClass: string): TGateVerdict;
+begin
+  Result:= gvPass;
+  if ADialogUp then
+    Result:= GateVerdictFor(AMsg, True, ATargetInMainForm, AWndClass);
 end;
 
 end.

@@ -2,7 +2,11 @@
 # (feat/convert-tab, Task 3, 2026-09-29).
 # Usage: pwsh -File drive-file-menu.ps1 -Exe <path\ConvRulesEditor.exe>  (put a frozen drag-lint.exe beside it).
 # Writes its fixture book under a fresh %TEMP%\filemenu-<id> folder and deletes it on exit.
-param([string]$Exe)
+# DLGGAP (2026-10-28): File > Save posted while the Save As dialog is up (a command that opens NO dialog) must not
+# run under it (dlggap.save.not.run) and is reported once the dialog closes (dlggap.save.reported). RED on the
+# pre-dlggap exe: the dialog's native loop dispatched it and the book was written. -ProofNoDialogGate posts the
+# Save only AFTER the dialog is cancelled: both dlggap checks must then FAIL (the Save runs, nothing is refused).
+param([string]$Exe, [switch]$ProofNoDialogGate)
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class W {
@@ -296,7 +300,21 @@ try {
   }
   Check 'new.after.delete.prompts' ($why -eq '') $why
   Start-Sleep -Seconds 1
-  [void][W]::InvokeMenu($main, 'File|Save')
+  # DLGGAP: the book now has a path and an unsaved deletion, so a plain Save writes silently -- no dialog of its own.
+  # Posted while Save As is up, it must neither write nor vanish unreported.
+  Check 'dlggap.saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
+  $dlg = WaitCls $p.Id '#32770' 20
+  Check 'dlggap.saveas.dialog' ($dlg -ne [IntPtr]::Zero) (TopsNow $p.Id)
+  if (-not $ProofNoDialogGate) { [void][W]::InvokeMenu($main, 'File|Save') }
+  Start-Sleep -Milliseconds 2000
+  $wroteUnder = -not ((Get-Content $out -Raw) -match '#use GuardUnitX')
+  if ($dlg -ne [IntPtr]::Zero) { Click (@(Find $dlg 'Button' 'Cancel')[0]) }
+  if ($ProofNoDialogGate) { Start-Sleep -Milliseconds 700; [void][W]::InvokeMenu($main, 'File|Save'); Start-Sleep -Milliseconds 2000; $wroteUnder = -not ((Get-Content $out -Raw) -match '#use GuardUnitX') }
+  Check 'dlggap.save.not.run' (-not $wroteUnder) ("book written while the dialog was up: $wroteUnder")
+  $st = ''; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt 10) { $st = (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | '; if ($st -match 'Save was NOT run' -and $st -match 'file or folder dialog') { break }; Start-Sleep -Milliseconds 300 }
+  Check 'dlggap.save.reported' (($st -match 'Save was NOT run') -and ($st -match 'file or folder dialog')) ("status: $st")
+  Start-Sleep -Seconds 1  [void][W]::InvokeMenu($main, 'File|Save')
   $t0 = Get-Date; while ((Test-Path $out) -and ((Get-Content $out -Raw) -match 'GuardUnitX') -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500 }
   Start-Sleep -Seconds 2
 
