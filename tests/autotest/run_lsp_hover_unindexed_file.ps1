@@ -188,7 +188,10 @@ end.
 $looseFile = Join-Path $WorkDir 'loose\LooseUnit.pas'
 WriteAnsi $looseFile $looseText
 
-$libDb  = Join-Path $WorkDir 'lib.sqlite'
+# LSP-1 CORE: a library index is recognised by its name library-<Platform> (the per-file context
+# answers a loose file from the platform library only); the central defaults are never the user's.
+$libDb  = Join-Path $WorkDir 'library-Win64.sqlite'
+$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
 $projDb = Join-Path $WorkDir 'proj.sqlite'
 & $Exe index "$WorkDir\libsrc"  --db $libDb  2>&1 | Out-Null
 & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null

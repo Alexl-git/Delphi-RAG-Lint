@@ -2595,6 +2595,14 @@ end;
   project's DB and THAT platform's library DB, never another project's store.
   Guarded by tests\autotest\run_lsp_context_*.ps1. }
 
+{ The libraries.<APlatform>.libraryDb of the central defaults, or ''. }
+function DefaultsLibraryDbFor(const ADefaults: TContextDefaults; const APlatform: string): string;
+begin
+  Result:= '';
+  for var L: TLibraryDefault in ADefaults.Libraries do
+    if SameText(L.Platform, APlatform) then Exit(L.LibraryDb);
+end;
+
 function TLSPServer.Defaults: TContextDefaults;
 begin
   if not FDefaultsRead then
@@ -2666,7 +2674,7 @@ begin
     begin
       if Ctx.Stale then
       begin
-        Result.StaleContextFile:= Ctx.ContextFile;
+        Result.StaleContextFile:= ContextFileFor(Ctx.SourceFile);
         Result.Project:= Ctx.SourceFile;
         Result.Source := lcsDproj;
       end
@@ -2674,7 +2682,7 @@ begin
       begin
         HaveCtx       := True;
         Result.Source := lcsContextFile;
-        Result.Project:= if Ctx.Project <> '' then Ctx.Project else Ctx.ContextFile;
+        Result.Project:= if Ctx.Project <> '' then Ctx.Project else Ctx.SourceFile;
       end;
     end;
   end;
@@ -2773,7 +2781,7 @@ begin
     resolve-dbs. None -> '' and the caller refuses library answers. }
   if FExplicitDbs or not UseResolver then Result.LibraryDb:= StartupLibraryFor(ACtx.Platform);
   if Result.LibraryDb = '' then Result.LibraryDb:= ACtx.LibraryDbOverride;
-  if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDb(Defaults, ACtx.Platform);
+  if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
   if (Result.LibraryDb = '') and UseResolver then Result.LibraryDb:= Resolved.LibraryDb;
   if (Result.LibraryDb <> '') and not TFile.Exists(Result.LibraryDb) then Result.LibraryDb:= '';
 end;
@@ -3128,7 +3136,7 @@ begin
     if TryLoadProjectContext(Proj, FClientCtx) then
     begin
       FHaveClientCtx:= True;
-      Proj:= if FClientCtx.Project <> '' then FClientCtx.Project else FClientCtx.ContextFile;
+      if FClientCtx.Project <> '' then Proj:= FClientCtx.Project;
     end
     else
       Writeln(ErrOutput, 'drag-lint LSP: client context file not readable, ignored: ', Proj);

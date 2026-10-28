@@ -69,6 +69,7 @@ uses
   DRagLint.Wiring in '..\core\DRagLint.Wiring.pas',
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
+  DRagLint.Project.ContextFile in '..\core\DRagLint.Project.ContextFile.pas',
   DRagLint.Core.LintBudget in '..\core\DRagLint.Core.LintBudget.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
   // The next unit and DragLint.Plugin.OpenSourcePath are listed so the CLI project index and lint cover the
@@ -257,7 +258,6 @@ uses
   DRagLint.Analysis.LintTree in '..\analysis\DRagLint.Analysis.LintTree.pas',
   DRagLint.Project.Members in '..\core\DRagLint.Project.Members.pas',
   DRagLint.Project.Coherence in '..\core\DRagLint.Project.Coherence.pas',
-  DRagLint.Project.ContextFile in '..\core\DRagLint.Project.ContextFile.pas',
   DRagLint.Analysis.SurfaceFingerprint in '..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas',
   DRagLint.Analysis.SurfaceAdapters in '..\analysis\DRagLint.Analysis.SurfaceAdapters.pas',
   DRagLint.Project.Facts in '..\project\DRagLint.Project.Facts.pas',
