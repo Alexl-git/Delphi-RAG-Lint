@@ -141,7 +141,8 @@ type
       FPickProjLoaded: Boolean       ;
       FPickW32Loaded : Boolean       ;
       FPickW64Loaded : Boolean       ;
-      FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
+      FPickLoading   : Boolean       ; // EnsurePickLists' progress window is up: no second load from its pump
+      FTabUnits     : TTabSheet             ; // the Unit Rules page; "is it active?" checks
       FTabConvert    : TTabSheet             ; // the Convert page; drops go to FConvertTab while it is active
       FConvertTab    : TConvertTab           ; // checked rule books x source units
       FTabWorkList   : TTabSheet             ; // the Work list page (Task 3, engine 1.27.0 pas_uses)
@@ -5456,12 +5457,33 @@ begin
 
   // Three descendant sets, once per session. Non-fatal: if the engine cannot
   // answer, rows stay '?' rather than being labelled non-visual on no evidence.
+  // STARTUP2: behind the progress window (~6.5 s on library-Win64, --form start-up
+  // included), so the editor keeps answering and Cancel works. Cancelled = no sets
+  // (rows '?', said on the status line); the next Examine asks again.
   if FVisualSet = nil then
   begin
     var LGuard: IInterface:= HourGlass;
-    FVisualSet    := LoadDescendantSet('TControl'   );
-    FComponentSet := LoadDescendantSet('TComponent' );
-    FPersistentSet:= LoadDescendantSet('TPersistent');
+    var LSets: TArray<TStringList>:= [nil, nil, nil];
+    try
+      if FEngine.RunInLongCall('Loading the TControl / TComponent / TPersistent class sets',
+        procedure
+        begin
+          LSets[0]:= LoadDescendantSet('TControl'   );
+          LSets[1]:= LoadDescendantSet('TComponent' );
+          LSets[2]:= LoadDescendantSet('TPersistent');
+        end) then
+      begin
+        FVisualSet    := LSets[0];
+        FComponentSet := LSets[1];
+        FPersistentSet:= LSets[2];
+        LSets:= nil; // owned by the form now
+      end
+      else
+        SetError(DescendantSetsCancelledText);
+    finally
+      for var LSet: TStringList in LSets do
+        LSet.Free;
+    end; // try
   end;
 
   if Length(FCatalog) = 0 then
@@ -9734,44 +9756,69 @@ begin
 end; // function
 
 procedure TConvRulesForm.EnsurePickLists(APlatform: TConvPlatform);
+type
+  TLoadOne = reference to procedure(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean);
 var
-  Failed: Boolean;
-
-  { One list, once. A failure is reported and NOT cached, so the next open
-    retries -- the usual cause (a DB mid-rebuild) is transient. }
-  procedure LoadOne(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean);
-  var
-    Names: TArray<string>;
-    Err  : string        ;
-  begin
-    if ALoaded then
-      Exit;
-    if FEngine.ListUnits(ADbs, Names, Err) then
-    begin
-      AList  := Names;
-      ALoaded:= True;
-    end
-    else
-    begin
-      Failed:= True;
-      SetError(Format('Unit picker: %s units unavailable -- %s', [AWhat, Err]));
-    end;
-  end; // procedure
-
+  Failed : Boolean;
+  LErrs  : TArray<string>;
+  LoadOne: TLoadOne;
 begin
+  { One list, once. A failure is reported and NOT cached, so the next open
+    retries -- the usual cause (a DB mid-rebuild) is transient. Runs on the
+    progress window's worker: it touches no VCL; the errors are reported after.
+    An anonymous method, not a nested procedure: the worker's closure calls it. }
+  LoadOne:=
+    procedure(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean)
+    var
+      Names: TArray<string>;
+      Err  : string        ;
+    begin
+      if ALoaded then
+        Exit;
+      if FEngine.ListUnits(ADbs, Names, Err) then
+      begin
+        AList  := Names;
+        ALoaded:= True;
+      end
+      else
+      begin
+        Failed:= True;
+        LErrs := LErrs + [Format('Unit picker: %s units unavailable -- %s', [AWhat, Err])];
+      end;
+    end;
+
   if FPickProjLoaded and (FPickW32Loaded or (APlatform = cpWin64)) and (FPickW64Loaded or (APlatform = cpWin32)) then
+    Exit;
+  // A classify or pick reached from inside the window's own message pump: the load
+  // in progress answers it; the caller sees what is loaded so far (a failure).
+  if FPickLoading then
     Exit;
   var LGuard: IInterface:= HourGlass;  // dl:ok write-only-local@8f1f -- REVIEWED 2026-09-24 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
   SetStatus('Loading unit lists for the unit picker (first time only)...');
-  Application.ProcessMessages;
   Failed:= False;
-  LoadOne([GEditorProjectDb], 'project', FPickProj, FPickProjLoaded);
-  if APlatform <> cpWin64 then
-    LoadOne(LibDbsFor(cpWin32, GEditorLibDir), 'Win32 library', FPickWin32, FPickW32Loaded);
-  if APlatform <> cpWin32 then
-    LoadOne(LibDbsFor(cpWin64, GEditorLibDir), 'Win64 library', FPickWin64, FPickW64Loaded);
-  if not Failed then
-    SetStatus(Format('Unit picker: %d project, %d Win32, %d Win64 unit(s) loaded.', [Length(FPickProj), Length(FPickWin32), Length(FPickWin64)]));
+  LErrs := nil;
+  // STARTUP2: the Win64 library list is an 11.5 s read: behind the progress window, so
+  // the editor keeps answering and Cancel works. The worker writes only these fields.
+  FPickLoading:= True;
+  try
+    var LDone: Boolean:= FEngine.RunInLongCall('Loading unit lists for the unit picker',
+      procedure
+      begin
+        LoadOne([GEditorProjectDb], 'project', FPickProj, FPickProjLoaded);
+        if APlatform <> cpWin64 then
+          LoadOne(LibDbsFor(cpWin32, GEditorLibDir), 'Win32 library', FPickWin32, FPickW32Loaded);
+        if APlatform <> cpWin32 then
+          LoadOne(LibDbsFor(cpWin64, GEditorLibDir), 'Win64 library', FPickWin64, FPickW64Loaded);
+      end);
+    if not LDone then
+      SetError(PickListsCancelledText)
+    else if Failed then
+      SetError(string.Join(' ', LErrs))
+    else
+      SetStatus(Format('Unit picker: %d project, %d Win32, %d Win64 unit(s) loaded.', [Length(FPickProj), Length(FPickWin32), Length(FPickWin64)]));
+  finally
+    FPickLoading:= False;
+  end; // try
 end; // procedure
 
 function TConvRulesForm.PickUnit(const ACaption, AInitial: string; ASide: TUnitPickSide; out AUnit: string): Boolean;

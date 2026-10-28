@@ -10152,6 +10152,139 @@ begin
     TDirectory.Delete(Dir, True);
   end;
 end;
+
+{ STARTUP2 (2026-10-27): RunInLongCall runs ordinary adapter calls inside the long-call
+  runner (the progress window's worker) and its Cancel stops the engine call in flight.
+  The --form start-up's three descendant sets (~6.5 s) and the unit picker's library
+  lists (11.5 s) ran on the main thread with no window and no Cancel. The stand-ins log
+  every call and answer one class name; the sleeping one runs ~6 s. }
+procedure TestRunInLongCall;
+const
+  LOG_CMD         = '@echo %1>>"%~dp0calls.log"'#13#10'@echo TFoo'#13#10'@exit /b 0'#13#10;
+  SLEEP_CMD       = '@ping -n 7 127.0.0.1 >nul'#13#10;
+  PART_CMD        = '@echo TFoo'#13#10'@ping -n 7 127.0.0.1 >nul'#13#10;
+  CANCEL_AFTER_MS = 300;
+  CANCEL_BOUND_MS = 3000; // cancel + process teardown, far under the stand-in's ~6 s
+  TITLE           = 'Loading class sets';
+var
+  Dir    : string;
+  Log    : string;
+  Eng    : TEngineAdapter;
+  Names  : TArray<string>;
+  Err    : string;
+  Ok     : Boolean;
+  Ran    : Boolean;
+  CallsIn: Integer;
+  Seen   : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'longcall-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TPath.Combine(Dir, 'calls.log');
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'log.cmd'), LOG_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'sleep.cmd'), SLEEP_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'part.cmd'), PART_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'log.cmd'), []);
+    try
+      // No runner: inline, uncancellable, the answer is kept.
+      Ok:= False;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListDescendantsOf('TControl', Names, Err); end);
+      Check('longcall.inline.runs', Ran and Ok and (Length(Names) = 1) and not Eng.LastCancelled, Format('ran=%s ok=%s n=%d err=%s', [BoolToStr(Ran, True), BoolToStr(Ok, True), Length(Names), Err]));
+
+      // A runner: the calls are made INSIDE it, under its title.
+      TFile.Delete(Log);
+      CallsIn:= -1;
+      Seen   := '';
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          CallsIn:= LogLineCount(Log);
+          Seen   := ATitle;
+          Result := AWork(nil, nil);
+        end;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListDescendantsOf('TControl', Names, Err); end);
+      Check('longcall.inside.runner', Ran and Ok and (CallsIn = 0) and (LogLineCount(Log) = 1) and (Seen = TITLE), Format('before=%d after=%d title=%s', [CallsIn, LogLineCount(Log), Seen]));
+
+      // Cancel pressed before the work starts: no engine call, not a success.
+      TFile.Delete(Log);
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T: TCancelToken;
+        begin
+          T:= TCancelToken.Create;
+          try
+            T.Cancel;
+            Result:= AWork(nil, T);
+          finally
+            T.Free;
+          end;
+        end;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListDescendantsOf('TControl', Names, Err); end);
+      Check('longcall.cancel.before.no.call', (not Ran) and Eng.LastCancelled and (LogLineCount(Log) = 0), Format('ran=%s calls=%d', [BoolToStr(Ran, True), LogLineCount(Log)]));
+    finally
+      Eng.Free;
+    end;
+
+    // Cancel DURING an engine call: the call stops, its answer is a failure, not a short list.
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'sleep.cmd'), []);
+    try
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T : TCancelToken;
+          Th: TThread;
+        begin
+          T:= TCancelToken.Create;
+          try
+            // The stand-in for the user's Cancel click, from another thread as the window's is.
+            Th:= TThread.CreateAnonymousThread(
+              procedure
+              begin
+                TThread.Sleep(CANCEL_AFTER_MS);
+                T.Cancel;
+              end);
+            Th.FreeOnTerminate:= False;
+            Th.Start;
+            try
+              Result:= AWork(nil, T);
+            finally
+              Th.WaitFor;
+              Th.Free;
+            end;
+          finally
+            T.Free;
+          end;
+        end;
+      Ok:= True;
+      var LStart: UInt64:= GetTickCount64;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListUnits(['a.sqlite'], Names, Err); end);
+      var LElapsed: UInt64:= GetTickCount64 - LStart;
+      Check('longcall.cancel.stops.call', (not Ran) and Eng.LastCancelled and (not Ok) and (LElapsed < CANCEL_BOUND_MS), Format('ran=%s ok=%s %d ms err=%s', [BoolToStr(Ran, True), BoolToStr(Ok, True), LElapsed, Err]));
+
+      // A descendant query cancelled after its first line: a failure, never that one line
+      // as the whole set (it took exit 2 alone as a failure, and read a cancelled call's
+      // partial output as the answer).
+      var LPart: TEngineAdapter:= TEngineAdapter.Create(TPath.Combine(Dir, 'part.cmd'), []);
+      try
+        LPart.LongCallRunner:= Eng.LongCallRunner;
+        Ok:= True;
+        Ran:= LPart.RunInLongCall(TITLE, procedure begin Ok:= LPart.ListDescendantsOf('TControl', Names, Err); end);
+        Check('longcall.cancel.descendants.not.short', (not Ran) and (not Ok) and (Length(Names) = 0), Format('ran=%s ok=%s n=%d err=%s', [BoolToStr(Ran, True), BoolToStr(Ok, True), Length(Names), Err]));
+      finally
+        LPart.Free;
+      end;
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  // A cancelled load is said, with its consequence and how it is retried (never stale-silent).
+  Check('longcall.sets.cancelled.text', ContainsText(DescendantSetsCancelledText, 'cancelled') and ContainsText(DescendantSetsCancelledText, '[?]') and ContainsText(DescendantSetsCancelledText, 'again'), DescendantSetsCancelledText);
+  Check('longcall.picklists.cancelled.text', ContainsText(PickListsCancelledText, 'cancelled') and ContainsText(PickListsCancelledText, 'MISSING') and ContainsText(PickListsCancelledText, 'again'), PickListsCancelledText);
+end;
 { ResolveClassQName answers are cached for the session (job C6 follow-up): every
   rule click resolved its From and To classes again (0.5-1.2 s each), so even a
   trivial load flashed the progress window. Keyed on the name (case-insensitive,
@@ -16290,6 +16423,7 @@ begin
     TestChooseTestEngine;
     TestStdoutSeparateFromStderr;
     TestProptreeResolveInRunner;
+    TestRunInLongCall;
     TestResolveCache;
     TestValidateParse;
     TestValidate1262Note;

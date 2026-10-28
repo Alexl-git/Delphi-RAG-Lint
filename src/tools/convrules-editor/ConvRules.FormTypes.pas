@@ -430,6 +430,14 @@ function SkipListFromRows(const AList: TSkipList; const ARows: TFormTypeRows): T
 /// </remarks>
 function ApplyNamedFilterToRows(const ARows: TFormTypeRows; const APatterns: TArray<string>; const ADeclaringUnits: TArray<string>; AExcludeStandard: Boolean; out AHits: Integer; out AError: string): TFormTypeRows;
 
+/// <summary>STARTUP2: the status line when the user cancelled loading the
+/// TControl / TComponent / TPersistent class sets behind the progress window.</summary>
+/// <returns>What it means -- every form type shows [?] -- and that the next Examine
+/// (Open form...) loads the sets again.</returns>
+/// <remarks>Pure. A cancelled load keeps no set at all, so the rows say "unknown",
+/// never "non-visual" on no evidence.</remarks>
+function DescendantSetsCancelledText: string;
+
 implementation
 
 uses
@@ -777,6 +785,11 @@ begin
     Result:= Format('%d of %d shown -- %d ruled, %d skipped, %d to do', [AVisibleCount, ACnt.Total, ACnt.Ruled, ACnt.Skipped, ACnt.ToDo])
   else
     Result:= Format('%d classes -- %d ruled, %d skipped, %d to do', [ACnt.Total, ACnt.Ruled, ACnt.Skipped, ACnt.ToDo]);
+end; // function
+
+function DescendantSetsCancelledText: string;
+begin
+  Result:= 'Class sets not loaded (cancelled): every form type shows [?] (visual or not unknown). Examine a form again to load them.';
 end; // function
 
 end.
