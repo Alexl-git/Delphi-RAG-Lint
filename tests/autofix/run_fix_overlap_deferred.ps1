@@ -16,8 +16,8 @@
     c1  pass 1: on line 10, exactly one of the two applied, the other deferred
     c2  pass 1 output compiles (dcc64; SKIP without rsvars.bat)
     c3  pass 2 applies the deferred finding; its output compiles too
-    c4  control: a finding on another line (line 13) is applied in pass 1 --
-        deferral is per conflict, not per file
+    c4  control: line 13 (redundant-not-not / nonminimal-bool, its own conflict)
+        still gets its FIRST fix in pass 1 -- deferral is per conflict, not per file
 
   Run from a NEUTRAL CWD, pwsh 7.
 #>
@@ -60,8 +60,8 @@ try {
   Check "c1 pass 1: line $lineA has both findings, 1 applied + 1 deferred" (($onA.Count -eq 2) -and ($app.Count -eq 1) -and ($def.Count -eq 1)) (($onA | ForEach-Object { "$($_.rule):applied=$($_.applied),deferred=$($_.deferred)" }) -join '; ')
   $after1 = [IO.File]::ReadAllLines($pas)[$lineA - 1]
   Check "c2 pass 1 output compiles: '$after1'" (Compiles $WorkDir 'ov.pas')
-  $nn = @($r1 | Where-Object { $_.line -eq $lineB -and $_.rule -eq 'redundant-not-not' -and $_.applied -eq $true })
-  Check "c4 control: the line-$lineB fix is applied in pass 1" ($nn.Count -eq 1)
+  $nn = @($r1 | Where-Object { $_.line -eq $lineB -and $_.applied -eq $true })
+  Check "c4 control: line $lineB (its own conflict) still applies its first fix in pass 1" ($nn.Count -eq 1)
 
   if ($def.Count -eq 1) {
     $deferredRule = $def[0].rule
