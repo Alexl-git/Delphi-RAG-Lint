@@ -171,6 +171,11 @@ begin
         Edit.Line      := P + 1;
         Edit.EndLine   := AFinding.StartLine;
         Edit.Text      := Copy(TrimRight(ALines[P]), 1, Length(TrimRight(ALines[P])) - 1) + ';';
+        { ApplyReplaceLines guards Line against the WHOLE line; the ExpectLine
+          anchor guard wants a word of the TrimLeft'ed line instead, so an
+          indented line failed it and the removal was dropped while the
+          implementation insert still landed (E2004, dogfood 2026-10-27). }
+        Edit.ExpectLine:= 0;
         Edit.ExpectText:= ALines[P];
       end
       else Exit;
