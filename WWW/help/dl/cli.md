@@ -931,6 +931,23 @@ Described in:
 * [About and Status](features/about-and-status.md)
 * [info](features/info.md)
 
+### init
+
+Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command.
+
+```text
+drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<file.dproj>` |  |  |
+| `--dry-run` |  |  |  |
+| `--home-dir` |  |  |  |
+| `--appdata-dir` |  |  |  |
+
+Described in [init: one command from a project to a wired AI client](features/init-wiring.md).
+
 ### library-drift
 
 Flags registered library roots that have source on disk but nothing in the index.
@@ -1101,16 +1118,17 @@ Described in:
 
 ### mcp-config
 
-Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable.
+Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable.
 
 ```text
-drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]
+drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--claude-code` |  |  |  |
 | `--vscode` |  |  |  |
+| `--cursor` |  |  |  |
 | `--all` |  |  |  |
 | `--remove` |  |  |  |
 | `--dry-run` |  |  |  |
@@ -1122,7 +1140,7 @@ drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [
 | `--home-dir` |  |  |  |
 | `--appdata-dir` |  |  |  |
 
-Described in [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md).
+Described in [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md).
 
 ### menu-drift
 

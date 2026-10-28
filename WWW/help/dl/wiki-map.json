@@ -140,6 +140,7 @@
   "inc-indexing": "inc-indexing",
   "index-build-config": "index-build-config",
   "info": "info",
+  "init-verb": "init-wiring",
   "link-orm": "link-orm",
   "lint-project": "lint-project",
   "lint-tree": "lint-tree",

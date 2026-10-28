@@ -1,0 +1,1 @@
+{ "mcpServers": { "drag-lint": { "type": "stdio", "command": "{{ENGINE}}", "args": ["serve", "--db", "{{DB1}}"] } } }

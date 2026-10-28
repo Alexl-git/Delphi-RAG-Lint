@@ -50,7 +50,7 @@
     MC-DOTCLAUDE  <home>\.claude exists: --all adds Claude Code at <home>\.claude.json, VS Code
                   skipped; MC-CCD CLAUDE_CONFIG_DIR (scratch) wins over --home-dir
     MC-ENGINE     no --engine: the command is the running exe's full path
-    MC-JSON       --json: one array, one object per target, the documented fields
+    MC-CURSOR     item 8: --cursor / --all: ~\.cursor\mcp.json (home-dir) absent -> skipped, present -> added with the\n                  VS Code entry under "mcpServers", unchanged on rerun, --remove --json reports Target Cursor\n    MC-JSON       --json: one array, one object per target, the documented fields
     MC-REAL       the real files (see above)
 
   Exit: 0 all PASS, 1 any FAIL, 2 setup.
@@ -88,6 +88,7 @@ $Db2 = Join-Path $Bin 'Two.sqlite';    [IO.File]::WriteAllText($Db2, 'dummy')
 # ---- the real files: fingerprint now, compare in finally ------------------------------------
 $RealClaude = Join-Path $env:USERPROFILE '.claude.json'
 $RealVSCode = Join-Path $env:APPDATA 'Code\User\mcp.json'
+$RealCursor = Join-Path $env:USERPROFILE '.cursor\mcp.json'
 function Get-Print([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return 'absent' }
   (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
@@ -112,7 +113,7 @@ $PrevCcd = $env:CLAUDE_CONFIG_DIR
 $RealCcd = $(if ($PrevCcd) { Join-Path $PrevCcd '.claude.json' } else { '' })
 $RealBefore = @{
   ClaudePrint = Get-Print $RealClaude; ClaudeServers = Get-ServersText $RealClaude
-  VSCodePrint = Get-Print $RealVSCode
+  VSCodePrint = Get-Print $RealVSCode; CursorPrint = Get-Print $RealCursor
   ClaudeSibs  = (Get-Siblings $RealClaude) -join '|'; VSCodeSibs = (Get-Siblings $RealVSCode) -join '|'
   CcdPrint    = $(if ($RealCcd) { Get-Print $RealCcd } else { '' })
   CcdServers  = $(if ($RealCcd) { Get-ServersText $RealCcd } else { '' })
@@ -125,7 +126,7 @@ Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue
 function Invoke-McpConfig([string[]]$A) {
   $hasPath = $A -contains '--config-path'
   $hasDirs = ($A -contains '--home-dir') -and ($A -contains '--appdata-dir')
-  $usage   = ($A | Where-Object { $_ -in '--claude-code', '--vscode', '--all' }).Count -eq 0 -or ($A -contains '--bogus')
+  $usage   = ($A | Where-Object { $_ -in '--claude-code', '--vscode', '--cursor', '--all' }).Count -eq 0 -or ($A -contains '--bogus')
   if (-not ($hasPath -or $hasDirs -or $usage)) { throw "GUARD BUG: engine run without --config-path or scratch dirs: $($A -join ' ')" }
   foreach ($flag in '--config-path', '--home-dir', '--appdata-dir') {
     $i = [array]::IndexOf($A, $flag)
@@ -394,16 +395,17 @@ try {
   $eh = Join-Path $Work 'e-home'; $ea = Join-Path $Work 'e-appdata'
   New-Item -ItemType Directory -Force $eh, $ea | Out-Null
   $r = Invoke-McpConfig @('--all', '--home-dir', $eh, '--appdata-dir', $ea, '--engine', $Eng)
-  Check 'MC-ALL-SKIP' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'skipped,skipped') "exit=$($r.Code) $((Get-Actions $r.Out) -join ',')"
-  Check 'MC-ALL-SKIP-NOFILE' (-not (Test-Path -LiteralPath (Join-Path $eh '.claude.json')) -and -not (Test-Path -LiteralPath (Join-Path $ea 'Code'))) ''
-  Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped' $null $null
+  Check 'MC-ALL-SKIP' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'skipped,skipped,skipped') "exit=$($r.Code) $((Get-Actions $r.Out) -join ',')"
+  Check 'MC-ALL-SKIP-NOFILE' (-not (Test-Path -LiteralPath (Join-Path $eh '.claude.json')) -and -not (Test-Path -LiteralPath (Join-Path $ea 'Code')) -and -not (Test-Path -LiteralPath (Join-Path $eh '.cursor'))) ''
+  # (the golden words are the retired script's two targets plus Cursor, which is new: skipped like VS Code)
+Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped,skipped' $null $null
   $r = Invoke-McpConfig @('--claude-code', '--home-dir', $eh, '--appdata-dir', $ea, '--engine', $Eng)
   Check 'MC-NAMED-NOTINSTALLED' (($r.Code -eq 2) -and ($r.Err -match 'is the client installed')) "exit=$($r.Code)"
   Check-Parity 'MC-NAMED-NOTINSTALLED' $r 'refused' $null $null
   New-Item -ItemType Directory -Force (Join-Path $eh '.claude') | Out-Null
   $r = Invoke-McpConfig @('--all', '--home-dir', $eh, '--appdata-dir', $ea, '--engine', $Eng)
-  Check 'MC-DOTCLAUDE' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'added,skipped' -and ($r.Out -match [regex]::Escape("Path  : $(Join-Path $eh '.claude.json')"))) "$((Get-Actions $r.Out) -join ',')"
-  Check-Parity 'MC-DOTCLAUDE' $r 'added,skipped' (Join-Path $eh '.claude.json') (Get-Expected 'empty-object.claude.expected.json')
+  Check 'MC-DOTCLAUDE' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'added,skipped,skipped' -and ($r.Out -match [regex]::Escape("Path  : $(Join-Path $eh '.claude.json')"))) "$((Get-Actions $r.Out) -join ',')"
+  Check-Parity 'MC-DOTCLAUDE' $r 'added,skipped,skipped' (Join-Path $eh '.claude.json') (Get-Expected 'empty-object.claude.expected.json')
   $ccdE = Join-Path $Work 'e-ccd'
   New-Item -ItemType Directory -Force $ccdE | Out-Null
   try {
@@ -415,6 +417,29 @@ try {
     Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue
   }
 
+  # ---- MC-CURSOR (item 8): ~\.cursor\mcp.json, container "mcpServers", the VS Code entry shape ------
+  # absent -> skipped under --all (MC-ALL-SKIP above, with a home that has no .cursor); present -> added.
+  $ch = Join-Path $Work 'e-home-cursor'
+  New-Item -ItemType Directory -Force $ch | Out-Null
+  $cf = Join-Path $ch '.cursor\mcp.json'
+  $r = Invoke-McpConfig @('--all', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--db', $Db1)
+  Check 'MC-CURSOR-CONTROL-ABSENT' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'skipped,skipped,skipped' -and -not (Test-Path -LiteralPath (Join-Path $ch '.cursor'))) "$((Get-Actions $r.Out) -join ',')"
+  New-Item -ItemType Directory -Force (Join-Path $ch '.cursor') | Out-Null
+  $r = Invoke-McpConfig @('--all', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--db', $Db1)
+  Check 'MC-CURSOR-ADDED' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'skipped,skipped,added' -and ($r.Out -match [regex]::Escape("Path  : $cf"))) "exit=$($r.Code) $((Get-Actions $r.Out) -join ',')"
+  Check 'MC-CURSOR-TREE' (Test-SameTree (Get-Tree $cf) (Get-Expected 'cursor-add.expected.json')) ''
+  $before = Get-Hash $cf
+  $r = Invoke-McpConfig @('--cursor', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--db', $Db1)
+  Check 'MC-CURSOR-UNCHANGED' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'unchanged' -and ((Get-Hash $cf) -eq $before)) "$((Get-Actions $r.Out) -join ',')"
+  $r = Invoke-McpConfig @('--cursor', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--db', $Db1, '--remove', '--dry-run')
+  Check 'MC-CURSOR-DRYRUN-REMOVE' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'would-removed' -and ((Get-Hash $cf) -eq $before)) "$((Get-Actions $r.Out) -join ',')"
+  $r = Invoke-McpConfig @('--cursor', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--json', '--remove')
+  $j = $(try { @($r.Out | ConvertFrom-Json -NoEnumerate) } catch { @() })
+  $ok = ($r.Code -eq 0) -and ($j.Count -eq 1) -and ($j[0].Count -eq 1) -and ($j[0][0].Target -eq 'Cursor') -and ($j[0][0].Action -eq 'removed') -and
+        ($j[0][0].Path -eq $cf) -and ($j[0][0].Error -eq '') -and ($j[0][0].ExitCode -eq 0)
+  Check 'MC-CURSOR-JSON-REMOVE' $ok "out=$($r.Out)"
+  $r = Invoke-McpConfig @('--cursor', '--vscode', '--config-path', (Join-Path $Work 'x.json'))
+  Check 'MC-CURSOR-CONFIGPATH-ONE' (($r.Code -eq 2) -and ($r.Err -match 'exactly one of')) "exit=$($r.Code)"
   # ---- MC-ENGINE / MC-JSON -------------------------------------------------------------------
   $p = Set-Pair 'engine.json' $null
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E)
@@ -433,6 +458,7 @@ try {
 } finally {
   if ($null -ne $PrevCcd) { $env:CLAUDE_CONFIG_DIR = $PrevCcd } else { Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue }
   # ---- MC-REAL -------------------------------------------------------------------------------
+  Check 'MC-REAL-CURSOR' ((Get-Print $RealCursor) -eq $RealBefore.CursorPrint) "$RealCursor byte-identical (or absent both times)"
   Check 'MC-REAL-VSCODE' ((Get-Print $RealVSCode) -eq $RealBefore.VSCodePrint) "$RealVSCode byte-identical (or absent both times)"
   $cNow = Get-Print $RealClaude
   if ($cNow -eq $RealBefore.ClaudePrint) {

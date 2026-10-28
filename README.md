@@ -717,16 +717,17 @@ rename: a WorkspaceEdit the editor applies -- the server itself writes no file).
 
 ### MCP server (Claude / Cursor)
 
-Register it with Claude Code and VS Code in one step:
+Register it with Claude Code, VS Code and Cursor in one step:
 
 ```
 drag-lint mcp-config --all [--db C:\Projects\MyApp\_D-RAG\MyApp.sqlite] [--dry-run]
 drag-lint mcp-config --claude-code --remove
+drag-lint init --project C:\Projects\MyApp\MyApp.dproj [--dry-run]   # register + index + mcp-config --all for one project
 ```
 
 `--claude-code` edits the top-level `"mcpServers"` object of `~\.claude.json`
 (`%CLAUDE_CONFIG_DIR%\.claude.json` when that is set); `--vscode` edits `"servers"` in
-`%APPDATA%\Code\User\mcp.json`; `--all` does both and skips a client that is not installed.
+`%APPDATA%\Code\User\mcp.json`; `--cursor` edits `"mcpServers"` in `~\.cursor\mcp.json`; `--all` does all three and skips a client that is not installed.
 The entry is `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}`
 (plus `"env":{}` for Claude Code); `--engine <exe>` overrides the default (this exe), `--name <n>`
 the entry name (default `drag-lint`). The edit is **merged** (only that one entry changes; every
@@ -811,7 +812,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
-| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
+| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 23 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
 | [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 <!-- dl:registry:end feature-summary -->
 

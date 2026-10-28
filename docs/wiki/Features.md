@@ -329,6 +329,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
 | [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference |  |
 | [ide-release](ide-release) | `ide-release` |  |
+| [init: one command from a project to a wired AI client](init-verb) | `init` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [LSP full rule set on save](lsp-proxy-merge) | `lsp` |  |
 | [LSP protocol extensions](lsp-proxy-merge) | `lsp textDocument/documentSymbol`; `lsp textDocument/implementation`; `lsp textDocument/declaration`; `lsp textDocument/rename`; `lsp textDocument/codeLens`; `lsp textDocument/semanticTokens/full`; `lsp textDocument/inlayHint`; `lsp workspace/executeCommand`; `lsp draglint/ping` |  |
@@ -336,7 +337,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [lsp](lsp) | `lsp` |  |
 | [MCP server](Register-MCP-Server) | `mcp find_symbol`; `mcp find_callers`; `mcp lint`; `mcp get_symbol_doc`; `mcp find_by_doc_tag`; `mcp find_undocumented`; `mcp get_impact`; `mcp get_wiring`; `mcp get_surface`; `mcp get_slice`; `mcp get_context_bundle`; `mcp get_type_at_position`; `mcp rename_symbol`; `mcp run_ast_checks`; `mcp run_compile_check` |  |
 | [Output encoding (--output-encoding)](output-encoding) | `sql` |  |
-| [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `mcp-config` |  |
+| [Register the MCP server (Claude Code, VS Code, Cursor)](Register-MCP-Server) | `mcp-config` |  |
 | [serve](serve) | `serve` |  |
 | [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |
 | [Switch VS Code Delphi MCP entry](lsp-proxy-merge) | `drag-lint-switch.exe` (drag-lint-switch --vscode --off) |  |

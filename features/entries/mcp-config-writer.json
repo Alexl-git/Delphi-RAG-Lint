@@ -1,25 +1,28 @@
 {
   "id": "mcp-config-writer",
-  "title": "Register the MCP server (Claude Code, VS Code)",
+  "title": "Register the MCP server (Claude Code, VS Code, Cursor)",
   "group": "editor-integration",
   "owner": "CHARTS",
   "status": "shipped",
   "since": "1.26.1-alpha",
-  "summary": "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable",
-  "intro": "Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again.",
+  "summary": "Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable",
+  "intro": "Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code, VS Code and Cursor can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again.",
   "wikiPage": "Register-MCP-Server",
   "surfaces": [
     {
       "type": "cli",
       "verb": "mcp-config",
       "example": "--all --dry-run",
-      "usage": "drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]",
+      "usage": "drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]",
       "flags": [
         {
           "name": "--claude-code"
         },
         {
           "name": "--vscode"
+        },
+        {
+          "name": "--cursor"
         },
         {
           "name": "--all"
@@ -57,19 +60,19 @@
         }
       ],
       "helpOrder": 23,
-      "help": ["  drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]", "                               writes {\"type\":\"stdio\",\"command\":\"<engine>\",\"args\":[\"serve\"[,\"--db\",\"<index>\"]]} (+ \"env\":{} for Claude Code) into", "                               ~\\.claude.json \"mcpServers\" / %APPDATA%\\Code\\User\\mcp.json \"servers\": merged, backed up (<file>.bak-<stamp>), idempotent;", "                               --remove takes only its own entry out; an entry by that name that runs something else is refused; --dry-run writes nothing;", "                               --home-dir / --appdata-dir move where the default files are looked for (tests)"]
+      "help": ["  drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]", "                               writes {\"type\":\"stdio\",\"command\":\"<engine>\",\"args\":[\"serve\"[,\"--db\",\"<index>\"]]} (+ \"env\":{} for Claude Code) into", "                               ~\\.claude.json \"mcpServers\" / %APPDATA%\\Code\\User\\mcp.json \"servers\" / ~\\.cursor\\mcp.json \"mcpServers\": merged, backed up (<file>.bak-<stamp>), idempotent;", "                               --remove takes only its own entry out; an entry by that name that runs something else is refused; --dry-run writes nothing;", "                               --home-dir / --appdata-dir move where the default files are looked for (tests)"]
     }
   ],
   "audience": "both",
-  "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "mcp setup", "mcp.json"],
-  "related": ["serve"],
+  "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "cursor mcp", "mcp setup", "mcp.json"],
+  "related": ["init-wiring", "serve"],
   "questions": [
     {
       "ask": "What would it change? (writes nothing)",
       "command": "drag-lint mcp-config --all --dry-run"
     },
     {
-      "ask": "Let Claude Code and VS Code start drag-lint's MCP server",
+      "ask": "Let Claude Code, VS Code and Cursor start drag-lint's MCP server",
       "command": "drag-lint mcp-config --all"
     },
     {
@@ -88,9 +91,9 @@
     "build": "1.31.1-alpha"
   },
   "verified": {
-    "date": "2026-10-21",
-    "by": "CHARTS",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "9c32b4245dcad99ed4b7866127fc25a69e346e3de5b2ec653a524583e8a1a584"
+    "date": "2026-10-28",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "8fc795601094490f2be12ab119ff5452bcac32b1953a773553e2fb79f458b602"
   }
 }
