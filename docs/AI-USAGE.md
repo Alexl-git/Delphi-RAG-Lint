@@ -420,6 +420,7 @@ define further codes.
 | `hover --qname U.T.M` | hover card (`--format plain\|md\|json`). On an **interface** it also answers "what satisfies this contract": `Implemented by:` (classes) and `Extended by:` (derived interfaces), capped with a `(+N more)` suffix. Absent entirely when nothing implements it -- never `(none)`. `--format json` also carries `effect_free` (-1/0/1), `effect_summary` (`g,h,s,p<k>,?`) and `effect_witness` -- the stored purity verdict and its first blocker |
 | `helpers-of T` | record/class helper edges targeting type T |
 | `top` | most-depended-on symbols (`--by fanin`, `--limit N`) |
+| `overview` | the agent's first call: one bounded page (freshness, counts per kind, units by layer, top fan-in, entry points, forms); `--max-rows N`, `--json`; a capped section says `N omitted by cap M; rerun with --max-rows K` |
 
 **Analysis / reports (call graph, deps, cycles, impact)**
 | Verb | What it does |
@@ -895,6 +896,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `menu-tree` | [Code-built menu tree and registry drift](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Menu-Tree) | The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it | index |
 | `migrate-dbs` | [migrate-dbs](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Moves project index databases into each project's own D-RAG folder, matching the current index layout |  |
 | `outline` | [outline](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) | Prints the file-scoped symbol outline for one Pascal unit |  |
+| `overview` | [Overview (first-turn summary)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Overview-first-turn) | One bounded call: freshness, counts, units by layer, top fan-in, entry points and forms | index |
 | `pp-profile` | [pp-profile](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/pp-profile) | Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line |  |
 | `preprocess-file` | [preprocess-file](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/preprocess-file) | Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set |  |
 | `project-facts` | [project-facts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Report what the build does: defines that are on and what sets each, imports, output paths and packages |  |
