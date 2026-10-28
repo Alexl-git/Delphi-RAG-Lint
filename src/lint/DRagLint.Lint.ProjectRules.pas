@@ -286,7 +286,8 @@ begin
 end;
 
 { Walk the tree-sitter AST for AFile and collect every identifier that appears
-  as a getter ('read') or setter ('write') accessor in a declProp node, plus
+  as a getter ('read'), setter ('write'), 'stored', 'index' or 'default'
+  specifier in a declProp node, plus
   the property's own backing-field name when it appears literally in those
   clauses.  Returns a lowercased-name set (TDictionary<string,Boolean>) that
   the caller must free.  Returns nil when the file cannot be parsed.
@@ -344,25 +345,20 @@ var
   var
     I      : Integer;
     GNode  : TTSNode;
-    SNode  : TTSNode;
     GName  : string ;
-    SName  : string ;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'declProp' then
     begin
-      { getter = read accessor; setter = write accessor. }
-      GNode:= N.ChildByField('getter');
-      if not GNode.IsNull then
+      { getter = read, setter = write; stored / index / defaultValue name a
+        private method or const just as often (`stored IsXStored`,
+        `index IDX_Y`, `default DEF_X`) and get no ref in the index either. }
+      for var Field in ['getter', 'setter', 'stored', 'index', 'defaultValue'] do
       begin
+        GNode:= N.ChildByField(Field);
+        if GNode.IsNull then Continue;
         GName:= BaseIdentOf(GNode);
         if GName <> '' then Dict.AddOrSetValue(GName, True);
-      end;
-      SNode:= N.ChildByField('setter');
-      if not SNode.IsNull then
-      begin
-        SName:= BaseIdentOf(SNode);
-        if SName <> '' then Dict.AddOrSetValue(SName, True);
       end;
       { No need to recurse inside declProp: nested declProp is not valid
         Delphi, so we exit early to avoid false matches from the type ref. }
