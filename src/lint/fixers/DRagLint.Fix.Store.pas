@@ -282,7 +282,7 @@ begin
   DocAt:= DocRunStart(ALines, AFinding.StartLine);
   for var I:= 1 to First - 1 do
     if ((I < DocAt) or (I > AFinding.StartLine)) and LineMentions(ALines, I, Name) then Exit;
-  Result:= DeleteAround(AFinding.FilePath, DocAt, AFinding.StartLine, AFinding.StartLine);
+  Result:= [DeleteLines(AFinding.FilePath, DocAt, AFinding.StartLine)];
   if DocAt < AFinding.StartLine then
   begin
     if DocRunStart(ALines, First) < First then Exit(nil);   { two docs: a human merges them }
@@ -417,7 +417,7 @@ begin
   if not IsDeletableRoutine(Store, Hit, AFinding.FilePath, ALines) then Exit;
   Last:= Hit.ImplEndLine;
   if (Last < ALines.Count) and (Trim(ALines[Last]) = '') then Inc(Last);
-  Result:= DeleteAround(AFinding.FilePath, DocRunStart(ALines, AFinding.StartLine), AFinding.StartLine, Last);
+  Result:= [DeleteLines(AFinding.FilePath, DocRunStart(ALines, AFinding.StartLine), Last)];
   if Hit.StartLine <> Hit.ImplStartLine then
   begin
     if (Hit.StartLine <> Hit.EndLine) or not IsDeletableMethodDecl(ALines[Hit.StartLine - 1], Name) then Exit(nil);
