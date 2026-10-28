@@ -11,11 +11,12 @@
 // advertising hover, definition, references, workspaceSymbol, completion and
 // signatureHelp.
 
-const { workspace, window, commands, ConfigurationTarget } = require('vscode');
+const { workspace, window, commands, ConfigurationTarget, StatusBarAlignment, ThemeColor } = require('vscode');
 const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
 const fs = require('fs');
 const path = require('path');
 const radcolors = require('./lib/radcolors');
+const dlctx = require('./lib/context');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -388,10 +389,15 @@ function makeClient(exe) {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
     outputChannelName: 'drag-lint',
     errorHandler: makeErrorHandler(),
-    synchronize: { fileEvents: manifestWatcher }
+    initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
+    synchronize: { configurationSection: 'dragLint', fileEvents: manifestWatcher }
   };
 
-  return new LanguageClient('dragLint', 'drag-lint', serverOptions, clientOptions);
+  const c = new LanguageClient('dragLint', 'drag-lint', serverOptions, clientOptions);
+  // Tolerant: a server without this notification just leaves the status bar at
+  // "context unknown".
+  c.onNotification('draglint/context', (ctx) => showContext(ctx));
+  return c;
 }
 
 async function restartServer() {
@@ -508,6 +514,66 @@ async function generateThemeFile() {
   if (pick === 'Reload Window') commands.executeCommand('workbench.action.reloadWindow');
 }
 
+/*
+  --- project / platform context -------------------------------------------
+  Settings draglint.project / platform / config are sent as initializationOptions
+  and via workspace/didChangeConfiguration. The commands also push the choice
+  immediately with workspace/executeCommand 'draglint.setContext'. The server
+  answers with a 'draglint/context' notification, shown in the status bar.
+*/
+let ctxStatus;
+let ctxWarned = false;
+
+function showContext(ctx) {
+  if (!ctxStatus) return;
+  const f = dlctx.formatStatus(ctx);
+  ctxStatus.text = f.text;
+  ctxStatus.tooltip = f.tooltip;
+  ctxStatus.backgroundColor = f.warning ? new ThemeColor('statusBarItem.warningBackground') : undefined;
+  ctxStatus.show();
+}
+
+async function applyContext(patch) {
+  const conf = workspace.getConfiguration('dragLint');
+  for (const k of Object.keys(patch)) {
+    await conf.update(k, patch[k], workspace.workspaceFolders ? ConfigurationTarget.Workspace : ConfigurationTarget.Global);
+  }
+  const now = dlctx.initOptions((k) => (k in patch ? patch[k] : conf.get(k)));
+  try {
+    if (!client) throw new Error('language server not running');
+    await client.sendRequest('workspace/executeCommand', { command: 'draglint.setContext', arguments: [now] });
+  } catch (e) {
+    if (!ctxWarned) {
+      ctxWarned = true;
+      window.showWarningMessage('drag-lint: server did not accept draglint.setContext (' + e.message + '). The setting is saved; it applies on the next server restart.');
+    }
+  }
+}
+
+async function selectPlatform() {
+  const cur = workspace.getConfiguration('dragLint').get('platform') || '';
+  const items = dlctx.PLATFORMS.map((p) => ({ label: p === '' ? '(project default)' : p, value: p, description: p === cur ? 'current' : '' }));
+  const pick = await window.showQuickPick(items, { placeHolder: 'drag-lint: select target platform' });
+  if (pick) await applyContext({ platform: pick.value });
+}
+
+async function selectProject() {
+  const items = [{ label: '$(file) Browse for .dproj / .dpr...', browse: true }, { label: '(auto-detect)', value: '' }];
+  try {
+    const found = await workspace.findFiles('**/*.dlcontext.json', '**/node_modules/**', 50);
+    for (const u of found) items.push({ label: path.basename(u.fsPath), description: u.fsPath, value: u.fsPath });
+  } catch (e) { /* no workspace: browse only */ }
+  const pick = await window.showQuickPick(items, { placeHolder: 'drag-lint: select project' });
+  if (!pick) return;
+  let value = pick.value;
+  if (pick.browse) {
+    const sel = await window.showOpenDialog({ canSelectMany: false, filters: { 'Delphi project': ['dproj', 'dpr'] } });
+    if (!sel || !sel.length) return;
+    value = sel[0].fsPath;
+  }
+  await applyContext({ project: value });
+}
+
 function activate(context) {
   extContext = context;
   // Its own channel, not the client's: this logs BEFORE the client exists, and
@@ -515,6 +581,13 @@ function activate(context) {
   // VS Code and the Delphi IDE disagree about an answer.
   engineLog = window.createOutputChannel('drag-lint (engine)');
   context.subscriptions.push(engineLog);
+
+  ctxStatus = window.createStatusBarItem(StatusBarAlignment.Left, 50);
+  ctxStatus.command = 'dragLint.selectPlatform';
+  context.subscriptions.push(ctxStatus);
+  showContext(undefined);
+  context.subscriptions.push(commands.registerCommand('dragLint.selectPlatform', selectPlatform));
+  context.subscriptions.push(commands.registerCommand('dragLint.selectProject', selectProject));
 
   const exe = resolveExe();
   log('language server exe: ' + exe);

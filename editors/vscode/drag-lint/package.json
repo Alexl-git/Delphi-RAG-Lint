@@ -44,6 +44,16 @@
         "command": "dragLint.generateTheme",
         "title": "Generate Theme From RAD Studio Colours",
         "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.selectPlatform",
+        "title": "Select Platform",
+        "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.selectProject",
+        "title": "Select Project",
+        "category": "drag-lint"
       }
     ],
     "languages": [
@@ -128,6 +138,34 @@
           ],
           "default": "off",
           "description": "Log the LSP conversation to the 'drag-lint' output channel."
+        },
+        "dragLint.project": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `.dproj` / `.dpr` whose index and platform the language server uses. Empty = detect from the open file."
+        },
+        "dragLint.platform": {
+          "type": "string",
+          "enum": [
+            "",
+            "Win32",
+            "Win64",
+            "Win64x",
+            "Linux64",
+            "OSX64",
+            "OSXARM64",
+            "Android",
+            "Android64",
+            "iOSDevice64",
+            "iOSSimARM64"
+          ],
+          "default": "",
+          "markdownDescription": "Target platform for library lookups. Empty = the project default."
+        },
+        "dragLint.config": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Build configuration (e.g. `Debug`, `Release`). Empty = the project default."
         }
       }
     }

@@ -85,6 +85,10 @@ and VS Code layers it OVER a grammar -- a complement, not a replacement.
 
 Do not also install a third-party Pascal extension: a second one declaring
 `source.pascal` conflicts with this grammar.
+## Project and platform context
+
+Settings `dragLint.project`, `dragLint.platform`, `dragLint.config` choose which project index and platform library the server answers from (empty = auto-detect). Commands **drag-lint: Select Platform** and **drag-lint: Select Project** change them and tell the server at once (`workspace/executeCommand draglint.setContext`). The status bar shows the resolved context (`DL: App | Win64 | Debug`; warning colour when the server reports a notice); click it to pick a platform. Needs a server that sends the `draglint/context` notification; otherwise it reads `DL: context unknown`.
+
 ## Packaging
 
 From this directory:
