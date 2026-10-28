@@ -176,6 +176,19 @@ begin
   end;
 end;
 
+{ True for a binary DFM: first byte $FF (resource header FF 0A 00), or a bare
+  stream starting with the 4-byte signature 'TPF0'. A text DFM starts with
+  object / inherited / inline, so neither can be misread. }
+function IsBinaryDfmBytes(const ASource: TBytes): Boolean;
+const
+  Tpf0Sig: array[0..3] of Byte = ($54, $50, $46, $30);  { 'TPF0' }
+  ResHdr1 = $FF;  { first byte of the FF 0A 00 resource header }
+begin
+  if Length(ASource) = 0 then Exit(False);
+  if ASource[0] = ResHdr1 then Exit(True);
+  Result:= (Length(ASource) >= Length(Tpf0Sig)) and CompareMem(@ASource[0], @Tpf0Sig[0], Length(Tpf0Sig));
+end;
+
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
 var
   StartIdx: Integer;
@@ -477,7 +490,7 @@ begin
     mirrors TDFMParser.Parse's own guard (see that function's comment). Checked
     on ASource exactly as given (no transcoding here -- see this function's
     <param> comment), so a genuine binary DFM is never misread as text. }
-  if (Length(ASource) > 0) and (ASource[0] = $FF) then Exit;
+  if IsBinaryDfmBytes(ASource) then Exit;
 
   Parser:= TTSParser.Create;
   try
@@ -574,7 +587,7 @@ var
 begin
   Result:= Default(TParseResult);
   { Binary DFM files start with $FF; the text-DFM parser cannot handle them. }
-  if (Length(ASource) > 0) and (ASource[0] = $FF) then
+  if IsBinaryDfmBytes(ASource) then
   begin
     Result.Diagnostics:= [AFilePath + ': binary DFM (TPF0) -- save as Text DFM in the IDE to index this file'];
     Exit;
