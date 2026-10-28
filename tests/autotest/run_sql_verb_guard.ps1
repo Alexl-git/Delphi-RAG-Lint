@@ -200,6 +200,23 @@ foreach ($d in $denials) {
 }
 
 # ---------------------------------------------------------------------------
+# CHECK 2b -- FTS5 MATCH works (the module issues PRAGMA data_version itself),
+# while a USER-written pragma stays refused. Positive control first.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 2b: FTS5 MATCH vs user-written PRAGMA' -ForegroundColor Cyan
+$r = Run @('sql','--query',"SELECT rowid FROM string_fts WHERE string_fts MATCH 'a OR the OR e' LIMIT 3",'--db',$DbFile)
+Check 'FTS5 MATCH returns rows (positive control)' `
+  (($r.Code -eq 0) -and ($r.Out -match '[1-3] row\(s\)')) "exit $($r.Code) / $(($r.Err -split "`n")[0].Trim())"
+foreach ($p in @('PRAGMA data_version','PRAGMA journal_mode','PRAGMA data_version = 5')) {
+  $r = Run @('sql','--query',$p,'--db',$DbFile)
+  Check ("user-written '$p' is still refused") `
+    (($r.Code -eq 1) -and ($r.Err -match 'PRAGMA is not permitted')) "exit $($r.Code) / $(($r.Err -split "`n")[0].Trim())"
+}
+$r = Run @('sql','--query',"INSERT INTO string_fts(text) VALUES ('x')",'--db',$DbFile)
+Check 'an INSERT into the FTS table is still refused' (($r.Code -eq 1) -and ($r.Err -match 'refused')) "exit $($r.Code)"
+
+# ---------------------------------------------------------------------------
 # CHECK 3 -- one statement, and the scanner is not a naive semicolon search
 # ---------------------------------------------------------------------------
 Write-Host ''
