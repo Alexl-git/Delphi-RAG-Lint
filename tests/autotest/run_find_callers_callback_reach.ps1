@@ -107,7 +107,9 @@ $norm = ($FixtureBody -replace "`r`n", "`n") -replace "`n", "`r`n"
 
 $Db = Join-Path $WorkDir 'cb.sqlite'
 & $Exe index $SrcDir --db $Db 2>&1 | Out-Null
-if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
+if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 
 function Resolved([string]$Name) {
   $o = & $Exe query find-callers --name $Name --resolved --db $Db 2>&1 | Out-String

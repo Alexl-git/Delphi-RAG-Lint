@@ -95,7 +95,7 @@ Check 'L0 precondition: the project DB is named library-* and the real library D
 Write-Ascii $libDb "this is not a database`n"
 $r = Run $l $lExe @('lint-project', '--project', "$l\proj\library-app.dpr", '--quiet')
 Check 'L1 the library is the Library SECTION (its DB is named in the degrade warning), not the library-* project DB' `
-      (($r.Out -match 'library-Win64\.sqlite') -and ($r.Out -match 'datamodule member classification degrades')) $r.Out
+      (($r.Out -match 'warning: library DB \S*library-Win64\.sqlite unreadable') -and ($r.Out -match 'continuing without it')) $r.Out
 Check 'L2 control: the project DB is intact and was not reported as the failing library' `
       ($r.Out -notmatch 'library-app\.sqlite: ') $r.Out
 

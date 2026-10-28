@@ -82,7 +82,9 @@ New-Unit 'uReleaseOnly' 48633
 
 # FOLDER index: every unit is in the DB, whatever the config.
 & $Exe index "$WorkDir\proj" --db $Db *> "$WorkDir\index.log"
-if (-not (Test-Path $Db)) { Write-Host "FATAL: index produced no DB; see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
+if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index produced no DB; see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
 
 # The units a --project lint-all run reports magic-literal findings for.
 function ScopedUnits([string[]]$Extra = @()) {

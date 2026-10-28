@@ -85,10 +85,13 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 # ---- index the fixture into a scratch DB ----------------------------------
 $db = "$WorkDir\teststub.sqlite"
 $idx = & $Exe index $fixtureDir --db $db 2>&1 | Out-String
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 Check 'fixture indexed into a scratch DB' (Test-Path $db) `
   (($idx -split "`r?`n" | Where-Object { $_ -match 'file|symbol' } | Select-Object -Last 1))
 
 if (-not (Test-Path $db)) {
+  $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: index produced no DB. Output:`n$idx" -ForegroundColor Red
   Write-Host 'FAIL' -ForegroundColor Red
   exit 1
