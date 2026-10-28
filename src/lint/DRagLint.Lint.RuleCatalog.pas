@@ -106,8 +106,7 @@ const
     'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
     'too-many-bool-fields', 'index-loop-to-for-in',
     { gap-rules wave (G0): OFF-by-default new built-ins }
-    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden',
-    'uses-movable-to-implementation'];
+    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -826,7 +825,7 @@ begin
     B('unused-loop-variable', 'dead-code', 'hint', 'for-loop counter is never used in the body -- the loop only repeats; check the intent', False);
     B('dfm-event-handler-missing', 'project-wide', 'warning', 'A .dfm names an event handler that the form class and its ancestors do not declare -- the form fails to load');
     B('dfm-password-edit-unmasked', 'security', 'info', 'Edit control named like a password field has no PasswordChar -- the secret is shown on screen');
-    B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time', False);
+    B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time');
     B('virtual-never-overridden', 'project-wide', 'hint', 'Virtual method with no override anywhere in the project -- the virtual dispatch buys nothing', False);
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');

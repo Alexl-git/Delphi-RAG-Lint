@@ -1,4 +1,4 @@
-# Guard: uses-movable-to-implementation (gap-rules wave, lane G8, project-wide, hint, OFF by default).
+# Guard: uses-movable-to-implementation (gap-rules wave, lane G8, project-wide, hint, ON by default since lane IMOV).
 #
 # Fixture tests\lint-project\uses-movable-to-implementation: uA.pas has an interface uses of
 #   uB (only the implementation calls BProc)  -> FIRES (line 6)
@@ -8,8 +8,8 @@
 #   rewrite the line above to end in ';' (dogfood 2026-10-27: the removal was dropped, E2004).
 # Fix: removes the entry from the interface uses and adds it to the implementation uses;
 # expected\uA.fixed.pas is hand-written. Second run is a no-op.
-# OFF by default (false positives: reference-to-function signatures leave no ref; the autofix would
-# move a still-needed unit): no config and no --rule -> silent; --rule or the config opts in.
+# ON by default (lane IMOV, 2026-10-27: REFTYPE closed the reference-to-function FP; engine dogfood
+# --fix --apply builds with identical warnings): no config and no --rule -> fires; the config still works.
 # Usage: pwsh -File tests/autotest/run_uses_movable_to_implementation.ps1 [-Exe <path>]
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
@@ -43,7 +43,7 @@ try {
   & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule).Count -eq 0)
-  Check 'OFF by default: no config, no --rule -> silent (control: --rule fired)' (($off.Count -eq 0) -and ($f.Count -eq 2))
+  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 2)
   Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 2)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''
