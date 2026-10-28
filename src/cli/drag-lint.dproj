@@ -153,6 +153,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.TaintRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.UnusedEnumValue.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UsesAudit.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Autofix.pas"/>
@@ -226,6 +227,7 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DeclChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.SizeChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ConcurrencyChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.EnumOrdinalCast.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DisallowedChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ModernizeChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.OwnershipChecks.pas"/>

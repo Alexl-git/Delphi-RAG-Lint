@@ -224,6 +224,7 @@ uses
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
+  DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM }
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) }
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -4550,6 +4551,10 @@ begin
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
       for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
+    { unused-enum-value (lane B-ENUM): OFF by default (flood risk: implicit uses) and OptedIn-gated --
+      a refs read per file, which a post-hoc config filter would hide while still charging for it. }
+    if WantRule(UNUSED_ENUM_VALUE_RULE) and OptedIn(UNUSED_ENUM_VALUE_RULE) then
+      for var Uv in CollectUnusedEnumValue(AStore) do Findings.Add(Uv);
     { gap-rules wave, lane G8. The two DFM rules are ON by default and walk one table each;
       virtual-never-overridden (scans every file's symbols) and uses-movable-to-implementation
       (false positives: a type used only in a `reference to function` signature records no ref, and
