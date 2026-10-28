@@ -243,7 +243,8 @@ type
         the offer DoSaveClick / DoSaveAsClick make after it. }
       FChainsAsked   : TArray<string>;
       FLastSaveChains: TArray<TRuleChain>;
-      FCastDefs    : TArray<TCastDef>; // shipped class-cast library (.castlib)
+      FChainDialogUp : Boolean; // chainform: RunChainDialog is inside TChainForm.Run (no second one)
+      FCastDefs   : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
       enum blocks were parsed and thrown away; the conversion catalog needs them
       to offer an enum target (TabcButtonLayout -> TdxButtonLayout). }
@@ -6812,7 +6813,10 @@ procedure TConvRulesForm.AppMessage(var Msg: TMsg; var Handled: Boolean);
 begin
   if not HandleAllocated then
     Exit;
-  var LBusy: Boolean:= EditorBusy(FTreeLoads, Screen.Cursor = crHourGlass);
+  // chainform: a modal of ours (Rule chains) disables the main form, yet its loop still
+  // dispatches a WM_COMMAND queued for it -- refuse that like an engine wait's.
+  var LMainEnabled: Boolean:= IsWindowEnabled(Handle);
+  var LBusy: Boolean:= GateBusy(FTreeLoads, Screen.Cursor = crHourGlass, LMainEnabled);
   var LInMain: Boolean:= (Msg.hwnd <> 0) and (GetAncestor(Msg.hwnd, GA_ROOT) = Handle);
   var LVerdict: TGateVerdict:= GateVerdictFor(Msg.message, LBusy, LInMain, GateTargetClass(Msg.hwnd));
   if LVerdict = gvPass then
@@ -6822,7 +6826,11 @@ begin
   if (LVerdict = gvRefuse) and (FLostClickTitle = '') then
   begin
     FLostCommand   := CommandName(GateTargetCaption(Msg));
-    FLostClickTitle:= BusyTitleFor(FBusyTitle, FLblStatus.Caption);
+    // Under a modal of ours (no engine wait), name that dialog as the busy work.
+    var LWaitTitle: string:= FBusyTitle;
+    if (LWaitTitle = '') and not LMainEnabled and (Screen.ActiveForm <> nil) and (Screen.ActiveForm <> Self) then
+      LWaitTitle:= Screen.ActiveForm.Caption;
+    FLostClickTitle:= BusyTitleFor(LWaitTitle, FLblStatus.Caption);
     FLostClickTimer.Enabled:= True;
   end;
 end;
@@ -8034,7 +8042,17 @@ procedure TConvRulesForm.RunChainDialog(const AChains: TArray<TRuleChain>);
 var
   LChecked: TArray<TRuleChain>;
 begin
-  var LResult: TModalResult:= TChainForm.Run(Self, AChains, LChecked);
+  // chainform: AppMessage refuses a queued command under the dialog; a SENT one bypasses the
+  // queue, so a second request while the dialog is up is ignored here (the open one stays).
+  if FChainDialogUp then
+    Exit;
+  FChainDialogUp:= True;
+  var LResult: TModalResult;
+  try
+    LResult:= TChainForm.Run(Self, AChains, LChecked);
+  finally
+    FChainDialogUp:= False;
+  end;
   FChainsAsked:= ChainKeysAsked(FChainsAsked, AChains); // Keep, Merge and Split all count as asked
   case LResult of
     mrYes: MergeChains(LChecked);
