@@ -44,7 +44,6 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix

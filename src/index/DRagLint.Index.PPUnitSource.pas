@@ -60,7 +60,7 @@ type
     FLibStores  : TArray<ISymbolStore>;
     FStoresOpen : Boolean;
     FDepth      : Integer;
-    FUnknowns   : Integer;
+    FUnknownAnswers: Integer;
     procedure OpenStores;
     function UnitFile(const AUnit: string): string;
     function Scan(const AKey, APath: string): TDictionary<string, TPPDecl>;
@@ -91,7 +91,7 @@ type
     /// <summary>How many lookups answered pnkUnknown since the last AddUnitFiles
     /// -- zero means no IF needed a unit the source could not see, so a second
     /// closure pass would decide nothing differently.</summary>
-    property UnknownAnswers: Integer read FUnknowns;
+    property UnknownAnswers: Integer read FUnknownAnswers;
   end;
 
 /// <summary>Creates a TPPUnitSourceResolver and installs it as the
@@ -161,7 +161,7 @@ begin
         FUnitFiles.AddOrSetValue(LowerCase(TPath.GetFileNameWithoutExtension(P)), P);
     FAnswers.Clear;
     FScanned.Clear;
-    FUnknowns:= 0;
+    FUnknownAnswers:= 0;
   finally
     FLock.Leave;
   end;
@@ -348,7 +348,7 @@ begin
     AValue:= A.Value;
     Result:= A.Kind;
   finally
-    if Result = pnkUnknown then Inc(FUnknowns);
+    if Result = pnkUnknown then Inc(FUnknownAnswers);
     FLock.Leave;
   end;
 end;

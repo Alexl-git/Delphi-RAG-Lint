@@ -40,7 +40,6 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   ;
 
@@ -299,10 +298,7 @@ var
     end;
     if Count <= BoolMax then Exit;
     Anchor:= AClass.Parent;
-    if (not Anchor.IsNull) and (Anchor.NodeType = 'declType') then
-      Anchor:= Anchor.ChildByField('name')
-    else
-      Anchor:= AClass;
+    Anchor:= if (not Anchor.IsNull) and (Anchor.NodeType = 'declType') then Anchor.ChildByField('name') else AClass;
     EmitAt(Anchor, RULE_BOOLS, Format('Class has %d Boolean fields (threshold %d) -- consider a set of flags or a state enum',
       [Count, BoolMax]), 'info');
   end;

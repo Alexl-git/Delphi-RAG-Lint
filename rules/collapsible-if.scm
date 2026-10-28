@@ -10,9 +10,12 @@
 ; begin, the inner if with no ';' inside it, an optional ';', then end. A
 ; second statement breaks the match (the ';' is followed by something other
 ; than end). A block whose inner if holds a nested begin/end or another ';'
-; is skipped (known false negative, deliberately conservative). No `$`
-; anchor: the engine's regex does not match it at the end of the capture.
+; is skipped (known false negative, deliberately conservative). The final end must
+; be the block's own: `$` does not match at the end of the capture in this engine
+; (the text it sees carries trailing punctuation), so end\b[^A-Za-z0-9_]*(?![\s\S])
+; pins it. Without that an 'end' INSIDE the first statement (a string literal, a
+; comment) passed, and the fix dropped every later statement in the block.
 ((if
    condition: (_) @a2
    then: (block (kBegin) (if condition: (_) @b2 then: (_) @s2) (kEnd)) @blk) @warn
-  (#match? @blk "(?i)^begin\\s*if\\b[^;]*;?(\\s|//[^\\r\\n]*)*end\\b"))
+  (#match? @blk "(?i)^begin\\s*if\\b[^;]*;?(\\s|//[^\\r\\n]*)*end\\b[^A-Za-z0-9_]*(?![\\s\\S])"))

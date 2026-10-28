@@ -82,6 +82,8 @@ var
   Ch         : Char;
 begin
   Result:= False;
+  ASemiLine:= 0;
+  ASemiCol:= 0;
   Depth:= 0;
   for I:= AFirst to Min(ALines.Count, AFirst + DECL_MAX_HEADER) do
   begin
@@ -125,6 +127,8 @@ function DcParseHead(const ALine: string; out AKind, AQName: string): Boolean;
 var
   M: TMatch;
 begin
+  AKind:= '';
+  AQName:= '';
   M:= TRegEx.Match(ALine, DECL_ROUTINE_HEAD + '\s+([^\s(;:]+)', [roIgnoreCase]);
   Result:= M.Success;
   if Result then
@@ -141,6 +145,8 @@ var
   Rx       : string;
 begin
   Result:= False;
+  AFirst:= 0;
+  ALast:= 0;
   Rx:= '^\s*' + TRegEx.Escape(AClass) + '\s*(?:<[^>]*>)?\s*=\s*(?:packed\s+)?(?:class|object)\b(?!\s+of\b)(?!\s*;)';
   for I:= 1 to ALines.Count do
     if TRegEx.IsMatch(ALines[I - 1], Rx, [roIgnoreCase]) then
@@ -232,7 +238,7 @@ var
 begin
   Result:= False;
   Open:= Pos('(', AHeader);
-  if (Open = 0) or ((Pos(';', AHeader) > 0) and (Pos(';', AHeader) < Open)) then Exit(True);  { no parameter list }
+  if (Open = 0) or ((AHeader.Contains(';')) and (Pos(';', AHeader) < Open)) then Exit(True);  { no parameter list }
   Depth:= 0;
   Close:= 0;
   for I:= Open to Length(AHeader) do
@@ -286,6 +292,7 @@ var
 begin
   Result:= False;
   ABegin:= 0;
+  AEnd:= 0;
   Ind:= DcIndentOf(ALines[AKeyLine - 1]);
   for I:= AHeaderLast + 1 to ALines.Count do
     if DcIndentOf(ALines[I - 1]) = Ind then
@@ -396,9 +403,9 @@ begin
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   K:= DcHeaderKeywordLine(ALines, AFinding.StartLine);
   if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) then Exit;
-  if (Pos('.', QName) = 0) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
+  if (not QName.Contains('.')) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
   Found:= DcLookupDecl(ALines, K, QName, DeclLine);
-  if (Found = dlAmbiguous) or ((Found = dlNone) and (Pos('.', QName) > 0)) then Exit;
+  if (Found = dlAmbiguous) or ((Found = dlNone) and (QName.Contains('.'))) then Exit;
   Edits:= TList<TTextEdit>.Create;
   try
     DcRemoveInline(AFinding, ALines, K, Edits);
@@ -463,9 +470,9 @@ begin
   K:= DcHeaderKeywordLine(ALines, AFinding.StartLine);
   if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) then Exit;
   if not DcHeaderEnd(ALines, K, SemiLine, SemiCol) or (SemiLine < AFinding.StartLine) then Exit;
-  if (Pos('.', QName) = 0) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
+  if (not QName.Contains('.')) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
   Found:= DcLookupDecl(ALines, K, QName, DeclLine);
-  if (Found = dlAmbiguous) or ((Found = dlNone) and (Pos('.', QName) > 0)) then Exit;
+  if (Found = dlAmbiguous) or ((Found = dlNone) and (QName.Contains('.'))) then Exit;
   E:= DcNewEdit(AFinding, tekReplaceInLine, AFinding.StartLine);
   E.Col       := AFinding.StartCol;
   E.EndCol    := AFinding.EndCol;
@@ -518,7 +525,9 @@ begin
   begin
     AHeaderSpans.Add(TPair<Integer, Integer>.Create(M.Index, M.Index + M.Length));
     Mask:= '';
-    if M.Groups[2].Success then
+    { Groups holds only up to the last group that PARTICIPATED: a header without a
+      parameter list has no Groups[2], and indexing it raises. }
+    if (M.Groups.Count > 2) and M.Groups[2].Success then
       for Part in DcSplitTop(M.Groups[2].Value, ';') do
       begin
         Colon:= Pos(':', Part);
@@ -712,6 +721,10 @@ var
   SemiLine, SemiCol: Integer;
 begin
   Result:= False;
+  AQName:= '';
+  AHeader:= '';
+  ABegin:= 0;
+  AEnd:= 0;
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   if not DcParseHead(ALines[AFinding.StartLine - 1], Kind, AQName) or (Kind <> AKeyword) then Exit;
   if not DcHeaderEnd(ALines, AFinding.StartLine, SemiLine, SemiCol) then Exit;
@@ -752,7 +765,7 @@ var
 begin
   Result:= nil;
   if not DcLocateBody(AFinding, ALines, 'constructor', QName, Header, BodyBegin, BodyEnd) then Exit;
-  if Pos('(', Header) > 0 then Exit;
+  if Header.Contains('(') then Exit;
   E:= DcNewEdit(AFinding, tekInsertLines, BodyBegin);
   E.ExpectLine:= BodyBegin;
   E.ExpectText:= 'begin';
@@ -767,6 +780,7 @@ function DcClassPrefixEdit(const AFinding: TLintFinding; ALines: TStringList; AL
 var
   M: TMatch;
 begin
+  AEdit:= Default(TTextEdit);
   M:= TRegEx.Match(ALines[ALine - 1], DECL_ROUTINE_HEAD, [roIgnoreCase]);
   Result:= M.Success and not StartsText('class', Trim(ALines[ALine - 1]));
   if not Result then Exit;
@@ -806,7 +820,7 @@ begin
   Result:= nil;
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   K:= DcHeaderKeywordLine(ALines, AFinding.StartLine);
-  if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) or (Pos('.', QName) = 0) then Exit;
+  if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) or (not QName.Contains('.')) then Exit;
   if (Kind <> 'function') and (Kind <> 'procedure') then Exit;
   if DcLookupDecl(ALines, K, QName, DeclLine) <> dlFound then Exit;
   if not DcSectionIsSafe(ALines, DeclLine) then Exit;
