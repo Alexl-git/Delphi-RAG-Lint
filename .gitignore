@@ -199,3 +199,10 @@ third_party/engine-pinned/
 # local rollback copies of deployed engine/BPL (never versioned)
 third_party/dll-win*/*.bak-*
 
+
+# dl-project-setup build outputs
+src/tools/project-setup/dcu/
+src/tools/project-setup/dcu_t/
+src/tools/project-setup/*.exe
+src/tools/project-setup/tests/*.exe
+src/tools/project-setup/*.smoke.txt

@@ -6,6 +6,8 @@ program dl_project_setup;
 uses
   Vcl.Forms,
   System.SysUtils, System.IOUtils,
+  DRagLint.Preprocess.Types in '..\..\preprocess\DRagLint.Preprocess.Types.pas',
+  DRagLint.Preprocess.Profile in '..\..\preprocess\DRagLint.Preprocess.Profile.pas',
   ProjectSetup.ContextJson in 'ProjectSetup.ContextJson.pas',
   ProjectSetup.MainForm in 'ProjectSetup.MainForm.pas';
 

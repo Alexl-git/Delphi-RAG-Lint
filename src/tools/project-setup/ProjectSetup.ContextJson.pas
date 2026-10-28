@@ -84,7 +84,16 @@ function TryLoadContext(const pProjectFile: string; out pCtx: TSetupContext): Bo
 implementation
 
 uses
-  System.JSON, System.Hash, System.IOUtils, System.DateUtils, Winapi.Windows;
+  System.JSON, System.Hash, System.IOUtils, System.DateUtils, Winapi.Windows,
+  DRagLint.Preprocess.Profile;
+
+const
+  SCHEMA_VERSION = 1;
+  LAST_ASCII = 126;
+  UNICODE_HEX_DIGITS = 4;
+  JSON_INDENT = 2;
+  WIN_PREFIX_LEN = 3;
+  ENV_BUF_LEN = 1024;
 
 function Arr(const pItems: array of string): TArray<string>;
 var
@@ -103,19 +112,28 @@ end;
 
 function BuiltInDefines(const pPlatform: string): TArray<string>;
 var
-  lCommon: TArray<string>;
+  Common: TArray<string>;
+  i: Integer;
 begin
-  lCommon := Arr(['UNICODE', 'CONDITIONALEXPRESSIONS', 'VER370']);
-  if SameText(pPlatform, 'Win32') then
-    Result := Arr(['MSWINDOWS', 'WIN32', 'CPU386', 'CPUX86', 'CPU32BITS', 'ASSEMBLER'])
-  else if SameText(pPlatform, 'Win64') then
-    Result := Arr(['MSWINDOWS', 'WIN64', 'CPUX64', 'CPU64BITS', 'ASSEMBLER'])
-  else if SameText(pPlatform, 'Win64x') then
+  // Win32 / Win64: the engine's own table, DRagLint.Preprocess.Profile.PlatformBuiltins
+  // (src\preprocess), upper-cased for the context file.
+  if SameText(pPlatform, 'Win32') or SameText(pPlatform, 'Win64') then
+  begin
+    Result := PlatformBuiltins(pPlatform);
+    for i := 0 to High(Result) do
+      Result[i] := UpperCase(Result[i]);
+    Exit;
+  end;
+  // Every other platform: the engine has NO table (it maps unknown names to Win64),
+  // so these lists are NOT from the engine; they are the documented Delphi
+  // platform symbols and must be checked against the compiler.
+  Common := Arr(['UNICODE', 'CONDITIONALEXPRESSIONS', 'COMPILER_VERSION_37', 'VER370']);
+  if SameText(pPlatform, 'Win64x') then
     Result := Arr(['MSWINDOWS', 'WIN64', 'CPUARM64', 'CPUARM', 'CPU64BITS'])
   else if SameText(pPlatform, 'Linux64') then
-    Result := Arr(['LINUX', 'LINUX64', 'UNIX', 'POSIX', 'POSIX64', 'ELF', 'CPUX64', 'CPU64BITS', 'ASSEMBLER'])
+    Result := Arr(['LINUX', 'LINUX64', 'UNIX', 'POSIX', 'POSIX64', 'ELF', 'CPUX64', 'CPU64BITS'])
   else if SameText(pPlatform, 'OSX64') then
-    Result := Arr(['MACOS', 'MACOS64', 'OSX', 'OSX64', 'DARWIN', 'UNIX', 'POSIX', 'POSIX64', 'CPUX64', 'CPU64BITS', 'ASSEMBLER'])
+    Result := Arr(['MACOS', 'MACOS64', 'OSX', 'OSX64', 'DARWIN', 'UNIX', 'POSIX', 'POSIX64', 'CPUX64', 'CPU64BITS'])
   else if SameText(pPlatform, 'OSXARM64') then
     Result := Arr(['MACOS', 'MACOS64', 'DARWIN', 'UNIX', 'POSIX', 'POSIX64', 'CPUARM64', 'CPUARM', 'CPU64BITS'])
   else if SameText(pPlatform, 'Android') then
@@ -128,7 +146,7 @@ begin
     Result := Arr(['IOS', 'IOS64', 'IOSSIMULATOR', 'DARWIN', 'UNIX', 'POSIX', 'POSIX64', 'CPUARM64', 'CPUARM', 'CPU64BITS'])
   else
     Exit(nil);
-  Result := lCommon + Result;
+  Result := Common + Result;
 end;
 
 function DefaultDefines(const pPlatform, pConfig: string): TArray<string>;
@@ -140,7 +158,7 @@ end;
 
 function DefaultNamespaces(const pPlatform: string): TArray<string>;
 begin
-  if SameText(Copy(pPlatform, 1, 3), 'Win') then
+  if SameText(Copy(pPlatform, 1, WIN_PREFIX_LEN), 'Win') then
     Result := Arr(['System', 'Vcl', 'Winapi'])
   else
     Result := Arr(['System']);
@@ -158,81 +176,87 @@ end;
 
 function SplitLines(const pText: string): TArray<string>;
 var
-  lList: TStringList;
-  i: Integer;
-  lS: string;
+  List: TStringList;
+  i, N: Integer;
+  S: string;
 begin
   Result := nil;
-  lList := TStringList.Create;
+  List := TStringList.Create;
   try
-    lList.Text := pText;
-    for i := 0 to lList.Count - 1 do
+    List.Text := pText;
+    SetLength(Result, List.Count);
+    N := 0;
+    for i := 0 to List.Count - 1 do
     begin
-      lS := Trim(lList[i]);
-      if lS <> '' then
-        Result := Result + Arr([lS]);
+      S := Trim(List[i]);
+      if S <> '' then
+      begin
+        Result[N] := S;
+        Inc(N);
+      end;
     end;
+    SetLength(Result, N);
   finally
-    lList.Free;
+    List.Free;
   end;
 end;
 
 function ToJsonArray(const pItems: TArray<string>): TJSONArray;
 var
-  lS: string;
+  S: string;
 begin
   Result := TJSONArray.Create;
-  for lS in pItems do
-    Result.Add(lS);
+  for S in pItems do
+    Result.Add(S);
 end;
 
 // Escapes every non-ASCII char as \uXXXX so the file is pure ASCII.
 function AsciiOnly(const pText: string): string;
 var
-  lCh: Char;
-  lSb: TStringBuilder;
+  Ch: Char;
+  Sb: TStringBuilder;
 begin
-  lSb := TStringBuilder.Create;
+  Sb := TStringBuilder.Create;
   try
-    for lCh in pText do
-      if Ord(lCh) > 126 then
-        lSb.Append('\u').Append(IntToHex(Ord(lCh), 4))
+    for Ch in pText do
+      if Ord(Ch) > LAST_ASCII then
+        Sb.Append('\u').Append(IntToHex(Ord(Ch), UNICODE_HEX_DIGITS))
       else
-        lSb.Append(lCh);
-    Result := lSb.ToString;
+        Sb.Append(Ch);
+    Result := Sb.ToString;
   finally
-    lSb.Free;
+    Sb.Free;
   end;
 end;
 
 function ContextToJson(const pCtx: TSetupContext; const pNowUtc: string): string;
 var
-  lRoot, lSrc: TJSONObject;
+  Root, Src: TJSONObject;
 begin
-  lRoot := TJSONObject.Create;
+  Root := TJSONObject.Create;
   try
-    lRoot.AddPair('schema', TJSONNumber.Create(1));
-    lRoot.AddPair('generatedBy', CGeneratedBy);
-    lRoot.AddPair('generatedAt', pNowUtc);
-    lRoot.AddPair('project', pCtx.Project);
-    lSrc := TJSONObject.Create;
-    lSrc.AddPair('file', pCtx.SourceFile);
-    lSrc.AddPair('mtime', pNowUtc);
-    lSrc.AddPair('sha1', pCtx.SourceSha1);
-    lRoot.AddPair('source', lSrc);
-    lRoot.AddPair('platform', pCtx.PlatformName);
-    lRoot.AddPair('config', pCtx.Config);
-    lRoot.AddPair('targetCompiler', pCtx.TargetCompiler);
-    lRoot.AddPair('defines', ToJsonArray(pCtx.Defines));
-    lRoot.AddPair('searchPath', ToJsonArray(pCtx.SearchPath));
-    lRoot.AddPair('namespaces', ToJsonArray(pCtx.Namespaces));
-    lRoot.AddPair('unitAliases', TJSONObject.Create);
-    lRoot.AddPair('libraryDb', pCtx.LibraryDb);
-    lRoot.AddPair('libraryRoots', ToJsonArray(pCtx.LibraryRoots));
-    lRoot.AddPair('projectDb', pCtx.ProjectDb);
-    Result := AsciiOnly(lRoot.Format(2));
+    Root.AddPair('schema', TJSONNumber.Create(SCHEMA_VERSION));
+    Root.AddPair('generatedBy', CGeneratedBy);
+    Root.AddPair('generatedAt', pNowUtc);
+    Root.AddPair('project', pCtx.Project);
+    Src := TJSONObject.Create;
+    Src.AddPair('file', pCtx.SourceFile);
+    Src.AddPair('mtime', pNowUtc);
+    Src.AddPair('sha1', pCtx.SourceSha1);
+    Root.AddPair('source', Src);
+    Root.AddPair('platform', pCtx.PlatformName);
+    Root.AddPair('config', pCtx.Config);
+    Root.AddPair('targetCompiler', pCtx.TargetCompiler);
+    Root.AddPair('defines', ToJsonArray(pCtx.Defines));
+    Root.AddPair('searchPath', ToJsonArray(pCtx.SearchPath));
+    Root.AddPair('namespaces', ToJsonArray(pCtx.Namespaces));
+    Root.AddPair('unitAliases', TJSONObject.Create);
+    Root.AddPair('libraryDb', pCtx.LibraryDb);
+    Root.AddPair('libraryRoots', ToJsonArray(pCtx.LibraryRoots));
+    Root.AddPair('projectDb', pCtx.ProjectDb);
+    Result := AsciiOnly(Root.Format(JSON_INDENT));
   finally
-    lRoot.Free;
+    Root.Free;
   end;
 end;
 
@@ -244,63 +268,63 @@ end;
 
 function GetArr(pObj: TJSONObject; const pName: string): TArray<string>;
 var
-  lArr: TJSONArray;
+  Arr: TJSONArray;
   i: Integer;
 begin
   Result := nil;
-  if pObj.TryGetValue<TJSONArray>(pName, lArr) then
+  if pObj.TryGetValue<TJSONArray>(pName, Arr) then
   begin
-    SetLength(Result, lArr.Count);
-    for i := 0 to lArr.Count - 1 do
-      Result[i] := lArr.Items[i].Value;
+    SetLength(Result, Arr.Count);
+    for i := 0 to Arr.Count - 1 do
+      Result[i] := Arr.Items[i].Value;
   end;
 end;
 
 function TryParseContext(const pJson: string; out pCtx: TSetupContext): Boolean;
 var
-  lVal: TJSONValue;
-  lRoot, lSrc: TJSONObject;
-  lSchema: Integer;
+  Val: TJSONValue;
+  Root, Src: TJSONObject;
+  Schema: Integer;
 begin
   Result := False;
   pCtx := Default(TSetupContext);
-  lVal := TJSONObject.ParseJSONValue(pJson);
-  if lVal = nil then
+  Val := TJSONObject.ParseJSONValue(pJson);
+  if Val = nil then
     Exit;
   try
-    if not (lVal is TJSONObject) then
+    if not (Val is TJSONObject) then
       Exit;
-    lRoot := TJSONObject(lVal);
-    if not lRoot.TryGetValue<Integer>('schema', lSchema) or (lSchema <> 1) then
+    Root := TJSONObject(Val);
+    if not Root.TryGetValue<Integer>('schema', Schema) or (Schema <> SCHEMA_VERSION) then
       Exit;
-    pCtx.Project := GetStr(lRoot, 'project');
-    pCtx.PlatformName := GetStr(lRoot, 'platform');
-    pCtx.Config := GetStr(lRoot, 'config');
-    pCtx.Defines := GetArr(lRoot, 'defines');
-    pCtx.SearchPath := GetArr(lRoot, 'searchPath');
-    pCtx.Namespaces := GetArr(lRoot, 'namespaces');
-    pCtx.LibraryDb := GetStr(lRoot, 'libraryDb');
-    pCtx.LibraryRoots := GetArr(lRoot, 'libraryRoots');
-    pCtx.ProjectDb := GetStr(lRoot, 'projectDb');
-    pCtx.TargetCompiler := GetStr(lRoot, 'targetCompiler');
-    if lRoot.TryGetValue<TJSONObject>('source', lSrc) then
+    pCtx.Project := GetStr(Root, 'project');
+    pCtx.PlatformName := GetStr(Root, 'platform');
+    pCtx.Config := GetStr(Root, 'config');
+    pCtx.Defines := GetArr(Root, 'defines');
+    pCtx.SearchPath := GetArr(Root, 'searchPath');
+    pCtx.Namespaces := GetArr(Root, 'namespaces');
+    pCtx.LibraryDb := GetStr(Root, 'libraryDb');
+    pCtx.LibraryRoots := GetArr(Root, 'libraryRoots');
+    pCtx.ProjectDb := GetStr(Root, 'projectDb');
+    pCtx.TargetCompiler := GetStr(Root, 'targetCompiler');
+    if Root.TryGetValue<TJSONObject>('source', Src) then
     begin
-      pCtx.SourceFile := GetStr(lSrc, 'file');
-      pCtx.SourceSha1 := GetStr(lSrc, 'sha1');
+      pCtx.SourceFile := GetStr(Src, 'file');
+      pCtx.SourceSha1 := GetStr(Src, 'sha1');
     end;
     Result := True;
   finally
-    lVal.Free;
+    Val.Free;
   end;
 end;
 
 function SaveContext(const pCtx: TSetupContext): string;
 var
-  lJson: string;
+  Json: string;
 begin
   Result := ContextFileFor(pCtx.Project);
-  lJson := ContextToJson(pCtx, FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', TTimeZone.Local.ToUniversalTime(Now)));
-  TFile.WriteAllText(Result, lJson, TUTF8Encoding.Create(False));
+  Json := ContextToJson(pCtx, FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', TTimeZone.Local.ToUniversalTime(Now)));
+  TFile.WriteAllText(Result, Json, TUTF8Encoding.Create(False));
 end;
 
 function ContextDefaultsFile: string;
@@ -312,59 +336,59 @@ end;
 
 function ExpandEnv(const pS: string): string;
 var
-  lBuf: array[0..1023] of Char;
+  Buf: array[0..ENV_BUF_LEN - 1] of Char;
 begin
-  if (Pos('%', pS) > 0) and (ExpandEnvironmentStrings(PChar(pS), lBuf, Length(lBuf)) > 0) then
-    Result := lBuf
+  if (Pos('%', pS) > 0) and (ExpandEnvironmentStrings(PChar(pS), Buf, Length(Buf)) > 0) then
+    Result := Buf
   else
     Result := pS;
 end;
 
 function TryLoadContextDefaults(const pPlatform: string; out pDefaults: TContextDefaults): Boolean;
 var
-  lFile, lPlat: string;
-  lVal: TJSONValue;
-  lRoot, lLibs, lLib: TJSONObject;
+  DefFile, Plat: string;
+  Val: TJSONValue;
+  Root, Libs, Lib: TJSONObject;
   i: Integer;
 begin
   Result := False;
   pDefaults := Default(TContextDefaults);
-  lFile := ContextDefaultsFile;
-  if not TFile.Exists(lFile) then
+  DefFile := ContextDefaultsFile;
+  if not TFile.Exists(DefFile) then
     Exit;
-  lVal := TJSONObject.ParseJSONValue(TFile.ReadAllText(lFile, TEncoding.UTF8));
-  if lVal = nil then
+  Val := TJSONObject.ParseJSONValue(TFile.ReadAllText(DefFile, TEncoding.UTF8));
+  if Val = nil then
     Exit;
   try
-    if not (lVal is TJSONObject) then
+    if not (Val is TJSONObject) then
       Exit;
-    lRoot := TJSONObject(lVal);
-    pDefaults.PlatformName := GetStr(lRoot, 'platform');
-    pDefaults.Config := GetStr(lRoot, 'config');
-    pDefaults.TargetCompiler := GetStr(lRoot, 'targetCompiler');
-    lPlat := pPlatform;
-    if lPlat = '' then
-      lPlat := pDefaults.PlatformName;
-    if lRoot.TryGetValue<TJSONObject>('libraries', lLibs) and lLibs.TryGetValue<TJSONObject>(lPlat, lLib) then
+    Root := TJSONObject(Val);
+    pDefaults.PlatformName := GetStr(Root, 'platform');
+    pDefaults.Config := GetStr(Root, 'config');
+    pDefaults.TargetCompiler := GetStr(Root, 'targetCompiler');
+    Plat := pPlatform;
+    if Plat = '' then
+      Plat := pDefaults.PlatformName;
+    if Root.TryGetValue<TJSONObject>('libraries', Libs) and Libs.TryGetValue<TJSONObject>(Plat, Lib) then
     begin
-      pDefaults.LibraryDb := ExpandEnv(GetStr(lLib, 'libraryDb'));
-      pDefaults.LibraryRoots := GetArr(lLib, 'libraryRoots');
+      pDefaults.LibraryDb := ExpandEnv(GetStr(Lib, 'libraryDb'));
+      pDefaults.LibraryRoots := GetArr(Lib, 'libraryRoots');
       for i := 0 to High(pDefaults.LibraryRoots) do
         pDefaults.LibraryRoots[i] := ExpandEnv(pDefaults.LibraryRoots[i]);
     end;
     Result := True;
   finally
-    lVal.Free;
+    Val.Free;
   end;
 end;
 
 function TryLoadContext(const pProjectFile: string; out pCtx: TSetupContext): Boolean;
 var
-  lFile: string;
+  DefFile: string;
 begin
   pCtx := Default(TSetupContext);
-  lFile := ContextFileFor(pProjectFile);
-  Result := TFile.Exists(lFile) and TryParseContext(TFile.ReadAllText(lFile, TEncoding.UTF8), pCtx);
+  DefFile := ContextFileFor(pProjectFile);
+  Result := TFile.Exists(DefFile) and TryParseContext(TFile.ReadAllText(DefFile, TEncoding.UTF8), pCtx);
 end;
 
 end.

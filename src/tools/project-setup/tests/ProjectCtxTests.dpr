@@ -4,6 +4,8 @@ program ProjectCtxTests;
 
 uses
   Winapi.Windows, System.SysUtils, System.IOUtils, System.Classes,
+  DRagLint.Preprocess.Types in '..\..\..\preprocess\DRagLint.Preprocess.Types.pas',
+  DRagLint.Preprocess.Profile in '..\..\..\preprocess\DRagLint.Preprocess.Profile.pas',
   ProjectSetup.ContextJson in '..\ProjectSetup.ContextJson.pas';
 
 var
@@ -37,7 +39,8 @@ var
   lP: string;
 begin
   Check(Has(BuiltInDefines('Win32'), 'WIN32'), 'Win32 has WIN32');
-  Check(Has(BuiltInDefines('Win64'), 'WIN64') and Has(BuiltInDefines('Win64'), 'CPUX64'), 'Win64 has WIN64,CPUX64');
+  Check(Has(BuiltInDefines('Win32'), 'VER370') and Has(BuiltInDefines('Win32'), 'CPUX86'), 'Win32 matches engine table');
+  Check(Has(BuiltInDefines('Win64'), 'WIN64') and Has(BuiltInDefines('Win64'), 'CPUX86_64'), 'Win64 has WIN64,CPUX86_64');
   Check(Has(BuiltInDefines('Linux64'), 'LINUX64'), 'Linux64 has LINUX64');
   Check(Has(BuiltInDefines('OSXARM64'), 'CPUARM64'), 'OSXARM64 has CPUARM64');
   Check(Has(BuiltInDefines('Android64'), 'ANDROID64'), 'Android64 has ANDROID64');

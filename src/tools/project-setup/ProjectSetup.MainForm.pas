@@ -25,6 +25,8 @@ type
     procedure ApplyCentralDefaults;
     function AddLabel(const pCaption: string; pTop: Integer): TLabel;
     function AddMemo(const pCaption: string; pTop, pHeight: Integer): TMemo;
+    function AddEdit(pTop, pWidth: Integer): TEdit;
+    function AddButton(const pCaption: string; pLeft, pWidth: Integer): TButton;
     procedure BrowseClick(pSender: TObject);
     procedure SaveClick(pSender: TObject);
     procedure PlatformChange(pSender: TObject);
@@ -42,80 +44,87 @@ type
 implementation
 
 const
-  CLeft = 12;
-  CWide = 560;
+  // Layout, in pixels. Rows are stacked top to bottom: label, then control.
+  MARGIN = 12;
+  CONTENT_WIDTH = 560;
+  LABEL_HEIGHT = 15;
+  LABEL_GAP = 18;
+  EDIT_HEIGHT = 23;
+  BUTTON_HEIGHT = 28;
+  BROWSE_WIDTH = 82;
+  SAVE_WIDTH = 80;
+  BUTTON_GAP = 8;
+  COMBO_WIDTH = 180;
+  COMBO_COLUMN_GAP = 20;
+  ROW_PROJECT = 8;
+  ROW_PLATFORM = 58;
+  ROW_DEFINES = 106;
+  ROW_SEARCH = 216;
+  ROW_NAMESPACES = 306;
+  ROW_LIBRARY_DB = 376;
+  ROW_ROOTS = 424;
+  ROW_COMPILER = 494;
+  ROW_STATUS = 556;
+  ROW_BUTTONS = 596;
+  HEIGHT_DEFINES = 100;
+  HEIGHT_SEARCH = 80;
+  HEIGHT_SMALL_MEMO = 60;
+  MEMO_TRIM = 20;
+  FORM_HEIGHT = 640;
 
 constructor TSetupForm.CreateSetup(pOwner: TComponent; const pProjectFile: string);
 var
-  lBtn: TButton;
-  lP: string;
+  Plat: string;
+  Btn: TButton;
 begin
   inherited CreateNew(pOwner);
   Caption := 'dl-project-setup - project context';
   Position := poScreenCenter;
   BorderStyle := bsDialog;
-  ClientWidth := CWide + 2 * CLeft;
-  ClientHeight := 640;
+  ClientWidth := CONTENT_WIDTH + 2 * MARGIN;
+  ClientHeight := FORM_HEIGHT;
 
-  AddLabel('Project file (.dpr)', 8);
-  FProjectEdit := TEdit.Create(Self);
-  FProjectEdit.Parent := Self;
-  FProjectEdit.SetBounds(CLeft, 26, CWide - 90, 23);
-  lBtn := TButton.Create(Self);
-  lBtn.Parent := Self;
-  lBtn.Caption := 'Browse...';
-  lBtn.SetBounds(CLeft + CWide - 82, 25, 82, 25);
-  lBtn.OnClick := BrowseClick;
+  AddLabel('Project file (.dpr)', ROW_PROJECT);
+  FProjectEdit := AddEdit(ROW_PROJECT + LABEL_GAP, CONTENT_WIDTH - BROWSE_WIDTH - BUTTON_GAP);
+  AddButton('Browse...', MARGIN + CONTENT_WIDTH - BROWSE_WIDTH, BROWSE_WIDTH).OnClick := BrowseClick;
 
-  AddLabel('Target platform', 58);
+  AddLabel('Target platform', ROW_PLATFORM);
   FPlatformCombo := TComboBox.Create(Self);
   FPlatformCombo.Parent := Self;
   FPlatformCombo.Style := csDropDownList;
-  FPlatformCombo.SetBounds(CLeft, 76, 180, 23);
-  for lP in SetupPlatforms do
-    FPlatformCombo.Items.Add(lP);
+  FPlatformCombo.SetBounds(MARGIN, ROW_PLATFORM + LABEL_GAP, COMBO_WIDTH, EDIT_HEIGHT);
+  for Plat in SetupPlatforms do
+    FPlatformCombo.Items.Add(Plat);
   FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf('Win32');
   FPlatformCombo.OnChange := PlatformChange;
 
-  AddLabel('Configuration', 58).Left := CLeft + 200;
+  AddLabel('Configuration', ROW_PLATFORM).Left := MARGIN + COMBO_WIDTH + COMBO_COLUMN_GAP;
   FConfigCombo := TComboBox.Create(Self);
   FConfigCombo.Parent := Self;
   FConfigCombo.Style := csDropDown;
-  FConfigCombo.SetBounds(CLeft + 200, 76, 180, 23);
+  FConfigCombo.SetBounds(MARGIN + COMBO_WIDTH + COMBO_COLUMN_GAP, ROW_PLATFORM + LABEL_GAP, COMBO_WIDTH, EDIT_HEIGHT);
   FConfigCombo.Items.Add('Debug');
   FConfigCombo.Items.Add('Release');
   FConfigCombo.Text := 'Debug';
   FConfigCombo.OnChange := PlatformChange;
 
-  FDefinesMemo := AddMemo('Conditional defines (one per line)', 106, 100);
-  FSearchMemo := AddMemo('Unit search path (one per line)', 216, 80);
-  FNamespacesMemo := AddMemo('Namespaces (one per line)', 306, 60);
+  FDefinesMemo := AddMemo('Conditional defines (one per line)', ROW_DEFINES, HEIGHT_DEFINES);
+  FSearchMemo := AddMemo('Unit search path (one per line)', ROW_SEARCH, HEIGHT_SEARCH);
+  FNamespacesMemo := AddMemo('Namespaces (one per line)', ROW_NAMESPACES, HEIGHT_SMALL_MEMO);
 
-  AddLabel('Library DB path (optional)', 376);
-  FLibraryDbEdit := TEdit.Create(Self);
-  FLibraryDbEdit.Parent := Self;
-  FLibraryDbEdit.SetBounds(CLeft, 394, CWide, 23);
+  AddLabel('Library DB path (optional)', ROW_LIBRARY_DB);
+  FLibraryDbEdit := AddEdit(ROW_LIBRARY_DB + LABEL_GAP, CONTENT_WIDTH);
 
-  FRootsMemo := AddMemo('RTL/VCL source roots (optional, one per line)', 424, 60);
+  FRootsMemo := AddMemo('RTL/VCL source roots (optional, one per line)', ROW_ROOTS, HEIGHT_SMALL_MEMO);
 
-  FStatus := AddLabel('', 556);
-  lBtn := TButton.Create(Self);
-  lBtn.Parent := Self;
-  lBtn.Caption := 'Save';
-  lBtn.Default := True;
-  lBtn.SetBounds(CLeft + CWide - 170, 596, 80, 28);
-  lBtn.OnClick := SaveClick;
-  lBtn := TButton.Create(Self);
-  lBtn.Parent := Self;
-  lBtn.Caption := 'Close';
-  lBtn.Cancel := True;
-  lBtn.ModalResult := mrCancel;
-  lBtn.SetBounds(CLeft + CWide - 82, 596, 82, 28);
+  AddLabel('Target compiler (optional, e.g. 37; empty = default)', ROW_COMPILER);
+  FCompilerEdit := AddEdit(ROW_COMPILER + LABEL_GAP, COMBO_WIDTH);
 
-  AddLabel('Target compiler (optional, e.g. 37; empty = default)', 494);
-  FCompilerEdit := TEdit.Create(Self);
-  FCompilerEdit.Parent := Self;
-  FCompilerEdit.SetBounds(CLeft, 512, 180, 23);
+  FStatus := AddLabel('', ROW_STATUS);
+  AddButton('Save', MARGIN + CONTENT_WIDTH - BROWSE_WIDTH - BUTTON_GAP - SAVE_WIDTH, SAVE_WIDTH).OnClick := SaveClick;
+  Btn := AddButton('Close', MARGIN + CONTENT_WIDTH - BROWSE_WIDTH, BROWSE_WIDTH);
+  Btn.Cancel := True;
+  Btn.ModalResult := mrCancel;
 
   PlatformChange(nil);
   ApplyCentralDefaults;
@@ -128,7 +137,22 @@ begin
   Result := TLabel.Create(Self);
   Result.Parent := Self;
   Result.Caption := pCaption;
-  Result.SetBounds(CLeft, pTop, CWide, 15);
+  Result.SetBounds(MARGIN, pTop, CONTENT_WIDTH, LABEL_HEIGHT);
+end;
+
+function TSetupForm.AddEdit(pTop, pWidth: Integer): TEdit;
+begin
+  Result := TEdit.Create(Self);
+  Result.Parent := Self;
+  Result.SetBounds(MARGIN, pTop, pWidth, EDIT_HEIGHT);
+end;
+
+function TSetupForm.AddButton(const pCaption: string; pLeft, pWidth: Integer): TButton;
+begin
+  Result := TButton.Create(Self);
+  Result.Parent := Self;
+  Result.Caption := pCaption;
+  Result.SetBounds(pLeft, ROW_BUTTONS, pWidth, BUTTON_HEIGHT);
 end;
 
 function TSetupForm.AddMemo(const pCaption: string; pTop, pHeight: Integer): TMemo;
@@ -137,16 +161,16 @@ begin
   Result := TMemo.Create(Self);
   Result.Parent := Self;
   Result.ScrollBars := ssVertical;
-  Result.SetBounds(CLeft, pTop + 18, CWide, pHeight - 20);
+  Result.SetBounds(MARGIN, pTop + LABEL_GAP, CONTENT_WIDTH, pHeight - MEMO_TRIM);
 end;
 
 procedure TSetupForm.FillMemo(pMemo: TMemo; const pItems: TArray<string>);
 var
-  lS: string;
+  Item: string;
 begin
   pMemo.Lines.Clear;
-  for lS in pItems do
-    pMemo.Lines.Add(lS);
+  for Item in pItems do
+    pMemo.Lines.Add(Item);
 end;
 
 function TSetupForm.ProjectFile: string;
@@ -162,79 +186,79 @@ end;
 
 procedure TSetupForm.ApplyCentralDefaults;
 var
-  lDef: TContextDefaults;
+  Def: TContextDefaults;
 begin
-  if not TryLoadContextDefaults('', lDef) then
+  if not TryLoadContextDefaults('', Def) then
     Exit;
-  if FPlatformCombo.Items.IndexOf(lDef.PlatformName) >= 0 then
-    FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(lDef.PlatformName);
-  if lDef.Config <> '' then
-    FConfigCombo.Text := lDef.Config;
-  FCompilerEdit.Text := lDef.TargetCompiler;
-  FLibraryDbEdit.Text := lDef.LibraryDb;
-  FillMemo(FRootsMemo, lDef.LibraryRoots);
+  if FPlatformCombo.Items.IndexOf(Def.PlatformName) >= 0 then
+    FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Def.PlatformName);
+  if Def.Config <> '' then
+    FConfigCombo.Text := Def.Config;
+  FCompilerEdit.Text := Def.TargetCompiler;
+  FLibraryDbEdit.Text := Def.LibraryDb;
+  FillMemo(FRootsMemo, Def.LibraryRoots);
   PlatformChange(nil);
 end;
 
 procedure TSetupForm.ProjectChanged;
 var
-  lCtx: TSetupContext;
+  Ctx: TSetupContext;
 begin
   FStatus.Caption := '';
-  if (ProjectFile <> '') and TryLoadContext(ProjectFile, lCtx) then
+  if (ProjectFile <> '') and TryLoadContext(ProjectFile, Ctx) then
   begin
-    if FPlatformCombo.Items.IndexOf(lCtx.PlatformName) >= 0 then
-      FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(lCtx.PlatformName);
-    FConfigCombo.Text := lCtx.Config;
-    FillMemo(FDefinesMemo, lCtx.Defines);
-    FillMemo(FSearchMemo, lCtx.SearchPath);
-    FillMemo(FNamespacesMemo, lCtx.Namespaces);
-    FLibraryDbEdit.Text := lCtx.LibraryDb;
-    FCompilerEdit.Text := lCtx.TargetCompiler;
-    FillMemo(FRootsMemo, lCtx.LibraryRoots);
+    if FPlatformCombo.Items.IndexOf(Ctx.PlatformName) >= 0 then
+      FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Ctx.PlatformName);
+    FConfigCombo.Text := Ctx.Config;
+    FillMemo(FDefinesMemo, Ctx.Defines);
+    FillMemo(FSearchMemo, Ctx.SearchPath);
+    FillMemo(FNamespacesMemo, Ctx.Namespaces);
+    FLibraryDbEdit.Text := Ctx.LibraryDb;
+    FCompilerEdit.Text := Ctx.TargetCompiler;
+    FillMemo(FRootsMemo, Ctx.LibraryRoots);
     FStatus.Caption := 'Loaded ' + ContextFileFor(ProjectFile);
   end;
 end;
 
 procedure TSetupForm.BrowseClick(pSender: TObject);
 var
-  lDlg: TOpenDialog;
+  Dlg: TOpenDialog;
 begin
-  lDlg := TOpenDialog.Create(Self);
+  Dlg := TOpenDialog.Create(Self);
   try
-    lDlg.Filter := 'Delphi project (*.dpr)|*.dpr|All files|*.*';
-    if lDlg.Execute then
+    Dlg.Filter := 'Delphi project (*.dpr)|*.dpr|All files|*.*';
+    if Dlg.Execute then
     begin
-      FProjectEdit.Text := lDlg.FileName;
+      FProjectEdit.Text := Dlg.FileName;
       ProjectChanged;
     end;
   finally
-    lDlg.Free;
+    Dlg.Free;
   end;
 end;
 
 procedure TSetupForm.SaveClick(pSender: TObject);
 var
-  lCtx: TSetupContext;
+  Ctx: TSetupContext;
 begin
   if (ProjectFile = '') or not FileExists(ProjectFile) then
   begin
     FStatus.Caption := 'Choose an existing .dpr first.';
     Exit;
   end;
-  lCtx := Default(TSetupContext);
-  lCtx.Project := ExpandFileName(ProjectFile);
-  lCtx.SourceFile := lCtx.Project;
-  lCtx.SourceSha1 := FileSha1(lCtx.Project);
-  lCtx.PlatformName := FPlatformCombo.Text;
-  lCtx.Config := Trim(FConfigCombo.Text);
-  lCtx.Defines := SplitLines(FDefinesMemo.Text);
-  lCtx.SearchPath := SplitLines(FSearchMemo.Text);
-  lCtx.Namespaces := SplitLines(FNamespacesMemo.Text);
-  lCtx.LibraryDb := Trim(FLibraryDbEdit.Text);
-  lCtx.TargetCompiler := Trim(FCompilerEdit.Text);
-  lCtx.LibraryRoots := SplitLines(FRootsMemo.Text);
-  FStatus.Caption := 'Saved ' + SaveContext(lCtx);
+  Ctx := Default(TSetupContext);
+  Ctx.Project := ExpandFileName(ProjectFile);
+  Ctx.SourceFile := Ctx.Project;
+  Ctx.SourceSha1 := FileSha1(Ctx.Project);
+  Ctx.PlatformName := FPlatformCombo.Text;
+  Ctx.Config := Trim(FConfigCombo.Text);
+  Ctx.Defines := SplitLines(FDefinesMemo.Text);
+  Ctx.SearchPath := SplitLines(FSearchMemo.Text);
+  Ctx.Namespaces := SplitLines(FNamespacesMemo.Text);
+  Ctx.LibraryDb := Trim(FLibraryDbEdit.Text);
+  Ctx.TargetCompiler := Trim(FCompilerEdit.Text);
+  Ctx.LibraryRoots := SplitLines(FRootsMemo.Text);
+  FStatus.Caption := 'Saved ' + SaveContext(Ctx);
 end;
 
 end.
