@@ -248,16 +248,17 @@ try {
   Check 'saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
   $dlg = WaitCls $p.Id '#32770' 20
   # gateleak: the Save As dialog's native loop never calls Application.OnMessage (InputGate cannot see it), so a
-  # File > Save As / File > Open posted to the disabled editor meanwhile nested a second dialog. RED (old exe) = 2 / 3.
+  # File > Save As / File > Open posted to the disabled editor meanwhile ran under it. RED (b42433f9 exe) = 2: File > Open's
+  # discard prompt (TMessageForm 'Confirm') over the Save As dialog.
   if ($dlg -ne [IntPtr]::Zero) {
     [void][W]::InvokeMenu($main, 'File|Save As...'); [void][W]::InvokeMenu($main, 'File|Open...')
     Start-Sleep -Milliseconds 1500
-    $nDlg = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq '#32770' }).Count
+    $nDlg = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -in '#32770', 'TMessageForm' }).Count
     Check 'saveas.reentrant.not.nested' ($nDlg -eq 1) ("dialogs while Save As is up and Save As + Open are posted: $nDlg; " + (TopsNow $p.Id))
   }
   # Cancel every dialog up (on a RED exe the nested ones too), topmost first.
   $t0 = Get-Date
-  while (($d = WaitCls $p.Id '#32770' 0) -ne [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 20) { Click (@(Find $d 'Button' 'Cancel')[0]); Start-Sleep -Milliseconds 700 }
+  while ((($d = WaitCls $p.Id 'TMessageForm' 0) -ne [IntPtr]::Zero -or ($d = WaitCls $p.Id '#32770' 0) -ne [IntPtr]::Zero) -and ((Get-Date) - $t0).TotalSeconds -lt 20) { Click (@([W]::Kids($d) | Where-Object { [W]::Txt($_) -eq 'Cancel' })[0]); Start-Sleep -Milliseconds 700 }
   Start-Sleep -Seconds 1
   # The book has had no path since File > New. If the cancelled Save As had kept the
   # abandoned path, plain Save would now write silently; it must still ASK.

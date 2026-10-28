@@ -1,8 +1,8 @@
 # GATELEAK (2026-10-27): the VCL needs two GLOBAL atoms per process -- 'Delphi<pid %.8X>' (WindowAtom) and
-# 'ControlOfs<HInstance %.8X><main thread id %.8X>' (ControlAtom). FindControl maps a window handle to its VCL
+# 'ControlOfs<HInstance %.8X><main thread id %.8X>' (ControlAtom); Vcl.Dialogs adds a third, 'WndProcPtr<same>'. FindControl maps a window handle to its VCL
 # control through them. A process that is KILLED (every GUI driver kills the editor and its engine children on
-# exit) never deletes them, so they leak until logoff; this desktop had ~2000 of them and the global atom table
-# ran out. An editor started while the table is full gets atom 0, FindControl answers nil for every window, and
+# exit) never deletes them, so they leak until logoff; this desktop had ~3000 of them (~1000 of each) and the global
+# atom table ran out. An editor started while the table is full gets atom 0, FindControl answers nil for every window, and
 # every button is dead: a posted BM_CLICK focuses the button but never reaches OnClick, a posted WM_COMMAND is
 # dropped by DoControlMsg. Menu commands still work (they dispatch by item ID), so the run looks healthy until
 # the first button click ('add.dialog: no Open dialog after two Add... clicks', 2 of 5 runs).
@@ -12,7 +12,7 @@
 #   VclAtomsReclaim                       -> deletes the leaked atoms of DEAD processes / threads; returns a count line
 #   VclAtomsOf $procId $mainWnd           -> @{ Control = <atom or 0>; Window = <atom or 0>; Names = '...' }
 # Reclaim only deletes an atom whose owner is gone: 'Delphi<pid>' when no process has that id, 'ControlOfs..<tid>'
-# when no thread has that id (a reused id keeps the atom: conservative). Atoms of live processes (the IDE, other
+# / 'WndProcPtr..<tid>' when no thread has that id (a reused id keeps the atom: conservative). Atoms of live processes (the IDE, other
 # editors, other lanes' runs) are never touched.
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -44,7 +44,7 @@ public static class VclAtoms {
     for (int a = 0xC000; a <= 0xFFFF; a++) {
       sb.Clear(); if (GlobalGetAtomName((ushort)a, sb, 256) == 0) continue;
       string s = sb.ToString(); uint id; bool dead;
-      if (s.StartsWith("ControlOfs") && s.Length >= 18 + 8 && uint.TryParse(s.Substring(s.Length - 8), System.Globalization.NumberStyles.HexNumber, null, out id)) dead = !ThreadAlive(id);
+      if ((s.StartsWith("ControlOfs") || s.StartsWith("WndProcPtr")) && s.Length >= 18 + 8 && uint.TryParse(s.Substring(s.Length - 8), System.Globalization.NumberStyles.HexNumber, null, out id)) dead = !ThreadAlive(id);
       else if (s.StartsWith("Delphi") && s.Length == 14 && uint.TryParse(s.Substring(6), System.Globalization.NumberStyles.HexNumber, null, out id)) dead = !ProcessAlive(id);
       else continue;
       seen++; if (!dead) continue;
