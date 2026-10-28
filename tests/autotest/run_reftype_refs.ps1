@@ -72,7 +72,7 @@ $expect = [ordered]@{
 $pyFile = Join-Path $WorkDir 'rt.py'
 @'
 import sqlite3, sys, json
-db, probe = sys.argv[1], sys.argv[2]
+db, probe, fname = sys.argv[1], sys.argv[2], sys.argv[3]
 lines = open(probe, encoding='ascii').read().split('\n')
 c = sqlite3.connect(db)
 c.row_factory = sqlite3.Row
@@ -82,11 +82,11 @@ for i, l in enumerate(lines):
     if p >= 0:
         markers[l[p + 2:l.index(' }', p)]] = i + 1
 q = ("select r.start_line as line, r.kind as kind, r.name_text as name from refs r "
-     "join files f on f.id = r.file_id where f.path like '%uRefTypeProbe.pas'")
-rows = [dict(r) for r in c.execute(q)]
+     "join files f on f.id = r.file_id where f.path like ?")
+rows = [dict(r) for r in c.execute(q, ('%' + fname,))]
 print(json.dumps({'markers': markers, 'rows': rows}))
 '@ | Set-Content -Encoding ascii $pyFile
-$data = (& python -I $pyFile $db $probe | Out-String) | ConvertFrom-Json
+$data = (& python -I $pyFile $db $probe 'uRefTypeProbe.pas' | Out-String) | ConvertFrom-Json
 
 $tu = @($data.rows | Where-Object { $_.kind -eq 'type_use' })
 Check 'probe indexed (type_use rows present)' ($tu.Count -gt 0) "rows=$($tu.Count)"
@@ -108,6 +108,48 @@ $audit = @($auditRaw | ConvertFrom-Json)
 Check 'uses-audit returned a JSON array' ($auditRaw.Trim().StartsWith('[')) $auditRaw.Trim()
 $flagged = @($audit | Where-Object { $_.unit -eq 'uRefTypeOnlyDefs' })
 Check 'uses-audit keeps uRefTypeOnlyDefs (signature-only use)' ($flagged.Count -eq 0) $auditRaw.Trim()
+
+# ---- part 2: names used ONLY in initializer / bound / default-VALUE / attribute
+# positions (uRefInitProbe.pas). Any ref kind counts (read, type_use, attribute);
+# EXACTLY one row per name and line, so a fix that double-emits fails here.
+$initExpect = [ordered]@{
+  'M-UNTYPED'  = @('RiA')
+  'M-TYPED'    = @('RiB')
+  'M-ARRAY'    = @('RiC1', 'RiC2')
+  'M-RECORD'   = @('RiD')
+  'M-DEFVAL'   = @('RiF')
+  'M-FREEDEF'  = @('RiF')
+  'M-ENUMVAL'  = @('RiH')
+  'M-RESSTR'   = @('RiS')
+  'M-VARINIT'  = @('RiJ')
+  # positive controls -- shapes that already emitted before the fix
+  'M-SUBRANGE' = @('RiLo', 'RiHi')
+  'M-ARRBOUND' = @('RiLo2', 'RiHi2')
+  'M-ATTR'     = @('RiAttr', 'RiG')
+  'M-EXPR'     = @('RiE')
+  'M-SIZEOF'   = @('TRiSz')
+  'M-SET'      = @('riK1', 'riK2')
+}
+$initProbe = Join-Path $SrcDir 'uRefInitProbe.pas'
+$idata = (& python -I $pyFile $db $initProbe 'uRefInitProbe.pas' | Out-String) | ConvertFrom-Json
+Check 'init probe indexed (rows present)' (@($idata.rows).Count -gt 0) "rows=$(@($idata.rows).Count)"
+foreach ($m in $initExpect.Keys) {
+  $line = $idata.markers.$m
+  if (-not $line) { Check "$m marker found" $false; continue }
+  foreach ($n in $initExpect[$m]) {
+    $hits = @($idata.rows | Where-Object { $_.line -eq $line -and $_.name -eq $n })
+    Check "$m ref $n" ($hits.Count -eq 1) "line=$line hits=$($hits.Count) kinds=$((@($hits | ForEach-Object kind)) -join ',')"
+  }
+}
+# NEGATIVE: a declared NAME (the const / enum value / param being declared) is not a ref.
+$declHits = @($idata.rows | Where-Object { $_.name -in @('CRiUntyped', 'CRiTyped', 'roA', 'SRiMsg', 'GRiInit', 'pX', 'pY') -and $_.line -lt $idata.markers.'M-FREEDEF' + 1 })
+Check 'no declared name in an initializer line is a ref' ($declHits.Count -eq 0) "hits=$($declHits.Count)"
+
+# uRefInitOnly uses uRefInitOnlyDefs ONLY in `CInitOnly = RiOnly;` (the CLI.pas:69 shape).
+$iaRaw = (& $Exe uses-audit (Join-Path $SrcDir 'uRefInitOnly.pas') --db $db --format json 2>$null | Out-String)
+Check 'uses-audit (init) returned a JSON array' ($iaRaw.Trim().StartsWith('[')) $iaRaw.Trim()
+$iflag = @(@($iaRaw | ConvertFrom-Json) | Where-Object { $_.unit -eq 'uRefInitOnlyDefs' })
+Check 'uses-audit keeps uRefInitOnlyDefs (initializer-only use)' ($iflag.Count -eq 0) $iaRaw.Trim()
 
 if ($script:Failed) { Write-Host 'run_reftype_refs: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_reftype_refs: PASS' -ForegroundColor Green; exit 0
