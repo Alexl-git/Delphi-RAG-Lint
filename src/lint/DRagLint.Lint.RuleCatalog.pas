@@ -764,7 +764,7 @@ begin
       volume was measured and put to the user before the raise. Report-only --
       there is nothing a fix could write, since the whole point is that the
       meaning is not in the code (ruling D-3). }
-    B('doc-param-no-description', 'documentation', 'warning', 'A <param> tag is present but has no description -- the parameter''s meaning is still undocumented'); { ON by default; marked fixable via FIXABLE_RULE_IDS -- its --fix applies only the safe subset (facts-block refresh + missing param/returns stubs), never rewriting hand prose }
+    B('doc-param-no-description', 'documentation', 'warning', 'A <param> tag is present but has no description -- the parameter''s meaning is still undocumented'); { ON by default; NOT fixable (lane A5B, 2026-10-27): the finding asks for prose only a human can write -- a stub description would still read as empty to the rule. doc-drift's --fix refreshes the facts block of the same decl }
 
     { --- metrics (CK class metrics; v0.78) --- }
     B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);

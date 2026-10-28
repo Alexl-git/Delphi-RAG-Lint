@@ -24,10 +24,10 @@ Write-Host '== rules --json: fix_opt_in marks the naming fixes ==' -ForegroundCo
 $rules = @((& (Resolve-Path $Exe).Path rules --json 2>$null | ConvertFrom-Json).rules)
 Check 'catalog read' ($rules.Count -gt 100) "rules=$($rules.Count)"
 
-$naming = @('const-casing','field-name-prefix','local-field-prefix','local-var-casing','method-pascalcase','param-name-prefix','type-name-prefix')
+$naming = @('const-casing','field-name-prefix','local-field-prefix','local-var-casing','method-pascalcase','param-name-prefix','property-accessor-name','type-name-prefix')   # property-accessor-name: lane A5B (a project-wide accessor rename)
 $optIn  = @($rules | Where-Object { $_.fix_opt_in -eq $true } | ForEach-Object { $_.id } | Sort-Object)
 Check 'O1 every rule carries the field' (@($rules | Where-Object { $null -eq $_.PSObject.Properties['fix_opt_in'] }).Count -eq 0) ''
-Check 'O2 exactly the seven naming fixes are opt-in' ((Compare-Object $optIn $naming) -eq $null) "got: $($optIn -join ',')"
+Check 'O2 exactly the eight naming fixes are opt-in' ((Compare-Object $optIn $naming) -eq $null) "got: $($optIn -join ',')"
 Check 'O3 every opt-in rule is also fixable' (@($rules | Where-Object { $_.fix_opt_in -and -not $_.fixable }).Count -eq 0) ''
 # CONTROL: the field must not swallow the ordinary fixes, or "Fix all" would be dead.
 $plain = @($rules | Where-Object { $_.fixable -and -not $_.fix_opt_in } | ForEach-Object { $_.id })

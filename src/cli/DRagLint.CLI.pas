@@ -11940,7 +11940,10 @@ begin
     else Targeted:= Survivors;
 
     var FixCount: Integer                                               ;
+    { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
+    SetAutofixStore(AStore);
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
+    SetAutofixStore(nil);
     { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
       recorded site no longer holds the identifier being renamed). Declared out
       here so the autofix summary below can report it -- an invisible skip is

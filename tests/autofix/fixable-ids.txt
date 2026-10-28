@@ -102,3 +102,8 @@ firedac-open-execsql-mismatch
 freeandnil-on-interface
 locale-sensitive-conversion
 unsafe-typecast-without-is
+unused-public-symbol
+unused-unit-in-uses
+empty-procedure-body
+classname-string-compare
+property-accessor-name
