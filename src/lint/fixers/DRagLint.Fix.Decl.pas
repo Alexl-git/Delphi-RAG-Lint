@@ -697,7 +697,8 @@ begin
   for I:= ClassFirst to ClassLast do
   begin
     if TRegEx.IsMatch(ALines[I - 1], '\bF' + TRegEx.Escape(Name) + '\b', [roIgnoreCase]) then Exit;
-    if (PrivLine = 0) and TRegEx.IsMatch(ALines[I - 1], '^\s*(?:strict\s+)?private\s*$', [roIgnoreCase]) then PrivLine:= I;
+    { only a private section ABOVE the public one: a property may not read a field declared after it }
+    if (PrivLine = 0) and (I < PubLine) and TRegEx.IsMatch(ALines[I - 1], '^\s*(?:strict\s+)?private\s*$', [roIgnoreCase]) then PrivLine:= I;
   end;
   EProp:= DcNewEdit(AFinding, tekReplaceLines, AFinding.StartLine);
   EProp.EndLine   := AFinding.StartLine;
