@@ -307,6 +307,7 @@ var
   M    : TMatch;
   E    : TTextEdit;
   Clash: Boolean;
+  Body : string;
 begin
   Result:= nil;
   AFixed:= 0;
@@ -315,11 +316,13 @@ begin
   One  := TList<TTextEdit>.Create;
   Taken:= TDictionary<Integer, Boolean>.Create;
   try
-    Lines.LoadFromFile(APath, TEncoding.ANSI);
-    for var F: TLintFinding in AFindings do
+    TTextFileFormat.ReadFile(APath, Body);   { the applier's decoder: columns count the characters it will write (CLIFIX C3) }
+    Lines.Text:= Body;
+    for var F0: TLintFinding in AFindings do
     begin
-      if not SameText(F.RuleId, 'unused-unit-in-uses') or not SameText(F.FilePath, APath) then Continue;
-      if ContainsText(F.Message, 'HAS an initialization section') then Continue;
+      if not SameText(F0.RuleId, 'unused-unit-in-uses') or not SameText(F0.FilePath, APath) then Continue;
+      if ContainsText(F0.Message, 'HAS an initialization section') then Continue;
+      var F: TLintFinding:= WithCharColumns(F0, Lines);   { index columns are UTF-8 bytes (CLIFIX C3) }
       M:= TRegEx.Match(F.Message, '^Unit ''([A-Za-z_][\w.]*)''');
       if not M.Success or (F.StartLine < 1) or (F.StartLine > Lines.Count) then Continue;
       if not SameText(StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]), M.Groups[1].Value) then Continue;
@@ -330,7 +333,7 @@ begin
       for var L:= E.Line to Max(E.Line, E.EndLine) do Clash:= Clash or Taken.ContainsKey(L);
       if Clash then Continue;
       for var L:= E.Line to Max(E.Line, E.EndLine) do Taken.AddOrSetValue(L, True);
-      E.Owner:= FixOwnerKey(F);   { lane IATOM: the applier writes a finding's edits all-or-nothing }
+      E.Owner:= FixOwnerKey(F0);   { lane IATOM: the applier writes a finding's edits all-or-nothing }
       Result:= Result + [E];
       Inc(AFixed);
     end;
@@ -466,6 +469,7 @@ var
   Store : ISymbolStore;
   Lines : TStringList;
   Units : TStringList;
+  Body  : string;
   M     : TMatch;
   Span  : string;
   Target: TSymbol;
@@ -481,11 +485,13 @@ begin
   Lines:= TStringList.Create;
   Units:= TStringList.Create(dupIgnore, True, False);
   try
-    Lines.LoadFromFile(APath, TEncoding.ANSI);
+    TTextFileFormat.ReadFile(APath, Body);   { the applier's decoder: columns count the characters it will write (CLIFIX C3) }
+    Lines.Text:= Body;
     if ImplementationLine(Lines) = 0 then Exit;
-    for var F: TLintFinding in AFindings do
+    for var F0: TLintFinding in AFindings do
     begin
-      if not SameText(F.RuleId, 'classname-string-compare') or not SameText(F.FilePath, APath) then Continue;
+      if not SameText(F0.RuleId, 'classname-string-compare') or not SameText(F0.FilePath, APath) then Continue;
+      var F: TLintFinding:= WithCharColumns(F0, Lines);   { index columns are UTF-8 bytes (CLIFIX C3) }
       if (F.StartLine < 1) or (F.StartLine > Lines.Count) or (F.EndLine <> F.StartLine) or (F.StartCol < 1) or (F.EndCol <= F.StartCol) then Continue;
       Span:= Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol);
       M:= TRegEx.Match(Span, '^(?<recv>[A-Za-z_]\w*)\.ClassName\s*(?<op>=|<>)\s*''(?<cls>[A-Za-z_]\w*)''$');

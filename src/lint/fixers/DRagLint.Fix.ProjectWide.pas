@@ -36,6 +36,15 @@ uses
 /// (its comma goes); a last `  , B;` hands its ';' to the entry above.</remarks>
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
 
+/// <summary>A copy of AFinding whose StartCol / EndCol count CHARACTERS of the decoded
+/// source line, as the text-edit applier does, instead of the UTF-8 BYTES the index stores.</summary>
+/// <param name="AFinding">A finding on one line (StartLine); its columns are index columns.</param>
+/// <param name="ALines">The file as the applier decodes it (TTextFileFormat.ReadFile).</param>
+/// <returns>AFinding with character columns; unchanged when the line is out of range or pure ASCII.</returns>
+/// <remarks>Pure ASCII lines map identically, so only a line with a non-ASCII character before
+/// the span moves (CLIFIX C3: such a file used to be declined by the uses fixers).</remarks>
+function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
+
 implementation
 
 uses
@@ -45,6 +54,7 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , DRagLint.Lint.Autofix
+  , DRagLint.Convert.UsesReconcile
   ;
 
 const
@@ -107,6 +117,14 @@ begin
   Edit.Text      := '';
   Edit.ExpectText:= M.Value;
   Result:= [Edit];
+end;
+
+function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
+begin
+  Result:= AFinding;
+  if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) or (AFinding.EndLine <> AFinding.StartLine) then Exit;
+  Result.StartCol:= CharColumn(ALines[AFinding.StartLine - 1], AFinding.StartCol);
+  Result.EndCol  := CharColumn(ALines[AFinding.StartLine - 1], AFinding.EndCol);
 end;
 
 function IsUsesKeywordLine(const ALine: string): Boolean;
@@ -410,7 +428,7 @@ begin
   Taken   := TDictionary<Integer, Boolean>.Create;
   Present := nil;
   try
-    Raw:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+    TTextFileFormat.ReadFile(APath, Raw);   { the applier's decoder (CLIFIX C3) }
     LB := TTextFileFormat.LineBreakOf(Raw);
     Lines.Text:= Raw;
     ImplAt:= -1;
@@ -446,10 +464,11 @@ begin
     Group  := if UsesAt < 0 then LowerCase(RULE_ID + '|' + APath) else '';
     First  := '';
 
-    for F in AFindings do
+    for var F0: TLintFinding in AFindings do
     begin
-      if not SameText(F.RuleId, RULE_ID) or not SameText(F.FilePath, APath) then Continue;
-      if (F.StartLine < 1) or (F.StartLine > ImplAt + 1) then Continue;      { only interface entries are movable }
+      if not SameText(F0.RuleId, RULE_ID) or not SameText(F0.FilePath, APath) then Continue;
+      if (F0.StartLine < 1) or (F0.StartLine > ImplAt + 1) then Continue;      { only interface entries are movable }
+      F:= WithCharColumns(F0, Lines);                                      { index columns are UTF-8 bytes }
       { a column-aligned dotted name (`DRagLint.Core    .Model`) is compared and moved compacted }
       Name:= StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]);
       { stale index: the span must still hold the unit the finding names (its message starts with it) }
@@ -460,7 +479,7 @@ begin
       for Edit in One do
         for i:= Edit.Line to Max(Edit.Line, Edit.EndLine) do Clash:= Clash or Taken.ContainsKey(i);
       if Clash then Continue;
-      Own:= FixOwnerKey(F);
+      Own:= FixOwnerKey(F0);
       for Edit in One do
       begin
         for i:= Edit.Line to Max(Edit.Line, Edit.EndLine) do Taken.AddOrSetValue(i, True);
@@ -539,4 +558,4 @@ initialization
   RegisterFixer('virtual-never-overridden', FixVirtualDirective, True);
   RegisterFileFixer('uses-movable-to-implementation', FixUsesMovable);
 
-end.
+end.
