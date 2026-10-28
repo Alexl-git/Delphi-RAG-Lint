@@ -1942,7 +1942,23 @@ type
       'oracle' (at least one call was bound at query time by --library-db). '' when
       LibraryCallCount = 0. Carried in the json as library_calls.via. }
     LibraryCallVia  : string            ;
+    { XERJ item 2: every capped list says so. TotalCallers is the number of
+      distinct call sites BEFORE the --max-callers cut (Length(Callers) is the
+      truncated count); CallerCap is the cap that was applied. Omitted callers =
+      TotalCallers - Length(Callers). }
+    TotalCallers    : Integer           ;
+    CallerCap       : Integer           ;
   end;
+
+/// <summary>The one-line "N omitted by cap" note every capped list prints (XERJ item 2).</summary>
+/// <param name="AOmitted">How many rows the cap hid (or, with AAtLeast, the minimum known to be hidden).</param>
+/// <param name="ACap">The cap that was applied.</param>
+/// <param name="AAtLeast">True when only a lower bound is known (the reader fetched cap + 1 rows).</param>
+/// <param name="AFlag">The flag that raises the cap, e.g. '--limit'.</param>
+/// <param name="ARerun">The value to pass to AFlag to see the hidden rows.</param>
+/// <returns>`-- N omitted by cap C; rerun with FLAG V` ("at least N" when AAtLeast).</returns>
+/// <remarks>Pure. The note never changes a verb's exit code; it only reports.</remarks>
+function CapOmittedNote(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer): string;
 
 /// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>
 /// <returns><!-- drag-lint:auto -->string -- Observed: 'xmldoc'; 'pasdoc'; 'oneline';
@@ -2889,6 +2905,11 @@ begin
     dfLoose  : Result:= 'loose';
     else Result:= 'unknown';
   end;
+end;
+
+function CapOmittedNote(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer): string;
+begin
+  Result:= Format('-- %s%d omitted by cap %d; rerun with %s %d', [if AAtLeast then 'at least ' else '', AOmitted, ACap, AFlag, ARerun]);
 end;
 
 function JsonEscape(const S: string): string;

@@ -659,6 +659,8 @@ begin
   if LastDelimiter('.', OwnerLeaf) > 0 then OwnerLeaf:= Copy(OwnerLeaf, LastDelimiter('.', OwnerLeaf) + 1, MaxInt);
   RawCallers:= DistinctCallSites(CallersOfTarget(AStore.FindCallersByNameWithContext(CallerName, ACallerContext),
                                                  TargetIds, Sym.Kind = skConstructor, OwnerLeaf));
+  Result.TotalCallers:= Length(RawCallers); { XERJ item 2: the count BEFORE the cut }
+  Result.CallerCap   := AMaxCallers;
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);
   SetLength(Result.Callers, Length(RawCallers));
   for I:= 0 to High(RawCallers) do
@@ -818,7 +820,10 @@ begin
 
     if Length(ABundle.Callers) > 0 then
     begin
-      SB.AppendLine(Format('## Callers (%d)', [Length(ABundle.Callers)]));
+      if ABundle.TotalCallers > Length(ABundle.Callers) then
+        SB.AppendLine(Format('## Callers (%d of %d)', [Length(ABundle.Callers), ABundle.TotalCallers]))
+      else
+        SB.AppendLine(Format('## Callers (%d)', [Length(ABundle.Callers)]));
       for I:= 0 to High(ABundle.Callers) do
       begin
         BC:= ABundle.Callers[I];
@@ -830,6 +835,8 @@ begin
           SB.AppendLine('  ```');
         end;
       end;
+      if ABundle.TotalCallers > Length(ABundle.Callers) then
+        SB.AppendLine(CapOmittedNote(ABundle.TotalCallers - Length(ABundle.Callers), ABundle.CallerCap, False, '--max-callers', ABundle.TotalCallers));
     end;
 
     if Length(ABundle.ImpactSummary) > 0 then
@@ -909,11 +916,12 @@ begin
 
   Result:= Format(
     '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +
-    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]%s}', [
+    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]%s,"omitted":%d,"cap":%d}', [
       JsonEscape(ABundle.Verb + ' ' + ABundle.QName), JsonEscape(ABundle.Verb), JsonEscape(ABundle.QName),
       IfThen(ABundle.Resolved, 'true', 'false'),
       ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
-      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki, LibJson]);
+      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki, LibJson,
+      Ord(ABundle.TotalCallers > Length(ABundle.Callers)) * (ABundle.TotalCallers - Length(ABundle.Callers)), ABundle.CallerCap]);
 end; // function
 
 end.

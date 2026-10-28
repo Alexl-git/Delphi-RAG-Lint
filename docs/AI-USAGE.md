@@ -420,6 +420,7 @@ define further codes.
 | `hover --qname U.T.M` | hover card (`--format plain\|md\|json`). On an **interface** it also answers "what satisfies this contract": `Implemented by:` (classes) and `Extended by:` (derived interfaces), capped with a `(+N more)` suffix. Absent entirely when nothing implements it -- never `(none)`. `--format json` also carries `effect_free` (-1/0/1), `effect_summary` (`g,h,s,p<k>,?`) and `effect_witness` -- the stored purity verdict and its first blocker |
 | `helpers-of T` | record/class helper edges targeting type T |
 | `top` | most-depended-on symbols (`--by fanin`, `--limit N`) |
+| `gain` | counted savings: sums `%LOCALAPPDATA%\drag-lint\usage.log` (one line per `context` / `query` / `find-callers` run, best effort, off with `DRAGLINT_USAGE_LOG=0`) per verb and per day -- `tokens_returned`, `tokens_avoided` (= source bytes the answer stood in for / 4), ratio (`--since yyyy-mm-dd`, `--json`). `tokens_returned` is measured for `context` (bundle estimate) and `query --text` (printed characters / 4) and estimated at 15 tokens per row for the other readers. |
 
 **Analysis / reports (call graph, deps, cycles, impact)**
 | Verb | What it does |
@@ -849,6 +850,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `format` | [Format Whole Project with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-Whole-Project-with-YADF) | Runs YADF formatting across a project's files, with indexing involved as part of the same action |  |
 | `format` | [Format with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-with-YADF) | Reformats one Pascal unit by driving the external YADF formatter |  |
 | `forms-csv` | [Forms for testers (CSV)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Generate-Test-Helper-CSV) | A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form | index |
+| `gain` | [Gain (counted savings)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Gain-usage-log) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day |  |
 | `generate-docs` | [Doc Comment Stub (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Doc-Comment-Stub-symbol) | Uses generate-docs to produce a doc-comment stub for one qualified symbol |  |
 | `generate-test` | [Unit Test Stub (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Unit-Test-Stub-symbol) | Uses generate-test to produce a unit-test skeleton for one qualified symbol |  |
 | `ghost-check` | [ghost-check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) | Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged |  |

@@ -89,6 +89,7 @@ uses
   DRagLint.Sql.Guarded in '..\sql\DRagLint.Sql.Guarded.pas',
   DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',
   DRagLint.Core.ControlChannel in '..\core\DRagLint.Core.ControlChannel.pas',
+  DRagLint.Core.UsageLog in '..\core\DRagLint.Core.UsageLog.pas',
   DRagLint.Core.OutputEncoding in '..\core\DRagLint.Core.OutputEncoding.pas',
   DRagLint.Core.FileTime in '..\core\DRagLint.Core.FileTime.pas',
   DRagLint.Parser.DocComments in '..\parser\DRagLint.Parser.DocComments.pas',

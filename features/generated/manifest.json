@@ -1263,6 +1263,49 @@
       }
     },
     {
+      "id": "gain-usage-log",
+      "title": "Gain (counted savings)",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.36.0-alpha",
+      "summary": "Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day",
+      "intro": "Read this to see what the index saves: gain sums the usage log that context, query and find-callers append to, per verb and per day, as tokens returned against the source they stood in for.",
+      "wikiPage": "Gain-usage-log",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "gain",
+          "example": "drag-lint gain --since 2026-10-01",
+          "usage": "drag-lint gain [--since yyyy-mm-dd] [--json]",
+          "flags": [
+            {
+              "name": "--since",
+              "arg": "yyyy-mm-dd"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "help": ["  drag-lint gain               [--since yyyy-mm-dd] [--json]   (counted savings: sums %LOCALAPPDATA%\\drag-lint\\usage.log -- one line per context / query / find-callers run, written best effort; DRAGLINT_USAGE_LOG=0 turns the log off -- per verb and per day: tokens_returned, tokens_avoided = source bytes the answer stood in for / 4, ratio)"]
+        }
+      ],
+      "audience": "both",
+      "pitfalls": ["tokens_returned is measured only for context and query --text; the other readers are estimated at 15 tokens per row", "The log is per user and best effort: an unwritable LOCALAPPDATA loses lines silently by design"],
+      "questions": [
+        {
+          "ask": "How many tokens has the index saved me this week?",
+          "command": "drag-lint gain --since 2026-10-22"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-28",
+        "by": "ENGINE",
+        "build": "1.36.0-alpha",
+        "surfaceHash": "54c7e1045ab05750316c2b5fabc2ad5e0f408fccf8f8d5ada00a45c8d839bacf"
+      }
+    },
+    {
       "id": "go-to-declaration",
       "title": "Go to Declaration",
       "group": "search-navigation",

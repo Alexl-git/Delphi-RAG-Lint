@@ -681,6 +681,21 @@ drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [-
 
 Described in [Forms for testers (CSV)](../../docs/wiki/Generate-Test-Helper-CSV.md).
 
+### gain
+
+Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day.
+
+```text
+drag-lint gain [--since yyyy-mm-dd] [--json]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--since` | `yyyy-mm-dd` |  |  |
+| `--json` |  |  |  |
+
+Described in [Gain (counted savings)](../../docs/wiki/Gain-usage-log.md).
+
 ### generate-docs
 
 Uses generate-docs to produce a doc-comment stub for one qualified symbol.

@@ -100,6 +100,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
 | [find-callees](find-callees) | `find-callees`; drag-lint > Uses & Dependencies > What This Routine Calls (callees)... |  |
 | [find-unit](find-unit) | `find-unit`; drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)... |  |
+| [Gain (counted savings)](Gain-usage-log) | `gain` |  |
 | [Go to Declaration](Go-to-Declaration) | Structure form: Go to Declaration |  |
 | [Go to Definition](Go-to-Definition) | drag-lint > Go to Definition |  |
 | [Go to Implementation](Go-to-Implementation) | Structure form: Go to Implementation |  |

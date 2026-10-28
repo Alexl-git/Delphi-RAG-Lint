@@ -144,6 +144,7 @@ uses
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
   , DRagLint.Core   .EngineHold { the sentinel behind `ide-release` }
+  , DRagLint.Core   .UsageLog   { RecordUsage + BuildGainReport behind `gain` }
   , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `shutdown`, and the lsp-only gate
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
@@ -332,6 +333,7 @@ type
     HoldSeconds     : Integer       ; // --seconds N: `ide-release` hold length
     Resume          : Boolean       ; // --resume: `ide-release` clears the hold instead of setting it
     StatusOnly      : Boolean       ; // --status: `ide-release` reports the hold without changing it
+    GainSince       : string        ; // --since <yyyy-mm-dd>: `gain` skips usage-log lines older than this
     WaitSeconds     : Integer       ; // --wait N: `shutdown` graceful deadline per engine (default 5)
     ForceKill       : Boolean       ; // --force: `shutdown` escalates to TerminateProcess -- only after a refusal
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
@@ -1845,6 +1847,7 @@ begin
     else if A = '--no-seealso' then Result.DocSeeAlso:= False  // dl:ok duplicate-code@b5e0 -- REVIEWED 2026-09-23: the ParseArgs shape every flag branch shares (a flag parser is a chain of these by design); the duplicate window moved here when the doc-forget flags were added below
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
+    else if (A = '--since') and (Result.Command = 'gain') and (i < ParamCount) then begin Inc(i); Result.GainSince:= ParamStr(i); end
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
     else if (A = '--scope') and (i < ParamCount) then
@@ -7847,8 +7850,56 @@ end; // function
 
 // v0.57 Task 8: text-constant search (phrase / any-order / substring).
 // Placed immediately before DoQuery so no forward declaration is needed.
-function DoQueryText(const AArgs: TArgs): Integer;
+const
+  { A reader that prints through a helper cannot report its own byte count; one
+    result row (a path, a name, a kind) is estimated at 15 tokens (~60 chars).
+    Only `context` (TContextBundle.TokenEstimate) and `query --text` (actual
+    characters) use a measured figure. }
+  USAGE_TOKENS_PER_ROW = 15;
+
+{ XERJ item 2: the one place a capped list says so. AOmitted is the number of
+  rows the cap hid (a lower bound when AAtLeast: the reader fetched cap + 1).
+  AJson, when given, receives `omitted` and `cap` keys (always, 0 included, so
+  a consumer can read them unconditionally). Without it the note is a text line
+  -- on STDERR when the verb's stdout is a bare JSON array (AAsJsonStream), so
+  the array stays parseable. The exit code is never touched here. }
+procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer; AJson: TJSONObject; AAsJsonStream: Boolean);
+begin
+  if AJson <> nil then
+  begin
+    AJson.AddPair('omitted', TJSONNumber.Create(Max(0, AOmitted)));
+    AJson.AddPair('cap'    , TJSONNumber.Create(ACap));
+    if AAtLeast and (AOmitted > 0) then AJson.AddPair('omitted_is_lower_bound', TJSONBool.Create(True));
+    Exit;
+  end;
+  if AOmitted <= 0 then Exit;
+  if AAsJsonStream then Writeln(ErrOutput, CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun))
+  else Writeln(CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun));
+end; // procedure
+
+{ XERJ item 1: appends one usage-log line for a reader verb. The source files the
+  answer stands in for are summed once each (distinct paths). Best effort and
+  silent -- see DRagLint.Core.UsageLog. }
+procedure LogReaderUsage(const AVerb, ADbPath: string; ATokens: Int64; const AFilePaths: TArray<string>);
 var
+  Units: Integer;
+  Bytes: Int64  ;
+begin
+  if not UsageLogEnabled then Exit;
+  Bytes:= SumDistinctFileBytes(AFilePaths, Units);
+  RecordUsage(AVerb, ChangeFileExt(ExtractFileName(ADbPath), ''), ATokens, Bytes, Units);
+end;
+
+/// <summary>drag-lint gain [--since yyyy-mm-dd] [--json]: sums the usage log per verb and per day.</summary>
+/// <param name="AArgs">Parsed arguments; GainSince and AsJson are used.</param>
+/// <returns>0 always; a missing log is an all-zero report.</returns>
+function DoGain(const AArgs: TArgs): Integer;
+begin
+  Writeln(BuildGainReport(UsageLogPath, AArgs.GainSince, AArgs.AsJson));
+  Result:= 0;
+end;
+
+function DoQueryText(const AArgs: TArgs): Integer;var
   PathsToScan: TArray<string>         ;
   DbPath     : string                 ;
   Store      : ISymbolStore           ;
@@ -7859,6 +7910,9 @@ var
   M          : TStringLitMatch        ;
   JArr       : TJSONArray             ;
   JObj       : TJSONObject            ;
+  Omitted    : Integer                ;
+  TextChars  : Int64                  ;
+  UsagePaths : TArray<string>         ;
 begin
   if not ExplicitDbsExist(AArgs, 'query --text') then Exit(2);
   if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
@@ -7883,10 +7937,11 @@ begin
       if StaleDbRefusesRun(AArgs, 'query --text', DbPath) then Exit(2);
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
-    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim, AArgs.Kind);
+    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim + 1, AArgs.Kind); { cap + 1: one extra row proves the cap hid something }
     for M in Matches do begin SetLength(AllMatches, Length(AllMatches) + 1); AllMatches[High(AllMatches)]:= M; end;
   end;
-  if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
+  Omitted:= Max(0, Length(AllMatches) - Lim);
+  if Omitted > 0 then SetLength(AllMatches, Lim);
 
   if AArgs.AsJson then
   begin
@@ -7915,6 +7970,18 @@ begin
     for M in AllMatches do
       Writeln(Format('%s:%d:%d  [%s/%s]  %s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, IfThen(M.EnclosingQName <> '', '  -> ' + M.EnclosingQName, '')]));
     Writeln(Format('%d match(es)', [Length(AllMatches)]));
+  end;
+  ReportCap(Omitted, Lim, True, '--limit', Lim * 2, nil, AArgs.AsJson);
+  if Length(AllMatches) > 0 then
+  begin
+    TextChars:= 0;
+    SetLength(UsagePaths, Length(AllMatches));
+    for var K:= 0 to High(AllMatches) do
+    begin
+      UsagePaths[K]:= AllMatches[K].FilePath;
+      Inc(TextChars, Length(AllMatches[K].FilePath) + Length(AllMatches[K].Text) + Length(AllMatches[K].EnclosingQName));
+    end;
+    LogReaderUsage('query', PathsToScan[0], (TextChars + USAGE_BYTES_PER_TOKEN - 1) div USAGE_BYTES_PER_TOKEN, UsagePaths);
   end;
   if Length(AllMatches) > 0 then Result:= 0 else Result:= 1;
 end; // function
@@ -8164,6 +8231,7 @@ begin
         with caller_line OMITTED when the enclosing symbol is unknown.
         Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
+      var CallerFiles: TArray<string>:= nil;
       var JOut: TJSONArray:= nil;
       if AArgs.AsJson then JOut:= TJSONArray.Create;
       try
@@ -8221,6 +8289,7 @@ begin
               end;
             end;
             Inc(TotalCallers);
+            CallerFiles:= CallerFiles + [Row.FilePath];
           end; // for Row
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
@@ -8232,11 +8301,13 @@ begin
       finally
         JOut.Free;
       end; // try
+      if TotalCallers > 0 then LogReaderUsage('find-callers', PathsToScan[0], TotalCallers * USAGE_TOKENS_PER_ROW, CallerFiles);
       if TotalCallers = 0 then Result:= 1 else Result:= 0;
       Exit;
     end; // if AArgs.Resolved
 
     var TotalRefs:= 0;
+    var RefFiles: TArray<string>:= nil;
     for DbPath in PathsToScan do
     begin
       var RoOk: Boolean;
@@ -8256,8 +8327,10 @@ begin
         if AArgs.ContextLines > 0 then PrintReferencesWithContext(Store, Refs, AArgs.ContextLines, AArgs.AsJson)
         else PrintReferences(Store, Refs, AArgs.AsJson);
         Inc(TotalRefs, Length(Refs));
+        for var Rf: TReference in Refs do RefFiles:= RefFiles + [Store.GetFilePath(Rf.FileId)];
       end;
     end; // for
+    if TotalRefs > 0 then LogReaderUsage('find-callers', PathsToScan[0], TotalRefs * USAGE_TOKENS_PER_ROW, RefFiles);
     if (TotalRefs = 0) and (not AArgs.AsJson) then
     begin
       Writeln('0 caller(s)');
@@ -8586,6 +8659,8 @@ begin
     end;
   end;
   PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
+  if (Length(AllSymbols) > 0) and (Length(PathsToScan) > 0) then
+    LogReaderUsage('query', PathsToScan[0], Length(AllSymbols) * USAGE_TOKENS_PER_ROW, AllPaths);
   if Length(AllSymbols) = 0 then Result:= 1
   else Result:= 0;
 end; // function
@@ -9117,14 +9192,14 @@ begin
     Q.Sql.Text:= 'WITH ref_counts AS (' + '  SELECT name_text, COUNT(*) AS fanin FROM refs ' + '  GROUP BY name_text ORDER BY fanin DESC LIMIT :lim' + ') ' +
     'SELECT rc.name_text AS name, rc.fanin, ' + '       (SELECT kind FROM symbols WHERE name = rc.name_text LIMIT 1) ' + '         AS kind, ' +
     '       (SELECT qualified_name FROM symbols WHERE name = rc.name_text ' + '        ORDER BY id LIMIT 1) AS sample_qname ' + 'FROM ref_counts rc ORDER BY rc.fanin DESC';
-    Q.ParamByName('lim').AsInteger:= Limit;
+    Q.ParamByName('lim').AsInteger:= Limit + 1; { cap + 1: one extra row proves the cap hid something }
     Q.Open;
     Rows:= 0;
     if AArgs.AsJson then
     begin
       JArr:= TJSONArray.Create;
       try
-        while not Q.Eof do
+        while (not Q.Eof) and (Rows < Limit) do
         begin
           JObj:= TJSONObject.Create;
           JObj.AddPair('name', Q.FieldByName('name').AsString);
@@ -9144,7 +9219,7 @@ begin
     begin
       Writeln(Format('%6s  %-22s  %-10s  %s', ['fan-in', 'name', 'kind', 'sample qualified name']));
       Writeln(StringOfChar('-', 90));
-      while not Q.Eof do
+      while (not Q.Eof) and (Rows < Limit) do
       begin
         Writeln(Format(
             '%6d  %-22s  %-10s  %s', [Q.FieldByName('fanin').AsInteger, Q.FieldByName('name').AsString, Q.FieldByName('kind').AsString, Q.FieldByName('sample_qname').AsString]));
@@ -9153,6 +9228,7 @@ begin
       end;
       Writeln(Format('%d row(s) (fan-in = how many references in the index ' + 'use this name; ambiguous if multiple symbols share it)', [Rows]));
     end;
+    ReportCap(Ord(not Q.Eof), Limit, True, '--limit', Limit * 2, nil, AArgs.AsJson);
   finally
     Q.Free;
     Conn.Free;
@@ -14733,6 +14809,13 @@ begin
   if SameText(AArgs.Format, 'json') then Writeln(TContextBundler.RenderJson(Bundle))
   else if SameText(AArgs.Format, 'raw') then Writeln(TContextBundler.RenderRaw(Bundle))
   else Writeln(TContextBundler.RenderMarkdown(Bundle));
+  if UsageLogEnabled then
+  begin
+    var UsagePaths: TArray<string>:= nil;
+    for var TS: TSymbol in Store.FindSymbolsByQualifiedName(Bundle.QName) do UsagePaths:= UsagePaths + [Store.GetFilePath(TS.FileId)];
+    for var BC: TBundleCaller in Bundle.Callers do UsagePaths:= UsagePaths + [BC.FilePath];
+    LogReaderUsage('context', AArgs.DbPath, Bundle.TokenEstimate, UsagePaths);
+  end;
   Result:= 0;
   finally
     Oracle.Free;
@@ -16958,7 +17041,7 @@ function tree_sitter_dfm: PTSLanguage; cdecl;
 external 'tree-sitter-dfm';
 
 const
-  CLI_VERB_COUNT = 61; // informational only, not load-bearing; approximate verb count
+  CLI_VERB_COUNT = 62; // informational only, not load-bearing; approximate verb count
 
 /// <summary>Returns the tree-sitter ABI version for the given grammar, or
 /// 'unknown' if the grammar's entry point cannot be called (never fabricated).</summary>
@@ -34119,6 +34202,7 @@ begin
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)
     else if Args.Command = 'top'               then Result:= DoTop             (Args)
+    else if Args.Command = 'gain'              then Result:= DoGain            (Args)
     else if Args.Command = 'import-log'        then Result:= DoImportLog       (Args)
     else if Args.Command = 'graph'             then Result:= DoGraph           (Args)
     else if Args.Command = 'todos'             then Result:= DoTodos           (Args)

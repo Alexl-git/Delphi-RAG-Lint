@@ -431,6 +431,10 @@ begin
   Writeln('       see wiki page: Document-it');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
   Writeln('       see wiki page: Format-with-YADF');
+  Writeln('  drag-lint gain [--since yyyy-mm-dd] [--json]');
+  Writeln('       ^ tokens_returned is measured only for context and query --text; the other readers are estimated at 15 tokens per row');
+  Writeln('       ^ The log is per user and best effort: an unwritable LOCALAPPDATA loses lines silently by design');
+  Writeln('       see wiki page: Gain-usage-log');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
