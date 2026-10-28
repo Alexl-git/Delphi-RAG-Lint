@@ -70,5 +70,27 @@ Check 'no crash after a failed rule load' (($bo -notmatch 'FATAL') -and ($bo -ma
 [IO.Directory]::Delete($bad, $true)
 Check 'single-file lint inside the IDE 8 s budget' ($total -lt 8.0) ("best={0:n2} s" -f $total)
 
+# [after-checkers] budget (lane PERF2, 2026-10-28). The phase between the last
+# checker and the end of output (FinalizeAndOutput) went 0.03 -> 0.25 s per
+# `lint` process: the review-marker pass rebuilt the whole rule catalogue --
+# every rules\*.json sidecar plus compliance.json -- on every file, marker or
+# not. Median over a 20-fixture sample so one slow run on a busy machine does
+# not decide it; 0.04 s sits well under the measured unfixed 0.07-0.09 s
+# (Debug, idle-ish box) and well over the fixed ~0.005 s.
+$sample = @(Get-ChildItem (Join-Path $PSScriptRoot '..\lint') -Filter '*.pas' -File | Sort-Object Name | Select-Object -First 20)
+$after = @()
+$env:DRAGLINT_PROFILE = '1'
+try {
+  foreach ($fx in $sample) {
+    $o = & $Exe lint $fx.FullName --rules-dir $rulesDir 2>&1 | ForEach-Object { "$_" }
+    $m = $o | Where-Object { $_ -match '\[lint-phase\] after-checkers\s+([\d.]+) s' } | Select-Object -First 1
+    if ($m -and ($m -match '\[lint-phase\] after-checkers\s+([\d.]+) s')) { $after += [double]$Matches[1] }
+  }
+} finally { $env:DRAGLINT_PROFILE = $null }
+Check 'after-checkers profile line on every sampled fixture (positive control)' (($sample.Count -eq 20) -and ($after.Count -eq $sample.Count)) ("fixtures={0} lines={1}" -f $sample.Count, $after.Count)
+$med = 99.0
+if ($after.Count -gt 0) { $s = @($after | Sort-Object); $med = $s[[int][Math]::Floor(($s.Count - 1) / 2)] }
+Check 'after-checkers median <= 0.04 s per file' ($med -le 0.04) ("median={0:n3} s max={1:n3} s" -f $med, (($after | Measure-Object -Maximum).Maximum))
+
 Write-Host ''
 if($script:Failed){Write-Host 'FAIL' -ForegroundColor Red; exit 1}else{Write-Host 'PASS' -ForegroundColor Green; exit 0}
