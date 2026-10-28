@@ -190,6 +190,57 @@ end.
   Check 'B1 the field read bare inside `with` is NOT renamed' (($a -cmatch '\bclient: Integer') -and ($a -cmatch 'Result:= client \+ 1')) ''
   Check 'B2 ... the skip is counted: "skipped (with-block): 1"' ($o -match 'skipped \(with-block\): 1') (Say $o 'skipped|autofix')
   Check 'B3 CONTROL: the field with no `with` read IS renamed' (($a -cmatch '\bFOther: Integer') -and ($a -cnotmatch '\bother: Integer')) ''
+
+  # ---- U: a TEXT form beside the unit that is NOT the unit's own indexed form ----
+  # (an inherited form / a form outside the .dproj). The engine cannot rewrite what it
+  # does not index: renaming the .pas would leave its row stale (compiles, dies at load).
+  $childDfm = "inherited frmChild: TfrmMain`n  Left = 0`n  object Button2: TButton`n    OnClick = buttonClick`n  end`nend`n"
+  $d9 = NewProject 'FormUnidx' @{ 'uForm.pas' = $form; 'uForm.dfm' = $dfmText; 'uChild.dfm' = $childDfm }
+  $p9 = Join-Path $d9 'uForm.pas'; $c9 = Join-Path $d9 'uChild.dfm'
+  $pre9 = Txt $p9; $preC9 = Txt $c9; $preD9 = Txt (Join-Path $d9 'uForm.dfm')
+  $o = (& $ExeP lint --file $p9 --db (Join-Path $d9 'FormUnidx.sqlite') --fix --apply 2>&1 | Out-String)
+  Check 'U1 an unindexed text form names the handler: .pas, own .dfm and the other .dfm are all unchanged' `
+    (((Txt $p9) -ceq $pre9) -and ((Txt $c9) -ceq $preC9) -and ((Txt (Join-Path $d9 'uForm.dfm')) -ceq $preD9)) (Say $o 'skipped|autofix')
+  Check 'U2 ... and the skip is counted: "skipped (dfm-unindexed): 1"' ($o -match 'skipped \(dfm-unindexed\): 1') (Say $o 'skipped|autofix')
+  $otherDfm = "inherited frmChild: TfrmMain`n  object Button2: TButton`n    OnClick = SomethingElse`n  end`nend`n"
+  $d10 = NewProject 'FormUnidxCtl' @{ 'uForm.pas' = $form; 'uForm.dfm' = $dfmText; 'uChild.dfm' = $otherDfm }
+  $o = (& $ExeP lint --file (Join-Path $d10 'uForm.pas') --db (Join-Path $d10 'FormUnidxCtl.sqlite') --fix --apply 2>&1 | Out-String)
+  Check 'U3 CONTROL: a neighbouring form that does not name the handler does not block the rename' `
+    (((Txt (Join-Path $d10 'uForm.pas')) -cmatch 'procedure ButtonClick') -and ((Txt (Join-Path $d10 'uForm.dfm')) -cmatch 'OnClick = ButtonClick') -and ($o -notmatch 'dfm-unindexed')) (Say $o 'skipped|autofix')
+
+  # ---- C: a bare field read in the class's own method IS renamed; no review warning ----
+  $bare = @'
+unit uBare;
+
+interface
+
+type
+  TFoo = class
+  private
+    client: Integer;
+  public
+    function Get: Integer;
+  end;
+
+implementation
+
+function TFoo.Get: Integer;
+begin
+  Result:= client + 1;
+end;
+
+end.
+'@
+  $d11 = NewProject 'BareRead' @{ 'uBare.pas' = $bare }
+  $cfg11 = Join-Path $d11 'drag-lint-lint.json'
+  WriteAscii $cfg11 '{ "naming": { "field_prefix": "F" } }'
+  $u11 = Join-Path $d11 'uBare.pas'
+  $o = (& $ExeP lint --file $u11 --db (Join-Path $d11 'BareRead.sqlite') --config $cfg11 --rule field-name-prefix --fix --apply 2>&1 | Out-String)
+  $a = Txt $u11
+  Check 'C1 the bare read in the class''s own method is renamed with the declaration' (($a -cmatch '\bFClient: Integer') -and ($a -cmatch 'Result:= FClient \+ 1;')) (Say $o 'autofix')
+  Check 'C2 ... and the stale "may leave a bare field read" warning is gone' ($o -notmatch 'bare field read')
+  Check 'C3 CONTROL: the matcher sees that warning text when present' (('drag-lint: warning: field-name-prefix autofix may leave a bare field read') -match 'bare field read')
+
 } finally {
   [IO.Directory]::Delete($work, $true)
 }

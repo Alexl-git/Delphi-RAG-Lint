@@ -529,13 +529,14 @@ $warnStderr = Join-Path $warnDir 'stderr.txt'
 Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb,'--config',$warnCfg,'--rule','field-name-prefix','--fix','--quiet') `
   -NoNewWindow -Wait -RedirectStandardOutput $warnStdout -RedirectStandardError $warnStderr
 $warnErrText = Read-Stderr $warnStderr
-Check 'WARN-A: field-name-prefix --fix emits the warning on stderr' `
-  ($warnErrText -match [regex]::Escape($WarnNeedle)) $warnErrText
+# 1.37.0: the index holds the bare-read ref, so the review warning was removed.
+Check 'WARN-A: field-name-prefix --fix no longer emits the stale warning' `
+  ($warnErrText -notmatch [regex]::Escape($WarnNeedle)) $warnErrText
 # POSITIVE CONTROL for WARN-B / WARN-C: their exact "no warning" expression,
 # fed WARN-A's stderr (which does warn), must come out False -- and fed an
 # empty capture, True -- or those two checks cannot tell a warning from silence.
 Check 'WARN POSITIVE CONTROL: the no-warning test rejects a stderr that warns' `
-  (-not ($warnErrText -notmatch [regex]::Escape($AnyWarnNeedle)))
+  (-not (('drag-lint: warning: x') -notmatch [regex]::Escape($AnyWarnNeedle)))
 $emptyErr = Join-Path $warnDir 'empty-stderr.txt'
 [System.IO.File]::WriteAllText($emptyErr, '')
 Check 'WARN POSITIVE CONTROL: the no-warning test accepts a 0-byte stderr' `

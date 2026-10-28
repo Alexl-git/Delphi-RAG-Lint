@@ -11656,6 +11656,9 @@ begin
     end;
 end;
 
+const
+  BINARY_FORM_MAGIC = 'TPF0'; // the first bytes of a binary .dfm / .fmx
+
 { The rename-engine finding's identifier, read from the file's own span. '' when
   the span no longer holds one. }
 function NamingFixIdentifier(const AFinding: TLintFinding): string;
@@ -11674,8 +11677,6 @@ end;
 /// tests\autotest\run_rules_fix_default_on.ps1 A1). A binary one is opaque to the
 /// index, so the rename could not be proved complete and is skipped.</remarks>
 function NamingFixReferencedByBinaryForm(const AFinding: TLintFinding): Boolean;
-const
-  BINARY_FORM_MAGIC = 'TPF0'; // the first bytes of a binary .dfm / .fmx
 var
   Ext, FormFile, Ident, Body: string;
   Bytes: TBytes;
@@ -11696,6 +11697,39 @@ begin
   end;
 end;
 
+/// <summary>Does a TEXT form file in the finding's folder, other than the unit's
+/// own indexed form (same base name), name the symbol being renamed?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True for method-pascalcase / type-name-prefix / field-name-prefix when
+/// another .dfm / .fmx in the unit's folder holds the identifier as a whole word
+/// (case-insensitively).</returns>
+/// <remarks>Such a form (an inherited form, a form outside the .dproj) is not in the
+/// index, so the rename engine would leave its OnClick = Handler / inherited X:
+/// TX row stale: the .pas compiles and the form dies at load. Skipped, never
+/// rewritten (conservative). The unit's own same-named form is the engine's job.</remarks>
+function NamingFixReferencedByUnindexedForm(const AFinding: TLintFinding): Boolean;
+var
+  Ident, Dir, Own, Pattern, FormFile: string;
+  Mask: string;
+begin
+  Result:= False;
+  if not (SameText(AFinding.RuleId, 'method-pascalcase') or SameText(AFinding.RuleId, 'type-name-prefix')
+       or SameText(AFinding.RuleId, 'field-name-prefix')) then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if Ident = '' then Exit;
+  Dir:= TPath.GetDirectoryName(AFinding.FilePath);
+  if (Dir = '') or not TDirectory.Exists(Dir) then Exit;
+  Own:= TPath.GetFileNameWithoutExtension(AFinding.FilePath);
+  Pattern:= '(?<![A-Za-z0-9_])' + TRegEx.Escape(Ident) + '(?![A-Za-z0-9_])';
+  for Mask in ['*.dfm', '*.fmx'] do
+    for FormFile in TDirectory.GetFiles(Dir, Mask) do
+    begin
+      if SameText(TPath.GetFileNameWithoutExtension(FormFile), Own) then Continue;
+      var Bytes: TBytes:= TFile.ReadAllBytes(FormFile);
+      if (Length(Bytes) >= Length(BINARY_FORM_MAGIC)) and (TEncoding.ASCII.GetString(Bytes, 0, Length(BINARY_FORM_MAGIC)) = BINARY_FORM_MAGIC) then Continue;
+      if TRegEx.IsMatch(TEncoding.ANSI.GetString(Bytes), Pattern, [roIgnoreCase]) then Exit(True);
+    end;
+end;
 /// <summary>Is the field a field-name-prefix finding names read bare inside a
 /// `with` in its own file?</summary>
 /// <param name="AFinding">A naming finding.</param>
@@ -12294,45 +12328,31 @@ begin
       var NamingTargets: TArray<TLintFinding>:= nil;
       var DfmSkipped: Integer:= 0;
       var WithSkipped: Integer:= 0;
+      var UnindexedSkipped: Integer:= 0;
       for F in Targeted do
         if IsNamingFixRule(F.RuleId) then
         begin
           if NamingFixReferencedByBinaryForm(F) then Inc(DfmSkipped)
+          else if NamingFixReferencedByUnindexedForm(F) then Inc(UnindexedSkipped)
           else if NamingFixReadBareInWith(F) then Inc(WithSkipped)
           else NamingTargets:= NamingTargets + [F];
         end;
       if DfmSkipped > 0 then
         Writeln(ErrOutput, Format('skipped (dfm-referenced): %d -- a binary form file names the symbol, so the rename ' +
           'could not be proved complete; nothing was written for it.', [DfmSkipped]));
+      if UnindexedSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (dfm-unindexed): %d -- a text form file beside the unit names the symbol and is not the unit''s own indexed form, ' +
+          'so the rename could not be proved complete; nothing was written for it.', [UnindexedSkipped]));
       if WithSkipped > 0 then
         Writeln(ErrOutput, Format('skipped (with-block): %d -- the field is read bare inside a `with`, a site the index ' +
           'holds no reference for; nothing was written for it.', [WithSkipped]));
       if Length(NamingTargets) > 0 then
       begin
         { Naming-prefix autofixes rewrite the declaration + every use the ref
-          index knows about. Coverage status per rule:
-          - type-name-prefix: FULLY covered as of ref-gap E (v-next). The index
-            now captures impl-header qualifier + param/return types, local-var
-            type annotations, and is/as operands (ref-gap E), on top of the
-            ordinary typeref sites; ref-gap D already covered Self.-qualified
-            uses. So a type rename no longer strands references -- NO warning.
-          - field-name-prefix: ref-gap D covers Self.-qualified field uses, but
-            a BARE field read used as an expression operand (e.g.
-            `Result := client + 1;`) is still NOT indexed as a ref, so that one
-            site can be left on the old name -- the file can fail to compile
-            with exit code 0 and no other diagnostic. So field-name-prefix STILL
-            warrants the warning, narrowed to that remaining shape.
-          param-name-prefix uses BuildLocal's pure-AST scope walk and needs no
-          warning. When ref-gaps close the bare-field-read shape, drop this too. }
-        for F in NamingTargets do
-          if SameText(F.RuleId, 'field-name-prefix') then
-          begin
-            Writeln(ErrOutput, 'drag-lint: warning: field-name-prefix autofix may leave a bare field '
-              + 'read used as an expression operand (e.g. `X := field + 1`) unrenamed (the index does '
-              + 'not yet capture that site) -- review the diff and recompile.');
-            Break;
-          end;
-
+          index knows about. The index holds a ref for a bare field read in the
+          class's own methods (probed, pinned by run_rules_fix_default_on.ps1 C1),
+          so no review warning is printed; the one shape it cannot see, a bare
+          read inside with, is skipped and counted above. }
         Rename:= PlanMultiOwnerNaming(AArgs, NFHintDb, Cfg.Naming, NamingTargets);
         Inc(FixCount, Rename.Applied);
 
