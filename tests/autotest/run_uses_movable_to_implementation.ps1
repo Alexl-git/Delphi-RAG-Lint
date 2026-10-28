@@ -11,9 +11,9 @@
 # uL (lane IATOM): a column-aligned dotted name (`uM   .Sub`) with a trailing { comment } -- the engine
 #   source's own shape -- moves compacted; uM.Sub.pas is its unit.
 # uN (lane IATOM dogfood): a `uses` inside a comment below `implementation` is not the clause.
-# uJ (lane IATOM, written at run time -- it is UTF-8): ATOMICITY. The removal edit no longer matches
-#   the file at apply time, so the WHOLE fix (removal + implementation insert) is declined: the file
-#   is left byte-identical (before IATOM the insert landed alone -> E2004) and --json says declined.
+# uJ (lane IATOM, written at run time -- it is UTF-8): a non-ASCII comment on the line above the entry.
+#   IATOM declined it (the plan decoded it as ANSI); since CLIFIX C3 it is APPLIED whole (removal +
+#   implementation insert together) and stays valid UTF-8.
 # Fix: removes the entry from the interface uses and adds it to the implementation uses;
 # expected\uA.fixed.pas is hand-written. Second run is a no-op.
 # ON by default (lane IMOV, 2026-10-27: REFTYPE closed the reference-to-function FP; engine dogfood
@@ -69,16 +69,21 @@ try {
   $djDb = Join-Path $WorkDir 'drift.sqlite'
   Check 'drift: index exits 0' ((Invoke-G8Index $Exe $dj $djDb) -eq 0)
   Check 'drift: uB flagged on uJ.pas line 7 (positive control)' (@(Get-G8Findings $Exe $djDb $rule | Where-Object { $_.file_path -match 'uJ\.pas$' -and [int]$_.start_line -eq 7 }).Count -eq 1)
-  $jBefore = [IO.File]::ReadAllBytes($uj)
+  # CLIFIX C3: the uses fixers now decode UTF-8 like the applier and map index byte columns to
+  # characters, so uJ is APPLIED (it used to be declined because the plan decoded it as ANSI). The
+  # atomic whole-fix property still holds: removal AND implementation insert land together, the file
+  # stays valid UTF-8 and keeps its non-ASCII comment. The withdraw path of the all-or-nothing applier
+  # has no uses-movable trigger left (see the CLIFIX report); cyclefix / convert-apply keep covering it.
   $jRaw = & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-backup --json 2>$null | Out-String
-  Check 'drift: the file is byte-identical (no half-applied fix)' ([Linq.Enumerable]::SequenceEqual([byte[]]$jBefore, [byte[]][IO.File]::ReadAllBytes($uj)))
+  $strictU8 = New-Object Text.UTF8Encoding($false, $true)
+  $jTxt8 = $null; try { $jTxt8 = $strictU8.GetString([IO.File]::ReadAllBytes($uj)) } catch { }
+  Check 'utf8: the file is still valid UTF-8 and keeps its non-ASCII comment' (($null -ne $jTxt8) -and $jTxt8.Contains($nonAscii))
+  $jIntf = if ($jTxt8) { ($jTxt8 -split 'implementation')[0] } else { '' }
+  $jImpl = if ($jTxt8) { ($jTxt8 -split 'implementation')[1] } else { '' }
+  Check 'utf8: uB left the interface uses AND joined the implementation uses (whole fix, no half)' (($jIntf -notmatch '\buB\b') -and ($jImpl -match '\buB\b'))
   $jRows = @(); $jb = $jRaw.IndexOf('['); if ($jb -ge 0) { try { $jRows = @($jRaw.Substring($jb) | ConvertFrom-Json) } catch { } }
-  $jRow = @($jRows | Where-Object { $_.rule -eq $rule -and $_.file_path -match 'uJ\.pas$' })
-  if ($jRow.Count -eq 0) { $jRow = @($jRows | Where-Object { $_.rule -eq $rule -and $_.file -match 'uJ\.pas$' }) }
-  Check 'drift: --json row says declined, not applied' (($jRow.Count -eq 1) -and ($jRow[0].declined -eq $true) -and ($jRow[0].applied -eq $false) -and ([string]$jRow[0].decline_reason -ne '')) $jRaw.Trim()
-  $jTxt = & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-String
-  Check 'drift: text summary reports the declined fix' ($jTxt -match '1 declined') $jTxt.Trim()
-  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 9)
+  $jRow = @($jRows | Where-Object { $_.rule -eq $rule -and ($_.file_path -match 'uJ\.pas$' -or $_.file -match 'uJ\.pas$') })
+  Check 'utf8: --json row says applied, not declined' (($jRow.Count -eq 1) -and ($jRow[0].applied -eq $true) -and ($jRow[0].declined -ne $true)) $jRaw.Trim()  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 9)
   Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 9)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''
