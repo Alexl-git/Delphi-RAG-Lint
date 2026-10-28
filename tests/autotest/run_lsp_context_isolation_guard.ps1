@@ -180,6 +180,11 @@ $s = Session "$WorkDir\loose\uLoose.pas" @('LibOnly;') -initOptions @{ project =
 $ctx = @($s.Context | Select-Object -Last 1)
 Check 'CLI: initializationOptions.project = a .dlcontext.json -> its project + platform' ($ctx.Count -eq 1 -and $ctx[0].params.project -like '*\L\L.dpr' -and
   $ctx[0].params.platform -eq 'Linux64' -and $ctx[0].params.source -eq 'client') ($ctx | ConvertTo-Json -Depth 5 -Compress)
+Write-Ascii "$WorkDir\A\A.delphilsp.json" '{"settings":{"dllname":"dcc64370.dll","dccOptions":"-DDEBUG"}}'
+$s = Session "$WorkDir\loose\uLoose.pas" @('LibOnly;') -initOptions @{ settingsFile = (Uri "$WorkDir\A\A.delphilsp.json") }
+$ctx = @($s.Context | Select-Object -Last 1)
+Check 'CLI: the IDE''s settingsFile (.delphilsp.json) names A.dproj, client' ($ctx.Count -eq 1 -and $ctx[0].params.project -like '*\A\A.dproj' -and
+  $ctx[0].params.source -eq 'client') ($ctx | ConvertTo-Json -Depth 5 -Compress)
 $cfg = @{ jsonrpc = '2.0'; method = 'workspace/didChangeConfiguration'; params = @{ settings = @{ dragLint = @{ project = "$WorkDir\A\A.dproj"; platform = 'Win64' } } } }
 $s = Session "$WorkDir\loose\uLoose.pas" @('LibOnly;') -extra @($cfg)
 $ctx = @($s.Context | Select-Object -Last 1)
