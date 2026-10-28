@@ -37,7 +37,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # rules are covered by their own tests\autotest\run_*.ps1 runner; the rest are legacy gaps owed a fixture. The list may only
 # shrink (P4 fails an entry that gained a fixture).
 $Allowlist = @(
-    'abstract-method-instantiation', 'assert-with-side-effect', 'boolean-comparison-true',
+    'abstract-method-instantiation', 'boolean-comparison-true',
     'case-magic-numbers', 'circular-uses', 'classname-string-compare',
     'confusable-identifier', 'const-casing', 'cycle-participant-unit', 'deep-inheritance',
     'deep-nesting', 'dependent-project-not-recompiled', 'deprecated-rtl-function',
@@ -45,13 +45,13 @@ $Allowlist = @(
     'discarded-effect-free-result', 'doc-drift', 'doc-orphan-block',
     'doc-param-no-description', 'doc-param-not-in-signature', 'duplicate-global-decl',
     'empty-procedure-body', 'enum-bare-read-scoped', 'enum-helper-separate-units',
-    'enum-ordinal-persisted', 'enum-read-inside-with', 'fan-in', 'fan-out', 'feature-envy',
+    'enum-ordinal-persisted', 'fan-in', 'fan-out', 'feature-envy',
     'global-form-variable', 'global-only-uses-edge', 'god-class', 'goto-statement', 'high-coupling',
-    'high-response', 'ifdef-undefined-symbol', 'inline-assembly',
+    'high-response', 'inline-assembly',
     'inline-comment-in-multiline-args', 'instability', 'interface-reference-cycle',
     'layering-violation', 'line-too-long', 'local-field-prefix', 'low-cohesion', 'method-too-long',
     'middle-man', 'missing-doc', 'nested-with', 'outputdebugstring', 'parser-error',
-    'platform-divergent-define', 'query-name-with-effect', 'redundant-as-tobject',
+    'query-name-with-effect', 'redundant-as-tobject',
     'repeated-type-switch', 'review-marker-malformed', 'review-marker-placeholder-hash',
     'review-marker-reason-unreviewed', 'review-marker-stale', 'review-marker-unused',
     'stat-gated-destructive', 'too-many-children', 'too-many-locals', 'unbalanced-begin-end',
@@ -75,6 +75,22 @@ $Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', '
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 
+# Store/project-bound rules cannot be a tests\lint per-file fixture (that harness runs `lint <file>` with no store). Each is
+# covered by its OWN runner; the guard accepts the runner only if it exists, names the id, and carries a
+# `# positive-control: <id>` marker on a line of its hit arm (so removing the hit arm, or the runner, turns P6/P3 RED).
+$OwnRunner = @{
+    'enum-read-inside-with'     = 'tests\autotest\run_enum_read_inside_with.ps1'
+    'ifdef-undefined-symbol'    = 'tests\autotest\run_ifdef_undefined_symbol.ps1'
+    'platform-divergent-define' = 'tests\autotest\run_platform_divergent_define.ps1'
+    'assert-with-side-effect'   = 'tests\lint-project\assert-side-effect\run_assert_side_effect.ps1'
+}
+function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
+  if (-not $Map.ContainsKey($Id)) { return $false }
+  $path = Join-Path $Repo $Map[$Id]
+  if (-not (Test-Path -LiteralPath $path)) { return $false }
+  $txt = [IO.File]::ReadAllText($path)
+  return $txt.Contains($Id) -and ($txt -match ('(?m)^\s*#\s*positive-control:\s*' + [regex]::Escape($Id) + '\s*$'))
+}
 # --- collect directives from every fixture ---
 $hits = @{}; $negs = @{}
 foreach ($f in Get-ChildItem (Join-Path $Repo 'tests\lint') -Filter '*.expected') {
@@ -90,7 +106,7 @@ foreach ($f in Get-ChildItem (Join-Path $Repo 'tests\lint') -Filter '*.expected'
     }
   }
 }
-function HasFixture([string]$Id) { return (([int]$hits[$Id]) -ge 1) -and (([int]$negs[$Id]) -ge 1) }
+function HasFixture([string]$Id) { return ((([int]$hits[$Id]) -ge 1) -and (([int]$negs[$Id]) -ge 1)) -or (HasOwnRunner $Id) }
 
 $ids = @((& $exePath rules --json --rules-dir (Join-Path $Repo 'rules') 2>$null | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
 Check 'P0 CONTROL: rule catalogue parsed' ($ids.Count -gt 100) "($($ids.Count) id(s))"
@@ -118,7 +134,13 @@ $stale = @($Allowlist | Where-Object { HasFixture $_ })
 Check 'P4 no allowlisted id has a fixture any more (the list only shrinks)' ($stale.Count -eq 0) ("remove from allowlist: " + ($stale -join ' '))
 $ghost = @($Allowlist | Where-Object { $ids -notcontains $_ })
 Check 'P5 every allowlisted id is a real catalogue rule' ($ghost.Count -eq 0) ("not in rules --json: " + ($ghost -join ' '))
-$done = @($Pending | Where-Object { HasFixture $_ })
+$badRunner = @($OwnRunner.Keys | Where-Object { -not (HasOwnRunner $_) })
+Check 'P6 every mapped own-runner exists, names its id and has a positive-control marker' ($badRunner.Count -eq 0) ("broken: " + ($badRunner -join ' '))
+$ghostMap = @($OwnRunner.Keys | Where-Object { $ids -notcontains $_ })
+Check 'P6 every mapped id is a real catalogue rule' ($ghostMap.Count -eq 0) ("not in rules --json: " + ($ghostMap -join ' '))
+$ctlMap = @{ 'zz-fake' = 'tests\autotest\no-such-runner.ps1' }
+Check 'P6 POSITIVE CONTROL: a mapping to a missing runner is rejected' (-not (HasOwnRunner 'zz-fake' $ctlMap)) 'the own-runner predicate accepts a missing file'
+Check 'P6 POSITIVE CONTROL: a runner without the marker is rejected' (-not (HasOwnRunner 'taint-sql-injection' @{ 'taint-sql-injection' = 'tests\autotest\run_rule_fixture_positive_control.ps1' })) 'the predicate ignores the marker'$done = @($Pending | Where-Object { HasFixture $_ })
 if ($done.Count -gt 0) { Write-Host ("WARN  pending ids already fixtured (integration step 4 removes them): " + ($done -join ' ')) -ForegroundColor Yellow }
 Write-Host ("INFO  catalogue={0} allowlisted={1} pending={2} (still unfixtured: {3})" -f $ids.Count, $Allowlist.Count, $Pending.Count, ($Pending.Count - $done.Count))
 

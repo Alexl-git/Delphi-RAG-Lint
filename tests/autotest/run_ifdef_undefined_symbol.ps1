@@ -169,6 +169,7 @@ Write-Host "lint <file> --project -- the rule fires on the four typos and nothin
 $f = Get-Findings @('lint', $unit, '--project', $proj, '--rule', $rule)
 foreach ($x in $f) { Write-Host ("    {0}:{1} {2}" -f (Split-Path $x.file_path -Leaf), $x.start_line, $x.message) -ForegroundColor DarkGray }
 $msgs = ($f | ForEach-Object { "$($_.start_line)|$($_.message)" }) -join "`n"
+# positive-control: ifdef-undefined-symbol
 Check 'POSITIVE: {$IFDEF EUREKALGO} fires on line 11'  ($msgs -match '(?m)^11\|.*EUREKALGO')  $msgs
 Check 'POSITIVE: the typo message suggests EUREKALOG (edit distance 2)' ($msgs -match 'EUREKALGO[^\n]*EUREKALOG') $msgs
 Check 'POSITIVE: {$IF defined(NOPE)} fires on line 13' ($msgs -match '(?m)^13\|.*NOPE')       $msgs
