@@ -118,6 +118,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Qualify #convert quick fix** -- ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book. Fix an ambiguous bare #convert class the way the engine suggests, without retyping the line. [More](convrules-editor-qualify-fix)
 * **Reindex project** -- ConvRulesEditor command: incremental index --project of the editor's project index, cancellable. Refresh the project index after IDE edits or between conversion stages. [More](convrules-editor-reindex-project)
 * **Rule book and source encoding** -- ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel). Work with non-ASCII captions and names without the editor turning them into question marks. [More](convrules-editor-encoding)
+* **Rule chains (single-pass warning, merge / split)** -- ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books. convert-apply is single pass, so TA -> TB plus TB -> TC leaves a TA as TB. The editor warns about this on Save and offers one click to merge the rules into TA -> TC or to split the stages into books the Convert tab runs in order. [More](convrules-editor-rule-chains)
 * **Work list** -- ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses). Get the manual to-do list of a conversion: unmapped members, dangling globals, refused casts. [More](convrules-editor-work-list)
 
 ## Graphs and reports
@@ -275,6 +276,8 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Rule book and source encoding: menu 'Convert tab > Convert' inside ConvRulesEditor.exe
 * Rule book and source encoding: menu 'File > Encoding' inside ConvRulesEditor.exe
 * Rule book and source encoding: menu 'File > Save' inside ConvRulesEditor.exe
+* Rule chains (single-pass warning, merge / split): menu 'Conversion > Rule chains...' inside ConvRulesEditor.exe
+* Rule chains (single-pass warning, merge / split): menu 'File > Save (offer)' inside ConvRulesEditor.exe
 * Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Switch VS Code Delphi MCP entry: menu 'drag-lint-switch --vscode --off' inside drag-lint-switch.exe

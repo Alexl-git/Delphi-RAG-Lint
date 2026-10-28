@@ -1,9 +1,11 @@
 # Re-creates the apply/1 captures of the tiny "Fix" project (the C:\fix\ project of the 2026-10-11 captures,
 # which is gone) from text, and re-runs the same convert-apply commands. N3, 2026-10-23.
 #
-# Usage: pwsh -NoProfile -File recapture.ps1 -Pin <pin dir> [-OutDir <dir>] [-Library <library-Win64.sqlite>]
+# Usage: pwsh -NoProfile -File make-capture.ps1 -Pin <pin dir> [-OutDir <dir>] [-Library <library-Win64.sqlite>]
 #   -Pin      a pinned engine dir (third_party\engine-pinned\<version>-<stamp>): the exe, tree-sitter DLLs,
 #             casts.castlib and rules\ are copied into a scratch STAGE; the pin itself and dll-win64 are never run.
+#   -Root     the folder the capture projects (and the staged engine) are built in; default a new temp folder. An
+#             existing Root is reused and overwritten in place (idempotent: sources rewritten, index incremental).
 #   -OutDir   where the captures are written (default: this folder, i.e. the checked-in fixtures).
 #   -Library  the Win64 library index (read-only --db). Default: C:\Projects\.drag-lint\library-Win64.sqlite.
 # The staged engine gets its OWN drag-lint.json (indexes.outDir = the scratch stage, no sections), so no real
@@ -15,16 +17,16 @@
 # drive-convert-tab fixture), apply-missing-fields-sample (hand-written).
 # Normalisation (stdout otherwise verbatim): the scratch project dir -> C:\fix (JSON-escaped), uses_reindex.ms -> 0.
 # Those are the only volatile fields; two runs are byte-identical.
-param([Parameter(Mandatory = $true)][string]$Pin, [string]$OutDir = $PSScriptRoot,
+param([Parameter(Mandatory = $true)][string]$Pin, [string]$OutDir = $PSScriptRoot, [string]$Root,
       [string]$Library = 'C:\Projects\.drag-lint\library-Win64.sqlite')
 $ErrorActionPreference = 'Stop'
 function WriteAscii($path, $text) { [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.ASCIIEncoding]::new()) }
 if (-not (Test-Path -LiteralPath (Join-Path $Pin 'drag-lint.exe'))) { throw "no drag-lint.exe in $Pin" }
 if (-not (Test-Path -LiteralPath $Library)) { throw "library index not found: $Library" }
-$work = Join-Path ([IO.Path]::GetTempPath()) ('apply1270-recapture-' + [guid]::NewGuid().ToString('N'))
+$work = if ($Root) { $Root } else { Join-Path ([IO.Path]::GetTempPath()) ('apply1270-recapture-' + [guid]::NewGuid().ToString('N')) }
 $stage = Join-Path $work 'stage'; [void][IO.Directory]::CreateDirectory($stage)
 foreach ($f in Get-ChildItem -LiteralPath $Pin -File) { if ($f.Name -ne 'ConvRulesEditor.exe') { Copy-Item -LiteralPath $f.FullName -Destination $stage } }
-if (Test-Path -LiteralPath (Join-Path $Pin 'rules')) { Copy-Item -LiteralPath (Join-Path $Pin 'rules') -Destination $stage -Recurse }
+if (Test-Path -LiteralPath (Join-Path $Pin 'rules')) { [void][IO.Directory]::CreateDirectory((Join-Path $stage 'rules')); Copy-Item -Path (Join-Path $Pin 'rules\*') -Destination (Join-Path $stage 'rules') -Recurse -Force }
 $idxDir = (Join-Path $stage 'idx') -replace '\\', '\\'
 WriteAscii (Join-Path $stage 'drag-lint.json') ('{ "settings": { "currentProjectsIndexing": "perProject", "defaultPlatform": "Win64", "enginePath": "auto" }, "indexes": { "outDir": "' + $idxDir + '", "sections": [] } }')
 $engine = Join-Path $stage 'drag-lint.exe'
@@ -135,7 +137,7 @@ foreach ($c in $cases) {
   $dirEsc = $dir -replace '\\', '\\'
   $json = $json.Replace($dirEsc, 'C:\\fix')
   $json = [regex]::Replace($json, '("uses_reindex":\{[^}]*"ms":)\d+', '${1}0')
-  $note = "RECAPTURE by recapture.ps1 (engine $ver pin $pinName sha256 $sha, exit code $($r.Code)). stdout only. Command: index --project Fix.dpr --db Fix.sqlite, then convert-apply --unit Unit1.pas --rules Fix.rules --db Fix.sqlite --db library-Win64.sqlite --castlib casts.castlib --apply --format json. $($c.Note) Temp paths replaced by C:\fix\; uses_reindex.ms zeroed." -replace '\\', '\\'
+  $note = "RECAPTURE by make-capture.ps1 (engine $ver pin $pinName sha256 $sha, exit code $($r.Code)). stdout only. Command: index --project Fix.dpr --db Fix.sqlite, then convert-apply --unit Unit1.pas --rules Fix.rules --db Fix.sqlite --db library-Win64.sqlite --castlib casts.castlib --apply --format json. $($c.Note) Temp paths replaced by C:\fix\; uses_reindex.ms zeroed." -replace '\\', '\\'
   $out = '{"_note":"' + $note + '",' + $json.Substring(1) + "`r`n"
   [IO.File]::WriteAllText((Join-Path $OutDir $c.Out), $out, [Text.ASCIIEncoding]::new())
   Write-Host ("{0}: exit {1}, {2} chars" -f $c.Out, $r.Code, $out.Length)

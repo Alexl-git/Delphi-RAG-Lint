@@ -2411,6 +2411,12 @@ begin
     lAt := Pos(MENU_ROOT + MENU_PATH_SEP, lLow, lFrom);
     if lAt = 0 then
       Break;
+    // a root that is itself the tail of a longer path ("Windows Settings > Apps > drag-lint > Uninstall") does not start at the IDE menu: not ours to judge
+    if (lAt > Length(MENU_PATH_SEP)) and (Copy(lText, lAt - Length(MENU_PATH_SEP), Length(MENU_PATH_SEP)) = MENU_PATH_SEP) then
+    begin
+      lFrom := lAt + Length(MENU_ROOT);
+      Continue;
+    end;
     lBest := '';
     for lP in lPaths do
       if (Length(lP) > Length(lBest)) and SameText(Copy(lText, lAt, Length(lP)), lP) then

@@ -55,7 +55,9 @@ uses
   , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
   , ConvRules.MigrateRules in '..\ConvRules.MigrateRules.pas'  // dl:unit ConvRules.MigrateRules accepted -- the tests read MIGRATE_REFUSAL_* to pin the engine's own sentences, so the consts travel with the unit under test
   , ConvRules.Migrate in '..\ConvRules.Migrate.pas'
+  , ConvRules.RuleChains in '..\ConvRules.RuleChains.pas'
   , ConvRules.MigrateRun in '..\ConvRules.MigrateRun.pas'  // dl:unit ConvRules.Migrate accepted -- the tests read REPORT_STATUS_* / MIGRATE_GLOBAL_TEXT to pin the unit's own texts
+  , ConvRules.OutputEncoding in '..\ConvRules.OutputEncoding.pas'
   , ConvRules.CapabilityProbe in '..\ConvRules.CapabilityProbe.pas'  // dl:unit ConvRules.CapabilityProbe accepted -- the tests read REQUIRED_ENGINE_VERSION / REDUCED_FEATURES_TEXT to pin the probe's own contract, so the consts travel with the unit under test
   ;
 
@@ -1938,6 +1940,25 @@ begin
   Pre:= Preflight(Books, [], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
+  // --- BookOrderNote (D2 Q6): Book-2 listed before the BDE book ---
+  Check('convertrun.order.book2.first', Pos('before', BookOrderNote(['c\convrules\DataDB-to-FireDAC.rules', 'c\convrules\BDE-to-FireDAC.rules'])) > 0,
+    BookOrderNote(['c\convrules\DataDB-to-FireDAC.rules', 'c\convrules\BDE-to-FireDAC.rules']));
+  Check('convertrun.order.bde.first', BookOrderNote(['c\BDE-to-FireDAC.rules', 'c\DataDB-to-FireDAC.rules']) = '');
+  Check('convertrun.order.book2.alone', BookOrderNote(['c\DataDB-to-FireDAC.rules']) = '');
+  Check('convertrun.order.nocase', BookOrderNote(['x\datadb-to-firedac.RULES', 'x\bde-to-firedac.rules', 'x\Other.rules']) <> '');
+  Check('convertrun.order.other.books', BookOrderNote(['x\Other.rules', 'x\BDE-to-FireDAC.rules']) = '');
+  Books:= [Default(TBookEntry), Default(TBookEntry)];
+  Books[0].Path:= 'c\DataDB-to-FireDAC.rules';
+  Books[0].Checked:= True;
+  Books[0].Kind:= bkConvertOnly;
+  Books[1].Path:= 'c\BDE-to-FireDAC.rules';
+  Books[1].Checked:= True;
+  Books[1].Kind:= bkMixed;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
+  Check('convertrun.order.preflight.note', Pre.Ok and (Length(Pre.Notes) = 1) and (Pos('BDE book', Pre.Notes[0]) > 0), string.Join(' | ', Pre.Notes));
+  Books[1].Checked:= False;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
+  Check('convertrun.order.preflight.unchecked.bde', Length(Pre.Notes) = 0, string.Join(' | ', Pre.Notes));
   // --- ParseApplyJson (schema apply/1) ---
   Row:= ParseApplyJson('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":3,' +
     '"converted":["Label1: TLabel -> TStaticText"],"access_sites":[],"creator_sites":[],' +
@@ -3834,10 +3855,12 @@ begin
     if Blocks[i].Kind = rbkTrailing then
       Trailing:= i;
   end;
-  Check('blockfile.trailing.bde.exists', Trailing >= 0, 'the BDE book must yield exactly one trailing block');
-  Check('blockfile.trailing.bde.is.last', Trailing = High(Blocks), 'the trailing block is the last block: ' + IntToStr(Trailing));
+  { D2 split 2026-10-27: the 28 Bde.DBTables #migrate lines are file-scope ABOVE the first
+    #convert, so the shipped book has a preamble (block 0) and NO trailing block. }
+  Check('blockfile.trailing.bde.exists', Trailing = -1, 'the split BDE book ends in its last #convert: ' + IntToStr(Trailing));
+  Check('blockfile.trailing.bde.is.last', (Blocks[High(Blocks)].Kind = rbkConvert) and (LastConvert = High(Blocks)), 'the last block is the TBatchMove rule');
   Check(
-    'blockfile.trailing.bde.migrate.count', CountDirectiveIn(Blocks, Trailing, '#migrate') = 43, 'want 43 #migrate, got ' + IntToStr(CountDirectiveIn(Blocks, Trailing, '#migrate'))
+    'blockfile.trailing.bde.migrate.count', CountDirectiveIn(Blocks, 0, '#migrate') = 27, 'want 27 #migrate in the preamble, got ' + IntToStr(CountDirectiveIn(Blocks, 0, '#migrate'))
   );
   Check(
     'blockfile.trailing.bde.tbatchmove.clean', CountDirectiveIn(Blocks, LastConvert, '#migrate') = 0,
@@ -4095,32 +4118,32 @@ begin
   Text:= TFile.ReadAllText(P, TEncoding.ASCII);
   B:= SplitRulesBlocks(Text);
 
-  Check('select.bde.blocks', Length(B) = 12, IntToStr(Length(B)));
-  Check('select.bde.trailer.start', (B[11].StartLine = 658) and (B[10].EndLine = 657), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
+  Check('select.bde.blocks', Length(B) = 8, IntToStr(Length(B)));
+  Check('select.bde.no.trailer', (B[0].Kind = rbkPreamble) and (B[7].Kind = rbkConvert), 'D2 split: preamble + 7 rules, no trailing block');
 
-  { Nothing selected: 155 preamble + 76 trailer. }
-  Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 231, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
+  { Nothing selected: the preamble only (221 lines, incl. the 28 file-scope #migrate). }
+  Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 222, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
   Check(
     'select.bde.none.content',
-    (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#convert') = 0) and (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#migrate') = 43),
-    'file-scope only: no rules, all 43 #migrate');
+    (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#convert') = 0) and (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#migrate') = 27),
+    'file-scope only: no rules, all 27 #migrate');
 
   { TDatabase is the block that carries '#apply BdeTransIsolation' (line 184) --
-    NOT TQuery, as the parent plan wrongly said. 155 + 41 + 76 = 272. }
-  Check('select.bde.tdatabase.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 272, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
+    NOT TQuery, as the parent plan wrongly said. 221 + 41 = 262. }
+  Check('select.bde.tdatabase.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 263, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
   Check('select.bde.tdatabase.carries.apply', Pos('#apply BdeTransIsolation', JoinBlocks(SelectForCompose(B, [2]))) > 0, 'the selected rule keeps its #apply');
   Check(
     'select.bde.tdatabase.carries.mapping', Pos('#mapping BdeTransIsolation from', JoinBlocks(SelectForCompose(B, [2]))) > 0,
     'and the preamble brought the declaration that #apply names');
-  Check('select.bde.tbatchmove.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10])))) = 260, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10]))))));
+  Check('select.bde.tbatchmove.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [7])))) = 251, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [7]))))));
 
-  SetLength(All, 10);
-  for i:= 0 to 9 do
+  SetLength(All, 7);
+  for i:= 0 to 6 do
     All[i]:= i + 1;
-  Check('select.bde.all.identity', JoinBlocks(SelectForCompose(B, All)) = Text, 'selecting all 10 rules must reproduce the book byte for byte');
+  Check('select.bde.all.identity', JoinBlocks(SelectForCompose(B, All)) = Text, 'selecting all 7 rules must reproduce the book byte for byte');
 
   Check(
-    'select.bde.bytype', IdxEq(BlocksConvertingTypes(B, ['TDatabase', 'TBatchMove', 'TLabel']), [2, 10]), IdxStr(BlocksConvertingTypes(B, ['TDatabase', 'TBatchMove', 'TLabel'])));
+    'select.bde.bytype', IdxEq(BlocksConvertingTypes(B, ['TDatabase', 'TBatchMove', 'TLabel']), [2, 7]), IdxStr(BlocksConvertingTypes(B, ['TDatabase', 'TBatchMove', 'TLabel'])));
 end; // procedure
 
 function StrsEq(const A, B: TArray<string>): Boolean;
@@ -4323,10 +4346,10 @@ begin
     Check('ws.sel.bde.bytype', (n = 2) and IdxEq(WS.Selected(0), [1, 2]), Format('n=%d sel=%s', [n, IdxStr(WS.Selected(0))]));
 
     t:= WS.ComposeSelected(Rep);
-    { 155 preamble + 20 TSession + 41 TDatabase + 76 trailer. }
-    Check('ws.sel.bde.lines', Length(SplitRawLines(t)) = 292, IntToStr(Length(SplitRawLines(t))));
+    { 221 preamble + 20 TSession + 41 TDatabase. }
+    Check('ws.sel.bde.lines', Length(SplitRawLines(t)) = 283, IntToStr(Length(SplitRawLines(t))));
     Check('ws.sel.bde.integrity', CheckApplyIntegrity(t).OK, 'the composed job must be self-consistent: ' + CheckApplyIntegrity(t).Summary);
-    Check('ws.sel.bde.smaller', Length(SplitRawLines(t)) < 707, 'and it must actually be a SUBSET of the book');
+    Check('ws.sel.bde.smaller', Length(SplitRawLines(t)) < 650, 'and it must actually be a SUBSET of the book');
   finally
     WS.Free;
   end; // try
@@ -9157,6 +9180,110 @@ begin
   DecodeAnsiChunk(LPending, [Byte($82)], CP932);
   Check('ansi.flush.truncated', (FlushAnsiPending(LPending, CP932) <> '') and (Length(LPending) = 0));
 end;
+
+{ OUTENC: engine 1.36.0 writes ASCII + \uXXXX by default and takes --output-encoding; older
+  engines write CP_ACP and reject the flag. The editor passes utf8 exactly when info --json's
+  version is 1.36.0 or newer, and then decodes the pipes as UTF-8 without breaking a character
+  split across two reads. A non-ASCII identifier (Cyrillic, accented, outside the BMP) must
+  come back whole -- through the pure decoder and through a real pipe. }
+procedure TestOutputEncoding;
+const
+  INFO_136 = '(loaded defaults from C:\x.json)' + #13#10 + '{"schema":"info/1","version":"1.36.0-alpha","capabilities":{"batch_units":true}}';
+  INFO_1351 = '{"version":"1.35.1-alpha","capabilities":{"batch_units":true}}';
+  // A name in Cyrillic, one accented, one outside the BMP (U+1D49C, a surrogate pair).
+  NAME = 'T' + #$0424 + #$043E + #$0440 + #$043C + #$0430 + '_Caf' + #$00E9 + '_' + #$D835 + #$DC9C;
+  STANDIN_PREFIX = '@echo {"version":"';
+  STANDIN_TAIL = '"}' + #13#10 + '@echo ARGS=%*' + #13#10 + '@type "%~dp0name.txt"' + #13#10;
+var
+  LBytes  : TBytes;
+  LPending: TBytes;
+  LGot    : string;
+  LBad    : Integer;
+  Dir     : string;
+  Eng     : TEngineAdapter;
+  LCaps   : TArray<string>;
+  LParsed : Boolean;
+  LOut    : string;
+begin
+  // The gate: the version, numbers only.
+  Check('outenc.version.136', SupportsOutputEncoding(INFO_136));
+  Check('outenc.version.1351', not SupportsOutputEncoding(INFO_1351));
+  Check('outenc.version.newer', SupportsOutputEncoding('{"version":"1.40.2"}') and SupportsOutputEncoding('{"version":"2.0.0-alpha"}'));
+  Check('outenc.version.none', not SupportsOutputEncoding('{"capabilities":{}}') and not SupportsOutputEncoding('FATAL: no')
+    and not SupportsOutputEncoding('') and not SupportsOutputEncoding('{"version":"x"}'));
+  Check('outenc.args', (OutputEncodingArgs(True) = ' --output-encoding utf8') and (OutputEncodingArgs(False) = ''));
+  Check('outenc.codepage', (PipeCodePage(True) = CP_UTF8) and (PipeCodePage(False) = CP_ACP));
+  // The default ascii mode is safe for --json: the escape IS the JSON escape.
+  var LJson: TJSONValue:= TJSONObject.ParseJSONValue('{"name":"T\u0424\u043e\u0440\u043c\u0430_Caf\u00e9_\ud835\udc9c"}');
+  try
+    Check('outenc.ascii.json.decodes', (LJson is TJSONObject) and (TJSONObject(LJson).GetValue<string>('name') = NAME));
+  finally
+    LJson.Free;
+  end; // try
+  // UTF-8 pipe bytes, cut at every position into two reads: always the same name.
+  LBytes:= TEncoding.UTF8.GetBytes('a ' + NAME + ' b');
+  LBad:= 0;
+  for var LCut: Integer:= 0 to Length(LBytes) do
+  begin
+    LPending:= nil;
+    LGot:= DecodeAnsiChunk(LPending, Copy(LBytes, 0, LCut), CP_UTF8);
+    LGot:= LGot + DecodeAnsiChunk(LPending, Copy(LBytes, LCut, Length(LBytes) - LCut), CP_UTF8);
+    LGot:= LGot + FlushAnsiPending(LPending, CP_UTF8);
+    if LGot <> 'a ' + NAME + ' b' then
+      Inc(LBad);
+  end;
+  Check('outenc.utf8.every.split', LBad = 0, IntToStr(LBad) + ' bad splits');
+  // One byte per read.
+  LPending:= nil;
+  LGot:= '';
+  for var LByte: Byte in LBytes do
+    LGot:= LGot + DecodeAnsiChunk(LPending, [LByte], CP_UTF8);
+  Check('outenc.utf8.byte.by.byte', (LGot + FlushAnsiPending(LPending, CP_UTF8)) = 'a ' + NAME + ' b');
+  Check('outenc.utf8.prefix', (Utf8CompletePrefixLen([Byte($61), Byte($D0)]) = 1)
+    and (Utf8CompletePrefixLen([Byte($F0), Byte($9D), Byte($92)]) = 0)
+    and (Utf8CompletePrefixLen([Byte($D0), Byte($A4)]) = 2)
+    and (Utf8CompletePrefixLen([Byte($61), Byte($80)]) = 2)
+    and (Utf8CompletePrefixLen([]) = 0));
+  // A lone invalid byte is decoded (U+FFFD), never held back or dropped.
+  LPending:= nil;
+  Check('outenc.utf8.invalid.not.held', (DecodeAnsiChunk(LPending, [Byte($E9), Byte($61)], CP_UTF8) <> '') and (Length(LPending) = 0));
+
+  // Through a real pipe: a stand-in that answers info with a version, echoes its arguments and
+  // writes the name as UTF-8 bytes.
+  Dir:= TPath.Combine(TPath.GetTempPath, 'outenc-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllBytes(TPath.Combine(Dir, 'name.txt'), TEncoding.UTF8.GetBytes(NAME));
+    TFile.WriteAllText(TPath.Combine(Dir, 'e136.cmd'), STANDIN_PREFIX + '1.36.0-alpha' + STANDIN_TAIL, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'e1351.cmd'), STANDIN_PREFIX + '1.35.1-alpha' + STANDIN_TAIL, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'e136.cmd'), []);
+    try
+      Check('outenc.adapter.default.off', not Eng.OutputUtf8);
+      Eng.CapabilityProbeTimed(LCaps, LParsed);
+      Check('outenc.adapter.136.on', LParsed and Eng.OutputUtf8);
+      Eng.RunCaptureTimed('query x', ENGINE_TIMEOUT_MS, LOut);
+      Check('outenc.adapter.136.flag', Pos('ARGS=query x --output-encoding utf8', LOut) > 0, LOut);
+      Check('outenc.adapter.136.name.round.trip', Pos(NAME, LOut) > 0, LOut);
+      // The probe itself runs without the flag (an older engine would refuse it).
+      Eng.InfoOutput(nil, LOut);
+      Check('outenc.adapter.probe.no.flag', (Pos('ARGS=info --json', LOut) > 0) and (Pos('--output-encoding', LOut) = 0) and Eng.OutputUtf8, LOut);
+    finally
+      Eng.Free;
+    end;
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'e1351.cmd'), []);
+    try
+      Eng.OutputUtf8:= True; // as if a newer engine had been probed before a swap
+      Eng.CapabilityProbeTimed(LCaps, LParsed);
+      Check('outenc.adapter.1351.off', LParsed and not Eng.OutputUtf8);
+      Eng.RunCaptureTimed('query x', ENGINE_TIMEOUT_MS, LOut);
+      Check('outenc.adapter.1351.no.flag', (Pos('ARGS=query x', LOut) > 0) and (Pos('--output-encoding', LOut) = 0), LOut);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
 { R2b round 1: a failed start-up probe is not repeated on every refresh (a hung engine would
   freeze the UI up to 15 s each time). }
 procedure TestStartupProbeDue;
@@ -10901,7 +11028,7 @@ begin
 end;
 { B10 (engine 1.26.7 inherited_code_unconverted, checked on the 1.33.0 pin): REAL captures of a
   descendant whose .dfm has NO Label1 block but whose code reads Label1.Caption (fixtures\inherited\
-  recapture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
+  make-capture.ps1). Ancestor unconverted -> the engine lists the use in inherited[] as skipped /
   unconverted; ancestor converted first -> action code / converted. With both inherited_retype and
   inherited_code_unconverted the editor adds NO code-use note of its own (CodeUseNoteDue). }
 procedure TestInheritedCodeUnconverted;
@@ -15011,6 +15138,14 @@ begin
     Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel')]);
     Check('qualify.apply.retarget.skips.refused', (Length(Outs) = 2) and (not Outs[0].Applied) and (not Outs[1].Applied)
       and (Outs[0].NodeIndex = 0) and (Pos('already qualified', Outs[1].Reason) > 0), Outs[1].Reason);
+    // Q08: the refused pick 0 (from side already qualified) carries NodeIndex 0, but pick 1 is the OTHER side of the same
+    // stale line. Were a refused outcome a re-target source, ApplyAt(0) would qualify the to side of a header the run never saw;
+    // only an APPLIED outcome may be one, so pick 1 goes through FindQualifyTarget and is refused as stale, the book untouched.
+    Book:= Make('#convert Vcl.StdCtrls.TLabel -> TSolo');
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]);
+    Check('qualify.apply.retarget.requires.applied', (Length(Outs) = 2) and (not Outs[0].Applied) and (Outs[0].NodeIndex = 0)  // dl:ok boolean-expression-complexity@41d8 -- REVIEWED 2026-10-27 one Check asserts a single expected outcome shape; splitting the condition would obscure it
+      and (not Outs[1].Applied) and (Outs[1].NodeIndex = -1) and (Pos('no longer reads', Outs[1].Reason) > 0)
+      and (Book.Nodes[0].ToType = 'TSolo') and (not Book.Nodes[0].Dirty), Outs[1].Reason + ' / ' + Book.Nodes[0].ToType);
     // Two different headers: the lines are listed, plural.
     Book:= Make(HDR + CRLF + '#link A <- B' + CRLF + '#link C <- D' + CRLF + '#convert TButton -> TSolo');
     FixB:= F0;
@@ -15742,6 +15877,18 @@ begin
 end;
 
 { Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+{ STARTUP: the library unit list (one multi-GB `sql` read on the main thread) loads only
+  for harvested rows the user is looking at -- never for a Destination edit losing focus
+  with nothing harvested, nor for the Convert tab feeding the harvest behind its back. }
+procedure TestClassifyDeferred;
+begin
+  Check('classify.deferred.empty.offscreen', ClassifyDeferred(0, False), '(nothing harvested, Unit Rules not shown)');
+  Check('classify.deferred.empty.onscreen', ClassifyDeferred(0, True), '(Destination edit left with nothing harvested: no library read)');
+  Check('classify.deferred.rows.offscreen', ClassifyDeferred(3, False), '(Convert tab Add...: rows wait for the Unit Rules tab)');
+  Check('classify.now.rows.onscreen', not ClassifyDeferred(3, True), '(rows on screen are classified at once)');
+  Check('classify.pending.note', Pos('Unit Rules tab', CLASSIFY_PENDING_NOTE) > 0, '(the deferral is said, never silent)');
+end;
+
 { ConvRules.InputGate (N7/N11) -- the one queue filter of the main window: while the
   editor is busy (an engine wait, an hourglass section's nested pump) a click or a
   command for the main form is refused and reported, never run inside the pump and
@@ -15756,6 +15903,12 @@ begin
   Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
   Check('gate.busy.hourglass', EditorBusy(0, True));
   Check('gate.idle', not EditorBusy(0, False));
+  // DRV-2b: the lost-command notice waits for the OPERATION, never for the editor to be the active application.
+  Check('gate.notice.idle.due', not LostNoticeDeferred(0, False, True, False), '(idle main form, whatever application is active: the notice is due)');
+  Check('gate.notice.wait', LostNoticeDeferred(1, False, True, False), '(an engine wait still runs)');
+  Check('gate.notice.menu', LostNoticeDeferred(0, True, True, False), '(a menu is open)');
+  Check('gate.notice.modal', LostNoticeDeferred(0, False, False, False), '(a modal window disables the main form)');
+  Check('gate.notice.hourglass', LostNoticeDeferred(0, False, True, True), '(an hourglass section runs)');
   // N11: the second Add... (a posted BM_CLICK) and its WM_COMMAND form; N7: Convert.
   Check('gate.bmclick.refused', GateVerdict(BM_CLICK, True, True) = gvRefuse);
   Check('gate.command.refused', GateVerdict(WM_COMMAND, True, True) = gvRefuse, '(a button notification or a menu item)');
@@ -15849,6 +16002,16 @@ begin
   Check('probe.case.unknown', (ProbeCaseFor('') = pcVersionUnknown) and (ProbeCaseFor('garbage') = pcVersionUnknown));
 end;
 
+procedure TestFieldRefsGate;
+begin
+  Check('ndgate.min.version', FIELD_REFS_MIN_ENGINE_VERSION = '1.35.1');
+  Check('ndgate.ok.at.min', FieldRefsGateNote('1.35.1-alpha') = '');
+  Check('ndgate.ok.newer', (FieldRefsGateNote('1.36.0-alpha') = '') and (FieldRefsGateNote('2.0.0') = ''));
+  Check('ndgate.old.says.so', (FieldRefsGateNote('1.35.0-alpha') <> '') and (FieldRefsGateNote('1.28.3') <> ''));
+  Check('ndgate.old.names.versions', ContainsText(FieldRefsGateNote('1.35.0-alpha'), '1.35.0-alpha') and ContainsText(FieldRefsGateNote('1.35.0-alpha'), '1.35.1'));
+  Check('ndgate.unknown.is.not.trusted', (FieldRefsGateNote('') <> '') and (FieldRefsGateNote('garbage') <> ''));
+end;
+
 procedure TestCapabilityProbeAnswers;
 const
   INFO_OUT = '(loaded defaults)' + sLineBreak + '{"schema":"info/1","version":"1.33.0-alpha","capabilities":{"pas_uses":true,"cli_verbs":61,"batch_units":true,"glyph_stitch":false}}';
@@ -15915,6 +16078,7 @@ end;
 procedure TestCapabilityProbe;
 begin
   TestCapabilityProbeVersions;
+  TestFieldRefsGate;
   TestCapabilityProbeAnswers;
   TestCapabilityProbeTexts;
 end;
@@ -15929,6 +16093,7 @@ end;
 {$I inc\EncodingBookPlacesTests.inc}
 {$I inc\RunnerDecisionTests.inc}
 {$I inc\MigrateTests.inc}
+{$I inc\RuleChainTests.inc}
 
 begin
   try
@@ -16118,6 +16283,7 @@ begin
     TestEngineArgsAndCaps;
     TestCapabilityProbeTimeout;
     TestAnsiChunkDecode;
+    TestOutputEncoding;
     TestStartupProbeDue;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
@@ -16183,6 +16349,7 @@ begin
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
     TestInputGate;
+    TestClassifyDeferred;
     TestCapabilityProbe;
     TestEncodingLevels;
     TestEncodingReaders;
@@ -16194,6 +16361,7 @@ begin
     TestEncodingBookPlaces;
     TestMigrateModel;
     TestMigrateBdeTail;
+    TestDataDbBook;
     TestMigrateBlocks;
     TestMigrateApply;
     TestMigrateNotes;
@@ -16202,6 +16370,12 @@ begin
     TestMigrateTabHandoff;
     TestMigrateReviewMinors;
     TestMigrateFollowups;
+    TestRuleChainsDetect;
+    TestRuleChainsTexts;
+    TestRuleChainsMarks;
+    TestRuleChainsMerge;
+    TestRuleChainsSplit;
+    TestRuleChainsUi;
 
     FreeAndNil(GParseBook);
 

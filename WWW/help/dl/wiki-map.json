@@ -105,6 +105,7 @@
   "convrules-editor-migrate": "convrules-migrate-members",
   "convrules-editor-qualify-fix": "convrules-qualify-fix",
   "convrules-editor-reindex-project": "convrules-reindex-project",
+  "convrules-editor-rule-chains": "convrules-rule-chains",
   "convrules-editor-work-list": "convrules-work-list",
   "create-enum-helper": "create-enum-helper",
   "deps-report": "deps-report",

@@ -203,6 +203,12 @@ function MarksText(const ANodes: TArray<TRuleNode>; out AErrors, AWarnings: Inte
 /// <returns>The marker text.</returns>
 function MarkerText(AErrors, AWarnings: Integer): string;
 
+/// <summary>Adds a warning mark with AText to ANode unless one with that text is already there (session state; see TRuleMark).</summary>
+/// <param name="ANode">The node to mark; not owned.</param>
+/// <param name="AText">The mark text, compared case-sensitively.</param>
+/// <returns>True when added.</returns>
+function AddStaticWarningMark(ANode: TRuleNode; const AText: string): Boolean;
+
 implementation
 
 const
@@ -746,5 +752,19 @@ begin
   else
     Result:= '';
 end;
+
+function AddStaticWarningMark(ANode: TRuleNode; const AText: string): Boolean;
+var
+  LMark: TRuleMark;
+begin
+  for LMark in ANode.Marks do
+    if LMark.Text = AText then
+      Exit(False);
+  LMark:= Default(TRuleMark);
+  LMark.Text     := AText;
+  LMark.IsWarning:= True;
+  ANode.Marks:= ANode.Marks + [LMark];
+  Result:= True;
+end; // function
 
 end.

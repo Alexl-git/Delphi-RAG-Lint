@@ -22,6 +22,9 @@ const
   /// is left out on purpose: no engine reports it yet (1.33.0 does not), so no version
   /// could satisfy it. Raise this when the editor starts gating on a newer key.</remarks>
   REQUIRED_ENGINE_VERSION = '1.28.3';
+  /// <summary>The first engine that binds cross-unit implicit-Self uses of an inherited
+  /// project field (the C8 code-use read, TEngineAdapter.ListCodeRefs, needs it).</summary>
+  FIELD_REFS_MIN_ENGINE_VERSION = '1.35.1';
   /// <summary>How long the probe may run before its wait window appears, in milliseconds:
   /// a healthy probe (~0.6 s for both calls) never flashes the window.</summary>
   PROBE_SHOW_AFTER_MS = 2000;
@@ -87,6 +90,16 @@ function CompareEngineVersions(const A, B: TEngineVersion): Integer;
 /// <remarks>Only the numbers count: a pre-release of the required version (1.28.3-alpha)
 /// is that version -- every pin is an -alpha build.</remarks>
 function ProbeCaseFor(const AVersionText: string): TProbeCase;
+
+/// <summary>PURE: may the C8 code-use read (TEngineAdapter.ListCodeRefs, field-resolved refs
+/// only) be trusted on an engine reporting AVersionText?</summary>
+/// <param name="AVersionText">EngineVersionText of the `--version` answer; '' = none.</param>
+/// <returns>'' when the version is at or above FIELD_REFS_MIN_ENGINE_VERSION; otherwise the
+/// note the caller shows in place of the answer: the engine is too old to bind inherited-field
+/// uses (or its version is unreadable), so "no uses" would be a silent miss.</returns>
+/// <remarks>No `info --json` capability reports this binding (1.36.0 lists none), so the gate
+/// is the version. Only the numbers count, as in ProbeCaseFor.</remarks>
+function FieldRefsGateNote(const AVersionText: string): string;
 
 /// <summary>Reads `info --json` output: is it an info object, and which capabilities
 /// does it report true?</summary>
@@ -207,6 +220,19 @@ begin
     Exit(pcVersionUnknown);
   TryParseEngineVersion(REQUIRED_ENGINE_VERSION, LNeed);
   Result:= if CompareEngineVersions(LHave, LNeed) >= 0 then pcVersionOk else pcVersionTooOld;
+end;
+
+function FieldRefsGateNote(const AVersionText: string): string;
+var
+  LHave, LNeed: TEngineVersion;
+begin
+  Result:= '';
+  TryParseEngineVersion(FIELD_REFS_MIN_ENGINE_VERSION, LNeed);
+  if TryParseEngineVersion(AVersionText, LHave) and (CompareEngineVersions(LHave, LNeed) >= 0) then
+    Exit;
+  Result:= 'Inherited-field code uses cannot be read: ' + (if AVersionText = '' then 'the engine version could not be read'
+    else 'engine ' + AVersionText + ' is older than ' + FIELD_REFS_MIN_ENGINE_VERSION) + ' (it does not bind inherited-field uses across units). Use engine '
+    + FIELD_REFS_MIN_ENGINE_VERSION + ' or newer.';
 end;
 
 function TryParseInfoCapabilities(const AInfoOutput: string; out ACaps: TArray<string>): Boolean;

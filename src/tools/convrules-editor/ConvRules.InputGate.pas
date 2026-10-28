@@ -64,6 +64,20 @@ type
 /// <returns>True when either holds.</returns>
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 
+/// <summary>PURE (DRV-2b): whether a refused command's notice (LostCommandStatus) must
+/// still wait, i.e. the operation that refused it has not ended yet.</summary>
+/// <param name="AWaitDepth">How many engine waits (RunLongCallTracked) are running; 0 = none.</param>
+/// <param name="AMenuOpen">A menu of the main form is open (or it is in a menu loop).</param>
+/// <param name="AMainEnabled">IsWindowEnabled of the main form: False under every modal
+/// window -- a TForm's ShowModal (a C8 prompt) and a common dialog both disable it.</param>
+/// <param name="AHourGlass">Screen.Cursor is crHourGlass: a synchronous section runs.</param>
+/// <returns>True while any of the four says the editor is busy; False once it is idle.</returns>
+/// <remarks>Deliberately NOT whether the editor is the active application (the old gate
+/// asked Screen.ActiveForm = main form): a progress window that closes while another
+/// application has the foreground leaves Screen.ActiveForm off the main form, and the
+/// notice then waited until the user activated the editor again -- on screen, the status
+/// line said nothing about the lost click (GUI driver n1/n7, 2026-10-27).</remarks>
+function LostNoticeDeferred(AWaitDepth: Integer; AMenuOpen, AMainEnabled, AHourGlass: Boolean): Boolean;
 /// <summary>PURE: what to do with one queued message while the editor may be busy.</summary>
 /// <param name="AMsg">The message number (TMsg.message).</param>
 /// <param name="ABusy">EditorBusy now.</param>
@@ -144,6 +158,11 @@ const
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 begin
   Result:= (AWaitDepth > 0) or AHourGlass;
+end;
+
+function LostNoticeDeferred(AWaitDepth: Integer; AMenuOpen, AMainEnabled, AHourGlass: Boolean): Boolean;
+begin
+  Result:= EditorBusy(AWaitDepth, AHourGlass) or AMenuOpen or not AMainEnabled;
 end;
 
 function GateVerdict(AMsg: Cardinal; ABusy, ATargetInMainForm: Boolean): TGateVerdict;

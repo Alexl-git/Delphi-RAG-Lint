@@ -30,7 +30,9 @@ public static class W {
   public static List<IntPtr> Tops(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static List<IntPtr> Kids(IntPtr parent) { var r = new List<IntPtr>(); EnumChildWindows(parent, (h, l) => { r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
-  public static string Txt(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); var s = new StringBuilder(n + 2); SendSB(h, 0x000D, (IntPtr)(n + 1), s); return s.ToString(); }
+  // Two messages (length, then text) race a status written in between: read with slack, then re-read until two reads agree.
+  static string TxtOnce(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); int cap = n + 1024; var s = new StringBuilder(cap); SendSB(h, 0x000D, (IntPtr)cap, s); return s.ToString(); }
+  public static string Txt(IntPtr h) { string p = TxtOnce(h); for (int i = 0; i < 5; i++) { string c = TxtOnce(h); if (c == p) return c; p = c; } return p; }
   public static int Top(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.T; }
   public static int Left(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.L; }
   [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr s, out UIntPtr put);
@@ -178,6 +180,8 @@ public static class W {
 }
 '@
 $script:pass = 0; $script:fail = 0
+$script:skip = 0
+function Skip($name, $why) { $script:skip++; "SKIP  $name  ($why)" }
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
@@ -211,18 +215,23 @@ public static class ChildWatch {
   [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, int pid);
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageNameW(IntPtr h, int f, StringBuilder s, ref int n);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
-  static volatile bool run; static Thread th; static HashSet<int> seen, hits;
-  static string Image(int pid) {
-    IntPtr h = OpenProcess(0x1000, false, pid); if (h == IntPtr.Zero) return "";
-    try { var s = new StringBuilder(1024); int n = 1024; return QueryFullProcessImageNameW(h, 0, s, ref n) ? s.ToString() : ""; } finally { CloseHandle(h); }
-  }
+  [DllImport("kernel32.dll")] static extern bool GetProcessTimes(IntPtr h, out long c, out long e, out long k, out long u);
+  static volatile bool run; static Thread th; static HashSet<int> seen; static List<IntPtr> hits;
+  static string Image(IntPtr h) { var s = new StringBuilder(1024); int n = 1024; return QueryFullProcessImageNameW(h, 0, s, ref n) ? s.ToString() : ""; }
   static int[] Ids() { var ps = Process.GetProcessesByName("drag-lint"); var r = new int[ps.Length]; for (int i = 0; i < ps.Length; i++) { r[i] = ps[i].Id; ps[i].Dispose(); } return r; }
+  // A hit's handle stays open until Lifetimes(): it keeps the exit time readable after the child is gone.
   public static void Start(string exe) {
-    seen = new HashSet<int>(Ids()); hits = new HashSet<int>(); run = true;
-    th = new Thread(() => { while (run) { foreach (int id in Ids()) if (seen.Add(id) && string.Equals(Image(id), exe, StringComparison.OrdinalIgnoreCase)) hits.Add(id); Thread.Sleep(1); } });
+    seen = new HashSet<int>(Ids()); hits = new List<IntPtr>(); run = true;
+    th = new Thread(() => { while (run) { foreach (int id in Ids()) if (seen.Add(id)) { IntPtr h = OpenProcess(0x1000, false, id); if (h == IntPtr.Zero) continue; if (string.Equals(Image(h), exe, StringComparison.OrdinalIgnoreCase)) hits.Add(h); else CloseHandle(h); } Thread.Sleep(1); } });
     th.IsBackground = true; th.Start();
   }
   public static int Stop() { run = false; th.Join(); return hits.Count; }
+  // Wall-clock life of each hit in ms (creation to exit; to now when still running); closes the handles.
+  public static long[] Lifetimes() {
+    var r = new long[hits.Count];
+    for (int i = 0; i < hits.Count; i++) { long c, e, k, u; r[i] = -1; if (GetProcessTimes(hits[i], out c, out e, out k, out u)) { if (e == 0) e = DateTime.UtcNow.ToFileTimeUtc(); r[i] = (e - c) / 10000; } CloseHandle(hits[i]); }
+    hits.Clear(); return r;
+  }
 }
 "@
 $tmp = Join-Path $env:TEMP ('enginewait-' + [guid]::NewGuid().ToString('N').Substring(0,8))
@@ -332,14 +341,16 @@ try {
   # CORRECT. So the re-load is tried up to 3 times: a cache that works shows no window
   # in at least one attempt; a real regression (window every time) fails all three.
   # The cache check (engine children == 1) must hold on EVERY attempt.
-  # Machine-load floor: the wall time of the cheapest engine call (--version, no index).
-  # The window shows after 400 ms of wall time, so when merely STARTING the engine costs
-  # more than ~150 ms (the box at 100 % CPU measured 450-2200 ms) a window on the re-load is
-  # correct behaviour, not a cache miss. The cache is still proven by the child count.
-  $floors = @(1..3 | ForEach-Object { (Measure-Command { & $engineExe --version *> $null }).TotalMilliseconds }); $floor = [int](($floors | Sort-Object)[1])
-  $loaded150 = ($floor -gt 150)
-  function Floor3 { [int]((@(1..3 | ForEach-Object { (Measure-Command { & $engineExe --version *> $null }).TotalMilliseconds }) | Sort-Object)[1]) }
-  $attempts = 0; $okNoWindow = $false; $kidsAll = @(); $trail = ''
+  # D2 (2026-10-27): the excuse is the re-load's OWN proptree child, timed creation->exit.
+  # The old excuse timed `--version` (opens no index) as a machine-load floor; the cached
+  # proptree also opens the library and project DBs and showed the window at 532-588 ms
+  # (1 child = cache working) in 3 of 6 attempts; three such attempts on a box whose
+  # --version floor stays under 150 ms failed the check with the cache working. A window is legitimate only when that one child itself ran for most of
+  # SHOW_DELAY_MS; a window over a short child (or a second child) is a product defect.
+  $SHOW_DELAY_MS = 400    # ConvRules.EngineWait.SHOW_DELAY_MS
+  $EXCUSE_CHILD_MS = 300  # child life that leaves < 100 ms for spawn + pipe + UI before the window
+  $SEEN_SLACK_MS = 50     # post -> Get-Date gap allowed before $t0
+  $attempts = 0; $okNoWindow = $false; $kidsAll = @(); $trail = ''; $excused = $false; $early = $false
   while ($attempts -lt 3 -and -not $okNoWindow) {
     $attempts++
     $e2 = OpenClass $main 'TOtherXyz'; WaitLoaded 'TOtherXyz'        # move off the block
@@ -352,16 +363,22 @@ try {
       if ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }) { if (-not $seen) { $seenAt = [int]((Get-Date) - $t0).TotalMilliseconds }; $seen = $true }
       Start-Sleep -Milliseconds 10
     }
-    $kids = [ChildWatch]::Stop(); $kidsAll += $kids
+    $kids = [ChildWatch]::Stop(); $kidsAll += $kids; $life = @([ChildWatch]::Lifetimes())
     $st = StatusText $main; $loaded = ($st -match 'Loaded TNoSuchClassXyz')
-    $loadedLast = $loaded; $trail += "[try $attempts load ran: $loaded; engine children: $kids; window seen: $seen (at $seenAt ms)] "
+    $trail += "[try $attempts load ran: $loaded; engine children: $kids (life ms: $($life -join ',')); window seen: $seen (at $seenAt ms)] "
     if ($loaded -and ($kids -ge 1) -and -not $seen) { $okNoWindow = $true }
-    if (-not $okNoWindow) { $fl = Floor3; if ($fl -gt $floor) { $floor = $fl }; if ($floor -gt 150) { $loaded150 = $true } }   # load is re-measured AFTER the attempt: it fluctuates
+    # Excused attempt: the window showed, the cache held (ONE child) and that child alone
+    # ran >= EXCUSE_CHILD_MS -- the window reports a slow engine call, not a cache miss.
+    # $t0 is taken AFTER the double-click was posted, so $seenAt bounds the load's age when
+    # the window appeared from ABOVE: a window seen before SHOW_DELAY_MS (less the post ->
+    # Get-Date slack) came up early -- a product defect whatever the engine cost.
+    if ($seen -and ($seenAt -lt ($SHOW_DELAY_MS - $SEEN_SLACK_MS))) { $early = $true; $trail += "[EARLY WINDOW at $seenAt ms < $SHOW_DELAY_MS ms show delay] " }
+    if ($loaded -and $seen -and ($seenAt -ge ($SHOW_DELAY_MS - $SEEN_SLACK_MS)) -and ($kids -eq 1) -and ($life[0] -ge $EXCUSE_CHILD_MS)) { $excused = $true }
     WaitIdle 're-load'
   }
-  $excused = (-not $okNoWindow) -and $loaded150 -and ($loadedLast) -and (@($kidsAll | Where-Object { $_ -ne 1 }).Count -eq 0)
-  if ($excused) { $trail += "[LOAD-EXCUSED: engine start-up floor $floor ms > 150 ms, window is legitimate; cache proven by 1 child per re-load] " }
-  Check 'wait.reload.no.window' ($okNoWindow -or $excused) ("$trail$script:idleNote; $e1 $e2 $e $st")
+  $excused = (-not $okNoWindow) -and $excused -and (@($kidsAll | Where-Object { $_ -ne 1 }).Count -eq 0)
+  if ($excused) { $trail += "[LOAD-EXCUSED: the cached proptree child itself ran >= $EXCUSE_CHILD_MS ms of the $SHOW_DELAY_MS ms show delay; window is legitimate; cache proven by 1 child per re-load] " }
+  Check 'wait.reload.no.window' ((-not $early) -and ($okNoWindow -or $excused))("$trail$script:idleNote; $e1 $e2 $e $st")
   Check 'wait.reload.query.cached' (@($kidsAll | Where-Object { $_ -ne 1 }).Count -eq 0) ("engine children per re-load attempt: $($kidsAll -join ',') (1 = proptree only)")} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 # --- 3. a Save under the progress window is refused and reported, never run or queued (N7/N11) ---
 # Why THIS driver: it owns the progress window (the slow TcxButton load holds it for ~7 s) and the
@@ -434,6 +451,11 @@ function SaveRound($how) {
     }
     if ($how -eq 'key') { [K]::Nudge(); [void][K]::SetForegroundWindow($dlg); Start-Sleep -Milliseconds 300 }
     $fgw = [K]::GetForegroundWindow(); $fg = ($fgw -eq $dlg)
+    # A locked desktop / idle RDP has NO foreground window (0): a real key cannot be delivered, so the key checks SKIP. Any other foreground (a different window) stays a FAIL below.
+    if ($how -eq 'key' -and $fgw -eq [IntPtr]::Zero) {
+      foreach ($n in 'under.progress', 'not.run', 'idle.runs') { Skip "save.key.$n" 'no foreground window: desktop locked' }
+      return
+    }
     $issued = $true
     if ($how -eq 'menu') { $issued = [W]::InvokeMenu($main, 'File|Save') } else { [K]::CtrlS() }
     Check "save.$how.under.progress" ($issued -and ($how -eq 'menu' -or $fg)) "(precondition: issued while the progress window disabled the editor) issued=$issued foreground=$fg (fg window: $([W]::Cls($fgw))/$([W]::Txt($fgw)))"
@@ -460,7 +482,9 @@ function SaveRound($how) {
       "INFO  save.key.status (a key drop is silent by design)  $st"
     }
     # Idle now: the same kind of Save must run (it also proves the Ctrl+S keystroke reaches the editor).
-    if ($how -eq 'menu') { [void][W]::InvokeMenu($main, 'File|Save') } else { [void][K]::SetForegroundWindow($main); Start-Sleep -Milliseconds 300; [K]::CtrlS() }
+    if ($how -eq 'key') { [void][K]::SetForegroundWindow($main); Start-Sleep -Milliseconds 300 }
+    if ($how -eq 'key' -and [K]::GetForegroundWindow() -eq [IntPtr]::Zero) { Skip 'save.key.idle.runs' 'no foreground window: desktop locked'; return }
+    if ($how -eq 'menu') { [void][W]::InvokeMenu($main, 'File|Save') } else { [K]::CtrlS() }
     $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 20 -and [IO.File]::GetLastWriteTimeUtc($book) -eq $old) { Start-Sleep -Milliseconds 250 }
     $ran = [IO.File]::GetLastWriteTimeUtc($book) -gt $old
     Check "save.$how.idle.runs" $ran ("mtime=" + [IO.File]::GetLastWriteTimeUtc($book).ToString('o') + '; status: ' + (StatusText $main))
@@ -470,5 +494,5 @@ SaveRound 'menu'
 SaveRound 'key'
 
 [IO.Directory]::Delete($tmp, $true)
-"RESULT pass=$script:pass fail=$script:fail"
+"RESULT pass=$script:pass fail=$script:fail skip=$script:skip"
 if ($script:fail -gt 0) { exit 1 }

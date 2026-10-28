@@ -1,5 +1,5 @@
 {
-  "product": "1.35.1-alpha",
+  "product": "1.36.0-alpha",
   "extractor": "1.25.0-alpha",
   "resolver": "1.15.0-alpha",
   "schema": 23,
@@ -3272,7 +3272,7 @@
         {
           "type": "cli",
           "verb": "lint-project",
-          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]",
+          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]",
           "flags": [
             {
               "name": "--db",
@@ -3290,7 +3290,7 @@
             }
           ],
           "helpOrder": 18,
-          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json]"]
+          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]"]
         },
         {
           "type": "ide-menu",
@@ -3563,7 +3563,7 @@
         {
           "type": "cli",
           "verb": "check-ast",
-          "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]",
+          "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]",
           "flags": [
             {
               "name": "--db",
@@ -3578,7 +3578,7 @@
             }
           ],
           "helpOrder": 73,
-          "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--output <file>]"]
+          "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
         }
       ],
       "audience": "both",
@@ -6132,6 +6132,36 @@
       }
     },
     {
+      "id": "convrules-rule-chains",
+      "title": "Rule chains (single-pass warning, merge / split)",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.35.1-alpha",
+      "summary": "ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books",
+      "intro": "convert-apply is single pass, so TA -> TB plus TB -> TC leaves a TA as TB. The editor warns about this on Save and offers one click to merge the rules into TA -> TC or to split the stages into books the Convert tab runs in order.",
+      "wikiPage": "convrules-editor-rule-chains",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Conversion > Rule chains..."
+        },
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "File > Save (offer)"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-27",
+        "by": "CONVERTER",
+        "build": "1.35.1-alpha",
+        "surfaceHash": "eb7e135631f7a03a51a1fef17c2fcea14d88e68829273394dc0fe5a5cf5ffb33"
+      }
+    },
+    {
       "id": "convrules-work-list",
       "title": "Work list",
       "group": "component-conversion",
@@ -8011,7 +8041,7 @@
             }
           ],
           "helpOrder": 7,
-          "help": ["  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]", "                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]", "                               [--format text|json|html] [--output <file>] [--open]", "  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)", "  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page", "  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot", "                               Reruns the old report's COMMAND in-process (no PowerShell) and diffs the normalised", "                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,", "                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping."]
+          "help": ["  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]", "                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]", "                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]", "  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)", "  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page", "  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot", "                               Reruns the old report's COMMAND in-process (no PowerShell) and diffs the normalised", "                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,", "                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping."]
         },
         {
           "type": "ide-menu",
@@ -9652,7 +9682,7 @@
         {
           "type": "cli",
           "verb": "serve",
-          "usage": "drag-lint serve --db <file.sqlite> (MCP stdio server)",
+          "usage": "drag-lint serve --db <file.sqlite> [--json] (MCP stdio server)",
           "flags": [
             {
               "name": "--db",
@@ -9660,7 +9690,7 @@
             }
           ],
           "helpOrder": 22,
-          "help": ["  drag-lint serve              --db <file.sqlite>    (MCP stdio server)"]
+          "help": ["  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)"]
         }
       ],
       "audience": "both",
@@ -12045,7 +12075,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A bare name the index bound to a value of an enum declared under $SCOPEDENUMS ON -- the compiler admits only TEnum.Value there, so th... (bug-patterns, warning)",
+        "summary": "A bare name spelled like a value of a visible $SCOPEDENUMS ON enum -- warning when it binds to another symbol of that name and the ty... (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {

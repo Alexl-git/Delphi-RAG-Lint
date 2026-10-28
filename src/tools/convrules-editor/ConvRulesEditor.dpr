@@ -53,6 +53,7 @@ uses
   , ConvRules.Inheritance in 'ConvRules.Inheritance.pas'
   , ConvRules.InheritanceEngine in 'ConvRules.InheritanceEngine.pas'
   , ConvRules.InputGate in 'ConvRules.InputGate.pas'
+  , ConvRules.OutputEncoding in 'ConvRules.OutputEncoding.pas'
   , ConvRules.CapabilityProbe in 'ConvRules.CapabilityProbe.pas'
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
@@ -63,8 +64,10 @@ uses
   , ConvRules.QualifyForm in 'ConvRules.QualifyForm.pas'
   , ConvRules.MigrateRules in 'ConvRules.MigrateRules.pas'
   , ConvRules.Migrate in 'ConvRules.Migrate.pas'
+  , ConvRules.RuleChains in 'ConvRules.RuleChains.pas'
   , ConvRules.MigrateRun in 'ConvRules.MigrateRun.pas'
   , ConvRules.MigrateForm in 'ConvRules.MigrateForm.pas'
+  , ConvRules.ChainForm in 'ConvRules.ChainForm.pas'
   , ConvRules.MembersPanel in 'ConvRules.MembersPanel.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
