@@ -16,6 +16,6 @@ map does not mark it as needing a separate index step.
 
 ## Example
 Illustrative only: place the caret on an undeclared identifier -- for example
-a reference to `TCustomerOrder` in a unit that has not yet added the unit
+a reference to `TCustomerOrder` in a unit whose `uses` lacks the unit
 that declares it -- and invoke the quick-fix (or press Ctrl+Alt+U) to add the
 declaring unit to `uses`.

@@ -7,7 +7,7 @@ group: refactoring
 order: 50007
 since: 0.47.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
@@ -38,7 +38,7 @@ map does not mark it as needing a separate index step.
 
 ### Example
 Illustrative only: place the caret on an undeclared identifier -- for example
-a reference to `TCustomerOrder` in a unit that has not yet added the unit
+a reference to `TCustomerOrder` in a unit whose `uses` lacks the unit
 that declares it -- and invoke the quick-fix (or press Ctrl+Alt+U) to add the
 declaring unit to `uses`.
 

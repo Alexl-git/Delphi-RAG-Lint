@@ -21,6 +21,7 @@ uses
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   , FeatureGen.HelpText in '..\FeatureGen.HelpText.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
+  , FeatureGen.DocsCheck in '..\FeatureGen.DocsCheck.pas'
   , FeatureGen.Check in '..\FeatureGen.Check.pas'  // dl:ok uses-global-census@b1db -- REVIEWED 2026-10-19: the test program names the checker constants it asserts on
   , FeatureGen.Audit in '..\FeatureGen.Audit.pas'
   , FeatureGen.Commands in '..\FeatureGen.Commands.pas'
@@ -2026,7 +2027,7 @@ begin
 end;
 
 { Splits off the Delphi-only classes; returns the rest. }
-function WithoutDelphiOnly(const pItems: TArray<string>; out pMcp, pNested, pNewD, pProse: Integer): TArray<string>;
+function WithoutDelphiOnly(const pItems: TArray<string>; out pMcp, pNested, pNewD, pProse, pDocs: Integer): TArray<string>;
 var
   lS: string;
 begin
@@ -2035,9 +2036,12 @@ begin
   pNested := 0;
   pNewD := 0;
   pProse := 0;
+  pDocs := 0;
   for lS in pItems do
     if lS.StartsWith(MCP_ONLY_PREFIX) then
       Inc(pMcp)
+    else if TRegEx.IsMatch(lS, '^C: C[123] ') then
+      Inc(pDocs)
     else if lS.StartsWith('A: ') and (Pos(NESTED_SCHEMA_MARK, lS) > 0) then
       Inc(pNested)
     else if IsNewDOutput(lS) then
@@ -2105,13 +2109,13 @@ end;
   Delphi-only class; pNewDExpected: the exact number of check D findings on the outputs the
   PowerShell generator did not own (-1: any number above zero, a seeded tree). }
 procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;  // dl:ok too-many-parameters@8a65 -- REVIEWED 2026-10-26 (re-stamped: pProseExpected added): test helper: each parameter is one expected count of the parity comparison
-  pMinFindings, pMcpExpected, pNestedExpected, pNewDExpected, pProseExpected: Integer);
+  pMinFindings, pMcpExpected, pNestedExpected, pNewDExpected, pProseExpected, pDocsExpected: Integer);
 var
   lFile, lMsg, lLine, lName: string;
   lPsFail, lPsNotes, lNotes, lMine, lCompared, lMissing, lExtra, lNMissing, lNExtra: TArray<string>;
   lFindings: TArray<TFinding>;
   lF: TFinding;
-  lDropped, lNested, lNewD, lProse: Integer;
+  lDropped, lNested, lNewD, lProse, lDocs: Integer;
   lNewDOk: Boolean;
 begin
   lName := (if pName <> '' then pName else pLevelName);
@@ -2128,13 +2132,13 @@ begin
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
   end;
-  lCompared := WithoutDelphiOnly(lMine, lDropped, lNested, lNewD, lProse);
+  lCompared := WithoutDelphiOnly(lMine, lDropped, lNested, lNewD, lProse, lDocs);
   CompareFindingSets(lPsFail, lCompared, lMissing, lExtra);
   CompareFindingSets(lPsNotes, lNotes, lNMissing, lNExtra);
   Writeln('INFO check ', lName, ': golden ', Length(lPsFail), ' failure(s) / ', Length(lPsNotes), ' note(s); featuregen ',
     Length(lMine), ' (', lDropped, ' Delphi-only MCP, expected ', pMcpExpected, '; ', lNested, ' nested schema, expected ',
     pNestedExpected, '; ', lNewD, ' D on new outputs, expected ', pNewDExpected, '; ', lProse, ' prose, expected ', pProseExpected,
-    ') / ', Length(lNotes));
+    '; ', lDocs, ' docs C1-C3 (Delphi-only; not pinned when expected is -1: the count follows the live engine --help), expected ', pDocsExpected, ') / ', Length(lNotes));
   for lLine in lMine do
     Writeln('INFO   finding: ', lLine.Split([#10])[0]);
   for lLine in lNotes do
@@ -2142,7 +2146,7 @@ begin
   lNewDOk := (if pNewDExpected < 0 then lNewD > 0 else ExclusionCountOk(lNewD, pNewDExpected));
   Check('Check.ParityWithGolden.' + lName, (lMsg = '') and TFile.Exists(lFile) and (Length(lPsFail) >= pMinFindings)  // dl:ok boolean-expression-complexity@8137 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     and ExclusionCountOk(lDropped, pMcpExpected) and ExclusionCountOk(lNested, pNestedExpected) and lNewDOk
-    and ExclusionCountOk(lProse, pProseExpected)
+    and ExclusionCountOk(lProse, pProseExpected) and ((pDocsExpected < 0) or ExclusionCountOk(lDocs, pDocsExpected))
     and (Length(lMissing) = 0) and (Length(lExtra) = 0) and (Length(lNMissing) = 0) and (Length(lNExtra) = 0),
     lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 5)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 5))  // dl:ok magic-literal@51d8 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     + ' // notes missing: ' + string.Join(' | ', lNMissing) + ' // notes extra: ' + string.Join(' | ', lNExtra));
@@ -3433,6 +3437,152 @@ begin
   end;
 end;
 
+{ ---- ki-docscheck: C1-C4 docs-drift checks. Each has a RED fixture (the stale page) and a clean control. ---- }
+
+const
+  DOC_HELP = '  drag-lint ask <question>     --target <T> [--out-root <dir>]'#10
+    + '                               [--plain]   one report question as text'#10
+    + '  drag-lint index              --project <X.dproj> --db <db>'#10
+    + #10
+    + '  drag-lint query              --name X'#10
+    + '  drag-lint query find-callers --name X --limit N'#10;
+
+procedure TestDocsFlags;
+var
+  lBlocks: TVerbBlocks;
+
+  function Count(const pText: string; const pVerbs: TArray<string> = nil): Integer;
+  begin
+    Result := Length(FlagProblems('zz', 'intro', pText, lBlocks, pVerbs));
+  end;
+
+begin
+  lBlocks := HelpVerbBlocks(DOC_HELP);
+  try
+    Check('Docs.C1.StaleFlagFails', Count('Run `drag-lint ask --target T --outroot x` now.') = 1);
+    Check('Docs.C1.RealFlagPasses', Count('Run `drag-lint ask --target T --out-root x` now.') = 0);
+    Check('Docs.C1.ContinuationLineFlagPasses', Count('Run `drag-lint ask --target T --plain`.') = 0);
+    Check('Docs.C1.OtherVerbsFlagFails', Count('Run `drag-lint ask --project P.dproj`.') = 1);
+    Check('Docs.C1.SubcommandUsesVerbBlock', Count('`drag-lint query find-callers --name Bar --limit 5`') = 0);
+    Check('Docs.C1.SubcommandStaleFails', Count('`drag-lint query find-callers --nam Bar`') = 1);
+    Check('Docs.C1.FenceLineFails', Count('```'#10'drag-lint index --project P.dproj --dbb x'#10'```') = 1);
+    Check('Docs.C1.FenceLinePasses', Count('```'#10'drag-lint index --project P.dproj --db x'#10'```') = 0);
+    Check('Docs.C1.UnknownVerbNotJudged', Count('`drag-lint nosuchverb --whatever`') = 0);
+    Check('Docs.C1.ProseOutsideBackticksNotJudged', Count('Never write drag-lint ask --outroot in prose') = 0);
+    Check('Docs.C1.HelpFlagAlwaysOk', Count('`drag-lint ask --help`') = 0);
+    Check('Docs.C1.WholeStringUsageFails', Count('drag-lint index --project X.dproj --stale') = 1);
+    Check('Docs.C1.StandaloneStaleFlagFails', Count('| `--outroot <dir>` | where |', ['ask']) = 1);
+    Check('Docs.C1.StandaloneRealFlagPasses', Count('| `--out-root <dir>` | where |', ['ask']) = 0);
+    Check('Docs.C1.StandaloneWithoutPageVerbNotJudged', Count('| `--outroot <dir>` | where |') = 0);
+  finally
+    lBlocks.Free;
+  end;
+end;
+
+procedure TestDocsPaths;
+var
+  lSrc: string;
+
+  function Count(const pText: string): Integer;
+  begin
+    Result := Length(PathProblems('zz', 'page', pText, lSrc));
+  end;
+
+begin
+  lSrc := FoldPathText('LOG = ''%LOCALAPPDATA%\drag-lint\logs\uri-handler.log''; ROOT = ''%TEMP%/drag-lint-reports'';');
+  Check('Docs.C2.StalePathFails', Count('the log is `%LOCALAPPDATA%\drag-lint\uri-handler.log`; it logs') = 1);
+  Check('Docs.C2.RealPathPasses', Count('the log is `%LOCALAPPDATA%\drag-lint\logs\uri-handler.log`; it logs') = 0);
+  Check('Docs.C2.PlaceholderTailCut', Count('goes to `%TEMP%\drag-lint-reports\<question>-<target>\`') = 0);
+  Check('Docs.C2.PartialSegmentDropped', Count('see %TEMP%\drag-lint-reports\compare-<q>.html') = 0);
+  Check('Docs.C2.RenamedFolderFails', Count('see %TEMP%\drag-lint-output\x.html') = 1);
+  Check('Docs.C2.NoEnvVarNotJudged', Count('see C:\Temp\nowhere.log') = 0);
+end;
+
+procedure TestDocsPhrases;
+begin
+  Check('Docs.C3.PlannedAndUntilThenFail', Length(PhraseProblems('zz', 'page', 'One verb, `ask`. Planned; until then the menu runs scripts.')) = 2);
+  Check('Docs.C3.NotYetFails', Length(PhraseProblems('zz', 'page', 'This is not yet wired.')) = 1);
+  Check('Docs.C3.ComingFails', Length(PhraseProblems('zz', 'page', 'Coming in the next release.')) = 1);
+  Check('Docs.C3.ShippedProseClean', Length(PhraseProblems('zz', 'page', 'Shipped: drag-lint ask runs in-process. The incoming link and the upcoming list are words, not promises.')) = 0);
+end;
+
+procedure TestDocsStaleSource;
+var
+  lDates: TDictionary<string, string>;
+  lSrc: TArray<string>;
+begin
+  lDates := ParseGitFileDates('@2026-10-10'#10'src/charts/DRagLint.Charts.Ask.pas'#10#10'@2026-08-01'#10'src/charts/DRagLint.Charts.Ask.pas'#10'src/core/Other.pas'#10);
+  try
+    lSrc := ConventionSources('ask', ['src/charts/draglint.charts.ask.pas', 'src/charts/draglint.charts.askverb.pas', 'src/core/other.pas']);
+    Check('Docs.C4.ConventionPicksExactUnitOnly', (Length(lSrc) = 1) and (lSrc[0] = 'src/charts/draglint.charts.ask.pas'));
+    Check('Docs.C4.NewestDateWins', lDates['src/charts/draglint.charts.ask.pas'] = '2026-10-10');
+    Check('Docs.C4.SourceNewerThanVerifiedReported', SourceChangedAfter('2026-09-01', lSrc, lDates) = '2026-10-10');
+    Check('Docs.C4.VerifiedAfterChangeClean', SourceChangedAfter('2026-10-20', lSrc, lDates) = '');
+    Check('Docs.C4.UnchangedSourceClean', SourceChangedAfter('2026-01-01', ['src/core/none.pas'], lDates) = '');
+  finally
+    lDates.Free;
+  end;
+end;
+
+function DocsProbe(const pIntroJson: string): TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{"id": "zz-docs-probe", "title": "Docs probe", "group": "maintenance", "owner": "CONVERTER", "status": "shipped",'
+    + ' "since": "1.0.0", "summary": "A probe entry whose prose is judged by the docs checks",'
+    + ' "intro": "' + pIntroJson + '", "wikiPage": "Home",'
+    + ' "surfaces": [ { "type": "cli", "verb": "ask" } ],'
+    + ' "audience": "both", "lastVerified": { "date": "2026-10-19", "by": "test", "build": "1.0.0" } }') as TJSONObject;
+end;
+
+function DocsProbeFindings(const pRepo, pIntroJson: string; const pLive: TLiveSurface): TArray<TFinding>;
+var
+  lReg: TRegistry;
+  lE: TJSONObject;
+  lNotes: TArray<string>;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lE := DocsProbe(pIntroJson);
+    try
+      Result := RunChecks(lReg, pLive, clFull, [lE], True, lNotes);
+    finally
+      lE.Free;
+    end;
+  finally
+    lReg.Free;
+  end;
+end;
+
+{ End to end through check --level full: the stale probe fails C1/C2/C3 and is named; the clean probe is not;
+  an allow row with a reason waives C1 for the probe and a row without a reason is itself a finding. }
+procedure TestDocsChecksEndToEnd(const pRepo: string);
+const
+  STALE = 'Run `drag-lint ask --target T --outroot x`; the log is `%LOCALAPPDATA%\\drag-lint\\no-such-folder\\x.log`. Planned; until then use scripts.';
+  CLEAN = 'Run `drag-lint ask --target T --out-root x` and read the answer.';
+var
+  lLive: TLiveSurface;
+  lF: TArray<TFinding>;
+  lScratch: string;
+begin
+  lLive := SharedLive(pRepo);
+  lF := DocsProbeFindings(pRepo, STALE, lLive);
+  Check('Docs.E2E.StaleFlagFails', HasFinding(lF, 'C', 'C1 zz-docs-probe'), FindingsNaming(lF, 'zz-docs-probe'));
+  Check('Docs.E2E.StalePathFails', HasFinding(lF, 'C', 'C2 zz-docs-probe'), FindingsNaming(lF, 'zz-docs-probe'));
+  Check('Docs.E2E.StalePhraseFails', HasFinding(lF, 'C', 'C3 zz-docs-probe'), FindingsNaming(lF, 'zz-docs-probe'));
+  lF := DocsProbeFindings(pRepo, CLEAN, lLive);
+  Check('Docs.E2E.CleanProbeNotNamed', not (HasFinding(lF, 'C', 'C1 zz-docs-probe') or HasFinding(lF, 'C', 'C2 zz-docs-probe')
+    or HasFinding(lF, 'C', 'C3 zz-docs-probe')), FindingsNaming(lF, 'zz-docs-probe'));
+  lScratch := CmdRepo(pRepo, 'docscheck-allow');
+  TFile.WriteAllText(TPath.Combine(lScratch, 'features\docs-check.json'),
+    '{ "allow": [ { "check": "C1", "where": "zz-docs-probe", "token": "--outroot", "why": "test waiver" } ] }'#10, TEncoding.ASCII);
+  lF := DocsProbeFindings(lScratch, STALE, lLive);
+  Check('Docs.E2E.AllowRowWaivesC1', not HasFinding(lF, 'C', 'C1 zz-docs-probe') and HasFinding(lF, 'C', 'C3 zz-docs-probe'), FindingsNaming(lF, 'zz-docs-probe'));
+  TFile.WriteAllText(TPath.Combine(lScratch, 'features\docs-check.json'),
+    '{ "allow": [ { "check": "C1", "where": "zz-docs-probe", "token": "--outroot", "why": "" } ] }'#10, TEncoding.ASCII);
+  lF := DocsProbeFindings(lScratch, STALE, lLive);
+  Check('Docs.E2E.AllowRowWithoutWhyIsAFinding', HasFinding(lF, 'A', 'has no "why"'), FindingsNaming(lF, 'docs-check'));
+end;
 { Defect (H-SYS): featuregen verify writes "verified"; the seed backlog asked for "lastVerified", so no entry could
   ever leave it. A backlog entry with intro + verified + a real since must be reported as paid (RED before the
   fix); one whose stamps are removed stays owed (positive control). }
@@ -3561,6 +3711,10 @@ begin
     TestLineAnchors;
     TestMenuProse;
     TestRuleCounts;
+    TestDocsFlags;
+    TestDocsPaths;
+    TestDocsPhrases;
+    TestDocsStaleSource;
     TestSetArgParsing;
     if lRepo <> '' then
     begin
@@ -3569,12 +3723,12 @@ begin
       TestHarvestRaisesOnEmptySubMap(lRepo);
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
-      TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0, GOLDEN_PROSE_A);
-      TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, GoldenLive(lRepo).McpTools), 0, 0, GOLDEN_PROSE_FULL);
+      TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0, GOLDEN_PROSE_A, 0);
+      TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, GoldenLive(lRepo).McpTools), 0, 0, GOLDEN_PROSE_FULL, -1);
       lSeeded := SeededRepo(lGold);
       // the seeded copy carries the same MCP server source, so the live tool list is the same
-      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0, GOLDEN_PROSE_A);  // dl:ok magic-literal@8c3e -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_A argument added): test expectation: the literal is the asserted value
-      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1, GOLDEN_PROSE_FULL);  // dl:ok magic-literal@edb5 -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_FULL argument added): test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0, GOLDEN_PROSE_A, 0);  // dl:ok magic-literal@8c3e -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_A argument added): test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1, GOLDEN_PROSE_FULL, -1);  // dl:ok magic-literal@edb5 -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_FULL argument added): test expectation: the literal is the asserted value
       TestCheckDCoversAllOutputs(lRepo);
       TestWikiCwdIndependent(lRepo);
       TestMarkedBlockNoMarkers;
@@ -3588,6 +3742,7 @@ begin
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
       TestBacklogReadsVerified(lRepo);
+      TestDocsChecksEndToEnd(lRepo);
       TestCommands(lRepo);
     end;
   except

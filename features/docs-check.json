@@ -1,0 +1,18 @@
+{
+  "allow": [
+    { "check": "C3", "where": "Circular-Uses-Report-cycles-fix-plan", "token": "planned", "why": "'planned' is the verb of the plan feature itself ('Not planned: cycle(s) 2, 3', 'before any group is planned'), not a promise" },
+    { "check": "C3", "where": "Multi-Project-Rename", "token": "planned", "why": "'planned on its index' describes what the rename plan does, not unfinished work" },
+    { "check": "C1", "where": "Diagrams-and-Charts", "token": "--list", "why": "CHARTS page: triage 2026-10-28 -- 'drag-lint ask --list --at ...' (call design, lines 18-19) names flags the ask help block does not have; owner to reconcile with the shipped verb" },
+    { "check": "C1", "where": "Diagrams-and-Charts", "token": "--at", "why": "CHARTS page: triage 2026-10-28 -- same call-design block as --list" },
+    { "check": "C1", "where": "Diagrams-and-Charts", "token": "--question", "why": "CHARTS page: triage 2026-10-28 -- same call-design block as --list" },
+    { "check": "C2", "where": "Setup-Installer", "token": "%LOCALAPPDATA%\\Programs\\drag-lint", "why": "installer\\drag-lint.iss says {autopf} with PrivilegesRequired=lowest, which Inno resolves to %LOCALAPPDATA%\\Programs" },
+    { "check": "C3", "where": "convrules-editor-rule-chains", "token": "not yet", "why": "CONVERTER page: triage 2026-10-28 -- 'does not yet warn ... planned as CHAIN-2' is an honest statement of a known gap; owner may reword" },
+    { "check": "C3", "where": "convrules-editor-rule-chains", "token": "planned", "why": "CONVERTER page: triage 2026-10-28 -- CHAIN-2 is genuinely planned; owner may reword" },
+    { "check": "C3", "where": "index-build-config", "token": "coming", "why": "LSP page: triage 2026-10-28 -- 'a coming re-parse' means an imminent re-parse, not a promise; owner may reword" },
+    { "check": "C2", "where": "charts-and-the-ide", "token": "%LOCALAPPDATA%\\drag-lint\\uri-handler.log", "why": "CHARTS page: fixed on gaps/ki-help (952d80b4) to ...\\logs\\uri-handler.log; drop this row once that branch is merged" },
+    { "check": "C3", "where": "charts-and-the-ide", "token": "not yet", "why": "CHARTS page: fixed on gaps/ki-help (952d80b4); drop this row once that branch is merged" },
+    { "check": "C3", "where": "charts-and-the-ide", "token": "planned", "why": "CHARTS page: fixed on gaps/ki-help (952d80b4); drop this row once that branch is merged" },
+    { "check": "C3", "where": "charts-and-the-ide", "token": "until then", "why": "CHARTS page: fixed on gaps/ki-help (952d80b4); drop this row once that branch is merged" }
+  ],
+  "sources": {}
+}

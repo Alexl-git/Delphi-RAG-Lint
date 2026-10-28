@@ -87,6 +87,8 @@ type
     Engine: string;  // dl:ok public-field@925b -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Set by the caller when Harvest raised (its message); the checks then report it as one B finding and stop.</summary>
     HarvestError: string;  // dl:ok public-field@87dc -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    /// <summary>The engine --help text (TLiveHelp.Text); the docs checks judge flags against it.</summary>
+    HelpText: string;
     /// <summary>Verbs listed by --help (TLiveHelp.Verbs).</summary>
     HelpVerbs: TArray<string>;  // dl:ok public-field@881d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Verbs dispatched by DRagLint.CLI.pas (Args.Command = '..'), sorted unique.</summary>
@@ -1099,6 +1101,7 @@ begin
   try
     lHelp.Load(pEngine);
     HelpVerbs := lHelp.Verbs;
+    HelpText := lHelp.Text;
   finally
     lHelp.Free;
   end;
