@@ -975,13 +975,14 @@ Described in:
 Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
+drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 | `--project` | `<.dproj>` |  |  |
+| `--build-config` | `<name>` |  |  |
 | `--rule` | `<id>` |  |  |
 | `--disable` |  |  |  |
 | `--output` | `<report.txt>` |  |  |

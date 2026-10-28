@@ -100,7 +100,7 @@
     "version": "1.35.1-alpha"
   },
   "features/compliance-labels.md": {
-    "hash": "5f60f39be7800f0f9c1b3fbc5cbd9ddfe225951e72b6a180d298f190d15b8885",
+    "hash": "6a333967481e178e4c2ea9ce5385fbecd69653671650d3067a0b8c41dd8716a5",
     "version": "1.36.0-alpha"
   },
   "features/context.md": {
@@ -304,7 +304,7 @@
     "version": "1.35.1-alpha"
   },
   "features/fix-all-in-project.md": {
-    "hash": "4eb823ccf60792343e5300154fc35617f55f2cb140a02c0507f0f93e9b892007",
+    "hash": "826c89b596a6a7e9562ff6c8df6b67e711335d1775435530d0a60121b5f2d486",
     "version": "1.36.0-alpha"
   },
   "features/fix-all-in-unit.md": {

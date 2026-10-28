@@ -26,6 +26,7 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 | `--project` | `<.dproj>` |  |  |
+| `--build-config` | `<name>` |  |  |
 | `--rule` | `<id>` |  |  |
 | `--disable` |  |  |  |
 | `--output` | `<report.txt>` |  |  |
