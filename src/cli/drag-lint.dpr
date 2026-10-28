@@ -257,6 +257,7 @@ uses
   DRagLint.Analysis.LintTree in '..\analysis\DRagLint.Analysis.LintTree.pas',
   DRagLint.Project.Members in '..\core\DRagLint.Project.Members.pas',
   DRagLint.Project.Coherence in '..\core\DRagLint.Project.Coherence.pas',
+  DRagLint.Project.ContextFile in '..\core\DRagLint.Project.ContextFile.pas',
   DRagLint.Analysis.SurfaceFingerprint in '..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas',
   DRagLint.Analysis.SurfaceAdapters in '..\analysis\DRagLint.Analysis.SurfaceAdapters.pas',
   DRagLint.Project.Facts in '..\project\DRagLint.Project.Facts.pas',

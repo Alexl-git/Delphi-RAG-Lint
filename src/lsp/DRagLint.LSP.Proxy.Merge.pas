@@ -140,6 +140,7 @@ type
     FServer     : TLSPServer;
     FServerTried: Boolean;
     FServerLock : TCriticalSection;
+    FPendingSettingsFile: string; { LSP-1 CORE: the .delphilsp.json the IDE named, applied to FServer on the next Server call; under FServerLock }
     FCallLock   : TCriticalSection;
     FStateLock  : TCriticalSection;
     FJobReady   : TEvent;
@@ -181,6 +182,7 @@ type
     function  Enqueue(const AWork: TProc): Boolean;
     function  IsDirty(const APath: string): Boolean;
     procedure TrackDocument(const AFrame: TBytes; ALen: Integer);
+    procedure PickupContext(const AFrame: TBytes; ALen: Integer);
     procedure QueueDocUpdate(const APath: string; ARemove: Boolean; const AText: string);
     procedure FlushDocUpdates;
     procedure RecordRequest(const AFrame: TBytes; ALen: Integer);
@@ -1037,6 +1039,12 @@ begin
         end;
       end;
     end;
+    { LSP-1 CORE: the IDE's .delphilsp.json names the active project + platform. }
+    if (FServer <> nil) and (FPendingSettingsFile <> '') then
+    begin
+      FServer.ApplyClientSettingsFile(FPendingSettingsFile);
+      FPendingSettingsFile:= '';
+    end;
     Result:= FServer;
   finally
     FServerLock.Leave;
@@ -1852,6 +1860,44 @@ begin
   end;
 end;
 
+{ LSP-1 CORE (.delphilsp.json pickup): DelphiLSP is configured by the IDE through
+  a `settingsFile` naming `<Project>.delphilsp.json` (initialize's
+  initializationOptions or workspace/didChangeConfiguration's settings). That is
+  the IDE's ACTIVE project, so it becomes the merge server's client context.
+  Read only when the frame contains the key; never alters the relayed bytes. }
+procedure TProxyMergeEngine.PickupContext(const AFrame: TBytes; ALen: Integer);
+var
+  Json: TJSONValue;
+  F   : string;
+begin
+  if not FrameContains(AFrame, ALen, 'settingsFile') then Exit;
+  F:= '';
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if not (Json is TJSONObject) then Exit;
+      if not Json.TryGetValue<string>('params.initializationOptions.settingsFile', F) then
+        if not Json.TryGetValue<string>('params.settings.settingsFile', F) then Exit;
+    finally
+      Json.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      MergeErrLine('drag-lint lsp --proxy: settingsFile not read (' + E.ClassName + ': ' + E.Message + ').');
+      Exit;
+    end;
+  end;
+  if F = '' then Exit;
+  if F.StartsWith('file:', True) then F:= TLSPServer.FileFromUri(F);
+  FServerLock.Enter;
+  try
+    FPendingSettingsFile:= F;
+  finally
+    FServerLock.Leave;
+  end;
+end;
+
 function TProxyMergeEngine.Intercept(ADir: TMergeDirection; const AFrame: TBytes;
   ALen: Integer; out AReplacement: TBytes): Boolean;
 begin
@@ -1861,6 +1907,8 @@ begin
   begin
     if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
       TrackDocument(AFrame, ALen);
+    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
+      PickupContext(AFrame, ALen);
     if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then RecordRequest(AFrame, ALen);
     Exit(False);
   end;
