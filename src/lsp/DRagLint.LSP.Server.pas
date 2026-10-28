@@ -1343,6 +1343,7 @@ type
 implementation
 
 uses
+  System.StrUtils, { LSP-1 CORE: MatchText }
   DRagLint.Project.DefineProfile,
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
@@ -2628,7 +2629,7 @@ begin
   Result:= Entry.Ctx;
 end;
 
-function TLSPServer.ComputeFileContext(const APath: string): TLspFileContext;  // dl:ok cyclomatic-complexity -- REVIEWED CORE 2026-10-28: one flat precedence ladder per field (SPEC 1b), each rung one line
+function TLSPServer.ComputeFileContext(const APath: string): TLspFileContext;
 var
   Ctx    : TProjectContext;
   HaveCtx: Boolean;
@@ -2903,6 +2904,12 @@ begin
       Exe:= GetEnvironmentVariable('DRAGLINT_LSP_REINDEX_EXE');
       if Exe = '' then Exe:= ParamStr(0);
       Cmd:= Format('"%s" index --project "%s" --db "%s"', [Exe, ADproj, ADb]);
+      { A batch stub runs through cmd /s /c, which keeps the inner quoting. }
+      if MatchText(ExtractFileExt(Exe), ['.cmd', '.bat']) then
+      begin
+        Cmd:= Format('"%s" /s /c "%s"', [GetEnvironmentVariable('ComSpec'), Cmd]);
+        Exe:= GetEnvironmentVariable('ComSpec');
+      end;
       UniqueString(Cmd);
       if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then
       begin
@@ -4798,8 +4805,11 @@ begin
       else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
     finally
       if FControl <> nil then FControl.EndWork;
-      FlushPending; { LSP-1 CORE: notices + draglint/context queued by this message }
-      FWorkLock.Leave;
+      try
+        FlushPending; { LSP-1 CORE: notices + draglint/context queued by this message }
+      finally
+        FWorkLock.Leave;
+      end;
       Msg.Free;
     end; // try
   end; // while

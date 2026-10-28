@@ -21,10 +21,19 @@ type
   /// <summary>One project's build context as read from a .dlcontext.json.</summary>
   /// <remarks>Plain value record; Stale is computed by TryLoadProjectContext.</remarks>
   TProjectContext = record
-    Schema: Integer; Project, Platform, Config: string;
-    Defines, SearchPath, Namespaces, LibraryRoots: TArray<string>;
-    UnitAliases: TArray<TPair<string,string>>;
-    LibraryDb, ProjectDb, SourceFile, SourceSha1: string;
+    Schema      : Integer;
+    Project     : string;
+    Platform    : string;
+    Config      : string;
+    Defines     : TArray<string>;
+    SearchPath  : TArray<string>;
+    Namespaces  : TArray<string>;
+    LibraryRoots: TArray<string>;
+    UnitAliases : TArray<TPair<string,string>>;
+    LibraryDb   : string;
+    ProjectDb   : string;
+    SourceFile  : string;
+    SourceSha1  : string;
     /// <summary>Compiler version the code targets ('' = default); carried, not evaluated.</summary>
     TargetCompiler: string;
     /// <summary>The .dlcontext.json this was read from.</summary>
@@ -35,14 +44,18 @@ type
 
   /// <summary>One `libraries.&lt;Platform&gt;` entry of the central defaults.</summary>
   TContextLibrary = record
-    Platform, LibraryDb: string;
+    LibraryDb   : string;
+    Platform    : string;  { not first: the drag-lint grammar fails on a record whose first field is Platform (gap logged) }
     LibraryRoots: TArray<string>;
   end;
 
   /// <summary>The central context defaults (spec 1b).</summary>
   TContextDefaults = record
-    Schema: Integer; Platform, Config, TargetCompiler: string;
-    Libraries: TArray<TContextLibrary>;
+    Schema        : Integer;
+    Platform      : string;
+    Config        : string;
+    TargetCompiler: string;
+    Libraries     : TArray<TContextLibrary>;
   end;
 
 /// <summary>The context file that belongs to a project file.</summary>
@@ -96,10 +109,11 @@ const
   DEFAULTS_ENV         = 'DRAGLINT_CONTEXT_DEFAULTS';
   DEFAULTS_DIR         = 'drag-lint';
   DEFAULTS_FILE        = 'context-defaults.json';
+  ENV_BUF_CHARS        = MAX_PATH * 4; // ExpandEnvironmentStrings buffer
 
 function ExpandEnv(const AValue: string): string;
 var
-  Buf: array[0..MAX_PATH * 4] of Char;
+  Buf: array[0..ENV_BUF_CHARS] of Char;
   N  : DWORD;
 begin
   Result:= AValue;
@@ -187,7 +201,7 @@ begin
     finally
       Root.Free;
     end;
-  except // dl:ok bare-except -- REVIEWED CORE 2026-10-28 never-raises contract: a malformed context file reads as absent
+  except // dl:ok bare-except@a672 -- REVIEWED CORE 2026-10-28 never-raises contract: a malformed context file reads as absent
     ACtx  := Default(TProjectContext);
     Result:= False;
   end;
@@ -211,7 +225,7 @@ begin
       if SameText(Parent, Dir) then Break;
       Dir:= Parent;
     end;
-  except // dl:ok bare-except -- REVIEWED CORE 2026-10-28 never-raises contract: an unreadable folder means no context
+  except // dl:ok bare-except@79dc -- REVIEWED CORE 2026-10-28 never-raises contract: an unreadable folder means no context
     Result:= False;
   end;
 end;
@@ -252,7 +266,7 @@ begin
     finally
       Root.Free;
     end;
-  except // dl:ok bare-except -- REVIEWED CORE 2026-10-28 never-raises contract: unreadable defaults read as absent
+  except // dl:ok bare-except@80f1 -- REVIEWED CORE 2026-10-28 never-raises contract: unreadable defaults read as absent
     ADefaults:= Default(TContextDefaults);
     Result   := False;
   end;
