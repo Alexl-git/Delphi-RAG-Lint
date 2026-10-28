@@ -41,6 +41,7 @@ Find symbols, callers, callees, text and types in the index.
 | [find-unit](features/find-unit.md) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | 0.69.0-alpha |
 | [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret across the indexed project | 0.33.0-alpha |
 | [Find Usages](features/find-usages-context.md) | Lists references to the symbol represented by a Structure-tree node | 0.33.0-alpha |
+| [Gain (counted savings)](features/gain-usage-log.md) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day | 1.36.0-alpha |
 | [Go to Declaration](features/go-to-declaration.md) | Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node | 0.43.0-alpha |
 | [Go to Definition](features/go-to-definition.md) | Jumps the editor caret to the declaration of the symbol under the cursor | 0.47.0-alpha |
 | [Go to Implementation](features/go-to-implementation.md) | Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node | 0.43.0-alpha |

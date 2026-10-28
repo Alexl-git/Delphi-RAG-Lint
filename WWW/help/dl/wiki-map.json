@@ -38,6 +38,7 @@
   "Format-Whole-Project-with-YADF": "format-whole-project-with-yadf",
   "Format-with-YADF": "format-with-yadf",
   "Full-Compile-Sweep": "full-compile-sweep",
+  "Gain-usage-log": "gain-usage-log",
   "Generate-Test-Helper-CSV": "generate-test-helper-csv",
   "Go-to-Declaration": "go-to-declaration",
   "Go-to-Definition": "go-to-definition",
