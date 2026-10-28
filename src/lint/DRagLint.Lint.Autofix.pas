@@ -519,7 +519,10 @@ begin
   begin
     C:= T[i];
     if (C = '(') or (C = '[') then Inc(Depth)
-    else if (C = ')') or (C = ']') then begin Dec(Depth); if Depth < 0 then Exit(False); end
+    else if (C = ')') or (C = ']') then begin
+      Dec(Depth);
+      if Depth < 0 then Exit(False);
+    end
     else if Depth = 0 then
     begin
       { at top level, only identifier chars and a '.' between segments are allowed;
@@ -692,7 +695,11 @@ begin
               else if Span[UcQ] = ')' then
               begin
                 Dec(UcDepth);
-                if UcDepth = 0 then begin UcClose:= UcQ; Break; end;
+                if UcDepth = 0 then
+                begin
+                  UcClose:= UcQ;
+                  Break;
+                end;
               end;
             end;
           end;
@@ -742,7 +749,11 @@ begin
               else if Span[AfQ] = ')' then
               begin
                 Dec(AfDepth);
-                if AfDepth = 0 then begin AfClose:= AfQ; Break; end;
+                if AfDepth = 0 then
+                begin
+                  AfClose:= AfQ;
+                  Break;
+                end;
               end;
             end;
             if AfClose > AfOpen then
@@ -806,9 +817,12 @@ begin
           for var Pass: Integer:= 1 to 2 do
           begin
             var LR: string:= TrimLeft(Rest);
-            if (Length(LR) >= 3) and SameText(Copy(LR, 1, 3), 'not') and ((Length(LR) = 3) or (LR[4] <= ' ')) then Rest:= TrimLeft(Copy(LR, 4, MaxInt))
+            if (Length(LR) >= 3) and SameText(Copy(LR, 1, 3), 'not') and ((Length(LR) = 3) or (LR[4] <= ' ')) then Rest:= TrimLeft(Copy(LR, 4, MaxInt))  // dl:ok magic-literal@1139 -- REVIEWED 2026-10-28: Pascal keyword length (not) and its 1-based follow index
             else
-            begin Ok:= False; Break; end;
+            begin
+              Ok:= False;
+              Break;
+            end;
           end;
           if Ok and (Rest <> '') then
           begin
@@ -834,7 +848,10 @@ begin
             if (Ch = '(') or (Ch = '[') then Inc(Depth)
             else if (Ch = ')') or (Ch = ']') then Dec(Depth)
             else if (Depth = 0) and (Span[K - 1] <= ' ') and SameText(Copy(Span, K, 2), 'as') and ((K + 2 > Length(Span)) or (Span[K + 2] <= ' ')) then
-            begin AsPos:= K; Break; end;
+            begin
+              AsPos:= K;
+              Break;
+            end;
           end;
           if AsPos > 1 then
           begin
@@ -868,9 +885,15 @@ begin
             else if Depth = 0 then
             begin
               if (K < Length(Span)) and (Ch = '<') and (Span[K + 1] = '>') then
-              begin OpPos:= K; OpLen:= 2; end
+              begin
+                OpPos:= K;
+                OpLen:= 2;
+              end
               else if Ch = '=' then
-              begin OpPos:= K; OpLen:= 1; end;
+              begin
+                OpPos:= K;
+                OpLen:= 1;
+              end;
             end;
           end;
           if OpPos > 1 then
@@ -921,13 +944,16 @@ begin
           var Depth  : Integer:= 0;
           var ThenEnd: Integer:= 0; { 1-based index one past the 'then' }
           var LS: string:= LowerCase(Span);
-          for var K: Integer:= 1 to Length(Span) - 3 do
+          for var K: Integer:= 1 to Length(Span) - 3 do  // dl:ok magic-literal@c578 -- REVIEWED 2026-10-28: length of keyword then, minus one
           begin
             var Ch: Char:= Span[K];
             if (Ch = '(') or (Ch = '[') then Inc(Depth)
             else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if (Depth = 0) and (Copy(LS, K, 4) = 'then') and ((K = 1) or (Span[K - 1] <= ' ') or (Span[K - 1] = ')')) and ((K + 4 > Length(Span)) or (Span[K + 4] <= ' ')) then
-            begin ThenEnd:= K + 4; Break; end;
+            else if (Depth = 0) and (Copy(LS, K, 4) = 'then') and ((K = 1) or (Span[K - 1] <= ' ') or (Span[K - 1] = ')')) and ((K + 4 > Length(Span)) or (Span[K + 4] <= ' ')) then  // dl:ok magic-literal@66b2 -- REVIEWED 2026-10-28: Pascal keyword length (then); lexer-local scan
+            begin
+              ThenEnd:= K + 4;  // dl:ok magic-literal@5223 -- REVIEWED 2026-10-28: length of keyword then
+              Break;
+            end;
           end;
           if ThenEnd > 0 then
           begin

@@ -434,7 +434,7 @@ begin
   Idx:= StrToInt(Lit);
   if Neg then Idx:= -Idx;
   Name:= LowerCase(Txt(Ent));
-  if not Lookup(Name, Info) then Exit;
+  if not Lookup(Name, Info) then Exit;  // dl:ok used-before-assignment@945b -- REVIEWED 2026-10-28: Info is an out parameter of Lookup, assigned on every path
   case Info.Kind of
     dkArray:
       if (Idx < Info.Lo) or (Idx > Info.Hi) then

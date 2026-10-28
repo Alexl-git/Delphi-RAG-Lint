@@ -90,10 +90,13 @@ function IsComplianceProfile(const AName: string): Boolean;
 /// <returns>True when the rule belongs to the profile: it carries >= 1 id under the standard
 /// (cwe-top25: >= 1 CWE id that is in CWE_TOP25_2025). False for an unknown profile name.</returns>
 function ComplianceProfileSelects(const AName: string; const ALabels: TComplianceLabels): Boolean;
+/// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed CWE id (CWE-476).</returns>
 function IsCweId(const AId: string): Boolean;
+/// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed CERT id (EXP34-C, DCL57-CPP, LCK09-J).</returns>
 function IsCertId(const AId: string): Boolean;
+/// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed MISRA id (MISRA-C-2012-R18.6, MISRA-CPP-2008-15-5-1).</returns>
 function IsMisraId(const AId: string): Boolean;
 

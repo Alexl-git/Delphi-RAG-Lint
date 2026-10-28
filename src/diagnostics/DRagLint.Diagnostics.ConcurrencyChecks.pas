@@ -43,8 +43,8 @@ uses
   , DRagLint.Diagnostics.ParseCache
   ;
 
-class function TConcurrencyChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@7485
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67
+class function TConcurrencyChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@7485 -- REVIEWED 2026-10-28: gate-fixed checker signature (LINT_GATE_CONCURRENCY call sites); the rules are threshold-free
+  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-28: gate-fixed checker signature; the rules are store-free
 const
   BLOCKING: array[0..7] of string = (
     'synchronize', 'waitfor', 'sendmessage', 'sleep', 'showmessage', 'messagedlg',
