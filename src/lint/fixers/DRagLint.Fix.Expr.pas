@@ -380,7 +380,7 @@ begin
     if (Word = '') or not END_WORDS.Contains('|' + Word + '|') then Exit;
   end;
   AEdit:= ReplaceEdit(AFinding.FilePath, AFinding.StartLine, A0, Copy(Line, A0, P - A0),
-    IfThen(Neq, 'not ', '') + 'SameValue(' + Lhs + ', ' + Rhs + ')');
+    IfThen(Neq, 'not ', '') + 'System.Math.SameValue(' + Lhs + ', ' + Rhs + ')');
   Result:= True;
 end;
 
