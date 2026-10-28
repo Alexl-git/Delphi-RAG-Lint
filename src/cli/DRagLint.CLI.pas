@@ -2927,8 +2927,8 @@ begin
   if AArgs.NoPreprocess then Exit;
   Fallback:= AFallback;
   if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath) then
-    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, '', True).Profile;
-  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', Fallback, True);
+    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig, True).Profile;
+  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig, Fallback, True);
   TAstParseCache.SetProfileResolver(
     function(AFile: string): TDefineProfile
     begin
@@ -4349,7 +4349,7 @@ end;
 /// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.</remarks>
 function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
 begin
-  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') then AnsiQuotedStr(AItem.Name, '"') else AItem.Name);
+  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') or AItem.Name.Contains('"') then '"' + AItem.Name.Replace('"', '\"') + '"' else AItem.Name);
   if AItem.Platform <> '' then Result:= Result + ' --platform ' + AItem.Platform;
   if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
 end;
@@ -18996,7 +18996,7 @@ begin
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
     var ScopeProfile: TDefineProfile:= ResolveIndexProfile('', AArgs.CheckPlatform, '');
     if (Dproj <> '') and TFile.Exists(Dproj) then
-      ScopeProfile:= ResolveActiveBuild(Dproj, AArgs.CheckPlatform, '', True).Profile;
+      ScopeProfile:= ResolveActiveBuild(Dproj, AArgs.CheckPlatform, AArgs.BuildConfig, True).Profile;
     Resolver.SetPreprocess(not AArgs.NoPreprocess, ScopeProfile);
     { An unreadable/absent project file must surface as "no scope" -- which the
       caller turns into a usage error -- not as an unhandled exception. }
@@ -30099,6 +30099,27 @@ end; // function DetectPlatformFromDproj
 //      default .\drag-lint.sqlite so existing behaviour is preserved.
 //   4. --project: the list is the project's OWN index (when it exists) plus the
 //      platform library, nothing else (owner ruling 2026-08-13; 1.20.4).
+/// <summary>Where the local-manifest walk starts for a run.</summary>
+/// <param name="AProjectPath">The --project argument, or ''.</param>
+/// <returns>The folder of an existing --project file, else the current directory.</returns>
+function ManifestStartDir(const AProjectPath: string): string;
+begin
+  Result:= GetCurrentDir;
+  if (AProjectPath <> '') and TFile.Exists(AProjectPath) then
+    Result:= ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(AProjectPath)));
+end;
+
+var
+  GNotedOnce: string = '';
+
+{ True the FIRST time AKey is seen in this process, so a note printed per
+  ResolveConsumerDbs call (lint-all calls it repeatedly) appears once. }
+function NoteOnce(const AKey: string): Boolean;
+begin
+  Result:= not GNotedOnce.Contains('|' + LowerCase(AKey) + '|');
+  if Result then GNotedOnce:= GNotedOnce + '|' + LowerCase(AKey) + '|';
+end;
+
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -30120,7 +30141,18 @@ begin
   // Try manifest-driven selection.
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
-    Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    { 1.20.4 #4b-2: the local-manifest walk starts at the PROJECT's folder when --project
+      names one (as index / refresh-findings do), so a read picks the same DB the write
+      did. Conservative: when that manifest has no owner for the project, fall back to the
+      old cwd walk, so a cwd-only registration keeps working. }
+    Manifest:= TManifestIO.Load(EngineDir, ManifestStartDir(AArgs.ProjectPath));
+    if (AArgs.ProjectPath <> '') and (ManifestStartDir(AArgs.ProjectPath) <> GetCurrentDir) then
+    begin
+      var NoClaimants: TArray<string>;
+      var NoDb: string;
+      if ResolveOwnProjectDb(Manifest, AArgs.ProjectPath, NoDb, NoClaimants) = pdmNone then
+        Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    end;
 
     { Pick platform: CLI --platform > the PROJECT'S OWN folder when --project
       names one > cwd detection > manifest defaultPlatform. Reading only the cwd
@@ -30195,10 +30227,13 @@ begin
     var Kept: TArray<string>:= nil;
     if (ProjDb <> '') and TFile.Exists(ProjDb) then Kept:= [ProjDb]
     else if Length(Claimants) > 1 then
+    begin
+      if NoteOnce('claim|' + ExpandFileName(AArgs.ProjectPath)) then
       Writeln(ErrOutput, Format('NOTE: %d manifest sections claim %s (%s) -- no index owns it, and other ' +
                                 'projects'' indexes are not consulted. Fix the manifest or pass --db.',
-                                [Length(Claimants), AArgs.ProjectPath, string.Join(', ', Claimants)]))
-    else
+                                [Length(Claimants), AArgs.ProjectPath, string.Join(', ', Claimants)]));
+    end
+    else if NoteOnce('noowner|' + ExpandFileName(AArgs.ProjectPath)) then
       Writeln(ErrOutput, Format('NOTE: no index owns %s -- other projects'' indexes are not consulted. ' +
                                 'Build it: drag-lint index --project "%s"', [AArgs.ProjectPath, AArgs.ProjectPath]));
     for D in Result do
@@ -30487,7 +30522,7 @@ begin
     end;
 
     for D in Resolved do
-      if StartsText('library-', ExtractFileName(D)) and TFile.Exists(D) then Exit(D);
+      if IsLibrarySectionDb(LibrarySectionDbs(Manifest), D) and TFile.Exists(D) then Exit(D);
   except
     { A manifest that will not load is not this function's problem to report --
       every caller already treats '' as "no library index" and degrades. }
