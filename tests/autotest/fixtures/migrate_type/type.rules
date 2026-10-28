@@ -1,0 +1,8 @@
+#migrate TScreenCursorOld -> TScreenCursorNew, CvNew
+#migrate scoBusy -> scnHourGlass
+#migrate TOldThing -> TNewThing, CvNew
+#migrate TGoneOld -> TNewThing, CvNew
+#migrate TOldThing2 -> TNoSuchType, NoSuchUnit
+
+#convert CvLib.TOldField -> CvLib.TNewField, CvLib
+#link Size <- Size

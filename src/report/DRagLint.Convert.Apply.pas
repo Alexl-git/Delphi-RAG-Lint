@@ -4852,6 +4852,63 @@ begin
   Result:= '';
 end;
 
+// 1.38 (owner ruling D2, 2026-10-28): the unit-level declaration AName names
+// in the supplied stores -- a type, an enum value, a const, a var or a routine,
+// never a member, a local or a parameter. A dotted name is looked up
+// qualified. False when no store declares it.
+function ResolveMigrateTarget(const ATrees: TConvertTreeCache; const AName: string;
+  out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
+const
+  DECL_KINDS: set of TSymbolKind = [skClass, skInterface, skRecord, skEnum, skEnumValue, skTypeAlias,
+                                    skConstDecl, skVarDecl, skProcedure, skFunction];
+begin
+  ASym  := Default(TSymbol);
+  AStore:= nil;
+  if AName = '' then Exit(False);
+  var Bare: string:= BareTypeTail(AName);
+  for var St: ISymbolStore in ATrees.Stores do
+  begin
+    var Found: TArray<TSymbol>:= if AName.Contains('.') then St.FindSymbolsByQualifiedName(AName)
+                                 else St.FindSymbolsByExactName(AName);
+    for var S: TSymbol in Found do
+      if (S.Kind in DECL_KINDS) and SameText(S.Name, Bare) then
+      begin
+        ASym  := S;
+        AStore:= St;
+        Exit(True);
+      end;
+  end;
+  Result:= False;
+end;
+
+// 1.38 (D2): an enum member's name after its lowercase prefix (scoWait ->
+// 'Wait'); '' when the name has no such prefix or nothing after it.
+function EnumMemberStem(const AName: string): string;
+begin
+  var I: Integer:= 1;
+  while (I <= Length(AName)) and CharInSet(AName[I], ['a'..'z']) do Inc(I);
+  Result:= if (I = 1) or (I > Length(AName)) then '' else Copy(AName, I, MaxInt);
+end;
+
+// 1.38 (D2): True when the #migrate ARule of #convert block ABlock (0 = file
+// scope) renames an IDENTIFIER in code -- PlanIdentifierMigrates' job -- and
+// not a member of the block's converted instances (PlanMigrateSites'): every
+// file-scope rule, and a plain in-block rule that names uses units or whose
+// New is an enum value.
+function MigrateIsIdentifier(const ATrees: TConvertTreeCache; const ARule: TConversionRule; ABlock: Integer): Boolean;
+begin
+  if ARule.Kind <> rkMigrate then Exit(False);
+  if ABlock = 0 then Exit(True);
+  if (ARule.Scope <> '') or not IsValidIdent(ARule.Old) or not IsValidIdent(ARule.New) or
+     SameText(ARule.New, DL_NONE_MARK) then Exit(False);
+  if Length(ARule.UnitsAdd) > 0 then Exit(True);
+  { a member name is PascalCase; only an enum-literal spelling is looked up }
+  if EnumMemberStem(ARule.New) = '' then Exit(False);
+  var Sym: TSymbol;
+  var St : ISymbolStore;
+  Result:= ResolveMigrateTarget(ATrees, ARule.New, Sym, St) and (Sym.Kind = skEnumValue);
+end;
+
 // The precedence of the link-given pas_uses statuses (higher wins).
 function PasStatusRank(const AStatus: string): Integer;
 const
@@ -5093,7 +5150,7 @@ begin
     begin
       if (M.Kind <> rkMigrate) or (MigrateRuleRefusal(M) <> '') then Continue;
       var MBlock: Integer:= LinkRuleBlock(AIn.Book.Rules, M);
-      if MBlock = 0 then Continue; { file scope: not a member migration }
+      if MigrateIsIdentifier(AIn.Trees, M, MBlock) then Continue; { 1.38: an identifier, not a member migration }
       for var N: string in ScopeFromBlocks(AIn.Converted, Blocks, MBlock) do
         if Cover.TryAdd(UpperCase(N + '|' + M.Old), PAS_USE_MAPPED) and not SameText(M.Old, M.New) then
           MigTo.TryAdd(UpperCase(N + '|' + M.Old), M.New); { G4 }
@@ -5133,9 +5190,10 @@ end;
 // ExpectText. NEVER rewritten, each a migrate-check warning: a site the index
 // cannot vouch for, a `with` naming the instance, a site whose text changed
 // since it was indexed, and a whole rule MigrateRuleRefusal declines or whose
-// member a #link (or an earlier #migrate) of the block already converts. A
-// file-scope #migrate (before the first #convert) is not a member migration
-// and is left alone, as before. An already wrapped site gets no second wrap.
+// member a #link (or an earlier #migrate) of the block already converts. An
+// identifier #migrate (MigrateIsIdentifier: file scope, uses units, or an enum
+// value target) is PlanIdentifierMigrates' (1.38). An already wrapped site
+// gets no second wrap.
 procedure PlanMigrateSites(const AIn: TPasUsesInput; const AUnitPas: string;
   out AEdits: TArray<TTextEdit>; out AItems: TArray<TApplyItem>);
 var
@@ -5268,7 +5326,7 @@ begin
         Inc(Block);
         Conv:= R;
       end;
-      if (R.Kind <> rkMigrate) or (Block = 0) then Continue;
+      if (R.Kind <> rkMigrate) or MigrateIsIdentifier(AIn.Trees, R, Block) then Continue; { 1.38: PlanIdentifierMigrates }
       var Scope: TArray<string>:= ScopeFromBlocks(AIn.Converted, Blocks, Block);
       if Length(Scope) = 0 then Continue; { no instance of this block in the unit }
       var Why: string:= MigrateRuleRefusal(R);
@@ -5304,6 +5362,342 @@ begin
     Said.Free;
     Taken.Free;
     Blocks.Free;
+  end;
+end;
+
+// 1.38 (D2): the index just past the comment that opened before AI of ALine
+// (ABrace: '{...}', else '(*...*)'); 0 when it does not close on this line.
+function PasCommentEnd(const ALine: string; AI: Integer; ABrace: Boolean): Integer;
+begin
+  var P: Integer:= if ABrace then PosEx('}', ALine, AI) else PosEx('*)', ALine, AI);
+  Result:= if P = 0 then 0 else P + (if ABrace then 1 else 2);
+end;
+
+// 1.38 (D2): the index just past the string literal whose opening quote is at
+// AI of ALine ('' inside it is an escaped quote).
+function PasQuotedEnd(const ALine: string; AI: Integer): Integer;
+begin
+  Result:= AI + 1;
+  while Result <= Length(ALine) do
+    if ALine[Result] <> '''' then Inc(Result)
+    else if (Result < Length(ALine)) and (ALine[Result + 1] = '''') then Inc(Result, 2)
+    else Exit(Result + 1);
+end;
+
+type
+  // 1.38 (D2): one identifier token -- its 1-based line, first column and the
+  // column past its end (characters).
+  TPasIdentToken = record
+    Line, Col, EndCol: Integer;
+  end;
+
+// 1.38 (D2): every identifier token of ALines outside comments ({...},
+// (*...*), //...), compiler directives and string literals; char / hex /
+// number literals and escaped &identifiers are skipped.
+function ScanPasIdentifiers(const ALines: TStringList): TArray<TPasIdentToken>;
+begin
+  var Found: TList<TPasIdentToken>:= TList<TPasIdentToken>.Create;
+  try
+    var Open: Integer:= 0; // 0 none, 1 a brace comment, 2 a paren-star comment
+    for var LineNo: Integer:= 1 to ALines.Count do
+    begin
+      var S: string:= ALines[LineNo - 1];
+      var I: Integer:= 1;
+      while I <= Length(S) do
+      begin
+        if Open <> 0 then
+        begin
+          var Past: Integer:= PasCommentEnd(S, I, Open = 1);
+          if Past = 0 then Break;
+          I   := Past;
+          Open:= 0;
+          Continue;
+        end;
+        var Two: string:= Copy(S, I, 2);
+        if Two = '//' then Break;
+        if S[I] = '{' then
+        begin
+          Open:= 1;
+          Inc(I);
+        end
+        else if Two = '(*' then
+        begin
+          Open:= 2;
+          Inc(I, 2);
+        end
+        else if S[I] = '''' then I:= PasQuotedEnd(S, I)
+        else if CharInSet(S[I], ['#', '$', '&', '0'..'9', 'A'..'Z', 'a'..'z', '_']) then
+        begin
+          var Tok: TPasIdentToken;
+          Tok.Line:= LineNo;
+          Tok.Col := I;
+          Inc(I);
+          while (I <= Length(S)) and IsIdentChar(S[I]) do Inc(I);
+          Tok.EndCol:= I;
+          if CharInSet(S[Tok.Col], ['A'..'Z', 'a'..'z', '_']) then Found.Add(Tok);
+        end
+        else Inc(I);
+      end;
+    end;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
+end;
+type
+  // 1.38 (D2): one identifier PlanIdentifierMigrates renames -- a rule's own
+  // Old, or an enum member its type #migrate maps by name.
+  TIdentMigrate = record
+    Old, New : string;
+    FromType : string;          { the rule's Old type (an enum member: its enum) }
+    ToType   : string;          { the rule's New }
+    UsesType : string;          { the declaration whose unit the uses clause needs }
+    Qualifier: string;          { the From enum a member may be qualified with }
+    Refusal  : string;          { '' renames; else why each site is a warning }
+    ByName   : Boolean;         { mapped by EnumMemberStem, not by a book line }
+    Rule     : TConversionRule;
+  end;
+
+// 1.38 (owner ruling D2, 2026-10-28; INBOX converter-to-engine-migrate-type
+// Q1): the identifier #migrate rules (MigrateIsIdentifier) realised in the
+// unit's CODE. Every bare identifier token Old outside comments, string
+// literals and directives -- a var / param / field / result type, a cast, an
+// `is` / `as` operand, a generic argument, an enum literal -- becomes New.
+// The target must resolve in a supplied store (ResolveMigrateTarget). A type
+// #migrate between two enums also maps each From member to the To member with
+// the same EnumMemberStem (never by ordinal); an explicit #migrate line for a
+// member overrides that. NEVER silent: a site that is not renamed is a
+// migrate-check warning -- the target resolves nowhere, the member has no
+// counterpart, Old is declared in this unit or a #convert converts it, or the
+// site is qualified (Unit.Old; only From-enum qualification is renamed).
+// The From side is trusted, not resolved: a type no index knows is renamed
+// all the same (its members are then mapped only by explicit lines, said
+// once). AUsesTypes are the declarations whose unit the uses clause needs,
+// AIntfTypes those with a site in the interface section.
+procedure PlanIdentifierMigrates(const AIn: TPasUsesInput; const AUnitPas: string;
+  out AEdits: TArray<TTextEdit>; out AItems: TArray<TApplyItem>; out AUsesTypes, AIntfTypes: TArray<string>);
+var
+  Map  : TDictionary<string, TIdentMigrate>;  { UPPER Old -> its rename }
+  Own  : TDictionary<string, Boolean>;        { UPPER names this unit declares }
+  Enums: TList<TIdentMigrate>;                { type rules whose New is an enum }
+  Edits: TList<TTextEdit>;
+  Items: TList<TApplyItem>;
+  UsesT: TList<string>;
+  IntfT: TList<string>;
+  ImplLine: Integer;
+
+  function Item(AKind: TApplyItemKind; AField: TApplyField; const AM: TIdentMigrate; ALine: Integer;
+    const AText: string): TApplyItem;
+  begin
+    Result:= Default(TApplyItem);
+    Result.Kind    := AKind;
+    Result.Field   := AField;
+    Result.FromType:= AM.FromType;
+    Result.ToType  := AM.ToType;
+    Result.FilePath:= AUnitPas;
+    Result.Path    := AM.Old;
+    Result.Value   := AM.New;
+    Result.OldValue:= AM.Old;
+    Result.RuleLine:= AM.Rule.LineNo;
+    Result.Line    := ALine;
+    Result.Text    := AText;
+  end;
+
+  { the explicit rule R as a map entry (its refusal, if any, decided here) }
+  procedure AddRule(const R: TConversionRule);
+  var
+    M  : TIdentMigrate;
+    Sym: TSymbol;
+    St : ISymbolStore;
+  begin
+    M  := Default(TIdentMigrate);
+    Sym:= Default(TSymbol);
+    St := nil;
+    M.Old     := R.Old;
+    M.New     := R.New;
+    M.FromType:= R.Old;
+    M.ToType  := R.New;
+    M.Rule    := R;
+    if R.Scope <> '' then M.Refusal:= 'a scoped #migrate (Class: / obj.) is not applied yet'
+    else if not IsValidIdent(R.Old) then M.Refusal:= 'only a plain identifier is migrated; call and assignment forms are not applied yet'
+    else if R.New = '' then M.Refusal:= 'it names no replacement'
+    else if SameText(R.New, DL_NONE_MARK) then M.Refusal:= 'DL_NONE marks member sites; an identifier #migrate needs a replacement'
+    else if not IsValidIdent(R.New, True) then M.Refusal:= 'replacement templates are not applied yet'
+    else if Own.ContainsKey(UpperCase(R.Old)) then M.Refusal:= Format('%s is declared in this unit', [R.Old])
+    else if not ResolveMigrateTarget(AIn.Trees, R.New, Sym, St) then
+      M.Refusal:= Format('the target %s resolves in no supplied index (library or project)', [R.New]);
+    for var C: TConversionRule in AIn.Book.Rules.Rules do
+      if (M.Refusal = '') and (C.Kind = rkConvert) and SameText(BareTypeTail(C.FromType), R.Old) then
+        M.Refusal:= Format('book line %d converts %s', [C.LineNo, R.Old]);
+    if not IsValidIdent(R.Old) then
+    begin
+      { no token to find: the rule itself is the warning }
+      Items.Add(Item(aikMigrateCheck, afWarnings, M, 0, Format('line %d: #migrate %s -> %s NOT applied -- %s; convert its sites by hand',
+        [R.LineNo, R.Old, R.New, M.Refusal])));
+      Exit;
+    end;
+    if M.Refusal = '' then
+    begin
+      M.New     := Sym.Name;
+      M.UsesType:= Sym.Name;
+      if Sym.Kind = skEnumValue then
+      begin
+        { the enum the value belongs to: Unit.TEnum.member -> TEnum }
+        var Q: string:= Sym.QualifiedName;
+        M.UsesType:= BareTypeTail(Copy(Q, 1, LastDelimiter('.', Q) - 1));
+      end;
+      if Sym.Kind = skEnum then Enums.Add(M);
+    end;
+    if not Map.TryAdd(UpperCase(M.Old), M) then
+      Items.Add(Item(aikMigrateCheck, afWarnings, M, 0, Format('line %d: #migrate %s -> %s NOT applied -- book line %d already migrates %s',
+        [R.LineNo, R.Old, R.New, Map[UpperCase(M.Old)].Rule.LineNo, R.Old])));
+  end;
+
+  { the members of the enum type rule AT, mapped by stem unless a line maps them }
+  procedure AddMembers(const AT: TIdentMigrate);
+  var
+    FromSym, ToSym: TSymbol;
+    FromSt, ToSt  : ISymbolStore;
+  begin
+    if not (ResolveMigrateTarget(AIn.Trees, AT.Old, FromSym, FromSt) and (FromSym.Kind = skEnum)) then
+    begin
+      Items.Add(Item(aikMigrateCheck, afWarnings, AT, 0, Format('line %d: #migrate %s -> %s: %s resolves in no supplied index, so its enum ' +
+        'members are not mapped by name -- only explicit #migrate member lines rename them', [AT.Rule.LineNo, AT.Old, AT.New, AT.Old])));
+      Exit;
+    end;
+    ResolveMigrateTarget(AIn.Trees, AT.New, ToSym, ToSt);
+    var ToMembers: TArray<TSymbol>:= ToSt.FindAllChildSymbols(ToSym.Id);
+    for var FM: TSymbol in FromSt.FindAllChildSymbols(FromSym.Id) do
+    begin
+      if FM.Kind <> skEnumValue then Continue;
+      var Prior: TIdentMigrate;
+      if Map.TryGetValue(UpperCase(FM.Name), Prior) then
+      begin
+        { an explicit line wins; it may be qualified with the From enum too }
+        if Prior.Qualifier = '' then
+        begin
+          Prior.Qualifier:= AT.Old;
+          Map[UpperCase(FM.Name)]:= Prior;
+        end;
+        Continue;
+      end;
+      var M: TIdentMigrate:= AT;
+      M.Old      := FM.Name;
+      M.New      := '';
+      M.Qualifier:= AT.Old;
+      M.ByName   := True;
+      var Stem: string:= EnumMemberStem(FM.Name);
+      var Hits: Integer:= 0;
+      for var TM: TSymbol in ToMembers do
+        if (TM.Kind = skEnumValue) and (Stem <> '') and SameText(EnumMemberStem(TM.Name), Stem) then
+        begin
+          Inc(Hits);
+          M.New:= TM.Name;
+        end;
+      if Hits <> 1 then
+      begin
+        M.New:= '';
+        M.Refusal:= Format('enum member %s of %s has %s in %s by its name after the lowercase prefix ("%s"); add #migrate %s -> <member>',
+          [FM.Name, AT.Old, if Hits = 0 then 'no counterpart' else Format('%d counterparts', [Hits]), AT.New, Stem, FM.Name]);
+      end;
+      Map.Add(UpperCase(FM.Name), M);
+    end;
+  end;
+
+  { one identifier token Tok of line ALineNo at [AStart, AEnd) }
+  procedure Site(ALineNo, AStart, AEnd: Integer; const ALine, ATok: string);
+  var
+    M: TIdentMigrate;
+    E: TTextEdit;
+  begin
+    if (ImplLine = 0) and SameText(ATok, 'implementation') then ImplLine:= ALineNo;
+    if not Map.TryGetValue(UpperCase(ATok), M) then Exit;
+    var Where: string:= Format('%s:%d', [ExtractFileName(AUnitPas), ALineNo]);
+    { Unit.Old / obj.Old: only From-enum qualification renames (never a range '..') }
+    var Q: Integer:= AStart - 1;
+    while (Q >= 1) and (ALine[Q] = ' ') do Dec(Q);
+    if (Q >= 2) and (ALine[Q] = '.') and (ALine[Q - 1] <> '.') then
+    begin
+      var QEnd: Integer:= Q - 1;
+      while (QEnd >= 1) and (ALine[QEnd] = ' ') do Dec(QEnd);
+      var QStart: Integer:= QEnd;
+      while (QStart > 1) and IsIdentChar(ALine[QStart - 1]) do Dec(QStart);
+      var Qual: string:= Copy(ALine, QStart, QEnd - QStart + 1);
+      if (M.Qualifier = '') or not SameText(Qual, M.Qualifier) then
+      begin
+        Items.Add(Item(aikMigrateCheck, afWarnings, M, ALineNo, Format('#migrate site %s %s.%s is qualified -- not renamed; convert it by hand',
+          [Where, Qual, ATok])));
+        Exit;
+      end;
+    end;
+    if M.Refusal <> '' then
+    begin
+      Items.Add(Item(aikMigrateCheck, afWarnings, M, ALineNo, Format('#migrate site %s %s NOT renamed -- %s', [Where, ATok, M.Refusal])));
+      Exit;
+    end;
+    if ATok = M.New then Exit; { already the target spelling }
+    E:= Default(TTextEdit);
+    E.FilePath  := AUnitPas;
+    E.Kind      := tekReplaceInLine;
+    E.Line      := ALineNo;
+    E.Col       := AStart;
+    E.EndCol    := AEnd;
+    E.Text      := M.New;
+    E.ExpectText:= ATok;
+    Edits.Add(E);
+    var It: TApplyItem:= Item(aikMigrateApplied, afAccessSites, M, ALineNo, Format('%s -> %s (L%d, #migrate line %d%s)',
+      [ATok, M.New, ALineNo, M.Rule.LineNo, if M.ByName then ', enum member by name' else '']));
+    It.OldValue:= ATok;
+    Items.Add(It);
+    if not MatchText(M.UsesType, UsesT.ToArray) then UsesT.Add(M.UsesType);
+    if (ImplLine = 0) and not MatchText(M.UsesType, IntfT.ToArray) then IntfT.Add(M.UsesType);
+  end;
+
+begin
+  AEdits    := nil;
+  AItems    := nil;
+  AUsesTypes:= nil;
+  AIntfTypes:= nil;
+  if (AIn.PasLines = nil) or (AIn.Trees = nil) then Exit;
+  Map  := TDictionary<string, TIdentMigrate>.Create;
+  Own  := TDictionary<string, Boolean>.Create;
+  Enums:= TList<TIdentMigrate>.Create;
+  Edits:= TList<TTextEdit>.Create;
+  Items:= TList<TApplyItem>.Create;
+  UsesT:= TList<string>.Create;
+  IntfT:= TList<string>.Create;
+  try
+    var Block: Integer:= 0;
+    var Any  : Boolean:= False;
+    for var R: TConversionRule in AIn.Book.Rules.Rules do
+    begin
+      if R.Kind = rkConvert then Inc(Block);
+      if not MigrateIsIdentifier(AIn.Trees, R, Block) then Continue;
+      if not Any and (AIn.Store <> nil) then
+        for var S: TSymbol in AIn.Store.FindSymbolsByFile(AUnitPas) do Own.AddOrSetValue(UpperCase(S.Name), True);
+      Any:= True;
+      AddRule(R);
+    end;
+    if not Any then Exit;
+    for var T: TIdentMigrate in Enums do AddMembers(T);
+    ImplLine:= 0;
+    for var Tok: TPasIdentToken in ScanPasIdentifiers(AIn.PasLines) do
+    begin
+      var Ln: string:= AIn.PasLines[Tok.Line - 1];
+      Site(Tok.Line, Tok.Col, Tok.EndCol, Ln, Copy(Ln, Tok.Col, Tok.EndCol - Tok.Col));
+    end;
+    AEdits    := Edits.ToArray;
+    AItems    := Items.ToArray;
+    AUsesTypes:= UsesT.ToArray;
+    AIntfTypes:= IntfT.ToArray;
+  finally
+    IntfT.Free;
+    UsesT.Free;
+    Items.Free;
+    Edits.Free;
+    Enums.Free;
+    Own.Free;
+    Map.Free;
   end;
 end;
 
@@ -7054,6 +7448,15 @@ begin
     PlanMigrateSites(PU, AUnitPas, MigEdits, MigItems); { C18 slice 1 }
     for var ME: TTextEdit in MigEdits do Edits.Add(ME);
     for var MI: TApplyItem in MigItems do Emit(MI);
+    { 1.38 (D2): identifier #migrate rules -- the unit of each renamed target
+      joins the To types the uses surface adds }
+    var IdUses, IdIntf: TArray<string>;
+    PlanIdentifierMigrates(PU, AUnitPas, MigEdits, MigItems, IdUses, IdIntf);
+    for var ME: TTextEdit in MigEdits do Edits.Add(ME);
+    for var MI: TApplyItem in MigItems do Emit(MI);
+    for var UT: string in IdUses do
+      if DoneUnits.TryAdd(UT, True) then ToTypesSeen.Add(UT);
+    for var UT: string in IdIntf do IntfToTypes.AddOrSetValue(UT, True);
     Result.Report.PasUses:= CollectPasUses(PU); { 1.27.0; PlanUsesAdditions appends the globals }
     var UsesPlan: TUsesPlan;
     var UnitAdds    : TArray<string>:= nil;
