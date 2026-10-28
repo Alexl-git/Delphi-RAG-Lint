@@ -100,11 +100,11 @@
     "version": "1.35.1-alpha"
   },
   "features/compliance-labels.md": {
-    "hash": "6a333967481e178e4c2ea9ce5385fbecd69653671650d3067a0b8c41dd8716a5",
+    "hash": "cf139b2b97991a8ba149795235f8fabe9055d47d03f649cc4608369825bd1a6c",
     "version": "1.36.0-alpha"
   },
   "features/context.md": {
-    "hash": "24130a0ed43c381bc20e7362b2206dc85f0401436e7adac907b031dccd93e004",
+    "hash": "d538aaa4bdeb9548c8f52942f21b145d55768ababbd124b0b19d54f6478bcd9c",
     "version": "1.36.0-alpha"
   },
   "features/convert-apply-migrate.md": {

@@ -983,6 +983,7 @@ function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; f
 function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
 function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
+function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
@@ -14637,7 +14638,11 @@ end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
 //   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs]
+//   [--library-db LIBRARY]
 // Builds a TContextBundle and renders it in the requested format.
+// RSV-R2: with --library-db (or a second --db), the "Library calls" count also
+// includes calls whose receiver type the library oracle binds now (read-only,
+// degrades to the stored-only count when the library cannot be opened).
 // Exit 2 on usage error, 1 if symbol not found, 0 on success.
 function DoContext(const AArgs: TArgs): Integer;
 var
@@ -14646,19 +14651,33 @@ var
   IncDocs   : Boolean       ;
   IncSurface: Boolean       ;
   IncImpl   : Boolean       ;
+  Oracle    : TLibraryOracle;
 begin
-  if AArgs.Task = '' then begin Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw]'); Exit(2); end;
+  if AArgs.Task = '' then begin Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw] [--library-db LIBRARY]'); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'context') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  var ProjectDb: string:= AArgs.DbPath;
+  var LibraryDb: string:= FindCalleesLibraryDb(AArgs, ProjectDb);
+  if not TFile.Exists(ProjectDb) then begin Writeln(Format('Database not found: %s', [ProjectDb])); Exit(2); end;
   var RoOk: Boolean;
-  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(1);
+  { The library is opened read-only and never written; one that cannot be opened is
+    a stderr NOTE and the stored-only count, never an error (as find-callees). }
+  Oracle:= nil;
+  if LibraryDb <> '' then
+  begin
+    var LibOk: Boolean;
+    var LibStore: ISymbolStore:= OpenReadOnlyStore(LibraryDb, LibOk, {AQuiet=}True);
+    if LibOk then Oracle:= TLibraryOracle.Create([LibStore])
+    else Writeln(ErrOutput, 'NOTE: context: the library index could not be opened (', LibraryDb, '); counting stored library calls only.');
+  end;
+  try
   IncDocs:= not AArgs.NoDocs;
   IncSurface:= AArgs.IncludeClassSurface;
   IncImpl:= SameText(AArgs.Verb, 'modify') or SameText(AArgs.Verb, 'refactor') or SameText(AArgs.Verb, 'extend');
   Bundle:= TContextBundler.Build(
     Store, AArgs.Verb, AArgs.BundleQName, AArgs.ContextLines, AArgs.MaxCallers, IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=}
-    not AArgs.FullSurface, {ATaskText=}AArgs.Task);
+    not AArgs.FullSurface, {ATaskText=}AArgs.Task, {AOracle=}Oracle);
 
   { THE OLD TEST HERE WAS `Bundle.QName = ''`, AND IT WAS DEAD. Build stamps
     QName with what the caller asked for BEFORE it looks anything up, so it is
@@ -14688,6 +14707,9 @@ begin
   else if SameText(AArgs.Format, 'raw') then Writeln(TContextBundler.RenderRaw(Bundle))
   else Writeln(TContextBundler.RenderMarkdown(Bundle));
   Result:= 0;
+  finally
+    Oracle.Free;
+  end; // try
 end; // function
 
 // v0.18: drag-lint bench-context [--db PATH] [--n N]

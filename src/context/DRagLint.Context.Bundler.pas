@@ -14,6 +14,7 @@ uses
   , System  .Generics.Collections
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
+  , DRagLint.Index   .LibraryOracle { TLibraryOracle -- the opt-in query-time Library calls count (RSV-R2) }
   ;
 
 type
@@ -40,6 +41,12 @@ type
       /// lookup entirely, so every existing caller is unaffected. Honoured only
       /// when AIncludeDocs is set -- <c>--no-docs</c> means no prose, and a
       /// concept body is prose.</param>
+      /// <param name="AOracle">Optional library oracle (RSV-R2). When set, a call in the target's
+      /// body that carries NO stored external_target but whose receiver type text the oracle
+      /// binds to exactly one library member counts toward "Library calls" as well
+      /// (LibraryCallVia = 'oracle' if at least one such hit was added, else 'stored').
+      /// nil (the default) keeps the stored-only count and never touches a library. The
+      /// caller owns the oracle and the stores behind it.</param>
       /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -56,7 +63,7 @@ type
       /// </remarks>
       class function Build(
         const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
+        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil): TContextBundle;
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
@@ -340,14 +347,31 @@ begin
   end;
 end; // function
 
-{ Library calls (item 4 / C3): one query per target id, counted from the stored
-  external_target; nothing is bound here, so a project indexed without a library
-  gets count 0 and the line stays out of the bundle. ACount is incremented (the
+{ The library routine the oracle binds for one unresolved call that has no stored
+  external_target, or '' (no oracle, no receiver type text, or a decline). Same
+  binding find-callees uses (EmitExternalCallees): the receiver type text is
+  split at its first dot into the type and the pending member chain. }
+function OracleTarget(const AStore: ISymbolStore; AOracle: TLibraryOracle; const ARef: TReference): string;
+begin
+  Result:= '';
+  if (AOracle = nil) or (ARef.ReceiverTypeText = '') then Exit;
+  var Dot: Integer:= Pos('.', ARef.ReceiverTypeText);
+  var TypeText: string:= (if Dot > 0 then Copy(ARef.ReceiverTypeText, 1, Dot - 1) else ARef.ReceiverTypeText);
+  var Pending : string:= (if Dot > 0 then Copy(ARef.ReceiverTypeText, Dot + 1, MaxInt) else '');
+  var UsedUnits: TArray<string>:= nil;
+  for var U: TUnitUse in AStore.GetUnitUsesForFile(ARef.FileId) do UsedUnits:= UsedUnits + [LowerCase(U.UnitName)];
+  var Reason: string;
+  Result:= AOracle.Bind(TypeText, Pending, ARef.NameText, ekCall, UsedUnits, Reason);
+end; // function
+
+{ Library calls (item 4 / C3, RSV-R2): one query per target id, counted from the stored
+  external_target and, when AOracle is set, from calls the oracle binds now; with
+  neither, a project indexed without a library gets count 0 and the line stays out of the bundle. ACount is incremented (the
   caller's bundle starts zeroed); ATop receives at most LIBRARY_CALLS_TOP targets,
   most-called first, ties in first-seen order. Split out of TContextBundler.Build
   to keep that routine under the cyclomatic-complexity limit. }
-procedure CollectLibraryCalls(const AStore: ISymbolStore; const ATargetIds: TArray<Int64>;
-  var ACount: Integer; var ATop: TArray<string>);
+procedure CollectLibraryCalls(const AStore: ISymbolStore; AOracle: TLibraryOracle; const ATargetIds: TArray<Int64>;
+  var ACount: Integer; var ATop: TArray<string>; var AVia: string);
 var
   LibCounts: TDictionary<string, Integer>;
   LibOrder : TList<string>               ;
@@ -358,18 +382,26 @@ begin
   try
     LibOrder:= TList<string>.Create;
     try
+      AVia:= '';
       for var TId: Int64 in ATargetIds do
         for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
-          if LR.ExternalTarget <> '' then
+        begin
+          var Target: string:= LR.ExternalTarget;
+          if Target <> '' then AVia:= (if AVia = '' then 'stored' else AVia)
+          else
           begin
-            Inc(ACount);
-            if LibCounts.TryGetValue(LR.ExternalTarget, Seen) then LibCounts[LR.ExternalTarget]:= Seen + 1
-            else
-            begin
-              LibCounts.Add(LR.ExternalTarget, 1);
-              LibOrder.Add(LR.ExternalTarget);
-            end;
+            Target:= OracleTarget(AStore, AOracle, LR);
+            if Target <> '' then AVia:= 'oracle';
           end;
+          if Target = '' then Continue;
+          Inc(ACount);
+          if LibCounts.TryGetValue(Target, Seen) then LibCounts[Target]:= Seen + 1
+          else
+          begin
+            LibCounts.Add(Target, 1);
+            LibOrder.Add(Target);
+          end;
+        end;
       while (Length(ATop) < LIBRARY_CALLS_TOP) and (LibOrder.Count > 0) do
       begin
         Best:= 0;
@@ -388,7 +420,7 @@ end; // procedure
 
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
+  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil): TContextBundle;
 var
   Syms       : TArray<TSymbol>   ;
   Sym        : TSymbol           ;
@@ -639,7 +671,7 @@ begin
     Result.Callers[I]:= BC;
   end;
 
-  CollectLibraryCalls(AStore, TargetIds, Result.LibraryCallCount, Result.LibraryCallTop);
+  CollectLibraryCalls(AStore, AOracle, TargetIds, Result.LibraryCallCount, Result.LibraryCallTop, Result.LibraryCallVia);
 
   // Impact summary (for refactor/delete verbs)
   if SameText(AVerb, 'refactor') or SameText(AVerb, 'delete') then Result.ImpactSummary:= AStore.FindTransitiveCallers(CallerName, 2);
@@ -872,7 +904,7 @@ begin
   begin
     var Quoted: TArray<string>:= nil;
     for I:= 0 to High(ABundle.LibraryCallTop) do Quoted:= Quoted + ['"' + JsonEscape(ABundle.LibraryCallTop[I]) + '"'];
-    LibJson:= Format(',"library_calls":{"count":%d,"top":[%s]}', [ABundle.LibraryCallCount, string.Join(',', Quoted)]);
+    LibJson:= Format(',"library_calls":{"count":%d,"via":"%s","top":[%s]}', [ABundle.LibraryCallCount, ABundle.LibraryCallVia, string.Join(',', Quoted)]);
   end;
 
   Result:= Format(

@@ -232,7 +232,7 @@ Described in [compile-check](../../docs/wiki/compile-check.md).
 Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers.
 
 ```text
-drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)
+drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>] (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -244,6 +244,7 @@ drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw
 | `--full-surface` |  |  |  |
 | `--max-callers` | `N` |  |  |
 | `--context` | `N` |  |  |
+| `--library-db` | `<library.sqlite>` |  |  |
 
 Described in [context](../../docs/wiki/context.md).
 
