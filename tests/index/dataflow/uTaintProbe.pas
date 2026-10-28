@@ -54,6 +54,7 @@ type
     procedure ArgRtlValue;
     procedure ArgUnresolved;
     procedure ArgTryGet(D: TObject);
+    procedure HardCast(O: TObject; const A: string);
   end;
 
 procedure Sink(const S: string);
@@ -261,6 +262,17 @@ begin
   TDictionary<string, string>(D).TryGetValue(K, V); { M-ARGTRY-CALL }
   Sink(K); { M-ARGTRY-K }
   Sink(V); { M-ARGTRY-V }
+end;
+
+{ ref-gap G5: a hard-cast receiver. The write must give a 'write' row and the read a src 'ref' row,
+  each landing on the parser's member-access refs row }
+procedure TProbe.HardCast(O: TObject; const A: string);
+var
+  X: string;
+begin
+  TEditStub(O).Text:= A; { M-G5WRITE }
+  X:= TEditStub(O).Text; { M-G5READ }
+  Sink(X); { M-G5SINK }
 end;
 
 end.

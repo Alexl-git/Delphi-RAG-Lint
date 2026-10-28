@@ -79,13 +79,13 @@ def rows(routine):
 routines = ['TrimParam','SinkParam','ViaLocal','Killed','Branch','Loop','LiteralOnly','Quoted',
             'NumericOnly','WithBody','ExitValue','SelfIndex','SetField','ReadField','SetGlobal',
             'GetName','UseOut','ListCarrier','ShellRecord','LambdaCapture','BigRoutine','CapRoutine',
-            'ArgValueOnly','ArgRtlValue','ArgUnresolved','ArgTryGet']
+            'ArgValueOnly','ArgRtlValue','ArgUnresolved','ArgTryGet','HardCast']
 out['rows'] = {r: rows(r) for r in routines}
 out['markers'] = {m: line_of(m) for m in ['M-TRIM','M-SINKPARAM','M-VIALOCAL-SRC','M-VIALOCAL-DST',
     'M-KILL-SRC','M-KILL-DST','M-BRANCH','M-LOOP','M-QUOTED','M-EXIT','M-SELFINDEX','M-SETFIELD',
     'M-READFIELD','M-SETGLOBAL','M-READGLOBAL','M-OUTPARAM','M-ARGOUT-CALL','M-ARGOUT-SINK',
     'M-LIST','M-SHELLREC','M-LAMBDA','M-ARGVAL-SINK','M-ARGRTL-SINK','M-ARGUNRES-CALL','M-ARGUNRES-SINK',
-    'M-ARGTRY-CALL','M-ARGTRY-K','M-ARGTRY-V']}
+    'M-ARGTRY-CALL','M-ARGTRY-K','M-ARGTRY-V','M-G5WRITE','M-G5READ','M-G5SINK']}
 out['total'] = c.execute('select count(*) from data_flows').fetchone()[0]
 out['orphans'] = c.execute('select count(*) from data_flows d left join symbols s on s.id = d.symbol_id where s.id is null').fetchone()[0]
 miss = c.execute("""select d.dst_kind, d.dst_line, d.dst_col, d.dst_name from data_flows d
@@ -155,6 +155,8 @@ Check 'ArgTryGet: POSITIVE CONTROL -- the ParamStr ref reaches Sink(K)' (Has $Rw
 Check 'container: L.Add(A); Sink(L.Text)' (Has $Rw.ListCarrier { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-LIST' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 -and $_.via_local -eq 1 })
 Check 'record member: Info.lpFile := PChar(A); ShellExecuteEx(@Info)' (Has $Rw.ShellRecord { $_.dst_kind -eq 'arg' -and $_.dst_name -eq 'ShellExecuteEx' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 })
 Check 'record member write row Info.lpFile' (Has $Rw.ShellRecord { $_.dst_kind -eq 'write' -and $_.dst_name -eq 'lpFile' -and $_.dst_receiver -eq 'Info' -and $_.src_kind -eq 'param' })
+Check 'G5 hard-cast write TEditStub(O).Text := A gives a write row' (Has $Rw.HardCast { $_.dst_kind -eq 'write' -and $_.dst_name -eq 'Text' -and $_.dst_line -eq $M.'M-G5WRITE' -and $_.src_kind -eq 'param' -and $_.src_index -eq 1 })
+Check 'G5 hard-cast read X := TEditStub(O).Text gives a src ref row' (Has $Rw.HardCast { $_.src_kind -eq 'ref' -and $_.src_name -eq 'Text' -and $_.src_line -eq $M.'M-G5READ' })
 Check 'lambda body sees the captured local (cond 1)' (Has $Rw.LambdaCapture { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-LAMBDA' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 -and $_.cond -eq 1 })
 
 Write-Host 'Fallback and cap' -ForegroundColor Cyan
