@@ -64,6 +64,20 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// raise-bare-exception) are NOT built here -- see the implementation comment.</remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 
+/// <summary>Drops every finding's edits that overlap an edit of an EARLIER
+/// finding in the same file, so one --fix pass never writes mixed bytes.</summary>
+/// <param name="AEdits">The pass's edits, in finding order (BuildAutofixEdits
+/// order); owned edits carry TTextEdit.Owner.</param>
+/// <param name="ADeferredOwners">Out: the FixOwnerKey of each finding whose edits
+/// were withheld -- the next --fix pass, which re-lints, applies them.</param>
+/// <returns>AEdits minus the deferred findings' edits, order kept.</returns>
+/// <remarks>A finding is kept or deferred WHOLE. Unowned edits (the store-backed
+/// builders) are always kept and win any conflict. Overlap: two line ranges
+/// (delete / replace-lines) sharing a line; an in-line replace on a line a range
+/// covers; two in-line replaces on one line whose column spans intersect; an
+/// insert strictly inside a range. Edits of the SAME finding never conflict here.
+/// Pure; never raises.</remarks>
+function DeferConflictingFixes(const AEdits: TArray<TTextEdit>; out ADeferredOwners: TArray<string>): TArray<TTextEdit>;
 /// <summary>The key that ties an edit to the finding that produced it.</summary>
 /// <param name="AFinding">The finding.</param>
 /// <returns>Lower-cased `file|StartLine|rule`; BuildAutofixEdits stores it in
@@ -184,6 +198,93 @@ var
   { the generic sidecar fixer (DRagLint.Fix.Templates installs it) }
   GSidecarFixer: TFindingFixer;
 
+{ The line span an edit occupies, for DeferConflictingFixes. In-line replaces
+  and inserts occupy one line; an insert after line L sits between L and L+1. }
+function EditSpanFirst(const E: TTextEdit): Integer;
+begin
+  Result:= E.Line;
+end;
+
+function EditSpanLast(const E: TTextEdit): Integer;
+begin
+  Result:= if (E.Kind in [tekDeleteLines, tekReplaceLines]) and (E.EndLine > E.Line) then E.EndLine else E.Line;
+end;
+
+function EditsConflict(const A, B: TTextEdit): Boolean;
+const
+  RANGE_KINDS = [tekDeleteLines, tekReplaceLines];
+begin
+  if not SameText(A.FilePath, B.FilePath) then Exit(False);
+  if (A.Kind = tekInsertLines) and (B.Kind = tekInsertLines) then Exit(False);
+  if A.Kind = tekInsertLines then
+    Exit((B.Kind in RANGE_KINDS) and (EditSpanFirst(B) <= A.Line) and (A.Line < EditSpanLast(B)));
+  if B.Kind = tekInsertLines then
+    Exit((A.Kind in RANGE_KINDS) and (EditSpanFirst(A) <= B.Line) and (B.Line < EditSpanLast(A)));
+  if (A.Kind = tekReplaceInLine) and (B.Kind = tekReplaceInLine) then
+    Exit((A.Line = B.Line) and (A.Col < B.EndCol) and (B.Col < A.EndCol));
+  Result:= (EditSpanFirst(A) <= EditSpanLast(B)) and (EditSpanFirst(B) <= EditSpanLast(A));
+end;
+
+function DeferConflictingFixes(const AEdits: TArray<TTextEdit>; out ADeferredOwners: TArray<string>): TArray<TTextEdit>;
+var
+  Kept    : TObjectDictionary<string, TList<TTextEdit>>;  { file -> edits kept so far }
+  Order   : TStringList;                                    { owners, first-appearance order }
+  Deferred: TDictionary<string, Boolean>;                   { owner -> deferred? (every owner is a key) }
+
+  function KeptFor(const APath: string): TList<TTextEdit>;
+  begin
+    if not Kept.TryGetValue(APath, Result) then
+    begin
+      Result:= TList<TTextEdit>.Create;
+      Kept.Add(APath, Result);
+    end;
+  end;
+
+begin
+  ADeferredOwners:= nil;
+  Kept    := TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues], TIStringComparer.Ordinal);
+  Order   := TStringList.Create(dupIgnore, False, False);
+  Deferred:= TDictionary<string, Boolean>.Create;
+  try
+    for var E: TTextEdit in AEdits do
+      if E.Owner = '' then KeptFor(E.FilePath).Add(E)
+      else if not Deferred.ContainsKey(E.Owner) then
+      begin
+        Deferred.Add(E.Owner, False);   { seen; True below = deferred }
+        Order.Add(E.Owner);
+      end;
+    for var Own: string in Order do
+    begin
+      var Clash: Boolean:= False;
+      for var E: TTextEdit in AEdits do
+      begin
+        if E.Owner <> Own then Continue;
+        for var K: TTextEdit in KeptFor(E.FilePath) do
+          if (K.Owner <> Own) and EditsConflict(E, K) then
+          begin
+            Clash:= True;
+            Break;
+          end;
+        if Clash then Break;
+      end;
+      if Clash then
+      begin
+        Deferred[Own]:= True;
+        ADeferredOwners:= ADeferredOwners + [Own];
+      end
+      else
+        for var E: TTextEdit in AEdits do
+          if E.Owner = Own then KeptFor(E.FilePath).Add(E);
+    end;
+    Result:= nil;
+    for var E: TTextEdit in AEdits do
+      if (E.Owner = '') or not Deferred[E.Owner] then Result:= Result + [E];
+  finally
+    Kept.Free;
+    Order.Free;
+    Deferred.Free;
+  end;
+end;
 function FixOwnerKey(const AFinding: TLintFinding): string;
 begin
   Result:= LowerCase(AFinding.FilePath + '|' + IntToStr(AFinding.StartLine) + '|' + AFinding.RuleId);

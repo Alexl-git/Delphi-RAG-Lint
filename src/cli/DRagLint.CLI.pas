@@ -12190,6 +12190,18 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
+    { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
+      finding's (two rules rewriting one span) is withheld WHOLE and reported
+      deferred; the next --fix pass re-lints and applies it.
+      tests\autofix\run_fix_overlap_deferred.ps1. }
+    var DeferredOwners: TArray<string>;
+    Edits:= DeferConflictingFixes(Edits, DeferredOwners);
+    if Length(DeferredOwners) > 0 then
+    begin
+      Dec(FixCount, Length(DeferredOwners));
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) deferred -- their edits overlap an earlier fix in this pass; ' +
+        'run --fix again to apply them.', [Length(DeferredOwners)]));
+    end;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
@@ -12239,6 +12251,7 @@ begin
             JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply and HasEdit));
             JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
             JObj.AddPair('risky' , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+            if MatchText(FixOwnerKey(F), DeferredOwners) then JObj.AddPair('deferred', TJSONBool.Create(True));
             { Multi-project rename: the owners and, when it applies, why the
               rename was dropped (spec criterion 14). Absent for a
               single-project unit. }
