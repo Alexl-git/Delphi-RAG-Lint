@@ -11,7 +11,7 @@ implementation
 
 procedure Run(A, B: Double);
 begin
-  if SameValue(A, B) then Exit;
+  if System.Math.SameValue(A, B) then Exit;
 end;
 
 end.
