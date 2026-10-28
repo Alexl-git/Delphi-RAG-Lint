@@ -209,6 +209,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
+      /// <summary>Builds the rule around a query compiled elsewhere -- the loader
+      /// compiles every .scm in parallel, then builds the rules in path order.</summary>
+      /// <param name="AQuerySource">The .scm text AQuery was compiled from.</param>
+      /// <param name="AScmPath">Path of the .scm; its base name is the default id.</param>
+      /// <param name="AJsonPath">Sidecar json path; skipped when it does not exist.</param>
+      /// <param name="AQuery">The compiled query, or nil. Ownership passes to the
+      /// rule at entry, so it is freed even when this constructor raises.</param>
+      /// <param name="AErrOff">ts_query_new error offset, reported on failure.</param>
+      /// <param name="AErrType">ts_query_new error type, reported on failure.</param>
+      /// <exception cref="Exception">AQuery is nil or did not compile.</exception>
+      /// <remarks>Same observable effects, in the same order, as Create.</remarks>
+      constructor CreateCompiled(const AQuerySource, AScmPath, AJsonPath: string; const AQuery: TTSQuery; const AErrOff: UInt32; const AErrType: TTSQueryError);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FQuery</para>
@@ -370,6 +382,7 @@ implementation
 
 uses
   System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
+  , System.Threading        { TParallel.For -- the loader compiles the .scm queries in parallel }
   , System.StrUtils        { IndexText -- capture-name lookup for sidecar fixes }
   , DRagLint.Lint.RuleCatalog { RegisterSidecarFixRule -- a rule with a "fix" key is fixable }
   , System.Generics.Defaults { TComparer -- sorting that table by cost }
@@ -699,16 +712,25 @@ begin
   Result:= True;
 end;
 
-constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
+constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);  // dl:ok missing-inherited-ctor@8f39 -- delegates to CreateCompiled, which calls inherited Create
 var
   ErrOff : UInt32       ;
   ErrType: TTSQueryError;
+begin
+  ErrOff:= 0;
+  ErrType:= TSQueryError(0);
+  CreateCompiled(AQuerySource, AScmPath, AJsonPath, TTSQuery.Create(ALanguage, AQuerySource, ErrOff, ErrType), ErrOff, ErrType);
+end; // constructor
+
+constructor TQueryRule.CreateCompiled(const AQuerySource, AScmPath, AJsonPath: string; const AQuery: TTSQuery; const AErrOff: UInt32; const AErrType: TTSQueryError);
+var
   JSON   : TJSONObject  ;
   RawJson: string       ;
   ExArr  : TJSONArray   ;
   ExVal  : TJSONValue   ;
 begin
   inherited Create;
+  FQuery:= AQuery; { first: Destroy frees it if anything below raises }
   FSourcePath:= AScmPath;
   FId:= TPath.GetFileNameWithoutExtension(AScmPath);
   FSeverity:= 'warning';
@@ -781,12 +803,9 @@ begin
     RegisterSidecarFixRule(FId, AnyRisky);
   end;
 
-  ErrOff:= 0;
-  ErrType:= TSQueryError(0);
-  FQuery:= TTSQuery.Create(ALanguage, AQuerySource, ErrOff, ErrType);
-  if FQuery.Query = nil then
+  if (FQuery = nil) or (FQuery.Query = nil) then
   begin
-    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, ErrOff, Ord(ErrType), AScmPath]);
+    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, AErrOff, Ord(AErrType), AScmPath]);
   end;
 end; // constructor
 
@@ -1538,45 +1557,102 @@ var
   Files   : TArray<string>   ;
   ScmPath : string           ;
   JsonPath: string           ;
-  Source  : string           ;
   Rule    : TQueryRule       ;
   List    : TList<TQueryRule>;
   Seen    : TDictionary<string, string>;
   FirstAt : string           ;
+  Wall    : TStopwatch       ;
+  SumTicks: Int64            ;
+  Sources : TArray<string>   ;
+  LoadErrs: TArray<string>   ;
+  Queries : TArray<TTSQuery> ;
+  ErrOffs : TArray<UInt32>   ;
+  ErrTypes: TArray<TTSQueryError>;
+  Ticks   : TArray<Int64>    ;
+  Lang    : PTSLanguage      ;
+  I       : Integer          ;
 begin
   SetLength(Result, 0);
   if not TDirectory.Exists(ARulesDir) then Exit;
+  Wall:= TStopwatch.StartNew;
   Files:= TDirectory.GetFiles(ARulesDir, '*.scm', TSearchOption.soAllDirectories);
   // Key = rule id + file name: one id may legitimately span several forms (hardcoded-credential
   // const + assignment), but the same id in the same-named file twice is a stray copy.
   TArray.Sort<string>(Files); // deterministic: first path wins a duplicate
-  List:= TList<TQueryRule>.Create;
-  Seen:= TDictionary<string, string>.Create;
+  { READ + COMPILE IN PARALLEL, BUILD IN ORDER (lane IPERF, 2026-10-28).
+    ts_query_new is the whole cost of this routine -- 95 queries, ~30 ms each and
+    254 ms for the worst, 3.2 s of a 3.8 s single-file lint -- and it is paid by
+    EVERY lint process before the file is even read. Each query compiles against
+    the read-only language independently, so the compiles fan out over the pool.
+    Everything with an observable effect -- the sidecar json, fix registration,
+    the duplicate check, both messages and the result order -- stays in the
+    serial loop below, in sorted-path order, exactly as before.
+    Guard: tests\autotest\run_rule_load_parallel.ps1. }
+  Lang:= ALanguage;
+  SetLength(Sources, Length(Files));
+  SetLength(LoadErrs, Length(Files));
+  SetLength(Queries, Length(Files));
+  SetLength(ErrOffs, Length(Files));
+  SetLength(ErrTypes, Length(Files));
+  SetLength(Ticks, Length(Files));
   try
-    for ScmPath in Files do
-    begin
-      // A nested directory named `rules` is an xcopy accident, never a rule folder.
-      if IsUnderNestedRulesDir(ARulesDir, ScmPath) then Continue;
-      JsonPath:= ChangeFileExt(ScmPath, '.json');
-      try
-        Source:= TFile.ReadAllText(ScmPath, TEncoding.UTF8);
-        Rule:= TQueryRule.Create(ALanguage, Source, ScmPath, JsonPath);
-        if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
-        begin
-          Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
-          FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
-          Continue;
+    TParallel.For(0, High(Files),
+      procedure(AIdx: Integer)
+      begin
+        // A nested directory named `rules` is an xcopy accident, never a rule folder.
+        if IsUnderNestedRulesDir(ARulesDir, Files[AIdx]) then Exit;
+        var T0: Int64:= TStopwatch.GetTimeStamp;
+        try
+          Sources[AIdx]:= TFile.ReadAllText(Files[AIdx], TEncoding.UTF8);
+          Queries[AIdx]:= TTSQuery.Create(Lang, Sources[AIdx], ErrOffs[AIdx], ErrTypes[AIdx]);
+        except  // dl:ok try-except-swallowed@e8d3 -- not swallowed: the message is kept in LoadErrs and printed as RULE-LOAD-FAIL in path order by the serial loop
+          on E: Exception do LoadErrs[AIdx]:= E.Message;
         end;
-        Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
-        List.Add(Rule);
-      except
-        on E: Exception do Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, E.Message]));
+        Ticks[AIdx]:= TStopwatch.GetTimeStamp - T0;
+      end);
+    SumTicks:= 0;
+    List:= TList<TQueryRule>.Create;
+    Seen:= TDictionary<string, string>.Create;
+    try
+      for I:= 0 to High(Files) do
+      begin
+        ScmPath:= Files[I];
+        if IsUnderNestedRulesDir(ARulesDir, ScmPath) then Continue;
+        Inc(SumTicks, Ticks[I]);
+        JsonPath:= ChangeFileExt(ScmPath, '.json');
+        try
+          if LoadErrs[I] <> '' then
+          begin
+            Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, LoadErrs[I]]));
+            Continue;
+          end;
+          { Ownership moves to the rule BEFORE the call: CreateCompiled frees the
+            query itself when it raises, so the finally below must not see it. }
+          var Q: TTSQuery:= Queries[I];
+          Queries[I]:= nil;
+          Rule:= TQueryRule.CreateCompiled(Sources[I], ScmPath, JsonPath, Q, ErrOffs[I], ErrTypes[I]);
+          if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
+          begin
+            Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
+            FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
+            Continue;
+          end;
+          Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
+          List.Add(Rule);
+        except
+          on E: Exception do Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, E.Message]));
+        end;
       end;
-    end;
-    Result:= List.ToArray;
+      Result:= List.ToArray;
+      if RuleProfileArmed then
+        Writeln(ErrOutput, Format('[rule-load] %d rules compiled: wall %.3f s, cpu-sum %.3f s',
+          [Length(Result), Wall.Elapsed.TotalSeconds, SumTicks / TStopwatch.Frequency], TFormatSettings.Invariant));
+    finally
+      Seen.Free;
+      List.Free;
+    end; // try
   finally
-    Seen.Free;
-    List.Free;
+    for I:= 0 to High(Queries) do Queries[I].Free; { only a query no rule took over }
   end; // try
 end; // function
 
