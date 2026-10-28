@@ -67,6 +67,9 @@ $Allowlist = @(
 #   pp-unresolved-if              -> tests\autotest\run_index_pp_consts.ps1
 $Allowlist += @('taint-sql-injection', 'taint-command-injection', 'taint-path-traversal',
     'duplicate-unit-on-search-path', 'pp-unresolved-if')
+#   side-effect-in-short-circuit, property-getter-with-effect, ui-access-in-thread-transitive
+#     -> tests\lint-project\effect-rules\run_effect_rules.ps1 (lane B-EFFECT, 1.37.0)
+$Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive')
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 
