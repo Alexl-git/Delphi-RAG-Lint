@@ -20,6 +20,9 @@ unit DRagLint.Lint.TaintRules;
 ///   SOURCE     { "id": str (unique), "name": str (qualified 'Vcl.StdCtrls.TCustomEdit.Text'
 ///                or bare 'ParamStr'), "kind": "call"|"read", "confidence": "certain"|"weak",
 ///                "enabled": bool (default true; false = second-order, on via second_order),
+///                "categories": [ "sql"|"cmd"|"path", ... ] (optional; default every rule --
+///                under an unlisted rule the value is TRUSTED and the branch stops clean;
+///                an unknown category raises ELintConfigError),
 ///                "note": str (optional) }                                 -> TTaintSourceEntry
 ///   SINK       { "id": str (unique), "rule": one of the TAINT_RULE_* ids, "name": str (leaf
 ///                name of the call or written member), "kind": "call"|"write",
@@ -108,6 +111,10 @@ type
     Enabled   : Boolean;
     /// <summary>Free text.</summary>
     Note      : string ;
+    /// <summary>TAINT_CAT_SQL / _CMD / _PATH values this source is attacker data for; empty =
+    /// every rule. Under a rule whose category is not listed the value is trusted: the
+    /// branch stops clean, as at a sanitizer.</summary>
+    Categories: TArray<string>;
   end;
 
   /// <summary>One SINK catalogue row (rules\taint-sinks.json "sinks"[]).</summary>
@@ -561,11 +568,12 @@ begin
   Result:= V as TJSONObject;
 end;
 
-procedure AppendSources(const AObj: TJSONObject; var ACfg: TTaintConfig);
+procedure AppendSources(const AObj: TJSONObject; var ACfg: TTaintConfig; const AWhat: string);
 var
   E  : TJSONValue;
   O  : TJSONObject;
   Src: TTaintSourceEntry;
+  Cat: string;
 begin
   for E in JArr(AObj, 'sources') do
     if E is TJSONObject then
@@ -578,6 +586,10 @@ begin
       Src.Confidence:= JStr(O, 'confidence', CONF_CERTAIN);
       Src.Enabled   := JBool(O, 'enabled', True);
       Src.Note      := JStr(O, 'note', '');
+      Src.Categories:= JStrs(O, 'categories');
+      for Cat in Src.Categories do
+        if not MatchText(Cat, [TAINT_CAT_SQL, TAINT_CAT_CMD, TAINT_CAT_PATH]) then
+          raise ELintConfigError.CreateFmt('taint: source "%s" in %s names unknown category "%s"', [Src.Id, AWhat, Cat]);
       if Src.Name <> '' then ACfg.Sources:= ACfg.Sources + [Src];
     end;
 end;
@@ -639,7 +651,7 @@ end;
 procedure AppendEntries(const AObj: TJSONObject; var ACfg: TTaintConfig; var ADisable: TArray<string>;
                         const AWhat: string);
 begin
-  AppendSources(AObj, ACfg);
+  AppendSources(AObj, ACfg, AWhat);
   AppendSinks(AObj, ACfg, AWhat);
   AppendPropagators(AObj, ACfg);
   ADisable:= ADisable + JStrs(AObj, 'disable');
@@ -1286,6 +1298,8 @@ begin
   for Src in FCfg.Sources do
     if NameMatches(Src.Name, R, ARow.FileId, Weak) then
     begin
+      { a source this rule trusts (ParamStr under path-traversal): clean, not walked into }
+      if (Src.Categories <> nil) and not InStrs(FCat, Src.Categories) then Exit;
       AddHit(Result, SourceHit(AStore, X, ARow,
         if OwnerSeg(Src.Name) <> '' then OwnerSeg(Src.Name) + '.' + LastSeg(Src.Name) else LastSeg(Src.Name),
         Src.Kind, '', Weak or R.Weak or SameText(Src.Confidence, CONF_WEAK)));
@@ -1422,6 +1436,7 @@ begin
   for Src in FCfg.Sources do
     if SameText(Src.Kind, KIND_CALL) and NameMatches(Src.Name, R, ARow.FileId, Weak) then
     begin
+      if (Src.Categories <> nil) and not InStrs(FCat, Src.Categories) then Exit;
       AddHit(Result, SourceHit(AStore, X, ARow, LastSeg(Src.Name), Src.Kind, ' (out argument)',
         Weak or R.Weak or SameText(Src.Confidence, CONF_WEAK)));
       Exit;
