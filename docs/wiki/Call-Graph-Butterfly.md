@@ -26,6 +26,11 @@ from a script, `butterfly` is the single-command option.
 ## Reaching it in the IDE
 drag-lint > Uses & Dependencies > Call Graph (Butterfly)...
 
+The item (or Ctrl+Alt+B) asks for a
+qualified name in a prompt; it does not read the caret. To start from a symbol you
+are already looking at, right-click its node in the Structure form instead
+(see [Show in Call Graph](Show-in-Call-Graph)); both end in the same dock tab.
+
 ## What it needs
 An index IS required -- both `butterfly` and the two `reverse-calltree`
 calls the IDE composes it from read the project's index database. The
