@@ -1152,6 +1152,78 @@ begin
   Result:= Trim(TRegEx.Replace(Result, '\s{2,}', ' '));
 end;
 
+{ F2: a line carrying SEVERAL `// dl:ok` comments keeps each comment (and its reason) as written.
+  InsertInto used to fold them into one comment and join the reasons with `; `, so every rule on
+  the line ended up claiming every reason. Here only the comment that already records ARuleId is
+  rewritten (the last comment when none does); the others are returned byte for byte.
+  Returns False when the line has a single tag, so the caller takes its normal path. }
+function InsertIntoSegmented(const ALineText, ARuleId, AReason, AHash: string; ACStart: Integer;
+  out AResult: string): Boolean;
+var
+  Starts: TArray<Integer>;
+  CStart: Integer;
+  Pos0  : Integer;
+  Nxt   : Integer;
+  I     : Integer;
+  K     : Integer;
+  Piece : string;
+  Edited: string;
+  Tail  : string;
+  Parts : TArray<string>;
+  M     : TReviewMarker;
+
+  { Text of comment I: piece 0 also carries the code before the first tag. }
+  function PieceAt(AIdx: Integer): string;
+  var
+    From: Integer;
+    Upto: Integer;
+  begin
+    From:= (if AIdx = 0 then 1 else Starts[AIdx]);
+    Upto:= (if AIdx < High(Starts) then Starts[AIdx + 1] else Length(ALineText) + 1);
+    Result:= Copy(ALineText, From, Upto - From);
+  end; // function
+
+begin
+  AResult:= '';
+  Parts  := nil;
+  CStart := ACStart;
+  Pos0:= CStart + Pos(REVIEW_MARK, LowerCase(Copy(ALineText, CStart, MaxInt))) - 1 + Length(REVIEW_MARK);
+  Starts:= [CStart];
+  Nxt:= NextLineCommentTag(Copy(ALineText, Pos0, MaxInt));
+  while Nxt > 0 do
+  begin
+    Starts:= Starts + [Pos0 + Nxt - 1];
+    Pos0  := Starts[High(Starts)] + Pos(REVIEW_MARK, LowerCase(Copy(ALineText, Starts[High(Starts)], MaxInt))) - 1 + Length(REVIEW_MARK);
+    Nxt   := NextLineCommentTag(Copy(ALineText, Pos0, MaxInt));
+  end;
+  Result:= Length(Starts) > 1;
+  if not Result then Exit;
+  K:= High(Starts);
+  for I:= 0 to High(Starts) do
+  begin
+    Piece:= PieceAt(I);
+    for M in TReviewMarkers.Parse(Piece) do
+      if SameText(M.RuleId, ARuleId) then
+      begin
+        K:= I;
+        Break;
+      end;
+    if K = I then Break;
+  end;
+  for I:= 0 to High(Starts) do
+  begin
+    Piece:= PieceAt(I);
+    if I = K then
+    begin
+      Tail  := Copy(Piece, Length(TrimRight(Piece)) + 1, MaxInt);
+      Edited:= TReviewMarkers.InsertInto(Piece, ARuleId, AReason, AHash);
+      Piece := Edited + (if I < High(Starts) then Tail else '');
+    end;
+    Parts:= Parts + [Piece];
+  end;
+  AResult:= string.Join('', Parts);
+end; // function
+
 class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string;
   const AHashOverride: string): string;
 var
@@ -1186,6 +1258,8 @@ begin
     acquires a hash. }
   for M in Existing do
     if SameText(M.RuleId, ARuleId) and SameText(M.Hash, Hash) then Exit(ALineText);
+
+  if (Length(Existing) > 1) and InsertIntoSegmented(ALineText, ARuleId, AReason, Hash, LineCommentStart(ALineText), Result) then Exit;
 
   if Length(Existing) = 0 then
   begin

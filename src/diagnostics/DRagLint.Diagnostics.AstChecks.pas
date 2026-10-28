@@ -2268,6 +2268,13 @@ var
       if HasInherited(N.Child(I)) then Exit(True);
   end; // function
 
+  { F1: does the body call a constructor of its own class by name (bare Create*(...) or Self.Create*(...))?
+    A qualified TOther.Create builds another object and does not count. }
+  function DelegatesToOwnCtor(const ABody: TTSNode): Boolean;
+  begin
+    Result:= TRegEx.IsMatch(SrcText(ABody, Src), '(?<![\w.])(Self\s*\.\s*)?Create\w*\s*[(;]|\bSelf\s*\.\s*Create\w*', [roIgnoreCase]);
+  end; // function
+
   procedure CheckProc(const ADefProc: TTSNode);
   var
     Hdr  : TTSNode     ;
@@ -2293,7 +2300,8 @@ var
     Body:= ADefProc.ChildByField('body');
     if Body.IsNull then Exit;
     if Body.NodeType = 'asm' then Exit;
-    if HasInherited(Body) then Exit;
+    { F1: a delegating constructor leaves ancestor init to its target }
+    if HasInherited(Body) or (IsCtor and DelegatesToOwnCtor(Body)) then Exit;
     P:= Hdr.StartPoint;
     F:= Default(TLintFinding);
     F.Severity:= 'warning';
