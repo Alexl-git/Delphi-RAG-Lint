@@ -76,7 +76,10 @@ $norm = ($FixtureBody -replace "`r`n", "`n") -replace "`n", "`r`n"
 
 $Db = Join-Path $WorkDir 'adhoc.sqlite'
 $idx = & $Exe index $SrcDir --db $Db 2>&1 | Out-String
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 if (-not (Test-Path $Db)) {
+  $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: ad-hoc index produced no DB" -ForegroundColor Red
   Write-Host $idx
   exit 2

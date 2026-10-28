@@ -5,6 +5,7 @@
 # (everything except the fixture's expected\ folder) into a scratch DB, so a --fix --apply run
 # never touches the checked-in fixture.
 $script:Failed = $false
+. (Join-Path $PSScriptRoot exe-hint.ps1)   # Get-ExeStartFailureHint (lane CLIFIX C2)
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   $status = if ($Ok) { 'PASS' } else { 'FAIL' }
   $color  = if ($Ok) { 'Green' } else { 'Red' }
@@ -17,15 +18,6 @@ function New-G8Scratch([string]$Fixture, [string]$WorkDir) {
   New-Item -ItemType Directory -Force $dst | Out-Null
   Get-ChildItem $src -File | ForEach-Object { Copy-Item $_.FullName $dst -Force }
   return $dst
-}
-function Get-ExeStartFailureHint([int]$Code) {
-  # 0xC000007B (STATUS_INVALID_IMAGE_FORMAT, -1073741701): the loader refused the exe -- missing or
-  # wrong-bitness companion DLLs beside it. Reporting that as "index produced no DB" sends the reader
-  # hunting in the indexer for a process that never started. '' for any other code.
-  if ($Code -eq -1073741701) {
-    return 'exe failed to start (0xC000007B): missing or wrong-bitness companion DLLs (tree-sitter*.dll, sqlite3.dll) beside the exe?'
-  }
-  return ''
 }
 function Invoke-G8Index([string]$Exe, [string]$Dir, [string]$Db) {
   if (Test-Path $Db) { [IO.File]::Delete($Db) }
