@@ -64,6 +64,14 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// raise-bare-exception) are NOT built here -- see the implementation comment.</remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 
+/// <summary>The key that ties an edit to the finding that produced it.</summary>
+/// <param name="AFinding">The finding.</param>
+/// <returns>Lower-cased `file|StartLine|rule`; BuildAutofixEdits stores it in
+/// TTextEdit.Owner of every edit the finding's fixer returned.</returns>
+/// <remarks>The `--fix --json` row of a finding is applied/preview when ANY edit
+/// carries its key, wherever that edit sits in the file.</remarks>
+function FixOwnerKey(const AFinding: TLintFinding): string;
+
 /// <summary>Registers a per-finding fixer for ARuleId (autofix wave A0).</summary>
 /// <param name="ARuleId">The rule id; compared case-insensitively.</param>
 /// <param name="AFixer">Builds the edits for one finding; see TFindingFixer.</param>
@@ -175,6 +183,11 @@ var
   GFixers: TDictionary<string, TRegisteredFixer>;
   { the generic sidecar fixer (DRagLint.Fix.Templates installs it) }
   GSidecarFixer: TFindingFixer;
+
+function FixOwnerKey(const AFinding: TLintFinding): string;
+begin
+  Result:= LowerCase(AFinding.FilePath + '|' + IntToStr(AFinding.StartLine) + '|' + AFinding.RuleId);
+end;
 
 procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
 begin
@@ -446,6 +459,7 @@ begin
   try
     for F in AFindings do
     begin
+      var OwnFrom: Integer:= Length(Result);   { this finding's edits start here -- stamped below }
       if SameText(F.RuleId, 'self-assignment') then
       begin
         EndL:= F.EndLine;
@@ -901,6 +915,10 @@ begin
           if (F.FixKind <> lfkNone) and (F.FixUses <> '') then UsesWanted.AddPair(F.FilePath, F.FixUses);
         end;
       end;
+      { ATTRIBUTION: every edit this finding produced -- on its line or not (a uses
+        entry, a FreeAndNil in the destructor, the doc lines above) -- names it. }
+      for var OwnI: Integer:= OwnFrom to High(Result) do
+        if Result[OwnI].Owner = '' then Result[OwnI].Owner:= FixOwnerKey(F);
     end; // for
 
     { unused-local is handled per FILE, not per finding: several dead names can

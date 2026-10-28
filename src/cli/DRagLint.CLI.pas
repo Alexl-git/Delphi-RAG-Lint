@@ -12211,10 +12211,17 @@ begin
           one edit on its own StartLine. }
         var EditLineKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
         try
-          for var Ed: TTextEdit in Edits do EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+          { OWNED edits first (BuildAutofixEdits stamps Owner = FixOwnerKey of the finding
+            whose fixer returned them): a fix that edits away from its line -- a uses
+            entry, a FreeAndNil before inherited, doc lines above -- is still its
+            finding's. The (file, line) match stays only for UNOWNED edits (the
+            store-backed builders: doc-drift, naming, raise-bare-exception, per-file fixers). }
+          for var Ed: TTextEdit in Edits do
+            if Ed.Owner <> '' then EditedKeys.AddOrSetValue(Ed.Owner, True)
+            else EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
           for F in Targeted do
             if IsFixableRule(F.RuleId) and EditLineKeys.ContainsKey(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine)) then
-              EditedKeys.AddOrSetValue( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId), True);
+              EditedKeys.AddOrSetValue(FixOwnerKey(F), True);
         finally
           EditLineKeys.Free;
         end;
@@ -12223,7 +12230,7 @@ begin
         try
           for F in Targeted do
           begin
-            var HasEdit: Boolean:= EditedKeys.ContainsKey( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId));
+            var HasEdit: Boolean:= EditedKeys.ContainsKey(FixOwnerKey(F));
             JObj:= TJSONObject.Create;
             JObj.AddPair('file' , F.FilePath);
             JObj.AddPair('line' , TJSONNumber.Create(F.StartLine));

@@ -61,6 +61,7 @@ type
     Text      : string;
     ExpectText: string;       { tekReplaceInLine: the span guard; with ExpectLine: the anchor guard }
     ExpectLine: Integer;      { 1-based ANCHOR line that must still hold ExpectText; 0 = unguarded }
+    Owner     : string;       { the finding that produced it (FixOwnerKey); '' = unattributed. Not used by the applier's text logic }
   end;
 
   /// <summary>How a text file was stored on disk -- its encoding, its BOM and
