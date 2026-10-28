@@ -102,6 +102,7 @@ uses
   , System.Hash
   , System.IOUtils
   , DRagLint.CLI.LibraryReady { library-first resolve: readiness probe + platform choice (plan 2026-10-28) }
+  , DRagLint.CLI.LibraryMarker { the project DB's library_resolve_state marker: JSON, decision table, notice }
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
   , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
   , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
@@ -2221,6 +2222,29 @@ var GFreshnessNoted: Boolean = False;
     GFreshnessDb    : string  = '';
     GFreshnessRep   : TFreshnessReport;
 
+function IndexRemedyFor(const AStore: ISymbolStore; const ADbPath: string; AResolveOnly: Boolean): string; forward;
+
+{ Adds the top-level `index_notes` array to an object JSON envelope when ADbPath is marked library-pending. }
+procedure AddLibraryPendingNotes(const AObj: TJSONObject; const ADbPath: string);
+var
+  Remedy: string;
+begin
+  if (AObj = nil) or (ADbPath = '') or not TFile.Exists(ADbPath) then Exit;
+  var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+  var M: TLibraryMarker:= LibraryMarkerFromJson(Probe.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+  if M.State <> LIBSTATE_PENDING then Exit;
+  Remedy:= 'drag-lint ' + IndexRemedyFor(Probe, ADbPath, {AResolveOnly=}True);
+  var Notes: TJSONArray:= TJSONArray.Create;
+  var One: TJSONObject:= TJSONObject.Create;
+  One.AddPair('db', ADbPath);
+  One.AddPair('kind', 'library-pending');
+  One.AddPair('reason', M.Reason);
+  One.AddPair('since_unix', TJSONNumber.Create(M.SinceUnix));
+  One.AddPair('remedy', Remedy);
+  Notes.AddElement(One);
+  AObj.AddPair('index_notes', Notes);
+end;
+
 { ENG-3 (2026-09-23): THE STALENESS FACT, CARRIED IN THE JSON ENVELOPE.
 
   The human note ("N of M indexed file(s) changed since this index was built")
@@ -2249,6 +2273,7 @@ begin
   end;
   AObj.AddPair('stale'      , TJSONBool.Create(Rep.Verdict = fvStale));
   AObj.AddPair('stale_files', TJSONNumber.Create(Rep.Changed));
+  AddLibraryPendingNotes(AObj, ADbPath);
 end;
 
 { The command that refreshes AStore, shaped by the database's own scan type.
@@ -2390,6 +2415,13 @@ begin
   else if Prev <> Cur then
     Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `%s` (minutes, not a re-parse).',
       [Prev, Cur, IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)]));
+
+  { LIBRARY-FIRST RESOLVE: a DB marked `pending` was resolved without its platform library, so
+    callers/callees into the library are missing. A reader never writes the marker and never
+    re-resolves; it says the answer is incomplete, once, with the exact remedy. }
+  var LibMarker: TLibraryMarker:= LibraryMarkerFromJson(AStore.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+  if LibMarker.State = LIBSTATE_PENDING then
+    Writeln(ErrOutput, LibraryPendingNote(LibMarker, ADbPath, 'drag-lint ' + IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)));
 end;
 
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
@@ -3882,6 +3914,93 @@ begin
        SameText(ExpandFileName(ExpandSectionDb(AManifest, Sec)), ExpandFileName(ADb)) then Exit(True);
 end;
 
+type
+  /// <summary>One section's library-first plan: what the marker says, what the probe says, and
+  /// the decision that follows (library-first resolve plan s.2.3/2.4).</summary>
+  TLibraryRun = record
+    Wanted  : Boolean;
+    Ready   : Boolean;
+    LibDb   : string;
+    Platform: string;
+    Reason  : string;
+    Fp      : string;
+    Old     : TLibraryMarker;
+    Decision: TLibraryDecision;
+  end;
+
+/// <summary>Reads the DB's library marker, probes the platform library and decides whether this
+/// writer run must re-resolve (the extra RanCalls term).</summary>
+/// <param name="AStore">The project DB, open for writing.</param>
+/// <param name="AWanted">The section opted in with libraryResolve AND no explicit --library-db named a store.</param>
+/// <param name="APlatform">The section's platform token ('' = manifest default).</param>
+/// <param name="AOwnDb">The DB being built; a library that IS this DB is never a library for it.</param>
+/// <returns>The plan; Decision.RunPass is True when the DB is pending (or never bound) and the library is now ready.</returns>
+/// <remarks>Writers only: it prints nothing and writes nothing; FinishLibraryResolve does both.</remarks>
+function PlanLibraryResolve(const AStore: ISymbolStore; AWanted: Boolean; const APlatform, AOwnDb: string): TLibraryRun;
+begin
+  Result:= Default(TLibraryRun);
+  Result.Old:= LibraryMarkerFromJson(AStore.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+  Result.Platform:= APlatform;
+  if AWanted then
+  begin
+    var LibArgs: TArgs:= Default(TArgs);
+    LibArgs.CheckPlatform:= APlatform;
+    Result.LibDb:= ResolveLibraryDb(LibArgs);
+    AWanted:= (Result.LibDb = '') or not SameText(ExpandFileName(Result.LibDb), ExpandFileName(AOwnDb));
+  end;
+  Result.Wanted:= AWanted;
+  if AWanted then
+  begin
+    var State: TLibraryReadiness:= ProbeLibraryReadiness(Result.LibDb, APlatform, Result.Reason, Result.Fp);
+    Result.Ready:= State = lrReady;
+    if not Result.Ready then Result.Reason:= LibraryReadinessToken(State) + ': ' + Result.Reason;
+  end;
+  Result.Decision:= DecideLibraryResolve(Result.Wanted, Result.Old.State,
+    AStore.GetMetaValue('external_stores') <> '', Result.Ready);
+end;
+
+/// <summary>Writes the marker the run ends with and tells the user the state.</summary>
+/// <param name="AStore">The project DB, open for writing.</param>
+/// <param name="ARun">The plan PlanLibraryResolve returned for this run.</param>
+/// <param name="ARanCalls">The resolve pass ran this run.</param>
+/// <param name="AOpened">The pass got a library store.</param>
+/// <param name="APrefix">Indent for the stdout line.</param>
+/// <param name="ADb">The project DB path (for the remedy text).</param>
+/// <remarks>pending -> a stderr NOTE that the result is incomplete, with the exact remedy; bound ->
+/// one stdout line. A section that no longer uses libraryResolve has its marker deleted.</remarks>
+procedure FinishLibraryResolve(const AStore: ISymbolStore; const ARun: TLibraryRun; ARanCalls, AOpened: Boolean;
+  const APrefix, ADb: string);
+var
+  M: TLibraryMarker;
+begin
+  if not ARun.Wanted then
+  begin
+    if ARun.Old.State <> '' then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, '');
+    Exit;
+  end;
+  var NowUnix: Int64:= DateTimeToUnix(Now, False);
+  M:= Default(TLibraryMarker);
+  M.Platform     := ARun.Platform;
+  M.LibraryDb    := ARun.LibDb;
+  M.FpSeen       := ARun.Fp;
+  M.Engine       := DRAGLINT_VERSION;
+  M.LastCheckUnix:= NowUnix;
+  if ARun.Ready and ((not ARanCalls) or AOpened) then
+  begin
+    M.State    := LIBSTATE_BOUND;
+    M.SinceUnix:= if ARun.Old.State = LIBSTATE_BOUND then ARun.Old.SinceUnix else NowUnix;
+    if ARun.Old.State <> LIBSTATE_BOUND then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, LibraryMarkerToJson(M));
+    if ARanCalls then Writeln(APrefix, 'library: bound (', ExtractFileName(ARun.LibDb), ')');
+    Exit;
+  end;
+  M.State    := LIBSTATE_PENDING;
+  M.Reason   := if ARun.Ready then 'library could not be opened' else ARun.Reason;
+  M.SinceUnix:= if ARun.Old.State = LIBSTATE_PENDING then ARun.Old.SinceUnix else NowUnix;
+  AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, LibraryMarkerToJson(M));
+  Writeln(ErrOutput, APrefix, 'library: PENDING (', M.Reason, ') -- stored call edges are project-local; the result is INCOMPLETE. ',
+    'Re-resolve once the library is ready: drag-lint ', IndexRemedyFor(AStore, ADb, {AResolveOnly=}True));
+end;
+
 { Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
 
@@ -4279,19 +4398,24 @@ begin
       resolver -- which is precisely the 2026-08-30 failure, reproduced by the
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
     if ResolverStale or AResolveOnly then Store.ClearCallEdges;
+    { Library-first resolve: a DB marked `pending` whose library is ready now re-resolves even when no file changed. }
+    var LibRun: TLibraryRun:= PlanLibraryResolve(Store, AItem.LibraryResolve and (AItem.Mode <> smLibrary), AItem.Platform, AItem.DbPath);
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
-       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
+       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly or LibRun.Decision.RunPass;
+    var SectionLibs: TArray<ISymbolStore>:= nil;
     if RanCalls then
     begin
-      { item 4: the opt-in library store, opened once for both stages; none when the key is off. }
+      { item 4: the opt-in library store, opened once for both stages; none when the key is off or the
+        library is not READY (lf-ready's gate re-probes quietly). LibRun (lf-marker) decided RunPass above
+        and FinishLibraryResolve writes the marker below. }
       var SectionGate: TLibraryGate;
-      var SectionLibs: TArray<ISymbolStore>:= ManifestLibraryStores(AItem.LibraryResolve and (AItem.Mode <> smLibrary),
-        AItem.Platform, ItemDproj, AItem.DbPath, Store, SectionGate);
+      SectionLibs:= ManifestLibraryStores(LibRun.Wanted, AItem.Platform, ItemDproj, AItem.DbPath, Store, SectionGate);
       Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
       Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
+    FinishLibraryResolve(Store, LibRun, RanCalls, Length(SectionLibs) > 0, '  ', AItem.DbPath);
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
@@ -6699,21 +6823,26 @@ begin
       than not having the flag. }
     if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
     var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
+    { Library-first resolve: an explicit --library-db names the store itself and clears any marker. }
+    var LibRun: TLibraryRun:= PlanLibraryResolve(Store,
+      (Length(AArgs.LibraryDbs) = 0) and ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), AArgs.CheckPlatform, ResolvedDb);
     var RanCalls: Boolean:= CorpusMoved or (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or
-       ResolverStale or AArgs.ResolveOnly;
+       ResolverStale or AArgs.ResolveOnly or LibRun.Decision.RunPass;
+    var RunLibs: TArray<ISymbolStore>:= nil;
     if RanCalls then
     begin
-      { item 4: --library-db wins; else the section's "libraryResolve" opt-in; else no extra store. }
+      { item 4: --library-db wins; else the section's "libraryResolve" opt-in (LibRun.Wanted: no --library-db,
+        the key on, the library is not this DB), opened only when READY; else no extra store. }
       var IdxResolveGate: TLibraryGate;
-      var RunLibs: TArray<ISymbolStore>:= OpenLibraryStores(AArgs);
+      RunLibs:= OpenLibraryStores(AArgs);
       if Length(RunLibs) = 0 then
-        RunLibs:= ManifestLibraryStores(ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), AArgs.CheckPlatform,
-          IdxDproj, ResolvedDb, Store, IdxResolveGate);
+        RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
       Stage('', 'calls', procedure begin Store.ResolveCallTargets(RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
     else
       Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
+    FinishLibraryResolve(Store, LibRun, RanCalls, Length(RunLibs) > 0, '', ResolvedDb);
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun).
@@ -17880,6 +18009,10 @@ type
     ResolverNewer   : Boolean;
     Verdict         : string;
     Remedy          : string;
+    { Library-first resolve: the stored marker (State = '' when none) and, for a pending one, the
+      probe's current word on the library (a readiness token, '' when no marker). }
+    LibraryMarker   : TLibraryMarker;
+    LibraryState    : string;
   end;
 
 /// <summary>Computes the `info --db` staleness verdict for one index file:
@@ -17927,6 +18060,7 @@ begin
       Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
       Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
       Result.ResolverExpected:= ResolverFingerprint(St);
+      Result.LibraryMarker   := LibraryMarkerFromJson(St.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
     end;
   except
     on E: Exception do Ok:= False;
@@ -17976,6 +18110,15 @@ begin
   begin
     Result.Verdict:= 'resolve-owed';
     Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)';
+  end
+  else if Result.LibraryMarker.State = LIBSTATE_PENDING then
+  begin
+    { The edges are current for THIS resolver but were derived without the platform library. }
+    var LWhy, LFp: string;
+    Result.LibraryState:= LibraryReadinessToken(ProbeLibraryReadiness(Result.LibraryMarker.LibraryDb, Result.LibraryMarker.Platform, LWhy, LFp));
+    Result.Verdict:= 'library-resolve-owed';
+    Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}True) + '   (minutes; the platform library was not ready: ' +
+      Result.LibraryMarker.Reason + '; library now: ' + Result.LibraryState + ')';
   end
   else
     Result.Verdict:= 'current';
@@ -18185,6 +18328,13 @@ begin
           JOne.AddPair('verdict', V.Verdict);
           if V.Remedy <> '' then
             JOne.AddPair('remedy', V.Remedy);
+          if V.LibraryMarker.State <> '' then
+          begin
+            { Additive to info/1: the stored marker as an object, plus the library's state now. }
+            var JLib: TJSONObject:= TJSONObject(TJSONObject.ParseJSONValue(LibraryMarkerToJson(V.LibraryMarker)));
+            if V.LibraryState <> '' then JLib.AddPair('library_state', V.LibraryState);
+            JOne.AddPair('library_resolve', JLib);
+          end;
         end;
       end;
 
@@ -18215,6 +18365,8 @@ begin
       Writeln('index: ', DbP, '  verdict: ', V.Verdict);
       if V.Remedy <> '' then
         Writeln('  remedy: ', V.Remedy);
+      if V.LibraryMarker.State <> '' then
+        Writeln('  library_resolve: ', V.LibraryMarker.State, '  ', V.LibraryMarker.Reason);
     end;
   end;
 end; // function

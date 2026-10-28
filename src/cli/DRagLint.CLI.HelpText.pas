@@ -227,6 +227,7 @@ begin
   Writeln('                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
+  Writeln('                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed.');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -264,8 +265,9 @@ begin
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
-  Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+  Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
   Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
+  Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -763,6 +765,7 @@ begin
     Writeln('                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)');
     Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
     Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
+    Writeln('                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed.');
     Exit;
   end;
   if pVerb = 'export' then
@@ -887,8 +890,9 @@ begin
   begin
     Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
     Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
-    Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+    Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
     Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
+    Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
     Exit;
   end;
   if pVerb = 'fb-snapshot' then

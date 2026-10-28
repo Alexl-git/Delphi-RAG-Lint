@@ -326,6 +326,7 @@ uses
   DRagLint.CLI.CycleFix in 'DRagLint.CLI.CycleFix.pas',
   DRagLint.CLI.LibraryReady in 'DRagLint.CLI.LibraryReady.pas',
   DRagLint.CLI.HelpText in 'DRagLint.CLI.HelpText.pas',
+  DRagLint.CLI.LibraryMarker in 'DRagLint.CLI.LibraryMarker.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

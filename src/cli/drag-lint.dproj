@@ -300,6 +300,7 @@
         <DCCReference Include="DRagLint.CLI.CycleFix.pas"/>
         <DCCReference Include="DRagLint.CLI.LibraryReady.pas"/>
         <DCCReference Include="DRagLint.CLI.HelpText.pas"/>
+        <DCCReference Include="DRagLint.CLI.LibraryMarker.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

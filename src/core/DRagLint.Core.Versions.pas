@@ -32,6 +32,17 @@ const
   /// Pinned by tests\autotest\run_rename_owners_harness.ps1 (M9-M11).</remarks>
   REBUILD_IN_PROGRESS_META_KEY = 'rebuild_in_progress';
 
+  /// <summary>schema_meta key holding the project DB's "needs library re-resolve" marker: a small
+  /// JSON object {"state":"pending"|"bound","platform","library","reason",
+  /// "library_fingerprint_seen","engine","since_unix","last_check_unix"}. Absent or empty = no
+  /// marker (the section does not use libraryResolve, or an explicit --library-db named the store).</summary>
+  /// <remarks>Written only by index writers (DRagLint.CLI): `pending` when the section opted in and
+  /// the platform library was not ready, so the stored call edges are project-local and the result
+  /// is incomplete; `bound` after a pass against a ready library. A later writer run re-resolves a
+  /// pending DB once the library is ready (the --resolve-only path). Read-only verbs only read it
+  /// and print a notice. See DRagLint.CLI.LibraryMarker.</remarks>
+  LIBRARY_RESOLVE_STATE_META_KEY = 'library_resolve_state';
+
 /// <summary>Orders two dotted version strings SEMANTICALLY -- numeric limb by
 /// numeric limb -- so that '1.100.0' is above '1.16.0' and '1.9.0' is below
 /// '1.10.0', which is exactly where a string comparison gets both wrong.</summary>
