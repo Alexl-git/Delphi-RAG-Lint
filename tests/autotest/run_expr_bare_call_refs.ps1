@@ -167,12 +167,14 @@ foreach ($nm in 'LoopsBackIntoScan','KeepGoing','ItemLimit','GuardedByParens','S
 
 Write-Host ''
 Write-Host 'unused-public-symbol' -ForegroundColor Cyan
+# Match the DEAD tier's message only: since L11 (a3084012) the own-unit hint shares this rule id
+# and correctly names a routine that IS called, but only from its own unit.
 $lint = (& $Exe lint-all --db $db 2>$null | Out-String)
 foreach ($nm in 'LoopsBackIntoScan','KeepGoing','ItemLimit','GuardedByParens','SelectorSource') {
-  Check "$nm is NOT called dead" (-not ($lint -match "unused-public-symbol.*$nm"))
+  Check "$nm is NOT called dead" (-not ($lint -match "unused-public-symbol: Exported routine $nm has no references"))
 }
 Check 'a genuinely uncalled export IS still reported' `
-  ($lint -match 'unused-public-symbol.*NeverCalledAtAll') 'else the fix just disabled the rule'
+  ($lint -match 'unused-public-symbol: Exported routine NeverCalledAtAll has no references') 'else the fix just disabled the rule'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
