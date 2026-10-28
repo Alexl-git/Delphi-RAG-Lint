@@ -258,6 +258,7 @@ begin
   Writeln('                               ESCALATING when it does. Every honoured or refused request is audited on the engine''s stderr and in');
   Writeln('                               %LOCALAPPDATA%\drag-lint\control-channel-audit.log (who asked: pid + exe, when).');
   Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)');
+  Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--out <file>] [--json] [--check]   (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
   Writeln('  drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
@@ -847,6 +848,11 @@ begin
   if pVerb = 'ide-release' then
   begin
     Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)');
+    Exit;
+  end;
+  if pVerb = 'project-context' then
+  begin
+  Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--out <file>] [--json] [--check]   (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
     Exit;
   end;
   if pVerb = 'sql' then
