@@ -210,6 +210,8 @@ uses
   , DRagLint.Diagnostics.ConcurrencyChecks
   , DRagLint.Diagnostics.DisallowedChecks
   , DRagLint.Diagnostics.ModernizeChecks
+  , DRagLint.Diagnostics.PpChecks
+  , DRagLint.Index.PPUnitSource
   , DRagLint.Diagnostics.OwnershipChecks
   , DRagLint.Diagnostics.BoundsNilChecks
   , DRagLint.Diagnostics.ExceptionThreadChecks
@@ -3885,6 +3887,16 @@ begin
             // PP-Task-10: per-config uses-discovery -- honour the SAME profile
             // the indexer uses for this section (default ON; --no-preprocess -> False).
             Cl.SetPreprocess(APreprocess, SectionProfile);
+            { Lane INC3: IF names resolve in the used units -- project files
+              scanned (registered per closure below), library units from the
+              platform library DB. }
+            var PPSrc: TPPUnitSourceResolver:= nil;
+            if APreprocess then
+            begin
+              var PPLibArgs: TArgs:= Default(TArgs);
+              PPLibArgs.CheckPlatform:= AItem.Platform;
+              PPSrc:= InstallPPUnitSource(SectionProfile, nil, [ResolveLibraryDb(PPLibArgs)]);
+            end;
             for F in AItem.Roots do
             begin
               { A project file that is not there is a FAILURE, not a skip. It was
@@ -3900,8 +3912,15 @@ begin
               // Combine global + section exclude patterns for the closure.
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
+              if PPSrc <> nil then // lane INC3: second pass as in DoIndex
+              begin
+                var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
+                PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+                if PPMissed then CR:= Cl.Resolve(F, ExcludePatterns);
+              end;
               for W in CR.Warnings do Writeln('  ', W);
               Indexer.SetIncludeContext(APreprocess, CR.SearchPaths); // lane INC: as in DoIndex
+              if PPSrc <> nil then PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths); // lane INC3
               { Same scope expansion as `index --project` (sibling .dfm + the
                 project file). Before this, closure sections indexed .pas/.inc
                 only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
@@ -5821,7 +5840,25 @@ begin
           from an inactive branch would be pulled in and then parsed as though
           it were not compiled, and vice versa. }
         Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
+        { Lane INC3: IF names resolve in the used units -- the closure's
+          project files are scanned (order-independent), library units come
+          from the library DB (--library-db, else the manifest's). }
+        var PPSrc: TPPUnitSourceResolver:= nil;
+        if not AArgs.NoPreprocess then
+          PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        { The first pass could not see the project's own units yet; when an IF
+          asked for a name it could not answer, resolve once more with them. }
+        if PPSrc <> nil then
+        begin
+          var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
+          PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+          if PPMissed then
+          begin
+            CR:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+            PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+          end;
+        end;
         { Lane INC: each .inc is parsed in its includer's define context, with
           include names resolved on the same search path the closure used. }
         Indexer.SetIncludeContext(not AArgs.NoPreprocess, CR.SearchPaths);
@@ -13242,6 +13279,8 @@ const
   { taint wave T2: the store-backed interprocedural taint rules (DRagLint.Lint.TaintRules) }
   LINT_GATE_TAINT: array[0..2] of string = (
     'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal');
+  { lane INC3: the preprocessor's own report (DRagLint.Diagnostics.PpChecks) }
+  LINT_GATE_PP: array[0..0] of string = ('pp-unresolved-if');
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
@@ -14037,6 +14076,11 @@ begin
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   InstallFileProfileResolver(AArgs, AArgs.DbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  { Lane INC3: the lint side's IF symbol table -- the same lookup the indexer
+    used: project units through the project DB's files, library units from
+    the library DB. }
+  if not AArgs.NoPreprocess then
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), AArgs.DbPaths, [LintLibraryDb(AArgs)]);
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -14732,6 +14776,10 @@ begin
       TraceLintChecker('modernize');
       if LintRuleWants(NarrowRule, LINT_GATE_MODERNIZE) then
         for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('pp');
+      if LintRuleWants(NarrowRule, LINT_GATE_PP) then
+        for F in DRagLint.Diagnostics.PpChecks.TPpChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { Gap-rules wave (G0): the five new per-file checker units. }
       TraceLintChecker('ownership');
@@ -20346,6 +20394,8 @@ begin
     silent zero -- ProjectDb stays '' and the run refuses below. }
   SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
   InstallFileProfileResolver(AArgs, Dbs, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  if not AArgs.NoPreprocess then // lane INC3: as in DoLint
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), [ProjectDb], [LibDb, LintLibraryDb(AArgs)]);
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -20648,6 +20698,8 @@ begin
           for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
           for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_PP) then
+          for F in DRagLint.Diagnostics.PpChecks.TPpChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { Gap-rules wave (G0): the five new per-file checker units. }
         if LintRuleWants(Nr, LINT_GATE_OWNERSHIP) then
           for F in DRagLint.Diagnostics.OwnershipChecks.TOwnershipChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];

@@ -762,6 +762,8 @@ begin
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');
     B('taint-path-traversal', 'security', 'warning', 'Tainted data reaches a file-system path sink -- a catalogued source flows across routines into a file / directory API (CWE-22)');
+    { lane INC3: the preprocessor's IF symbol table (DRagLint.Diagnostics.PpChecks) }
+    B('pp-unresolved-if', 'bug-patterns', 'hint', '$IF names a constant the index cannot resolve -- the directive was taken as False, so the wrong branch (and include) may be indexed');
     Result:= L.ToArray;
   finally
     L.Free;
