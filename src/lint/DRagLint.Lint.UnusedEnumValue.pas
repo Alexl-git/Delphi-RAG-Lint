@@ -109,6 +109,11 @@ var
       for var I:= LineStart to LineEnd do
       begin
         var R: TReference:= Refs[I];
+        { an UNBOUND ref spelled like a (unique) enum type on an implicit-use line:
+          `Low(TFlag)` whose TFlag the resolver left unbound (measured on the engine tree) }
+        var ByNm: Int64;
+        if HasImplicitName and (R.SymbolId <= 0) and EnumByName.TryGetValue(LowerCase(R.NameText), ByNm) and (ByNm > 0) then
+          Implicit.AddOrSetValue(ByNm, True);
         if R.SymbolId <= 0 then Continue;
         var V: TSymbol;
         if ValueOf.TryGetValue(R.SymbolId, V) then

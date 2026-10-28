@@ -61,10 +61,13 @@ implementation
 uses
   System.SysUtils
   , System.StrUtils
+  , System.Classes
+  , System.IOUtils
   , System.Generics.Collections
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.EnumOrdinalPersisted { CountImplicitOrdinals }
   ;
 
 const
@@ -76,6 +79,12 @@ const
   { declType's own name field, and the decl nodes whose names carry a type. }
   FIELD_NAME = 'name';
   FIELD_TYPE = 'type';
+  { EnumState answers }
+  ENUM_NONE   = -1;
+  ENUM_FREE   = 0;
+  ENUM_PINNED = 1;
+  { how far past an indexed enum's start line its value list may run }
+  DECL_WINDOW_LINES = 400;
 
 class function TEnumOrdinalCastChecker.Check(const AFile: string; const AStore: ISymbolStore;
   AFileId: Int64): TArray<TLintFinding>;
@@ -83,11 +92,11 @@ var
   Src       : TBytes                                ;
   PF        : TParsedFile                           ;
   Findings  : TList<TLintFinding>                   ;
-  EnumTypes : TDictionary<string, Boolean>          ; { lower enum type names declared here }
-  EnumValues: TDictionary<string, Boolean>          ; { lower enum value names declared here }
+  EnumTypes : TDictionary<string, Boolean>          ; { lower enum type names declared here -> every value pinned (= N) }
+  EnumValues: TDictionary<string, string>           ; { lower enum value name declared here -> lower type name }
   DeclTypes : TDictionary<string, string>           ; { lower var/param/field name -> lower bare type; '' = ambiguous }
   RefByPos  : TDictionary<string, TReference>       ; { 'line:col' (1-based) -> ref }
-  StoreEnum : TDictionary<string, Boolean>          ; { lower type name -> the index holds an enum of that name }
+  StoreEnum : TDictionary<string, Integer>          ; { lower type name -> ENUM_NONE / ENUM_FREE / ENUM_PINNED }
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -137,10 +146,20 @@ var
     begin
       var P: TTSNode:= N.Parent;
       while not P.IsNull and (P.NodeType <> 'declType') do P:= P.Parent;
-      if not P.IsNull then EnumTypes.AddOrSetValue(BareLower(NodeStr(P.ChildByField(FIELD_NAME))), True);
+      if not P.IsNull then
+      begin
+        var TypeNm: string:= BareLower(NodeStr(P.ChildByField(FIELD_NAME)));
+        var Pinned: Boolean:= True;
+        for var I: Integer:= 0 to N.NamedChildCount - 1 do
+        begin
+          var V: TTSNode:= N.NamedChild(I);
+          if V.NodeType <> 'declEnumValue' then Continue;
+          EnumValues.AddOrSetValue(LowerCase(Trim(NodeStr(V.ChildByField(FIELD_NAME)))), TypeNm);
+          if V.ChildByField('value').IsNull then Pinned:= False;
+        end;
+        EnumTypes.AddOrSetValue(TypeNm, Pinned);
+      end;
     end
-    else if T = 'declEnumValue' then
-      EnumValues.AddOrSetValue(LowerCase(Trim(NodeStr(N.ChildByField(FIELD_NAME)))), True)
     else if (T = 'declVar') or (T = 'declArg') or (T = 'declField') then
     begin
       var TypeN: TTSNode:= N.ChildByField(FIELD_TYPE);
@@ -167,23 +186,58 @@ var
       and (ARef.SymbolId > 0);
   end;
 
-  function StoreHasEnum(const ALowerType: string): Boolean;
+  { An indexed enum's declaration text (from its name on); '' when unreadable. }
+  function DeclTextOf(const AEnum: TSymbol): string;
+  var
+    Lines: TArray<string>;
   begin
-    if (AStore = nil) or (ALowerType = '') then Exit(False);
+    Result:= '';
+    try
+      Lines:= TFile.ReadAllLines(AStore.GetFilePath(AEnum.FileId), TEncoding.ANSI);
+    except  // dl:ok try-except-swallowed -- an unreadable declaring file only means the pin cannot be proven: the enum counts as unpinned
+      on EInOutError do Exit;
+      on EStreamError do Exit;
+      on EEncodingError do Exit;
+    end;
+    for var L: Integer:= AEnum.StartLine to AEnum.StartLine + DECL_WINDOW_LINES do
+    begin
+      if (L < 1) or (L > Length(Lines)) then Break;
+      var Txt: string:= Lines[L - 1];
+      if (L = AEnum.StartLine) and (AEnum.StartCol > 1) then Txt:= Copy(Txt, AEnum.StartCol, MaxInt);
+      Result:= Result + Txt + sLineBreak;
+    end;
+  end;
+
+  { The enum state of a type the INDEX knows by name: read once, cached. A
+    name two enums share is ENUM_NONE (no guessing). }
+  function StoreEnumState(const ALowerType: string): Integer;
+  var
+    Found: TArray<TSymbol>;
+  begin
+    if (AStore = nil) or (ALowerType = '') then Exit(ENUM_NONE);
     if StoreEnum.TryGetValue(ALowerType, Result) then Exit;
-    Result:= False;
+    Result:= ENUM_NONE;
+    Found:= nil;
     for var S: TSymbol in AStore.FindSymbolsByExactName(ALowerType) do
-      if (S.Kind = skEnum) and SameText(S.Name, ALowerType) then
-      begin
-        Result:= True;
-        Break;
-      end;
+      if (S.Kind = skEnum) and SameText(S.Name, ALowerType) then Found:= Found + [S];
+    if Length(Found) = 1 then
+    begin
+      Result:= ENUM_FREE;
+      var Total: Integer;
+      var Decl: string:= DeclTextOf(Found[0]);
+      if (Decl <> '') and (CountImplicitOrdinals(Decl, Total) = 0) and (Total > 0) then Result:= ENUM_PINNED;
+    end;
     StoreEnum.Add(ALowerType, Result);
   end;
 
-  function IsEnumTypeName(const ALowerType: string): Boolean;
+  { ENUM_NONE when ALowerType is no enum, else whether its values are pinned. }
+  function EnumState(const ALowerType: string): Integer;
+  var
+    Pinned: Boolean;
   begin
-    Result:= (ALowerType <> '') and (EnumTypes.ContainsKey(ALowerType) or StoreHasEnum(ALowerType));
+    if ALowerType = '' then Exit(ENUM_NONE);
+    if EnumTypes.TryGetValue(ALowerType, Pinned) then Exit(if Pinned then ENUM_PINNED else ENUM_FREE);
+    Result:= StoreEnumState(ALowerType);
   end;
 
   { The identifier a (dotted) name ends in; null for any other expression. }
@@ -210,45 +264,54 @@ var
     Result:= BareLower(Result);
   end;
 
-  { True when N is an enum VALUE: an enum value name, or a var / param / field
-    whose declared type is an enum. }
-  function IsEnumExpr(const N: TTSNode): Boolean;
+  { The lower enum TYPE name of an enum value expression -- an enum value, or a
+    var / param / field declared of an enum type; '' when N is none of those. }
+  function EnumTypeOfExpr(const N: TTSNode): string;
   var
     Ref: TReference;
   begin
+    Result:= '';
     var Id: TTSNode:= LastIdent(N);
-    if Id.IsNull then Exit(False);
+    if Id.IsNull then Exit;
     var Nm: string:= LowerCase(Trim(NodeStr(Id)));
     if (AStore <> nil) and RefAt(Id, Ref) then
     begin
       var Sym: TSymbol:= AStore.GetSymbolById(Ref.SymbolId);
-      if Sym.Kind = skEnumValue then Exit(True);
-      if Sym.Kind in [skEnum, skClass, skRecord, skInterface, skProcedure, skFunction] then Exit(False);
-      if IsEnumTypeName(SigType(Sym)) then Exit(True);
+      if Sym.Kind = skEnumValue then Exit(LowerCase(AStore.GetSymbolById(Sym.ParentId).Name));
+      if Sym.Kind in [skEnum, skClass, skRecord, skInterface, skProcedure, skFunction, skMethod] then Exit;
+      var St: string:= SigType(Sym);
+      if EnumState(St) <> ENUM_NONE then Exit(St);
     end;
+    if EnumValues.TryGetValue(Nm, Result) then Exit;
     var Ty: string;
-    Result:= EnumValues.ContainsKey(Nm)
-      or (DeclTypes.TryGetValue(Nm, Ty) and IsEnumTypeName(Ty));
+    if DeclTypes.TryGetValue(Nm, Ty) and (EnumState(Ty) <> ENUM_NONE) then Result:= Ty;
   end;
 
-  { True when the call's callee names an enum TYPE (a cast to it). }
-  function IsEnumCastEntity(const AEntity: TTSNode): Boolean;
+  { The lower enum TYPE name a call's callee names (a cast to it); '' otherwise. }
+  function EnumCastTarget(const AEntity: TTSNode): string;
   var
     Ref: TReference;
   begin
+    Result:= '';
     var Id: TTSNode:= LastIdent(AEntity);
-    if Id.IsNull then Exit(False);
+    if Id.IsNull then Exit;
+    var Nm: string:= LowerCase(Trim(NodeStr(Id)));
     if (AStore <> nil) and RefAt(Id, Ref) then
-      Exit(AStore.GetSymbolById(Ref.SymbolId).Kind = skEnum);
-    Result:= EnumTypes.ContainsKey(LowerCase(Trim(NodeStr(Id))));
+    begin
+      if AStore.GetSymbolById(Ref.SymbolId).Kind = skEnum then Result:= Nm;
+      Exit;
+    end;
+    if EnumTypes.ContainsKey(Nm) then Result:= Nm;
   end;
 
+  { A non-negative integer literal. A negative one (TKind(-1)) is an out-of-range
+    sentinel, not any value's position, so reordering cannot change it. }
   function IsIntLiteral(const N: TTSNode): Boolean;
   begin
     if N.IsNull then Exit(False);
     if (N.NodeType = 'exprParens') and (N.NamedChildCount = 1) then Exit(IsIntLiteral(N.NamedChild(0)));
-    if N.NodeType = 'exprUnary' then Exit(IsIntLiteral(N.ChildByField('operand')));
-    Result:= (N.NodeType = 'literalNumber') and (Pos('.', NodeStr(N)) = 0);
+    var Txt: string:= Trim(NodeStr(N));
+    Result:= (N.NodeType = 'literalNumber') and (Pos('.', Txt) = 0) and not StartsStr('-', Txt);
   end;
 
   function SingleArg(const ACall: TTSNode): TTSNode;
@@ -258,17 +321,18 @@ var
     if not Args.IsNull and (Args.NamedChildCount = 1) then Result:= Args.NamedChild(0);
   end;
 
-  { `Ord(E)` / `Integer(E)` / ... with E an enum value; '' otherwise, else the cast's name. }
-  function OrdOfEnum(const N: TTSNode): string;
+  { True for `Ord(E)` / `Integer(E)` / ... with E a value of an enum whose
+    ordinals are NOT all pinned (`= N` makes a literal ordinal stable). }
+  function IsOrdOfFreeEnum(const N: TTSNode): Boolean;
   begin
-    Result:= '';
+    Result:= False;
     var X: TTSNode:= N;
     while not X.IsNull and (X.NodeType = 'exprParens') and (X.NamedChildCount = 1) do X:= X.NamedChild(0);
     if X.IsNull or (X.NodeType <> 'exprCall') then Exit;
     var Ent: TTSNode:= X.ChildByField('entity');
     if Ent.IsNull or (Ent.NodeType <> 'identifier') or not InList(Trim(NodeStr(Ent)), ORD_CASTS) then Exit;
     var Arg: TTSNode:= SingleArg(X);
-    if not Arg.IsNull and IsEnumExpr(Arg) then Result:= Trim(NodeStr(Ent));
+    if not Arg.IsNull then Result:= EnumState(EnumTypeOfExpr(Arg)) = ENUM_FREE;
   end;
 
   procedure EmitAt(const ANode: TTSNode; const AMsg: string);
@@ -326,7 +390,7 @@ var
     if T = 'exprCall' then
     begin
       var Arg: TTSNode:= SingleArg(N);
-      if IsIntLiteral(Arg) and IsEnumCastEntity(N.ChildByField('entity')) then
+      if IsIntLiteral(Arg) and (EnumState(EnumCastTarget(N.ChildByField('entity'))) = ENUM_FREE) then
         EmitAt(N, Format('%s hard-codes an enum ordinal -- inserting or reordering a value of %s ' +
           'silently changes which value this is. Name the value instead.',
           [Trim(NodeStr(N)), Trim(NodeStr(N.ChildByField('entity')))]));
@@ -339,8 +403,8 @@ var
         var L: TTSNode:= N.ChildByField('lhs');
         var R: TTSNode:= N.ChildByField('rhs');
         var Side: TTSNode:= Default(TTSNode);
-        if IsIntLiteral(R) and (OrdOfEnum(L) <> '') then Side:= L
-        else if IsIntLiteral(L) and (OrdOfEnum(R) <> '') then Side:= R;
+        if IsIntLiteral(R) and IsOrdOfFreeEnum(L) then Side:= L
+        else if IsIntLiteral(L) and IsOrdOfFreeEnum(R) then Side:= R;
         if not Side.IsNull then
           EmitAt(N, Format('%s compares an enum ordinal with a literal -- inserting or reordering a ' +
             'value silently changes the meaning. Compare with the enum value itself.',
@@ -350,7 +414,7 @@ var
     else if T = 'case' then
     begin
       var Sel: TTSNode:= CaseSelector(N);
-      if not Sel.IsNull and (OrdOfEnum(Sel) <> '') and CaseHasLiteralLabel(N) then
+      if not Sel.IsNull and IsOrdOfFreeEnum(Sel) and CaseHasLiteralLabel(N) then
         EmitAt(N, Format('case %s of ... with literal labels hard-codes enum ordinals -- inserting or ' +
           'reordering a value silently changes which branch runs. Case on the enum value itself.',
           [Trim(NodeStr(Sel))]));
@@ -365,10 +429,10 @@ begin
   Src:= PF.Src;
   Findings  := TList<TLintFinding>.Create;
   EnumTypes := TDictionary<string, Boolean>.Create;
-  EnumValues:= TDictionary<string, Boolean>.Create;
+  EnumValues:= TDictionary<string, string>.Create;
   DeclTypes := TDictionary<string, string>.Create;
   RefByPos  := TDictionary<string, TReference>.Create;
-  StoreEnum := TDictionary<string, Boolean>.Create;
+  StoreEnum := TDictionary<string, Integer>.Create;
   try
     CollectDecls(PF.Tree.RootNode);
     if (AStore <> nil) and (AFileId > 0) then

@@ -4,12 +4,14 @@ unit EnumOrdinalCastFixture;
   case Ord(X) of 2: -- breaks silently when a value is inserted or reordered.
   Known FP shapes kept silent below: Ord() against another Ord() (arithmetic /
   serialisation), Ord() of a Char or Integer, a cast to a non-enum type,
-  a cast whose argument is not a literal. }
+  a cast whose argument is not a literal, a negative sentinel TEnum(-1),
+  an enum whose values are all pinned (= N). }
 
 interface
 
 type
   TCmd = (cmdLoad, cmdDelta, cmdSave, cmdQuit);
+  TPinned = (pnA = 0, pnB = 1, pnC = 2);
   TCmdHolder = class
     FCmd: TCmd;
   end;
@@ -23,6 +25,7 @@ var
   C: TCmd;
   B: Byte;
   D: Integer;
+  P: TPinned;
 begin
   C:= TCmd(2);                          { hit: cast-in of a literal }
   if Ord(pCmd) = 3 then Exit;           { hit: Ord of a param compared to a literal }
@@ -41,6 +44,9 @@ begin
   case pCmd of                          { silent: case on the enum itself }
     cmdLoad: Exit;
   end;
+  C:= TCmd(-1);                         { silent: negative sentinel, no value's position }
+  P:= TPinned(1);                       { silent: every value pinned (= N) }
+  if Ord(P) = 2 then Exit;              { silent: every value pinned (= N) }
   if (D > 0) and (B > 0) then Exit;
 end;
 

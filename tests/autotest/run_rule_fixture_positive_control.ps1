@@ -67,6 +67,8 @@ $Allowlist = @(
 #   pp-unresolved-if              -> tests\autotest\run_index_pp_consts.ps1
 $Allowlist += @('taint-sql-injection', 'taint-command-injection', 'taint-path-traversal',
     'duplicate-unit-on-search-path', 'pp-unresolved-if')
+# unused-enum-value -> tests\lint-project\unused-enum-value\run_unused_enum_value.ps1 (project rule, lane B-ENUM)
+$Allowlist += @('unused-enum-value')
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 
