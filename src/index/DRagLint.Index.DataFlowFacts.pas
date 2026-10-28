@@ -930,7 +930,7 @@ begin
   begin
     Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Integer(R.StartPoint.Column) + 1, Text(R)));
     BN:= LowerCase(Text(Base));
-    if (BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN)) then Result:= ExprUnion(Result, LV);
+    if ((BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN))) or IsHardCastRooted(L) then Result:= ExprUnion(Result, LV); { a cast keeps its operand's taint }
     Exit;
   end;
   Result:= LV;
