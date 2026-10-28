@@ -3509,6 +3509,12 @@ type
       class function FindImplEnd(const ALines: TArray<string>; AStartLine: Integer): Integer; static;
   end;
 
+const
+  /// <summary>Lane INC: the schema_meta key prefix of a host's recorded include
+  /// list (SetFileIncludes); the full key is this plus the lowercased stored host
+  /// path, the value the include paths joined by '|'. Public for lint-all (lane INC2).</summary>
+  FILE_INCLUDES_META_KEY = 'file_includes:';
+
 implementation
 
 uses
@@ -5561,7 +5567,7 @@ end; // function
 
 const
   // Lane INC: schema_meta key prefix of a host's recorded include list.
-  FILE_INCLUDES_KEY = 'file_includes:';
+  FILE_INCLUDES_KEY = FILE_INCLUDES_META_KEY;
   FILE_INCLUDES_SEP = '|';
 
 // True when one of the includes recorded for APath by SetFileIncludes is

@@ -298,6 +298,80 @@ begin
   end;
 end;
 
+// Lane INC2: a directive's opening bytes (brace + dollar), and the length of
+// that frame plus the closing brace -- what is cut to get the directive body.
+const
+  DIRECTIVE_OPEN      = #123'$';
+  DIRECTIVE_FRAME_LEN = 3;
+
+// Lane INC2: the long names of the switch directives {$IFOPT} can test, and
+// the letter each one sets ({$RANGECHECKS ON} = {$R+}). Parallel arrays.
+const
+  SWITCH_LONG_NAMES: array[0..19] of string = (
+    'booleval', 'assertions', 'debuginfo', 'importeddata', 'longstrings',
+    'iochecks', 'writeableconst', 'localsymbols', 'typeinfo', 'optimization',
+    'openstrings', 'overflowchecks', 'rangechecks', 'typedaddress', 'safedivide',
+    'varstringchecks', 'stackframes', 'extendedsyntax', 'referenceinfo', 'definitioninfo');
+  SWITCH_LONG_LETTERS: array[0..19] of string = (
+    'b', 'c', 'd', 'g', 'h', 'i', 'j', 'l', 'm', 'o',
+    'p', 'q', 'r', 't', 'u', 'v', 'w', 'x', 'y', 'y');
+
+// Lane INC2: applies one switch directive body (the text between the dollar
+// and the closing brace) to ASwitches: a letter list 'R+' / 'R-,Q+' or a long
+// form 'RANGECHECKS ON'. Anything else ({$R file.res}, {$WARN ...}) is left
+// alone. dcc applies a switch in source order, so the caller calls this for
+// active directives only.
+procedure ApplySwitchText(const AText: string; ASwitches: TDictionary<string, Boolean>);
+var
+  Parts: TArray<string>;
+  Part : string;
+  LongName: string;
+  Rest : string;
+  Sp   : Integer;
+  K    : Integer;
+begin
+  Parts:= Trim(AText).Split([',']);
+  if Length(Parts) = 0 then Exit;
+  // Letter list: every part is exactly <letter><sign>.
+  var IsList: Boolean:= True;
+  for Part in Parts do
+    if not ((Length(Trim(Part)) = 2) and CharInSet(Trim(Part)[1], ['A'..'Z', 'a'..'z'])
+            and CharInSet(Trim(Part)[2], ['+', '-'])) then IsList:= False;
+  if IsList then
+  begin
+    for Part in Parts do
+      ASwitches.AddOrSetValue(LowerCase(Trim(Part)[1]), Trim(Part)[2] = '+');
+    Exit;
+  end;
+  // Long form: NAME ON|OFF.
+  Rest:= Trim(AText);
+  Sp:= Pos(' ', Rest);
+  if Sp = 0 then Exit;
+  LongName:= LowerCase(Copy(Rest, 1, Sp - 1));
+  Rest := LowerCase(Trim(Copy(Rest, Sp + 1, MaxInt)));
+  if (Rest <> 'on') and (Rest <> 'off') then Exit;
+  for K:= Low(SWITCH_LONG_NAMES) to High(SWITCH_LONG_NAMES) do
+    if LongName = SWITCH_LONG_NAMES[K] then
+    begin
+      ASwitches.AddOrSetValue(SWITCH_LONG_LETTERS[K], Rest = 'on');
+      Exit;
+    end;
+end;
+
+// Lane INC2: {$IFOPT X+} / {$IFOPT X-} against the live switch states. A
+// letter no profile or directive set is False either way (conservative, the
+// pre-INC2 answer for every IFOPT).
+function EvalIfOpt(const AArgs: string; ASwitches: TDictionary<string, Boolean>): Boolean;
+var
+  A : string;
+  On: Boolean;
+begin
+  A:= Trim(AArgs);
+  if (Length(A) < 2) or not CharInSet(A[2], ['+', '-']) then Exit(False);
+  if not ASwitches.TryGetValue(LowerCase(A[1]), On) then Exit(False);
+  Result:= On = (A[2] = '+');
+end;
+
 // The recursive worker (the faithful port of preprocess.js's preprocess()).
 // ADefines / ANumeric are threaded BY REFERENCE through the recursion so a
 // 'defines-only' child's {$DEFINE}/{$UNDEF} mutate the PARENT'S live table --
@@ -310,6 +384,7 @@ procedure PreprocessInto(
   const ABytes: TBytes;
   ADefines: TDictionary<string, Boolean>;
   ANumeric: TDictionary<string, Integer>;
+  ASwitches: TDictionary<string, Boolean>;
   const AIncludeMode, ABaseDir: string;
   ANearSearch: Boolean;
   const ASearchPaths: TArray<string>;
@@ -411,7 +486,7 @@ var
     // child's BaseDir is the resolved include's own directory, and NearSearch is
     // threaded through so a nested {$I} resolves nearest-first from there too.
     PreprocessInto(
-      SubBytes, ADefines, ANumeric, AIncludeMode,
+      SubBytes, ADefines, ANumeric, ASwitches, AIncludeMode,
       TPath.GetDirectoryName(Resolved), ANearSearch, ASearchPaths, ADepth + 1, ASites, SubOut, SubPos);
     if SiteIdx >= 0 then
     begin
@@ -459,6 +534,9 @@ begin
   begin
     if C.Kind = ckText then
     begin
+      // Lane INC2: a passthrough directive may be a compiler switch ({$R-}).
+      if (Length(C.Value) > DIRECTIVE_FRAME_LEN) and C.Value.StartsWith(DIRECTIVE_OPEN) and EffectivelyActive then
+        ApplySwitchText(Copy(C.Value, Length(DIRECTIVE_OPEN) + 1, Length(C.Value) - DIRECTIVE_FRAME_LEN), ASwitches);
       BlankifyOrEmit(C.SrcStart, C.SrcEnd);
       Continue;
     end;
@@ -485,7 +563,7 @@ begin
       if C.Dir = 'ifdef' then Cond:= ADefines.ContainsKey(LowerCase(C.Args))
       else if C.Dir = 'ifndef' then Cond:= not ADefines.ContainsKey(LowerCase(C.Args))
       else if C.Dir = 'if' then Cond:= EvalPPExpr(C.Args, ADefines, ANumeric)
-      else Cond:= False; // ifopt -- conservative
+      else Cond:= EvalIfOpt(C.Args, ASwitches); // lane INC2
       var OuterInactive: Boolean:= not EffectivelyActive;
       SetLength(Stack, Length(Stack) + 1);
       Stack[High(Stack)].Active       := Cond and (not OuterInactive);
@@ -527,6 +605,14 @@ begin
       Continue;
     end;
 
+    // Lane INC2: {$I+} / {$I-} is the IOCHECKS switch, not an include.
+    if (C.Dir = 'i') and (C.Args <> '') and CharInSet(C.Args[1], ['+', '-']) then
+    begin
+      if EffectivelyActive then ApplySwitchText('I' + C.Args, ASwitches);
+      BlankifyDirective(C.SrcStart, C.SrcEnd);
+      Continue;
+    end;
+
     if (C.Dir = 'i') or (C.Dir = 'include') then
     begin
       // {$I}/{$INCLUDE} (preprocess.js:149-186, minus 'expand'). ALWAYS blank
@@ -554,8 +640,10 @@ function PreprocessWithSites(const AUtf8: TBytes; const AOptions: TPPOptions;
 var
   Defines: TDictionary<string, Boolean>;
   Numeric: TDictionary<string, Integer>;
+  Switches: TDictionary<string, Boolean>;
   D      : string           ;
   P      : TPair<string, Integer>;
+  S      : TPair<string, Boolean>;
   OutPos : Integer          ;
 begin
   SetLength(Result, Length(AUtf8));
@@ -563,6 +651,7 @@ begin
 
   Defines:= TDictionary<string, Boolean>.Create;
   Numeric:= TDictionary<string, Integer>.Create;
+  Switches:= TDictionary<string, Boolean>.Create;
   try
     // Seed the live defines set from the profile ONCE (already lowercased); the
     // recursion then SHARES these instances (never re-seeds per include).
@@ -570,6 +659,8 @@ begin
       if D <> '' then Defines.AddOrSetValue(LowerCase(D), True);
     for P in AOptions.Profile.NumericDefines do
       Numeric.AddOrSetValue(LowerCase(P.Key), P.Value);
+    for S in AOptions.Profile.Switches do // lane INC2: {$IFOPT} states, later wins
+      Switches.AddOrSetValue(LowerCase(S.Key), S.Value);
 
     { P1 (extractor 1.19.0-alpha): a Delphi 12+ multi-line string literal is
       neutralised BEFORE the directive lexer sees it -- unconditionally, unlike
@@ -578,9 +669,10 @@ begin
       the offset-identity invariant is untouched; a file without such a literal
       is passed through as the very same array. }
     PreprocessInto(
-      NeutralizeMultilineStrings(AUtf8), Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
+      NeutralizeMultilineStrings(AUtf8), Defines, Numeric, Switches, AOptions.IncludeMode, AOptions.BaseDir,
       AOptions.NearSearch, AOptions.SearchPaths, 0, ASites, Result, OutPos);
   finally
+    Switches.Free;
     Numeric.Free;
     Defines.Free;
   end;

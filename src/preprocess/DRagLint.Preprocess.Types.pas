@@ -50,7 +50,14 @@ type
   /// </remarks>
   TDefineProfile = record
     Defines       : TArray<string>;
+    /// <summary>Lowercased name -> integer for {$IF NAME op N}; a later pair for
+    /// the same name wins (lane INC2: a valued DCC_Define such as DEBUG2=3, and the
+    /// compiler's CompilerVersion / RTLVersion).</summary>
     NumericDefines: TArray<TPair<string, Integer>>;
+    /// <summary>Lane INC2: compiler switch states for {$IFOPT X+}: a lowercased
+    /// switch letter -> True for '+'; a later pair for the same letter wins. Empty
+    /// = every {$IFOPT} is False (the pre-INC2 behaviour).</summary>
+    Switches      : TArray<TPair<string, Boolean>>;
   end;
 
   /// <summary>PP-Task-6: options carrier for a Preprocess run that handles

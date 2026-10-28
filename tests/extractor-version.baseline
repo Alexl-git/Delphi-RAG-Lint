@@ -1071,4 +1071,9 @@
 #   Superseded: 1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
 #   2026-10-27 (controller, merge gaps/inc into gaps/taint): re-pinned WITHIN 1.26.0-alpha -- ARGOUT + INC
 #   both changed the surface; no index built under 1.26.0 yet. Superseded: f26a8bd6 (ARGOUT), ec65f9df (INC).
-1.26.0-alpha|80ca533eeebcd5e3c2ae42ebf7926721c80733c97809a8ed30e16888324fb305
+#   2026-10-27 (lane INC2, gaps/inc2): re-pinned WITHIN 1.26.0-alpha (no index built under 1.26.0 yet).
+#   Valued DCC_Define / delphilsp -D (DEBUG2=3) reach {$IF} as numerics, CompilerVersion/RTLVersion
+#   seeded, {$IFOPT} evaluated (dcc defaults + .dproj DCC_ switches + -$X+ + in-source switches) --
+#   which preprocessor branches parse changes. Pinned by tests\autotest\run_index_inc_value_defines.ps1.
+#   Superseded: 80ca533e (controller merge INC + ARGOUT).
+1.26.0-alpha|470635dde28593b22c55d0a07367ba49f14278c32b630b691325b92c4af9183b
