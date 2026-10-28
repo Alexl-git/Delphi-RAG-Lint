@@ -41,7 +41,8 @@ type
     procedure Add(const N: string);
   end;
 
-  ELibError = class(Exception)
+  { P8: an exception class whose member comes from a LIBRARY ancestor. }
+  ELibError = class(TLibBase)
   end;
 
 var

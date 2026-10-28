@@ -6,7 +6,10 @@
 
   Part A: project only (xt_app + xt_app2). Part B: same project with
   --library-db (xt_lib indexed alone). RED until resolver lane R1 (part A) and
-  R2 (part B). Controls: external_target NULL for ALL rows in part A; the local
+  R2 (part B). A head the PROJECT cannot type (a library type or global:
+  TLibEnc.UTF8, LibApp) has receiver_type_text '' in part A -- no store knows it --
+  and the library-typed text in part B (lane R4R ruling; spec s.4.1 row 3).
+  P8 needs the extractor's handler local_var (lane X). Controls: external_target NULL for ALL rows in part A; the local
   call_edges set is byte-identical between A and B; P2 is never TOtherLib.Add.
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
@@ -43,8 +46,8 @@ try {
     @{ id='P2'; n='Add';      r='S.Defs';        t='TLibStream.Defs';  x='xt_lib.TLibDefs.Add' },
     @{ id='P3'; n='Pos';      r='A';             t='TAppStream';       x='xt_lib.TLibBase.Pos' },
     @{ id='P4'; n='Own';      r='A';             t='TAppStream';       x=$null },
-    @{ id='P5'; n='GetBytes'; r='TLibEnc.UTF8';  t='TLibEnc.UTF8';     x='xt_lib.TLibEnc.GetBytes' },
-    @{ id='P6'; n='Base';     r='LibApp';        t='TLibBase';         x='xt_lib.TLibBase.Base' },
+    @{ id='P5'; n='GetBytes'; r='TLibEnc.UTF8';  t='';                 tb='TLibEnc.UTF8'; x='xt_lib.TLibEnc.GetBytes' },
+    @{ id='P6'; n='Base';     r='LibApp';        t='';                 tb='TLibBase';     x='xt_lib.TLibBase.Base' },
     @{ id='P7'; n='Own';      r='GArr[1]';       t='TAppStream';       x=$null },
     @{ id='P8'; n='Base';     r='E';             t='ELibError';        x='xt_lib.TLibBase.Base' },
     @{ id='P9'; n='LibFormat';r='';              t='';                 x='xt_lib.LibFormat' },
@@ -63,7 +66,7 @@ try {
     Check 'A: app index built' ($LASTEXITCODE -eq 0)
     $a = Q $dbA $refSql
     foreach ($s in $sites) {
-      $rw = Rows $a $s.n $s.r
+      $rw = @(Rows $a $s.n $s.r)
       $ok = ($rw.Count -gt 0) -and (@($rw | Where-Object { $_.receiver_type_text -cne $s.t }).Count -eq 0)
       Check "A: $($s.id) receiver_type_text = '$($s.t)'" $ok ("rows=" + $rw.Count + " got=" + (($rw | ForEach-Object { "'" + $_.receiver_type_text + "'" }) -join ','))
     }
@@ -75,7 +78,9 @@ try {
     Check 'B: app index built with --library-db' ($LASTEXITCODE -eq 0)
     $b = Q $dbB $refSql
     foreach ($s in $sites) {
-      $rw = Rows $b $s.n $s.r
+      $rw = @(Rows $b $s.n $s.r)
+      $tb = if ($s.ContainsKey('tb')) { $s.tb } else { $s.t }
+      Check "B: $($s.id) receiver_type_text = '$tb'" (($rw.Count -gt 0) -and (@($rw | Where-Object { $_.receiver_type_text -cne $tb }).Count -eq 0)) ("got=" + (($rw | ForEach-Object { "'" + $_.receiver_type_text + "'" }) -join ','))
       if ($s.x) { $ok = @($rw | Where-Object { $_.external_target -ceq $s.x }).Count -gt 0 }
       else      { $ok = ($rw.Count -gt 0) -and (@($rw | Where-Object { $_.external_target }).Count -eq 0) }
       Check "B: $($s.id) external_target = '$($s.x)'" $ok ("got=" + (($rw | ForEach-Object { "'" + $_.external_target + "'" }) -join ','))
