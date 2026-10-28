@@ -3411,7 +3411,7 @@
         {
           "type": "cli",
           "verb": "lint-project",
-          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]",
+          "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]",
           "flags": [
             {
               "name": "--db",
@@ -3429,7 +3429,7 @@
             }
           ],
           "helpOrder": 18,
-          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]"]
+          "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]"]
         },
         {
           "type": "ide-menu",
@@ -12835,6 +12835,26 @@
         "wikiAnchor": "enum-helper-separate-units"
       },
       {
+        "id": "rule.enum-ordinal-cast",
+        "title": "enum-ordinal-cast",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A hard-coded enum ordinal -- a literal cast to an enum type TEnum(5), an enum's ordinal compared with a literal (Ord(X) = 3), or case... (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule enum-ordinal-cast"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "enum-ordinal-cast"
+      },
+      {
         "id": "rule.enum-ordinal-persisted",
         "title": "enum-ordinal-persisted",
         "group": "linting",
@@ -15235,6 +15255,26 @@
         "wikiAnchor": "property-accessor-name"
       },
       {
+        "id": "rule.property-getter-with-effect",
+        "title": "property-getter-with-effect",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A property's read accessor is a method with a PROVEN self-field or global write (lazy initialisers and memos exempt) -- reading a proper... (project-wide, info)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule property-getter-with-effect"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "property-getter-with-effect"
+      },
+      {
         "id": "rule.property-references-itself",
         "title": "property-references-itself",
         "group": "linting",
@@ -15735,6 +15775,26 @@
         "wikiAnchor": "separate-query-from-modifier"
       },
       {
+        "id": "rule.side-effect-in-short-circuit",
+        "title": "side-effect-in-short-circuit",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A routine with a PROVEN effect is called in the right operand of a Boolean and/or -- short-circuit evaluation skips it whenever the left... (project-wide, info)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule side-effect-in-short-circuit"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "side-effect-in-short-circuit"
+      },
+      {
         "id": "rule.sizeof-pointer-assumption",
         "title": "sizeof-pointer-assumption",
         "group": "linting",
@@ -16175,6 +16235,26 @@
         "wikiAnchor": "ui-access-in-thread"
       },
       {
+        "id": "rule.ui-access-in-thread-transitive",
+        "title": "ui-access-in-thread-transitive",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A TThread.Execute reaches, through resolved calls not marshalled by Synchronize/Queue, a routine that touches the UI -- the call path... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule ui-access-in-thread-transitive"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "ui-access-in-thread-transitive"
+      },
+      {
         "id": "rule.unbalanced-begin-end",
         "title": "unbalanced-begin-end",
         "group": "linting",
@@ -16433,6 +16513,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unsigned-compare-always-true"
+      },
+      {
+        "id": "rule.unused-enum-value",
+        "title": "unused-enum-value",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed prop... (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unused-enum-value"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unused-enum-value"
       },
       {
         "id": "rule.unused-local",

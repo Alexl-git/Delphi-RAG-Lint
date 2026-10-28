@@ -402,6 +402,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [empty-procedure-body](rules#empty-procedure-body) -- bug-patterns, info, fixable
 * [enum-bare-read-scoped](rules#enum-bare-read-scoped) -- bug-patterns, warning, fixable
 * [enum-helper-separate-units](rules#enum-helper-separate-units) -- project-wide, warning
+* [enum-ordinal-cast](rules#enum-ordinal-cast) -- bug-patterns, warning
 * [enum-ordinal-persisted](rules#enum-ordinal-persisted) -- project-wide, warning
 * [enum-read-inside-with](rules#enum-read-inside-with) -- bug-patterns, warning
 * [exception-constructed-but-not-raised](rules#exception-constructed-but-not-raised) -- bug-patterns, warning, fixable
@@ -522,6 +523,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [pos-for-contains](rules#pos-for-contains) -- refactoring, hint, fixable
 * [pp-unresolved-if](rules#pp-unresolved-if) -- bug-patterns, hint
 * [property-accessor-name](rules#property-accessor-name) -- naming, info, fixable
+* [property-getter-with-effect](rules#property-getter-with-effect) -- project-wide, info
 * [property-references-itself](rules#property-references-itself) -- bug-patterns, warning
 * [public-field](rules#public-field) -- structure, info, fixable
 * [public-writable-field](rules#public-writable-field) -- refactoring, info
@@ -547,6 +549,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [review-marker-unused](rules#review-marker-unused) -- review-markers, hint, fixable
 * [self-assignment](rules#self-assignment) -- bug-patterns, warning, fixable
 * [separate-query-from-modifier](rules#separate-query-from-modifier) -- refactoring, info
+* [side-effect-in-short-circuit](rules#side-effect-in-short-circuit) -- project-wide, info
 * [sizeof-pointer-assumption](rules#sizeof-pointer-assumption) -- platform, warning
 * [sleep-in-vcl](rules#sleep-in-vcl) -- bug-patterns, warning
 * [split-variable](rules#split-variable) -- refactoring, info
@@ -569,6 +572,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [try-except-swallowed](rules#try-except-swallowed) -- bug-patterns, warning
 * [type-name-prefix](rules#type-name-prefix) -- naming, info, fixable
 * [ui-access-in-thread](rules#ui-access-in-thread) -- bug-patterns, warning
+* [ui-access-in-thread-transitive](rules#ui-access-in-thread-transitive) -- project-wide, warning
 * [unbalanced-begin-end](rules#unbalanced-begin-end) -- bug-patterns, warning
 * [unconditional-recursion](rules#unconditional-recursion) -- bug-patterns, warning
 * [undocumented-check-suppression](rules#undocumented-check-suppression) -- other, hint
@@ -582,6 +586,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [unsafe-string-api](rules#unsafe-string-api) -- platform, warning
 * [unsafe-typecast-without-is](rules#unsafe-typecast-without-is) -- bug-patterns, warning, fixable
 * [unsigned-compare-always-true](rules#unsigned-compare-always-true) -- bug-patterns, warning
+* [unused-enum-value](rules#unused-enum-value) -- project-wide, hint
 * [unused-local](rules#unused-local) -- dead-code, hint, fixable
 * [unused-loop-variable](rules#unused-loop-variable) -- dead-code, hint
 * [unused-parameter](rules#unused-parameter) -- dead-code, warning
