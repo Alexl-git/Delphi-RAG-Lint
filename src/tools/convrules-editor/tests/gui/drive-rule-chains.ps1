@@ -381,11 +381,12 @@ try {
   Check 'merge.save.dialog' (($dlg -ne [IntPtr]::Zero) -and ((ChainRowCount $dlg) -eq 1)) (TopsNow $p.Id)
   if ($dlg -ne [IntPtr]::Zero) { Click (ButtonOf $dlg 'Merge') }
   $gone = ($dlg -ne [IntPtr]::Zero) -and (WaitGone $p.Id $dlg 10)
-  $s = WaitStatus $main '^(Merged|Nothing merged)' $SLOW_SEC
-  Check 'merge.click' ($gone -and ($s -match '^Merged 1 chain')) $s
+  # Whole text: Txt reads the length then the text, so a read racing the status change returns it cut short.
+  $s = WaitStatus $main '^(Merged.*then Save|Nothing merged)' $SLOW_SEC
+  Check 'merge.click' ($gone -and ($s -match '^Merged 1 chain') -and ($s -match 'dropped 1 line\(s\) the later stage does not map: #link TableName <- TableName')) $s
   [void](WaitIdle $p.Id $main $SLOW_SEC)
   $raw = Raw $main
-  $okHead = $raw -match '#convert Bde\.DBTables\.TTable -> FireDAC\.Comp\.Client\.TFDMemTable\r?\n#note chain merge:[^\r\n]*\r?\n#link TableName <- TableName'
+  $okHead = $raw -match '#convert Bde\.DBTables\.TTable -> FireDAC\.Comp\.Client\.TFDMemTable\r?\n#note chain merge:[^\r\n]*1 dropped[^\r\n]*\r?\n#note chain merge: dropped #link TableName <- TableName because [^\r\n]*\r?\n#ignore TableName\r?\n' -and ($raw -notmatch '(?m)^#link TableName')
   $nConv = ([regex]::Matches($raw, '#convert Bde\.DBTables\.TTable')).Count
   $nName = ([regex]::Matches($raw, '#link Name <- Name')).Count
   $okTail = $raw -match '#convert FireDAC\.Comp\.Client\.TFDTable -> FireDAC\.Comp\.Client\.TFDMemTable\r?\n#link Name <- Name'
@@ -399,7 +400,7 @@ try {
   [void](WaitIdle $p.Id $main $SLOW_SEC)
   $again = WaitFor $p.Id 'Rule chains' 10
   $s = StatusText $main
-  Check 'merge.save.no.dialog' (($s -match '^(\[!\] )?Saved Merge\.rules') -and ($s -notmatch 'Rule chains:') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
+  Check 'merge.save.no.dialog' (($s -match '^Saved Merge\.rules') -and ($s -notmatch 'Rule chains:') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
   if ($again -ne [IntPtr]::Zero) { Click (ButtonOf $again 'Keep'); [void](WaitGone $p.Id $again 10) }
 
   # --- Close with a dirty book that still has a chain: the Save from the guard never offers (O3) ---

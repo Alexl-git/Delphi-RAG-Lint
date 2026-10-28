@@ -161,11 +161,11 @@ exist on its own in the sources). The FIRST stage's block is replaced in place.
   cannot be composed -- pick one` before it.
 * A3. WHEN Q has `#ignore B.x` for P's `#link B.x <- A.y` THE merge SHALL emit `#ignore A.y`
   (the From property is not mapped).
-* A4. WHEN Q has no line for `B.x` THE merge SHALL keep P's `#link B.x <- A.y` verbatim
-  (counted as carried; the next Save's validation says whether C has `x`).
+* A4. WHEN Q has no line for `B.x` THE merge SHALL drop P's `#link B.x <- A.y`, write a
+  `#note chain merge: dropped ...` and `#ignore A.y` (changed in section 10, lane linkmerge).
 * A5. `#default B.x = v` of P: through a Q link on `B.x` it becomes `#default C.z = v` (a Q
   cast adds a `#note`); through a Q `#ignore` it is dropped with a `#note`; unmatched it is
-  carried verbatim. `#default` of Q is copied verbatim.
+  dropped with a `#note` too (section 10). `#default` of Q is copied verbatim.
 * A6. `#migrate Old -> New[, units]` (plain member form) of P followed by Q's
   `#migrate New -> Newer[, units2]` becomes `#migrate Old -> Newer[, units2]`; every other
   `#migrate` of P and of Q is carried verbatim, de-duplicated on its text.
@@ -177,10 +177,10 @@ exist on its own in the sources). The FIRST stage's block is replaced in place.
   consumed by A2 / A3 / A5 are dropped (they name B paths that A never maps -- a TA instance
   has no value for them; the next Save's validation reports what is left unlinked on TC).
 * A7a. Counters: Composed = lines rewritten through Q (A2, A3, A5 through a link, A6
-  composed); Carried = A4, A5 unmatched and every `#migrate` not composed; Noted = every
+  composed); Carried = every `#migrate` not composed; Dropped = A4 / A5 unmatched (section 10); Noted = every
   `#note` added except the leading A8 note.
 * A8. THE merged block SHALL start with `#note chain merge: <P.From> -> <P.To> (line a) +
-  <Q.From> -> <Q.To> (line b) = <P.From> -> <Q.To>; <n> composed, <m> carried, <k> noted --
+  <Q.From> -> <Q.To> (line b) = <P.From> -> <Q.To>; <n> composed, <m> carried, <d> dropped, <k> noted --
   validate on Save` right after the header. Trailing blank lines of the replaced range are
   kept.
 * A9. WHEN a UNIT chain is merged THE merge SHALL rewrite the ADDING line only: `#useswap A ->
@@ -306,3 +306,18 @@ unless marked FIXED.
   `chains.marks.replaces.shifted`). `MergeChains` refreshes the marks at once.
 * Driver: 22 checks (`-ProofNoChain` 5); the dirty check uses File > New's "Save changes"
   question (the editor has no caption marker).
+* A4 / A5 CHANGED (lane linkmerge, 2026-10-27): an unmatched P line is no longer carried. When Q has no
+  `#link` and no `#ignore` for `B.x`, Q's pass drops the B property (an unlinked property is dropped,
+  CONVERSION-RULES `#link`), so `A.y` never reaches C, and C need not have `x` at all: carried
+  verbatim, the merged `#link B.x <- A.y` failed the next Save's validation (drive-rule-chains on the
+  1.36.0 pin: `link ToPath not found in --to tree: TableName`, TFDMemTable has no TableName). Now the
+  merge writes `#note chain merge: dropped <P line> because <Q> (line N) has no #link or #ignore for
+  B.x; its From side is ignored below -- link it instead if the value should carry` and then
+  `#ignore A.y` (the A3 result; it also keeps a block whose only link was dropped from being saved as
+  an empty scratch rule). An unmatched `#default B.x = v` is dropped with `#note chain merge: dropped
+  #default B.x = v because <Q> has no #link for B.x`. Counters: `TChainMerge.Dropped` lists every
+  dropped P line; each drop's note counts in Noted; Carried no longer counts them. The A8 note reads
+  `<n> composed, <m> carried, <d> dropped, <k> noted`, and the Merge status names the drops per chain
+  (`MergeChainText`: `<chain> (dropped N line(s) the later stage does not map: <lines> -- see its
+  #note)`). Nothing is dropped silently. Known limit: the match is on the exact path text, so a P link
+  to `B.x.y` is dropped even when Q links the parent `B.x`.

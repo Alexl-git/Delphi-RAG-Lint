@@ -287,7 +287,9 @@ begin
     Check('chains.merge.link.ignored', (not Has(M, '#link Keep <- K')) and Has(M, '#ignore K'), '');
     Check('chains.merge.default.ignored', (not Has(M, '#default Gone = 1')) and (StartsAt(M, '#note') >= 0)
       and (PosOf(M, '#default Gone = 1') < 0) and (Pos('Gone', string.Join('|', M.NewLines)) > 0), '');
-    Check('chains.merge.default.carried', Has(M, '#default Flag = True'), '');
+    // A5 (linkmerge): TB -> TC has no line for Flag, so the TB -> TC pass drops TB.Flag; the merge drops it too, with a note.
+    Check('chains.merge.default.dropped', (not Has(M, '#default Flag = True'))
+      and (StartsAt(M, '#note chain merge: dropped #default Flag = True because TB -> TC (line 12) has no #link for Flag') >= 0), '');
     Check('chains.merge.default.q', Has(M, '#default Extra = 2'), '');
     Check('chains.merge.ignore.p', Has(M, '#ignore Old'), '');
     Check('chains.merge.migrate.composed', Has(M, '#migrate DoA -> DoC, UnitC') and (not Has(M, '#migrate DoB -> DoC, UnitC'))
@@ -295,10 +297,37 @@ begin
     LI:= StartsAt(M, '#note chain merge: the lines below came from TB -> TC (line 12)');
     Check('chains.merge.q.rest', (LI >= 0) and (PosOf(M, '#warn Title "check"') > LI) and (not Has(M, '#tag t2')) and Has(M, '#tag t1'),
       IntToStr(LI));
-    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 2) and (M.Noted = 3),  // dl:ok magic-literal@4210 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
-      Format('%d/%d/%d', [M.Composed, M.Carried, M.Noted]));
+    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 1) and (M.Noted = 4) and (Length(M.Dropped) = 1),  // dl:ok magic-literal@4210 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
+      Format('%d/%d/%d/%d', [M.Composed, M.Carried, M.Noted, Length(M.Dropped)]));
     Check('chains.merge.range.non.last', (M.NodeIdx = 0) and (M.LastIdx = 10) and (M.NewLines[High(M.NewLines)] = ''),  // dl:ok magic-literal@33fa -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
       Format('%d..%d', [M.NodeIdx, M.LastIdx]));
+
+    // A4 (linkmerge): a #link whose TB-side path has no onward line in TB -> TC is dropped with a note, never carried
+    // (the TB -> TC pass drops an unlinked TB property, and TC need not have it: drive-rule-chains' TableName).
+    M:= Plan(J(['#convert TTable -> TFDTable', '#link TableName <- TableName', '#link Name <- Name', '#convert TFDTable -> TFDMemTable',
+      '#link Name <- Name']), 0, Bk);
+    Check('chains.merge.link.no.onward', (M.Problem = '') and (not Has(M, '#link TableName <- TableName'))
+      and (StartsAt(M, '#note chain merge: dropped #link TableName <- TableName because TFDTable -> TFDMemTable (line 4) has no #link or #ignore for TableName') >= 0),
+      string.Join(' | ', M.NewLines));
+    Check('chains.merge.link.no.onward.ignored', Has(M, '#ignore TableName')
+      and (PosOf(M, '#ignore TableName') = StartsAt(M, '#note chain merge: dropped #link TableName') + 1), string.Join(' | ', M.NewLines));
+    Check('chains.merge.link.no.onward.composes', Has(M, '#link Name <- Name'), string.Join(' | ', M.NewLines));
+    Check('chains.merge.link.no.onward.counts', (M.Composed = 1) and (M.Carried = 0) and (M.Noted = 1)
+      and (Length(M.Dropped) = 1) and (M.Dropped[0] = '#link TableName <- TableName'),
+      Format('%d/%d/%d/%d', [M.Composed, M.Carried, M.Noted, Length(M.Dropped)]));
+    Check('chains.merge.link.no.onward.a8', (Length(M.NewLines) > 1) and M.NewLines[1].EndsWith('; 1 composed, 0 carried, 1 dropped, 1 noted -- validate on Save'),
+      if Length(M.NewLines) > 1 then M.NewLines[1] else 'short');
+    Check('chains.merge.status.dropped', MergeChainText('TA -> TB -> TC', M)
+      = 'TA -> TB -> TC (dropped 1 line(s) the later stage does not map: #link TableName <- TableName -- see its #note)',
+      MergeChainText('TA -> TB -> TC', M));
+    // The drive-rule-chains book: the ONLY link has no onward line; the merged block must still map something, or Save drops it as scratch.
+    M:= Plan(J(['#convert TTable -> TFDTable', '#link TableName <- TableName', '#convert TFDTable -> TFDMemTable', '#link Name <- Name']), 0, Bk);
+    ApplyChainMerge(Bk, M);
+    LText:= Bk.SaveCompleteToString(LI);
+    Check('chains.merge.link.no.onward.saved', (LI = 0) and LText.Contains('#convert TTable -> TFDMemTable') and LText.Contains('#ignore TableName'),
+      Format('dropped=%d; %s', [LI, LText]));
+    M:= Plan(J(['#convert TA -> TB', '#link b <- a', '#convert TB -> TC', '#link c <- b']), 0, Bk);
+    Check('chains.merge.status.clean', MergeChainText('TA -> TB -> TC', M) = 'TA -> TB -> TC', MergeChainText('TA -> TB -> TC', M));
 
     M:= Plan(J(['#convert TB -> TC', '#link a <- b', '#convert TA -> TB', '#link b <- c', '#migrate M -> N']), 0, Bk);
     Check('chains.merge.range.last.trailer', (M.Problem = '') and (M.NodeIdx = 2) and (M.LastIdx = 3), Format('%d..%d %s', [M.NodeIdx, M.LastIdx, M.Problem]));  // dl:ok magic-literal@91f1 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
