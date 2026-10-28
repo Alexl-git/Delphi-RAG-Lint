@@ -230,10 +230,21 @@ type
     /// <param name="APath">The host file, as for FileIsUpToDate.</param>
     /// <returns>False for a host with no include rows, an unindexed path, or a
     /// DB without the origin columns.</returns>
-    /// <remarks>Only includes that ALREADY contributed a uses row are watched: an
-    /// include that gains its first uses clause is seen when the host itself
-    /// changes or the run is forced. Read-only.</remarks>
-    function IncludeOriginsChanged(const APath: string): Boolean;    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
+    /// <remarks>Lane INC: also watches every include recorded for APath by
+    /// SetFileIncludes (consts, code, defines -- not only uses-bearing ones), so
+    /// in a project DB editing or deleting any include re-parses each includer.
+    /// Read-only.</remarks>
+    function IncludeOriginsChanged(const APath: string): Boolean;
+    /// <summary>Lane INC: records the include files AHostPath took in its last
+    /// parse (every active include, nested ones too), replacing any earlier list.
+    /// IncludeOriginsChanged reads it back.</summary>
+    /// <param name="AHostPath">The host file, as for FileIsUpToDate.</param>
+    /// <param name="AIncludes">Absolute include paths; empty clears the record.</param>
+    /// <remarks>Stored in schema_meta under the key 'file_includes:' plus the
+    /// lowercased stored host path (one row per host, values separated by '|'),
+    /// so no schema change is needed. A row for a host that later leaves the DB
+    /// is inert: it is only read for that host's own path.</remarks>
+    procedure SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
     // schema_meta key. Used to carry the INDEXER FINGERPRINT -- see
     // TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
     // byte-identical file. '' when the key (or the table) is absent.
@@ -2453,6 +2464,51 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+    { ---- data_flows (taint wave T0, 2026-10-27) ------------------------------ }
+    /// <summary>Writes the data_flows rows of ONE routine inside the open file
+    /// transaction (one prepared INSERT per row). Called by the indexer right
+    /// after PutSymbolFacts.</summary>
+    /// <param name="AToken">The open file tx; supplies file_id (each row's FileId is ignored).</param>
+    /// <param name="ARows">The routine's rows (TDataFlowFacts.Collect); may be empty (no-op).
+    /// Every row's SymbolId must be a symbols.id written in this tx.</param>
+    /// <remarks>No delete: a per-file reindex drops the old rows through
+    /// data_flows.symbol_id ON DELETE CASCADE when OpenFileTx deletes the file's
+    /// symbols. A no-op when the table is absent (read-only open of a DB that
+    /// predates it). Part of the extractor guard's emit list.</remarks>
+    procedure PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+    /// <summary>True when this database has the data_flows table (probed once).</summary>
+    /// <returns>False on a DB that predates extractor 1.26.0 and was opened read-only.
+    /// A present-but-EMPTY table means "indexed before 1.26.0": the taint rules print
+    /// ONE stale-index note and report nothing.</returns>
+    function HasDataFlows: Boolean;
+    /// <summary>Rows whose destination is AT one site (an 'arg' / 'write' call or
+    /// member-write ref position, or a field/global/result/outparam write site).</summary>
+    /// <param name="AFileId">files.id of the site.</param>
+    /// <param name="ALine">dst_line (refs.start_line of the site).</param>
+    /// <param name="ACol">dst_col (refs.start_col of the site).</param>
+    /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
+    /// <returns>Matching rows ordered by (dst_index, src_kind, src_line, src_col); empty
+    /// when none or when the table is absent.</returns>
+    function GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer; const ADstKind: string): TArray<TDataFlowRow>;
+    /// <summary>Rows of ONE routine with one destination kind -- the routine's
+    /// summary ('result', 'outparam', 'field', 'global' rows).</summary>
+    /// <param name="ASymbolId">symbols.id of the routine.</param>
+    /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
+    /// <returns>Rows ordered by (dst_kind, dst_index, dst_line, dst_col); empty when none.</returns>
+    function GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+    /// <summary>Every row writing field AName in a routine owned by one of AOwnerIds
+    /// (the caller passes the class, its ancestors and descendants): dst_kind='field',
+    /// plus dst_kind='write' with an empty dst_receiver -- a bare write of a field the
+    /// owner inherits, which the extractor emits by name.</summary>
+    /// <param name="AOwnerIds">data_flows.owner_id values to match; empty returns nothing.</param>
+    /// <param name="AName">Field name, compared case-insensitively against dst_name.</param>
+    /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>
+    function GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+    /// <summary>Every dst_kind='global' row writing unit variable AName.</summary>
+    /// <param name="AName">Variable name, compared case-insensitively against dst_name.</param>
+    /// <param name="AFileId">Restrict to rows of this files.id; 0 (or less) = every file.</param>
+    /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>
+    function GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
     /// <summary>True when at least one routine with a body has no purity
     /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
     /// stage run after a per-file reindex even when the calls stage was
@@ -2826,6 +2882,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+    /// <summary>Lane INC: turns on include-context indexing for a PROJECT
+    /// run. A host unit's active include sites (nested ones too) are
+    /// remembered; when the walk then reaches that .inc it is parsed from the
+    /// bytes the preprocessor produced UNDER THE HOST'S live defines at the
+    /// directive, not standalone, and it is always re-parsed (its context can
+    /// change while its own bytes do not). Each host also records the includes
+    /// it took (ISymbolStore.SetFileIncludes), so editing or deleting one
+    /// re-parses every includer.</summary>
+    /// <param name="AEnabled">True for a project-scoped run with preprocessing
+    /// on. False (the default) keeps the standalone .inc parse.</param>
+    /// <param name="ASearchPaths">The build's absolute search path; an include
+    /// name is tried there after the includer's own folder.</param>
+    /// <remarks>Call before the walk. The walk must reach a host before its
+    /// includes (ExpandProjectScope orders .inc files last); an .inc reached
+    /// first is parsed standalone. When several hosts include one .inc, the
+    /// first host parsed this run supplies its context.</remarks>
+    procedure SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
     /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
     /// this run analysed that HELD unclassified identifiers, resolves the
     /// owning class's transitive ancestors (GetTransitiveAncestors -- which

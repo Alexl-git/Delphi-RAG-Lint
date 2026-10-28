@@ -274,6 +274,8 @@ $emitted = [ordered]@{
   # the two the old inline lists missed.
   'LINT_GATE_NAMING'        = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.NamingChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
   'LINT_GATE_DEAD_CODE'     = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
+  # taint wave T2 (2026-10-27): the three ids TTaintRules.Check emits, named by its TAINT_RULE_* constants
+  'LINT_GATE_TAINT'         = IdsIn 'src\lint\DRagLint.Lint.TaintRules.pas' "TAINT_RULE_[A-Z]+\s*=\s*'([a-z0-9-]+)'"
 }
 # gap-rules wave (G0): gate ids whose emitting lane has not landed. A lane deletes its own ids from this table;
 # integration leaves it empty (D3 then bites again).

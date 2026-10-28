@@ -190,6 +190,11 @@ type
     /// <summary>Naming conventions parsed from the "naming" block; always
     /// populated with TNamingConfig.Default when no block is present.</summary>
     Naming: TNamingConfig;
+    /// <summary>The `taint` objects of the config, as JSON text, in the order they were read (top level,
+    /// then the profile); TTaintRules.LoadConfig merges them over the built-in catalogues.</summary>
+    /// <remarks>Kept as text so this unit does not depend on the taint unit; additive on purpose --
+    /// a profile adds to the top level rather than replacing it (the merge is additive by design).</remarks>
+    TaintJson: TArray<string>;
     /// <summary>The unit that owns this project's exception classes, from
     /// "exceptions": { "unit": "..." }. EMPTY when the block is absent, and that
     /// is the OFF switch for the whole feature: raise-bare-exception then reports
@@ -837,6 +842,9 @@ begin
   end;
   if AObj.GetValue('naming') is TJSONObject then
     ApplyNamingObject(AObj.GetValue('naming') as TJSONObject);
+  { taint wave T2: the `taint` object is merged by TTaintRules.LoadConfig }
+  if AObj.GetValue('taint') is TJSONObject then
+    TaintJson:= TaintJson + [AObj.GetValue('taint').ToJSON];
   { The "exceptions" block, key "unit" -- names the unit that owns the project's
     exception classes. Absent leaves ExceptionsUnit empty, which is the feature's
     off switch. NB: no JSON braces in this comment on purpose; a closing brace

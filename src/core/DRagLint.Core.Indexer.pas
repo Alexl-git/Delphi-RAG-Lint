@@ -72,6 +72,9 @@ type
       FPreprocessEnabled: Boolean                          ; { PP-Task-9: run Preprocess before parsing }
       FProfile        : TDefineProfile                     ; { PP-Task-9: active define profile when preprocessing }
       FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
+      FIncludeContext : Boolean                            ; { lane INC: parse an .inc from its host's include site }
+      FIncSearchPaths : TArray<string>                     ; { lane INC: the build's search path for include resolution }
+      FIncContexts    : TDictionary<string, TBytes>        ; { lane INC: lowercase .inc path -> host-context bytes, first host wins }
       FForceReparse   : Boolean                            ; { INBOX 2.3: bypass the incremental skip for this whole run }
       { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). '' = off.
 
@@ -131,6 +134,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
+      // Lane INC: remember each active include site's host-context bytes
+      // (first host wins) and record the host's include list in the store.
+      procedure RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
       /// <param name="AExtension"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->IParser -- Observed: nil.</returns>
       /// <remarks>
@@ -505,6 +511,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+      /// <summary>Lane INC: include-context indexing for a project run; see
+      /// IIndexer.SetIncludeContext.</summary>
+      /// <param name="AEnabled">True for a project-scoped, preprocessed run.</param>
+      /// <param name="ASearchPaths">The build's absolute search path.</param>
+      /// <remarks>Clears the contexts remembered so far.</remarks>
+      procedure SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
       /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
       /// this run analysed that HELD unclassified identifiers, resolves the
       /// owning class's transitive ancestors (GetTransitiveAncestors -- which
@@ -556,6 +568,7 @@ uses
   DRagLint.Doc.SymbolFacts        // dl:unit DRagLint.Doc.SymbolFacts accepted -- v(ADP2 T2): TSymbolFactsAnalyzer, the index-time symbol_facts pass; v23: FIELD_RW_CAP + JoinCappedDisplay travel with it so the facts-inherited post-pass re-joins by the SAME cap rule the parse-time string used
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
+  , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
   ;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
@@ -578,6 +591,8 @@ begin
     out). FProfile stays empty (an empty profile = no seeded defines). }
   FPreprocessEnabled := False;
   FPreprocessFellBack:= False;
+  FIncludeContext    := False;
+  FIncContexts       := TDictionary<string, TBytes>.Create;
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
   FWalkFilter:= TWalkFilter.Create;
   FTestFailFileName:= GetEnvironmentVariable('DRAGLINT_INDEX_TEST_FAIL_FILE');
@@ -598,6 +613,7 @@ begin
   FIntern.Free;
   FHeld.Free;
   FIgnoreStack.Free;
+  FIncContexts.Free;
   FStore:= nil;
   inherited;
 end;
@@ -811,6 +827,40 @@ begin
   FPreprocessEnabled := AEnabled;
   FProfile           := AProfile;
   FPreprocessFellBack:= False;
+end;
+
+procedure TIndexer.SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
+begin
+  FIncludeContext:= AEnabled;
+  FIncSearchPaths:= ASearchPaths;
+  FIncContexts.Clear;
+end;
+
+procedure TIndexer.RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
+var
+  Paths: TList<string>;
+  Seen : TList<string>;
+  Site : TPPIncludeSite;
+begin
+  Paths:= TList<string>.Create;
+  Seen := TList<string>.Create;
+  try
+    for Site in ASites do
+    begin
+      var Key: string:= LowerCase(TPath.GetFullPath(Site.Path));
+      if not FIncContexts.ContainsKey(Key) then FIncContexts.Add(Key, Site.Resolved);
+      // Case-insensitive: one file spelled JEDI.inc and JEDI.INC is one include.
+      if not Seen.Contains(Key) then
+      begin
+        Seen.Add(Key);
+        Paths.Add(Site.Path);
+      end;
+    end;
+    FStore.SetFileIncludes(AHostPath, Paths.ToArray);
+  finally
+    Seen.Free;
+    Paths.Free;
+  end;
 end;
 
 procedure TIndexer.LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
@@ -1153,6 +1203,10 @@ var
   SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
+  FactsAst      : TSymbolFactsAst            ; { taint T1 }
+  DfFieldsByParent: TDictionary<Integer, TArray<string>>; { taint T1: field names per in-array parent index, built once per file }
+  DfGlobals     : TArray<string>             ; { taint T1: this file's unit-level variables }
+  DfCallees     : TDataFlowCallees           ; { lane ARGOUT: this file's routine var/out masks, built lazily, freed below }
   SymStartLines : TArray<Integer>            ; { adp2-docregion-fix: every symbol's StartLine, sorted ascending -- lets FindDocRegionAbove reject a region separated from its symbol by an intervening declaration }
   EnclosingByLine: TArray<Int64>             ; { v0.85 perf: line -> enclosing routine's db id, built once per file (see BuildEnclosingLineMap) }
 begin
@@ -1218,8 +1272,16 @@ begin
     "unknown". Both halves fail toward re-parsing. }
   var MayResume: Boolean:= (FResumeFingerprint <> '') and
                            SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
+  { Lane INC: an .inc whose host was parsed THIS run carries that host's
+    context (the bytes the preprocessor produced under the host's live defines
+    at the directive). Its context can change while its own bytes do not, so it
+    is always re-parsed -- and it is only here because its host was. }
+  var IncCtx: TBytes:= nil;
+  var HasIncCtx: Boolean:= FIncludeContext and FPreprocessEnabled
+    and SameText(ExtractFileExt(AFilePath), '.inc')
+    and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
   // N-06: ...unless an include it took a uses clause from changed since its parse.
-  if ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
+  if (not HasIncCtx) and ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
     and not FStore.IncludeOriginsChanged(AFilePath) then
   begin
     Inc(FSkippedUpToDate);
@@ -1248,7 +1310,16 @@ begin
   // symbol/ref span the parser emits still maps 1:1 back to the original file
   // with NO source map. A per-file exception must NOT hard-fail the whole run:
   // log once, then index the RAW UTF-8 for that file (pre-Task-9 behaviour).
-  if FPreprocessEnabled and not IsBinaryDfm then
+  if HasIncCtx then
+  begin
+    { Lane INC: the host's view of this include. Same length as the raw .inc
+      (offset identity), so every span is an .inc position; transcoded like the
+      raw bytes are when the .inc is not UTF-8. No sites: an .inc is never a
+      host, and its nested includes were reported by the host's own run. }
+    ParseBytes:= EnsureUtf8Bytes(IncCtx);
+    IncSites  := nil;
+  end
+  else if FPreprocessEnabled and not IsBinaryDfm then
   begin
     try
       // v(2026-08-16, INBOX-parse-error-shellshock-units): 'defines-only', NOT
@@ -1268,6 +1339,7 @@ begin
       PpOpts.Profile    := FProfile;
       PpOpts.IncludeMode:= 'defines-only';
       PpOpts.BaseDir    := TPath.GetDirectoryName(AFilePath);
+      PpOpts.SearchPaths:= FIncSearchPaths; // lane INC: empty unless a project run set it
       // N-06: the 3-arg overload also hands back each active include's child
       // output, so a uses clause inside it can be extracted below. Same bytes.
       ParseBytes:= Preprocess(Utf8, PpOpts, IncSites);
@@ -1282,6 +1354,8 @@ begin
   end
   else
     ParseBytes:= Utf8;
+  if FIncludeContext and MatchText(ExtractFileExt(AFilePath), ['.pas', '.dpr', '.dpk']) then
+    RememberIncludeSites(AFilePath, IncSites);
   Inc(GProfPre, ProfNow - TPre);
   var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);
@@ -1331,6 +1405,8 @@ begin
     FStore.DeleteFileDocs(Token.FileId);
     Inc(GProfOpenTx, ProfNow - TProf);
     IdxToId:= TDictionary<Integer, Int64>.Create;
+    DfFieldsByParent:= nil; { taint T1: built lazily by the facts loop, freed below }
+    DfCallees:= nil;
     try
       try
         // adp2-docregion-fix: every symbol's StartLine in this file, sorted
@@ -1464,9 +1540,42 @@ begin
           if (Sym.ParentId >= 0) and IdxToId.TryGetValue(Integer(Sym.ParentId), ResolvedParent) then Sym.ParentId:= ResolvedParent
           else Sym.ParentId:= -1;
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
-          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore);
+          Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore, FactsAst);
           Facts.SymbolId:= NewSymId;
           FStore.PutSymbolFacts(Facts);
+          // taint T1 (2026-10-27): the routine's data_flows rows, from the SAME
+          // matched defProc (no second AST lookup). Field names: this file's
+          // fields of the owning class (an ancestor's field from another unit is
+          // emitted by NAME as an unclassified ref and resolved by the linter);
+          // globals: this file's unit-level variables. ON DELETE CASCADE on
+          // data_flows.symbol_id drops the old rows with the old symbols.
+          if FactsAst.Found then
+          begin
+            if DfFieldsByParent = nil then
+            begin
+              DfFieldsByParent:= TDictionary<Integer, TArray<string>>.Create;
+              DfGlobals:= nil;
+              for var K:= 0 to High(ParseRes.Symbols) do
+              begin
+                var KS:= ParseRes.Symbols[K];
+                if KS.Kind = skField then
+                begin
+                  var Arr: TArray<string>;
+                  if not DfFieldsByParent.TryGetValue(Integer(KS.ParentId), Arr) then Arr:= nil;
+                  DfFieldsByParent.AddOrSetValue(Integer(KS.ParentId), Arr + [KS.Name]);
+                end
+                else if (KS.Kind = skVarDecl) and ((KS.ParentId < 0) or (KS.ParentId > High(ParseRes.Symbols))
+                        or (ParseRes.Symbols[Integer(KS.ParentId)].Kind in [skUnit, skProgram, skPackage])) then
+                  DfGlobals:= DfGlobals + [KS.Name];
+              end;
+            end;
+            var OwnFields: TArray<string>;
+            var OrigParent:= ParseRes.Symbols[I].ParentId;
+            if (OrigParent < 0) or not DfFieldsByParent.TryGetValue(Integer(OrigParent), OwnFields) then OwnFields:= nil;
+            { lane ARGOUT: this file's routines decide which arguments get an argout source }
+            if DfCallees = nil then DfCallees:= TDataFlowFacts.BuildCallees(ParseRes.Symbols);
+            FStore.PutDataFlows(Token, TDataFlowFacts.Collect(Sym, FactsAst.Proc, FactsAst.Body, FactsAst.Src, OwnFields, DfGlobals, DfCallees));
+          end;
           // v23 (spec F1): hold the candidates for the facts-inherited pass.
           // Only a routine with an owning class AND something unclassified is
           // worth a record -- everything else can gain nothing from ancestors.
@@ -1517,6 +1626,8 @@ begin
       // run never accumulates one tree per file. Safe even on the exception
       // path above: Clear only frees cached trees, it does not touch FStore.
       TAstParseCache.Clear;
+      DfFieldsByParent.Free;
+      DfCallees.Free; { lane ARGOUT }
       IdxToId.Free;
       // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
       // termination cannot swallow COMPLETED lines from the tail of this log.

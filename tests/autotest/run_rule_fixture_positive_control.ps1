@@ -75,7 +75,10 @@ $Pending = @(
     'integer-division-to-float', 'stream-read-result-ignored', 'is-prefix-not-boolean',
     'halt-in-library', 'format-string-not-formatted', 'swap-without-temp',
     'undocumented-check-suppression', 'collapsible-if', 'is-not-operator',
-    'ifthen-to-if-expression', 'unreadable-literal'
+    'ifthen-to-if-expression', 'unreadable-literal',
+    # taint wave T2 (2026-10-27): store-backed; their fixtures are tests\autotest\run_taint_rules.ps1 +
+    # run_taint_library.ps1 (tests\lint-project\taint*). INT empties these with the others.
+    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal'
 )
 
 # --- collect directives from every fixture ---

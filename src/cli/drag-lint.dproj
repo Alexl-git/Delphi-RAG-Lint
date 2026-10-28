@@ -151,6 +151,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.PlatformDivergent.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.Parse.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.TaintRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UsesAudit.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>
@@ -262,9 +263,13 @@
         <DCCReference Include="..\index\DRagLint.Index.Coverage.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.CallResolver.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.DispatchResolver.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.DataFlowFacts.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Types.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Lexer.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Expr.pas"/>
+        <DCCReference Include="..\preprocess\DRagLint.Preprocess.Decls.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.PPUnitSource.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.PpChecks.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Tolerance.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Profile.pas"/>

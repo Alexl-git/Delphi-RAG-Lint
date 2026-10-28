@@ -157,6 +157,8 @@ type
       FHasMemberAccesses     : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasMemberAccesses }
       FHasEffectCols         : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasEffectCols }
       FHasUseOriginCols      : Integer      ; { N-06: -1 unprobed, 0 absent, 1 present -- see HasUseOriginCols }
+      FHasDataFlows          : Integer      ; { taint T0: -1 unprobed, 0 absent, 1 present -- see HasDataFlows }
+      FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -1026,6 +1028,11 @@ type
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
       function IncludeOriginsChanged(const APath: string): Boolean;
+      /// <summary>Lane INC: records the include files AHostPath took in its last
+      /// parse; see ISymbolStore.SetFileIncludes.</summary>
+      /// <param name="AHostPath">The host file path.</param>
+      /// <param name="AIncludes">Absolute include paths; empty deletes the record.</param>
+      procedure SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta reader.
       /// Tolerates a missing table (a DB from before schema_meta existed) and a missing
       /// key, both as '' -- callers treat that as "unknown", never as an error, exactly
@@ -2125,6 +2132,40 @@ type
       /// (Migrate has not run on it -- a read-only open). Defensive; never a silent no-op.</exception>
       /// <remarks>Implements ISymbolStore.PutEffectFacts.</remarks>
       procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+      /// <summary>Writes one routine's data_flows rows inside the open file tx.</summary>
+      /// <param name="AToken">The open file tx (supplies file_id).</param>
+      /// <param name="ARows">Rows to insert; empty is a no-op.</param>
+      /// <remarks>Implements ISymbolStore.PutDataFlows. No-op when the table is absent.</remarks>
+      procedure PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+      /// <summary>True when the data_flows table exists (probed once per store).</summary>
+      /// <returns>Implements ISymbolStore.HasDataFlows.</returns>
+      function HasDataFlows: Boolean;
+      /// <summary>data_flows rows whose destination is at (AFileId, ALine, ACol).</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <param name="ALine">dst_line.</param>
+      /// <param name="ACol">dst_col.</param>
+      /// <param name="ADstKind">DF_DST_* or '' for all.</param>
+      /// <returns>Implements ISymbolStore.GetDataFlowsAt.</returns>
+      function GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer; const ADstKind: string): TArray<TDataFlowRow>;
+      /// <summary>data_flows rows of one routine.</summary>
+      /// <param name="ASymbolId">symbols.id of the routine.</param>
+      /// <param name="ADstKind">DF_DST_* or '' for all.</param>
+      /// <returns>Implements ISymbolStore.GetDataFlowsOf.</returns>
+      function GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+      /// <summary>dst_kind='field' rows writing AName under one of AOwnerIds.</summary>
+      /// <param name="AOwnerIds">owner_id values; empty returns nothing.</param>
+      /// <param name="AName">Field name (case-insensitive).</param>
+      /// <returns>Implements ISymbolStore.GetFieldWriters.</returns>
+      function GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+      /// <summary>dst_kind='global' rows writing AName.</summary>
+      /// <param name="AName">Variable name (case-insensitive).</param>
+      /// <param name="AFileId">files.id filter; 0 or less = every file.</param>
+      /// <returns>Implements ISymbolStore.GetGlobalWriters.</returns>
+      function GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
+      /// <summary>Runs a data_flows SELECT (column list DATA_FLOWS_COLS) and maps every row.</summary>
+      /// <param name="AQ">An unopened query whose SQL and params are set; opened and closed here.</param>
+      /// <returns>The mapped rows.</returns>
+      function ReadDataFlowRows(AQ: TFDQuery): TArray<TDataFlowRow>;
       /// <summary>True when at least one routine with a body has no purity
       /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
       /// stage run after a per-file reindex even when the calls stage was
@@ -3468,6 +3509,12 @@ type
       class function FindImplEnd(const ALines: TArray<string>; AStartLine: Integer): Integer; static;
   end;
 
+const
+  /// <summary>Lane INC: the schema_meta key prefix of a host's recorded include
+  /// list (SetFileIncludes); the full key is this plus the lowercased stored host
+  /// path, the value the include paths joined by '|'. Public for lint-all (lane INC2).</summary>
+  FILE_INCLUDES_META_KEY = 'file_includes:';
+
 implementation
 
 uses
@@ -3585,6 +3632,7 @@ begin
   FHasMemberAccesses:= -1; { probed lazily -- see HasMemberAccesses }
   FHasEffectCols    := -1; { probed lazily -- see HasEffectCols }
   FHasUseOriginCols := -1; { N-06: probed lazily -- see HasUseOriginCols }
+  FHasDataFlows     := -1; { taint T0: probed lazily -- see HasDataFlows }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -3637,6 +3685,206 @@ end;
 function TSQLiteSymbolStore.HasDispatchEdges: Boolean;
 begin
   Result:= TableExists('dispatch_edges');
+end;
+
+{ ---- data_flows (taint wave T0, 2026-10-27) ----------------------------------
+  Writer + readers only; no analysis here. Column order of every SELECT is
+  DATA_FLOWS_COLS, mapped POSITIONALLY by ReadDataFlowRows. }
+const
+  DATA_FLOWS_COLS = 'file_id, symbol_id, owner_id, dst_kind, dst_line, dst_col, dst_index, dst_name, ' +
+                    'dst_receiver, src_kind, src_index, src_line, src_col, src_name, via_local, cond';
+  { a bare `F := e` (no receiver) in a descendant is a 'write' row: the extractor
+    classifies only the owner's own fields, so an inherited field arrives by name }
+  SQL_FIELD_WRITERS_HEAD = 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE (dst_kind = ''' + DF_DST_FIELD +
+                           ''' OR (dst_kind = ''' + DF_DST_WRITE + ''' AND dst_receiver = ''''))' +
+                           ' AND dst_name = :n COLLATE NOCASE AND owner_id IN (';
+  SQL_FIELD_WRITERS_TAIL = ') ORDER BY file_id, dst_line, dst_col';
+  SQL_PUT_DATA_FLOWS = 'INSERT INTO data_flows(' + DATA_FLOWS_COLS + ') VALUES (:fid, :sid, :own, :dk, ' +  // dl:ok sql-injection-concat@11f0 -- REVIEWED 2026-10-27: DATA_FLOWS_COLS is a compile-time const column list, no runtime value; every value is a bound :param
+                       ':dl, :dc, :di, :dn, :dr, :sk, :si, :sl, :sc, :sn, :vl, :cd)';
+
+type
+  { Positional column order of DATA_FLOWS_COLS -- keep the two in step. }
+  TDataFlowCol = (dfcFileId = 0, dfcSymbolId = 1, dfcOwnerId = 2, dfcDstKind = 3, dfcDstLine = 4, dfcDstCol = 5,
+                  dfcDstIndex = 6, dfcDstName = 7, dfcDstReceiver = 8, dfcSrcKind = 9, dfcSrcIndex = 10, dfcSrcLine = 11,
+                  dfcSrcCol = 12, dfcSrcName = 13, dfcViaLocal = 14, dfcCond = 15);
+
+function TSQLiteSymbolStore.HasDataFlows: Boolean;
+begin
+  if FHasDataFlows < 0 then FHasDataFlows:= if TableExists('data_flows') then 1 else 0;
+  Result:= FHasDataFlows = 1;
+end;
+
+procedure TSQLiteSymbolStore.PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+var
+  R: TDataFlowRow;
+begin
+  if (Length(ARows) = 0) or not HasDataFlows then Exit;
+  if FQPutDataFlows = nil then
+  begin
+    FQPutDataFlows:= TFDQuery.Create(nil);
+    FQPutDataFlows.Connection:= FConn;
+    FQPutDataFlows.SQL.Text:= SQL_PUT_DATA_FLOWS;
+    FQPutDataFlows.ParamByName('fid').DataType:= ftLargeint;
+    FQPutDataFlows.ParamByName('sid').DataType:= ftLargeint;
+    FQPutDataFlows.ParamByName('own').DataType:= ftLargeint;
+    FQPutDataFlows.ParamByName('dk' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('dl' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('dc' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('di' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('dn' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('dr' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('sk' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('si' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('sl' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('sc' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('sn' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('vl' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('cd' ).DataType:= ftInteger;
+    FQPutDataFlows.Prepare;
+  end;
+  for R in ARows do
+  begin
+    FQPutDataFlows.ParamByName('fid').AsLargeInt  := AToken.FileId;
+    FQPutDataFlows.ParamByName('sid').AsLargeInt  := R.SymbolId;
+    FQPutDataFlows.ParamByName('own').AsLargeInt  := R.OwnerId;
+    FQPutDataFlows.ParamByName('dk' ).AsWideString:= R.DstKind;
+    FQPutDataFlows.ParamByName('dl' ).AsInteger   := R.DstLine;
+    FQPutDataFlows.ParamByName('dc' ).AsInteger   := R.DstCol;
+    FQPutDataFlows.ParamByName('di' ).AsInteger   := R.DstIndex;
+    FQPutDataFlows.ParamByName('dn' ).AsWideString:= R.DstName;
+    FQPutDataFlows.ParamByName('dr' ).AsWideString:= R.DstReceiver;
+    FQPutDataFlows.ParamByName('sk' ).AsWideString:= R.SrcKind;
+    FQPutDataFlows.ParamByName('si' ).AsInteger   := R.SrcIndex;
+    FQPutDataFlows.ParamByName('sl' ).AsInteger   := R.SrcLine;
+    FQPutDataFlows.ParamByName('sc' ).AsInteger   := R.SrcCol;
+    FQPutDataFlows.ParamByName('sn' ).AsWideString:= R.SrcName;
+    FQPutDataFlows.ParamByName('vl' ).AsInteger   := Ord(R.ViaLocal);
+    FQPutDataFlows.ParamByName('cd' ).AsInteger   := Ord(R.Cond);
+    FQPutDataFlows.ExecSQL;
+  end;
+end;
+
+function TSQLiteSymbolStore.ReadDataFlowRows(AQ: TFDQuery): TArray<TDataFlowRow>;
+var
+  L: TList<TDataFlowRow>;
+  R: TDataFlowRow;
+begin
+  L:= TList<TDataFlowRow>.Create;
+  try
+    AQ.Open;
+    try
+      while not AQ.Eof do
+      begin
+        R:= Default(TDataFlowRow);
+        R.FileId     := AQ.Fields[Ord(dfcFileId)].AsLargeInt;
+        R.SymbolId   := AQ.Fields[Ord(dfcSymbolId)].AsLargeInt;
+        R.OwnerId    := AQ.Fields[Ord(dfcOwnerId)].AsLargeInt;
+        R.DstKind    := AQ.Fields[Ord(dfcDstKind)].AsString;
+        R.DstLine    := AQ.Fields[Ord(dfcDstLine)].AsInteger;
+        R.DstCol     := AQ.Fields[Ord(dfcDstCol)].AsInteger;
+        R.DstIndex   := AQ.Fields[Ord(dfcDstIndex)].AsInteger;
+        R.DstName    := AQ.Fields[Ord(dfcDstName)].AsString;
+        R.DstReceiver:= AQ.Fields[Ord(dfcDstReceiver)].AsString;
+        R.SrcKind    := AQ.Fields[Ord(dfcSrcKind)].AsString;
+        R.SrcIndex   := AQ.Fields[Ord(dfcSrcIndex)].AsInteger;
+        R.SrcLine    := AQ.Fields[Ord(dfcSrcLine)].AsInteger;
+        R.SrcCol     := AQ.Fields[Ord(dfcSrcCol)].AsInteger;
+        R.SrcName    := AQ.Fields[Ord(dfcSrcName)].AsString;
+        R.ViaLocal   := AQ.Fields[Ord(dfcViaLocal)].AsInteger <> 0;
+        R.Cond       := AQ.Fields[Ord(dfcCond)].AsInteger <> 0;
+        L.Add(R);
+        AQ.Next;
+      end;
+    finally
+      AQ.Close;
+    end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer;
+  const ADstKind: string): TArray<TDataFlowRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasDataFlows then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE file_id = :f AND dst_line = :l AND ' +
+      'dst_col = :c AND (:k = '''' OR dst_kind = :k) ORDER BY dst_index, src_kind, src_line, src_col';
+    Q.ParamByName('f').AsLargeInt  := AFileId;
+    Q.ParamByName('l').AsInteger   := ALine;
+    Q.ParamByName('c').AsInteger   := ACol;
+    Q.ParamByName('k').AsWideString:= ADstKind;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasDataFlows then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE symbol_id = :s AND ' +
+      '(:k = '''' OR dst_kind = :k) ORDER BY dst_kind, dst_index, dst_line, dst_col';
+    Q.ParamByName('s').AsLargeInt  := ASymbolId;
+    Q.ParamByName('k').AsWideString:= ADstKind;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+var
+  Q     : TFDQuery;
+  Ids   : string;
+  IdText: TArray<string>;
+  I     : Integer;
+begin
+  Result:= nil;
+  if (Length(AOwnerIds) = 0) or not HasDataFlows then Exit;
+  SetLength(IdText, Length(AOwnerIds));
+  for I:= 0 to High(AOwnerIds) do IdText[I]:= IntToStr(AOwnerIds[I]);
+  Ids:= string.Join(',', IdText);
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= SQL_FIELD_WRITERS_HEAD + Ids + SQL_FIELD_WRITERS_TAIL;  { Ids: IntToStr of Int64 ids only, never text }
+    Q.ParamByName('n').AsWideString:= AName;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasDataFlows then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE dst_kind = ''' + DF_DST_GLOBAL + ''' AND ' +
+      'dst_name = :n COLLATE NOCASE AND (:f <= 0 OR file_id = :f) ORDER BY file_id, dst_line, dst_col';
+    Q.ParamByName('n').AsWideString:= AName;
+    Q.ParamByName('f').AsLargeInt  := AFileId;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
@@ -3924,6 +4172,7 @@ begin
   FQDeleteFileDocs.Free;
   FQGetSymbolDoc.Free;
   FQPutSymbolFacts.Free;
+  FQPutDataFlows.Free;
   FQGetSymbolFacts.Free;
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
@@ -4544,6 +4793,33 @@ begin
           '  PRIMARY KEY (ref_id, arg_index))');
   TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_class ON classref_args(class_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_param ON classref_args(param_symbol_id)');
+  { 2026-10-27 (taint wave T0, plan 2026-10-27-taint-interprocedural-plan.md section 2):
+    per-routine data-flow facts, written by the indexer (PutDataFlows) inside the file tx.
+    ADDITIVE and probed for (HasDataFlows), so NO SCHEMA_VERSION bump -- the member_accesses /
+    classref_args precedent, and like them it lives ONLY here (Migrate runs on every writable
+    open, new DB or old), not in SCHEMA_DDL, so SCHEMA_DDL_FTS5_FIRST does not move. Both FK
+    child columns are covered by an index's LEADING column (file_id: idx_data_flows_dst,
+    symbol_id: idx_data_flows_sym) -- the v0.85 PERF rule below. Column semantics: TDataFlowRow. }
+  TryExec('CREATE TABLE IF NOT EXISTS data_flows (' +
+          '  file_id      INTEGER NOT NULL REFERENCES files(id)   ON DELETE CASCADE,' +
+          '  symbol_id    INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  owner_id     INTEGER NOT NULL,' +
+          '  dst_kind     TEXT    NOT NULL,' +
+          '  dst_line     INTEGER NOT NULL,' +
+          '  dst_col      INTEGER NOT NULL,' +
+          '  dst_index    INTEGER NOT NULL,' +
+          '  dst_name     TEXT,' +
+          '  dst_receiver TEXT,' +
+          '  src_kind     TEXT    NOT NULL,' +
+          '  src_index    INTEGER NOT NULL,' +
+          '  src_line     INTEGER NOT NULL,' +
+          '  src_col      INTEGER NOT NULL,' +
+          '  src_name     TEXT,' +
+          '  via_local    INTEGER NOT NULL,' +
+          '  cond         INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_dst  ON data_flows(file_id, dst_line, dst_col)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_sym  ON data_flows(symbol_id, dst_kind)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_name ON data_flows(dst_kind, dst_name COLLATE NOCASE)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -5289,10 +5565,68 @@ begin
   end;
 end; // function
 
+const
+  // Lane INC: schema_meta key prefix of a host's recorded include list.
+  FILE_INCLUDES_KEY = FILE_INCLUDES_META_KEY;
+  FILE_INCLUDES_SEP = '|';
+
+// True when one of the includes recorded for APath by SetFileIncludes is
+// missing or newer than APath's last parse.
+function RecordedIncludesChanged(AConn: TFDConnection; const APath: string): Boolean;
+var
+  Q: TFDQuery;
+  ParsedAt: Int64;
+  List: string;
+begin
+  Result:= False;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AConn;
+    Q.SQL.Text:= 'SELECT m.value, f.parsed_at FROM schema_meta m JOIN files f ' +
+                 'ON (f.path = :p OR LOWER(f.path) = LOWER(:p)) WHERE m.key = :k LIMIT 1';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('k').AsWideString:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(APath));
+    try
+      Q.Open;
+    except
+      { no schema_meta table (a pre-schema_meta DB): nothing was recorded }
+    end;
+    if (not Q.Active) or Q.IsEmpty then Exit;
+    List    := Q.Fields[0].AsString;
+    ParsedAt:= Q.Fields[1].AsLargeInt;
+  finally
+    Q.Free;
+  end;
+  for var Inc_ in List.Split([FILE_INCLUDES_SEP]) do
+  begin
+    if Inc_ = '' then Continue;
+    if (not TFile.Exists(Inc_)) or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > ParsedAt) then
+      Exit(True);
+  end;
+end;
+
+procedure TSQLiteSymbolStore.SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);
+var
+  Key: string;
+begin
+  Key:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(AHostPath));
+  if Length(AIncludes) = 0 then
+  begin
+    try
+      FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [Key]);
+    except
+      { no schema_meta table: nothing to clear }
+    end;
+    Exit;
+  end;
+  SetMetaValue(Key, string.Join(FILE_INCLUDES_SEP, AIncludes));
+end;
+
 function TSQLiteSymbolStore.IncludeOriginsChanged(const APath: string): Boolean;
 var
   Q: TFDQuery;
 begin
+  if RecordedIncludesChanged(FConn, APath) then Exit(True);
   Result:= False;
   if not HasUseOriginCols then Exit;
   Q:= TFDQuery.Create(nil);

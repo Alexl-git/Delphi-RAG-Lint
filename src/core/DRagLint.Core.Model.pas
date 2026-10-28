@@ -142,7 +142,16 @@ const
     (A7-I) a PROJECT index preprocesses with the project's ACTIVE build config
     (not Release); its fingerprint gains ;cfg=..;defs=.. (library / folder DBs keep
     theirs). Guard: tests\autotest\run_index_active_config_guard.ps1. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.25.0-alpha';
+  { 1.25.0 -> 1.26.0 (2026-10-27, taint wave, ONE re-parse): new additive table
+    data_flows (per routine: which source reaches which destination -- call
+    argument, member write, field, global, var/out param, Result), emitted by
+    DRagLint.Index.DataFlowFacts at index time; no schema bump (member_accesses /
+    classref_args precedent). Bumped in T0 (the contract commit) so T1's
+    extractor lands under it; no DB may be re-parsed under 1.26.0 before T1 is
+    merged (an engine built from T0 alone stores EMPTY data_flows under this
+    fingerprint). Plan: docs\superpowers\plans\2026-10-27-taint-interprocedural-plan.md.
+    Guard: tests\autotest\run_dataflow_facts.ps1 (T1). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.26.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -1110,6 +1119,113 @@ type
   /// left on it.</remarks>
   TLintFixKind = (lfkNone, lfkReplace, lfkDeleteSpan, lfkDeleteStatement);
 
+{ ---- data_flows (taint wave T0, 2026-10-27; plan docs\superpowers\plans\
+  2026-10-27-taint-interprocedural-plan.md section 2) ------------------------
+  The TEXT values of data_flows.dst_kind / src_kind. These constants ARE the
+  contract between the extractor (T1, DRagLint.Index.DataFlowFacts) and the
+  linter (T2, DRagLint.Lint.TaintRules): write and compare these, never a
+  literal typed from memory. }
+const
+  /// <summary>dst_kind: argument dst_index (0-based) of a call; dst_line/dst_col = the call ref's position.</summary>
+  DF_DST_ARG      = 'arg';
+  /// <summary>dst_kind: RHS of an assignment to a member of something that is not a local, param or field
+  /// (`Q.SQL.Text := S`: dst_name 'Text', dst_receiver 'Q.SQL'); dst_line/dst_col = the member-write ref's position.</summary>
+  DF_DST_WRITE    = 'write';
+  /// <summary>dst_kind: the routine's Result (`Result := e`, `Exit(e)`, `FuncName := e`); position = first such site.</summary>
+  DF_DST_RESULT   = 'result';
+  /// <summary>dst_kind: a field of the owning class or an ancestor (dst_name = field name as written); position = the write site.</summary>
+  DF_DST_FIELD    = 'field';
+  /// <summary>dst_kind: a unit-level variable (dst_name = its name as written); position = the write site.</summary>
+  DF_DST_GLOBAL   = 'global';
+  /// <summary>dst_kind: a var/out parameter of THIS routine, dst_index = its 0-based declared position (Self excluded).</summary>
+  DF_DST_OUTPARAM = 'outparam';
+  /// <summary>src_kind: a declared parameter, src_index = 0-based declared position (Self excluded).</summary>
+  DF_SRC_PARAM    = 'param';
+  /// <summary>src_kind: a call whose RESULT feeds the value, or a read of a member/variable that is not a
+  /// local/param/field/global of this routine (`Edit1.Text`, `ParamStr(1)`); src_line/src_col = that ref's position.</summary>
+  DF_SRC_REF      = 'ref';
+  /// <summary>src_kind: a field of the owning class or an ancestor, src_name = its name as written.</summary>
+  DF_SRC_FIELD    = 'field';
+  /// <summary>src_kind: a unit-level variable of this unit, src_name = its name as written.</summary>
+  DF_SRC_GLOBAL   = 'global';
+  /// <summary>src_kind: a local or param passed as a plain variable argument at position src_index of an EARLIER
+  /// call (src_line/src_col = that call ref's position; src_name = the callee name as written).</summary>
+  DF_SRC_ARGOUT   = 'argout';
+  /// <summary>Per-routine row cap (a generated huge routine emits the first DF_ROW_CAP rows and a Writeln note).</summary>
+  DF_ROW_CAP      = 4000;
+
+type
+  /// <summary>One data_flows row: "a value of SRC can reach DST inside routine SymbolId on at least one CFG
+  /// path". No row = not proven. Emitted by TDataFlowFacts.Collect (extractor), written by
+  /// ISymbolStore.PutDataFlows, read back by the GetDataFlows* readers.</summary>
+  /// <remarks>
+  /// Column-for-column image of the data_flows table (DDL in TSQLiteSymbolStore.Migrate).
+  /// Kinds are the DF_DST_* / DF_SRC_* constants. Positions (DstLine/DstCol, SrcLine/SrcCol) are
+  /// EXACTLY the start_line/start_col the refs table stores for the ref at that site, so
+  /// `data_flows d JOIN refs r ON r.file_id = d.file_id AND r.start_line = d.dst_line AND
+  /// r.start_col = d.dst_col` finds the call / member-write ref of every 'arg' / 'write' row (and, with
+  /// src_line/src_col, the feeding ref of every 'ref' / 'argout' row). Unused integers are -1 (indices)
+  /// or 0 (positions); unused strings are ''. FileId is IGNORED by PutDataFlows (the file tx token
+  /// supplies it) and filled by the readers. Literals, constants, nil and numeric/boolean/ordinal-typed
+  /// values emit no row; an unknown type DOES emit (silence costs recall, a wrong drop costs trust).
+  /// </remarks>
+  TDataFlowRow = record
+    /// <summary>files.id of the routine's file (set by the readers; ignored on write).</summary>
+    FileId     : Int64  ;
+    /// <summary>symbols.id of the enclosing routine (FK, ON DELETE CASCADE: a per-file reindex drops the rows).</summary>
+    SymbolId   : Int64  ;
+    /// <summary>symbols.id of the routine's owning class, or 0 (field rows resolve against it).</summary>
+    OwnerId    : Int64  ;
+    /// <summary>One of the DF_DST_* constants.</summary>
+    DstKind    : string ;
+    /// <summary>'arg'/'write': the call / member-write ref's start_line; 'field'/'global': the write site;
+    /// 'result'/'outparam': the (first) assigning site.</summary>
+    DstLine    : Integer;
+    /// <summary>Column companion of DstLine (same base as refs.start_col).</summary>
+    DstCol     : Integer;
+    /// <summary>'arg': 0-based argument position; 'outparam': 0-based declared parameter position; else -1.</summary>
+    DstIndex   : Integer;
+    /// <summary>Callee / member / field / global leaf name as written; '' for 'result' and 'outparam' (the
+    /// parameter name for 'outparam').</summary>
+    DstName    : string ;
+    /// <summary>Text before the dot at an 'arg'/'write' site ('Q.SQL' for `Q.SQL.Text := S`); '' when bare.</summary>
+    DstReceiver: string ;
+    /// <summary>One of the DF_SRC_* constants.</summary>
+    SrcKind    : string ;
+    /// <summary>'param': 0-based declared position (Self excluded); 'argout': the argument position; else -1.</summary>
+    SrcIndex   : Integer;
+    /// <summary>'ref': the feeding ref's start_line; 'argout': the earlier call ref's start_line; else 0.</summary>
+    SrcLine    : Integer;
+    /// <summary>Column companion of SrcLine; 0 when SrcLine is 0.</summary>
+    SrcCol     : Integer;
+    /// <summary>Leaf name of the feeding ref / field / global / parameter / callee (as written).</summary>
+    SrcName    : string ;
+    /// <summary>False = the source appears in the destination expression itself; True = it reached the
+    /// destination through state (a local, a container, a record member of a local).</summary>
+    ViaLocal   : Boolean;
+    /// <summary>True = the reaching path passed a branch/loop join with a differing state, or the routine
+    /// took the flow-insensitive fallback. Explainability only: never used to drop a row.</summary>
+    Cond       : Boolean;
+  end;
+
+  /// <summary>One hop of a finding's path (taint: source -> hops -> sink), serialised as an element of
+  /// the `path` array in `lint --format json` and as a SARIF threadFlow location.</summary>
+  /// <remarks>Empty for every rule that does not produce a path. Hop 0 is the SOURCE; the last hop is the
+  /// SINK (the finding's own position).</remarks>
+  TLintLocation = record
+    /// <summary>Absolute file path of the hop.</summary>
+    FilePath: string ;
+    /// <summary>1-based line of the hop.</summary>
+    Line    : Integer;
+    /// <summary>Column of the hop (refs base); 0 when unknown.</summary>
+    Col     : Integer;
+    /// <summary>Qualified name of the routine the hop is in; '' when none.</summary>
+    Routine : string ;
+    /// <summary>Short hop description ('source ParamStr', 'param 0 of TDal.Run', 'via field TFoo.FSql',
+    /// 'sink ExecSQL'); free text for humans, not parsed.</summary>
+    Note    : string ;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.ScanAdd (DRagLint.CLI.pas) (+185 more)</para>
@@ -1179,6 +1295,11 @@ type
     { A unit the fix needs in the implementation uses clause ('' = none), e.g.
       System.Math for a SameValue rewrite; added once per file when missing. }
     FixUses: string;
+
+    { taint wave T0 (2026-10-27): the source -> hops -> sink path of a taint finding (hop 0 = source,
+      last = sink). Empty for every other rule (zeroed by Default). Serialised to `--format json` as
+      `path` only when non-empty (T2) and to SARIF codeFlows (T3); never to the rule cache. }
+    Path: TArray<TLintLocation>;
   end;
 
   /// <remarks>

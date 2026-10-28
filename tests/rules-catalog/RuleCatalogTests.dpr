@@ -62,6 +62,17 @@ begin
   Check('sql-injection-concat present + scm + security',
     Find(Cat, 'sql-injection-concat', Info) and (Info.Source = 'scm') and (Info.Category = 'security'));
 
+  { taint wave T2 (2026-10-27): the three store-backed taint rules are built-ins, security, ON }
+  Check('taint-sql-injection builtin + security + error + ON',
+    Find(Cat, 'taint-sql-injection', Info) and (Info.Source = 'builtin') and (Info.Category = 'security')
+    and (Info.DefaultSeverity = 'error') and Info.DefaultEnabled);
+  Check('taint-command-injection builtin + security + error + ON',
+    Find(Cat, 'taint-command-injection', Info) and (Info.Source = 'builtin') and (Info.Category = 'security')
+    and (Info.DefaultSeverity = 'error') and Info.DefaultEnabled);
+  Check('taint-path-traversal builtin + security + warning + ON',
+    Find(Cat, 'taint-path-traversal', Info) and (Info.Source = 'builtin') and (Info.Category = 'security')
+    and (Info.DefaultSeverity = 'warning') and Info.DefaultEnabled);
+
   { built-in still wins dedup + keeps builtin source }
   Check('too-many-parameters still builtin after merge',
     Find(Cat, 'too-many-parameters', Info) and (Info.Source = 'builtin'));

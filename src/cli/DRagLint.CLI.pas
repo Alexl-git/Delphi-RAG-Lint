@@ -158,6 +158,7 @@ uses
   , DRagLint.Lint   .PlatformDivergent // dl:unit DRagLint.Lint.PlatformDivergent accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
+  , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
@@ -212,6 +213,8 @@ uses
   , DRagLint.Diagnostics.ConcurrencyChecks
   , DRagLint.Diagnostics.DisallowedChecks
   , DRagLint.Diagnostics.ModernizeChecks
+  , DRagLint.Diagnostics.PpChecks
+  , DRagLint.Index.PPUnitSource
   , DRagLint.Diagnostics.OwnershipChecks
   , DRagLint.Diagnostics.BoundsNilChecks
   , DRagLint.Diagnostics.ExceptionThreadChecks
@@ -2814,7 +2817,7 @@ begin
   Plat:= EffectiveIndexPlatform(APlatform); // library / no-project fallback (plan default)
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
-  if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
+  if ADproj = '' then Result:= BuiltinsProfile(Plat); // lane INC2: + CompilerVersion and the default switches
 end;
 
 /// <summary>A7-I: the full active build an INDEX run preprocesses a PROJECT section
@@ -3043,6 +3046,7 @@ begin
   try
     for F in AClosureFiles do
     begin
+      if SameText(ExtractFileExt(F), '.inc') then Continue; // lane INC: added last, below
       AddOnce(F);
       if SameText(ExtractFileExt(F), '.pas') then
       begin
@@ -3066,6 +3070,12 @@ begin
       end
       else if TFile.Exists(ProjAbs) then AddOnce(ProjAbs); // a bare .dpr/.dpk
     end;
+
+    { Lane INC: include files LAST, after every host (the program file too), so
+      the indexer has seen each includer's include site -- and parses the .inc
+      under that host's defines -- before it reaches the .inc itself. }
+    for F in AClosureFiles do
+      if SameText(ExtractFileExt(F), '.inc') then AddOnce(F);
 
     Result:= Scope.ToArray;
   finally
@@ -3884,6 +3894,16 @@ begin
             // PP-Task-10: per-config uses-discovery -- honour the SAME profile
             // the indexer uses for this section (default ON; --no-preprocess -> False).
             Cl.SetPreprocess(APreprocess, SectionProfile);
+            { Lane INC3: IF names resolve in the used units -- project files
+              scanned (registered per closure below), library units from the
+              platform library DB. }
+            var PPSrc: TPPUnitSourceResolver:= nil;
+            if APreprocess then
+            begin
+              var PPLibArgs: TArgs:= Default(TArgs);
+              PPLibArgs.CheckPlatform:= AItem.Platform;
+              PPSrc:= InstallPPUnitSource(SectionProfile, nil, [ResolveLibraryDb(PPLibArgs)]);
+            end;
             for F in AItem.Roots do
             begin
               { A project file that is not there is a FAILURE, not a skip. It was
@@ -3899,7 +3919,15 @@ begin
               // Combine global + section exclude patterns for the closure.
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
+              if PPSrc <> nil then // lane INC3: second pass as in DoIndex
+              begin
+                var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
+                PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+                if PPMissed then CR:= Cl.Resolve(F, ExcludePatterns);
+              end;
               for W in CR.Warnings do Writeln('  ', W);
+              Indexer.SetIncludeContext(APreprocess, CR.SearchPaths); // lane INC: as in DoIndex
+              if PPSrc <> nil then PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths); // lane INC3
               { Same scope expansion as `index --project` (sibling .dfm + the
                 project file). Before this, closure sections indexed .pas/.inc
                 only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
@@ -5819,7 +5847,28 @@ begin
           from an inactive branch would be pulled in and then parsed as though
           it were not compiled, and vice versa. }
         Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
+        { Lane INC3: IF names resolve in the used units -- the closure's
+          project files are scanned (order-independent), library units come
+          from the library DB (--library-db, else the manifest's). }
+        var PPSrc: TPPUnitSourceResolver:= nil;
+        if not AArgs.NoPreprocess then
+          PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        { The first pass could not see the project's own units yet; when an IF
+          asked for a name it could not answer, resolve once more with them. }
+        if PPSrc <> nil then
+        begin
+          var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
+          PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+          if PPMissed then
+          begin
+            CR:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+            PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+          end;
+        end;
+        { Lane INC: each .inc is parsed in its includer's define context, with
+          include names resolved on the same search path the closure used. }
+        Indexer.SetIncludeContext(not AArgs.NoPreprocess, CR.SearchPaths);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
         { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
@@ -12388,6 +12437,21 @@ begin
         var CompLb: TComplianceLabels;
         CompTbl.TryGet(F.RuleId, CompLb);
         if not CompLb.IsEmpty then JObj.AddPair('compliance', ComplianceToJson(CompLb, False));
+        if Length(F.Path) > 0 then
+        begin
+          var JPath: TJSONArray:= TJSONArray.Create;
+          for var Hop: TLintLocation in F.Path do
+          begin
+            var JHop: TJSONObject:= TJSONObject.Create;
+            JHop.AddPair('file_path', Hop.FilePath);
+            JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
+            JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
+            JHop.AddPair('routine'  , Hop.Routine);
+            JHop.AddPair('note'     , Hop.Note);
+            JPath.AddElement(JHop);
+          end;
+          JObj.AddPair('path', JPath);
+        end;
         JArr.AddElement(JObj);
       end;
       EmitFindingsDoc(AArgs, JArr.Format(2));
@@ -12616,6 +12680,11 @@ const
     'property-references-itself', 'identical-then-else', 'interface-object-mixing');
   LINT_GATE_PARITY_EXT: array[0..2] of string = (
     'property-references-itself', 'identical-then-else', 'interface-object-mixing');
+  { taint wave T2: the store-backed interprocedural taint rules (DRagLint.Lint.TaintRules) }
+  LINT_GATE_TAINT: array[0..2] of string = (
+    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal');
+  { lane INC3: the preprocessor's own report (DRagLint.Diagnostics.PpChecks) }
+  LINT_GATE_PP: array[0..0] of string = ('pp-unresolved-if');
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
@@ -12626,6 +12695,53 @@ begin
   Result:= False;
 end;
 
+{ True when at least one taint rule survives this run's config (--disable, the
+  config's disabled list, a marker): the taint stage is the most expensive pass and
+  runs not at all when every rule it emits would be dropped. }
+function TaintWanted(const AKeep: TFunc<string, Boolean>): Boolean;
+begin
+  for var Id: string in LINT_GATE_TAINT do
+    if AKeep(Id) then Exit(True);
+  Result:= False;
+end;
+
+var
+  { one stale-index note per process, however many files `lint` is asked about }
+  GTaintStaleNoted: Boolean = False;
+
+/// <summary>Runs the three taint rules (LINT_GATE_TAINT) over AScope and returns the
+/// findings the caller keeps.</summary>
+/// <param name="AStore">Project store; nil returns nothing (the rules are store-backed).</param>
+/// <param name="ALibStore">The platform library store the lint path opened, or nil.</param>
+/// <param name="AScope">files.id of the files whose sinks are examined.</param>
+/// <param name="ACfg">The lint config; its TaintJson objects extend the built-in catalogues.</param>
+/// <param name="ANarrowRule">--rule; '' = every taint rule.</param>
+/// <param name="AOnlyPath">Keep only findings in this file ('' = all).</param>
+/// <returns>Taint findings with their Path.</returns>
+/// <remarks>A DB indexed before extractor 1.26.0 (no or empty data_flows) prints ONE note to
+/// stderr and reports nothing. DRAGLINT_DEBUG / DRAGLINT_PROFILE print the
+/// `taint: sinks N, keys N, ...` stats line to stderr.</remarks>
+function RunTaintRules(const AStore, ALibStore: ISymbolStore; const AScope: TArray<Int64>;
+                       const ACfg: TLintConfig; const ANarrowRule, AOnlyPath: string): TArray<TLintFinding>;
+var
+  Stats: TTaintStats;
+  F    : TLintFinding;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  for F in TTaintRules.Check(AStore, ALibStore, AScope, TTaintRules.LoadConfig('', ACfg.TaintJson), Stats) do
+    if ((ANarrowRule = '') or SameText(ANarrowRule, F.RuleId))
+       and ((AOnlyPath = '') or SameText(F.FilePath, AOnlyPath)) then
+      Result:= Result + [F];
+  if Stats.StaleIndex and not GTaintStaleNoted then
+  begin
+    GTaintStaleNoted:= True;
+    Writeln(ErrOutput, 'taint: this index has no data_flows facts (built before extractor 1.26.0) -- ' +
+      're-index to enable taint-sql-injection / taint-command-injection / taint-path-traversal');
+  end;
+  if (GetEnvironmentVariable('DRAGLINT_DEBUG') <> '') or (GetEnvironmentVariable('DRAGLINT_PROFILE') <> '') then
+    Writeln(ErrOutput, Stats.ToLine);
+end;
 /// <summary>The rule ids named by a suppression marker anywhere in AFiles, lowercased:
 /// every `dl:ok &lt;rule&gt;` and every `drag-lint:ignore &lt;rule&gt;`; '*' when a
 /// `drag-lint:ignore` names no rule (it suppresses everything on its line).</summary>
@@ -13365,6 +13481,11 @@ begin
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   InstallFileProfileResolver(AArgs, AArgs.DbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  { Lane INC3: the lint side's IF symbol table -- the same lookup the indexer
+    used: project units through the project DB's files, library units from
+    the library DB. }
+  if not AArgs.NoPreprocess then
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), AArgs.DbPaths, [LintLibraryDb(AArgs)]);
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -14111,6 +14232,10 @@ begin
       if LintRuleWants(NarrowRule, LINT_GATE_MODERNIZE) then
         for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('pp');
+      if LintRuleWants(NarrowRule, LINT_GATE_PP) then
+        for F in DRagLint.Diagnostics.PpChecks.TPpChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { Gap-rules wave (G0): the five new per-file checker units. }
       TraceLintChecker('ownership');
       if LintRuleWants(NarrowRule, LINT_GATE_OWNERSHIP) then
@@ -14241,6 +14366,11 @@ begin
                        {AOnlyFileId=}FlowFid, RuleKeptByRun(AArgs, Cfg, Marked)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
+          end;          { taint wave T2: the sinks of THIS file; the walk may leave it (callers, fields, library) }
+          if LintRuleWants(NarrowRule, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, Marked)) then
+          begin
+            TraceLintChecker('taint');
+            Findings:= Findings + RunTaintRules(FlowStore, FlowLibStore, [FlowFid], Cfg, NarrowRule, MyPath);
           end;
         finally
           SibKeep .Free;
@@ -19569,7 +19699,65 @@ const
     cannot silently skew: run_lintall_progress_phases.ps1 asserts the sequence
     is monotonic and that 100 appears only last. }
   LINTALL_SCAN_PCT    = 90;
-  LINTALL_TAIL_PHASES = 13;
+  LINTALL_TAIL_PHASES = 14;
+
+{ Lane INC2: LINT AN INCLUDE FROM THE BYTES THE INDEXER PARSED. A project index
+  parses each .inc from its includer's include site (lane INC, TIndexer.
+  SetIncludeContext: the host's live defines at the directive, first host wins),
+  so lint-all registers the same bytes with TAstParseCache before the scan: the
+  hosts are walked in the index's file order, only those whose recorded include
+  list (SetFileIncludes) names an include in AFiles are re-preprocessed, and each
+  include takes the first host that reaches it. Positions stay the include's own
+  lines (offset identity); the include is linted once however many units include
+  it. An include no recorded host reaches is linted standalone -- as it was
+  indexed. Returns how many includes got a host context. }
+function InstallLintIncludeContexts(const AStore: ISymbolStore; const AFiles: TArray<string>;
+  const AProjectPath: string): Integer;
+var
+  Pending: TDictionary<string, Boolean>;
+  Paths  : TDictionary<string, TArray<string>>;
+begin
+  Result:= 0;
+  TAstParseCache.ClearIncludeContexts;
+  Pending:= TDictionary<string, Boolean>.Create;
+  Paths  := TDictionary<string, TArray<string>>.Create;
+  try
+    for var F: string in AFiles do
+      if SameText(ExtractFileExt(F), '.inc') then Pending.AddOrSetValue(LowerCase(TPath.GetFullPath(F)), True);
+    if Pending.Count = 0 then Exit;
+    for var Fid: Int64 in AStore.GetAllFileIds do
+    begin
+      if Pending.Count = 0 then Break;
+      var Host: string:= AStore.GetFilePath(Fid);
+      if not MatchText(ExtractFileExt(Host), ['.pas', '.dpr', '.dpk']) then Continue;
+      var Listed: string:= AStore.GetMetaValue(FILE_INCLUDES_META_KEY + LowerCase(Host));
+      var Wanted: Boolean:= False;
+      for var L: string in Listed.Split(['|']) do
+        if (L <> '') and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
+      if not Wanted then Continue;
+      { The build's search path, as the closure walk resolved includes against it. }
+      var Dproj: string:= AProjectPath;
+      if not SameText(ExtractFileExt(Dproj), '.dproj') then Dproj:= TProjectProfileCache.BuildForFile(Host).Dproj;
+      var SP: TArray<string>:= nil;
+      if (Dproj <> '') and not Paths.TryGetValue(LowerCase(Dproj), SP) then
+      begin
+        SP:= TClosureResolver.ProjectSearchPaths(Dproj);
+        Paths.Add(LowerCase(Dproj), SP);
+      end;
+      for var Site: TPPIncludeSite in TAstParseCache.HostIncludeSites(Host, SP) do
+      begin
+        var Key: string:= LowerCase(TPath.GetFullPath(Site.Path));
+        if not Pending.ContainsKey(Key) then Continue;
+        TAstParseCache.SetIncludeContext(Site.Path, Site.Resolved);
+        Pending.Remove(Key);
+        Inc(Result);
+      end;
+    end;
+  finally
+    Paths.Free;
+    Pending.Free;
+  end;
+end;
 
 { --file / --in used to be accepted by lint-all and IGNORED, so a "scoped"
   `lint-all --rule doc-drift --fix --file X` planned the whole project (1.31.5
@@ -19677,6 +19865,8 @@ begin
     silent zero -- ProjectDb stays '' and the run refuses below. }
   SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
   InstallFileProfileResolver(AArgs, Dbs, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  if not AArgs.NoPreprocess then // lane INC3: as in DoLint
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), [ProjectDb], [LibDb, LintLibraryDb(AArgs)]);
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -19802,7 +19992,9 @@ begin
       .dpr bodies are where Application.CreateForm, initialization order and
       top-level exception handling live -- exactly the code worth linting.
       See docs\INBOX-lint-all-never-scans-dpr-files.md. }
-    if (SameText(ExtractFileExt(PasPath), '.pas') or SameText(ExtractFileExt(PasPath), '.dpr'))
+    { Lane INC2: .dpk and .inc too -- every file the indexer parses as Pascal. An
+      include is linted from its includer's context (InstallLintIncludeContexts). }
+    if MatchText(ExtractFileExt(PasPath), ['.pas', '.dpr', '.dpk', '.inc'])
        and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
@@ -19838,6 +20030,7 @@ begin
     rule, which is computed from every other rule's findings (LintNarrowRule);
     the report is still filtered to AArgs.Rule in FinalizeAndOutput. }
   var Nr: string:= LintNarrowRule(AArgs.Rule);
+  if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   Linter.OnlyRuleId:= Nr;
@@ -19976,6 +20169,8 @@ begin
           for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
           for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_PP) then
+          for F in DRagLint.Diagnostics.PpChecks.TPpChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { Gap-rules wave (G0): the five new per-file checker units. }
         if LintRuleWants(Nr, LINT_GATE_OWNERSHIP) then
           for F in DRagLint.Diagnostics.OwnershipChecks.TOwnershipChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
@@ -20259,7 +20454,10 @@ begin
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
     Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
-      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));
+      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));  { taint wave T2: store-backed interprocedural taint over every file of the index }
+  LintPhase('taint');
+  if LintRuleWants(Nr, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths))) then
+    Findings:= Findings + RunTaintRules(Store, LibStore, Store.GetAllFileIds, Cfg, Nr, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');
@@ -24213,6 +24411,34 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>Lane INC2: the value and switch lines pp-profile prints after the
+/// defines: each effective numeric value as 'name=value' and each switch state as
+/// '$x+' / '$x-' (the last pair per name wins), each group sorted.</summary>
+/// <param name="AProfile">The resolved profile.</param>
+/// <returns>The lines, values first.</returns>
+function PpProfileValueLines(const AProfile: TDefineProfile): TArray<string>;
+var
+  Nums: TDictionary<string, Integer>;
+  Sws : TDictionary<string, Boolean>;
+  A, B: TArray<string>;
+begin
+  A:= nil;
+  B:= nil;
+  Nums:= TDictionary<string, Integer>.Create;
+  Sws := TDictionary<string, Boolean>.Create;
+  try
+    for var N in AProfile.NumericDefines do Nums.AddOrSetValue(LowerCase(N.Key), N.Value);
+    for var S in AProfile.Switches do Sws.AddOrSetValue(LowerCase(S.Key), S.Value);
+    for var N in Nums do A:= A + [Format('%s=%d', [N.Key, N.Value])];
+    for var S in Sws do B:= B + ['$' + S.Key + (if S.Value then '+' else '-')];
+  finally
+    Sws.Free;
+    Nums.Free;
+  end;
+  TArray.Sort<string>(A);
+  TArray.Sort<string>(B);
+  Result:= A + B;
+end;
 /// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
 /// [--config Release|Debug] [--in FILE [--db DB]] -- diagnostic dump of the define-profile resolver.
 /// With --in FILE (LSP C10) it first prints dproj= / platform= / config= /
@@ -24222,7 +24448,9 @@ end; // function
 /// Base + selected-config DCC_Define symbols); without --dproj it dumps
 /// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
 /// lowercased symbol per line, so tests/preprocess/run_profile.ps1 can grep for
-/// membership. --platform defaults to Win64, --config to Release.</summary>
+/// membership; then (lane INC2) the effective values as 'name=value' and the switch
+/// states as '$x+' / '$x-' (PpProfileValueLines). --platform defaults to Win64,
+/// --config to Release.</summary>
 /// <param name="AArgs">Parsed CLI args; PpDproj (--dproj) the project;
 /// CheckPlatform (--platform) the target; WorkspaceConfig (--config) the
 /// config.</param>
@@ -24243,8 +24471,7 @@ begin
   Config:= AArgs.WorkspaceConfig;
   if Config = '' then Config:= 'Release';
 
-  Profile.Defines:= PlatformBuiltins(Platform);
-  Profile.NumericDefines:= nil;
+  Profile:= BuiltinsProfile(Platform);
   if AArgs.InFile <> '' then
   begin
     { LSP C10: the profile of the file's OWN project's active build. }
@@ -24265,6 +24492,10 @@ begin
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);
   for Sym in Defines do
+    Writeln(Sym);
+  { Lane INC2: then the effective values ('name=value', sorted) and switch states
+    ('$x+' / '$x-', sorted) -- never mistakable for a define name. }
+  for Sym in PpProfileValueLines(Profile) do
     Writeln(Sym);
   Result:= 0;
 end; // function
