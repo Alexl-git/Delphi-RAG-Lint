@@ -322,6 +322,7 @@ using System; using System.Runtime.InteropServices;
 public static class B {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
   [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
   /* DRV-5 / N7/N11: 'ConvRulesEditor.Busy' answers 2 busy / 1 idle; no answer within the timeout = blocked = busy. */
   public static bool Busy(IntPtr main) {
     uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
@@ -334,7 +335,7 @@ public static class B {
 function WaitIdle($procId, $main, $sec) {
   $idleSince = $null; $t0 = Get-Date
   while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
-    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main) -or [B]::Busy($main)
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [B]::IsWindowEnabled($main) -or [B]::Busy($main)
     if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
     Start-Sleep -Milliseconds 200
   }
