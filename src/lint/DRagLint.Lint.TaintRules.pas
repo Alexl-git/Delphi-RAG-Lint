@@ -495,7 +495,7 @@ end;
 function LooksLikeTypeName(const AText: string): Boolean;
 begin
   Result:= (Length(AText) >= 2) and CharInSet(AText[1], ['T', 'E', 'I'])
-           and CharInSet(AText[2], ['A'..'Z']) and (Pos('.', AText) = 0);
+           and CharInSet(AText[2], ['A'..'Z']) and (not AText.Contains('.'));
 end;
 
 { 'Unit.TType.Method' -> 'TType.Method'; 'Unit.Routine' -> 'Routine'. }
@@ -504,8 +504,7 @@ var
   Owner: string;
 begin
   Owner:= OwnerSeg(AQName);
-  if LooksLikeTypeName(Owner) then Result:= Owner + '.' + LastSeg(AQName)
-  else Result:= LastSeg(AQName);
+  Result:= if LooksLikeTypeName(Owner) then Owner + '.' + LastSeg(AQName) else LastSeg(AQName);
 end;
 
 { ---- JSON catalogue parsing ---------------------------------------------------- }
@@ -544,7 +543,7 @@ var
   I: Integer;
 begin
   Result:= nil;
-  if not (AObj.GetValue(AKey) is TJSONArray) then Exit;
+  if (AObj.GetValue(AKey) is not TJSONArray) then Exit;
   A:= AObj.GetValue(AKey) as TJSONArray;
   SetLength(Result, A.Count);
   for I:= 0 to A.Count - 1 do Result[I]:= A.Items[I];
@@ -571,7 +570,7 @@ var
   V: TJSONValue;
 begin
   V:= TJSONObject.ParseJSONValue(AText);
-  if not (V is TJSONObject) then
+  if (V is not TJSONObject) then
   begin
     V.Free;
     raise ELintConfigError.CreateFmt('taint: %s is not a JSON object', [AWhat]);
@@ -1121,7 +1120,7 @@ begin
   { The receiver's own type: only a single identifier can be looked up (a dotted
     receiver's type is a member chain this walk does not type). }
   Seg:= Result.Receiver;
-  if (Seg <> '') and (Pos('.', Seg) = 0) then
+  if (Seg <> '') and (not Seg.Contains('.')) then
   begin
     Result.RecvType:= DeclaredTypeOf(AStore, X, Seg);
     if (Result.RecvType = '') and LooksLikeTypeName(Seg) then Result.RecvType:= Seg;
@@ -1519,7 +1518,7 @@ begin
   Result:= nil;
   if not T.IsVirtual then Exit;
   Cls:= Sym(AStore, T.ParentId);
-  if not (Cls.Kind in [skClass, skInterface]) then Exit;
+  if (Cls.Kind not in [skClass, skInterface]) then Exit;
   for Dn in FStores[AStore].FindDescendantNames(Cls.Name) do
     for C in FStores[AStore].FindSymbolsByExactName(LastSeg(Dn)) do
       if C.Kind = skClass then
@@ -1700,8 +1699,7 @@ var
   KindOk    : Boolean;
   ReceiverOk: Boolean;
 begin
-  if SameText(AEntry.Kind, KIND_WRITE) then KindOk:= ARow.DstKind = DF_DST_WRITE
-  else KindOk:= (ARow.DstKind = DF_DST_ARG) and (Length(AEntry.Args) > 0) and InInts(ARow.DstIndex, AEntry.Args);
+  KindOk:= if SameText(AEntry.Kind, KIND_WRITE) then ARow.DstKind = DF_DST_WRITE else (ARow.DstKind = DF_DST_ARG) and (Length(AEntry.Args) > 0) and InInts(ARow.DstIndex, AEntry.Args);
   ReceiverOk:= (AEntry.ReceiverSuffix = '') or EndsText(AEntry.ReceiverSuffix, ARow.DstReceiver);
   Result:= SameText(AEntry.Name, ARow.DstName) and KindOk and ReceiverOk;
 end;

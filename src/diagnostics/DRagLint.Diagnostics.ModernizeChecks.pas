@@ -39,7 +39,6 @@ uses
   System.SysUtils
   , System.StrUtils
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   ;
 

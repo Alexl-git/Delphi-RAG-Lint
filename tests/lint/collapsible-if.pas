@@ -39,6 +39,12 @@ begin
       Inc(N);
     Inc(N);                                 // NOT_E: block holds two statements (the anchor-free text check must see the second)
   end;
+  if A then
+  begin
+    if B then
+      Writeln('it can never end');
+    Exit;                                   // NOT_F: an 'end' inside the first statement must not pass the single-statement check
+  end;
 end;
 
 end.
