@@ -2962,6 +2962,14 @@ begin
       Write(ErrOutput, Copy(Text, 1, Brace - 1));
       Text:= Copy(Text, Brace, MaxInt);
     end;
+    { ...and a note the child flushed AFTER its document (stderr is unbuffered, stdout is not, so
+      the order in the shared file is not the write order) goes back to stderr too. }
+    var LastBrace:= LastDelimiter('}', Text);
+    if pOpts.Json and (Brace > 0) and (LastBrace > 0) and (Trim(Copy(Text, LastBrace + 1, MaxInt)) <> '') then
+    begin
+      Write(ErrOutput, Copy(Text, LastBrace + 1, MaxInt));
+      Text:= Copy(Text, 1, LastBrace);
+    end;
     var Doc:= if pOpts.Json then TJSONObject.ParseJSONValue(Text) else nil;
     try
       if Doc is TJSONObject then
