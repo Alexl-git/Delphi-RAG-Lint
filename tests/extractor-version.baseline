@@ -1098,4 +1098,8 @@
 #   T(X).M emits a member-access ref) rides the still-unreleased 1.26.0-alpha re-parse. Pinned by
 #   tests\callresolve\run_receiver_cst_capture.ps1 H1-H3.
 # 2026-10-28 INT-B: re-pinned within unreleased 1.26.0-alpha after merging gaps/r0 (item 4: R4X handler local_var, receiver_type_text) onto gaps/stage (B-FLOW 2b, INC, REFTYPE). No bump: 1.26.0-alpha has not shipped.
-1.26.0-alpha|352247e0e7c75ceada222be9b410d47d29401994c3ccbbe39031e55a3c9990f3
+# 2026-10-28 lane EXT (1.37.0 gaps triage, EXT-FREEZE candidate): re-pinned ONCE within unreleased 1.26.0-alpha, no bump.
+#   E1 routine-header comments stripped from signatures; E2 DataFlowFacts G5 hard-cast mirror; E4 typed const
+#   symbols.modifiers 'typed' + $IF refusal; E5 Model.pas note, Plan/Manifest doc regen, marker re-stamps.
+#   Superseded: 1.26.0-alpha|352247e0e7c75ceada222be9b410d47d29401994c3ccbbe39031e55a3c9990f3
+1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
