@@ -1102,4 +1102,8 @@
 #   E1 routine-header comments stripped from signatures; E2 DataFlowFacts G5 hard-cast mirror; E4 typed const
 #   symbols.modifiers 'typed' + $IF refusal; E5 Model.pas note, Plan/Manifest doc regen, marker re-stamps.
 #   Superseded: 1.26.0-alpha|352247e0e7c75ceada222be9b410d47d29401994c3ccbbe39031e55a3c9990f3
-1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
+# 2026-10-28 lane ki-exta (gaps/ki-exta): hash re-pinned WITHOUT a bump, within unreleased 1.26.0-alpha. A bare TPF0
+#   binary DFM (no FF 0A 00 header) is now recognised (Core.Indexer HasBinaryDfmHeader, Parser.DFM IsBinaryDfmBytes) and
+#   reports the binary-DFM diagnostic instead of a text parse error / EEncodingError skip. Controller recomputes at freeze.
+#   Superseded: 1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
+1.26.0-alpha|c16677016afbb4bf27a7eae03ff0ecb0799f1bfe9af8331975d7ff3052374865
