@@ -122,6 +122,7 @@ function Lint-Case([string]$Dir, [switch]$NoRule, [switch]$NoProject) {
 $base = 'BASEDEF;$(DCC_Define)'
 
 Write-Host ''
+# positive-control: platform-divergent-define
 Write-Host 'POSITIVE -- EUREKALOG only in Base_Win32, tested on line 7' -ForegroundColor Cyan
 $red = New-Case 'red' @{ Base=$base; Base_Win32='EUREKALOG;$(DCC_Define)'; Cfg_1='DEBUG;$(DCC_Define)' } (New-Unit 'EUREKALOG')
 $f = Lint-Case $red
