@@ -34,7 +34,9 @@ public static class W {
   public static List<IntPtr> Tops(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static List<IntPtr> Kids(IntPtr parent) { var r = new List<IntPtr>(); EnumChildWindows(parent, (h, l) => { r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
-  public static string Txt(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); var s = new StringBuilder(n + 2); SendSB(h, 0x000D, (IntPtr)(n + 1), s); return s.ToString(); }
+  // Two messages (length, then text) race a status written in between: read with slack, then re-read until two reads agree.
+  static string TxtOnce(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); int cap = n + 1024; var s = new StringBuilder(cap); SendSB(h, 0x000D, (IntPtr)cap, s); return s.ToString(); }
+  public static string Txt(IntPtr h) { string p = TxtOnce(h); for (int i = 0; i < 5; i++) { string c = TxtOnce(h); if (c == p) return c; p = c; } return p; }
   public static int Top(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.T; }
   public static int Left(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.L; }
   [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr s, out UIntPtr put);
@@ -197,7 +199,8 @@ public static class W {
 }
 '@
 $script:pass = 0; $script:fail = 0
-function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
+trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
@@ -381,11 +384,12 @@ try {
   Check 'merge.save.dialog' (($dlg -ne [IntPtr]::Zero) -and ((ChainRowCount $dlg) -eq 1)) (TopsNow $p.Id)
   if ($dlg -ne [IntPtr]::Zero) { Click (ButtonOf $dlg 'Merge') }
   $gone = ($dlg -ne [IntPtr]::Zero) -and (WaitGone $p.Id $dlg 10)
-  $s = WaitStatus $main '^(Merged|Nothing merged)' $SLOW_SEC
-  Check 'merge.click' ($gone -and ($s -match '^Merged 1 chain')) $s
+  # Whole text: Txt reads the length then the text, so a read racing the status change returns it cut short.
+  $s = WaitStatus $main '^(Merged.*then Save|Nothing merged)' $SLOW_SEC
+  Check 'merge.click' ($gone -and ($s -match '^Merged 1 chain') -and ($s -match 'dropped 1 line\(s\) the later stage does not map: #link TableName <- TableName')) $s
   [void](WaitIdle $p.Id $main $SLOW_SEC)
   $raw = Raw $main
-  $okHead = $raw -match '#convert Bde\.DBTables\.TTable -> FireDAC\.Comp\.Client\.TFDMemTable\r?\n#note chain merge:[^\r\n]*\r?\n#link TableName <- TableName'
+  $okHead = $raw -match '#convert Bde\.DBTables\.TTable -> FireDAC\.Comp\.Client\.TFDMemTable\r?\n#note chain merge:[^\r\n]*1 dropped[^\r\n]*\r?\n#note chain merge: dropped #link TableName <- TableName because [^\r\n]*\r?\n#ignore TableName\r?\n' -and ($raw -notmatch '(?m)^#link TableName')
   $nConv = ([regex]::Matches($raw, '#convert Bde\.DBTables\.TTable')).Count
   $nName = ([regex]::Matches($raw, '#link Name <- Name')).Count
   $okTail = $raw -match '#convert FireDAC\.Comp\.Client\.TFDTable -> FireDAC\.Comp\.Client\.TFDMemTable\r?\n#link Name <- Name'
@@ -399,7 +403,7 @@ try {
   [void](WaitIdle $p.Id $main $SLOW_SEC)
   $again = WaitFor $p.Id 'Rule chains' 10
   $s = StatusText $main
-  Check 'merge.save.no.dialog' (($s -match '^(\[!\] )?Saved Merge\.rules') -and ($s -notmatch 'Rule chains:') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
+  Check 'merge.save.no.dialog' (($s -match '^Saved Merge\.rules') -and ($s -notmatch 'Rule chains:') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
   if ($again -ne [IntPtr]::Zero) { Click (ButtonOf $again 'Keep'); [void](WaitGone $p.Id $again 10) }
 
   # --- Close with a dirty book that still has a chain: the Save from the guard never offers (O3) ---

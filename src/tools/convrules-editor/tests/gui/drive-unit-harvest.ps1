@@ -32,7 +32,9 @@ public static class H {
   public static List<IntPtr> Tops(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static List<IntPtr> Kids(IntPtr parent) { var r = new List<IntPtr>(); EnumChildWindows(parent, (h, l) => { r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
-  public static string Txt(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); var s = new StringBuilder(n + 2); SendSB(h, 0x000D, (IntPtr)(n + 1), s); return s.ToString(); }
+  // Two messages (length, then text) race a status written in between: read with slack, then re-read until two reads agree.
+  static string TxtOnce(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); int cap = n + 1024; var s = new StringBuilder(cap); SendSB(h, 0x000D, (IntPtr)cap, s); return s.ToString(); }
+  public static string Txt(IntPtr h) { string p = TxtOnce(h); for (int i = 0; i < 5; i++) { string c = TxtOnce(h); if (c == p) return c; p = c; } return p; }
   // LVM_GETITEMTEXTW across processes: LVITEMW (x64) iSubItem @8, pszText @24, cchTextMax @32.
   public static string LvText(IntPtr lv, int row, int col) {
     uint pid; GetWindowThreadProcessId(lv, out pid);
@@ -54,7 +56,8 @@ public static class H {
 Add-Type -AssemblyName System.Windows.Forms
 if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'drive-unit-harvest.ps1 needs an STA thread for the clipboard (pwsh -File runs STA by default).' }
 $script:pass = 0; $script:fail = 0
-function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
+trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Find($parent, $cls, $text) { [H]::Kids($parent) | Where-Object { [H]::Cls($_) -eq $cls -and ($null -eq $text -or [H]::Txt($_) -eq $text) } }
 function LvCount($lv) { [int][H]::Send($lv, 0x1004, [IntPtr]::Zero, [IntPtr]::Zero) }
 # Text of any message box the editor raised (an unhandled exception, typically); '' when none.

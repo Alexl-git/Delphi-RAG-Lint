@@ -42,7 +42,7 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 3090 pass / 0 fail / 20 skip** on main 3a6f3b8f (CHAIN-1, D2 split, a1270, drv2b merged, 2026-10-27). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 3095 pass / 0 fail / 20 skip** on conv/startup (main e06bdde9 + STARTUP classify deferral, 2026-10-27; 3215 / 0 / 0 on the 1.36.0-alpha-20261027-142316 pin). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.36.0-alpha-20261027-142316 pin:
   **3204 pass / 0 fail / 0 skip** (main bcbd1c35, before a1270 + drv2b; re-measure). The old 5 "VARINSP fixture" failures were a fixture defect:
@@ -69,6 +69,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-save-encoding.ps1` 15 -- Save question, File > Encoding, UTF-16 BOM note
   * `drive-convert-encoding.ps1` 29 (mixed.* N4-1; `-ProofNoMixed` = 28 / 1) -- Convert tab lower question, and the PRE-run encoding question (raise.prerun.* No then Yes; N2: Yes keeps every place as note rows, Cancel adds none; raise.* SKIP without `convert_encoding_guard`; the main exe before conv-1026 = 15 / 5)
   * `drive-migrate.ps1` 24 -- A4 #migrate: Work list -> Migrate dialog -> DL_NONE / rename, Save, re-run marks; D5 bulk DL_NONE, D6-B opens the row's book (`-ProofNoMigrate` = 13 / 7, `-ProofNoBulk` = 22 / 2)
+  * `drive-startup-responsive.ps1` 6 -- STARTUP: a convert-request launch (harvest fed by the Convert tab) reads NO library unit list and settles responsive (busy query + menu); showing Unit Rules classifies (`library`). The exe before conv/startup = 5 / 1 (startup.no.library.list); prints the measured ms
   * `drive-rule-chains.ps1` 22 (measured on the 1.36.0 pin; the merged-book Save status carries a `[!]` validate prefix there) -- rule chains on Save: mark + status, dialog once per key, Conversion > Rule chains..., Split to `.stage2.rules` + Convert tab order, Merge, no dialog on close (`-ProofNoChain` = 5 / 0: the `proof.*` lines pass only when NO chain status / dialog / row appears)
 * In a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`.
 

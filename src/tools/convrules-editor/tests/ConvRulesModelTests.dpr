@@ -1940,6 +1940,25 @@ begin
   Pre:= Preflight(Books, [], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
+  // --- BookOrderNote (D2 Q6): Book-2 listed before the BDE book ---
+  Check('convertrun.order.book2.first', Pos('before', BookOrderNote(['c\convrules\DataDB-to-FireDAC.rules', 'c\convrules\BDE-to-FireDAC.rules'])) > 0,
+    BookOrderNote(['c\convrules\DataDB-to-FireDAC.rules', 'c\convrules\BDE-to-FireDAC.rules']));
+  Check('convertrun.order.bde.first', BookOrderNote(['c\BDE-to-FireDAC.rules', 'c\DataDB-to-FireDAC.rules']) = '');
+  Check('convertrun.order.book2.alone', BookOrderNote(['c\DataDB-to-FireDAC.rules']) = '');
+  Check('convertrun.order.nocase', BookOrderNote(['x\datadb-to-firedac.RULES', 'x\bde-to-firedac.rules', 'x\Other.rules']) <> '');
+  Check('convertrun.order.other.books', BookOrderNote(['x\Other.rules', 'x\BDE-to-FireDAC.rules']) = '');
+  Books:= [Default(TBookEntry), Default(TBookEntry)];
+  Books[0].Path:= 'c\DataDB-to-FireDAC.rules';
+  Books[0].Checked:= True;
+  Books[0].Kind:= bkConvertOnly;
+  Books[1].Path:= 'c\BDE-to-FireDAC.rules';
+  Books[1].Checked:= True;
+  Books[1].Kind:= bkMixed;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
+  Check('convertrun.order.preflight.note', Pre.Ok and (Length(Pre.Notes) = 1) and (Pos('BDE book', Pre.Notes[0]) > 0), string.Join(' | ', Pre.Notes));
+  Books[1].Checked:= False;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
+  Check('convertrun.order.preflight.unchecked.bde', Length(Pre.Notes) = 0, string.Join(' | ', Pre.Notes));
   // --- ParseApplyJson (schema apply/1) ---
   Row:= ParseApplyJson('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":3,' +
     '"converted":["Label1: TLabel -> TStaticText"],"access_sites":[],"creator_sites":[],' +
@@ -15858,6 +15877,18 @@ begin
 end;
 
 { Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+{ STARTUP: the library unit list (one multi-GB `sql` read on the main thread) loads only
+  for harvested rows the user is looking at -- never for a Destination edit losing focus
+  with nothing harvested, nor for the Convert tab feeding the harvest behind its back. }
+procedure TestClassifyDeferred;
+begin
+  Check('classify.deferred.empty.offscreen', ClassifyDeferred(0, False), '(nothing harvested, Unit Rules not shown)');
+  Check('classify.deferred.empty.onscreen', ClassifyDeferred(0, True), '(Destination edit left with nothing harvested: no library read)');
+  Check('classify.deferred.rows.offscreen', ClassifyDeferred(3, False), '(Convert tab Add...: rows wait for the Unit Rules tab)');
+  Check('classify.now.rows.onscreen', not ClassifyDeferred(3, True), '(rows on screen are classified at once)');
+  Check('classify.pending.note', Pos('Unit Rules tab', CLASSIFY_PENDING_NOTE) > 0, '(the deferral is said, never silent)');
+end;
+
 { ConvRules.InputGate (N7/N11) -- the one queue filter of the main window: while the
   editor is busy (an engine wait, an hourglass section's nested pump) a click or a
   command for the main form is refused and reported, never run inside the pump and
@@ -16352,6 +16383,7 @@ begin
     TestConverterMinorsStartup;
     TestInputGate;
     TestNativeDialogGuard;
+    TestClassifyDeferred;
     TestCapabilityProbe;
     TestEncodingLevels;
     TestEncodingReaders;
