@@ -407,7 +407,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Export Graph (DOT)](features/export-graph-dot.md) -- Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring.
 * [Export to Obsidian](features/export-to-obsidian.md) -- Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages.
 * [lsp](features/lsp.md) -- Starts the LSP (Language Server Protocol) stdio server.
-* [shutdown](features/shutdown.md) -- Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them.
+* [shutdown](features/shutdown.md) -- Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
 * [Top Symbols (fan-in)](features/top-symbols-fan-in.md) -- Ranks indexed symbols by fan-in -- how many places reference them.
 * [workspace add](features/workspace-add.md) -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it.
 * [workspace index](features/workspace-index.md) -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass.

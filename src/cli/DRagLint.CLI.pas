@@ -4435,6 +4435,51 @@ begin
   if Result then ReportManifestRefusal(AVerb, AManifest.LoadError);
 end;
 
+/// <summary>Installs the between-files stand-down gate on the storage layer (DEC-13).</summary>
+/// <remarks>Once the batch channel's request is taken, the next file the walk is about to
+/// open stops the run: the resolver stamp is cleared (the next run re-derives every edge,
+/// because the files written so far were never resolved), the WAL is checkpointed, the
+/// connection is closed, `exiting` is answered and the process ends with
+/// CONTROL_EXIT_STOOD_DOWN. No file transaction is open at that point, so no file row is
+/// half written; every committed file is up to date and the same command resumes.</remarks>
+procedure InstallIndexStandDownGate;
+begin
+  { Test seam (run_control_channel_guard.ps1): slows each file so a stand-down can land mid-walk. }
+  var FileDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_INDEX_FILE_DELAY_MS'), 0);
+  GFileTxGate:= procedure(AStore: TObject)
+    begin
+      if FileDelayMs > 0 then Sleep(FileDelayMs);
+      if not BatchStandDownTaken then Exit;
+      Writeln(ErrOutput, 'index: stopped by a maintenance stand-down between files; the database is consistent. Re-run the same command to resume.');
+      if AStore is TSQLiteSymbolStore then
+      begin
+        try
+          TSQLiteSymbolStore(AStore).SetMetaValue(RESOLVER_FP_KEY, '');
+        except
+          { best effort: the stamp only makes the next run re-resolve }
+        end;
+        TSQLiteSymbolStore(AStore).CloseForStandDown;
+      end;
+      Flush(Output);
+      Flush(ErrOutput);
+      BatchChannelClose;
+      Halt(CONTROL_EXIT_STOOD_DOWN);
+    end;
+end;
+
+/// <summary>Asks every child of an `index --all --jobs N` pool to stand down (the parent stops spawning).</summary>
+/// <param name="AHandles">Process handles of the running children.</param>
+/// <param name="ACount">How many entries of AHandles are live.</param>
+procedure ForwardStandDownToChildren(const AHandles: TArray<THandle>; ACount: Integer);
+const
+  CONNECT_MS = 2000;
+begin
+  for var K:= 0 to ACount - 1 do
+  begin
+    var Reply, Err: string;
+    ControlRequest(ControlPipeNameFor(GetProcessId(AHandles[K])), CONTROL_MSG_SHUTDOWN, CONNECT_MS, Reply, Err);
+  end;
+end;
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -4627,6 +4672,13 @@ begin
   end; // if
 
   // Build each section: sequential or parallel based on --jobs / manifest.maxJobs.
+  { DEC-13: `index --all` listens too. In-process sections stop at the storage gate; the
+    parent of a --jobs pool stops spawning and forwards the stand-down to its children. }
+  begin
+    var AllDbs: TArray<string>:= nil;
+    for var PlanSec in Plan.Items do AllDbs:= AllDbs + [ExpandFileName(PlanSec.DbPath)];
+    if BatchChannelOpen('index', AllDbs, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION) then InstallIndexStandDownGate;
+  end;
   // Compute effective job count.
   // Priority: --jobs CLI > manifest.settings.maxJobs > auto (min(CpuCount, sections)).
   var EffJobs  : Integer;
@@ -4652,7 +4704,7 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do begin if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN); if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -4717,6 +4769,12 @@ begin
   try
     for i:= 0 to TotalSections - 1 do
     begin
+      if BatchStandDownTaken then
+      begin
+        ForwardStandDownToChildren(ProcHandles, PoolCount);
+        for var k:= i to TotalSections - 1 do FailedNames:= FailedNames + [SectionLabel(Plan.Items[k])];
+        Break;
+      end;
       // Drain one slot from pool if it is full.
       while PoolCount >= EffJobs do
       begin
@@ -4839,6 +4897,7 @@ begin
   Writeln(Format('parallel build: %d/%d sections OK (jobs=%d)', [OkCount, TotalSections, EffJobs]));
 
   Result:= ReportFailedSections(FailedNames, TotalSections);
+  if BatchStandDownTaken then Result:= CONTROL_EXIT_STOOD_DOWN;
 end; // function
 
 { ONE PLACE THAT SAYS WHY THERE IS NO DATABASE (2026-08-26).
@@ -5750,6 +5809,8 @@ begin
     end;
   end;
   Store.Migrate;
+  { DEC-13: a long one-shot run listens for a maintenance stand-down (a dry run touches no disk, so it does not). }
+  if (not AArgs.DryRun) and BatchChannelOpen('index', TArray<string>.Create(ExpandFileName(ResolvedDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION) then InstallIndexStandDownGate;
   { V-C (1.31.5): a DB with no files before this run (created by it, or never
     filled) has nothing stale -- the stamp / scan_type notes below are real
     warnings only on a DB that already holds an index. Read before any rebuild
@@ -6496,7 +6557,9 @@ begin
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
-    Sleep(Interval * 1000);
+    var Slept: Integer:= 0;
+    while (Slept < Interval * 1000) and not BatchStandDownTaken do begin Sleep(100); Inc(Slept, 100); end;
+    if BatchStandDownTaken then Break; { idle between ticks: nothing open, stop cleanly }
   end; // while
 
   { WARM THE `lint <file>` RULE CACHE for a project index, AFTER releasing the
@@ -20201,6 +20264,10 @@ begin
     the report is still filtered to AArgs.Rule in FinalizeAndOutput. }
   var Nr: string:= LintNarrowRule(AArgs.Rule);
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
+  { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
+  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+  var LintStoodAt: Integer:= -1;
+  var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   Linter.OnlyRuleId:= Nr;
@@ -20211,6 +20278,8 @@ begin
   try
     for FileIdx:= 0 to Length(FilePaths) - 1 do
     begin
+      if LintDelayMs > 0 then Sleep(LintDelayMs); { test seam, see run_control_channel_guard.ps1 }
+      if BatchStandDownTaken then begin LintStoodAt:= FileIdx; Break; end;
       PasPath:= FilePaths[FileIdx];
       try
         { Progress output (throttled by percentage) }
@@ -20381,7 +20450,12 @@ begin
     Linter.Free;
     GScanTgt:= nil; { the pointer must not outlive Findings' frame }
   end; // try
-  { SESSION 25 B2 attribution -- see ScanAdd. Slots are listed in execution
+  if LintStoodAt >= 0 then
+  begin
+    Writeln(ErrOutput, Format('lint-all: stopped by a maintenance stand-down after %d of %d file(s) -- PARTIAL result (project-wide rules not run); re-run to complete.', [LintStoodAt, Length(FilePaths)]));
+    for F in Findings do Writeln(Format('%s:%d:%d  [%s] %s: %s', [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
+    Exit(CONTROL_EXIT_STOOD_DOWN);
+  end;  { SESSION 25 B2 attribution -- see ScanAdd. Slots are listed in execution
     order and named for the routine that owns them, so a hot slot names the code
     to open rather than a rule id that may come from several. }
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
@@ -34110,8 +34184,13 @@ begin
           '(--rebuild clears every indexed file from the DB first; --recompile updates it in place).');
         Exit(2);
       end;
-      if Args.IndexAll then Result:= DoIndexAll(Args)
-      else Result:= DoIndex(Args)
+      try
+        if Args.IndexAll then Result:= DoIndexAll(Args)
+        else Result:= DoIndex(Args);
+      finally
+        GFileTxGate:= nil;
+        BatchChannelClose; { DEC-13: every store is closed by now }
+      end
     end
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
@@ -34165,7 +34244,14 @@ begin
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
-    else if Args.Command = 'lint-all'          then Result:= DoLintAll         (Args)
+    else if Args.Command = 'lint-all'          then
+    begin
+      try
+        Result:= DoLintAll(Args);
+      finally
+        BatchChannelClose;
+      end;
+    end
   else if Args.Command = 'lint-tree'         then Result:= DoLintTree        (Args)
     else if Args.Command = 'exceptions-sync'   then Result:= DoExceptionsSync  (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)

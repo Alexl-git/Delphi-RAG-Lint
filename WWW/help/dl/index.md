@@ -273,6 +273,6 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |
 | [Maintenance](features/maintenance.md) | Indexes, the manifest, reindexing, and what to do when something looks wrong | 1.4.0-alpha |
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |
-| [shutdown](features/shutdown.md) | Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them | 0.6.0-alpha |
+| [shutdown](features/shutdown.md) | Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced | 0.6.0-alpha |
 | [sql](features/sql.md) | Runs one read-only SQL statement against an index database and prints the result set | 0.40.5-alpha |
 

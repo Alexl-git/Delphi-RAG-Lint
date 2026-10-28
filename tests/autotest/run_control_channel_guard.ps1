@@ -484,6 +484,109 @@ $hpMs = $sw.ElapsedMilliseconds
 Check 'H-P1 reply is exiting<TAB>pid...' ($rp -match ('^exiting\t' + $Hp.P.Id + '\b')) "got [$rp] after $hpMs ms"
 Check 'H-P2 the hang seam is live: the reply waited for it (>= 1000 ms)' ($hpMs -ge 1000) "$hpMs ms"
 Check 'H-P3 engine HP exited 0' ((WaitUntil { $Hp.P.HasExited } 15000) -and ($Hp.P.ExitCode -eq 0)) ''
+# ---- W (DEC-13): the long one-shot verbs (index, lint-all) listen and stand down cleanly ----
+Write-Host ''
+Write-Host 'W: index and lint-all open the control channel; shutdown stops them between files, cleanly, resumably' -ForegroundColor Cyan
+$bigDir = Join-Path $WorkDir 'bigsrc'
+New-Item -ItemType Directory -Force $bigDir | Out-Null
+$nBig = 60
+for ($i = 1; $i -le $nBig; $i++) {
+  WriteAscii (Join-Path $bigDir ("BigUnit$i.pas")) ("unit BigUnit$i;`r`n`r`ninterface`r`n`r`nprocedure Big$i;`r`n`r`nimplementation`r`n`r`nprocedure Big$i;`r`nbegin`r`nend;`r`n`r`nend.`r`n")
+}
+function IntegrityOk([string]$Db) {
+  # sqlite3's own PRAGMA integrity_check, through Python's stdlib (the sql verb refuses PRAGMA by design).
+  try {
+    $o = (& python -I -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $Db 2>$null | Out-String).Trim()
+  } catch { return $false }
+  return ($o -eq 'ok')
+}
+function FilesIn([string]$Db) {
+  $o = (& $script:Exe sql --query "SELECT count(*) AS n FROM files" --db $Db --json 2>$null | Out-String) -replace '\s', ''
+  if ($o -match '"rows":\[\[(\d+)\]') { return [int]$Matches[1] }
+  return -1
+}$slowIdx = @{ DRAGLINT_TEST_INDEX_FILE_DELAY_MS = '200' }
+$w1db = Join-Path $WorkDir 'w1.sqlite'
+$W1 = Start-Engine @('index', $bigDir, '--db', $w1db) 'W1' $slowIdx
+$leafW1 = PipeLeafOf $W1 15000
+Check 'W1a index engine announces a control pipe (the gate widened beyond lsp/cycles)' ($leafW1 -ne '') $leafW1
+$null = WaitUntil { (ErrText $W1) -match '\[\d+/\d+\]' } 20000
+Check 'W1b index is mid-walk when asked (not finished)' (-not $W1.P.HasExited) ''
+$wv = Invoke-Verb @('shutdown', '--db', $w1db, '--wait', '30') 'W1v'
+Check 'W1c shutdown verb exits 0 and reports the index engine exiting' (($wv.Exit -eq 0) -and ($wv.Out -match ('pid\s+' + $W1.P.Id + '\b.*exiting'))) ($wv.Out + $wv.Err)
+Check 'W1d index process exited by itself with the stand-down code 4 (not killed)' ((WaitUntil { $W1.P.HasExited } 30000) -and ($W1.P.ExitCode -eq 4)) ("code " + $(if ($W1.P.HasExited) { $W1.P.ExitCode } else { 'running' }))
+Check 'W1e no -wal / -shm left behind' ((Sidecars $w1db) -eq '') ("sidecars=" + (Sidecars $w1db))
+Check 'W1f database integrity_check ok' (IntegrityOk $w1db) ''
+$partial = FilesIn $w1db
+Check 'W1g stopped part-way: some files committed, not all' (($partial -gt 0) -and ($partial -lt $nBig)) "files=$partial of $nBig"
+$re = Invoke-Verb @('index', $bigDir, '--db', $w1db) 'W1r'
+Check 'W1h the same command resumes and exits 0' ($re.Exit -eq 0) ("exit $($re.Exit): " + ($re.Out -split "`r?`n" | Select-Object -Last 2) -join ' ')
+Check 'W1i resumed index holds every file' ((FilesIn $w1db) -eq $nBig) ("files=" + (FilesIn $w1db))
+Check 'W1j integrity_check ok after the resume' (IntegrityOk $w1db) ''
+
+# lint-all: stops between files and reports partial
+$slowLint = @{ DRAGLINT_TEST_LINT_FILE_DELAY_MS = '300' }
+$W2 = Start-Engine @('lint-all', '--db', $w1db) 'W2' $slowLint
+$leafW2 = PipeLeafOf $W2 20000
+Check 'W2a lint-all announces a control pipe' ($leafW2 -ne '') $leafW2
+$null = WaitUntil { (ErrText $W2) -match 'lint-all: \[\d+/\d+\]' } 20000
+$wv2 = Invoke-Verb @('shutdown', '--db', $w1db, '--wait', '30') 'W2v'
+Check 'W2b shutdown verb reports the lint-all engine exiting' (($wv2.Exit -eq 0) -and ($wv2.Out -match ('pid\s+' + $W2.P.Id + '\b.*exiting'))) ($wv2.Out + $wv2.Err)
+Check 'W2c lint-all exited with the stand-down code 4' ((WaitUntil { $W2.P.HasExited } 30000) -and ($W2.P.ExitCode -eq 4)) ''
+Check 'W2d stderr says PARTIAL' (WaitUntil { (ErrText $W2) -match 'PARTIAL' } 5000) ''
+Check 'W2e database untouched by lint-all (integrity ok, no sidecar)' ((IntegrityOk $w1db) -and ((Sidecars $w1db) -eq '')) ''
+
+# POSITIVE CONTROLS: lsp still stands down (S above), and a verb outside the gate still has no pipe (G above).
+Write-Host 'W-P: POSITIVE CONTROL -- without the stand-down, the same slowed index completes with exit 0' -ForegroundColor Cyan
+$w3db = Join-Path $WorkDir 'w3.sqlite'
+$W3 = Start-Engine @('index', $bigDir, '--db', $w3db) 'W3' @{ DRAGLINT_TEST_INDEX_FILE_DELAY_MS = '20' }
+# the engine's stdout/stderr pipes must be drained or a 64 KB pipe stalls it mid-run (that, not a stand-down, made this read 40 of 60)
+Check 'W-P1 an unasked index completes, exit 0, every file present' ((WaitUntil { Pump $W3; $W3.P.HasExited } 120000) -and ($W3.P.ExitCode -eq 0) -and ((FilesIn $w3db) -eq $nBig)) ("files=" + (FilesIn $w3db))
+Check 'W-P2 the pipe is gone with the process' (-not ((PipesInNamespace) -contains $leafW1)) ''
+
+# ---- ST (DEC-13 owner addition): the stager asks through the channel first, kills last ----
+Write-Host ''
+Write-Host 'ST: build\stage-engine.ps1 stops a holder through the channel (nothing killed); an engine with no channel is the last-resort kill' -ForegroundColor Cyan
+$stager = (Resolve-Path (Join-Path $PSScriptRoot '..\..\build\stage-engine.ps1')).Path
+$exeDir = Split-Path -Parent $Exe
+function Make-Target([string]$Name) {
+  $d = Join-Path $WorkDir "stage-$Name"; New-Item -ItemType Directory -Force $d | Out-Null
+  Copy-Item (Join-Path $exeDir '*.dll') $d -ErrorAction SilentlyContinue
+  Copy-Item $Exe (Join-Path $d 'drag-lint.exe') -Force
+  return (Join-Path $d 'drag-lint.exe')
+}
+function Start-FromTarget([string]$Target, [string[]]$ArgList, [string]$Tag, [hashtable]$EnvVars) {
+  $saved = $script:Exe; $script:Exe = $Target
+  try { return (Start-Engine $ArgList $Tag $EnvVars) } finally { $script:Exe = $saved }
+}
+# -StandDownScope names this run's own database, so the test never stands down the owner's real IDE engines.
+function Run-Stager([string]$Target, [string]$Db) {
+  $o = & pwsh -NoProfile -File $stager -FreshExe $Exe -Target $Target -TimeoutSec 40 -HoldSeconds 1 -StandDownWaitSec 30 -StandDownDb $Db 2>&1 | Out-String
+  return @{ Exit = $LASTEXITCODE; Out = $o }
+}
+$stDb = Join-Path $WorkDir 'st1.sqlite'
+$tgt1 = Make-Target 'idx'
+$S1 = Start-FromTarget $tgt1 @('index', $bigDir, '--db', $stDb) 'ST1' $slowIdx
+$null = PipeLeafOf $S1 15000
+$null = WaitUntil { (ErrText $S1) -match '\[\d+/\d+\]' } 20000
+Check 'ST1a an index run holds the target image' (-not $S1.P.HasExited) ''
+$r1 = Run-Stager $tgt1 $stDb
+Check 'ST1b stager exits 0 (staged) instead of REFUSING to stage over an index run' ($r1.Exit -eq 0) (($r1.Out -split "`r?`n" | Select-Object -Last 4) -join ' | ')
+Check 'ST1c the index run stood down through the channel (exit 4), it was not killed' ((WaitUntil { $S1.P.HasExited } 30000) -and ($S1.P.ExitCode -eq 4)) ''
+Check 'ST1d the stager reports nothing was killed' (($r1.Out -match 'nothing was killed') -and ($r1.Out -notmatch 'stopped PID')) ''
+Check 'ST1e the target is the fresh build' ((Md5 $tgt1) -eq (Md5 $Exe)) ''
+Check 'ST1f the interrupted index left a consistent database, no sidecar' ((IntegrityOk $stDb) -and ((Sidecars $stDb) -eq '')) ''
+
+$tgt2 = Make-Target 'srv'
+$stDb2 = Join-Path $WorkDir 'st2.sqlite'; Copy-Item $pristine $stDb2
+$S2 = Start-FromTarget $tgt2 @('serve', '--db', $stDb2) 'ST2' @{}
+Start-Sleep -Milliseconds 1500
+Check 'ST2a a serve engine (no channel) holds the target image' (-not $S2.P.HasExited) ''
+$r2 = Run-Stager $tgt2 $stDb2
+Check 'ST2b LAST RESORT: with no channel to ask, the holder is stopped and staging succeeds' (($r2.Exit -eq 0) -and ($r2.Out -match 'stopped PID')) (($r2.Out -split "`r?`n" | Select-Object -Last 4) -join ' | ')
+Check 'ST2c the serve engine is gone and the target is the fresh build' ((WaitUntil { $S2.P.HasExited } 15000) -and ((Md5 $tgt2) -eq (Md5 $Exe))) ''
+
+$iss = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\installer\drag-lint.iss'))
+Check 'ST3 the installer stops the old engine through the channel before installing (StopRunningEngines called from PrepareToInstall)' (($iss -match 'sh' + 'utdown --all --wait') -and ($iss -match '(?s)function PrepareToInstall.*?StopRunningEngines;')) ''
 
 } finally {
   Stop-Engines

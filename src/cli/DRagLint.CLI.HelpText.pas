@@ -248,10 +248,10 @@ begin
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
-  Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)');
+  Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
   Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
-  Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Only an');
-  Writeln('                               engine started in lsp mode listens (one-shot verbs and `serve` do not). --all (the default) asks every');
+  Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
+  Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every');
   Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
   Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
   Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');
@@ -833,10 +833,10 @@ begin
   end;
   if pVerb = 'shutdown' then
   begin
-    Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)');
+    Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
     Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
-    Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Only an');
-    Writeln('                               engine started in lsp mode listens (one-shot verbs and `serve` do not). --all (the default) asks every');
+    Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
+    Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every');
     Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
     Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
     Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');

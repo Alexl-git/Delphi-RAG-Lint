@@ -931,7 +931,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `selftest` | [selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb |  |
 | `serve` | [serve](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | index |
 | `shared-unit` | [shared-unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/shared-unit) | Reads or extends the dl:shared marker on a unit, recording which projects share it |  |
-| `shutdown` | [shutdown](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them |  |
+| `shutdown` | [shutdown](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced |  |
 | `slice` | [Symbol Slice](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Symbol-Slice) | Shows the slice of code relevant to one symbol: its declaration, body, and immediate context |  |
 | `sql` | [Output encoding (--output-encoding)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/output-encoding) | Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM |  |
 | `sql` | [sql](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) | Runs one read-only SQL statement against an index database and prints the result set | index |
