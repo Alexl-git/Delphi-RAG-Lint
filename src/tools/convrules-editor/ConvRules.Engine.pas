@@ -1303,8 +1303,8 @@ type
       /// (LastCancelled is then True) -- before it started, or during an engine call,
       /// which then returns ENGINE_OUTCOME_CANCELLED to the call that made it, so its
       /// answer is a failure and never a short list.</returns>
-      /// <exception cref="Exception">Whatever AWork or the runner raised.</exception>
-      /// <remarks>No LongCallRunner (model tests, callers without a UI): AWork runs inline
+      /// <remarks>An exception raised by AWork or the runner propagates to the caller unchanged.
+      /// No LongCallRunner (model tests, callers without a UI): AWork runs inline
       /// and cannot be cancelled. Every engine call AWork makes ON THE RUNNER'S THREAD polls
       /// the runner's cancel token (a threadvar, set only for AWork's duration); calls
       /// made on other threads are not affected.</remarks>
