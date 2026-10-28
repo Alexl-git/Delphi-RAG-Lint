@@ -1098,4 +1098,4 @@
 #   variable emits a local_var symbol scoped to its handler (EmitHandlerVarSymbol), so E.Message types to T.
 #   Guard: tests\autotest\run_handler_var_symbol.ps1.
 #   Superseded: 1.26.0-alpha|6ca1eacb94de48872caa82458f506c9afc6c9c70ffa5599ae7201e10814231fe
-1.26.0-alpha|7047b26e9a536baf6db7079d1d28a167c634d75b95bd38c8522c0b3c6939d847
+1.26.0-alpha|3c287a60df2293947a7db98b7039359493511196c588e8e7fa3cdb7b86592fa0

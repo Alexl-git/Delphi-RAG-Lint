@@ -32,6 +32,10 @@ drag-lint context --task "modify CustomerOrder.TCustomerOrder.Total" --db C:\Pro
 This would return `Total`'s doc comment, its class's surface, its own body,
 and a capped list of callers, as markdown.
 
+## Library calls
+
+When the project was indexed with a library (`--library-db`, or `libraryResolve` in the manifest), a routine whose body calls library members gets one extra line above `## Callers`: `Library calls: N (top: a, b, c)`. N counts the calls whose stored `external_target` is set; the top three targets are the most frequent. `--format json` carries the same as `library_calls` (`count`, `top`). A project indexed without a library has no external targets, so the line and the key are both absent.
+
 ## When the phrase is not an identifier
 
 The bundle also carries a `## Wiki` section: if the task phrase matches the

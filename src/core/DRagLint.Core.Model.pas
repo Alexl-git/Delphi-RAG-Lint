@@ -1918,6 +1918,12 @@ type
       rendered an empty bundle and exited 0, which is precisely the silent
       empty answer the bare-name fallback was added to stop. }
     Resolved     : Boolean              ;
+    { Item 4 / plan C3: calls in the target's body whose refs.external_target is
+      set (a project indexed with --library-db). 0 = no such call, and then the
+      markdown line and the json key are both OMITTED. }
+    LibraryCallCount: Integer           ;
+    { Up to three external targets, most frequent first (ties: first seen). }
+    LibraryCallTop  : TArray<string>    ;
   end;
 
 /// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>
