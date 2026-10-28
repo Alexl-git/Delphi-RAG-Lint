@@ -30813,6 +30813,7 @@ var
   Platform : string                                    ;
   Resolved : TArray<string>                            ;
   D        : string                                    ;
+  LibDbs   : TArray<string>                            ;
 begin
   Result:= '';
   try
@@ -30836,8 +30837,15 @@ begin
       Resolver.Free;
     end;
 
+    { ONE ResolvePlan, not one per resolved DB: LibrarySectionDbs walks the whole
+      manifest, and this loop runs over every DB of the platform. Called inside the
+      loop it cost ~0.7 s x N -- 20-25 s per `lint` on a 15-project manifest under
+      load, and INC3 made every `lint` setup resolve the library (InstallPPUnitSource),
+      so the LSP --full-rules child (8 s budget, LintChildTimeoutMs) timed out and fell
+      back to the subset (run_lsp_dlok_filtering_guard, metric rule). }
+    LibDbs:= LibrarySectionDbs(Manifest);
     for D in Resolved do
-      if IsLibrarySectionDb(LibrarySectionDbs(Manifest), D) and TFile.Exists(D) then Exit(D);
+      if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then Exit(D);
   except
     { A manifest that will not load is not this function's problem to report --
       every caller already treats '' as "no library index" and degrades. }
