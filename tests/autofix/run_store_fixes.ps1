@@ -18,7 +18,7 @@
   cannot pass it. Exit 0 = all pass.
 #>
 param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
-      [string]$WorkDir = (Join-Path $env:TEMP 'draglint-store-fix-negatives'))
+      [string]$WorkDir = (Join-Path $env:TEMP ('draglint-store-fix-negatives-' + $PID)))
 $ErrorActionPreference = 'Continue'
 $exePath = (Resolve-Path $Exe).Path
 $fail = 0; $pass = 0

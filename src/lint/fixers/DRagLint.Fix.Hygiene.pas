@@ -139,8 +139,10 @@ begin
 end;
 
 { doc-param-not-in-signature: deletes the whole `/// <param name="X">...</param>` tag (one or several lines) from
-  the doc block that documents the routine. Declines unless the tag opens and closes on `///` lines of its own. }
-function FixDocParamNotInSignature(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@029a -- REVIEWED 2026-10-27: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
+  the doc block that documents the routine. Declines unless the tag opens and closes on `///` lines of its own, and
+  declines while a signature parameter has no tag of its own: that is a RENAME, whose hand prose doc-drift keeps
+  report-only (ADP3 T3) for a human to carry over. }
+function FixDocParamNotInSignature(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@7432 -- REVIEWED 2026-10-28: a fixer declines (Exit) on every source shape it was not written for (incl. a renamed param, INT); guard clauses by design
 var
   Match : TMatch;
   Lo    : Integer;
@@ -155,6 +157,47 @@ var
     Result:= (AIdx >= 0) and (AIdx < ALines.Count) and TrimLeft(ALines[AIdx]).StartsWith('///');
   end;
 
+  { True when a line of the doc block Lo..Hi matches APattern (case-insensitive). }
+  function AnyLineMatches(const APattern: string): Boolean;
+  begin
+    Result:= False;
+    for var L:= Lo to Hi do
+      if TRegEx.IsMatch(ALines[L], APattern, [roIgnoreCase]) then Exit(True);
+  end;
+
+  { True when the declaration below the doc block (Hi + 1 ..) names a parameter no <param> tag in Lo..Hi
+    documents. Reads up to the first ')' that closes the parameter list; no list = no parameters. }
+  function SignatureHasUntaggedParam: Boolean;
+  const
+    MAX_SIG_LINES = 20;   { a parameter list longer than this is not worth a guess: read what fits }
+  var
+    Sig  : string;
+    Open : Integer;
+    Close: Integer;
+    K    : Integer;
+  begin
+    Result:= False;
+    Sig:= '';
+    K:= Hi + 1;
+    while (K < ALines.Count) and (K <= Hi + MAX_SIG_LINES) do
+    begin
+      Sig:= Sig + ' ' + ALines[K];
+      if Sig.Contains(')') or (not Sig.Contains('(') and Sig.Contains(';')) then Break;
+      Inc(K);
+    end;
+    Open:= Sig.IndexOf('(');
+    Close:= Sig.IndexOf(')');
+    if (Open < 0) or (Close < Open) then Exit;
+    for var Group in Sig.Substring(Open + 1, Close - Open - 1).Split([';']) do
+    begin
+      var Names:= TRegEx.Replace(Group.Split([':'])[0], '\[[^\]]*\]', '');
+      Names:= TRegEx.Replace(Names, '^\s*(const|var|out|constref)\s+', '', [roIgnoreCase]);
+      for var N in Names.Split([',']) do
+        if (Trim(N) <> '') and not AnyLineMatches('<param\s+name\s*=\s*"' + TRegEx.Escape(Trim(N)) + '"') then
+          Exit(True);
+    end;
+  end;
+
 begin
   Result:= nil;
   Match:= TRegEx.Match(AFinding.Message, '^documented param "([^"]+)" not in signature');
@@ -167,6 +210,7 @@ begin
   Hi:= Lo;
   while IsDoc(Lo - 1) do Dec(Lo);
   while IsDoc(Hi + 1) do Inc(Hi);
+  if SignatureHasUntaggedParam then Exit;
   Opener:= '^\s*///\s*<param\s+name\s*=\s*"' + TRegEx.Escape(Match.Groups[1].Value) + '"[^>]*>';
   for I:= Lo to Hi do
     if TRegEx.IsMatch(ALines[I], Opener, [roIgnoreCase]) then

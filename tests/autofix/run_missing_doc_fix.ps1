@@ -150,7 +150,10 @@ try {
   $dbB     = Join-Path $scratchB 'missfix.sqlite'
   $cfgB    = Join-Path $scratchB 'missfix.config.json'
   Copy-Item $fixture $targetB -Force
-  '{ "enabled": ["missing-doc"] }' | Set-Content -Path $cfgB -Encoding ascii -NoNewline
+  # unused-public-symbol is disabled here (2026-10-28, gaps INT): its own-unit-tier fixer (A5B) legitimately
+  # moves Undocumented's prototype out of the interface in a blanket batch (CallsIt is its only caller), which
+  # broke the byte-identity below for a reason unrelated to missing-doc. C2 is about missing-doc's exclusion.
+  '{ "enabled": ["missing-doc"], "disabled": ["unused-public-symbol"] }' | Set-Content -Path $cfgB -Encoding ascii -NoNewline
   & $exePath index $scratchB --db $dbB 2>$null | Out-Null
 
   $beforeBatch = [IO.File]::ReadAllText($targetB)
