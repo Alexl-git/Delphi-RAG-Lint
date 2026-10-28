@@ -9,6 +9,7 @@ interface
 const
   LIB_BASE = 4;
   LIB_LEVEL = LIB_BASE + 5;
+  LIB_TYPED: Integer = 9; // EXT-E4: a TYPED constant in a library unit
 
 type
   TLibThing = class

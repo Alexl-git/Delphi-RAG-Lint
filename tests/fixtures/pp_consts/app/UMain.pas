@@ -67,6 +67,12 @@ const
 {$I NOSUCH_NO.INC}
 {$IFEND}
 
+{$IF LIB_TYPED = 9}
+{$I LTYPED_YES.INC}
+{$ELSE}
+{$I LTYPED_NO.INC}
+{$IFEND}
+
 implementation
 
 end.
