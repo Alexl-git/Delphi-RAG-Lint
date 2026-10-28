@@ -4,6 +4,8 @@
 # Rule chains dialog ONCE; Conversion > Rule chains... reopens it; Split writes
 # Chain.stage2.rules and the Convert tab lists it after the base book; Merge composes the
 # chain in the model (dirty, not saved); a Save from closing the editor never offers it.
+# double.*: Rule chains... posted twice opens ONE dialog and the second is refused with a
+# notice (an exe before conv/chainform raises "A component named ChainForm already exists").
 # Usage: pwsh -NoProfile -File drive-rule-chains.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoChain]
 #   The exe beside a STAGED COPY of a pin (never dll-win64) whose Win64 library index answers
 #   Bde.DBTables.TTable and FireDAC.Comp.Client.TFDTable / TFDMemTable / TFDQuery; run under
@@ -344,6 +346,25 @@ try {
   [void](SaveAndWait $p.Id $main $SLOW_SEC)
   $again = WaitFor $p.Id 'Rule chains' 10
   Check 'save2.no.dialog' (((StatusText $main) -match '^Saved ') -and ($again -eq [IntPtr]::Zero)) ((StatusText $main) + ' / ' + (TopsNow $p.Id))
+  if ($again -ne [IntPtr]::Zero) { Click (ButtonOf $again 'Keep'); [void](WaitGone $p.Id $again 10) }
+
+  # --- chainform: a forced double open. Two posted Rule chains... commands: the second is
+  # dispatched by the first dialog's modal loop. Before the fix it ran re-entrantly and raised
+  # "A component named ChainForm already exists."; now the input gate refuses it and says so. ---
+  [void](WaitIdle $p.Id $main 60)
+  [void][W]::InvokeMenu($main, 'Conversion|Rule chains...')
+  [void][W]::InvokeMenu($main, 'Conversion|Rule chains...')
+  $dlg = WaitFor $p.Id 'Rule chains' 20
+  Start-Sleep -Milliseconds 1500
+  $chainsUp = @([W]::Tops($p.Id) | Where-Object { [W]::Txt($_) -eq 'Rule chains' }).Count
+  $errBox = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -in '#32770', 'TMessageForm' }).Count
+  Check 'double.one.dialog' (($dlg -ne [IntPtr]::Zero) -and ($chainsUp -eq 1) -and ($errBox -eq 0)) ("dialogs=$chainsUp errorBoxes=$errBox; " + (TopsNow $p.Id))
+  foreach ($h in @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -in '#32770', 'TMessageForm' })) { $ok = @(Find $h 'Button' $null) + @(Find $h 'TButton' $null); if ($ok.Count -gt 0) { Click $ok[0] } }
+  if ($dlg -ne [IntPtr]::Zero) { Click (ButtonOf $dlg 'Keep'); [void](WaitGone $p.Id $dlg 10) }
+  $s = WaitStatus $main 'NOT run' 15
+  Start-Sleep -Milliseconds 1000
+  $again = TopBy $p.Id 'Rule chains'
+  Check 'double.refused' (($s -match 'NOT run: it was clicked while the editor was busy \(Rule chains\)') -and ($again -eq [IntPtr]::Zero)) "$s / $(TopsNow $p.Id)"
   if ($again -ne [IntPtr]::Zero) { Click (ButtonOf $again 'Keep'); [void](WaitGone $p.Id $again 10) }
 
   # --- Conversion > Rule chains... reopens it, asked or not (O4) ---

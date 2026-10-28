@@ -73,6 +73,22 @@ type
 /// <returns>True when either holds.</returns>
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 
+/// <summary>PURE (chainform): whether the queue filter (GateVerdictFor) treats the editor as
+/// busy -- EditorBusy, or a modal window of the editor is up.</summary>
+/// <param name="AWaitDepth">As for EditorBusy.</param>
+/// <param name="AHourGlass">As for EditorBusy.</param>
+/// <param name="AMainEnabled">IsWindowEnabled of the main form: False under every modal
+/// window (a TForm's ShowModal such as Rule chains, a message box, a common dialog).</param>
+/// <returns>True when EditorBusy holds or the main form is disabled.</returns>
+/// <remarks>A modal's own message loop still dispatches a WM_COMMAND queued for the disabled
+/// main form (Windows does not check it), so a posted menu command ran re-entrantly inside the
+/// dialog: Conversion &gt; Rule chains... under the Rule chains dialog raised "A component named
+/// ChainForm already exists". The editor's Busy query (EDITOR_BUSY_QUERY_MSG) stays EditorBusy:
+/// the GUI drivers wait for a modal by its caption, not by that answer. A native common dialog
+/// (Open / Save As / folder) runs its own message loop that never reaches Application.OnMessage,
+/// so this verdict does not filter commands posted under one -- that gap is closed separately.</remarks>
+function GateBusy(AWaitDepth: Integer; AHourGlass, AMainEnabled: Boolean): Boolean;
+
 /// <summary>PURE (DRV-2b): whether a refused command's notice (LostCommandStatus) must
 /// still wait, i.e. the operation that refused it has not ended yet.</summary>
 /// <param name="AWaitDepth">How many engine waits (RunLongCallTracked) are running; 0 = none.</param>
@@ -215,6 +231,11 @@ var
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 begin
   Result:= (AWaitDepth > 0) or AHourGlass;
+end;
+
+function GateBusy(AWaitDepth: Integer; AHourGlass, AMainEnabled: Boolean): Boolean;
+begin
+  Result:= EditorBusy(AWaitDepth, AHourGlass) or not AMainEnabled;
 end;
 
 function LostNoticeDeferred(AWaitDepth: Integer; AMenuOpen, AMainEnabled, AHourGlass: Boolean): Boolean;

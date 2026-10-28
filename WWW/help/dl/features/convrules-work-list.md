@@ -4,10 +4,10 @@ title: Work list
 summary: "ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses)"
 product: DL
 group: component-conversion
-order: 60012
+order: 60014
 since: 1.28.2-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Work list
@@ -71,6 +71,13 @@ later (`pas_uses_resolution`) an unresolved row says so instead of guessing:
 `(class not found)`, `(member not found)` or `(kind unknown)`, and its Kind reads
 `(unknown)` when the engine could not tell. An older engine's text is shown as it
 came.
+
+### Where to click
+
+**View > Work list**
+1. Run a conversion on the Convert tab
+2. Choose View > Work list
+3. Read the rows; select rows and click Migrate... to write a #migrate rule
 
 ---
 

@@ -46,9 +46,9 @@
   ],
   "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\.",
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "CONVERTER",
-    "build": "1.35.1-alpha",
+    "build": "1.36.0-alpha",
     "surfaceHash": "da1fc5e5287650a452eb20c25fff64509455cf311fd24c9e1f1ffdbd08ea7722"
   }
 }
