@@ -4,10 +4,10 @@ title: Fix it
 summary: Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling
 product: DL
 group: linting
-order: 30009
+order: 30011
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Fix it
@@ -30,6 +30,7 @@ Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -72,7 +73,7 @@ either (a stale owning index is reported `index=stale`, not reindexed). With
 [Multi-Project-Rename](multi-project-rename.md)).
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
-reports a `fixable` field per rule; 23 of the 195 rules are fixable.
+reports a `fixable` field per rule; 109 of the 284 rules are fixable.
 
 ### Unused units (`unused-unit-in-uses`)
 

@@ -4,10 +4,10 @@ title: Rename across every project that compiles a shared unit
 summary: A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects
 product: DL
 group: linting
-order: 30016
+order: 30019
 since: 1.29.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.36.0-alpha
 ---
 
 # Rename across every project that compiles a shared unit
@@ -19,7 +19,7 @@ Use it when a naming finding (const-casing, type-name-prefix, ...) sits in a uni
 ## How to run it
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
 ```
 
 Example:
@@ -38,6 +38,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |

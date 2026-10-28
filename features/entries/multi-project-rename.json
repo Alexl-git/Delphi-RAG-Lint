@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "lint",
       "example": "lint --in <f> --fix --fix-line <L> --fix-rule const-casing --db <db>",
-      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]",
       "flags": [
         {
           "name": "--rule",
@@ -28,6 +28,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--labels"
         },
         {
           "name": "--no-preprocess"
@@ -80,9 +83,9 @@
     "build": "1.31.0-alpha"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-27",
     "by": "ENGINE",
-    "build": "1.35.0-alpha",
-    "surfaceHash": "a30d6b709fe9ade05739a8899f6b26c13cc3e39906c3f1f1cd15fe5c5972b974"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "160fb8d83b9f5df03772ba2b52121d12f9cd220ba36b7c214bbd7856a3a1b60c"
   }
 }

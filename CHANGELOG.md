@@ -14,6 +14,20 @@ breaking changes** until v1.0.
 - LSP: diagnostics for a file no loaded index owns are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"` (guard `run_lsp_unowned_label_guard.ps1`).
 - `lint --project` / `lint-all --project` / `unit-not-in-dpr`: the scope closure follows the `.dproj`'s ACTIVE build config (the same profile the defines use), so a unit only the inactive config uses is no longer linted (LSP lane, guard `run_lint_project_scope_active_config_guard.ps1`).
 
+## v1.37.0-alpha -- 2026-10-27
+
+### Added (lint rules)
+- About 50 new lint rules from the gap wave (G1-G9): security `.scm` rules (G1, incl. the XXE sidecar fix), shape rules (G2), memory and overflow checks (G3), ownership and lifetime checks (G4: `field-created-not-freed`, `free-of-owned-item`, `mismatched-alloc-free`, ...), nil and bounds checks (G5), exception and thread checks (G6), declaration parity (G7), project-wide DFM and virtual-method rules (G8) and FixInsight parity (G9). `drag-lint rules --json` is the authoritative list: 284 rules in 18 categories, 242 on by default, 109 with an auto-fix.
+- Taint rules `taint-sql-injection`, `taint-command-injection`, `taint-path-traversal` (CWE-89 / 78 / 22): an interprocedural walk over the new `data_flows` index table (extractor 1.26.0-alpha) from a catalogued source to a sink. Catalogues `rules\taint-sources|sinks|propagators.json`, extended by the `taint` object of `drag-lint-lint.json`. They run in `lint-all` and in `lint` with a store; the stage is skipped when every taint rule is disabled. Sources take `categories` and `trusted_args` (the command line, a dropped file, ParamStr(0) and known-folder variables are not path-traversal sources).
+- `lint --fix` / `lint-all --fix` now repair 109 rule ids (A0-A6: expression, statement, declaration, hygiene and store-backed fixers). `lint --fix --json` reports per finding whether it was applied (by finding key); overlapping fixes are deferred.
+- `lint <folder>` runs the same checks as `lint <file>` on every scanned `.pas` / `.inc` / `.dpr` (their union).
+- Compliance labels: `rules\compliance.json`, `rules --standard cwe|cert|misra`, `--labels` on `lint` / `lint-all`, a `compliance` object in `--json`, SARIF taxonomies, and built-in profiles `cwe`, `cert`, `misra`, `cwe-top25`.
+- `lint --json` / SARIF findings carry the file `path`.
+
+### Changed (index)
+- Include files: a project DB indexes only the ACTIVE includes, parsed in the includer's define context (INC); includes are chosen under the exact preprocessor values, and `lint-all` lints `.inc` in the includer's context (INC2); `{$IF}` evaluates value defines, `CompilerVersion`, IFOPT, true constants of the same file, used project / library units, `Declared()` and fuller arithmetic (INC3). An `{$IF}` that cannot be decided reports the `pp-unresolved-if` hint.
+- `uses-movable-to-implementation` is OFF by default (false positives, risky autofix).
+
 ## v1.36.0-alpha -- 2026-10-27
 
 ### Changed (index)

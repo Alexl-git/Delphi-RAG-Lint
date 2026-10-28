@@ -1,0 +1,25 @@
+{
+  "id": "taint-analysis",
+  "title": "Taint analysis (SQL, command, path)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.37.0-alpha",
+  "summary": "taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink",
+  "intro": "Read this when you want to find tainted values reaching a SQL, command or file-path sink across routines and units. The rules run in lint-all and in lint with a store; the catalogues of sources, sinks and propagators are editable JSON.",
+  "wikiPage": "taint-analysis",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <db> --rule taint-sql-injection"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-27",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "a7084e4910bb01acfceb7aef57ab1752a6c96e50e2e1c4452f13acb29a80a3e0"
+  }
+}

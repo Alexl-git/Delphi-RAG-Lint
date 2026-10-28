@@ -7,7 +7,7 @@ group: component-conversion
 order: 60011
 since: 1.35.1-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Rule chains (single-pass warning, merge / split)
@@ -72,7 +72,7 @@ Merge replaces the first stage with `#convert TA -> TC` (using the last stage's 
 composing the stages from the left. The last stage block stays as it is, because a TB may
 also exist on its own in your sources. Merge edits the book and does NOT save: review it,
 then Save. The block starts with a `#note chain merge: ...` line that counts what was
-composed, carried and noted.
+composed, carried, dropped and noted.
 
 In plain words:
 
@@ -80,10 +80,12 @@ In plain words:
    becomes `C.z <- A.y`. If both stages have a cast, the link gets no cast and a note asks
    you to pick one; otherwise the one cast is kept.
 2. A `#ignore B.x` in the second stage becomes `#ignore A.y`.
-3. A first-stage `#link B.x <- A.y` with no second-stage line for `B.x` is kept as it is; the
-   next Save tells you whether TC has an `x`.
+3. A first-stage `#link B.x <- A.y` with no second-stage line for `B.x` is DROPPED: run in two
+   passes, the second pass drops the unlinked `B.x` too, and TC may have no `x` at all. A
+   `#note chain merge: dropped ...` names the line, `#ignore A.y` follows it, and the Merge
+   status lists every dropped line. Link `A.y` to a TC property yourself if the value should carry.
 4. A first-stage `#default B.x = v` follows a second-stage link to `#default C.z = v`; it is
-   dropped with a note through an `#ignore`, and kept when nothing matches.
+   dropped with a note through an `#ignore`, and dropped with a note when nothing matches.
 5. `#migrate Old -> New` followed by `#migrate New -> Newer` becomes `#migrate Old -> Newer`;
    all other `#migrate` lines are kept and de-duplicated.
 6. Everything else of the first stage (`#ignore`, `#remove`, `#apply`, `#tag`, `#warn`,

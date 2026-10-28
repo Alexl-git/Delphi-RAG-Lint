@@ -9,6 +9,14 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.37.0-alpha
+
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 109 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
+* [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
+* [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
+* [Taint analysis (SQL, command, path)](features/taint-analysis.md) -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink.
+
 ## 1.35.1-alpha
 
 * [Rule chains (single-pass warning, merge / split)](features/convrules-rule-chains.md) -- ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books.
