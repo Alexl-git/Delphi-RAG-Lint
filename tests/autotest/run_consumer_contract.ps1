@@ -165,11 +165,19 @@ Push-Location 'C:\Projects'
 try {
   $loud  = RunSplit @('query', '--name', 'TWidget', '--db', $db, '--json')
   $quiet = RunSplit @('query', '--name', 'TWidget', '--db', $db, '--json', '--quiet')
+  # Text-mode pair: since IJSON (1.37.0) --json ALONE also suppresses the banner,
+  # so the de-vacuating control has to run without --json.
+  $loudText  = RunSplit @('query', '--name', 'TWidget', '--db', $db)
+  $quietText = RunSplit @('query', '--name', 'TWidget', '--db', $db, '--quiet')
 } finally { Pop-Location }
 
-Check 'without --quiet the banner IS emitted (de-vacuates the next check)' `
-  ($loud.Err -match 'loaded defaults') "stderr='$($loud.Err)'"
-Check 'with --quiet the banner is GONE' (-not ($quiet.Err -match 'loaded defaults')) `
+Check 'text mode without --quiet the banner IS emitted (de-vacuates the next checks)' `
+  ($loudText.Err -match 'loaded defaults') "stderr='$($loudText.Err)'"
+Check 'text mode with --quiet the banner is GONE' (-not ($quietText.Err -match 'loaded defaults')) `
+  "stderr='$($quietText.Err)'"
+Check '--json alone suppresses the banner (IJSON)' (-not ($loud.Err -match 'loaded defaults')) `
+  "stderr='$($loud.Err)'"
+Check 'with --json --quiet the banner is GONE' (-not ($quiet.Err -match 'loaded defaults')) `
   "stderr='$($quiet.Err)'"
 # The point of the flag is JSON that survives a stream-merging consumer, so
 # assert stdout is valid JSON in BOTH modes -- --quiet must be a convenience,

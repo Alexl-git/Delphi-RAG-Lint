@@ -267,7 +267,13 @@ $typeSpan = '(?s)class function TAstChecker\.CheckTypeAware\(.*?(?=\r?\nclass fu
 $emitted = [ordered]@{
   'LINT_GATE_TYPE_AWARE'    = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.AstChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" $typeSpan | Where-Object { $catalog -contains $_ })
   'LINT_GATE_FLOW'          = IdsIn 'src\diagnostics\DRagLint.Diagnostics.FlowChecks.pas' "\bEmit\('([a-z0-9-]+)'"
-  'LINT_GATE_PROJECT_RULES' = IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' "\bWantRule\('([a-z0-9-]+)'\)"
+  # WantRule(<CONST>) too (B-ENUM: WantRule(UNUSED_ENUM_VALUE_RULE)) -- each constant resolved to its
+  # literal in src\lint\*.pas, so a gate id named through a constant is not reported as a phantom.
+  'LINT_GATE_PROJECT_RULES' = @(@(IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' "\bWantRule\('([a-z0-9-]+)'\)") + @(
+      IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' '\bWantRule\(([A-Z][A-Z0-9_]*_RULE)\)' | ForEach-Object {
+        $c = $_; Get-ChildItem (Join-Path $Repo 'src\lint') -Filter *.pas | ForEach-Object {
+          [regex]::Matches([IO.File]::ReadAllText($_.FullName), "\b$c\s*=\s*'([a-z0-9-]+)'") } |
+          ForEach-Object { $_.Groups[1].Value } }) | Sort-Object -Unique)
   'LINT_GATE_CLASS_METRICS' = IdsIn 'src\lint\DRagLint.Lint.ClassMetrics.pas' "\bWantRule\('([a-z0-9-]+)'\)"
   # D17: the multi-id walks `lint` and `lint-all` now share. Every catalogue id
   # the checker's own unit names -- local-field-prefix and doc-orphan-block were

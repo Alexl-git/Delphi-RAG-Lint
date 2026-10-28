@@ -454,9 +454,16 @@ foreach ($c in $edCases) {
   $sep = RunRawIn $ex $Exe (& $c.A "s$ci")
   $mrg = RunMergedIn $ex $Exe (& $c.A "m$ci")
   $errTxt = Ascii $sep.Err
-  $banner = if ($c.N -like 'convert-*') { 'note: ignoring "docs" in .*a convert verb reads only' } else { 'loaded defaults' }
-  Check "e $($c.N): separate run exits 0 and writes the banner to stderr" `
-    (($sep.Code -eq 0) -and ($errTxt -match $banner)) "exit=$($sep.Code) stderr=$($errTxt.Trim())"
+  if ($c.N -like 'convert-*') {
+    $banner = 'note: ignoring "docs" in .*a convert verb reads only'
+    Check "e $($c.N): separate run exits 0 and writes the banner to stderr" `
+      (($sep.Code -eq 0) -and ($errTxt -match $banner)) "exit=$($sep.Code) stderr=$($errTxt.Trim())"
+  } else {
+    # IJSON (1.37.0): a JSON verb suppresses the defaults banner altogether, so a merged-stream
+    # consumer gets pure JSON; the convert-* cases above keep a stderr note for the ordering check.
+    Check "e $($c.N): separate run exits 0 and prints NO defaults banner (IJSON)" `
+      (($sep.Code -eq 0) -and -not ($errTxt -match 'loaded defaults')) "exit=$($sep.Code) stderr=$($errTxt.Trim())"
+  }
   $tail = ((Ascii $mrg).TrimEnd() -split "`n" | Select-Object -Last 1)
   # The --apply case runs on per-run copies (s<i> / m<i>): the copy's directory
   # name is the only byte allowed to differ.
