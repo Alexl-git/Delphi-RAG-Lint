@@ -4,7 +4,7 @@ title: "type-name-prefix: expected letter from the ancestor chain"
 summary: type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter
 product: DL
 group: linting
-order: 30025
+order: 30026
 since: 1.31.4-alpha
 status: shipped
 updated: 1.36.0-alpha
@@ -31,7 +31,7 @@ lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
+drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).

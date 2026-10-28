@@ -129,6 +129,7 @@ uses
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
+  , DRagLint.Lint.TargetCompiler { --target-compiler: ResolveTargetCompiler, TTargetRuleGate (1.38) }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
@@ -385,6 +386,7 @@ type
     ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
     Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
     Profile      : string ; // --profile <name>: merge a named enable/disable set
+    TargetCompiler: string ; // --target-compiler <ver|auto> (1.38): lint / lint-all / rules; '' = config, then 37
     // v0.16: query find flags
     DocTag     : string ;
     DocContains: string ;
@@ -1538,6 +1540,11 @@ begin
     end
     else if (A = '--enable') and (i < ParamCount) then begin Inc(i); Result.Enable:= ParamStr(i); end
     else if (A = '--profile') and (i < ParamCount) then begin Inc(i); Result.Profile:= ParamStr(i); end
+    else if (A = '--target-compiler') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.TargetCompiler:= ParamStr(i);
+    end
     else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
     else if (A = '--output-dir') and (i < ParamCount) then begin Inc(i); Result.OutputDir:= ParamStr(i); end
     else if A = '--include-external' then Result.IncludeExternal:= True
@@ -11244,6 +11251,69 @@ begin
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
 end;
 
+var
+  { THE RULE GATE OF THIS RUN (two-way modernize, 1.38). Set once by
+    ApplyRunTargetCompiler at the top of lint / lint-all / rules and read by
+    FinalizeAndOutput and DoRules. Its zero value is inactive -- Drops and
+    ForcesOn answer False for every id -- so a verb that never calls
+    ApplyRunTargetCompiler, or a run at the default target, takes no new path. }
+  GRunTargetGate: TTargetRuleGate;
+
+/// <summary>Resolves the run's target compiler, publishes it
+/// (SetActiveTargetCompiler) and builds GRunTargetGate from the rule catalog.</summary>
+/// <param name="AArgs">--target-compiler, and --project for "auto".</param>
+/// <param name="AConfigValue">The lint config's target_compiler (after --profile), or ''.</param>
+/// <returns>False after printing the refusal to stderr (an unknown token, or
+/// "auto" that cannot be mapped); the verb then exits 2.</returns>
+/// <remarks>The project-context hook: the LSP lane passes the .dlcontext.json
+/// targetCompiler as the third argument of ResolveTargetCompiler. The catalog
+/// is built only for a non-default target.</remarks>
+function ApplyRunTargetCompiler(const AArgs: TArgs; const AConfigValue: string): Boolean;
+var
+  V    : Integer;
+  Err  : string;
+  Dproj: string;
+  Cat  : TArray<TRuleInfo>;
+  Ids  : TArray<string>;
+  Needs: TArray<Integer>;
+  Since: TArray<Integer>;
+  I    : Integer;
+begin
+  Dproj:= if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then AArgs.ProjectPath else '';
+  if not ResolveTargetCompiler(AArgs.TargetCompiler, AConfigValue, '', Dproj, V, Err) then
+  begin
+    Writeln(ErrOutput, 'drag-lint: ' + Err);
+    Exit(False);
+  end;
+  SetActiveTargetCompiler(V);
+  GRunTargetGate:= Default(TTargetRuleGate);
+  GRunTargetGate.Target:= V;
+  if V <> DEFAULT_TARGET_COMPILER then
+  begin
+    Cat:= TRuleCatalog.BuildCatalog(AArgs.RulesDir, '', False);
+    SetLength(Ids, Length(Cat));
+    SetLength(Needs, Length(Cat));
+    SetLength(Since, Length(Cat));
+    for I:= 0 to High(Cat) do
+    begin
+      Ids[I]  := Cat[I].Id;
+      Needs[I]:= Cat[I].NeedsCompiler;
+      Since[I]:= Cat[I].CompatSince;
+    end;
+    GRunTargetGate:= TTargetRuleGate.Build(V, Ids, Needs, Since);
+  end;
+  Result:= True;
+end;
+
+/// <summary>Does rule AInfo run by default at this run's target compiler?</summary>
+/// <param name="AInfo">A catalog row.</param>
+/// <returns>DefaultEnabled, lifted for a compat rule the target switches on and
+/// cleared for a rule the target gates; equal to DefaultEnabled at 37.</returns>
+function RuleActiveAtRunTarget(const AInfo: TRuleInfo): Boolean;
+begin
+  Result:= (AInfo.DefaultEnabled or GRunTargetGate.ForcesOn(AInfo.Id)) and not GRunTargetGate.Drops(AInfo.Id);
+end;
+
 { The "may drag-lint touch this file at all?" half of ownership, as a predicate
   the doc batch can hold. EVERY `document*` command must set
   TDocBatchOptions.IsExcluded from this -- see that field's remarks for what
@@ -12034,14 +12104,22 @@ begin
     names its marker's rule as `"<id>"` (ApplyLineMarkers' messages), and a
     stale dl:ok for the rule being asked about is part of that rule's answer --
     run_marker_metric_scope.ps1 check 6 prints its remedy from exactly that line. }
+  { 1.38 two-way modernize: ONE stderr line when the run targets an older compiler. }
+  if GRunTargetGate.Active then
+    Writeln(ErrOutput, Format('target-compiler: %d (%s) -- %d modernize rule(s) gated, %d compat rule(s) on',
+      [GRunTargetGate.Target, CompilerDisplayName(GRunTargetGate.Target), Length(GRunTargetGate.Gated), Length(GRunTargetGate.CompatOn)]));
   Survivors:= nil;
   for F in AFindings do
   begin
     if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule)
        and not (StartsText('review-marker-', F.RuleId) and ContainsText(F.Message, '"' + AArgs.Rule + '"')) then Continue;
+    { 1.38: a modernize finding the target compiler cannot take is not advice }
+    if GRunTargetGate.Drops(F.RuleId) then Continue;
     IsDefDis:= False;
     for DId in ADefaultDisabled do
       if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
+    { 1.38: a compat rule is OFF by default and ON when the target predates its construct }
+    if IsDefDis and GRunTargetGate.ForcesOn(F.RuleId) then IsDefDis:= False;
     if Cfg.ShouldKeep(F.RuleId, IsDefDis) then begin MF:= F; MF.Severity:= Cfg.ApplySeverity(F.RuleId, F.Severity); Survivors:= Survivors + [MF]; end;
   end;
 
@@ -12080,6 +12158,9 @@ begin
     { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
     SetAutofixStore(AStore);
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
+    if AutofixTargetSkipped > 0 then
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) skipped (target-compiler) -- the fix emits syntax newer than %s; the finding stays.',
+        [AutofixTargetSkipped, CompilerDisplayName(ActiveTargetCompiler)]));
     SetAutofixStore(nil);
     { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
       recorded site no longer holds the identifier being renamed). Declared out
@@ -12610,6 +12691,8 @@ var
     AObj.AddPair('params', PA);
   end;
 begin
+  { rules reads only the command line (and --project for auto): it names no file, so it has no config to discover }
+  if not ApplyRunTargetCompiler(AArgs, '') then Exit(2);
   Cat:= TRuleCatalog.BuildCatalog(AArgs.RulesDir, AArgs.RuleCategory);
   if TRuleCatalog.ComplianceError <> '' then begin Writeln(ErrOutput, 'drag-lint: ' + TRuleCatalog.ComplianceError); Exit(2); end;
   var CompDummy: string;
@@ -12640,6 +12723,11 @@ begin
         O.AddPair('fix_opt_in', TJSONBool.Create(IsOptInFixRule(R.Id)));
         AddParamsJson(O, R.Params);
         O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
+        { 1.38 two-way modernize: the gate's inputs, and whether the rule runs by
+          default at this run's --target-compiler (= default_enabled at 37) }
+        O.AddPair('needs_compiler', TJSONNumber.Create(R.NeedsCompiler));
+        O.AddPair('compat_since', TJSONNumber.Create(R.CompatSince));
+        O.AddPair('target_active', TJSONBool.Create(RuleActiveAtRunTarget(R)));
         Arr.AddElement(O);
       end;
       Root.AddPair('rules', Arr);
@@ -12656,6 +12744,7 @@ begin
       end;
       SumO.AddPair('per_category', PcA );
       Root.AddPair('summary'     , SumO);
+      Root.AddPair('target_compiler', TJSONNumber.Create(ActiveTargetCompiler));
       Writeln(Root.ToJson);
     finally
       Root.Free;
@@ -12673,13 +12762,16 @@ begin
       if R.Category <> CurCat then begin CurCat:= R.Category; Sb.AppendLine(''); Sb.AppendLine('[' + CurCat + ']'); end;
       var Flags: string:= R.DefaultSeverity;
       if not R.DefaultEnabled then Flags:= Flags + ', off';
+      { 1.38: only under a non-default --target-compiler, so a default run prints what it always did }
+      var TgtSuffix: string:= if GRunTargetGate.Drops(R.Id) then ', gated by target'
+        else if GRunTargetGate.ForcesOn(R.Id) then ', on for target' else '';
       if Length(R.Params) > 0 then
       begin
         var Names: string:= '';
         for P in R.Params do begin if Names <> '' then Names:= Names + ','; Names:= Names + P.Name + '=' + P.DefaultVal; end;
         Flags:= Flags + '; ' + Names;
       end;
-      Sb.AppendLine(Format('  %-34s %-8s (%s)', [R.Id, R.Source, Flags]) + R.Compliance.Suffix);
+      Sb.AppendLine(Format('  %-34s %-8s (%s%s)', [R.Id, R.Source, Flags, TgtSuffix]) + R.Compliance.Suffix);
     end; // for
     Writeln(Sb.ToString);
   finally
@@ -13579,6 +13671,7 @@ var
     start reporting markers in files the run deliberately does not report on. }
   ScannedFiles: TArray<string>              ;
 begin
+  if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
@@ -19998,6 +20091,7 @@ var
   end;
 
 begin
+  if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path

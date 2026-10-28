@@ -224,6 +224,15 @@ type
     /// replaces the list; the top level appends. Not written by
     /// TLintConfigWriter, which preserves the key verbatim.</remarks>
     PlatformDivergentAllow: TArray<string>;
+    /// <summary>The raw "target_compiler" token (two-way modernize, 1.38): a
+    /// product version (13, 12, 10.4, XE7 ...), a CompilerVersion (37, 36 ...)
+    /// or "auto". Empty when the key is absent.</summary>
+    /// <remarks>Not validated here -- DRagLint.Lint.TargetCompiler.
+    /// ResolveTargetCompiler parses it (and refuses an unknown token) after the
+    /// command line had its say. A profile that names the key replaces the
+    /// top-level value, so a "legacy" profile can pin 12 while the top level
+    /// stays 13.</remarks>
+    TargetCompiler: string;
     /// <summary>True when Load found a profile named AProfile under "profiles" in the
     /// config file. A built-in compliance profile name applies only when this is False
     /// (a user-defined profile of the same name wins).</summary>
@@ -794,6 +803,8 @@ begin
   ApplyList('exclude_paths', FExcludePaths);
   ApplyList('ifdef_allow', IfdefAllow);
   ApplyList('platform_divergent_allow', PlatformDivergentAllow);
+  { two-way modernize (1.38): a scalar, so a profile simply overrides it }
+  if AObj.GetValue('target_compiler') <> nil then TargetCompiler:= Trim(AObj.GetValue('target_compiler').Value);
   if AObj.GetValue('severity') is TJSONObject then
   begin
     { profile semantics: update-or-add each severity key; base keys not

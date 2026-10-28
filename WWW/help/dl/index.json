@@ -780,11 +780,23 @@
     "verb": "lint-all"
   },
   {
+    "id": "target-compiler",
+    "title": "Target compiler (--target-compiler)",
+    "summary": "Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported",
+    "group": "linting",
+    "order": 30025,
+    "since": "1.36.0-alpha",
+    "file": "features/target-compiler.md",
+    "menus": ["drag-lint > Code Quality > Run Lint All (Full Report)..."],
+    "context": [],
+    "verb": "lint"
+  },
+  {
     "id": "type-name-prefix-origin",
     "title": "type-name-prefix: expected letter from the ancestor chain",
     "summary": "type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter",
     "group": "linting",
-    "order": 30025,
+    "order": 30026,
     "since": "1.31.4-alpha",
     "file": "features/type-name-prefix-origin.md",
     "menus": [],

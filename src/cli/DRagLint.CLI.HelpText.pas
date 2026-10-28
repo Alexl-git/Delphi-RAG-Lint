@@ -137,8 +137,8 @@ begin
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor''s class pickers. exit 1 = no such ancestor)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
-  Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
-  Writeln('  drag-lint lint  <path>       [--profile <name>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
+  Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)');
+  Writeln('  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
   Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
   Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
   Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
@@ -161,7 +161,7 @@ begin
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]');
-  Writeln('  drag-lint lint-all           [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
@@ -370,6 +370,7 @@ begin
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
   Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
+  Writeln('    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
@@ -437,7 +438,7 @@ begin
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
   Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('       see wiki page: Copy-Diagnostics-Current-File');
-  Writeln('  drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
   Writeln('       ^ A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\_D-RAG\drag-lint-project.json`.');
   Writeln('       see wiki page: Run-Lint-All-Full-Report');
@@ -445,6 +446,8 @@ begin
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
+  Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
+  Writeln('       see wiki page: rules');
 end;
 
 procedure WriteFlagAliases;
@@ -607,12 +610,12 @@ begin
   end;
   if pVerb = 'rules' then
   begin
-    Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
+    Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)');
     Exit;
   end;
   if pVerb = 'lint' then
   begin
-    Writeln('  drag-lint lint  <path>       [--profile <name>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
+    Writeln('  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
     Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
     Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
     Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
@@ -651,7 +654,7 @@ begin
   end;
   if pVerb = 'lint-all' then
   begin
-    Writeln('  drag-lint lint-all           [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
+    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
     Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
     Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
@@ -1139,6 +1142,7 @@ begin
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
     Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
+    Writeln('    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
     Exit;

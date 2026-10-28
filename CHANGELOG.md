@@ -3,10 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.38.1-alpha -- planned
+
+### Planned
+- Downgrade fixes: `compat` rules (`compat_since`) that rewrite syntax the `--target-compiler` cannot take back to classic syntax -- `if` expression, `is not`, `not in`, `Contains`, `InRange`, digit separators, inline `var`. Registry entry `compat-downgrade-fixes`.
+
 ## Unreleased
 
 ### Added
 - `find-callees` lists library-bound callees after the resolved ones, marked `(library` (`--json`: `"external": true`, `"via": "edge"|"oracle"`). `edge` = the stored `refs.external_target`; `oracle` = bound at read time when the library index is named (a second `--db`, or `--library-db`) from `refs.receiver_type_text`. With no library open the text ends `M external (library not open)`. Guard `tests\autotest\run_find_callees_external.ps1`.
+- `--target-compiler <ver|auto>` on `lint` / `lint-all` / `rules` and the config key `"target_compiler"` (profile-overridable; the command line wins): the oldest compiler the code must compile on -- a product version (`13`, `12`, `10.4`, `XE7` ...), a CompilerVersion (`37`, `36` ...) or `auto` (the `.dproj` ProjectVersion). A modernize finding whose advice needs a newer compiler is not reported (sidecar / catalog key `needs_compiler`, also per `fix` entry); an inline-`var` fix (33) is skipped and counted. `rules --json` rows gain `needs_compiler`, `compat_since`, `target_active` and the root `target_compiler`. Category `compat` and sidecar key `compat_since` are registered for the downgrade rules (separate registry entry, 1.38.1). Default 37 = unchanged output. Resolver `DRagLint.Lint.TargetCompiler.ResolveTargetCompiler` takes the project-context `targetCompiler` too. Guard `tests\autotest\run_target_compiler_guard.ps1`.
 - Manifest section key `"libraryResolve": true` (default false; the 2026-10-25 no-attach ruling stands): `index --all` / `index --project` open the platform library as an extra store for the call-resolve pass. Guard `tests\autotest\run_library_resolve_key.ps1`.
 
 ### Changed

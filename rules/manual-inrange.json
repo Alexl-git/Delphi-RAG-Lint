@@ -2,6 +2,7 @@
   "id": "manual-inrange",
   "severity": "hint",
   "category": "refactoring",
+  "needs_compiler": 14,
   "message": "Two-sided inclusive bounds check on one value -- System.Math.InRange(X, A, B) states the intent and evaluates X once.",
   "warn_capture": "warn",
   "fix": [

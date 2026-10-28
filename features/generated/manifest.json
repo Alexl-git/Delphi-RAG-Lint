@@ -2502,7 +2502,7 @@
             }
           ],
           "helpOrder": 15,
-          "help": ["  drag-lint lint  <path>       [--profile <name>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
+          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
       "audience": "both",
@@ -2516,7 +2516,7 @@
         "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "975097445759c7fcdcc9b50aa02641879d85b272f7a94cf5fa2e31783b2799a9"
+        "surfaceHash": "ba81666564c496fe9f0886053a1a662229c0eeb6e080b47b1c361781cb2339dd"
       }
     },
     {
@@ -2625,6 +2625,31 @@
       }
     },
     {
+      "id": "compat-downgrade-fixes",
+      "title": "Downgrade fixes (compat rules)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "planned",
+      "since": "1.38.1-alpha",
+      "summary": "compat rules report syntax the target compiler cannot take and rewrite it to classic syntax -- the reverse of the modernize fixes",
+      "intro": "Read this when code written for Delphi 13 must go back to an older compiler: each compat rule rewrites one modern construct to its classic form.",
+      "wikiPage": "compat-downgrade-fixes",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "<file.pas> --fix --target-compiler 12"
+        }
+      ],
+      "audience": "both",
+      "related": ["autofix-wave", "target-compiler"],
+      "verified": {
+        "date": "2026-10-28",
+        "by": "alexanderl",
+        "build": "1.36.0-alpha"
+      }
+    },
+    {
       "id": "drag-lint-project-rules",
       "title": "drag-lint: Project Rules",
       "group": "linting",
@@ -2644,7 +2669,7 @@
         {
           "type": "cli",
           "verb": "rules",
-          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
           "flags": [
             {
               "name": "--json"
@@ -2663,7 +2688,7 @@
             }
           ],
           "helpOrder": 14,
-          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)"]
+          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
         }
       ],
       "audience": "both",
@@ -2678,10 +2703,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "0b4d15ca782f7dbf5422ffa802e055a53959c8d9808203f7ce92e5bc2bb03bff"
+        "surfaceHash": "b8b47d5c06426ec7495d792343905a86aa5149fc5385ac6de617d47ef742ac2f"
       }
     },
     {
@@ -2815,7 +2840,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -2834,7 +2859,7 @@
         "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "615bfe539dd39041949e4603b0f938701534c2b425d496f6ceb8a3a3e7673fb3"
+        "surfaceHash": "e34870d6f3fadb022d2c750019246e275079c68a89bd92a6d90079748991b7f7"
       }
     },
     {
@@ -3372,7 +3397,7 @@
         {
           "type": "cli",
           "verb": "rules",
-          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
           "flags": [
             {
               "name": "--json"
@@ -3390,7 +3415,7 @@
               "arg": "<dir>"
             }
           ],
-          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)"]
+          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
         }
       ],
       "audience": "both",
@@ -3412,10 +3437,10 @@
       },
       "family": "lint-rules",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "8ea04f384d04eaf3edaec969f1dfad83730fe418e900b4b5ddb76124c85923c3"
+        "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
       }
     },
     {
@@ -3813,7 +3838,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
           "flags": [
             {
               "name": "--db",
@@ -3879,10 +3904,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "4170291105f6fdb95e1b23ea802e11c00d0cc180db39572077e115e1c511f661"
+        "surfaceHash": "557189816aa3fa2848eb840f8019f130d131a4c43c1b3437eadc1a0d5c9d8fa2"
       }
     },
     {
@@ -3908,6 +3933,46 @@
         "by": "ENGINE",
         "build": "1.36.0-alpha",
         "surfaceHash": "a7084e4910bb01acfceb7aef57ab1752a6c96e50e2e1c4452f13acb29a80a3e0"
+      }
+    },
+    {
+      "id": "target-compiler",
+      "title": "Target compiler (--target-compiler)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.36.0-alpha",
+      "summary": "Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported",
+      "intro": "Read this when your code must still build on an older Delphi (12, 10.4, XE7 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.",
+      "wikiPage": "target-compiler",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "<file.pas> --target-compiler 12"
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "--db <db> --target-compiler 10.4"
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "example": "--json --target-compiler 36"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
+        }
+      ],
+      "audience": "both",
+      "related": ["autofix-wave", "compat-downgrade-fixes"],
+      "verified": {
+        "date": "2026-10-28",
+        "by": "ENGINE",
+        "build": "1.36.0-alpha",
+        "surfaceHash": "d34a6b56b376254d160c438e0c242af3a3b67d4960d378b460299f2ccd190d05"
       }
     },
     {
@@ -3967,7 +4032,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
           "flags": [
             {
               "name": "--db",
@@ -4077,10 +4142,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "f8851d8232fa74d9139f971f6d0e24d1eac8a5c5617a5f404613c7e90a4e37ae"
+        "surfaceHash": "23e9012b6b41c0403697f84eb9c7f767753cf8b2480f4731379fc93470ae3bf1"
       }
     },
     {
@@ -8939,7 +9004,7 @@
             }
           ],
           "helpOrder": 91,
-          "help": ["  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)", "", "  Output/CI (lint, lint-all, check-ast):", "    --format sarif            emit SARIF 2.1.0 (in addition to text|json)", "    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)", "    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)", "    --enable id1,id2          re-include disabled / off-by-default rules", "    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)", "    --baseline <file>         report only findings absent from the baseline", "    --write-baseline <file>   record current findings as the baseline and exit 0"]
+          "help": ["  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)", "", "  Output/CI (lint, lint-all, check-ast):", "    --format sarif            emit SARIF 2.1.0 (in addition to text|json)", "    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)", "    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)", "    --enable id1,id2          re-include disabled / off-by-default rules", "    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)", "    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)", "    --baseline <file>         report only findings absent from the baseline", "    --write-baseline <file>   record current findings as the baseline and exit 0"]
         }
       ],
       "audience": "both",
@@ -8960,7 +9025,7 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
         "surfaceHash": "5a2453d7609d4f43aa33d05dd123b4c8b6c0ea3c09911c36042f39b03c9fe3e1"
