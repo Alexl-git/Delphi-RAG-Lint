@@ -12,17 +12,34 @@ unit DRagLint.Fix.ProjectWide;
 
 interface
 
+uses
+  System.Classes
+  , System.Generics.Collections
+  , DRagLint.Core.Model
+  , DRagLint.Refactor.TextEdit
+  ;
+
+/// <summary>Adds to AEdits the edits that take ONE uses entry -- the finding's
+/// span, which must hold the unit name -- out of its clause.</summary>
+/// <param name="AFinding">A finding whose StartLine/StartCol..EndCol span one
+/// uses entry's unit name on a single line.</param>
+/// <param name="ALines">The file's lines; read only.</param>
+/// <param name="AEdits">Receives one edit on success; untouched on failure.</param>
+/// <returns>False when the layout is not one this routine understands (an
+/// `in '...'` path, an entry mid-line with no neighbour comma, a clause that
+/// does not end in a ';' on the line it can see) -- the caller then declines.</returns>
+/// <remarks>Shared by uses-movable-to-implementation (here) and
+/// unused-unit-in-uses (DRagLint.Fix.Store, lane A5B). Every edit carries
+/// ExpectText, so a file that changed under the finding is skipped.</remarks>
+function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
+
 implementation
 
 uses
   System.SysUtils
-  , System.Classes
   , System.IOUtils
   , System.StrUtils
-  , System.Generics.Collections
   , System.RegularExpressions
-  , DRagLint.Core.Model
-  , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
   ;
 
@@ -96,9 +113,6 @@ begin
   Result:= (T = 'uses') or T.StartsWith('uses ');
 end;
 
-{ The edits that take ONE uses entry (the finding's span) out of its clause; False when the
-  layout is not one this fixer understands (an `in '...'` path, an entry mid-line with no
-  neighbour comma, a clause that does not end in a ';' on the line it can see). }
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@0fbb -- REVIEWED 2026-10-27: one guard-clause Exit per uses-clause layout the fixer recognises; any other layout must decline
 var
   T, Before, After, Name: string;

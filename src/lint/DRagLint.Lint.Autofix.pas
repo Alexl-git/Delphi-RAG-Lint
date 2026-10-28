@@ -11,6 +11,7 @@ interface
 uses
   System.Classes
   , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces
   , DRagLint.Refactor.TextEdit
   ;
 
@@ -90,6 +91,16 @@ procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARi
 /// the reverse, so no unit cycle forms (circular-uses).</remarks>
 procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
 
+/// <summary>Hands the store this --fix run's findings came from to the registered fixers.</summary>
+/// <param name="AStore">The open store, or nil to clear it (a run without --db).</param>
+/// <remarks>The CLI sets it around BuildAutofixEdits. A store-backed fixer reads it through
+/// AutofixStore and declines when it is nil. The unit holds the reference only between the
+/// two calls; not thread-safe -- one fix run at a time.</remarks>
+procedure SetAutofixStore(const AStore: ISymbolStore);
+
+/// <summary>The store SetAutofixStore handed over, or nil when none is open.</summary>
+/// <returns>The current fix run's store; nil outside a --db run.</returns>
+function AutofixStore: ISymbolStore;
 /// <summary>Builds the ONE edit that wraps lines AFirstLine..ALastLine in
 /// try / finally / end.</summary>
 /// <param name="APath">The file the edit targets.</param>
@@ -175,10 +186,22 @@ var
   GFixers: TDictionary<string, TRegisteredFixer>;
   { the generic sidecar fixer (DRagLint.Fix.Templates installs it) }
   GSidecarFixer: TFindingFixer;
+  { the open store of the current --fix run (SetAutofixStore); nil without --db }
+  GFixStore: ISymbolStore;
 
 procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
 begin
   GSidecarFixer:= AFixer;
+end;
+
+procedure SetAutofixStore(const AStore: ISymbolStore);
+begin
+  GFixStore:= AStore;
+end;
+
+function AutofixStore: ISymbolStore;
+begin
+  Result:= GFixStore;
 end;
 
 function Fixers: TDictionary<string, TRegisteredFixer>;
@@ -222,7 +245,7 @@ end;
   the exceptions unit's managed block, so a pure-text builder could not know
   it -- BuildExceptionRewriteEdits supplies those edits the same way. }
 const
-  FIXABLE_RULE_IDS: array[0..22] of string = (
+  FIXABLE_RULE_IDS: array[0..23] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
     'method-pascalcase', 'local-var-casing', 'const-casing',
@@ -234,7 +257,10 @@ const
     { raise-bare-exception: `raise Exception.Create('x')` -> the generated
       class for that message, plus the uses entry. Gated on exceptions-sync
       having run, and it SKIPS any file that tests the class exactly. }
-    'raise-bare-exception');
+    'raise-bare-exception',
+    { property-accessor-name (lane A5B): the accessor is renamed to F<Prop> /
+      Get<Prop> / Set<Prop> by the NamingFix rename engine -- opt-in below. }
+    'property-accessor-name');
 
 { The LEGACY set: the ids the FIXABLE_RULE_IDS list (and the if-chain in
   BuildAutofixEdits / the store-backed appends in the CLI) owns. }
@@ -262,9 +288,9 @@ end;
   counted these as fixable, offered "Fix all in unit (78)" on ORM3's
   BASICS.PAS, and the run then reported "no fixable findings" (2026-10-13). }
 const
-  OPT_IN_FIX_RULE_IDS: array[0..6] of string = (
+  OPT_IN_FIX_RULE_IDS: array[0..7] of string = (
     'method-pascalcase', 'local-var-casing', 'const-casing', 'field-name-prefix',
-    'param-name-prefix', 'type-name-prefix', 'local-field-prefix');
+    'param-name-prefix', 'type-name-prefix', 'local-field-prefix', 'property-accessor-name');
 
 /// <summary>Is ARuleId a fixable rule whose fix applies only when opted in?</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
@@ -1177,6 +1203,7 @@ initialization
 
 finalization
   GSidecarFixer:= nil;
+  GFixStore:= nil;
   GFixers.Free;
 
 end.

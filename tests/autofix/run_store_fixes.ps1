@@ -10,6 +10,10 @@
     2. unused-private-member, stale index (second run, no reindex)  -> declined
     3. discarded-effect-free-result as the lone `then` statement    -> declined
     4. discarded-effect-free-result, a bare call line               -> deleted
+  Lane A5B (cases 5-14): unused-public-symbol own-unit tier (5 fixed, 6 early caller declined),
+  unused-unit-in-uses (7 fixed + init-section unit kept, 8 stale), classname-string-compare
+  (9 no --db, 10 metaclass Self / unknown class), empty-procedure-body (11 called / override,
+  12 stale, 14 no --db), property-accessor-name (13 shifted index writes nothing).
   Each case also checks the rule FIRES (positive control), so a silent rule
   cannot pass it. Exit 0 = all pass.
 #>
@@ -205,6 +209,26 @@ $after1 = [IO.File]::ReadAllText($c12.File)
 Check 'emptystale: first run deleted Lonely only (positive control)' ((-not $after1.Contains('Lonely')) -and $after1.Contains('procedure Other;'))
 FixOnce $c12 'empty-procedure-body' @()
 Check 'emptystale: second run on the stale index kept Other' ([IO.File]::ReadAllText($c12.File) -eq $after1)
+# 13. property-accessor-name on a STALE index (a line inserted above everything after indexing):
+#     every recorded position is off by one, so the rename must write nothing at all
+$c13 = NewCase 'accstale' @(
+  'unit uaccstale;', '', 'interface', '', 'type', '  TBox = class', '  private', '    function Reader: Integer;',
+  '  public', '    property Count: Integer read Reader;', '  end;', '', 'implementation', '',
+  'function TBox.Reader: Integer;', 'begin', '  Result:= 1;', 'end;', '', 'end.')
+$cfg13 = Join-Path $WorkDir 'acc.config.json'
+[IO.File]::WriteAllText($cfg13, '{"enabled":["property-accessor-name"],"autofix":["property-accessor-name"]}')
+Check 'accstale: the rule fires (positive control)' ((Fires $c13 'property-accessor-name' @('--config', $cfg13)) -ge 1)
+[IO.File]::WriteAllText($c13.File, "{ inserted after indexing }`r`n" + [IO.File]::ReadAllText($c13.File))
+$before = [IO.File]::ReadAllText($c13.File)
+FixOnce $c13 'property-accessor-name' @('--config', $cfg13)
+Check 'accstale: file unchanged on the shifted index' ([IO.File]::ReadAllText($c13.File) -eq $before)
+
+# 14. empty-procedure-body without --db: zero references cannot be proved -> declined
+$c14 = NewCase 'emptynodb' @('unit uemptynodb;', '', 'interface', '', 'implementation', '', 'procedure Lonely;', 'begin', 'end;', '', 'end.')
+$before = [IO.File]::ReadAllText($c14.File)
+Push-Location $c14.Dir
+try { & $exePath lint --file $c14.File --fix --fix-rule empty-procedure-body --apply --no-backup *> (Join-Path $c14.Dir '_fixnodb.log') } finally { Pop-Location }
+Check 'emptynodb: file unchanged without --db' ([IO.File]::ReadAllText($c14.File) -eq $before)
 
 Write-Host "store fixes: $pass passed, $fail failed"
 exit $(if ($fail -eq 0) { 0 } else { 1 })

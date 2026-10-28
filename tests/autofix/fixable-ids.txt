@@ -40,3 +40,8 @@ mismatched-alloc-free
 unused-private-member
 discarded-effect-free-result
 doc-orphan-block
+unused-public-symbol
+unused-unit-in-uses
+empty-procedure-body
+classname-string-compare
+property-accessor-name
