@@ -15,6 +15,11 @@ uses
   , DRagLint.Refactor.TextEdit
   ;
 
+const
+  /// <summary>Why a fix was declined whole (lane IATOM): `--fix --json`
+  /// decline_reason and the text summary's "N declined (...)".</summary>
+  DECLINE_STALE_REASON = 'an edit of the fix no longer matches the file';
+
 type
   /// <summary>A per-FINDING fixer: the edits that fix AFinding.</summary>
   /// <remarks>ALines is the finding's file as the builder read it (shared,
@@ -72,7 +77,8 @@ function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCo
 /// <param name="ADeferredOwners">Out: the FixOwnerKey of each finding whose edits
 /// were withheld -- the next --fix pass, which re-lints, applies them.</param>
 /// <returns>AEdits minus the deferred findings' edits, order kept.</returns>
-/// <remarks>A finding is kept or deferred WHOLE. Unowned edits (the store-backed
+/// <remarks>A finding is kept or deferred WHOLE -- with every finding a
+/// TTextEdit.AtomGroup ties it to (EditAtomKey). Unowned, ungrouped edits (the store-backed
 /// builders) are always kept and win any conflict. Overlap: two line ranges
 /// (delete / replace-lines) sharing a line; an in-line replace on a line a range
 /// covers; two in-line replaces on one line whose column spans intersect; an
@@ -259,39 +265,38 @@ begin
   Order   := TStringList.Create(dupIgnore, False, False);
   Deferred:= TDictionary<string, Boolean>.Create;
   try
+    { lane IATOM: the unit kept or deferred is the ATOM (EditAtomKey: the
+      finding, or the group a per-file fixer tied several findings into). }
     for var E: TTextEdit in AEdits do
-      if E.Owner = '' then KeptFor(E.FilePath).Add(E)
-      else if not Deferred.ContainsKey(E.Owner) then
+      if EditAtomKey(E) = '' then KeptFor(E.FilePath).Add(E)
+      else if not Deferred.ContainsKey(EditAtomKey(E)) then
       begin
-        Deferred.Add(E.Owner, False);   { seen; True below = deferred }
-        Order.Add(E.Owner);
+        Deferred.Add(EditAtomKey(E), False);   { seen; True below = deferred }
+        Order.Add(EditAtomKey(E));
       end;
     for var Own: string in Order do
     begin
       var Clash: Boolean:= False;
       for var E: TTextEdit in AEdits do
       begin
-        if E.Owner <> Own then Continue;
+        if EditAtomKey(E) <> Own then Continue;
         for var K: TTextEdit in KeptFor(E.FilePath) do
-          if (K.Owner <> Own) and EditsConflict(E, K) then
+          if (EditAtomKey(K) <> Own) and EditsConflict(E, K) then
           begin
             Clash:= True;
             Break;
           end;
         if Clash then Break;
       end;
-      if Clash then
-      begin
-        Deferred[Own]:= True;
-        ADeferredOwners:= ADeferredOwners + [Own];
-      end
+      if Clash then Deferred[Own]:= True
       else
         for var E: TTextEdit in AEdits do
-          if E.Owner = Own then KeptFor(E.FilePath).Add(E);
+          if EditAtomKey(E) = Own then KeptFor(E.FilePath).Add(E);
     end;
     Result:= nil;
     for var E: TTextEdit in AEdits do
-      if (E.Owner = '') or not Deferred[E.Owner] then Result:= Result + [E];
+      if (EditAtomKey(E) = '') or not Deferred[EditAtomKey(E)] then Result:= Result + [E]
+      else if (E.Owner <> '') and (IndexText(E.Owner, ADeferredOwners) < 0) then ADeferredOwners:= ADeferredOwners + [E.Owner];
   finally
     Kept.Free;
     Order.Free;
