@@ -93,6 +93,7 @@ uses
   DRagLint.Core.FileTime in '..\core\DRagLint.Core.FileTime.pas',
   DRagLint.Parser.DocComments in '..\parser\DRagLint.Parser.DocComments.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
+  DRagLint.Query.IdentWords in '..\query\DRagLint.Query.IdentWords.pas',
   DRagLint.Query.Callers in '..\query\DRagLint.Query.Callers.pas',
   DRagLint.Query.HoverModel in '..\query\DRagLint.Query.HoverModel.pas',
   DRagLint.Symbol.Describe in '..\query\DRagLint.Symbol.Describe.pas',

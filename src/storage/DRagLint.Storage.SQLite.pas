@@ -2186,6 +2186,21 @@ type
       /// (pre-purity index: a writable open migrates them in first).</returns>
       /// <remarks>Implements ISymbolStore.PurityNeedsRun.</remarks>
       function PurityNeedsRun: Boolean;
+      /// <summary>Concept-search stage: syncs symbol_search with symbols.</summary>
+      /// <returns>Rows inserted.</returns>
+      /// <remarks>Implements ISymbolStore.BuildSymbolSearch (see there).</remarks>
+      function BuildSymbolSearch: Integer;
+      /// <summary>True when SearchConcept can answer on this DB.</summary>
+      /// <returns>See ISymbolStore.ConceptSearchReady.</returns>
+      /// <remarks>Implements ISymbolStore.ConceptSearchReady.</remarks>
+      function ConceptSearchReady: Boolean;
+      /// <summary>Ranked concept search (query --concept).</summary>
+      /// <param name="AWords">Free-text question.</param>
+      /// <param name="ALimit">Maximum rows; &lt; 1 means 20.</param>
+      /// <param name="AKinds">Comma-separated kind filter; '' = all.</param>
+      /// <returns>See ISymbolStore.SearchConcept.</returns>
+      /// <remarks>Implements ISymbolStore.SearchConcept.</remarks>
+      function SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string = ''): TArray<TConceptHit>;
       /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
       /// the purity stage (one query instead of one per routine).</summary>
       /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
@@ -9620,6 +9635,21 @@ begin
     stage fills them. Probing the column would itself be "no such column". }
   if not HasEffectCols then Exit(True);
   Result:= ProbeExists('SELECT 1 FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL LIMIT 1');
+end; // function
+
+function TSQLiteSymbolStore.BuildSymbolSearch: Integer;
+begin
+  Result:= 0; { XJ5-STUB: sub-lane (a) implements }
+end; // function
+
+function TSQLiteSymbolStore.ConceptSearchReady: Boolean;
+begin
+  Result:= False; { XJ5-STUB: sub-lane (a) implements }
+end; // function
+
+function TSQLiteSymbolStore.SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string): TArray<TConceptHit>;
+begin
+  Result:= nil; { XJ5-STUB: sub-lane (a) implements }
 end; // function
 
 function TSQLiteSymbolStore.GetAllSymbolFacts: TArray<TSymbolFacts>;

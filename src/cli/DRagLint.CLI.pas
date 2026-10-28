@@ -94,6 +94,7 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Core.CliError
+  , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
   , System.SysUtils
@@ -32073,6 +32074,24 @@ begin
   end;
 end; // function
 
+/// <summary>selftest ident-words: runs SelfTestIdentWords (concept search splitter).</summary>
+/// <returns>0 and IDENTWORDS-OK on success, 1 and IDENTWORDS-FAIL otherwise.</returns>
+function DoSelfTestIdentWords: Integer;
+var
+  Failure: string;
+begin
+  if SelfTestIdentWords(Failure) then
+  begin
+    Writeln('IDENTWORDS-OK');
+    Result:= 0;
+  end
+  else
+  begin
+    Writeln('IDENTWORDS-FAIL: ', Failure);
+    Result:= 1;
+  end;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -32091,10 +32110,11 @@ begin
   else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
   else if AArgs.SubCommand = 'studio-root'   then Result:= DoSelfTestStudioRoot
   else if AArgs.SubCommand = 'fact-wrap'     then Result:= DoSelfTestFactWrap
+  else if AArgs.SubCommand = 'ident-words'   then Result:= DoSelfTestIdentWords
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap, ident-words');
     Result:= 2;
   end;
 end; // function
