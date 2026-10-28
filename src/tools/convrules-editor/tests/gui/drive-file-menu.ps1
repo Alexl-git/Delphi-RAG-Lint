@@ -2,7 +2,11 @@
 # (feat/convert-tab, Task 3, 2026-09-29).
 # Usage: pwsh -File drive-file-menu.ps1 -Exe <path\ConvRulesEditor.exe>  (put a frozen drag-lint.exe beside it).
 # Writes its fixture book under a fresh %TEMP%\filemenu-<id> folder and deletes it on exit.
-param([string]$Exe)
+# DLGGAP (2026-10-28): File > Save posted while the Save As dialog is up (a command that opens NO dialog) must not
+# run under it (dlggap.save.not.run) and is reported once the dialog closes (dlggap.save.reported). RED on the
+# pre-dlggap exe: the dialog's native loop dispatched it and the book was written. -ProofNoDialogGate posts the
+# Save only AFTER the dialog is cancelled: both dlggap checks must then FAIL (the Save runs, nothing is refused).
+param([string]$Exe, [switch]$ProofNoDialogGate)
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class W {
@@ -178,6 +182,7 @@ public static class W {
 '@
 $script:pass = 0; $script:fail = 0
 trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
@@ -218,11 +223,14 @@ function SaveDialogTo($procId, $path) {
   Click (@(Find $dlg 'Button' '&Save')[0])
   return ''
 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # GATELEAK: see drive-convert-tab.ps1 env.vcl.atoms
 $p = Start-Process $Exe -ArgumentList "`"$book`"" -PassThru
 try {
   $main = [IntPtr]::Zero; $t0 = Get-Date
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $main = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($null -eq $main) { $main = [IntPtr]::Zero } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
+  $atoms = VclAtomsOf $p.Id $main
+  Check 'env.vcl.atoms' (($atoms.Control -ne 0) -and ($atoms.Window -ne 0)) ("control=$($atoms.Control) window=$($atoms.Window) ($($atoms.Names))")
   Start-Sleep -Seconds 2
   $caps = [W]::MenuCaptions($main)
   Check 'file.items' (($caps -match 'File\|New') -and ($caps -match 'File\|Save As\.\.\.') -and ($caps -match 'File\|Exit')) $caps
@@ -244,7 +252,18 @@ try {
   # Save As: cancelled keeps the (empty) path; then writes a new file.
   Check 'saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
   $dlg = WaitCls $p.Id '#32770' 20
-  if ($dlg -ne [IntPtr]::Zero) { Click (@(Find $dlg 'Button' 'Cancel')[0]) }
+  # gateleak: the Save As dialog's native loop never calls Application.OnMessage (InputGate cannot see it), so a
+  # File > Save As / File > Open posted to the disabled editor meanwhile ran under it. RED (b42433f9 exe) = 2: File > Open's
+  # discard prompt (TMessageForm 'Confirm') over the Save As dialog.
+  if ($dlg -ne [IntPtr]::Zero) {
+    [void][W]::InvokeMenu($main, 'File|Save As...'); [void][W]::InvokeMenu($main, 'File|Open...')
+    Start-Sleep -Milliseconds 1500
+    $nDlg = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -in '#32770', 'TMessageForm' }).Count
+    Check 'saveas.reentrant.not.nested' ($nDlg -eq 1) ("dialogs while Save As is up and Save As + Open are posted: $nDlg; " + (TopsNow $p.Id))
+  }
+  # Cancel every dialog up (on a RED exe the nested ones too), topmost first.
+  $t0 = Get-Date
+  while ((($d = WaitCls $p.Id 'TMessageForm' 0) -ne [IntPtr]::Zero -or ($d = WaitCls $p.Id '#32770' 0) -ne [IntPtr]::Zero) -and ((Get-Date) - $t0).TotalSeconds -lt 20) { Click (@([W]::Kids($d) | Where-Object { [W]::Txt($_) -eq 'Cancel' })[0]); Start-Sleep -Milliseconds 700 }
   Start-Sleep -Seconds 1
   # The book has had no path since File > New. If the cancelled Save As had kept the
   # abandoned path, plain Save would now write silently; it must still ASK.
@@ -281,7 +300,21 @@ try {
   }
   Check 'new.after.delete.prompts' ($why -eq '') $why
   Start-Sleep -Seconds 1
-  [void][W]::InvokeMenu($main, 'File|Save')
+  # DLGGAP: the book now has a path and an unsaved deletion, so a plain Save writes silently -- no dialog of its own.
+  # Posted while Save As is up, it must neither write nor vanish unreported.
+  Check 'dlggap.saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
+  $dlg = WaitCls $p.Id '#32770' 20
+  Check 'dlggap.saveas.dialog' ($dlg -ne [IntPtr]::Zero) (TopsNow $p.Id)
+  if (-not $ProofNoDialogGate) { [void][W]::InvokeMenu($main, 'File|Save') }
+  Start-Sleep -Milliseconds 2000
+  $wroteUnder = -not ((Get-Content $out -Raw) -match '#use GuardUnitX')
+  if ($dlg -ne [IntPtr]::Zero) { Click (@(Find $dlg 'Button' 'Cancel')[0]) }
+  if ($ProofNoDialogGate) { Start-Sleep -Milliseconds 700; [void][W]::InvokeMenu($main, 'File|Save'); Start-Sleep -Milliseconds 2000; $wroteUnder = -not ((Get-Content $out -Raw) -match '#use GuardUnitX') }
+  Check 'dlggap.save.not.run' (-not $wroteUnder) ("book written while the dialog was up: $wroteUnder")
+  $st = ''; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt 10) { $st = (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | '; if ($st -match 'Save was NOT run' -and $st -match 'file or folder dialog') { break }; Start-Sleep -Milliseconds 300 }
+  Check 'dlggap.save.reported' (($st -match 'Save was NOT run') -and ($st -match 'file or folder dialog')) ("status: $st")
+  Start-Sleep -Seconds 1  [void][W]::InvokeMenu($main, 'File|Save')
   $t0 = Get-Date; while ((Test-Path $out) -and ((Get-Content $out -Raw) -match 'GuardUnitX') -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500 }
   Start-Sleep -Seconds 2
 

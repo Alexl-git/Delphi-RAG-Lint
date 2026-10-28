@@ -16105,7 +16105,70 @@ begin
   Check('gate.title.unknown', (BusyTitleFor('', '  ') = BUSY_TITLE_UNKNOWN) and (BUSY_TITLE_UNKNOWN = 'another operation'));
 end;
 
-procedure TestConverterMinorsStartup;
+{ gateleak (2026-10-27): RunNativeDialog, the one re-entrancy guard of every native common
+  dialog (Add..., File > Open / Save As, the Unit Rules browses, the curation dialogs). Their
+  native loops never call Application.OnMessage, so the queue filter cannot refuse a command
+  posted meanwhile; the second dialog-opening command must not run while one is up. }
+procedure TestNativeDialogGuard;
+var
+  LUpInside, LInnerRan, LInnerResult, LRaised: Boolean;
+begin
+  Check('native.result.true', RunNativeDialog(function: Boolean begin Result:= True; end));
+  Check('native.result.false', not RunNativeDialog(function: Boolean begin Result:= False; end));
+  Check('native.idle', not NativeDialogUp, '(nothing is up between runs)');
+  LUpInside:= False; LInnerRan:= False; LInnerResult:= True;
+  RunNativeDialog(function: Boolean
+    begin
+      LUpInside:= NativeDialogUp;
+      LInnerResult:= RunNativeDialog(function: Boolean begin LInnerRan:= True; Result:= True; end);
+      Result:= True;
+    end);
+  Check('native.up.inside', LUpInside, '(the dialog is up while AExecute runs)');
+  Check('native.nested.not.run', not LInnerRan, '(a second dialog-opening command under the first runs nothing)');
+  Check('native.nested.false', not LInnerResult, '(and reads as cancelled)');
+  Check('native.down.after', not NativeDialogUp);
+  LRaised:= False;
+  try
+    RunNativeDialog(function: Boolean begin raise Exception.Create('dialog failed'); end);
+  except
+    on Exception do
+      LRaised:= True;
+  end;
+  Check('native.raise.propagates', LRaised);
+  Check('native.raise.clears', not NativeDialogUp, '(a raising dialog does not lock every later one)');
+  Check('native.runs.again', RunNativeDialog(function: Boolean begin Result:= True; end));
+end;
+
+{ dlggap (2026-10-28): RunNativeDialog stops only a SECOND dialog. A command that opens none (a
+  posted Save / Convert / Delete) was dispatched by the dialog's own native loop and ran under it.
+  NativeLoopVerdict is the filter the editor's WH_GETMESSAGE hook applies inside those loops. }
+procedure TestNativeLoopGate;
+const
+  WM_PAINT_ = $000F;
+  WM_TIMER_ = $0113;
+begin
+  Check('native.loop.idle.passes', NativeLoopVerdict(GATE_WM_COMMAND, False, True, '') = gvPass,
+    '(no dialog up: Application.OnMessage owns the VCL pumps)');
+  Check('native.loop.command.refused', NativeLoopVerdict(GATE_WM_COMMAND, True, True, '') = gvRefuse,
+    '(a posted Save / Convert / menu item for the editor under a dialog)');
+  Check('native.loop.bmclick.refused', NativeLoopVerdict(GATE_BM_CLICK, True, True, 'TButton') = gvRefuse,
+    '(a posted Delete button click)');
+  Check('native.loop.command.listbox.refused', NativeLoopVerdict(GATE_WM_COMMAND, True, True, 'TListBox') = gvRefuse,
+    '(a command stays a command whatever the class)');
+  Check('native.loop.dialog.input.passes', NativeLoopVerdict(GATE_WM_COMMAND, True, False, 'Button') = gvPass,
+    '(the dialog''s own buttons work)');
+  Check('native.loop.dialog.key.passes', NativeLoopVerdict(GATE_WM_KEYFIRST, True, False, 'Edit') = gvPass);
+  Check('native.loop.key.dropped', NativeLoopVerdict(GATE_WM_KEYFIRST, True, True, '') = gvDrop);
+  Check('native.loop.selection.dropped', NativeLoopVerdict(GATE_WM_LBUTTONDOWN, True, True, 'TListBox') = gvDrop);
+  Check('native.loop.press.refused', NativeLoopVerdict(GATE_WM_LBUTTONDOWN, True, True, 'TButton') = gvRefuse);
+  Check('native.loop.paint.passes', NativeLoopVerdict(WM_PAINT_, True, True, '') = gvPass);
+  Check('native.loop.timer.passes', NativeLoopVerdict(WM_TIMER_, True, True, '') = gvPass,
+    '(the notice timer runs; LostNoticeDeferred holds it while the editor is disabled)');
+  Check('native.loop.notice', LostCommandStatus('', 'Save', NATIVE_DIALOG_BUSY_TITLE)
+    = 'Save was NOT run: it was clicked while the editor was busy (a file or folder dialog was open). Click it again.');
+  Check('native.loop.notice.deferred', LostNoticeDeferred(0, False, False, False),
+    '(under the dialog the editor is disabled: the notice waits until it closes)');
+end;procedure TestConverterMinorsStartup;
 const
   FORM_ERR = '--form "X.pas" does not exist.';
   REQ_STATUS = 'Request from the IDE: convert 1 selected component(s)';
@@ -16496,6 +16559,8 @@ begin
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
     TestInputGate;
+    TestNativeDialogGuard;
+    TestNativeLoopGate;
     TestClassifyDeferred;
     TestCapabilityProbe;
     TestEncodingLevels;
