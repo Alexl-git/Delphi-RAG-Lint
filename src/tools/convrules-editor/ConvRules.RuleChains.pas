@@ -112,6 +112,8 @@ type
     Carried : Integer;
     /// <summary>#note lines added (the leading merge note not counted).</summary>
     Noted   : Integer;
+    /// <summary>The lines of an earlier stage dropped because a later stage has no line for their To-side path (spec A4 / A5): each one also has a #note in NewLines.</summary>
+    Dropped : TArray<string>;
     /// <summary>'' or why the merge is refused (spec A11); then nothing else is valid.</summary>
     Problem : string;
   end;
@@ -185,7 +187,12 @@ function ChainKeysAsked(const AAsked: TArray<string>; const AListed: TArray<TRul
 /// <param name="AProblems">MergeChainPlan.Problem of every chain refused.</param>
 /// <returns>The status text.</returns>
 function MergeStatusText(const AMerged, AProblems: TArray<string>): string;
-/// <summary>The text of an EXISTING stage book after a split appends to it: AExisting's blocks, its last block terminated, then AStage's blocks without AStage's '#depth' line (the existing book's own #depth governs).</summary>
+/// <summary>One merged chain's entry for MergeStatusText: AChainText alone, or with ' (dropped N line(s) the later stage does not map: l1; l2 -- see its #note)' when AMerge dropped lines (spec A4 / A5).</summary>
+/// <param name="AChainText">ChainPathText of the merged chain.</param>
+/// <param name="AMerge">The plan that was applied.</param>
+/// <returns>The entry text.</returns>
+function MergeChainText(const AChainText: string; const AMerge: TChainMerge): string;
+///<summary>The text of an EXISTING stage book after a split appends to it: AExisting's blocks, its last block terminated, then AStage's blocks without AStage's '#depth' line (the existing book's own #depth governs).</summary>
 /// <param name="AExisting">The stage book's current text.</param>
 /// <param name="AStage">StageBookText of the blocks being moved.</param>
 /// <returns>The text to write; CRLF.</returns>
@@ -225,6 +232,7 @@ type
     Composed: Integer;
     Carried : Integer;
     Noted   : Integer;
+    Dropped : TArray<string>;
   end;
 
 // File-scope directive kinds (spec 5.4 block range).
@@ -285,8 +293,10 @@ begin
   Result:= -1;
 end;
 
-// A2 / A3 / A4 for one #link of P.
-procedure MergeLink(APN: TRuleNode; const APLine: string; const AQ: TArray<TRuleNode>; var AUsed: TArray<Boolean>;
+// A2 / A3 / A4 for one #link of P. A4: Q has no line for the B-side path, so Q's pass drops that B property;
+// the merged link is dropped too (C need not have the path), with a #note and an entry in AC.Dropped, and its From
+// side becomes '#ignore A.y' -- the same result as A3, and the block still maps something, so Save keeps it.
+procedure MergeLink(APN: TRuleNode; const APLine, AQDesc: string; const AQ: TArray<TRuleNode>; var AUsed: TArray<Boolean>;
   ARes: TList<string>; var AC: TMergeCounts);
 var
   LHits: TArray<Integer>;
@@ -326,13 +336,16 @@ begin
     end
     else
     begin
-      ARes.Add(APLine);
-      Inc(AC.Carried);
+      ARes.Add(Format(MERGE_NOTE + 'dropped %s because %s has no #link or #ignore for %s; its From side is ignored below -- link it instead if the value should carry',
+        [APLine, AQDesc, Trim(APN.LinkTo)]));
+      Inc(AC.Noted);
+      MergeAddUnique(ARes, '#ignore ' + Trim(APN.LinkFrom));
+      AC.Dropped:= AC.Dropped + [APLine];
     end;
   end;
 end;
 
-// A5 for one #default of P.
+// A5 for one #default of P (unmatched: dropped like an A4 link).
 procedure MergeDefault(APN: TRuleNode; const APLine, AQDesc: string; const AQ: TArray<TRuleNode>; var AUsed: TArray<Boolean>;
   ARes: TList<string>; var AC: TMergeCounts);
 var
@@ -364,8 +377,9 @@ begin
     end
     else
     begin
-      ARes.Add(APLine);
-      Inc(AC.Carried);
+      ARes.Add(Format(MERGE_NOTE + 'dropped %s because %s has no #link for %s', [APLine, AQDesc, Trim(APN.DefTo)]));
+      Inc(AC.Noted);
+      AC.Dropped:= AC.Dropped + [APLine];
     end;
   end;
 end;
@@ -451,7 +465,7 @@ begin
       LPN:= ABook.ParseLine(LLine);
       try
         case LPN.Kind of
-          rnkLink   : MergeLink(LPN, LLine, LQ, LUsed, LRes, AC);
+          rnkLink   : MergeLink(LPN, LLine, AQDesc, LQ, LUsed, LRes, AC);
           rnkDefault: MergeDefault(LPN, LLine, AQDesc, LQ, LUsed, LRes, AC);
           rnkMigrate: MergeMigrate(LPN, LLine, LQ, LUsed, LRes, AC);
           else
@@ -517,13 +531,15 @@ begin
     if LLast.Units <> '' then
       LHdr:= LHdr + ', ' + LLast.Units;
     Result.NewLines:= ['#convert ' + LHdr,
-      Format(MERGE_NOTE + '%s = %s; %d composed, %d carried, %d noted -- validate on Save', [LDescs, LTarget, LC.Composed, LC.Carried, LC.Noted])];
+      Format(MERGE_NOTE + '%s = %s; %d composed, %d carried, %d dropped, %d noted -- validate on Save',
+        [LDescs, LTarget, LC.Composed, LC.Carried, Length(LC.Dropped), LC.Noted])];
     Result.NewLines:= Result.NewLines + LP.ToArray;
     for LI:= 1 to LBlank do
       Result.NewLines:= Result.NewLines + [''];
     Result.Composed:= LC.Composed;
     Result.Carried:= LC.Carried;
     Result.Noted:= LC.Noted;
+    Result.Dropped:= LC.Dropped;
   finally
     LP.Free;
   end;
@@ -1384,6 +1400,14 @@ begin
   Result:= Format('Merged %d chain(s): %s -- review the composed block, then Save', [Length(AMerged), string.Join(', ', AMerged)]);
   if Length(AProblems) > 0 then
     Result:= Result + '; not merged: ' + string.Join('; ', AProblems);
+end;
+
+function MergeChainText(const AChainText: string; const AMerge: TChainMerge): string;
+begin
+  Result:= AChainText;
+  if Length(AMerge.Dropped) > 0 then
+    Result:= Format('%s (dropped %d line(s) the later stage does not map: %s -- see its #note)',
+      [AChainText, Length(AMerge.Dropped), string.Join('; ', AMerge.Dropped)]);
 end;
 
 function StageAppendText(const AExisting, AStage: string): string;

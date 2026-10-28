@@ -8072,7 +8072,7 @@ begin
         var LHdr: Integer:= if LPlan.Problem = '' then ApplyChainMerge(FBook, LPlan) else -1;
         if LHdr >= 0 then
         begin
-          LMerged  := [ChainPathText(LNow)] + LMerged; // file order in the status
+          LMerged  := [MergeChainText(ChainPathText(LNow), LPlan)] + LMerged; // file order in the status
           LFirstHdr:= LHdr;
         end
         else
