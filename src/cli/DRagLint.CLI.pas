@@ -1875,7 +1875,7 @@ begin
     else if (A = '--concept') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.ConceptQuery:= ParamStr(i);
+      Result.ConceptQuery:= ParamStr(i);  // dl:ok duplicate-code@33b9 -- the one-value flag shape every ParseArgs branch repeats; folding it is a ParseArgs refactor, not this lane
     end
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True

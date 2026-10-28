@@ -3558,7 +3558,7 @@ uses
   , System.IOUtils
   , System.Math
   , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
-  , DRagLint.Storage.Schema
+  , DRagLint.Storage.Schema  // dl:unit DRagLint.Storage.Schema accepted -- the DDL constants exist only for this store: Migrate is their one reader, so they travel together
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY: ClearAllFiles stamps it (B-23) }
   , DRagLint.Query  .Fuzzy
@@ -9809,6 +9809,9 @@ var
   DocByDecl: TDictionary<string, string>;
   FileIds  : TArray<Integer>;
   CurFile, BlockEnd, LitFile, LitStart, LitEnd: Integer;
+  FldId, FldName, FldPName, FldDSum, FldDRem, FldFile, FldStart, FldEnd, FldText: TField;
+  Block    : TStringBuilder;
+  IdText   : TArray<string>;
 
   procedure FlushBlock;
   var
@@ -9816,6 +9819,8 @@ var
     Target, Idx: Integer;
     Prior : string;
   begin
+    BlockText:= Block.ToString;
+    Block.Clear;
     if (BlockText = '') or (not Starts.TryGetValue(CurFile, L)) then
     begin
       BlockText:= '';
@@ -9844,6 +9849,7 @@ begin
   FileSet  := TDictionary<Integer, Boolean>.Create;
   Starts   := TObjectDictionary<Integer, TList<Integer>>.Create([doOwnsValues]);
   DocByDecl:= TDictionary<string, string>.Create;
+  Block    := TStringBuilder.Create;
   Q        := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
@@ -9853,17 +9859,24 @@ begin
                  'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
                  'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
     Q.Open;
+    FldId   := Q.FieldByName('id');
+    FldName := Q.FieldByName('name');
+    FldPName:= Q.FieldByName('pname');
+    FldDSum := Q.FieldByName('dsum');
+    FldDRem := Q.FieldByName('drem');
+    FldFile := Q.FieldByName('file_id');
+    FldStart:= Q.FieldByName('start_line');
     while not Q.Eof do
     begin
-      Name      := Q.FieldByName('name').AsString;
-      Parent    := Q.FieldByName('pname').AsString;
-      DocSummary:= ConceptStripDocMarkup(Q.FieldByName('dsum').AsString);
-      R.Id       := Q.FieldByName('id').AsLargeInt;
-      R.FileId   := Q.FieldByName('file_id').AsInteger;
-      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      Name      := FldName.AsString;
+      Parent    := FldPName.AsString;
+      DocSummary:= ConceptStripDocMarkup(FldDSum.AsString);
+      R.Id       := FldId.AsLargeInt;
+      R.FileId   := FldFile.AsInteger;
+      R.StartLine:= FldStart.AsInteger;
       R.Tokens   := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
       R.Summary  := DocSummary;
-      R.Remarks  := ConceptStripDocMarkup(Q.FieldByName('drem').AsString);
+      R.Remarks  := ConceptStripDocMarkup(FldDRem.AsString);
       if R.Tokens = '' then R.Tokens:= Name.ToLower;
       Rows.Add(R);
       FileSet.AddOrSetValue(R.FileId, True);
@@ -9877,9 +9890,9 @@ begin
       FileFilter:= '';
       if Length(FileIds) <= MAX_IN_FILES then
       begin
-        for I:= 0 to High(FileIds) do
-          FileFilter:= FileFilter + IfThen(I > 0, ',', '') + IntToStr(FileIds[I]);
-        FileFilter:= ' AND file_id IN (' + FileFilter + ')';
+        SetLength(IdText, Length(FileIds));
+        for I:= 0 to High(FileIds) do IdText[I]:= IntToStr(FileIds[I]);
+        FileFilter:= ' AND file_id IN (' + string.Join(',', IdText) + ')';
       end;
       Q.SQL.Text:= 'SELECT DISTINCT file_id, start_line FROM symbols WHERE 1 = 1' + FileFilter + ' ORDER BY file_id, start_line';  // dl:ok sql-injection-concat@7486 -- FileFilter is built only from IntToStr of file ids read from the DB
       Q.Open;
@@ -9896,19 +9909,22 @@ begin
       Q.Open;
       CurFile:= -1;
       BlockEnd:= -1;
-      BlockText:= '';
+      FldFile := Q.FieldByName('file_id');
+      FldStart:= Q.FieldByName('start_line');
+      FldEnd  := Q.FieldByName('end_line');
+      FldText := Q.FieldByName('text');
       while not Q.Eof do
       begin
-        LitFile := Q.FieldByName('file_id').AsInteger;
-        LitStart:= Q.FieldByName('start_line').AsInteger;
-        LitEnd  := Q.FieldByName('end_line').AsInteger;
+        LitFile := FldFile.AsInteger;
+        LitStart:= FldStart.AsInteger;
+        LitEnd  := FldEnd.AsInteger;
         if (LitFile <> CurFile) or (LitStart > BlockEnd + 1) then
         begin
           FlushBlock;
           CurFile:= LitFile;
         end;
-        if BlockText <> '' then BlockText:= BlockText + ' ';
-        BlockText:= BlockText + Q.FieldByName('text').AsString;
+        if Block.Length > 0 then Block.Append(' ');
+        Block.Append(FldText.AsString);
         BlockEnd := LitEnd;
         Q.Next;
       end; // while
@@ -9936,7 +9952,7 @@ begin
       try
         Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
         Q.ExecSQL;
-        for R in Rows do
+        for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
         begin
           Ins.ParamByName('sid').AsLargeInt:= R.Id;
           Ins.ParamByName('tok').Value:= R.Tokens;
@@ -9955,6 +9971,7 @@ begin
     Result:= Rows.Count;
   finally
     Q.Free;
+    Block.Free;
     DocByDecl.Free;
     Starts.Free;
     FileSet.Free;
@@ -9987,6 +10004,7 @@ var
     I  : Integer;
     H  : TConceptHit;
     Sql: string;
+    ColSid, ColQn, ColKd, ColPth, ColLn, ColSc, ColTok, ColSm, ColRmk: TField;
   begin
     Sql:= 'SELECT s.id AS sid, s.qualified_name AS qn, s.kind AS kd, f.path AS fpath, s.start_line AS ln, ' +
           '-bm25(symbol_search_fts, 3.0, 2.0, 1.0) AS sc, ss.tokens AS tok, ss.summary AS sm, ss.remarks AS rmk ' +
@@ -10008,17 +10026,26 @@ var
       Q.ParamByName('n').AsInteger:= AMax;
       for I:= 0 to High(Kinds) do Q.ParamByName('k' + IntToStr(I)).AsString:= Kinds[I];
       Q.Open;
+      ColSid:= Q.FieldByName('sid');
+      ColQn := Q.FieldByName('qn');
+      ColKd := Q.FieldByName('kd');
+      ColPth:= Q.FieldByName('fpath');
+      ColLn := Q.FieldByName('ln');
+      ColSc := Q.FieldByName('sc');
+      ColTok:= Q.FieldByName('tok');
+      ColSm := Q.FieldByName('sm');
+      ColRmk:= Q.FieldByName('rmk');
       while not Q.Eof do
       begin
-        H.SymbolId     := Q.FieldByName('sid').AsLargeInt;
+        H.SymbolId     := ColSid.AsLargeInt;
         if not Seen.Contains(H.SymbolId) then
         begin
-          H.QualifiedName:= Q.FieldByName('qn').AsString;
-          H.Kind         := Q.FieldByName('kd').AsString;
-          H.FilePath     := Q.FieldByName('fpath').AsString;
-          H.Line         := Q.FieldByName('ln').AsInteger;
-          H.Score        := Q.FieldByName('sc').AsFloat;
-          H.Matched      := ConceptMatchedColumns(Terms, Q.FieldByName('tok').AsString, Q.FieldByName('sm').AsString, Q.FieldByName('rmk').AsString);
+          H.QualifiedName:= ColQn.AsString;
+          H.Kind         := ColKd.AsString;
+          H.FilePath     := ColPth.AsString;
+          H.Line         := ColLn.AsInteger;
+          H.Score        := ColSc.AsFloat;
+          H.Matched      := ConceptMatchedColumns(Terms, ColTok.AsString, ColSm.AsString, ColRmk.AsString);
           H.AllTerms     := AAllTerms;
           Hits.Add(H);
           Seen.Add(H.SymbolId);
