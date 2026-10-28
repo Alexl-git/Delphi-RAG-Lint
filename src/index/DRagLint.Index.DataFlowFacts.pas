@@ -439,17 +439,39 @@ begin
   Result:= IsParenRooted(N.ChildByField('lhs'));
 end;
 
+{ Mirror of the parser's IsHardCastRootedReceiver (ref-gap G5): a bare identifier
+  called with exactly ONE argument -- T(X) -- or a dotted identifier chain rooted
+  in one, T(X).A.B. A cast and a one-argument function call look alike; the
+  parser records the ref either way and the resolver decides. }
+function IsHardCastRooted(const N: TTSNode): Boolean;
+var
+  E, A, R: TTSNode;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if N.NodeType = 'exprCall' then
+  begin
+    E:= N.ChildByField('entity');
+    A:= N.ChildByField('args');
+    Exit((not E.IsNull) and (E.NodeType = 'identifier') and (not A.IsNull) and (A.NamedChildCount = 1));
+  end;
+  if N.NodeType <> 'exprDot' then Exit;
+  R:= N.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsHardCastRooted(N.ChildByField('lhs'));
+end;
+
 { The receiver shapes L for which the parser emits a 'member-access' ref at the
-  member identifier of `L.M` (DRagLint.Parser.Delphi13, ref-gaps G, G2, G3, G4):
-  a plain identifier other than Self, a dotted identifier chain, an indexed or a
-  parenthesised root. Mirrored here so every 'write' row and every src 'ref' row
+  member identifier of `L.M` (DRagLint.Parser.Delphi13, ref-gaps G, G2, G3, G4, G5):
+  a plain identifier other than Self, a dotted identifier chain, an indexed, a
+  parenthesised or a hard-cast root. Mirrored here so every 'write' row and every src 'ref' row
   lands on a refs row (run_dataflow_facts.ps1 joins them). }
 function RefShapeOk(const L: TTSNode; AIsSelf: Boolean): Boolean;
 begin
   Result:= False;
   if L.IsNull then Exit;
   if L.NodeType = 'identifier' then Exit(not AIsSelf);
-  Result:= ((L.NodeType = 'exprDot') and IsDottedIdentChain(L)) or IsIndexedReceiver(L) or IsParenRooted(L);
+  Result:= ((L.NodeType = 'exprDot') and IsDottedIdentChain(L)) or IsIndexedReceiver(L) or IsParenRooted(L) or IsHardCastRooted(L);
 end;
 { ---- TTaintReach -------------------------------------------------------- }
 
