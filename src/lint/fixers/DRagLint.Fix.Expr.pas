@@ -193,6 +193,13 @@ end;
 
 { ---- ifthen-to-if-expression ---- }
 
+{ True when AOperand is a bare identifier whose declared type is an array (so it cannot join an if-expression). }
+function IsArrayOperand(const AFinding: TLintFinding; const AOperand: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(Trim(AOperand), '^' + IDENT_RE + '$') and
+    TRegEx.IsMatch(Trim(DeclTypeOf(AFinding.FilePath, AFinding.StartLine, Trim(AOperand))), '^array\b', [roIgnoreCase]);
+end;
+
 { ifthen-to-if-expression: `if C then X := A else X := B;` -> `X := if C then A else B;`,
   one line, in the statement's own indent. }
 function FixIfThenToIfExpr(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
@@ -225,6 +232,8 @@ begin
   if not Match.Success then Exit;
   if TRegEx.IsMatch(Match.Groups['c'].Value + ' ' + Match.Groups['a'].Value + ' ' + Match.Groups['b'].Value,
     NESTED, [roIgnoreCase]) then Exit;
+  { a bare array-typed operand (array of Char beside a string) is not an if-expression operand: E2010 }
+  if IsArrayOperand(AFinding, Match.Groups['a'].Value) or IsArrayOperand(AFinding, Match.Groups['b'].Value) then Exit;
   NewTxt:= Match.Groups['l'].Value + Match.Groups['op'].Value + 'if ' + Match.Groups['c'].Value + ' then ' +
     Match.Groups['a'].Value + ' else ' + Match.Groups['b'].Value + Match.Groups['semi'].Value;
   E:= Default(TTextEdit);
@@ -371,7 +380,7 @@ begin
     if (Word = '') or not END_WORDS.Contains('|' + Word + '|') then Exit;
   end;
   AEdit:= ReplaceEdit(AFinding.FilePath, AFinding.StartLine, A0, Copy(Line, A0, P - A0),
-    IfThen(Neq, 'not ', '') + 'SameValue(' + Lhs + ', ' + Rhs + ')');
+    IfThen(Neq, 'not ', '') + 'System.Math.SameValue(' + Lhs + ', ' + Rhs + ')');
   Result:= True;
 end;
 
@@ -388,6 +397,8 @@ begin
   Lines:= TStringList.Create;
   try
     Lines.LoadFromFile(APath);
+    { a unit declaring its own SameValue hides System.Math's: the rewrite would call the wrong overload set }
+    if TRegEx.IsMatch(Lines.Text, '^\s*(?:function|procedure)\s+SameValue\b', [roIgnoreCase, roMultiLine]) then Exit;
     for F in AFindings do
       if SameText(F.RuleId, 'float-equality-comparison') and SameText(F.FilePath, APath) and
          FloatEqualityEdit(F, Lines, E) then

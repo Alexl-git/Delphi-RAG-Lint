@@ -856,7 +856,10 @@ begin
           if AsPos > 1 then
           begin
             Repl:= TrimRight(Copy(Span, 1, AsPos - 1));
-            if Repl <> '' then
+            { only a bare identifier whose declared type is known and is not interface-looking (I + capital):
+              IFoo as TObject is the only way from an interface to its instance, never redundant. }
+            if (Repl <> '') and TRegEx.IsMatch(Repl, '^[A-Za-z_]\w*$') and (DeclTypeOf(F.FilePath, F.StartLine, Repl) <> '') and
+               not TRegEx.IsMatch(DeclTypeOf(F.FilePath, F.StartLine, Repl), '^I[A-Z]') then
             begin
               AddReplaceEdit(F, F.EndCol, Repl);
             end;
@@ -1216,6 +1219,7 @@ end;
 
 function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;
 var
+  UnitNameRe: string;
   InUses: Boolean;
   T     : string ;
   M     : Integer;
@@ -1223,7 +1227,10 @@ begin
   AEdit:= Default(TTextEdit);
   Result:= False;
   if AUnit = '' then Exit;
-  { scan every uses clause (from the keyword to its ';') for AUnit as a whole name }
+  { scan every uses clause (from the keyword to its ';') for AUnit as a whole name; the unit-scope alias counts too
+    (System.Math is the same unit as Math: adding both is E2004) }
+  UnitNameRe:= TRegEx.Escape(AUnit);
+  if AUnit.StartsWith('System.', True) then UnitNameRe:= '(?:System\.)?' + TRegEx.Escape(Copy(AUnit, Length('System.') + 1, MaxInt));
   InUses:= False;
   for M:= 0 to ALines.Count - 1 do
   begin
@@ -1231,7 +1238,7 @@ begin
     if (T = 'uses') or T.StartsWith('uses ') then InUses:= True;
     if InUses then
     begin
-      if TRegEx.IsMatch(ALines[M], '(^|[\s,])' + TRegEx.Escape(AUnit) + '\s*([,;]|$|\{|//)', [roIgnoreCase]) then Exit;
+      if TRegEx.IsMatch(ALines[M], '(^|[\s,])' + UnitNameRe + '\s*([,;]|$|\{|//)', [roIgnoreCase]) then Exit;
       if ALines[M].Contains(';') then InUses:= False;
     end;
   end;

@@ -313,6 +313,12 @@ end;
 
 { ------------------------------------------------------------------ inherited-bare }
 
+{ True when a class declaration line in the file declares procedure AMeth with the override directive. }
+function DcDeclaredOverride(ALines: TStringList; const AMeth: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(ALines.Text, '^\s*procedure\s+' + TRegEx.Escape(AMeth) + '\b[^\r\n]*\boverride\s*;', [roIgnoreCase, roMultiLine]);
+end;
+
 { inherited-bare: `inherited;` -> `inherited <Method>(<param names>);` from the enclosing implementation header.
   Declines for a function (the bare form forwards the result), for a constructor WITH parameters (a bare
   `inherited;` there legally reaches an ancestor constructor of a different signature, e.g. TObject.Create),
@@ -337,6 +343,8 @@ begin
   if not DcBodyRange(ALines, H, SemiLine, BodyBegin, BodyEnd) then Exit;
   if (AFinding.StartLine <= BodyBegin) or (AFinding.StartLine >= BodyEnd) then Exit;
   Meth:= Copy(QName, LastDelimiter('.', QName) + 1, MaxInt);
+  { a procedure that is not declared override may have no ancestor method of its name (an event handler): decline }
+  if (Kind = 'procedure') and not DcDeclaredOverride(ALines, Meth) then Exit;
   Text:= DcHeaderText(ALines, H, SemiLine);
   Names:= TList<string>.Create;
   try
@@ -607,6 +615,32 @@ begin
     Masks.Free;
   end;
 end;
+{ True when the file uses AName (bare or as the last segment of a dotted path) where a variable is required:
+  the first argument of Inc / Dec / Include / Exclude, or the operand of @ -- a property cannot stand there. }
+function DcFieldUsedAsVariable(ALines: TStringList; const AName: string): Boolean;
+var
+  Esc: string;
+begin
+  Esc:= TRegEx.Escape(AName);
+  Result:= TRegEx.IsMatch(ALines.Text, '\b(?:Inc|Dec|Include|Exclude)\s*\(\s*(?:\w+\.)*' + Esc + '\b', [roIgnoreCase]) or
+    TRegEx.IsMatch(ALines.Text, '@\s*(?:\w+\.)*' + Esc + '\b', [roIgnoreCase]);
+end;
+{ True when a later plain field line in the class (before ALast) names a field that the fixer will decline
+  (var/out argument or Inc / Dec / @ target): it would stay a field AFTER the earlier converted properties, which
+  Delphi rejects (E2169). }
+function DcLaterSiblingStaysField(ALines: TStringList; AFrom, ALast: Integer): Boolean;
+var
+  I: Integer;
+  M: TMatch;
+begin
+  Result:= False;
+  for I:= AFrom to ALast - 1 do
+  begin
+    M:= TRegEx.Match(ALines[I - 1], '^\s*(\w+)\s*:\s*[^\s;=\[\(]+\s*;\s*$');
+    if M.Success and (DcFieldPassedAsVarArg(ALines, M.Groups[1].Value) or DcFieldUsedAsVariable(ALines, M.Groups[1].Value)) then Exit(True);
+  end;
+end;
+
 { public-field: `X: T;` in a public section -> a same-named property `property X: T read FX write FX;` plus a
   private `FX: T;` (in the class's first `private` section, else in a new `private` section opened just above the
   `public` line). Same name, so no call site changes. Declines for anything but a lone, comment-free `X: T;` with a
@@ -627,6 +661,7 @@ begin
   if (AFinding.StartCol < 1) or (AFinding.EndCol > Length(Line) + 1) then Exit;
   Name:= Copy(Line, AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
   if DcFieldPassedAsVarArg(ALines, Name) then Exit;   { decline: passed as var/out }
+  if DcFieldUsedAsVariable(ALines, Name) then Exit;   { decline: Inc / Dec / @ target }
   M:= TRegEx.Match(Line, '^(\s*)' + TRegEx.Escape(Name) + '\s*:\s*([^\s;=\[\(]+)\s*;\s*$', [roIgnoreCase]);
   if not M.Success or (Length(M.Groups[1].Value) <> AFinding.StartCol - 1) then Exit;
   Ind:= M.Groups[1].Value;
@@ -657,11 +692,13 @@ begin
       Break;
     end;
   if ClassLast = 0 then Exit;
+  if DcLaterSiblingStaysField(ALines, AFinding.StartLine + 1, ClassLast) then Exit;   { decline: a sibling stays a field }
   PrivLine:= 0;
   for I:= ClassFirst to ClassLast do
   begin
     if TRegEx.IsMatch(ALines[I - 1], '\bF' + TRegEx.Escape(Name) + '\b', [roIgnoreCase]) then Exit;
-    if (PrivLine = 0) and TRegEx.IsMatch(ALines[I - 1], '^\s*(?:strict\s+)?private\s*$', [roIgnoreCase]) then PrivLine:= I;
+    { only a private section ABOVE the public one: a property may not read a field declared after it }
+    if (PrivLine = 0) and (I < PubLine) and TRegEx.IsMatch(ALines[I - 1], '^\s*(?:strict\s+)?private\s*$', [roIgnoreCase]) then PrivLine:= I;
   end;
   EProp:= DcNewEdit(AFinding, tekReplaceLines, AFinding.StartLine);
   EProp.EndLine   := AFinding.StartLine;

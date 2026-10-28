@@ -11948,16 +11948,52 @@ begin
   ACfg.SetDisabled(Dis);
 end;
 
+type
+  /// <summary>Owner handle for the SARIF rule-metadata map, so the lookup closure keeps it alive and frees it with the closure.</summary>
+  ISarifMetaMap = interface
+    /// <summary>The rule id to metadata map; owned by the handle.</summary>
+    function Map: TDictionary<string, TSarifRuleMeta>;
+  end;
+
+  /// <summary>Reference-counted owner of the metadata map; frees it when the last reference (the lookup closure) goes.</summary>
+  TSarifMetaMap = class(TInterfacedObject, ISarifMetaMap)
+  strict private
+    FMap: TDictionary<string, TSarifRuleMeta>;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function Map: TDictionary<string, TSarifRuleMeta>;
+  end;
+
+constructor TSarifMetaMap.Create;
+begin
+  inherited Create;
+  FMap:= TDictionary<string, TSarifRuleMeta>.Create;
+end;
+
+destructor TSarifMetaMap.Destroy;
+begin
+  FMap.Free;
+  inherited;
+end;
+
+function TSarifMetaMap.Map: TDictionary<string, TSarifRuleMeta>;
+begin
+  Result:= FMap;
+end;
+
 /// <summary>The rule-metadata lookup the SARIF writer needs (title, category, severity, labels).</summary>
 /// <param name="ARulesDir">The --rules-dir value ('' = rules beside the exe).</param>
 /// <returns>A lookup over the rule catalog; False for an id the catalog does not know.</returns>
 function SarifMetaLookup(const ARulesDir: string): TSarifMetaLookup;
 var
-  Meta: TDictionary<string, TSarifRuleMeta>;
-  R   : TRuleInfo;
-  M   : TSarifRuleMeta;
+  Holder: ISarifMetaMap;
+  Meta  : TDictionary<string, TSarifRuleMeta>;
+  R     : TRuleInfo;
+  M     : TSarifRuleMeta;
 begin
-  Meta:= TDictionary<string, TSarifRuleMeta>.Create;
+  Holder:= TSarifMetaMap.Create;
+  Meta:= Holder.Map;
   for R in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(ARulesDir, '') do
   begin
     M.Title:= R.Title; M.Category:= R.Category; M.Severity:= R.DefaultSeverity; M.Labels:= R.Compliance;
@@ -11966,7 +12002,7 @@ begin
   Result:=
     function(const ARuleId: string; out AMeta: TSarifRuleMeta): Boolean
     begin
-      Result:= Meta.TryGetValue(ARuleId, AMeta);
+      Result:= Holder.Map.TryGetValue(ARuleId, AMeta);
     end;
 end;
 
