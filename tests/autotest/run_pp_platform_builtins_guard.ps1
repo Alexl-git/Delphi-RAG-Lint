@@ -24,10 +24,10 @@ function Get-Set($plat) {
   $out = & $Exe pp-profile --platform $plat 2>&1 | ForEach-Object { "$_".Trim().ToLowerInvariant() }
   ,@($out | Where-Object { $_ -match '^[a-z_][a-z0-9_]*$' })
 }
-$common = 'unicode','conditionalexpressions','compiler_version_37','ver370'
+$common = 'unicode','conditionalexpressions','ver370','nativecode','dcc','weakref'
 $cases = [ordered]@{
-  'Win32'      = @{ has = @('mswindows','win32','cpux86') + $common; not = @('win64','posix','cpu64bits') }
-  'Win64'      = @{ has = @('mswindows','win64','cpu64bits','cpux86_64') + $common; not = @('win32','posix','linux') }
+  'Win32'      = @{ has = @('mswindows','win32','cpux86','cpu386','cpu32bits','assembler','underscoreimportname') + $common; not = @('win64','posix','cpu64bits','cpux64','compiler_version_37') }
+  'Win64'      = @{ has = @('mswindows','win64','cpu64bits','cpux64','assembler') + $common; not = @('win32','posix','linux','cpux86_64','compiler_version_37') }
   'Win64x'     = @{ has = @('mswindows','win64','cpu64bits','cpux64') + $common; not = @('win32','posix','linux') }
   'Linux64'    = @{ has = @('linux','linux64','posix','posix64','cpux64','cpu64bits','externallinker') + $common; not = @('mswindows','win64','macos','android') }
   'OSX64'      = @{ has = @('macos','macos64','osx','osx64','posix','posix64','cpux64','cpu64bits') + $common; not = @('mswindows','linux','ios','cpuarm64') }
@@ -43,6 +43,12 @@ foreach ($p in $cases.Keys) {
   foreach ($s in $cases[$p].has) { Check "$p has $s" ($set -contains $s) }
   foreach ($s in $cases[$p].not) { Check "$p lacks $s" ($set -notcontains $s) }
 }
+# Compiler ground truth (dcc32 / dcc64 probe, 2026-10-28): EXACT sets.
+$exact = @{
+  'Win32' = 'assembler,conditionalexpressions,cpu32bits,cpu386,cpux86,dcc,mswindows,nativecode,underscoreimportname,unicode,ver370,weakref,win32'
+  'Win64' = 'assembler,conditionalexpressions,cpu64bits,cpux64,dcc,mswindows,nativecode,unicode,ver370,weakref,win64'
+}
+foreach ($p in $exact.Keys) { $got = ((Get-Set $p) | Sort-Object) -join ','; Check "$p EXACT = compiler output" ($got -eq $exact[$p]) $got }
 $unk = Get-Set 'NoSuchPlatform'; $w64 = Get-Set 'Win64'
 Check 'unknown platform = Win64 default set' ((($unk -join ',') -eq ($w64 -join ',')) -and $unk.Count -gt 0)
 if ($script:Failed) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }

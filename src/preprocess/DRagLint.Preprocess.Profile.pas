@@ -30,14 +30,19 @@ uses
   System.Generics.Collections,
   DRagLint.Preprocess.Types;
 
+/// <summary>The Delphi 13 target platform names PlatformBuiltins knows.</summary>
+/// <returns>The platform names, Win32 and Win64 first.</returns>
+/// <remarks>Pure. Lets a caller walk every platform table.</remarks>
+function KnownPlatforms: TArray<string>;
+
 /// <summary>Returns the built-in compiler defines for the given target
-/// platform, ALL LOWERCASED, for Delphi 13 / RAD Studio 37 (CompilerVersion 37,
-/// VER370). 'Win64' -> mswindows, win64, cpu64bits, cpux86_64, unicode,
-/// conditionalexpressions, compiler_version_37, ver370. 'Win32' -> mswindows,
-/// win32, cpux86, unicode, conditionalexpressions, compiler_version_37, ver370
-/// (no win64/cpu64bits/cpux86_64). Win64x, Linux64, OSX64, OSXARM64, Android,
+/// platform, ALL LOWERCASED, for Delphi 13 / RAD Studio 37 (VER370). 'Win32' and
+/// 'Win64' are EXACTLY what dcc32 / dcc64 report as defined (e.g. Win64 has
+/// cpux64, cpu64bits, win64, mswindows, assembler, weakref, nativecode, dcc;
+/// Win32 has cpux86, cpu386, cpu32bits, win32, underscoreimportname). Win64x,
+/// Linux64, OSX64, OSXARM64, Android,
 /// Android64, iOSDevice64 and iOSSimARM64 each get their own POSIX / CPU / OS
-/// set (see the constants in the implementation for the source). Platform
+/// set (UNVERIFIED: no cross compiler is installed). Platform
 /// match is case-insensitive; an unknown platform falls back to the Win64
 /// set.</summary>
 /// <param name="APlatform">A Delphi 13 target platform name listed above
@@ -254,35 +259,54 @@ const
   // <Platform value="Win64">True</Platform> in the BorlandProject section.
   PLATFORM_ENABLED_PATTERN = '<Platform\s+value="([^"]+)"\s*>\s*True\s*</Platform>';
 
+function KnownPlatforms: TArray<string>;
+begin
+  Result := TArray<string>.Create('Win32', 'Win64', 'Win64x', 'Linux64', 'OSX64',
+    'OSXARM64', 'Android', 'Android64', 'iOSDevice64', 'iOSSimARM64');
+end;
+
 function PlatformBuiltins(const APlatform: string): TArray<string>;
 const
-  // Present on every Delphi 13 / RAD Studio 37 target.
-  COMMON = ',unicode,conditionalexpressions,compiler_version_37,ver370';
-  // Per-platform predefined conditionals. Source for every row below:
-  // Embarcadero DocWiki "Conditional compilation (Delphi)", predefined
-  // conditionals table (platform / CPU / OS groups), transcribed from the
-  // published table; the docwiki MCP was unreachable on 2026-10-28 and no RTL
-  // source ships under Studio\37.0\source, so a live IDE check is still due.
-  // Win32 / Win64 rows are the original sets and must not change.
-  WIN32_SET  = 'mswindows,win32,cpux86';
-  WIN64_SET  = 'mswindows,win64,cpu64bits,cpux86_64';
-  // DocWiki: Win64x (LLVM-based Windows 64) is a Windows 64 target: WIN64,
-  // MSWINDOWS, CPUX64, CPU64BITS.
-  WIN64X_SET = 'mswindows,win64,cpu64bits,cpux64';
-  // DocWiki: LINUX, LINUX64, POSIX, POSIX64, CPUX64, CPU64BITS, EXTERNALLINKER.
-  LINUX64_SET = 'linux,linux64,posix,posix64,cpux64,cpu64bits,externallinker';
-  // DocWiki: MACOS, MACOS64, OSX, OSX64, POSIX, POSIX64, CPU64BITS, with
+  // VERIFIED rows (Win32, Win64): produced by the installed Delphi 13 compilers
+  // (Studio\37.0\bin\dcc32.exe / dcc64.exe) on 2026-10-28 with a probe program
+  // that emits {$IFDEF X}{$MESSAGE HINT} for ~70 candidate symbols; the rows
+  // below are EXACTLY the symbols the compiler reported, nothing more. The
+  // compiler does NOT define COMPILER_VERSION_37 (removed from the old set).
+  WIN32_SET = 'cpu32bits,cpux86,cpu386,mswindows,win32,assembler,weakref,'
+    + 'underscoreimportname,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  WIN64_SET = 'cpux64,cpu64bits,mswindows,win64,assembler,weakref,'
+    + 'unicode,conditionalexpressions,ver370,nativecode,dcc';
+  // UNVERIFIED rows (no cross compiler is installed under Studio\37.0\bin; only
+  // dcc32 / dcc64 exist): best recollection of the Embarcadero DocWiki
+  // "Conditional compilation (Delphi)" table plus the compiler-wide symbols the
+  // probe showed on both Windows compilers (unicode, conditionalexpressions,
+  // ver370, nativecode, dcc, weakref). Re-verify when a cross compiler is
+  // available.
+  // UNVERIFIED Win64x (LLVM-based Windows 64): taken to equal Win64.
+  WIN64X_SET = WIN64_SET;
+  // UNVERIFIED Linux64: LINUX, LINUX64, POSIX, POSIX64, CPUX64, CPU64BITS,
+  // EXTERNALLINKER.
+  LINUX64_SET = 'linux,linux64,posix,posix64,cpux64,cpu64bits,externallinker,assembler,'
+    + 'weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  // UNVERIFIED macOS: MACOS, MACOS64, OSX, OSX64, POSIX, POSIX64, CPU64BITS,
   // CPUX64 (Intel) or CPUARM + CPUARM64 (Apple silicon); EXTERNALLINKER.
-  OSX64_SET    = 'macos,macos64,osx,osx64,posix,posix64,cpux64,cpu64bits,externallinker';
-  OSXARM64_SET = 'macos,macos64,osx,osx64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
-  // DocWiki: ANDROID + ANDROID32 / ANDROID64, POSIX + POSIX32 / POSIX64, CPUARM
-  // (+ CPUARM32 / CPUARM64), CPU32BITS / CPU64BITS. LINUX is NOT defined.
-  ANDROID_SET   = 'android,android32,posix,posix32,cpuarm,cpuarm32,cpu32bits,externallinker';
-  ANDROID64_SET = 'android,android64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
-  // DocWiki: IOS, IOS64, IOSDEVICE, IOSDEVICE64 (device) or IOSSIMULATOR
-  // (simulator), plus MACOS, POSIX, POSIX64, CPUARM, CPUARM64, CPU64BITS.
-  IOSDEV64_SET = 'ios,ios64,iosdevice,iosdevice64,macos,macos64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
-  IOSSIM64_SET = 'ios,ios64,iossimulator,macos,macos64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker';
+  OSX64_SET = 'macos,macos64,osx,osx64,posix,posix64,cpux64,cpu64bits,externallinker,assembler,'
+    + 'weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  OSXARM64_SET = 'macos,macos64,osx,osx64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker,'
+    + 'weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  // UNVERIFIED Android: ANDROID + ANDROID32 / ANDROID64, POSIX + POSIX32 /
+  // POSIX64, CPUARM (+ CPUARM32 / CPUARM64), CPU32BITS / CPU64BITS; no LINUX.
+  ANDROID_SET = 'android,android32,posix,posix32,cpuarm,cpuarm32,cpu32bits,externallinker,'
+    + 'weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  ANDROID64_SET = 'android,android64,posix,posix64,cpuarm,cpuarm64,cpu64bits,externallinker,'
+    + 'weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  // UNVERIFIED iOS: IOS, IOS64, IOSDEVICE, IOSDEVICE64 (device) or IOSSIMULATOR
+  // (simulator), plus MACOS, MACOS64, POSIX, POSIX64, CPUARM, CPUARM64,
+  // CPU64BITS.
+  IOSDEV64_SET = 'ios,ios64,iosdevice,iosdevice64,macos,macos64,posix,posix64,cpuarm,cpuarm64,'
+    + 'cpu64bits,externallinker,weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
+  IOSSIM64_SET = 'ios,ios64,iossimulator,macos,macos64,posix,posix64,cpuarm,cpuarm64,'
+    + 'cpu64bits,externallinker,weakref,unicode,conditionalexpressions,ver370,nativecode,dcc';
 var
   Spec: string;
 begin
@@ -298,7 +322,7 @@ begin
   else
     // Win64 is the default (also for unknown/empty platforms).
     Spec := WIN64_SET;
-  Result := SplitString(Spec + COMMON, ',');
+  Result := SplitString(Spec, ',');
 end;
 // Map a config name to its RAD Studio Cfg_N alias the way the IDE templates
 // lay it out: Release -> Cfg_2, Debug -> Cfg_1. Only the FALLBACK now, for a

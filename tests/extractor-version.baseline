@@ -1108,4 +1108,7 @@
 # 2026-10-28 lane ext-plat: PlatformBuiltins now covers Win64x, Linux64, OSX64, OSXARM64, Android, Android64,
 #   iOSDevice64, iOSSimARM64 (+ PlatformGroupSuffix); re-pinned within unreleased 1.26.0-alpha, no bump. Controller recomputes at the freeze merge.
 #   Superseded: 1.26.0-alpha|0a258c0449063bf1b56057ea6dbda480550a2202ab44811acdd4398d80250c4d
-1.26.0-alpha|0cf33f0abbeec93a4ea58c7f2d25c0a06b510fb5f475070c9f6c745cbc924c18
+# 2026-10-28 lane ext-plat (2): Win32/Win64 built-ins now EXACTLY the dcc32/dcc64 output (Win64 gains cpux64, assembler, weakref,
+#   nativecode, dcc; loses cpux86_64, compiler_version_37); other platforms UNVERIFIED. Re-pinned within unreleased 1.26.0-alpha, no bump.
+#   Superseded: 1.26.0-alpha|0cf33f0abbeec93a4ea58c7f2d25c0a06b510fb5f475070c9f6c745cbc924c18
+1.26.0-alpha|a03831243d308150efe0541f8a5b7b67495e96aa98f04d995fd7038acb2e7d11

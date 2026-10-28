@@ -103,8 +103,8 @@ type
     /// so no .dproj or $DEFINE is needed for it to be live.</summary>
     /// <param name="ASymbol">The symbol, any case.</param>
     /// <returns>True for VER followed by digits, any CPU-prefixed name, the
-    /// named platform/feature conditionals, and PlatformBuiltins of Win32 and
-    /// Win64. DEBUG and RELEASE are NOT predefined -- the IDE templates put them
+    /// named platform/feature conditionals, and PlatformBuiltins of every
+    /// platform in KnownPlatforms. DEBUG and RELEASE are NOT predefined -- the IDE templates put them
     /// in DCC_Define -- and return False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -389,7 +389,8 @@ end;
 
 class function TIfdefUndefinedCheck.IsCompilerPredefined(const ASymbol: string): Boolean;
 var
-  Sym: string;
+  Sym : string;
+  Plat: string;
 begin
   Sym:= LowerCase(ASymbol);
   // CPU*: CPUX86, CPUX64, CPU32BITS, CPU64BITS, CPUARM, CPUARM64, CPU386, ...
@@ -397,8 +398,10 @@ begin
   // disagree with the define profile the preprocessor uses.
   if Sym = '' then Exit(False);
   if IsVersionSymbol(Sym) or StartsStr(CPU_PREFIX, Sym) then Exit(True);
-  Result:= InList(Sym, PREDEFINED) or InList(Sym, PlatformBuiltins('Win32'))
-    or InList(Sym, PlatformBuiltins('Win64'));
+  if InList(Sym, PREDEFINED) then Exit(True);
+  for Plat in KnownPlatforms do
+    if InList(Sym, PlatformBuiltins(Plat)) then Exit(True);
+  Result:= False;
 end;
 
 // Include and unit search directories the .dproj names LITERALLY. An entry that
