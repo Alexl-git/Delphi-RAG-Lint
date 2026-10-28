@@ -699,6 +699,12 @@ try {
   if ($dlg -eq [IntPtr]::Zero) { [void](WaitIdle $p.Id $main 60); Click $add; $dlg = WaitOpenDlg $p.Id 20 }
   if ($dlg -eq [IntPtr]::Zero) { Check 'add.dialog' $false "no Open dialog after two Add... clicks; windows: $(TopsNow $p.Id); status: $(Status $main)"; return }
   Start-Sleep -Milliseconds 700
+  # GATELEAK: the Open dialog is a native modal loop that never calls Application.OnMessage, so InputGate cannot see
+  # a WM_COMMAND(Add...) posted to the disabled editor meanwhile; AddClick must not nest a second Open dialog.
+  [void][W]::PostMessage([CT]::Parent($add), 0x0111, [IntPtr]::Zero, $add)
+  Start-Sleep -Milliseconds 1200
+  $nOpen = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq '#32770' -and @([W]::Kids($_) | Where-Object { [W]::Cls($_) -eq 'Edit' }).Count -gt 0 }).Count
+  Check 'add.reentrant.not.nested' ($nOpen -eq 1) ('Open dialogs while one is up and Add... is posted again: ' + $nOpen)
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
   [EngineHold]::Arm($engine)   # DRV-2
   Click (@(Find $dlg 'Button' '&Open')[0])

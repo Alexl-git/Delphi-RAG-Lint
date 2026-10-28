@@ -173,6 +173,7 @@ type
       FAnalyzing      : Boolean;            // an analysis is running behind the progress window
       FAnalysisCancelled: Boolean;          // the last Analyze ended with ENGINE_OUTCOME_CANCELLED
       FPrompting      : Boolean;            // a C8 prompt (E6 offer, gate, E7) is up: drops are refused
+      FAddOpen        : Boolean;            // AddClick's Open dialog is up (a native loop InputGate cannot see): a second Add... is ignored
       FLockable       : TArray<TControl>;   // disabled while a run is in progress
       FTopPanel       : TPanel;
       FBottomPanel    : TPanel;
@@ -1313,14 +1314,26 @@ procedure TConvertTab.AddClick(Sender: TObject);
 var
   Dlg: TOpenDialog;
 begin
-  Dlg:= TOpenDialog.Create(Self);
+  // GATELEAK: the common dialog runs its own native loop, which never calls Application.OnMessage,
+  // so a WM_COMMAND(Add...) posted meanwhile reached here again and nested a second Open dialog.
+  if FAddOpen then
+    Exit;
+  FAddOpen:= True;
   try
-    Dlg.Filter := 'Delphi units and projects (*.pas;*.dpr;*.dproj)|*.pas;*.dpr;*.dproj';
-    Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
-    if Dlg.Execute then
-      AddSources(Dlg.Files.ToStringArray);
+    Dlg:= TOpenDialog.Create(Self);
+    try
+      Dlg.Filter := 'Delphi units and projects (*.pas;*.dpr;*.dproj)|*.pas;*.dpr;*.dproj';
+      Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
+      if Dlg.Execute then
+      begin
+        FAddOpen:= False; // the dialog is gone: AddSources pumps behind InputGate, which refuses a second Add...
+        AddSources(Dlg.Files.ToStringArray);
+      end;
+    finally
+      Dlg.Free;
+    end; // try
   finally
-    Dlg.Free;
+    FAddOpen:= False;
   end; // try
 end;
 
