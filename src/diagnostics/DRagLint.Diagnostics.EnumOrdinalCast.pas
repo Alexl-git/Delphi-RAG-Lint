@@ -65,7 +65,6 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.EnumOrdinalPersisted { CountImplicitOrdinals }
   ;
@@ -194,7 +193,7 @@ var
     Result:= '';
     try
       Lines:= TFile.ReadAllLines(AStore.GetFilePath(AEnum.FileId), TEncoding.ANSI);
-    except  // dl:ok try-except-swallowed -- an unreadable declaring file only means the pin cannot be proven: the enum counts as unpinned
+    except  // dl:ok try-except-swallowed@57ce -- an unreadable declaring file only means the pin cannot be proven: the enum counts as unpinned
       on EInOutError do Exit;
       on EStreamError do Exit;
       on EEncodingError do Exit;
@@ -311,7 +310,7 @@ var
     if N.IsNull then Exit(False);
     if (N.NodeType = 'exprParens') and (N.NamedChildCount = 1) then Exit(IsIntLiteral(N.NamedChild(0)));
     var Txt: string:= Trim(NodeStr(N));
-    Result:= (N.NodeType = 'literalNumber') and (Pos('.', Txt) = 0) and not StartsStr('-', Txt);
+    Result:= (N.NodeType = 'literalNumber') and not Txt.Contains('.') and not StartsStr('-', Txt);
   end;
 
   function SingleArg(const ACall: TTSNode): TTSNode;
