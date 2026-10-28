@@ -24,3 +24,9 @@ The task-oriented manual is `docs\converter\convrules-editor-manual.md` (rule la
 
 ## Reaching it from the IDE
 The IDE plugin starts the editor with a conversion request (see above); the editor has no IDE menu of its own.
+
+## Where to click
+
+**Conversion > Convert... (the IDE plugin starts it with --convert-request FILE and probes --write-capabilities FILE)**
+1. Choose Conversion > Convert... (opens the Convert tab)
+2. Or start ConvRulesEditor.exe with `--convert-request FILE` to open it pre-filled from the IDE

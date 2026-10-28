@@ -91,3 +91,15 @@ A from-side alternative (a uses change) is shown, not applied. One click on
 **Qualify #convert...** fixes one results row's book; **Qualify all...** covers the run
 but one dialog and one save decision per book. No undo beyond Don't Save. A comment on the `#convert` line itself is dropped when the line is
 rewritten (as for any header edit in the editor).
+
+## Where to click
+
+**Convert tab > Qualify #convert...**
+1. Choose Conversion > Convert... (opens the Convert tab)
+2. Run Convert; select a result row that reports an ambiguous #convert class
+3. Click Qualify #convert... and confirm the proposed line, then File > Save
+
+**Convert tab > Qualify all...**
+1. Choose Conversion > Convert... (opens the Convert tab)
+2. Run Convert
+3. Click Qualify all... to fix every ambiguous class, book by book

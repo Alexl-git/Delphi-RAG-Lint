@@ -4,10 +4,10 @@ title: Convert progress
 summary: "ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab"
 product: DL
 group: component-conversion
-order: 60005
+order: 60006
 since: 1.26.7-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.36.0-alpha
 ---
 
 # Convert progress
@@ -59,6 +59,13 @@ A Convert run (Conversion > Convert..., then Convert). Nothing to configure.
 ### Limits
 The engine's own progress inside one convert-apply call is not shown; a long
 apply shows `applying` with a ticking clock until it returns.
+
+### Where to click
+
+**Convert tab progress line**
+1. Choose Conversion > Convert... (opens the Convert tab)
+2. Check the books, add the units (Add...), click Convert
+3. Read the progress line under the buttons and in the status bar: unit, book, phase, elapsed
 
 ---
 

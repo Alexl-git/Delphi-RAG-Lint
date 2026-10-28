@@ -10,6 +10,7 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Standing task lists (not handoffs)
 
+- 2026-10-27 | lsp | release roll-up done: all LSP code merged by ENGINE (local main); fix/lsp-clear-diags-on-close f719c702+6cc58823 handed for after 1.37.0; only owner/IDE items + unowned hover ruling left | open | [HANDOFF-2026-10-27-lsp-release-rollup-done.md](HANDOFF-2026-10-27-lsp-release-rollup-done.md)
 - 2026-10-27 | engine | 1.36.0 DEPLOYED+pushed (main a6515adc, 2 LSP lanes merged); full W32/W64 re-parse running; Clippy wave: L0 done, L1-L12 lanes running (238 rules planned) | open | [HANDOFF](HANDOFF-2026-10-27-engine-1360-deployed-clippy-lanes-running.md)
 - 2026-10-27 | converter | CHAIN-1 T1-T5 on conv/chain1-impl (T6 next); D2 split + drv2b HELD for ENGINE 1.36.0 re-parse, then re-pin | open | [HANDOFF-2026-10-27-converter-chain1-t6-next-reparse-hold.md](HANDOFF-2026-10-27-converter-chain1-t6-next-reparse-hold.md)
 - 2026-10-27 | engine | 1.36.0 extract line merged to main (ext 1.25 / res 1.15), battery triaged + R1-R3 fixed; waiting owner deploy go, then parallel W32/W64 re-parse | resumed | [HANDOFF-2026-10-27-engine-136-merged-deploy-go-next](HANDOFF-2026-10-27-engine-136-merged-deploy-go-next.md)
@@ -57,6 +58,7 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 - 2026-10-20 | engine | E18 T14-T16 merged (8a9033dd), T17 measured, T17b running in e18-t17b; next review T17b -> merge -> T18 | closed (E18 shipped) | [HANDOFF-2026-10-20-engine-e18-t16-merged-t17b-running.md](HANDOFF-2026-10-20-engine-e18-t16-merged-t17b-running.md)
 - converter | delayed tasks, one list -- open when picking the next job | [CONVERTER-BACKLOG.md](../CONVERTER-BACKLOG.md)
 - engine | every deferred / on-hold run | [BACKLOG-INDEX-ENGINE-2026-10-14.md](../BACKLOG-INDEX-ENGINE-2026-10-14.md)
+- all teams | every local branch ahead of main, classified (needs decision / active lane / done / parked); re-measure before acting | [UNMERGED-BRANCHES.md](UNMERGED-BRANCHES.md)
 
 ## Open
 

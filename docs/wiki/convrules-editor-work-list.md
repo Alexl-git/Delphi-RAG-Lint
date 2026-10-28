@@ -53,3 +53,10 @@ later (`pas_uses_resolution`) an unresolved row says so instead of guessing:
 `(class not found)`, `(member not found)` or `(kind unknown)`, and its Kind reads
 `(unknown)` when the engine could not tell. An older engine's text is shown as it
 came.
+
+## Where to click
+
+**View > Work list**
+1. Run a conversion on the Convert tab
+2. Choose View > Work list
+3. Read the rows; select rows and click Migrate... to write a #migrate rule

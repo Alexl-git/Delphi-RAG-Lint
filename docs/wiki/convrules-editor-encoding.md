@@ -77,3 +77,18 @@ Three questions. None changes a file without your Yes:
 
 See also: [ConvRulesEditor](convrules-editor.md), `docs/CONVERSION-RULES.md`
 ("Text encoding of rule books and sources").
+
+## Where to click
+
+**File > Encoding**
+1. Choose File > Encoding
+2. Pick the encoding Save and Save As write this book in (UTF-16 is always saved with a BOM)
+
+**File > Save**
+1. Choose File > Save (Ctrl+S)
+2. Answer the encoding question if the book holds characters the chosen encoding cannot keep
+
+**Convert tab > Convert**
+1. Choose Conversion > Convert... (opens the Convert tab)
+2. Check the books, add the units, click Convert
+3. If a source cannot hold the rules, answer the question: raise the encoding, fix the rules, or Cancel

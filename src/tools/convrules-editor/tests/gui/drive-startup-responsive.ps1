@@ -93,7 +93,8 @@ public static class SR {
 }
 '@
 $script:pass = 0; $script:fail = 0
-function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
+trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Find($parent, $cls) { [SR]::Kids($parent) | Where-Object { [SR]::Cls($_) -eq $cls } }
 function WriteAscii($path, $text) { [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.ASCIIEncoding]::new()) }
 function Status($main) { $sb = @(Find $main 'TStatusBar')[0]; if ($sb) { [SR]::TxtT($sb) } else { '' } }
@@ -216,3 +217,4 @@ try {
   try { [IO.Directory]::Delete($tmp, $true) } catch { }
 }
 "gui-startup-responsive: $script:pass pass / $script:fail fail"
+if ($script:fail -gt 0) { exit 1 }

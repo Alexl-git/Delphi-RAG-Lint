@@ -1,0 +1,36 @@
+{
+  "id": "convrules-busy-guard",
+  "title": "Progress window and busy guard",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.35.0-alpha",
+  "summary": "ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs",
+  "intro": "Know why the editor shows a progress window and why a click was refused while it runs.",
+  "wikiPage": "convrules-editor-busy-guard",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Progress window (appears by itself)"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Why was my click on Convert or Save refused?",
+      "command": "A long engine call is running (progress window); wait for it or press Cancel, then repeat"
+    }
+  ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-28",
+    "by": "CONVERTER"
+  },
+  "verified": {
+    "date": "2026-10-28",
+    "by": "CONVERTER",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "6d2503f8331cc541e27b994402452ae33121e93b7de6d956b5bc2e176740fb3d"
+  }
+}

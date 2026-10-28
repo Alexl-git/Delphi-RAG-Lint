@@ -105,8 +105,21 @@ The Convert tab runs the CHECKED books in list order, one after the other, on ev
 and reindexes between books. So `X.rules` then `X.stage2.rules` really does turn a TA into
 TB and then into TC: book 2 reads book 1's output. The folder scan lists `X.rules` before
 `X.stage2.rules`; use **Move Up** and **Move Down** under the book list to change the order.
-The tab does not yet warn about a wrong order across books (a later book holding the
-earlier stage); that is planned as CHAIN-2.
+The tab does not yet warn about a wrong order across books in general (a later book holding the
+earlier stage); that is planned as CHAIN-2. One pair is checked today: when DataDB-to-FireDAC.rules
+is listed before BDE-to-FireDAC.rules, the preflight adds a note that the BDE book must convert
+first (a warning only; the run is not refused).
 
 Source: spec `docs\superpowers\specs\2026-10-27-converter-chain1-design.md`; engine facts:
 `docs\CONVERSION-RULES.md` (single pass).
+
+## Where to click
+
+**Conversion > Rule chains...**
+1. Open the rule book (File > Open...)
+2. Choose Conversion > Rule chains...
+3. Select the findings, then click Merge (one TA -> TC rule), Split (stage books) or Keep
+
+**File > Save (offer)**
+1. Choose File > Save
+2. If the book holds a fixable chain, the Rule chains dialog opens once per chain per session

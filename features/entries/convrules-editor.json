@@ -16,7 +16,7 @@
     {
       "type": "exe",
       "name": "ConvRulesEditor.exe",
-      "menu": "Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)"
+      "menu": "Conversion > Convert... (the IDE plugin starts it with --convert-request FILE and probes --write-capabilities FILE)"
     }
   ],
   "audience": "both",
@@ -41,9 +41,9 @@
     "by": "CONVERTER"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "CONVERTER",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "81571091f5be39465ef8f3e84e45e7026ea8e649412669f80dff72fdc7dab343"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "e2461a908fd5b8bea2d413208afe6e93a9cc52998f70dbde903da031b7055444"
   }
 }
