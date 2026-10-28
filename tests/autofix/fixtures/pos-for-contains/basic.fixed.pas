@@ -4,6 +4,9 @@ interface
 
 implementation
 
+uses
+  System.SysUtils;
+
 function P(S, T: string): Boolean;
 begin
   Result := S.Contains(T);
