@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_per_file_defines_guard.ps1 -- the LSP (and `lint`) preprocess EACH file with
   the define profile of ITS OWN project's active build (LSP C10 / A7-L, Task 3).

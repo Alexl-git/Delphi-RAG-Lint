@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_unowned_label_guard.ps1 -- publishDiagnostics for a file NO open store
   owns carries source "drag-lint (unowned)", so the reader can see the findings

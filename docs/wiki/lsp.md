@@ -200,6 +200,34 @@ the user-level registration in `state.vscdb` is not read or written. Guard:
 
 Limits: a mcp.json containing comments (JSONC) cannot be parsed, so the tool exits 3 and leaves the file untouched. The rewritten file is JSON-equal to the original, not byte-equal (indentation is normalised to 2 spaces); the untouched original is kept in the .bak.
 
+## Project context
+
+Each opened file gets a context -- project, platform, config -- and the LSP answers it from that project's index plus that platform's library index only, as the Delphi IDE does. Another project's index never answers hover, definition, references, completion or caller counts, even when several indexes are open.
+
+First hit wins, per field:
+
+1. explicit startup `--project` / `--platform`;
+2. the client: `initializationOptions` `{project, platform, config}`, `workspace/didChangeConfiguration` section `dragLint` (same keys), `workspace/executeCommand` `draglint.setContext` with `arguments: [{project, platform, config}]`, or -- in `--proxy` mode -- the `<Project>.delphilsp.json` the IDE names (`settingsFile`). `project` may also name a `*.dlcontext.json`;
+3. the owning `.dproj` (its active platform and config);
+4. the nearest `<Base>.dlcontext.json`, only when no `.dproj` exists (a stale one, whose `.dproj` changed, is bypassed);
+5. `%LOCALAPPDATA%\drag-lint\context-defaults.json` (read only; `DRAGLINT_CONTEXT_DEFAULTS` overrides the path);
+6. the placeholder `Win64`.
+
+The library DB for the platform: an explicit `--db library-<Platform>.sqlite`, else the context file's `libraryDb`, else `libraries.<Platform>.libraryDb` in the defaults file, else what `resolve-dbs` resolves. No library DB for the platform -> library answers are refused, never taken from another platform. Opened sets (project DB + library DB) are kept in an LRU of 3.
+
+What you see:
+
+- `window/showMessage` once per file and reason: no project known, platform defaulted, no library index for the platform, a stale `.dlcontext.json`, a re-index in progress or failed;
+- a hover footer `context: <project|none> -- <platform> [default]`, followed by the same notice text;
+- a `draglint/context` notification `{uri, project, platform, config, source, notice}` on open and after every context change, for a status bar. `source` is the step that won: `startup`, `client`, `dproj`, `dlcontext`, `defaults` or `placeholder`.
+
+A project index that needs re-resolve (library-first resolve) is re-indexed by a separate `drag-lint index --project <dproj> --db <db>` process in the background -- one run per DB, never retried after a failure. Answers continue meanwhile; when it exits the index is reopened, the notice clears and diagnostics are republished. Not in `--proxy` mode.
+
+Guards: `tests\autotest\run_lsp_context_isolation_guard.ps1`, `tests\autotest\run_lsp_context_reindex_guard.ps1`.
+
 ## Diagnostics for a file no index owns
 
 Plain `drag-lint lsp` publishes lint findings for every opened file. When no loaded index owns the file (for example another worktree's copy of a unit), the findings are computed from the buffer alone and are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"`, so you can tell they are not backed by a project index. Owned files keep `"drag-lint"`. Guard: `tests\autotest\run_lsp_unowned_label_guard.ps1`.
+
+## Clearing diagnostics
+ server clears what it published: on `textDocument/didClose` and on `workspace/didChangeWatchedFiles` entries of type 3 (Deleted) it publishes an empty `diagnostics` array for the same uri string the client used, so a closed file, or one deleted without ever being closed (a removed git worktree), disappears from the Problems panel instead of keeping its last warnings. The VS Code extension registers a `**/*.{pas,dpr,dpk,inc}` watcher so deletions reach the server. Guard: `tests\autotest\run_lsp_clear_diags_guard.ps1`.

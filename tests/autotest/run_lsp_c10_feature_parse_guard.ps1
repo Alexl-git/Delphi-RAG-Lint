@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_c10_feature_parse_guard.ps1 -- the LSP's own tree-sitter parse (semantic
   tokens, inlay hints; DRagLint.LSP.SyntaxTree.ParseDelphiUtf8) preprocesses each file with

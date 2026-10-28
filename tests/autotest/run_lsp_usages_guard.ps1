@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_usages_guard.ps1 -- `draglint/usages` must answer with EXACTLY the
   payload `usages --format json` prints.

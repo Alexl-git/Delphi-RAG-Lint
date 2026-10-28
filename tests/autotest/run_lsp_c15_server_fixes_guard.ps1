@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_c15_server_fixes_guard.ps1 -- LSP backlog C15: two TLSPServer fixes.
 

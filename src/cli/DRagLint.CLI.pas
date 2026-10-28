@@ -35198,6 +35198,35 @@ begin
     end;
 end;
 
+{ LSP-1 CORE: plain `lsp`'s per-file context DB resolver -- the SAME
+  ResolveConsumerDbs + SplitConsumerDbs a `--project X --platform P` read verb
+  runs (so `resolve-dbs --project X --platform P` names the same pair), over a
+  snapshot for the reason MakeConsumerDbResolver gives. AProject = '' asks for
+  the platform library only. }
+function MakeLspContextDbResolver(const pArgs: TArgs): DRagLint.LSP.Server.TLspContextDbResolver;
+var
+  Snapshot: TArgs;
+begin
+  Snapshot:= pArgs;
+  Snapshot.DbPaths:= nil;
+  Snapshot.Path   := '';
+  Snapshot.InFile := '';
+  Result:=
+    function(const AProject, APlatform: string): DRagLint.LSP.Server.TLspDbSet
+    var
+      A     : TArgs;
+      ProjDb: string;
+      LibDb : string;
+    begin
+      A:= Snapshot;
+      A.ProjectPath  := AProject;
+      A.CheckPlatform:= APlatform;
+      SplitConsumerDbs(A, ResolveConsumerDbs(A), ProjDb, LibDb);
+      Result.ProjectDb:= if AProject <> '' then ProjDb else '';
+      Result.LibraryDb:= LibDb;
+    end;
+end;
+
 function Run: Integer;
 const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
@@ -35490,6 +35519,8 @@ begin
       LSP.FullRules:= Args.LspFullRules;
       if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
       LSP.StartupPlatform:= Args.CheckPlatform;
+      LSP.ExplicitDbs    := Length(Args.DbPaths) > 0;            { LSP-1 CORE: per-file context sets }
+      LSP.DbResolver     := MakeLspContextDbResolver(Args);
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance

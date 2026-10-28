@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_rename_guard.ps1 -- `textDocument/prepareRename` and
   `textDocument/rename` (B3; spec docs\superpowers\specs\2026-05-29-v024-rename-design.md).

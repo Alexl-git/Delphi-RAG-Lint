@@ -4,4 +4,10 @@ Content-Length: <N>
 
 {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///<W>/FxDirty.pas","diagnostics":[]}}Content-Length: <N>
 
+{"jsonrpc":"2.0","method":"window/showMessage","params":{"type":2,"message":"drag-lint: no project is known for FxDirty.pas -- answering from the Win64 library only. Name it with draglint.setContext or a .dlcontext.json."}}Content-Length: <N>
+
+{"jsonrpc":"2.0","method":"window/showMessage","params":{"type":2,"message":"drag-lint: no platform is known for FxDirty.pas -- using the default Win64."}}Content-Length: <N>
+
+{"jsonrpc":"2.0","method":"draglint/context","params":{"uri":"file:///<W>/FxDirty.pas","project":"","platform":"Win64","config":"","source":"placeholder","notice":"drag-lint: no project is known for FxDirty.pas -- answering from the Win64 library only. Name it with draglint.setContext or a .dlcontext.json. drag-lint: no platform is known for FxDirty.pas -- using the default Win64."}}Content-Length: <N>
+
 {"jsonrpc":"2.0","id":99,"result":null}

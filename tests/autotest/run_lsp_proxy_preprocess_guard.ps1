@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family. Spawns and reaps LspStub children, like the
 #   sibling run_lsp_proxy_*guard.ps1 scripts.
 <#

@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_switch_guard.ps1 -- drag-lint-switch must be able to turn the IDE's
   custom LSP entry off AND put it back, exactly.

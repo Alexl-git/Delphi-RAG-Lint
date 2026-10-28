@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_hover_directives_no_doc_guard.ps1 -- LSP task C3.
 

@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_library_flow_timeout_guard.ps1 -- LSP C11 (E29 follow-up, lane X-PERF).
 

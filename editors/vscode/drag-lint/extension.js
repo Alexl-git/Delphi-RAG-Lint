@@ -30,6 +30,9 @@ let client;
 // building a fresh client per restart -- which is what the restart command does
 // -- would otherwise leak one file-system watcher per invocation.
 let manifestWatcher;
+// Source-file watcher: sends workspace/didChangeWatchedFiles deletions so the server
+// clears Problems entries of files removed without ever being closed (e.g. a removed worktree).
+let sourceWatcher;
 
 // Redeploying the engine REPLACES THE FILE A RUNNING SERVER IS EXECUTING FROM.
 // Since v1.4 the server runs a PRIVATE COPY (see mirrorEngine below), so the
@@ -384,13 +387,15 @@ function makeClient(exe) {
   // The index is rebuilt out-of-band; watching the manifest means a reindex that
   // adds a section does not require reloading the window.
   manifestWatcher = workspace.createFileSystemWatcher('**/drag-lint.json');
+  if (sourceWatcher) sourceWatcher.dispose();
+  sourceWatcher = workspace.createFileSystemWatcher('**/*.{pas,dpr,dpk,inc}');
 
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
     outputChannelName: 'drag-lint',
     errorHandler: makeErrorHandler(),
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
-    synchronize: { configurationSection: 'dragLint', fileEvents: manifestWatcher }
+    synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] }
   };
 
   const c = new LanguageClient('dragLint', 'drag-lint', serverOptions, clientOptions);
@@ -619,12 +624,17 @@ function activate(context) {
   context.subscriptions.push({
     dispose: () => {
       if (manifestWatcher) manifestWatcher.dispose();
+      if (sourceWatcher) sourceWatcher.dispose();
       return client && client.stop();
     }
   });
 }
 
 function deactivate() {
+  if (sourceWatcher) {
+    sourceWatcher.dispose();
+    sourceWatcher = undefined;
+  }
   if (manifestWatcher) {
     manifestWatcher.dispose();
     manifestWatcher = undefined;

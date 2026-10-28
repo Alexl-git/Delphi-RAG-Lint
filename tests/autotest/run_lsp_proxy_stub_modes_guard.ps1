@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family. Spawns and reaps LspStub children and runs the
 #   four shipped proxy guards; the sibling proxy guards were observed
 #   interfering with each other even when strictly serialised (root cause fixed
