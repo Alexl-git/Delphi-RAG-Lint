@@ -1358,6 +1358,8 @@ const
   LSP_ERR_INTERNAL = -32603;
   { LSP-1 CORE: SPEC.md 3 -- opened (project DB, library DB) pairs kept. }
   LSP_STORE_SET_LRU = 3;
+  { lf-marker: = DRagLint.Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY (gaps/lf-marker), not yet in this base. }
+  LSP_LIBRARY_RESOLVE_STATE_KEY = 'library_resolve_state';
   { LSP-1 CORE: longest log line quoted in a failed re-index notice. }
   LSP_REINDEX_REASON_MAX = 200;
   { LSP-1 CORE: SPEC.md 1b -- the placeholder platform when nothing names one. }
@@ -2854,9 +2856,40 @@ begin
     the readiness API. TEST-ONLY seam: run_lsp_context_reindex_guard names a
     FIXTURE db in DRAGLINT_LSP_TEST_MARK_INCOMPLETE; never set in production. }
   Result:= '';
+  if AProjectDb = '' then Exit;
   var Marked: string:= GetEnvironmentVariable('DRAGLINT_LSP_TEST_MARK_INCOMPLETE');
-  if (Marked <> '') and (AProjectDb <> '') and SameText(ExpandFileName(Marked), ExpandFileName(AProjectDb)) then
-    Result:= 'needs re-resolve (test marker)';
+  if (Marked <> '') and SameText(ExpandFileName(Marked), ExpandFileName(AProjectDb)) then
+    Exit('needs re-resolve (test marker)');
+  { lf-marker (gaps/lf-marker cb98fe76): schema_meta.library_resolve_state =
+    JSON {state: pending|bound, platform, library, reason, ...}; missing or
+    empty = no marker. Only `pending` is incomplete. The key is spelled here
+    until Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY reaches this base. }
+  var St: ISymbolStore:= nil;
+  for var I:= 0 to High(FStorePaths) do
+    if SameText(FStorePaths[I], AProjectDb) then St:= FStores[I];
+  if St = nil then
+    for var Cached: TStoreSet in FSets do
+      for var J:= 0 to High(Cached.Paths) do
+        if SameText(Cached.Paths[J], AProjectDb) then St:= Cached.Stores[J];
+  if St = nil then Exit;
+  var Raw: string:= '';
+  try
+    Raw:= St.GetMetaValue(LSP_LIBRARY_RESOLVE_STATE_KEY);
+  except
+    on E: Exception do Raw:= ''; { an unreadable marker is no marker; the answers stand }
+  end;
+  if Trim(Raw) = '' then Exit;
+  var V: TJSONValue:= nil;
+  try
+    V:= TJSONObject.ParseJSONValue(Raw);
+    if (V is TJSONObject) and SameText(JsonStrOf(TJSONObject(V), 'state'), 'pending') then
+    begin
+      Result:= 'is resolved without the ' + JsonStrOf(TJSONObject(V), 'platform') + ' library';
+      if JsonStrOf(TJSONObject(V), 'reason') <> '' then Result:= Result + ' (' + JsonStrOf(TJSONObject(V), 'reason') + ')';
+    end;
+  finally
+    V.Free;
+  end;
 end;
 
 function LastLogLine(const ALog: string): string;
@@ -3064,7 +3097,15 @@ begin
         [ExtractFileName(ADbs.ProjectDb)]))
     else if Run.State = risFailed then
       Add('reindex-failed', Format('drag-lint: re-index of %s failed (%s) -- answers may be incomplete; not retried.',
-        [ExtractFileName(ADbs.ProjectDb), Run.Reason]));
+        [ExtractFileName(ADbs.ProjectDb), Run.Reason]))
+    else
+    begin
+      { The run finished but the marker still says pending (e.g. the library
+        was not ready): state it, never start another run. }
+      var StillPending: string:= ProjectDbIncompleteReason(ADbs.ProjectDb);
+      if StillPending <> '' then
+        Add('incomplete', Format('drag-lint: %s %s -- answers may be incomplete.', [ExtractFileName(ADbs.ProjectDb), StillPending]));
+    end;
   end
   else if ADbs.ProjectDb <> '' then
   begin
@@ -3077,7 +3118,7 @@ begin
         Result:= ContextNotice(APath, ACtx, ADbs, AQueue);
         Exit;
       end
-      else Add('incomplete', Incomplete);
+      else Add('incomplete', Format('drag-lint: %s %s -- answers may be incomplete.', [ExtractFileName(ADbs.ProjectDb), Incomplete]));
   end;
   Result:= Acc;
 end;
