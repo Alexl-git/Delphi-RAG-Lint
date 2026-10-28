@@ -10592,6 +10592,10 @@ const
     a COMMENT, so appending a marker comment changes the very text the rule
     reads. }
   COMMENT_SENSITIVE: array[0..2] of string = ('empty-except', 'empty-case-branch', 'commented-out-code');
+  { The rules whose findings carry a TYPE scope (TLintFinding.ScopeFile/ScopeLine),
+    and the shape of the enum declaration line their type-level marker sits on. }
+  TYPE_SCOPE_RULES: array[0..1] of string = ('unused-enum-value', 'enum-ordinal-cast');
+  ENUM_DECL_LINE = '^\s*&?[A-Za-z_][A-Za-z0-9_]*\s*=\s*\(';
 var
   LineCache : TDictionary<string, TArray<string>>;
   Lines     : TArray<string>                     ;
@@ -10666,6 +10670,30 @@ var
       if TFile.Exists(AFile) then Result:= TFile.ReadAllLines(AFile) else SetLength(Result, 0);
       LineCache.Add(AFile, Result);
     end;
+  end;
+
+  { The first dl:ok marker for ARule on ANOTHER site of a finding -- a pair's
+    other end, a type's declaration -- accounted as used whichever finding it
+    then suppresses. AWant is that line's window hash. False when the line is
+    out of range or carries no marker for ARule. }
+  function SiteMarker(const ASiteFile: string; ASiteLine: Integer; const ARule: string;
+    out AMarker: TReviewMarker; out AWant: string): Boolean;
+  var
+    SLines: TArray<string>;
+  begin
+    Result:= False;
+    AMarker:= Default(TReviewMarker);
+    AWant  := '';
+    SLines:= LinesOf(ASiteFile);
+    if (ASiteLine < 1) or (ASiteLine > Length(SLines)) then Exit;
+    for var SM: TReviewMarker in TReviewMarkers.Parse(SLines[ASiteLine - 1]) do
+      if SameText(SM.RuleId, ARule) then
+      begin
+        Accounted.AddOrSetValue(MarkerKey(ASiteFile, ASiteLine, SM.RuleId), True);
+        AMarker:= SM;
+        AWant  := TReviewMarkers.HashWindow(SLines, ASiteLine - 1);
+        Exit(True);
+      end;
   end;
 
 begin
@@ -10853,28 +10881,46 @@ begin
         it is accounted whichever end suppresses (so neither end's marker is
         called unused), and it is verified against the line it was hashed on
         -- the partner's own window, not the anchor's. }
-      if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
+      if (F.RelatedLine > 0) and (F.RelatedFile <> '') and SiteMarker(F.RelatedFile, F.RelatedLine, F.RuleId, M, Want)
+         and not Suppressed then
       begin
-        var RLines: TArray<string>:= LinesOf(F.RelatedFile);
-        if F.RelatedLine <= Length(RLines) then
-          for M in TReviewMarkers.Parse(RLines[F.RelatedLine - 1]) do
-          begin
-            if not SameText(M.RuleId, F.RuleId) then Continue;
-            Accounted.AddOrSetValue(MarkerKey(F.RelatedFile, F.RelatedLine, M.RuleId), True);
-            if not Suppressed then
-            begin
-              Want:= TReviewMarkers.HashWindow(RLines, F.RelatedLine - 1);
-              if (M.Hash = '') or SameText(M.Hash, Want) then Suppressed:= True
-              { a placeholder hash suppresses nothing and is reported by the
-                scanned-file walk below; only a real, mismatching hash is stale }
-              else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
-                EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
-                  Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
-                         'Re-review, then: allow --fix-line %d --fix-rule %s',
-                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
-            end;
-            Break;
-          end;
+        if (M.Hash = '') or SameText(M.Hash, Want) then Suppressed:= True
+        { a placeholder hash suppresses nothing and is reported by the
+          scanned-file walk below; only a real, mismatching hash is stale }
+        else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
+          EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
+            Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
+                   'Re-review, then: allow --fix-line %d --fix-rule %s',
+                   [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
+      end;
+      { THE TYPE SCOPE (lane ENUMRULES, owner rule 2026-10-28). A finding ABOUT a
+        type -- an unused value of an enum, a hard-coded ordinal cast of it -- also
+        honours a marker on that type's declaration line (F.ScopeFile:ScopeLine),
+        so ONE `dl:ok <rule-id>` reviews every finding of that rule for the type:
+        the 65 filler values that pad a DB-stored ordinal, or every cast of a
+        wire-protocol enum, in any unit. Same contract as the pair end above:
+        accounted on the MARKER'S line whichever finding it suppresses (so it is
+        not called unused), verified against the window hash of the type line
+        (a re-shaped declaration re-opens the review), and a hint per marker,
+        never per finding (EmitHint's key). Unlike the pair end, a marker with
+        no @hash says so, as the finding's own line does. }
+      if (F.ScopeLine > 0) and (F.ScopeFile <> '') and SiteMarker(F.ScopeFile, F.ScopeLine, F.RuleId, M, Want)
+         and not Suppressed then
+      begin
+        if M.Hash = '' then
+        begin
+          Suppressed:= True;
+          EmitHint(F.ScopeFile, F.ScopeLine, 'review-marker-stale',
+            Format('dl:ok marker for "%s" on this type declaration carries no @hash, so it cannot be checked ' +
+                   'against the code -- re-mark it as %s@%s.', [M.RuleId, M.RuleId, Want]), M.RuleId);
+        end
+        else if SameText(M.Hash, Want) then
+          Suppressed:= True
+        else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
+          EmitHint(F.ScopeFile, F.ScopeLine, 'review-marker-stale',
+            Format('dl:ok marker for "%s" on this type declaration records @%s but line %d now hashes to @%s. ' +
+                   'Re-review the type, then re-mark it as %s@%s.',
+                   [M.RuleId, M.Hash, F.ScopeLine, Want, M.RuleId, Want]), M.RuleId);
       end;
       if not Suppressed then Kept.Add(F);
     end; // for
@@ -11058,6 +11104,12 @@ begin
               have accounted its marker, so "no longer matches" would be a claim the
               run has no evidence for. See LintUnjudgedMarkerRules. }
             if MatchStr(LowerCase(M.RuleId), AUnjudgedRules) then Continue;
+            { A TYPE-SCOPE marker (ENUMRULES) reviews findings that may sit in
+              OTHER units -- the casts of an enum declared here. A file-scoped run
+              (AUnjudgedRules is never nil there) did not evaluate those units, so
+              it cannot judge the marker on an enum declaration line; lint-all can. }
+            if (AUnjudgedRules <> nil) and MatchText(M.RuleId, TYPE_SCOPE_RULES)
+               and TRegEx.IsMatch(Lines[LN - 1], ENUM_DECL_LINE) then Continue;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
@@ -20596,7 +20648,7 @@ begin
       if Cfg.ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn:= OptIn + [Bx];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn:= OptIn + ['virtual-never-overridden'];
-    if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}True) then   { B-ENUM }
+    if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn:= OptIn + ['unused-enum-value'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
@@ -21084,7 +21136,7 @@ begin
       if LoadLintConfig(AArgs).ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn2:= OptIn2 + [Bx];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
-    if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}True) then   { B-ENUM }
+    if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn2:= OptIn2 + ['unused-enum-value'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that

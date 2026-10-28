@@ -894,6 +894,27 @@ begin
   end;
 end;
 
+{ True when a marker reviews finding F of AFile (AMarkLines, its buffer): the C2
+  predicate TReviewMarkers.Suppresses on the finding's own span (H2: a /// block
+  is reviewed on its declaration), or -- ENUMRULES 2026-10-28 -- a dl:ok on the
+  TYPE the finding is about (F.ScopeFile:ScopeLine, an enum's declaration,
+  perhaps in another unit), decided as DRagLint.CLI.ApplyLineMarkers does: the
+  first marker for the rule on that line, with no hash or the type line's
+  window hash. }
+function MarkerReviews(const F: TLintFinding; const AFile: string; const AMarkLines: TArray<string>): Boolean;
+begin
+  if TReviewMarkers.Suppresses(AMarkLines, F.RuleId, F.StartLine,
+       Max(F.EndLine, DocCommentMarkerLine(AMarkLines, F.StartLine)),
+       MarkerExpectedHash(AMarkLines, F.RuleId, F.StartLine, F.Metric)) then Exit(True);
+  Result:= False;
+  if (F.ScopeLine <= 0) or (F.ScopeFile = '') then Exit;
+  var SLines: TArray<string>:= if SameText(F.ScopeFile, AFile) then AMarkLines else TLiveDocuments.ReadLines(F.ScopeFile);
+  if F.ScopeLine > Length(SLines) then Exit;
+  for var SM: TReviewMarker in TReviewMarkers.Parse(SLines[F.ScopeLine - 1]) do
+    if SameText(SM.RuleId, F.RuleId) then
+      Exit((SM.Hash = '') or SameText(SM.Hash, TReviewMarkers.HashWindow(SLines, F.ScopeLine - 1)));
+end;
+
 class function TLspCompletion.BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
 var
   Findings: TArray<TLintFinding>;
@@ -1009,9 +1030,7 @@ begin
         `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
         dropped (or the "Mark as reviewed" action would change nothing). }
       if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
-      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine,
-           Max(F.EndLine, DocCommentMarkerLine(MarkLines, F.StartLine)), { H2: /// -> its declaration }
-           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
+      if MarkerReviews(F, AFile, MarkLines) then Continue;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
       DiagObj:= TJSONObject.Create;

@@ -127,7 +127,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**289 rules. 110 have an auto-fix. 244 are on by default.** 196 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**289 rules. 110 have an auto-fix. 245 are on by default.** 196 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -177,6 +177,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
+| [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 
 ## Documentation

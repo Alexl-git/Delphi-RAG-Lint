@@ -802,7 +802,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 31 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 25 (+ 289 rules, 110 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 26 (+ 289 rules, 110 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 17 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -965,7 +965,7 @@ Win64 build.
 
 #### Lint
 
-**289 rules across 18 categories -- 196 built-in + 93 external `.scm`, 244
+**289 rules across 18 categories -- 196 built-in + 93 external `.scm`, 245
 enabled by default, 110 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1092,6 +1092,16 @@ would report; opt in per project with `"enabled"` or `--enable`) flags a
 reason with no stamp, an invalid or future date, or a stamp older than
 `max_age_days` (default 180; `"thresholds": {"review-marker-reason-unreviewed": N}`,
 `0` = presence only).
+
+**Type-level review (enums).** One marker on an enum TYPE declaration line reviews
+every `unused-enum-value` / `enum-ordinal-cast` finding of that type, in any unit --
+for enums that mirror stored ordinals (DB bytes, a wire protocol) and carry filler
+values or deliberate casts. `lint-all` reports it unused when it suppresses nothing;
+`lint <file>` does not judge it. See [Type-Level-Review-Marker](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Type-Level-Review-Marker).
+
+```pascal
+  LotStatusCodes = (  // dl:ok unused-enum-value -- REVIEWED 2026-10-28 values mirror stored DB ordinals
+```
 #### Component conversion
 
 | Command | What it does | Notable flags |
@@ -1215,7 +1225,7 @@ CLI-only verbs).
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
 external `.scm`). As of v1.37.0-alpha: **289 rules across 18 categories -- 196
-built-in and 93 external `.scm`, 244 enabled by default, and 110 with an
+built-in and 93 external `.scm`, 245 enabled by default, and 110 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

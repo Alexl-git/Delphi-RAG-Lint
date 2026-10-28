@@ -3911,6 +3911,47 @@
       }
     },
     {
+      "id": "type-level-review-marker",
+      "title": "Type-level dl:ok review",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.36.0-alpha",
+      "summary": "One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit",
+      "intro": "Read this when an enum mirrors ordinals stored outside the code (a DB byte, a wire protocol, streaming) and its filler values or ordinal casts are deliberate: one `dl:ok <rule-id>` on the type line reviews them all, instead of one marker per value or cast.",
+      "wikiPage": "Type-Level-Review-Marker",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Type-Level-Review-Marker.md"
+        }
+      ],
+      "audience": "both",
+      "aliases": ["dl:ok", "enum-ordinal-cast", "unused-enum-value"],
+      "related": ["allow"],
+      "questions": [
+        {
+          "ask": "Silence every unused filler value of one enum at once",
+          "command": "add `// dl:ok unused-enum-value -- <reason>` on the line that declares the type"
+        },
+        {
+          "ask": "Accept every ordinal cast of a wire-protocol enum",
+          "command": "add `// dl:ok enum-ordinal-cast -- <reason>` on the line that declares the type"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-28",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-10-28",
+        "by": "ENGINE",
+        "build": "1.36.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
+    },
+    {
       "id": "type-name-prefix-origin",
       "title": "type-name-prefix: expected letter from the ancestor chain",
       "group": "linting",

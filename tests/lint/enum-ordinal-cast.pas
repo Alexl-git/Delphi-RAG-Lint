@@ -5,13 +5,15 @@ unit EnumOrdinalCastFixture;
   Known FP shapes kept silent below: Ord() against another Ord() (arithmetic /
   serialisation), Ord() of a Char or Integer, a cast to a non-enum type,
   a cast whose argument is not a literal, a negative sentinel TEnum(-1),
-  an enum whose values are all pinned (= N). }
+  an enum whose values are all pinned (= N), and an enum whose TYPE line carries
+  a dl:ok enum-ordinal-cast review (type-level suppression, ENUMRULES). }
 
 interface
 
 type
   TCmd = (cmdLoad, cmdDelta, cmdSave, cmdQuit);
   TPinned = (pnA = 0, pnB = 1, pnC = 2);
+  TMarkedCmd = (mcA, mcB, mcC);  // dl:ok enum-ordinal-cast -- REVIEWED 2026-10-28 ordinals mirror the wire protocol
   TCmdHolder = class
     FCmd: TCmd;
   end;
@@ -26,6 +28,7 @@ var
   B: Byte;
   D: Integer;
   P: TPinned;
+  M: TMarkedCmd;
 begin
   C:= TCmd(2);                          { hit: cast-in of a literal }
   if Ord(pCmd) = 3 then Exit;           { hit: Ord of a param compared to a literal }
@@ -47,6 +50,8 @@ begin
   C:= TCmd(-1);                         { silent: negative sentinel, no value's position }
   P:= TPinned(1);                       { silent: every value pinned (= N) }
   if Ord(P) = 2 then Exit;              { silent: every value pinned (= N) }
+  M:= TMarkedCmd(1);                    { silent: one dl:ok on the TYPE reviews its casts }
+  if Ord(M) = 2 then Exit;              { silent: one dl:ok on the TYPE reviews its casts }
   if (D > 0) and (B > 0) then Exit;
 end;
 

@@ -1299,6 +1299,16 @@ type
       anchor was "unused" in the other scope. Not serialised to --json or LSP. }
     RelatedFile: string;
     RelatedLine: Integer;
+    { The TYPE-SCOPE anchor (lane ENUMRULES, 2026-10-28): the declaration line of
+      the type the finding is ABOUT -- today the enum type of an unused-enum-value
+      or enum-ordinal-cast finding. A `dl:ok <rule-id>` marker on ScopeFile:
+      ScopeLine reviews EVERY finding of that rule for that type, wherever the
+      finding sits (owner rule: one marker on the type silences its filler values
+      and its casts). Verified against the window hash of the scope line, and
+      accounted there so review-marker-unused does not call it dead.
+      '' / 0 for every rule without a type scope (zeroed by Default). }
+    ScopeFile: string;
+    ScopeLine: Integer;
     { The COMMAND that fixes this finding when the fix is a verb, not `lint --fix` -- today only
       the per-file circular-uses finding of `lint <file>` (E18 T15b):
       `cycles --fix --project "<X.dproj>" --db "<db>" --unit <stem>`. '' for every other finding.

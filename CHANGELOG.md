@@ -6,10 +6,12 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Added
+- Type-level `dl:ok` review (ENUMRULES, owner rule): one `// dl:ok <rule-id> -- <reason>` on an enum TYPE declaration line reviews every `unused-enum-value` / `enum-ordinal-cast` finding of that type, in any unit (`lint`, `lint-all`, `lint-project`, LSP gutter). Findings carry the type as a scope (`TLintFinding.ScopeFile` / `ScopeLine`, rule cache `scope_file` / `scope_line`); verified against the type line's hash; `lint-all` reports a type marker that suppresses nothing as `review-marker-unused`, `lint <file>` does not judge it. Wiki `Type-Level-Review-Marker`; guards `tests\lint-project\enum-type-marker\run_enum_type_marker.ps1`, `run_unused_enum_value.ps1`.
 - `find-callees` lists library-bound callees after the resolved ones, marked `(library` (`--json`: `"external": true`, `"via": "edge"|"oracle"`). `edge` = the stored `refs.external_target`; `oracle` = bound at read time when the library index is named (a second `--db`, or `--library-db`) from `refs.receiver_type_text`. With no library open the text ends `M external (library not open)`. Guard `tests\autotest\run_find_callees_external.ps1`.
 - Manifest section key `"libraryResolve": true` (default false; the 2026-10-25 no-attach ruling stands): `index --all` / `index --project` open the platform library as an extra store for the call-resolve pass. Guard `tests\autotest\run_library_resolve_key.ps1`.
 
 ### Changed
+- `unused-enum-value` is ON by default (owner, 1.38). A filler value named for its own ordinal (`Dummy0` at 0, `None64` at 64 -- padding so a real value lands on a stored DB ordinal) is never reported. ORM3 measurement in the lane report.
 - The `Called from:` name bucket drops a candidate whose recorded receiver type (`refs.receiver_type_text`) is a type declared in the same index and unrelated to the target's owner (not the owner, an ancestor, or a descendant); a library type (not declared in the index) is kept, marked `?`. Autodoc text moves only on an index re-resolved by the 1.16 resolver. Guard `tests\autodoc\run_called_from_type_filter.ps1`.
 - `--help` names `--out-root <dir>` on compare (its code reads it); the flag-verb map baseline drops 104 -> 103 cells.
 - `--help` names `--output` on lint-project and `--json` on check-ast and serve (every verb whose code reads --out / --json now shows it); the flag-verb map baseline drops 108 -> 104 cells.

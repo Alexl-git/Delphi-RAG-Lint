@@ -780,11 +780,23 @@
     "verb": "lint-all"
   },
   {
+    "id": "type-level-review-marker",
+    "title": "Type-level dl:ok review",
+    "summary": "One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit",
+    "group": "linting",
+    "order": 30025,
+    "since": "1.36.0-alpha",
+    "file": "features/type-level-review-marker.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
+  },
+  {
     "id": "type-name-prefix-origin",
     "title": "type-name-prefix: expected letter from the ancestor chain",
     "summary": "type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter",
     "group": "linting",
-    "order": 30025,
+    "order": 30026,
     "since": "1.31.4-alpha",
     "file": "features/type-name-prefix-origin.md",
     "menus": [],
