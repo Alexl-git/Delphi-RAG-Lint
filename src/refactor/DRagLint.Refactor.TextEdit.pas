@@ -12,7 +12,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils,
   System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Core.Encoding;
+  DRagLint.Core.Interfaces;
 
 type
   /// <remarks>
@@ -433,7 +433,8 @@ function EditAtomKey(const AEdit: TTextEdit): string;
 implementation
 
 uses
-  System.Character, System.StrUtils, System.Math;
+  System.Character, System.StrUtils, System.Math,
+  DRagLint.Core.Model, DRagLint.Core.Encoding;
 
 { The code point starting at S[I] and how many UTF-16 units it spans (2 for a valid surrogate pair). }
 function CodePointAt(const S: string; I: Integer; out ALen: Integer): Integer;
