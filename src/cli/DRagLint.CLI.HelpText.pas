@@ -85,6 +85,7 @@ begin
   Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]');
+  Writeln('  drag-lint query              --concept "<words>"  ranked BM25 search over identifier words (camelCase split) + doc-comment prose; [--limit N] [--kind k,...] [--json]');
   Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
   Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
   Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');
@@ -533,6 +534,7 @@ begin
     Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
     Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
     Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]');
+    Writeln('  drag-lint query              --concept "<words>"  ranked BM25 search over identifier words (camelCase split) + doc-comment prose; [--limit N] [--kind k,...] [--json]');
     Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
     Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
     Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');
