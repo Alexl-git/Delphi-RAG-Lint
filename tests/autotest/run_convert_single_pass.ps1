@@ -128,12 +128,12 @@ Check 'H1+ control: TA -> TC converts the .dfm to TC' ($r.Dfm -match 'object x: 
 # ---- H3: warnings --------------------------------------------------------------------
 $r = RunBook 'h3a' $Chain
 Check 'H3a chain warning text (convert-apply, dry run)' `
-  ($r.Out -match '(?m)^s*line 2: warning: chain: TB is also a From type \(line 1 converts TA -> TB; single pass, TA ends as TB\)') $r.Out
+  ($r.Out -match '(?m)^\s*line 2: warning: chain: TB is also a From type \(line 1 converts TA -> TB; single pass, TA ends as TB\)') $r.Out
 Check 'H3a ... exit code unchanged (warnings only)' ($r.Exit -eq 0) "exit=$($r.Exit)"
 $v = (& $Exe convert-validate --rules (Join-Path $r.Dir 'x.rules') 2>&1) -join "`n"
-Check 'H3a chain warning text (convert-validate)' ($v -match '(?m)^s*line 2: warning: chain: TB is also a From type') $v
+Check 'H3a chain warning text (convert-validate)' ($v -match '(?m)^\s*line 2: warning: chain: TB is also a From type') $v
 $r = RunBook 'h3b' $Dup
-Check 'H3b duplicate-From warning text' ($r.Out -match '(?m)^s*line 2: warning: duplicate From TA \(line 1 wins\)') $r.Out
+Check 'H3b duplicate-From warning text' ($r.Out -match '(?m)^\s*line 2: warning: duplicate From TA \(line 1 wins\)') $r.Out
 Check 'H3b ... exit code unchanged' ($r.Exit -eq 0) "exit=$($r.Exit)"
 $r = RunBook 'h3c' $Direct
 Check 'H3c a clean book prints neither warning' (($r.Out -notmatch 'warning: chain') -and ($r.Out -notmatch 'duplicate From')) $r.Out

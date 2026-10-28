@@ -27953,6 +27953,15 @@ var
     end;
   end;
 
+  // 1.37.0 (CHAIN H3): the book's single-pass warnings (a chain, a duplicate
+  // From type) join warnings[] as plain text, beside the unreachable and
+  // inferred ones; they never change the exit code.
+  procedure MergeBookChain(var AReport: TApplyReport);
+  begin
+    for var W: TRuleError in BookChainWarnings(Rules) do
+      AReport.Warnings:= AReport.Warnings + [Format('line %d: warning: %s', [W.LineNo, W.Message])];
+  end;
+
   // Owner ruling 2026-10-11: each #convert class settled by INFERENCE becomes
   // one warnings[] line (QualifyInferredText) and its items[] mirror (kind
   // convert-class-inferred); the structured row is JCtx.QualifyFixes.
@@ -28179,6 +28188,7 @@ var
       every JSON exit from here on, warnings[] carries the messages too. }
     MergeUnreachable(JCtx.Report);
     MergeInferred(JCtx.Report);
+    MergeBookChain(JCtx.Report);
     { C13 d: a type no --db resolves is an index gap -- the unit is REFUSED,
       dry run and --apply alike, before any rule error is reported }
     if Length(Unresolved) > 0 then Exit(RefuseUnit(UnresolvedReason(Unresolved)));
@@ -28316,6 +28326,7 @@ var
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
     MergeInferred(PlanRes.Report);    { likewise }
+    MergeBookChain(PlanRes.Report);   { likewise }
     AppendInheritedReport(JCtx.InheritedInsts, DfmPath, PlanRes.Report); { likewise }
     { 1.25.0: descendants that still stream / use an instance converted here.
       A warning, never a refusal; only the instances the plan converted count. }
