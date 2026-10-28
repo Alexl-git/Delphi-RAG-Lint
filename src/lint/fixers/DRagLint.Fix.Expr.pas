@@ -397,6 +397,8 @@ begin
   Lines:= TStringList.Create;
   try
     Lines.LoadFromFile(APath);
+    { a unit declaring its own SameValue hides System.Math's: the rewrite would call the wrong overload set }
+    if TRegEx.IsMatch(Lines.Text, '^\s*(?:function|procedure)\s+SameValue\b', [roIgnoreCase, roMultiLine]) then Exit;
     for F in AFindings do
       if SameText(F.RuleId, 'float-equality-comparison') and SameText(F.FilePath, APath) and
          FloatEqualityEdit(F, Lines, E) then
