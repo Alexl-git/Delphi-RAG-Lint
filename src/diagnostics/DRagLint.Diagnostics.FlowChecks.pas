@@ -3332,8 +3332,8 @@ begin
         Key, Sig: string;
         Syms: TArray<TSymbol>;
         Parts: TArray<TParamPart>;
-        M, Seen: TParamMode;
-        Any: Boolean;
+        M, Seen, MethodSeen: TParamMode;
+        Any, MethodAny: Boolean;
         I: Integer;
 
         { A PARAMETER WHOSE TYPE IS A POINTER TELLS US NOTHING ABOUT ITS ARGUMENT.
@@ -3467,6 +3467,7 @@ begin
           if (Length(Syms) = 0) and (ALibStore <> nil) then
             Syms := ALibStore.FindSymbolsByExactName(ACalleeName);
           Any := False; Seen := pmUnknown;
+          MethodAny := False; MethodSeen := pmUnknown;
           for I := 0 to High(Syms) do
           begin
             { ONLY A FREE ROUTINE MAY ANSWER A BARE-NAME CALL. A bare `Foo(...)`
@@ -3485,13 +3486,29 @@ begin
               them -- reporting the buffer as used-before-assignment on the line
               that ALLOCATES it. Note the "all matches must agree" rule did NOT
               save this: there was exactly ONE match and it was the wrong one.
-              Agreement is not resolution. }
-            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
+              Agreement is not resolution.
+
+              A SAME-NAMED METHOD MAY NOT ANSWER, BUT IT MAY VETO. The bare call
+              may be that method of the enclosing class: `Lookup(Name, Info)`
+              inside TBnRun means TBnRun.Lookup(...; out AInfo), while a free
+              Lookup(const AClassQName, AMember: string) in another unit said
+              "const" and reported Info at error severity on the line that
+              fills it (run_uba_method_homonym.ps1). A method whose mode at
+              this position differs makes the call ambiguous -> pmUnknown. }
             if Syms[I].Signature = '' then Continue;
+            if Syms[I].Kind = skMethod then
+            begin
+              if ModeOf(Syms[I].Signature, M) then
+                if not MethodAny then begin MethodSeen := M; MethodAny := True; end
+                else if M <> MethodSeen then MethodSeen := pmUnknown;
+              Continue;
+            end;
+            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
             if not ModeOf(Syms[I].Signature, M) then Continue;
             if not Any then begin Seen := M; Any := True; end
             else if M <> Seen then begin Seen := pmUnknown; Break; end;
           end;
+          if Any and MethodAny and (MethodSeen <> Seen) then Seen := pmUnknown;
           if Any then Result := Seen else Result := pmUnknown;
         finally
           OracleCheckPM(Verifying, Cached, Result, Key);
