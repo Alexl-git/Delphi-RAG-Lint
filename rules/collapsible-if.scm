@@ -1,7 +1,7 @@
 ; `if A then if B then X` with no else on either level collapses to
 ; `if A and B then X`. Reported on the outer if. An `ifElse` (outer or inner)
 ; is a different node type, so the else cases never match.
-((if then: (if)) @warn)
+((if condition: (_) @a then: (if condition: (_) @b then: (_) @s)) @warn)
 
 ; begin/end form: the block must hold exactly ONE statement, the inner if.
 ; Sibling anchors are NOT reliable here (measured 2026-10-27: `(kBegin) . (if)`
@@ -13,5 +13,6 @@
 ; is skipped (known false negative, deliberately conservative). No `$`
 ; anchor: the engine's regex does not match it at the end of the capture.
 ((if
-   then: (block (kBegin) (if) (kEnd)) @blk) @warn
+   condition: (_) @a2
+   then: (block (kBegin) (if condition: (_) @b2 then: (_) @s2) (kEnd)) @blk) @warn
   (#match? @blk "(?i)^begin\\s*if\\b[^;]*;?(\\s|//[^\\r\\n]*)*end\\b"))

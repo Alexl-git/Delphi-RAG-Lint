@@ -47,7 +47,7 @@ $Allowlist = @(
     'empty-procedure-body', 'enum-bare-read-scoped', 'enum-helper-separate-units',
     'enum-ordinal-persisted', 'enum-read-inside-with', 'fan-in', 'fan-out', 'feature-envy',
     'global-form-variable', 'global-only-uses-edge', 'god-class', 'goto-statement', 'high-coupling',
-    'high-response', 'identical-then-else', 'ifdef-undefined-symbol', 'inline-assembly',
+    'high-response', 'ifdef-undefined-symbol', 'inline-assembly',
     'inline-comment-in-multiline-args', 'instability', 'interface-reference-cycle',
     'layering-violation', 'line-too-long', 'local-field-prefix', 'low-cohesion', 'method-too-long',
     'middle-man', 'missing-doc', 'nested-with', 'outputdebugstring', 'parser-error',
@@ -75,11 +75,7 @@ $Pending = @(
     'integer-division-to-float', 'stream-read-result-ignored', 'is-prefix-not-boolean',
     'halt-in-library', 'format-string-not-formatted', 'swap-without-temp',
     'undocumented-check-suppression', 'collapsible-if', 'is-not-operator',
-    'ifthen-to-if-expression', 'unreadable-literal',
-    # gap-rules wave (G0): lanes G4/G7/G9 ids still pending (G1,G2,G3,G5,G6,G8 merged and removed). Integration empties these too.
-    'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free',
-    'freeonterminate-then-wait', 'begin-end-pair-not-in-finally', 'hides-ancestor-virtual',
-    'needless-exit', 'free-of-parameter', 'property-accessor-name', 'unused-loop-variable'
+    'ifthen-to-if-expression', 'unreadable-literal'
 )
 
 # --- collect directives from every fixture ---

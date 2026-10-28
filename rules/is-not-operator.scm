@@ -5,4 +5,4 @@
 ((exprUnary
   operator: (kNot)
   operand: (exprParens
-    (exprBinary operator: (kIs)))) @warn)
+    (exprBinary lhs: (_) @x operator: (kIs) rhs: (_) @t))) @warn)

@@ -6,6 +6,6 @@
     entity: (exprDot
       lhs: (identifier) @recv
       rhs: (identifier) @m)
-    args: (exprArgs . (_) . (_) .)) @warn)
+    args: (exprArgs . (_) @a1 . (_) @a2 .)) @warn)
  (#any-of? @m "Read" "Write")
  (#declared-type? @recv "^(System\\.Classes\\.)?T[A-Za-z]*Stream$"))
