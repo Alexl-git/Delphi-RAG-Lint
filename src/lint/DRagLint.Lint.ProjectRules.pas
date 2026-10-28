@@ -225,6 +225,7 @@ uses
                                uses name exactly as the cycles graph does (A3-b) }
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
   DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM }
+  DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) }
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -4525,6 +4526,13 @@ begin
     { assert-with-side-effect (INBOX 2026-09-23 rule 4): same gate, same reason. }
     if WantRule('assert-with-side-effect') and OptedIn('assert-with-side-effect') then
       for var Pf3 in CollectAssertWithSideEffect(AStore) do Findings.Add(Pf3);
+    { lane B-EFFECT (DRagLint.Lint.EffectRules): same gate, same reason. }
+    if WantRule('side-effect-in-short-circuit') and OptedIn('side-effect-in-short-circuit') then
+      for var Pf4 in CollectSideEffectInShortCircuit(AStore, AOnlyFileId) do Findings.Add(Pf4);
+    if WantRule('property-getter-with-effect') and OptedIn('property-getter-with-effect') then
+      for var Pf5 in CollectPropertyGetterWithEffect(AStore, AOnlyFileId) do Findings.Add(Pf5);
+    if WantRule('ui-access-in-thread-transitive') and OptedIn('ui-access-in-thread-transitive') then
+      for var Pf6 in CollectUiAccessInThreadTransitive(AStore, AOnlyFileId) do Findings.Add(Pf6);
     Inc(TPurity, Tick - T0);
     T0:= Tick;
 

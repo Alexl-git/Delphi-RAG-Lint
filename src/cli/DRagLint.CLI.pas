@@ -12633,25 +12633,27 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..22] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..25] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
     'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
-    'unused-enum-value');
+    'unused-enum-value',
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..9] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..12] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
-    'unused-enum-value');
+    'unused-enum-value',
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -12659,6 +12661,9 @@ const
     id ships OFF and stays --rule-only on this verb.
     tests\autotest\run_lint_file_discarded_effect_free.ps1. }
   LINT_FILE_OPTIN_ON: array[0..0] of string = ('discarded-effect-free-result');
+  { The three OFF-by-default store rules of lane B-EFFECT (DRagLint.Lint.EffectRules). }
+  LANE_BEFFECT_RULES: array[0..2] of string = (
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   LINT_GATE_CLASS_METRICS: array[0..9] of string = (
     'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
     'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
@@ -20461,6 +20466,8 @@ begin
       OptIn:= OptIn + ['query-name-with-effect'];
     if Cfg.ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['assert-with-side-effect'];
+    for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
+      if Cfg.ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn:= OptIn + [Bx];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn:= OptIn + ['virtual-never-overridden'];
     if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}True) then   { B-ENUM }
@@ -20947,6 +20954,8 @@ begin
       OptIn2:= OptIn2 + ['query-name-with-effect'];
     if LoadLintConfig(AArgs).ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn2:= OptIn2 + ['assert-with-side-effect'];
+    for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
+      if LoadLintConfig(AArgs).ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn2:= OptIn2 + [Bx];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}True) then   { B-ENUM }
