@@ -1097,4 +1097,5 @@
 # 2026-10-28 (1.37.0 B-FLOW, item 2b): hash re-pinned WITHOUT a bump -- ref-gap G5 (hard-cast receiver
 #   T(X).M emits a member-access ref) rides the still-unreleased 1.26.0-alpha re-parse. Pinned by
 #   tests\callresolve\run_receiver_cst_capture.ps1 H1-H3.
-1.26.0-alpha|8932fe0089040e5cb897032d57e06743eb50fb91cad27dc12c016ff4aeb4cf59
+# 2026-10-28 INT-B: re-pinned within unreleased 1.26.0-alpha after merging gaps/r0 (item 4: R4X handler local_var, receiver_type_text) onto gaps/stage (B-FLOW 2b, INC, REFTYPE). No bump: 1.26.0-alpha has not shipped.
+1.26.0-alpha|352247e0e7c75ceada222be9b410d47d29401994c3ccbbe39031e55a3c9990f3
