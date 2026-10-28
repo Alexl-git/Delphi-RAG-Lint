@@ -1862,6 +1862,7 @@ type
     property ReceiverStats: TReceiverStats read FReceiverStats;
     /// <summary>Item 4: the library oracle's outcome counters; no-store counts
     /// every site that would have been offered to a library had one been open.</summary>
+    /// <returns>A copy of TLibraryOracle.Stats.</returns>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
     function OracleStats: TOracleStats;
   end;
