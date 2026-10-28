@@ -2,10 +2,10 @@
 ; equality / inequality / membership. Only these three shapes; not (A < B) is
 ; deliberately NOT flagged (NaN: not (A < B) is not A >= B for floats), and
 ; not (X or Y) / not Call(..) are not comparisons.
-; Known FP shape: not (A in S) has no shorter spelling in Delphi (there is no
-; 'not in' operator); operator-overloaded = on records.
-; The fix covers = and <> only (the parentheses stay: <> and = bind looser than and/or,
-; so 'C and not (A = B)' needs '(A <> B)'); the 'in' form has no fix.
+; not (A in S) is A not in S since Delphi 13 (dcc64 37.0 compiles it; the grammar parses
+; 'not in' as one infix operator). Known FP shape: operator-overloaded = on records.
+; The fix covers all three (the parentheses stay: =, <> and not in bind looser than
+; and/or, so 'C and not (A = B)' needs '(A <> B)').
 ((exprUnary
   operator: (kNot)
   operand: (exprParens
@@ -19,4 +19,4 @@
 ((exprUnary
   operator: (kNot)
   operand: (exprParens
-    (exprBinary operator: (kIn)))) @warn)
+    (exprBinary lhs: (_) @inl operator: (kIn) rhs: (_) @inr))) @warn)

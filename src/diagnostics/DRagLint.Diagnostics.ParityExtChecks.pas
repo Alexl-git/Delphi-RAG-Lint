@@ -21,7 +21,6 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
@@ -642,7 +641,7 @@ end;
 { identical-then-else, block / call shapes  ->  the then branch alone. Only when the
   condition holds no call (it could have a side effect). Registered RISKY: a bare
   identifier in the condition might still be a parameterless function. }
-function FixIdenticalBlockBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@0456 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch
+function FixIdenticalBlockBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@7e51 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch
 var
   PF                : TParsedFile;
   Run               : TParityRun;

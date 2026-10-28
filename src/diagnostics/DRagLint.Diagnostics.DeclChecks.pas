@@ -213,7 +213,7 @@ var
   P: Integer;
 begin
   P:= Pos('<', S);
-  if P > 0 then Result:= Copy(S, 1, P - 1) else Result:= S;
+  Result:= if P > 0 then Copy(S, 1, P - 1) else S;
 end;
 
 class function TDeclRun.LastSegment(const S: string): string;
@@ -221,7 +221,7 @@ var
   P: Integer;
 begin
   P:= LastDelimiter('.', S);
-  if P > 0 then Result:= Copy(S, P + 1, MaxInt) else Result:= S;
+  Result:= if P > 0 then Copy(S, P + 1, MaxInt) else S;
 end;
 
 { I + uppercase letter + identifier characters: the Delphi interface naming convention. }
@@ -648,7 +648,7 @@ begin
   if MatchStr(N.NodeType, ['declVar', 'varDef', 'varAssignDef']) then
   begin
     Ty:= N.ChildByField('type');
-    if Ty.IsNull then TyStart:= MaxInt else TyStart:= Integer(Ty.StartByte);
+    TyStart:= if Ty.IsNull then MaxInt else Integer(Ty.StartByte);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       C:= N.NamedChild(I);

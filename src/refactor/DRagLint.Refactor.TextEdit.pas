@@ -657,7 +657,7 @@ end;
   it. tekInsertInLine/Lines use Line. }
 function EditTopLine(const E: TTextEdit): Integer;
 begin
-  if E.Kind in [tekDeleteLines, tekReplaceLines] then Result:= E.EndLine else Result:= E.Line;
+  Result:= if E.Kind in [tekDeleteLines, tekReplaceLines] then E.EndLine else E.Line;
 end;
 
 { THE STALE-POSITION GUARD for tekReplaceInLine. True when the edit may be

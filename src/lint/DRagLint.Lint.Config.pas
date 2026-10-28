@@ -722,33 +722,33 @@ procedure TLintConfig.ApplyDisallowedObject(const ABlock: TJSONObject; AReplace:
     Idx  : Integer;
   begin
     if ABlock.GetValue(AKey) = nil then Exit;
-    if not (ABlock.GetValue(AKey) is TJSONArray) then
+    if (ABlock.GetValue(AKey) is not TJSONArray) then
       raise ELintConfigError.CreateFmt('config: disallowed.%s must be an array of objects', [AKey]);
     Arr:= ABlock.GetValue(AKey) as TJSONArray;
     if AReplace then AList:= nil;
     Idx:= 0;
     for V in Arr do
     begin
-      if not (V is TJSONObject) then
+      if (V is not TJSONObject) then
         raise ELintConfigError.CreateFmt('config: disallowed.%s[%d] must be an object with "name"', [AKey, Idx]);
       O:= V as TJSONObject;
       E:= Default(TDisallowedEntry);
-      if not (O.GetValue('name') is TJSONString) or (Trim(O.GetValue('name').Value) = '') then
+      if (O.GetValue('name') is not TJSONString) or (Trim(O.GetValue('name').Value) = '') then
         raise ELintConfigError.CreateFmt('config: disallowed.%s[%d] needs a non-empty string "name"', [AKey, Idx]);
       E.Name:= Trim(O.GetValue('name').Value);
       if O.GetValue('reason') <> nil then
       begin
-        if not (O.GetValue('reason') is TJSONString) then
+        if (O.GetValue('reason') is not TJSONString) then
           raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].reason must be a string', [AKey, Idx]);
         E.Reason:= O.GetValue('reason').Value;
       end;
       if O.GetValue('except') <> nil then
       begin
-        if not (O.GetValue('except') is TJSONArray) then
+        if (O.GetValue('except') is not TJSONArray) then
           raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].except must be an array of glob strings', [AKey, Idx]);
         for G in (O.GetValue('except') as TJSONArray) do
         begin
-          if not (G is TJSONString) then
+          if (G is not TJSONString) then
             raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].except holds a non-string', [AKey, Idx]);
           E.Exempt:= E.Exempt + [G.Value];
         end;
@@ -836,7 +836,7 @@ begin
   end;
   if AObj.GetValue('disallowed') <> nil then
   begin
-    if not (AObj.GetValue('disallowed') is TJSONObject) then
+    if (AObj.GetValue('disallowed') is not TJSONObject) then
       raise ELintConfigError.Create('config: "disallowed" must be an object with methods/types/names lists');
     ApplyDisallowedObject(AObj.GetValue('disallowed') as TJSONObject, AReplace);
   end;

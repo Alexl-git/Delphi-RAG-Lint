@@ -278,7 +278,7 @@ begin
 end;
 
 class function TDisallowedChecker.Check(const AFile: string; const ACfg: TLintConfig;
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; // dl:ok unused-parameter -- REVIEWED 2026-10-27: signature fixed by the checker contract shared with DoLint/DoLintAll; textual rules need no index
+  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: signature fixed by the checker contract shared with DoLint/DoLintAll; textual rules need no index
 var
   Tok: TArray<TTok>;
 begin
