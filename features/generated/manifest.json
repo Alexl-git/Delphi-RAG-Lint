@@ -14914,7 +14914,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Negated comparison can be written without not: use <> for not (A = B), = for not (A <> B); not (A in S) is the only spelling of se... (dead-code, info, fixable)",
+        "summary": "Negated comparison can be written without not: use <> for not (A = B), = for not (A <> B), A not in S for not (A in S) (dead-code, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
