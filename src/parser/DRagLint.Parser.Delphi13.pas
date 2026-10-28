@@ -133,6 +133,68 @@ begin
   Result:= TEncoding.UTF8.GetString(ASource, StartIdx, Len);
 end;
 
+// EXT-E1 (1.37.0): the text of ANode with every `comment` descendant replaced
+// by ONE space. Comments are tree-sitter extras, so a line comment carrying a
+// dl:ok marker after a parameter line, or a brace / paren-star block between
+// parameters, is a child of declArgs and NodeText carried it into
+// symbols.signature (and hover split it into a fake parameter name). The space
+// keeps the tokens on either side apart; callers collapse whitespace anyway.
+// Byte ranges are concatenated BEFORE the UTF-8 decode, so a multi-byte
+// character is never split.
+function NodeTextSansComments(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  Buf : TBytes ;
+  Used: Integer;
+
+  procedure Append(AFrom, ATo: Integer);
+  begin
+    if ATo <= AFrom then Exit;
+    Move(ASource[AFrom], Buf[Used], ATo - AFrom);
+    Inc(Used, ATo - AFrom);
+  end;
+
+  { Appends ANode's bytes from APos to its end, skipping comment subtrees;
+    returns the byte offset reached. }
+  function Walk(const AN: TTSNode; APos: Integer): Integer;
+  var
+    i    : Integer;
+    Child: TTSNode;
+  begin
+    Result:= APos;
+    for i:= 0 to AN.NamedChildCount - 1 do
+    begin
+      Child:= AN.NamedChild(i);
+      if Child.NodeType = 'comment' then
+      begin
+        Append(Result, Integer(Child.StartByte));
+        Buf[Used]:= Ord(' ');
+        Inc(Used);
+        Result:= Integer(Child.EndByte);
+      end
+      else if Child.NamedChildCount > 0 then
+        Result:= Walk(Child, Result);
+    end;
+  end;
+
+var
+  StartIdx: Integer;
+  EndIdx  : Integer;
+  Reached : Integer;
+begin
+  Result:= '';
+  if ANode.IsNull then Exit;
+  StartIdx:= Integer(ANode.StartByte);
+  EndIdx  := Integer(ANode.EndByte  );
+  if (EndIdx - StartIdx <= 0) or (StartIdx < 0) or (EndIdx > Length(ASource)) then Exit;
+  { A comment is never shorter than the one space that replaces it, so the
+    output fits in the input's length. }
+  SetLength(Buf, EndIdx - StartIdx);
+  Used   := 0;
+  Reached:= Walk(ANode, StartIdx);
+  Append(Reached, EndIdx);
+  Result:= TEncoding.UTF8.GetString(Buf, 0, Used);
+end;
+
 function FindNamedChildOfType(const AParent: TTSNode; const AType: string): TTSNode;
 var
   i    : Integer;
@@ -1938,7 +2000,7 @@ begin
   Result:= '';
   T:= ANode.ChildByField('type');
   if T.IsNull then Exit;
-  Raw:= NodeText(T, ASource);
+  Raw:= NodeTextSansComments(T, ASource);
   { collapse runs of whitespace to single spaces so multi-line types read well }
   PrevSpace:= False;
   for i:= 1 to Length(Raw) do
@@ -2056,7 +2118,7 @@ begin
 
   if not ValNode.IsNull then
   begin
-    ValText:= CollapseWs(NodeText(ValNode, ASource));
+    ValText:= CollapseWs(NodeTextSansComments(ValNode, ASource));
     if Length(ValText) > MAX_VALUE_TEXT then ValText:= Copy(ValText, 1, MAX_VALUE_TEXT) + '...';
 
     { Infer only from a literal, where the node type IS the answer. Anything
@@ -2126,7 +2188,7 @@ var
 begin
   ArgsText:= '';
   ArgsNode:= ANode.ChildByField('args');
-  if not ArgsNode.IsNull then ArgsText:= CollapseWs(NodeText(ArgsNode, ASource));
+  if not ArgsNode.IsNull then ArgsText:= CollapseWs(NodeTextSansComments(ArgsNode, ASource));
   RetType:= TypeTextOf(ANode, ASource);
   if RetType <> '' then
   begin
