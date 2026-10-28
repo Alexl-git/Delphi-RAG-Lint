@@ -101,7 +101,9 @@ try {
   Check 'a4: cycle 3 names its chosen edge and `routine-call inversion`' `
     ($t -match 'fix-it: demoblueprint -&gt; demoblueprint\.viewmodel by routine-call inversion') ''
   Check 'a5: cycle 1 names the Part B follow-up `move globals`' ($t -match 'fix-it: Part A first, then demoaudit -&gt; democonfig by move globals') ''
-  Check 'a6: cycle 2 without the library reads `not available -- `' ($t -match 'fix-it: not available -- receiver-unknown') ''
+  # since dbc28c1f (C1 is-guard) cycle 2's first refusal is cast-unseen (TComponent is undeclared without the
+  # library); either reason is the library-missing case this check pins.
+  Check 'a6: cycle 2 without the library reads `not available -- `' ($t -match 'fix-it: not available -- (receiver-unknown|cast-unseen: .*no index given declares)') ''
 
   Write-Host '== (b) nocut' -ForegroundColor Cyan
   $pn = Build-Page $ndb $nproj $Exe 'nocut'

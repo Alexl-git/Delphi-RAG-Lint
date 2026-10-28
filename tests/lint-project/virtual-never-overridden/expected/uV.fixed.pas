@@ -3,7 +3,7 @@ unit uV;
 interface
 
 type
-  TShape = class
+  TVnoShape = class
   public
     procedure DrawA;
     procedure DrawB; virtual;
@@ -12,26 +12,26 @@ type
     constructor Create; virtual;
   end;
 
-  TCircle = class(TShape)
+  TCircle = class(TVnoShape)
   public
     procedure DrawB; override;
   end;
 
 implementation
 
-constructor TShape.Create;
+constructor TVnoShape.Create;
 begin
 end;
 
-procedure TShape.DrawA;
+procedure TVnoShape.DrawA;
 begin
 end;
 
-procedure TShape.DrawB;
+procedure TVnoShape.DrawB;
 begin
 end;
 
-procedure TShape.DrawD;
+procedure TVnoShape.DrawD;
 begin
 end;
 

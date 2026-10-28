@@ -181,6 +181,6 @@ Nothing to do: after Part A no cycle remains among these units.
 Fix it (mechanical, compile-gated):
   dry run : drag-lint cycles --fix --project <your.dproj> --db "demo.sqlite" --cycle 1
   apply   : drag-lint cycles --fix --project <your.dproj> --db "demo.sqlite" --cycle 1 --apply
-  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  cuts    : the INTERFACE coupling of this cycle (Part A: extract base classes into new leaf units)
   requires: the project builds with 0 errors before the fix (the dry run checks this)
 ````
