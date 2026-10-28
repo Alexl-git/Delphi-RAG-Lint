@@ -199,7 +199,7 @@ function SafeParseObject(const AFile: string): TJSONObject;
 begin
   try
     Result := ParseObject(AFile);
-  except // dl:ok bare-except@86a2 -- REVIEWED 2026-10-28 fail-open by contract: an unreadable or malformed file is "absent"
+  except // dl:ok bare-except@8ac3 -- REVIEWED 2026-10-28 fail-open by contract: an unreadable or malformed file is "absent"
     Result := nil;
   end;
 end;
@@ -326,7 +326,7 @@ begin
     Files := nil;
     try
       if TDirectory.Exists(Dir) then Files := TDirectory.GetFiles(Dir, '*' + CONTEXT_FILE_SUFFIX);
-    except // dl:ok bare-except@86a2 -- REVIEWED 2026-10-28 fail-open by contract: an unreadable folder is skipped
+    except // dl:ok bare-except@b9ec -- REVIEWED 2026-10-28 fail-open by contract: an unreadable folder is skipped
       Files := nil;
     end;
     for F in Files do

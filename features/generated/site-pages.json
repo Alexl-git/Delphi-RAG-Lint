@@ -503,6 +503,10 @@
     "hash": "e201756d0a6863f7b2f5b228fb6e5c34a8f5be5f8384cb461473925171860987",
     "version": "1.35.1-alpha"
   },
+  "features/project-context.md": {
+    "hash": "3939838977070c9af40e80f2aa68f342cc8d75829e24421c7ddc4c6921406d0f",
+    "version": "1.36.0-alpha"
+  },
   "features/project-facts.md": {
     "hash": "44981c3c7581bdcbd9f607f51ce09b9781729f7ab92b65b684bc289fc05d39f2",
     "version": "1.35.1-alpha"
@@ -620,12 +624,12 @@
     "version": "1.36.0-alpha"
   },
   "features/serve.md": {
-    "hash": "f1cd394c95bb1a46ee4da82bb21b0102bf969f3853862b5dc145240944ae3415",
-    "version": "1.35.1-alpha"
+    "hash": "54c706a030c90819b7e1557df072548627ba5e7b3c41539fcfd491824e568e07",
+    "version": "1.36.0-alpha"
   },
   "features/setup-installer.md": {
-    "hash": "0e25e15529be98752707aea63c361a7e594617940f2e7957518837281f80a30b",
-    "version": "1.35.1-alpha"
+    "hash": "ca9d34e1c06e9ccf255d08e3bb6e668b198f7e71edf6e281aba53739ff2f650d",
+    "version": "1.36.0-alpha"
   },
   "features/shared-unit.md": {
     "hash": "50a09c58eb0a92358bc0457498a3c7dde9017b37201909561fd1b8fae58b0e82",
@@ -720,15 +724,15 @@
     "version": "1.35.1-alpha"
   },
   "features/workspace-add.md": {
-    "hash": "8f9fa259eef89c1a36fe4b4d3d70fe5baf85745eee9a9cbd52225c7f692e5bff",
-    "version": "1.35.1-alpha"
+    "hash": "d2c7aab49926c3ecb2c252368bb7fa6c25e1e4ea929231874fd575a8f1c408c0",
+    "version": "1.36.0-alpha"
   },
   "features/workspace-index.md": {
-    "hash": "628a1d2609fe34da4627a063fa5bb944a6a785dd21b5aeda2695dfde84ed3af5",
-    "version": "1.35.1-alpha"
+    "hash": "145eb17aeffebc45bfd8af9db6ef2bb4da91d0751a16ff10ddb4702ede721c6d",
+    "version": "1.36.0-alpha"
   },
   "features/workspace-status.md": {
-    "hash": "629d46ab6c291e90c08fe7a56ebdaf037bc24b2c57c15f109a21fddda2b0c6f0",
-    "version": "1.35.1-alpha"
+    "hash": "e2348cb6bf0fd8c1f372f11abf96047e235af8f5d5cdbe08c86c8c58a3599c69",
+    "version": "1.36.0-alpha"
   }
 }
