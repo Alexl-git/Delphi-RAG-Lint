@@ -253,6 +253,9 @@
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Types.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Lexer.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Expr.pas"/>
+        <DCCReference Include="..\preprocess\DRagLint.Preprocess.Decls.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.PPUnitSource.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.PpChecks.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Tolerance.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Profile.pas"/>

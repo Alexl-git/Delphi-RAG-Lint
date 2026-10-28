@@ -81,7 +81,7 @@ $lj = Run @('lint', $main, '--db', $db, '--library-db', $libDb, '--project', $pr
 $lines = @()
 try {
   $jtxt = $lj.Substring($lj.IndexOf('['))
-  $lines = @(($jtxt | ConvertFrom-Json) | Where-Object { $_.rule_id -eq 'pp-unresolved-if' } | ForEach-Object { [int]$_.start_line })
+  $lines = @(($jtxt | ConvertFrom-Json) | Where-Object { $_.rule -eq 'pp-unresolved-if' } | ForEach-Object { [int]$_.start_line })
 } catch { }
 Write-Host ("  pp-unresolved-if lines: {0}" -f ($lines -join ','))
 Check 'pp-unresolved-if fires on {$IF NOSUCHNAME = 1} (line 64)' ($lines -contains 64)

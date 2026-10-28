@@ -1089,4 +1089,9 @@
 #   Superseded: 1.26.0-alpha|78e9e91c9c34038abda630fd61f0508077e8fca2441009aa9be4f075b99be338
 #   superseded at merge: 1.26.0-alpha|cf421226101da454ad3f2fec99f01910c34315a655f06cb9d459e431aa70240c
 #   2026-10-27 (controller, merge gaps/reftype into gaps/taint): re-pinned WITHIN 1.26.0-alpha for INC2 + REFTYPE; no index built under 1.26.0 yet.
-1.26.0-alpha|65c3b5089ab03f94ca0b8727d269a368bd30acb93231d944bced1d7d3014df79
+#   Superseded: 1.26.0-alpha|65c3b5089ab03f94ca0b8727d269a368bd30acb93231d944bced1d7d3014df79
+#   2026-10-27 (lane INC3, gaps/inc3): re-pinned WITHIN 1.26.0-alpha (no index built under 1.26.0 yet). {$IF} now resolves
+#   true constants -- same file (active text only; typed consts excluded) and uses-clause units (project scan +
+#   library DB) -- plus arithmetic / xor / strings / Ord / SizeOf / Declared(), so a different branch and include can
+#   be indexed. Pinned by tests\autotest\run_index_pp_consts.ps1 + tests\preprocess\run_expr_ext.ps1.
+1.26.0-alpha|6ca1eacb94de48872caa82458f506c9afc6c9c70ffa5599ae7201e10814231fe

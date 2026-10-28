@@ -70,6 +70,15 @@ type
     /// preprocessing is off, the file is unreadable or the preprocess raised.</returns>
     /// <remarks>Never raises (fail-open: no context, the include is linted standalone).</remarks>
     class function HostIncludeSites(const AHostFile: string; const ASearchPaths: TArray<string>): TArray<TPPIncludeSite>;
+    /// <summary>Lane INC3: the IF / ELSEIF directives of AFile, evaluated in
+    /// active code under the profile ApplyPreprocess would use, whose
+    /// expression names something the symbol table could not resolve.</summary>
+    /// <param name="AFile">A .pas / .dpr / .dpk / .inc file.</param>
+    /// <returns>The directives in source order; empty when preprocessing is
+    /// off, the file is unreadable or the preprocess raised.</returns>
+    /// <remarks>Never raises. Re-reads and re-preprocesses the file (only the
+    /// pp-unresolved-if rule asks).</remarks>
+    class function UnresolvedIfs(const AFile: string): TArray<TPPUnresolvedIf>;
     /// <summary>Installs the per-file profile source ApplyPreprocess consults BEFORE the
     /// process-wide profile from SetPreprocess. nil restores the single profile.</summary>
     /// <param name="AResolver">Returns the profile for a path; an empty Defines array or an
@@ -322,6 +331,24 @@ begin
     PpOpts.SearchPaths:= ASearchPaths;
     Preprocess(NormalizeLoneCR(EnsureUtf8Bytes(TFile.ReadAllBytes(AHostFile))), PpOpts, Result);
   except // dl:ok try-except-swallowed -- REVIEWED 2026-10-27 fail-open by contract: no context, the include is linted standalone
+    on E: Exception do Result:= nil;
+  end;
+end;
+
+class function TAstParseCache.UnresolvedIfs(const AFile: string): TArray<TPPUnresolvedIf>;
+var
+  Report: TPPReport;
+begin
+  Result:= nil;
+  if not (FPreprocess and FProfileSet) then Exit;
+  try
+    var PpOpts: TPPOptions:= TPPOptionsDefault;
+    PpOpts.Profile    := ProfileFor(AFile);
+    PpOpts.IncludeMode:= 'defines-only';
+    PpOpts.BaseDir    := TPath.GetDirectoryName(AFile);
+    PreprocessReport(NormalizeLoneCR(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))), PpOpts, Report);
+    Result:= Report.Unresolved;
+  except // fail-open by contract: an unreadable file reports no directive
     on E: Exception do Result:= nil;
   end;
 end;
