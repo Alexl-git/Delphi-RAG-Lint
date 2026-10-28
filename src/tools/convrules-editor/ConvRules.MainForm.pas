@@ -4682,12 +4682,14 @@ procedure TConvRulesForm.DoLoad(Sender: TObject);
 var
   Dlg: TOpenDialog;
 begin
+  if NativeDialogUp then
+    Exit; // gateleak: a File > Open posted under a native dialog (no discard prompt under it either)
   if not ConfirmDiscard then
     Exit;
   Dlg:= TOpenDialog.Create(Self);
   try
     Dlg.Filter:= 'Conversion rules (*.rules;*.txt)|*.rules;*.txt|All files (*.*)|*.*';
-    if Dlg.Execute then
+    if RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       LoadFile(Dlg.FileName);
   finally
     Dlg.Free;
@@ -6033,7 +6035,7 @@ begin
     // ignored by TOpenDialog rather than being an error.
     if (FLastFormDir <> '') and TDirectory.Exists(FLastFormDir) then
       Dlg.InitialDir:= FLastFormDir;
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     AFiles:= ExpandUnitSiblings(Dlg.Files.ToStringArray);
     if Length(AFiles) > 0 then
@@ -8290,7 +8292,7 @@ begin
         Dlg.FileName  := ExtractFileName(FFilePath);
       end;
       Dlg.Options:= Dlg.Options + [ofOverwritePrompt];
-      if not Dlg.Execute then
+      if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
         Exit;
       FFilePath:= Dlg.FileName;
       FLblFile.Caption:= FFilePath;
@@ -8743,7 +8745,7 @@ procedure TConvRulesForm.DoBrowseMaskFolder(Sender: TObject);
 var
   Dir: string;
 begin
-  if not SelectDirectory('Hide units under this folder', '', Dir) then
+  if not RunNativeDialog(function: Boolean begin Result:= SelectDirectory('Hide units under this folder', '', Dir); end) then
     Exit;
   FEdMaskFolder.Text:= Dir;
   MaskChanged(Sender);
@@ -9201,7 +9203,7 @@ begin
     Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
     if (FLastFormDir <> '') and TDirectory.Exists(FLastFormDir) then
       Dlg.InitialDir:= FLastFormDir;
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     SetLastFormDir(ExtractFileDir(Dlg.FileName));
     AddSourceFiles(Dlg.Files.ToStringArray);
@@ -9305,7 +9307,7 @@ begin
     Dlg.Options:= Dlg.Options + [ofFileMustExist];
     if Trim(FEdDest.Text) <> '' then
       Dlg.InitialDir:= ExtractFileDir(Trim(FEdDest.Text));
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     FEdDest.Text:= Dlg.FileName;
   finally

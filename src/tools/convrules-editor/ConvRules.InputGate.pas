@@ -15,6 +15,12 @@ unit ConvRules.InputGate;
   (TConvRulesForm.AppMessage on Application.OnMessage, which every VCL pump
   calls) with these decisions: refuse, say so, never queue.
 
+  NOT every pump: a native common dialog (TOpenDialog / TSaveDialog Execute,
+  SelectDirectory) runs its own Win32 loop, which never calls Application.OnMessage
+  and dispatches a command posted to the disabled editor unseen (gateleak: Add...
+  under the Add... dialog nested a second one). Those sites run their dialog through
+  RunNativeDialog, the one re-entrancy guard -- and the one piece of state here.
+
   No Winapi here: the message numbers are named below and pinned to Winapi by
   the model tests. }
 
@@ -141,8 +147,30 @@ const
   /// <summary>BusyTitleFor's answer when neither a wait title nor a status names the work.</summary>
   BUSY_TITLE_UNKNOWN = 'another operation';
 
-implementation
+type
+  /// <summary>Shows one native common dialog and returns its Execute result (RunNativeDialog).</summary>
+  TNativeDialogRun = reference to function: Boolean;
 
+/// <summary>Runs one native common dialog -- a TOpenDialog / TSaveDialog Execute or a
+/// SelectDirectory -- unless one is already up: the one re-entrancy guard of every such site
+/// (gateleak, 2026-10-27).</summary>
+/// <param name="AExecute">Shows the dialog; returns True when the user confirmed it.</param>
+/// <returns>AExecute's result; False WITHOUT calling it while a dialog run here is up.</returns>
+/// <remarks>A common dialog runs its own native message loop, which never calls
+/// Application.OnMessage, so the queue filter (GateVerdictFor in TConvRulesForm.AppMessage) never
+/// sees a WM_COMMAND posted to the disabled editor meanwhile: that loop dispatches it, and Add...
+/// posted under the Add... dialog nested a second one. The refusal is silent and reads as a
+/// cancelled dialog: only a posted command gets here (Windows drops a user's click on a disabled
+/// window). Not covered: a command that opens no dialog still runs under one. NOT pure -- the one
+/// process-wide flag of this unit; main thread only. The flag is cleared when AExecute returns or
+/// raises.</remarks>
+function RunNativeDialog(const AExecute: TNativeDialogRun): Boolean;
+
+/// <summary>Whether a native common dialog run by RunNativeDialog is up.</summary>
+/// <returns>True from the moment RunNativeDialog calls AExecute until it returns or raises.</returns>
+function NativeDialogUp: Boolean;
+
+implementation
 uses
   System.SysUtils
   , System.StrUtils
@@ -154,6 +182,9 @@ const
   SELECTION_CLASSES: array[0..14] of string = ('ListBox', 'SysListView32', 'SysTreeView32', 'ComboBox', 'Edit',
     'TListBox', 'TCheckListBox', 'TComboBox', 'TListView', 'TTreeView', 'TEdit', 'TMemo', 'TcxGrid', 'TcxGridSite', 'TcxTextEdit');
   STATUS_JOIN     = ' | '; // ConvertRun's own join, which its implementation keeps private
+
+var
+  GNativeDialogUp: Boolean = False; // RunNativeDialog: a native common dialog of the editor is up
 
 function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 begin
@@ -221,6 +252,23 @@ begin
     Result:= Trim(AStatus)
   else
     Result:= BUSY_TITLE_UNKNOWN;
+end;
+
+function RunNativeDialog(const AExecute: TNativeDialogRun): Boolean;
+begin
+  if GNativeDialogUp then
+    Exit(False);
+  GNativeDialogUp:= True;
+  try
+    Result:= AExecute();
+  finally
+    GNativeDialogUp:= False;
+  end; // try
+end;
+
+function NativeDialogUp: Boolean;
+begin
+  Result:= GNativeDialogUp;
 end;
 
 end.

@@ -173,7 +173,6 @@ type
       FAnalyzing      : Boolean;            // an analysis is running behind the progress window
       FAnalysisCancelled: Boolean;          // the last Analyze ended with ENGINE_OUTCOME_CANCELLED
       FPrompting      : Boolean;            // a C8 prompt (E6 offer, gate, E7) is up: drops are refused
-      FAddOpen        : Boolean;            // AddClick's Open dialog is up (a native loop InputGate cannot see): a second Add... is ignored
       FLockable       : TArray<TControl>;   // disabled while a run is in progress
       FTopPanel       : TPanel;
       FBottomPanel    : TPanel;
@@ -429,6 +428,7 @@ uses
   System.IOUtils
   , System.StrUtils
   , Vcl.Dialogs
+  , ConvRules.InputGate // gateleak: RunNativeDialog, the re-entrancy guard of the Add... dialog
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
   , ConvRules.Glyph
@@ -1314,26 +1314,17 @@ procedure TConvertTab.AddClick(Sender: TObject);
 var
   Dlg: TOpenDialog;
 begin
-  // GATELEAK: the common dialog runs its own native loop, which never calls Application.OnMessage,
-  // so a WM_COMMAND(Add...) posted meanwhile reached here again and nested a second Open dialog.
-  if FAddOpen then
-    Exit;
-  FAddOpen:= True;
+  Dlg:= TOpenDialog.Create(Self);
   try
-    Dlg:= TOpenDialog.Create(Self);
-    try
-      Dlg.Filter := 'Delphi units and projects (*.pas;*.dpr;*.dproj)|*.pas;*.dpr;*.dproj';
-      Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
-      if Dlg.Execute then
-      begin
-        FAddOpen:= False; // the dialog is gone: AddSources pumps behind InputGate, which refuses a second Add...
-        AddSources(Dlg.Files.ToStringArray);
-      end;
-    finally
-      Dlg.Free;
-    end; // try
+    Dlg.Filter := 'Delphi units and projects (*.pas;*.dpr;*.dproj)|*.pas;*.dpr;*.dproj';
+    Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
+    // GATELEAK: the dialog's native loop never calls Application.OnMessage, so a WM_COMMAND(Add...)
+    // posted meanwhile reached here again and nested a second Open dialog. AddSources runs after
+    // the dialog is gone: it pumps behind InputGate, which refuses a second Add... there.
+    if RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
+      AddSources(Dlg.Files.ToStringArray);
   finally
-    FAddOpen:= False;
+    Dlg.Free;
   end; // try
 end;
 

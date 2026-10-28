@@ -215,11 +215,14 @@ function SaveDialogTo($procId, $path) {
   Click (@(Find $dlg 'Button' '&Save')[0])
   return ''
 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # GATELEAK: see drive-convert-tab.ps1 env.vcl.atoms
 $p = Start-Process $Exe -ArgumentList "`"$book`"" -PassThru
 try {
   $main = [IntPtr]::Zero; $t0 = Get-Date
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $main = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($null -eq $main) { $main = [IntPtr]::Zero } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
+  $atoms = VclAtomsOf $p.Id $main
+  Check 'env.vcl.atoms' (($atoms.Control -ne 0) -and ($atoms.Window -ne 0)) ("control=$($atoms.Control) window=$($atoms.Window) ($($atoms.Names))")
   Start-Sleep -Seconds 2
   $caps = [W]::MenuCaptions($main)
   Check 'file.items' (($caps -match 'File\|New') -and ($caps -match 'File\|Save As\.\.\.') -and ($caps -match 'File\|Exit')) $caps
@@ -241,7 +244,17 @@ try {
   # Save As: cancelled keeps the (empty) path; then writes a new file.
   Check 'saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
   $dlg = WaitCls $p.Id '#32770' 20
-  if ($dlg -ne [IntPtr]::Zero) { Click (@(Find $dlg 'Button' 'Cancel')[0]) }
+  # gateleak: the Save As dialog's native loop never calls Application.OnMessage (InputGate cannot see it), so a
+  # File > Save As / File > Open posted to the disabled editor meanwhile nested a second dialog. RED (old exe) = 2 / 3.
+  if ($dlg -ne [IntPtr]::Zero) {
+    [void][W]::InvokeMenu($main, 'File|Save As...'); [void][W]::InvokeMenu($main, 'File|Open...')
+    Start-Sleep -Milliseconds 1500
+    $nDlg = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq '#32770' }).Count
+    Check 'saveas.reentrant.not.nested' ($nDlg -eq 1) ("dialogs while Save As is up and Save As + Open are posted: $nDlg; " + (TopsNow $p.Id))
+  }
+  # Cancel every dialog up (on a RED exe the nested ones too), topmost first.
+  $t0 = Get-Date
+  while (($d = WaitCls $p.Id '#32770' 0) -ne [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 20) { Click (@(Find $d 'Button' 'Cancel')[0]); Start-Sleep -Milliseconds 700 }
   Start-Sleep -Seconds 1
   # The book has had no path since File > New. If the cancelled Save As had kept the
   # abandoned path, plain Save would now write silently; it must still ASK.

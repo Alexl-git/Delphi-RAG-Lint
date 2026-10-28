@@ -15928,6 +15928,39 @@ begin
   Check('gate.title.unknown', (BusyTitleFor('', '  ') = BUSY_TITLE_UNKNOWN) and (BUSY_TITLE_UNKNOWN = 'another operation'));
 end;
 
+{ gateleak (2026-10-27): RunNativeDialog, the one re-entrancy guard of every native common
+  dialog (Add..., File > Open / Save As, the Unit Rules browses, the curation dialogs). Their
+  native loops never call Application.OnMessage, so the queue filter cannot refuse a command
+  posted meanwhile; the second dialog-opening command must not run while one is up. }
+procedure TestNativeDialogGuard;
+var
+  LUpInside, LInnerRan, LInnerResult, LRaised: Boolean;
+begin
+  Check('native.result.true', RunNativeDialog(function: Boolean begin Result:= True; end));
+  Check('native.result.false', not RunNativeDialog(function: Boolean begin Result:= False; end));
+  Check('native.idle', not NativeDialogUp, '(nothing is up between runs)');
+  LUpInside:= False; LInnerRan:= False; LInnerResult:= True;
+  RunNativeDialog(function: Boolean
+    begin
+      LUpInside:= NativeDialogUp;
+      LInnerResult:= RunNativeDialog(function: Boolean begin LInnerRan:= True; Result:= True; end);
+      Result:= True;
+    end);
+  Check('native.up.inside', LUpInside, '(the dialog is up while AExecute runs)');
+  Check('native.nested.not.run', not LInnerRan, '(a second dialog-opening command under the first runs nothing)');
+  Check('native.nested.false', not LInnerResult, '(and reads as cancelled)');
+  Check('native.down.after', not NativeDialogUp);
+  LRaised:= False;
+  try
+    RunNativeDialog(function: Boolean begin raise Exception.Create('dialog failed'); end);
+  except
+    on Exception do
+      LRaised:= True;
+  end;
+  Check('native.raise.propagates', LRaised);
+  Check('native.raise.clears', not NativeDialogUp, '(a raising dialog does not lock every later one)');
+  Check('native.runs.again', RunNativeDialog(function: Boolean begin Result:= True; end));
+end;
 procedure TestConverterMinorsStartup;
 const
   FORM_ERR = '--form "X.pas" does not exist.';
@@ -16318,6 +16351,7 @@ begin
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
     TestInputGate;
+    TestNativeDialogGuard;
     TestCapabilityProbe;
     TestEncodingLevels;
     TestEncodingReaders;

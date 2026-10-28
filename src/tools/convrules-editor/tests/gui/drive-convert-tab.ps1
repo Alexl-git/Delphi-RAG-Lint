@@ -18,7 +18,10 @@
 # Delete) are refused, the first one reported, none run (n7.*); WaitIdle also asks the editor ('ConvRulesEditor.Busy').
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow, [switch]$ProofOccluded, [switch]$ForeignActive)
+# GATELEAK env.vcl.atoms (2026-10-27): before the launch, the VCL atoms leaked by killed Delphi processes are
+# reclaimed (vcl-atoms.ps1); after it, the editor's own two VCL atoms must exist, else FindControl is nil and every
+# button is dead (the 'add.dialog' flake). -ProofAtomCheck asks for a wrong atom name: env.vcl.atoms must FAIL.
+param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow, [switch]$ProofOccluded, [switch]$ForeignActive, [switch]$ProofAtomCheck)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -551,12 +554,17 @@ try {
 
   # The file FIRST, then the flags: ConvRulesEditor.dpr auto-opens only a LEADING file argument,
   # and the rules folder of the run is that book's folder.
+  . "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)
   $p = Start-Process $Exe -ArgumentList "`"$book`" --project-db `"$db`"" -PassThru
   $main = [IntPtr]::Zero; $t0 = Get-Date
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $m = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($m) { $main = $m } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   # A zero HWND would make EnumChildWindows(NULL) walk every OTHER process's windows.
   if ($main -eq [IntPtr]::Zero) { return }
+  # GATELEAK: no VCL atoms = FindControl nil = every button click lost; a precondition, not an editor defect.
+  $atoms = VclAtomsOf $p.Id $main -WrongName:$ProofAtomCheck
+  Check 'env.vcl.atoms' (($atoms.Control -ne 0) -and ($atoms.Window -ne 0)) ("control=$($atoms.Control) window=$($atoms.Window) ($($atoms.Names)); 0 = the global atom table was full when the editor started")
+  if (($atoms.Control -eq 0) -or ($atoms.Window -eq 0)) { return }
   Start-Sleep -Seconds 2
   # DRV-2b: the start-up work (book load, engine probes) runs behind the InputGate; a menu command posted then is
   # refused like any other (seen: 'active tabs: Classes' + busy=True, then every later step cascaded): the library unit-list
