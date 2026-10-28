@@ -19,7 +19,7 @@ Read this when a project raises bare Exception.Create with literal messages and 
 ## How to run it
 
 ```text
-drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)
+drag-lint exceptions-sync [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)
 ```
 
 Full flag list: [exceptions-sync in the CLI reference](../cli.md#exceptions-sync).
