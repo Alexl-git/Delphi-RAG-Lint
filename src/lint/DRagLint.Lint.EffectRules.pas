@@ -122,7 +122,7 @@ begin
   begin
     try
       Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
-    except  // dl:ok bare-except -- one unreadable file must cost its own findings, never abort the lint run
+    except  // dl:ok bare-except@8ac3 -- one unreadable file must cost its own findings, never abort the lint run
       Result:= nil;
     end;
     ACache.Add(APath, Result);
@@ -225,21 +225,17 @@ const
   CLogical   : array[0..2] of string = ('kAnd', 'kOr', 'kXor');
 begin
   var X: TTSNode:= Unparen(N);
-  if X.IsNull then Exit(False);
-  var T: string:= X.NodeType;
-  if (T = 'kTrue') or (T = 'kFalse') then Exit(True);
+  var T: string:= if X.IsNull then '' else X.NodeType;
   if T = 'exprBinary' then
-  begin
-    var Op: string:= OperatorOf(X);
-    if MatchStr(Op, CRelational) then Exit(True);
-    if MatchStr(Op, CLogical) then
-      Exit(BoolOperand(X.ChildByField('lhs')) or BoolOperand(X.ChildByField('rhs')));
-    Exit(False);
-  end;
+    Exit(MatchStr(OperatorOf(X), CRelational) or
+      (MatchStr(OperatorOf(X), CLogical) and
+       (BoolOperand(X.ChildByField('lhs')) or BoolOperand(X.ChildByField('rhs')))));
   if T = 'exprUnary' then
     Exit((OperatorOf(X) = 'kNot') and BoolOperand(X.ChildByField('operand')));
-  if (T = 'exprCall') and SameText(NodeText(X.ChildByField('entity'), Src), 'Assigned') then Exit(True);
-  Result:= BoolCallee and SameNode(CalleeIdentOf(X), Callee);
+  var IsLiteral : Boolean:= (T = 'kTrue') or (T = 'kFalse');
+  var IsAssigned: Boolean:= (T = 'exprCall') and SameText(NodeText(X.ChildByField('entity'), Src), 'Assigned');
+  var IsCallee  : Boolean:= (T <> '') and BoolCallee and SameNode(CalleeIdentOf(X), Callee);
+  Result:= IsLiteral or IsAssigned or IsCallee;
 end;
 
 function TShortCircuitJudge.IsCondition(const N: TTSNode): Boolean;
@@ -269,16 +265,17 @@ end;
 
 function TShortCircuitJudge.Guarded: Boolean;
 begin
+  Result:= False;
   var N: TTSNode:= Callee;
-  while True do
+  var P: TTSNode:= N.Parent;
+  while not P.IsNull do
   begin
-    var P: TTSNode:= N.Parent;
-    if P.IsNull then Exit(False);
     if (P.NodeType = 'exprBinary') and MatchStr(OperatorOf(P), ['kAnd', 'kOr']) and
        SameNode(P.ChildByField('rhs'), N) and BoolProven(P) then
       Exit(True);
-    if not IsExprNode(P) then Exit(False);
+    if not IsExprNode(P) then Exit;
     N:= P;
+    P:= N.Parent;
   end;
 end;
 
@@ -354,12 +351,8 @@ begin
         if Seen.ContainsKey(Key) then Continue;
         Seen.Add(Key, True);
         if not AndOrNear(LinesOf(C.FullPath, LineCache), C.CallSiteLine) then Continue;
-        var PF: TParsedFile;
-        try
-          PF:= TAstParseCache.Get(C.FullPath);
-        except  // dl:ok bare-except -- one unparseable file must cost its own findings, never abort the lint run
-          Continue;
-        end;
+        { Get answers Tree = nil for a missing or unreadable file. }
+        var PF: TParsedFile:= TAstParseCache.Get(C.FullPath);
         if (PF.Tree = nil) or HasCompleteBoolEval(PF.RawSrc) then Continue;
         Idents.Clear;
         CollectIdentsOnRow(PF.Tree.RootNode, C.CallSiteLine - 1, Sym.Name, PF.Src, Idents);
@@ -468,7 +461,7 @@ function IsLazyInitGetter(const ARoot: TTSNode; const ASrc: TBytes; const AGette
 const
   CCondNodes: array[0..3] of string = ('if', 'ifElse', 'while', 'repeat');
 var
-  Assigned_: TDictionary<string, Boolean>;
+  AssignedNames: TDictionary<string, Boolean>;
   Nodes    : TList<TTSNode>;
 begin
   Result:= False;
@@ -476,7 +469,7 @@ begin
   if Proc.IsNull then Exit;
   var Body: TTSNode:= Proc.ChildByField('body');
   if Body.IsNull then Exit;
-  Assigned_:= TDictionary<string, Boolean>.Create;
+  AssignedNames:= TDictionary<string, Boolean>.Create;
   Nodes    := TList<TTSNode>.Create;
   try
     CollectNodesOfType(Body, 'assignment', Nodes);
@@ -485,18 +478,18 @@ begin
       var L: string:= LowerCase(Trim(NodeText(A.ChildByField('lhs'), ASrc)));
       if StartsStr('self.', L) then L:= Copy(L, Length('self.') + 1, MaxInt);
       if (L <> '') and (L <> 'result') and not SameText(L, AGetter.Name) then
-        Assigned_.AddOrSetValue(L, True);
+        AssignedNames.AddOrSetValue(L, True);
     end;
     for var T in CCondNodes do
     begin
       Nodes.Clear;
       CollectNodesOfType(Body, T, Nodes);
       for var C in Nodes do
-        if ConditionGuards(C.ChildByField('condition'), ASrc, Assigned_) then Exit(True);
+        if ConditionGuards(C.ChildByField('condition'), ASrc, AssignedNames) then Exit(True);
     end;
   finally
     Nodes.Free;
-    Assigned_.Free;
+    AssignedNames.Free;
   end;
 end;
 
@@ -536,12 +529,7 @@ begin
     begin
       var Path: string:= AStore.GetFilePath(Pair.Key);
       if Path = '' then Continue;
-      var PF: TParsedFile;
-      try
-        PF:= TAstParseCache.Get(Path);
-      except  // dl:ok bare-except -- one unparseable file must cost its own findings, never abort the lint run
-        Continue;
-      end;
+      var PF: TParsedFile:= TAstParseCache.Get(Path);
       if PF.Tree = nil then Continue;
       Props.Clear;
       CollectNodesOfType(PF.Tree.RootNode, 'declProp', Props);
@@ -596,8 +584,9 @@ begin
   var P   : TTSNode:= AIdent.Parent;
   while (not P.IsNull) and (P.NodeType <> 'defProc') do
   begin
-    if (P.NodeType = 'exprCall') and SameNode(P.ChildByField('args'), Prev) then
-      if MatchText(NodeText(CalleeIdentOf(P), ASrc), CMarshalNames) then Exit(True);
+    if (P.NodeType = 'exprCall') and SameNode(P.ChildByField('args'), Prev) and
+       MatchText(NodeText(CalleeIdentOf(P), ASrc), CMarshalNames) then
+      Exit(True);
     Prev:= P;
     P   := P.Parent;
   end;
@@ -610,12 +599,8 @@ function EdgeMarshalled(const APath: string; ALine: Integer; const ACallee: stri
 var
   Idents: TList<TTSNode>;
 begin
-  var PF: TParsedFile;
-  try
-    PF:= TAstParseCache.Get(APath);
-  except  // dl:ok bare-except -- an unparseable file is treated as marshalled: absence over a wrong finding
-    Exit(True);
-  end;
+  { A missing or unreadable file (Tree = nil) counts as marshalled: absence over a wrong finding. }
+  var PF: TParsedFile:= TAstParseCache.Get(APath);
   if PF.Tree = nil then Exit(True);
   Idents:= TList<TTSNode>.Create;
   try
