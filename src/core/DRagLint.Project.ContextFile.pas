@@ -10,7 +10,8 @@ interface
 
 uses
   System.SysUtils,
-  System.Generics.Collections;
+  System.Generics.Collections,
+  DRagLint.Core.ContextDefaults;
 
 const
   /// <summary>The schema number this unit reads and writes.</summary>
@@ -18,7 +19,7 @@ const
   /// <summary>File suffix appended to the project base name.</summary>
   CONTEXT_FILE_SUFFIX = '.dlcontext.json';
   /// <summary>Environment variable that overrides the central defaults file path (tests).</summary>
-  CONTEXT_DEFAULTS_ENV = 'DRAGLINT_CONTEXT_DEFAULTS';
+  CONTEXT_DEFAULTS_ENV = CORE_CONTEXT_DEFAULTS_ENV;
 
 type
   /// <summary>One project context as stored in a .dlcontext.json file.</summary>
@@ -53,7 +54,8 @@ type
 
 /// <summary>The per-user settings folder %LOCALAPPDATA%\drag-lint (no trailing separator).</summary>
 /// <returns>The folder path; '' when LOCALAPPDATA is not set. Does not create it.</returns>
-/// <remarks>Shared helper: ENGINE code may call it instead of inlining the lookup.</remarks>
+/// <remarks>Shared helper: ENGINE code may call it instead of inlining the lookup. Forwards to
+/// DRagLint.Core.ContextDefaults.DragLintLocalDataDir (the one definition, linkable by the plugin).</remarks>
 function DragLintLocalDataDir: string;
 
 /// <summary>Path of the central defaults file.</summary>
@@ -118,22 +120,13 @@ uses
   DRagLint.Project.DefineProfile;
 
 function DragLintLocalDataDir: string;
-var
-  Base: string;
 begin
-  Base := GetEnvironmentVariable('LOCALAPPDATA');
-  if Base = '' then Exit('');
-  Result := ExcludeTrailingPathDelimiter(Base) + PathDelim + 'drag-lint';
+  Result := DRagLint.Core.ContextDefaults.DragLintLocalDataDir;
 end;
 
 function ContextDefaultsFile: string;
-var
-  Dir: string;
 begin
-  Result := GetEnvironmentVariable(CONTEXT_DEFAULTS_ENV);
-  if Result <> '' then Exit;
-  Dir := DragLintLocalDataDir;
-  if Dir <> '' then Result := Dir + PathDelim + 'context-defaults.json';
+  Result := DRagLint.Core.ContextDefaults.ContextDefaultsFile;
 end;
 
 function ExpandEnvVars(const AText: string): string;
