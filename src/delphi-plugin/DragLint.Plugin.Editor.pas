@@ -551,7 +551,14 @@ begin
       correct x64 tree-sitter DLLs. Fall back to an exe next to the BPL (for
       non-standard layouts), then to PATH as last resort. }
     var Win64Dir: string := ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\';
-    if FileExists(Win64Dir + 'drag-lint.exe') then
+    { CLIFIX C4: the shared resolver FIRST -- the Settings ExePath override (set + exists), then
+      ..\dll-win64\drag-lint.exe, the same answer every other spawn site gets. This site used to
+      carry its own copy of the lookup and so ignored the override. The chain below stays only for
+      the case the resolver answers ''. }
+    ExePath:= DragLintExe;
+    if ExePath <> '' then
+      DebugLog('EnsureLspClient: using resolver exe = ' + ExePath)
+    else if FileExists(Win64Dir + 'drag-lint.exe') then
     begin
       ExePath:= Win64Dir + 'drag-lint.exe';
       DebugLog('EnsureLspClient: using Win64 exe = ' + ExePath);
