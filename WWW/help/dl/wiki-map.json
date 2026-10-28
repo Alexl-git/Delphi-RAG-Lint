@@ -170,6 +170,7 @@
   "shared-unit": "shared-unit",
   "sql": "sql",
   "taint-analysis": "taint-analysis",
+  "target-compiler": "target-compiler",
   "usages": "usages",
   "wiki": "wiki",
   "workspace-add": "workspace-add",

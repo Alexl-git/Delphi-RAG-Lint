@@ -16,7 +16,7 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Find Dead Code...](features/find-dead-code.md)
     * [Find Undocumented (public)...](features/find-undocumented-public.md)
     * [Project Structure Rules (god-class, layering...)...](features/lint-project.md)
-    * [Run Lint All (Full Report)...](features/run-lint-all-full-report.md)
+    * Run Lint All (Full Report)...: [Run Lint All (Full Report)](features/run-lint-all-full-report.md), [Target compiler (--target-compiler)](features/target-compiler.md)
     * [Scan TODOs / FIXMEs...](features/scan-todos-fixmes.md)
     * [Top Symbols (fan-in)...](features/top-symbols-fan-in.md)
   * [Compile & Diagnose](features/compile-diagnose.md)

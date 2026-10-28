@@ -159,6 +159,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
+| [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
@@ -178,6 +179,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
+| [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 
 ## Documentation

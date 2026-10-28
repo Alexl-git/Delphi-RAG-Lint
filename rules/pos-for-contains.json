@@ -5,8 +5,8 @@
   "message": "Comparing Pos(...) with 0 or 1 is a substring test -- use Contains (Pos > 0 / <> 0 / = 0) or StartsStr/StartsWith (Pos = 1).",
   "warn_capture": "warn",
   "fix": [
-    { "when_capture": "s", "replace": "{s}.Contains({sub})", "uses": "System.SysUtils" },
-    { "when_capture": "s2", "replace": "{s2}.Contains({sub2})", "uses": "System.SysUtils" },
-    { "when_capture": "s3", "replace": "not {s3}.Contains({sub3})", "uses": "System.SysUtils" }
+    { "when_capture": "s", "replace": "{s}.Contains({sub})", "uses": "System.SysUtils", "needs_compiler": 24 },
+    { "when_capture": "s2", "replace": "{s2}.Contains({sub2})", "uses": "System.SysUtils", "needs_compiler": 24 },
+    { "when_capture": "s3", "replace": "not {s3}.Contains({sub3})", "uses": "System.SysUtils", "needs_compiler": 24 }
   ]
 }

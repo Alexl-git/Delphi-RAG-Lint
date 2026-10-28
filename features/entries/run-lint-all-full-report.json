@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
       "flags": [
         {
           "name": "--db",
@@ -83,9 +83,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-27",
+    "date": "2026-10-28",
     "by": "ENGINE",
     "build": "1.36.0-alpha",
-    "surfaceHash": "4170291105f6fdb95e1b23ea802e11c00d0cc180db39572077e115e1c511f661"
+    "surfaceHash": "557189816aa3fa2848eb840f8019f130d131a4c43c1b3437eadc1a0d5c9d8fa2"
   }
 }

@@ -1,0 +1,25 @@
+{
+  "id": "compat-downgrade-fixes",
+  "title": "Downgrade fixes (compat rules)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "planned",
+  "since": "1.38.1-alpha",
+  "summary": "compat rules report syntax the target compiler cannot take and rewrite it to classic syntax -- the reverse of the modernize fixes",
+  "intro": "Read this when code written for Delphi 13 must go back to an older compiler: each compat rule rewrites one modern construct to its classic form.",
+  "wikiPage": "compat-downgrade-fixes",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "<file.pas> --fix --target-compiler 12"
+    }
+  ],
+  "audience": "both",
+  "related": ["autofix-wave", "target-compiler"],
+  "verified": {
+    "date": "2026-10-28",
+    "by": "alexanderl",
+    "build": "1.36.0-alpha"
+  }
+}

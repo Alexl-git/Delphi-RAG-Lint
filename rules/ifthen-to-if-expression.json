@@ -1,6 +1,7 @@
 {
   "id": "ifthen-to-if-expression",
   "category": "modernize",
+  "needs_compiler": 37,
   "severity": "hint",
   "message": "Both branches assign the same target -- Delphi 13 allows X := if C then A else B in one statement.",
   "warn_capture": "warn",

@@ -3,7 +3,8 @@ program RuleCatalogTests;
 uses
   System.SysUtils, System.IOUtils, System.Generics.Collections,
   DRagLint.Lint.Compliance in '..\..\src\lint\DRagLint.Lint.Compliance.pas',
-  DRagLint.Lint.RuleCatalog in '..\..\src\lint\DRagLint.Lint.RuleCatalog.pas';
+  DRagLint.Lint.RuleCatalog in '..\..\src\lint\DRagLint.Lint.RuleCatalog.pas',
+  DRagLint.Lint.TargetCompiler in '..\..\src\lint\DRagLint.Lint.TargetCompiler.pas';
 var
   GPass, GFail: Integer;
 procedure Check(const AName: string; ACond: Boolean);
@@ -28,13 +29,14 @@ const
     under analysis -- emitted by the central dl:ok filter, not by any checker --
     which is a genuinely different kind of thing from every other bucket here.
     Filing them under 'other' would have passed this test while hiding that. }
-  CanonicalBuckets: array[0..17] of string = (
+  CanonicalBuckets: array[0..18] of string = (
     'bug-patterns','resource-lifetime','security','platform',
     'complexity','structure','naming','dead-code',
     'data-flow','firedac','project-wide','metrics','other','refactoring',
     'documentation', { ADF milestone: missing-doc + doc-drift live in this bucket }
     'review-markers',
-    'policy', 'modernize' { clippy-parity wave 2026-10-27: disallowed-* and index-loop-to-for-in });
+    'policy', 'modernize', { clippy-parity wave 2026-10-27: disallowed-* and index-loop-to-for-in }
+    'compat' { 2026-10-28 two-way modernize: the downgrade rules (COMPAT_CATEGORY), 1.38.1 });
 var
   Cat: TArray<TRuleInfo>;
   Info: TRuleInfo;
@@ -180,6 +182,70 @@ begin
   Check('weak ids are a subset of the rule ids', Find(Cat, 'wait-while-holding-lock', Info) and (Length(Info.Compliance.Weak) = 2) and (Info.Compliance.Suffix = ' [CWE-833 LCK09-J]'));
   Check('malformed id is rejected by the format check', not IsCweId('CWE-x') and IsCweId('CWE-476') and IsCertId('EXP34-C') and IsMisraId('MISRA-C-2012-R18.6'));
 end;
+procedure TestTargetCompiler;
+var
+  V  : Integer;
+  Err: string;
+  Cat: TArray<TRuleInfo>;
+  Info: TRuleInfo;
+  G  : TTargetRuleGate;
+  function Tok(const AToken: string): Integer;
+  var E: string;
+  begin
+    if not ParseCompilerToken(AToken, Result, E) then Result:= -1;
+  end;
+  function PV(const AValue: string): Integer;
+  begin
+    if not ProjectVersionToCompiler(AValue, Result) then Result:= -1;
+  end;
+begin
+  { tokens: product versions, CompilerVersion numbers, code names, a Delphi prefix }
+  Check('token 13 -> 37', Tok('13') = 37);
+  Check('token 37 -> 37', Tok('37') = 37);
+  Check('token 12.2 -> 36', Tok('12.2') = 36);
+  Check('token Delphi 11 -> 35', Tok('Delphi 11') = 35);
+  Check('token athens -> 36', Tok('athens') = 36);
+  Check('token 10.4 -> 34', Tok('10.4') = 34);
+  Check('token XE7 -> 28', Tok('XE7') = 28);
+  Check('token 2009 -> 20', Tok('2009') = 20);
+  Check('token 6 -> 14', Tok('6') = 14);
+  Check('token 14 -> 14 (CompilerVersion)', Tok('14') = 14);
+  Check('unknown tokens refuse (5, 38, 14.5, XE9, empty)',
+    (Tok('5') = -1) and (Tok('38') = -1) and (Tok('14.5') = -1) and (Tok('XE9') = -1) and (Tok('') = -1));
+  Check('a refusal names the accepted set', not ParseCompilerToken('nope', V, Err) and (Pos('accepted:', Err) > 0));
+  { ProjectVersion table: 20.4 measured (Studio 37); the rest pinned from the release history }
+  Check('ProjectVersion 20.4 -> 37', PV('20.4') = 37);
+  Check('ProjectVersion 20.1 / 20.3 -> 36', (PV('20.1') = 36) and (PV('20.3') = 36));
+  Check('ProjectVersion 19.5 -> 35', PV('19.5') = 35);
+  Check('ProjectVersion 19.2 -> 34', PV('19.2') = 34);
+  Check('ProjectVersion 18.8 -> 33', PV('18.8') = 33);
+  Check('ProjectVersion 99.9 / empty refuse', (PV('99.9') = -1) and (PV('') = -1));
+  { precedence: command line > config > context > default }
+  Check('resolve: nothing -> 37', ResolveTargetCompiler('', '', '', '', V, Err) and (V = 37));
+  Check('resolve: context only -> its value', ResolveTargetCompiler('', '', '12', '', V, Err) and (V = 36));
+  Check('resolve: config beats context', ResolveTargetCompiler('', '11', '12', '', V, Err) and (V = 35));
+  Check('resolve: command line beats config', ResolveTargetCompiler('10.3', '11', '12', '', V, Err) and (V = 33));
+  Check('resolve: bad config token refuses and names its source',
+    not ResolveTargetCompiler('', 'bogus', '', '', V, Err) and (Pos('config target_compiler', Err) > 0));
+  Check('resolve: auto without a .dproj refuses', not ResolveTargetCompiler('auto', '', '', '', V, Err));
+  { the gate }
+  Check('gated: needs 37 at 36', IsGatedByTarget(37, 36));
+  Check('not gated: needs 37 at 37, needs 0 at 14', not IsGatedByTarget(37, 37) and not IsGatedByTarget(0, 14));
+  Check('compat on: since 37 at 36; off at 37; off for 0',
+    IsCompatOnForTarget(37, 36) and not IsCompatOnForTarget(37, 37) and not IsCompatOnForTarget(0, 14));
+  G:= TTargetRuleGate.Build(36, ['a', 'b', 'c'], [37, 0, 0], [0, 0, 37]);
+  Check('gate at 36: drops a, forces c, leaves b', G.Drops('A') and G.ForcesOn('c') and not G.Drops('b') and not G.ForcesOn('b'));
+  Check('gate active at 36, inactive at 37 and when zero', G.Active
+    and not TTargetRuleGate.Build(37, ['a'], [37], [0]).Active and not Default(TTargetRuleGate).Active);
+  { the catalog carries the keys }
+  Cat:= TRuleCatalog.BuildCatalog(TPath.GetFullPath(TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), '..\..\rules')), '');
+  Check('is-not-operator needs_compiler 37 (sidecar)', Find(Cat, 'is-not-operator', Info) and (Info.NeedsCompiler = 37) and (Info.CompatSince = 0));
+  Check('unreadable-literal needs_compiler 35', Find(Cat, 'unreadable-literal', Info) and (Info.NeedsCompiler = 35));
+  Check('nonminimal-bool rule-level needs_compiler 0 (its gate is per entry)', Find(Cat, 'nonminimal-bool', Info) and (Info.NeedsCompiler = 0));
+  Check('a built-in defaults to 0 / 0', Find(Cat, 'too-many-parameters', Info) and (Info.NeedsCompiler = 0) and (Info.CompatSince = 0));
+  Check('COMPAT_CATEGORY = compat', COMPAT_CATEGORY = 'compat');
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -189,6 +255,11 @@ begin
   end;
   try
     TestMerge;
+  except
+    on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
+  end;
+  try
+    TestTargetCompiler;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

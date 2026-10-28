@@ -33,6 +33,7 @@ type
     Template   : string      ;  { lfkReplace only }
     UsesUnit   : string      ;  { '' = none }
     Risky      : Boolean     ;  { behaviour-changing fix: tagged risky, still applied }
+    NeedsCompiler: Integer   ;  { 1.38 "needs_compiler": a match that binds this entry is dropped under an older --target-compiler; 0 = any }
   end;
 
   // A loaded external lint rule expressed as a tree-sitter S-expression query.
@@ -186,7 +187,9 @@ type
       /// </remarks>
       function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
       function IsPrecededByExcludedText(const APicked: TTSNode; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
-      procedure AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes);
+      { Expands the first applicable fix entry onto AFinding. False = that entry's
+        needs_compiler is newer than ActiveTargetCompiler: the caller drops the match. }
+      function AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
@@ -385,6 +388,7 @@ uses
   , System.Threading        { TParallel.For -- the loader compiles the .scm queries in parallel }
   , System.StrUtils        { IndexText -- capture-name lookup for sidecar fixes }
   , DRagLint.Lint.RuleCatalog { RegisterSidecarFixRule -- a rule with a "fix" key is fixable }
+  , DRagLint.Lint.TargetCompiler { per-entry needs_compiler gate in AttachFix }
   , System.Generics.Defaults { TComparer -- sorting that table by cost }
   , System.RegularExpressionsCore { ERegularExpressionError -- a bad rule regex }
   ;
@@ -652,6 +656,8 @@ function ParseSidecarFix(const AValue: TJSONValue): TArray<TSidecarFix>;
     if V <> nil then Fx.UsesUnit:= Trim(V.Value);
     V:= AObj.GetValue('risky');
     Fx.Risky:= (V <> nil) and SameText(V.Value, 'true');
+    V:= AObj.GetValue('needs_compiler');
+    if V <> nil then Fx.NeedsCompiler:= StrToIntDef(V.Value, 0);
     if AObj.GetValue('replace') <> nil then
     begin
       Fx.Kind    := lfkReplace;
@@ -1493,7 +1499,7 @@ begin
         Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
         Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
         Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
-        if Length(FFixes) > 0 then AttachFix(Finding, Captures, ASource);
+        if (Length(FFixes) > 0) and not AttachFix(Finding, Captures, ASource) then Continue;
         FoundList.Add(Finding);
       end; // while
       Result:= FoundList.ToArray;
@@ -1510,7 +1516,7 @@ end; // function
 { Autofix wave A0: the FIRST fix entry that applies to this match is expanded
   onto the finding. An entry applies when its when_capture (if any) is bound
   and its template expands with no placeholder left over. }
-procedure TQueryRule.AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes);
+function TQueryRule.AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
 var
   Names: TArray<string>;
   Texts: TArray<string>;
@@ -1525,9 +1531,13 @@ begin
     Names[i]:= FQuery.CaptureNameForID(ACaptures[i].index);
     Texts[i]:= NodeText(ACaptures[i].node, ASource);
   end;
+  Result:= True;
   for Fx in FFixes do
   begin
     if (Fx.WhenCapture <> '') and (IndexText(Fx.WhenCapture, Names) < 0) then Continue;
+    { two-way modernize (1.38): the pattern this entry fixes needs a newer
+      compiler than the run targets -- the advice itself is void, drop the match }
+    if IsGatedByTarget(Fx.NeedsCompiler, ActiveTargetCompiler) then Exit(False);
     Txt:= '';
     if (Fx.Kind = lfkReplace) and not ExpandFixTemplate(Fx.Template, Names, Texts, Txt) then Continue;
     AFinding.FixKind:= Fx.Kind;

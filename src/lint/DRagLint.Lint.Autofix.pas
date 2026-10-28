@@ -97,19 +97,30 @@ function FixOwnerKey(const AFinding: TLintFinding): string;
 /// <param name="ARuleId">The rule id; compared case-insensitively.</param>
 /// <param name="AFixer">Builds the edits for one finding; see TFindingFixer.</param>
 /// <param name="ARisky">True for a behaviour-CHANGING fix (tagged risky, still applied).</param>
+/// <param name="ANeedsCompiler">Oldest CompilerVersion that compiles the fix's OUTPUT
+/// (1.38; e.g. 33 for an inline var); 0 = any. Under an older --target-compiler
+/// the finding is still reported but no edit is built -- counted by
+/// AutofixTargetSkipped.</param>
 /// <remarks>Makes IsFixableRule (and so `rules --json`.fixable) true for the id.
 /// An id the legacy FIXABLE_RULE_IDS chain already fixes is never handed to a
 /// registered fixer. Call it from a fixer unit's RegisterFixers, which this
 /// unit's initialization runs; not thread-safe after start-up.</remarks>
-procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False);
+procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False; ANeedsCompiler: Integer = 0);
 
 /// <summary>Registers a per-file fixer for ARuleId (autofix wave A0).</summary>
 /// <param name="ARuleId">The rule id; compared case-insensitively.</param>
 /// <param name="AFixer">Builds the edits for every finding of the rule in one file.</param>
 /// <param name="ARisky">True for a behaviour-CHANGING fix.</param>
+/// <param name="ANeedsCompiler">As RegisterFixer's.</param>
 /// <remarks>Same contract as RegisterFixer; called once per file that has a
 /// finding of the rule.</remarks>
-procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False);
+procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False; ANeedsCompiler: Integer = 0);
+
+/// <summary>How many findings the LAST BuildAutofixEdits left unfixed because
+/// their fixer's ANeedsCompiler is newer than ActiveTargetCompiler.</summary>
+/// <returns>0 at the default target, and whenever no registered fixer is gated.</returns>
+/// <remarks>Process-wide, like the registry; read right after BuildAutofixEdits.</remarks>
+function AutofixTargetSkipped: Integer;
 
 /// <summary>Installs THE generic sidecar fixer: the builder for every finding
 /// whose rule's .json carries a "fix" key (TLintFinding.FixKind).</summary>
@@ -199,6 +210,7 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.QueryRules     { DeclaredTypeAt -- DeclTypeOf }
   , DRagLint.Lint.RuleCatalog    { IsSidecarFixRule -- a sidecar "fix" key makes a rule fixable }
+  , DRagLint.Lint.TargetCompiler { RegisterFixer's ANeedsCompiler gate }
   ;
 
 type
@@ -206,6 +218,7 @@ type
     Finding: TFindingFixer;
     PerFile: TFileFixer   ;
     Risky  : Boolean      ;
+    NeedsCompiler: Integer;   { 0 = any target; see RegisterFixer }
   end;
 
 var
@@ -216,6 +229,8 @@ var
   GSidecarFixer: TFindingFixer;
   { the open store of the current --fix run (SetAutofixStore); nil without --db }
   GFixStore: ISymbolStore;
+  { findings the last BuildAutofixEdits skipped for the target compiler }
+  GTargetSkipped: Integer;
 
 { The line span an edit occupies, for DeferConflictingFixes. In-line replaces
   and inserts occupy one line; an insert after line L sits between L and L+1. }
@@ -329,23 +344,30 @@ begin
   Result:= GFixers;
 end;
 
-procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean);
+function AutofixTargetSkipped: Integer;
+begin
+  Result:= GTargetSkipped;
+end;
+
+procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean; ANeedsCompiler: Integer);
 var
   R: TRegisteredFixer;
 begin
   R:= Default(TRegisteredFixer);
   R.Finding:= AFixer;
   R.Risky  := ARisky;
+  R.NeedsCompiler:= ANeedsCompiler;
   Fixers.AddOrSetValue(ARuleId, R);
 end;
 
-procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean);
+procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean; ANeedsCompiler: Integer);
 var
   R: TRegisteredFixer;
 begin
   R:= Default(TRegisteredFixer);
   R.PerFile:= AFixer;
   R.Risky  := ARisky;
+  R.NeedsCompiler:= ANeedsCompiler;
   Fixers.AddOrSetValue(ARuleId, R);
 end;
 { The set of rule-ids that have a registered, mechanical, side-effect-free
@@ -605,6 +627,7 @@ var
 begin
   Result:= nil;
   AFixableCount:= 0;
+  GTargetSkipped:= 0;
   Cache:= TDictionary<string, TStringList>.Create;
   UsesWanted:= TStringList.Create;
   UsesDone  := TStringList.Create;
@@ -994,7 +1017,11 @@ begin
         var RegFx: TRegisteredFixer;
         var RegEdits: TArray<TTextEdit>:= nil;
         if Fixers.TryGetValue(F.RuleId, RegFx) and Assigned(RegFx.Finding) then
-          RegEdits:= RegFx.Finding(F, LinesFor(F.FilePath))
+        begin
+          { 1.38: the fix's output needs a newer compiler than the run targets }
+          if IsGatedByTarget(RegFx.NeedsCompiler, ActiveTargetCompiler) then Inc(GTargetSkipped)
+          else RegEdits:= RegFx.Finding(F, LinesFor(F.FilePath));
+        end
         else if (F.FixKind <> lfkNone) and Assigned(GSidecarFixer) then
           RegEdits:= GSidecarFixer(F, LinesFor(F.FilePath));
         if Length(RegEdits) > 0 then
@@ -1042,6 +1069,12 @@ begin
     for var FxPair: TPair<string, TRegisteredFixer> in Fixers do
     begin
       if (not Assigned(FxPair.Value.PerFile)) or IsLegacyFixRule(FxPair.Key) then Continue;
+      if IsGatedByTarget(FxPair.Value.NeedsCompiler, ActiveTargetCompiler) then
+      begin
+        for F in AFindings do
+          if SameText(F.RuleId, FxPair.Key) then Inc(GTargetSkipped);
+        Continue;
+      end;
       var FxFiles: TStringList:= TStringList.Create(dupIgnore, True, False);
       try
         for F in AFindings do

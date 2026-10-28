@@ -1012,6 +1012,7 @@ Described in:
 * [Fix it](features/fix-it.md)
 * [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md)
 * [Rename across every project that compiles a shared unit](features/multi-project-rename.md)
+* [Target compiler (--target-compiler)](features/target-compiler.md)
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
 
 ### lint-all
@@ -1045,6 +1046,7 @@ Described in:
 * [Fix all in project](features/fix-all-in-project.md)
 * [Run Lint All (Full Report)](features/run-lint-all-full-report.md)
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md)
+* [Target compiler (--target-compiler)](features/target-compiler.md)
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
 
 ### lint-project
@@ -1502,7 +1504,7 @@ Described in:
 Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 
 ```text
-drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)
+drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1518,6 +1520,7 @@ Described in:
 * [drag-lint: Project Rules](features/drag-lint-project-rules.md)
 * [Gap-wave lint rules](features/gap-wave-rules.md)
 * [Lint rules](features/lint-rules.md)
+* [Target compiler (--target-compiler)](features/target-compiler.md)
 
 ### safe-delete
 

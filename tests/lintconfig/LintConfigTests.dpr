@@ -280,6 +280,32 @@ begin
   end;
 end;
 
+{ 1.38 two-way modernize: "target_compiler" is a scalar a profile overrides, and a
+  key the writer does not own -- so it must survive an unrelated save verbatim. }
+procedure TestTargetCompiler;
+var
+  Cfg : TLintConfig;
+  Path: string;
+begin
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-target-compiler-test.json');
+  TFile.WriteAllText(Path,
+    '{ "target_compiler": "12", "profiles": { "legacy": { "target_compiler": "XE7" }, "plain": { "disabled": ["x"] } } }',
+    TEncoding.ASCII);
+  try
+    Check('TC1 top-level target_compiler loaded', TLintConfig.Load(Path, '').TargetCompiler = '12');
+    Check('TC2 a profile overrides it', TLintConfig.Load(Path, 'legacy').TargetCompiler = 'XE7');
+    Check('TC3 a profile that does not name it inherits the top level', TLintConfig.Load(Path, 'plain').TargetCompiler = '12');
+    Check('TC4 absent key = empty', TLintConfig.Load('', '').TargetCompiler = '');
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    TLintConfigWriter.SetThreshold(Cfg, 'deep-nesting', 7);
+    TLintConfigWriter.SaveToFile(Path, Cfg);
+    Check('TC5 target_compiler survives an unrelated writer save', TLintConfig.Load(Path, '').TargetCompiler = '12');
+    Check('TC6 ... and so does the profile override', TLintConfig.Load(Path, 'legacy').TargetCompiler = 'XE7');
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -288,6 +314,7 @@ begin
     TestAutoFix;
     TestIfdefAllow;
     TestNonAsciiEscaped;
+    TestTargetCompiler;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

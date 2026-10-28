@@ -73,6 +73,8 @@ the rule id, warn capture name = `warn`).
 | `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
 | `require_ancestor` | none | Node kinds; a match COUNTS ONLY inside one of them. |
 | `require_file_text` | none | Substrings; the rule does not run at all against a file whose text contains NONE of them. Case-insensitive, matched against the whole file. |
+| `needs_compiler` | `0` | (1.38.0) The oldest CompilerVersion (37 = Delphi 13, 36 = 12, 35 = 11, 33 = 10.3, 24 = XE3 ...) that accepts what the rule advises. Under `--target-compiler` / config `target_compiler` older than this the rule reports nothing. The same key on ONE entry of `fix` gates only that pattern: a match whose first applicable entry is gated is dropped (`nonminimal-bool`'s `not in` entry, `pos-for-contains`'s `Contains` entries). `0` = any compiler. |
+| `compat_since` | `0` | (1.38.0) For a rule of category `compat` (a downgrade rule): the CompilerVersion that introduced the construct it reports. Ship it `"enabled": false`; it is switched ON for a run whose target is older than this. `--enable <id>` runs it at any target. |
 
 If `warn_capture` is omitted (or no capture by that name is present in a
 match), the finding is pinned to the **first** capture in the match.

@@ -31,7 +31,7 @@ lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
+drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).

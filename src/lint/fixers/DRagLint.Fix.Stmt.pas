@@ -60,6 +60,7 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , DRagLint.Lint.Autofix
+  , DRagLint.Lint.TargetCompiler { INLINE_VAR_SINCE -- the 10.3 gate on the inline-var fixers }
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.AstChecks
   ;
@@ -1611,12 +1612,12 @@ initialization
   RegisterFixer('dataset-open-without-close', FixDatasetOpen);
   RegisterFixer('unprotected-object-free', FixUnprotectedFree);
   RegisterFixer('create-inside-try', FixCreateInsideTry);
-  RegisterFixer('index-loop-to-for-in', FixIndexLoopToForIn);
+  RegisterFixer('index-loop-to-for-in', FixIndexLoopToForIn, False, INLINE_VAR_SINCE);  { emits for var X in }
   { risky: behaviour-CHANGING fixes, applied and tagged risky:true }
   RegisterFixer('bare-except', FixBareExcept, True);
   RegisterFixer('duplicate-exception-handler', FixDuplicateHandler, True);
   RegisterFixer('exception-constructed-but-not-raised', FixExceptionNotRaised, True);
-  RegisterFixer('field-by-name-in-loop', FixFieldByNameInLoop, True);
-  RegisterFixer('swap-without-temp', FixSwapWithoutTemp, True);
+  RegisterFixer('field-by-name-in-loop', FixFieldByNameInLoop, True, INLINE_VAR_SINCE);  { emits an inline var }
+  RegisterFixer('swap-without-temp', FixSwapWithoutTemp, True, INLINE_VAR_SINCE);  { emits an inline var }
 
 end.

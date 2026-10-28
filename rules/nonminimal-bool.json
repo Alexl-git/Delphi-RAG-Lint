@@ -7,6 +7,6 @@
   "fix": [
     { "when_capture": "eql", "replace": "({eql} <> {eqr})" },
     { "when_capture": "nel", "replace": "({nel} = {ner})" },
-    { "when_capture": "inl", "replace": "({inl} not in {inr})" }
+    { "when_capture": "inl", "replace": "({inl} not in {inr})", "needs_compiler": 37 }
   ]
 }

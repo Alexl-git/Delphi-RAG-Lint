@@ -101,6 +101,7 @@ uses
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
   DRagLint.Lint.Compliance in '..\lint\DRagLint.Lint.Compliance.pas',
   DRagLint.Lint.RuleCatalog in '..\lint\DRagLint.Lint.RuleCatalog.pas',
+  DRagLint.Lint.TargetCompiler in '..\lint\DRagLint.Lint.TargetCompiler.pas',
   DRagLint.Lint.Baseline in '..\lint\DRagLint.Lint.Baseline.pas',
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',

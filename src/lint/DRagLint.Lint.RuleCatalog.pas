@@ -121,6 +121,12 @@ const
 
     duplicate-code is deliberately NOT here. It is block-scoped rather than
     routine-scoped and carries no single metric its review is about. }
+  /// <summary>The rule category of the downgrade ("compat") rules: a finding
+  /// reports a construct the run's --target-compiler cannot compile, its fix
+  /// rewrites it to classic syntax (two-way modernize, 1.38; the rules
+  /// themselves arrive in 1.38.1).</summary>
+  COMPAT_CATEGORY = 'compat';
+
   ROUTINE_METRIC_RULES: TArray<string> = [
     'too-many-exit-points', 'cyclomatic-complexity', 'cognitive-complexity',
     'method-too-long', 'too-many-locals', 'too-many-parameters', 'deep-nesting'];
@@ -156,6 +162,19 @@ type
     HasSidecarFix  : Boolean; // .scm only: its sidecar .json carries a "fix" key (autofix wave A0)
     Params         : TArray<TRuleParam>;
     Compliance     : TComplianceLabels;  // rules\compliance.json row; empty when unlabelled
+    /// <summary>Oldest CompilerVersion that accepts this rule's ADVICE / fix
+    /// output (two-way modernize, 1.38); 0 = any compiler.</summary>
+    /// <remarks>Sidecar key "needs_compiler", or B()'s ANeedsCompiler. Under a
+    /// --target-compiler older than this the rule's findings are not reported
+    /// (TTargetRuleGate.Drops). A per-fix-entry "needs_compiler" (one pattern
+    /// of a rule, e.g. nonminimal-bool's `not in`) is NOT reflected here --
+    /// TQueryRule drops just the matches that bound that entry.</remarks>
+    NeedsCompiler  : Integer;
+    /// <summary>For a rule of category <see cref="COMPAT_CATEGORY"/>: the
+    /// CompilerVersion that introduced the construct it reports; 0 otherwise.</summary>
+    /// <remarks>Sidecar key "compat_since". Such a rule ships OFF and is switched
+    /// ON for a run whose target is older (TTargetRuleGate.ForcesOn).</remarks>
+    CompatSince    : Integer;
   end;
 
   /// <summary>Per-category and total rule counts for the catalog summary.</summary>
@@ -438,11 +457,14 @@ class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;
 var
   L: TList<TRuleInfo>;
   procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;
-    const AParams: TArray<TRuleParam> = nil);
+    const AParams: TArray<TRuleParam> = nil; ANeedsCompiler: Integer = 0; ACompatSince: Integer = 0);
   var R: TRuleInfo;
   begin
+    R:= Default(TRuleInfo);
     R.Id:= AId; R.Category:= ACat; R.DefaultSeverity:= ASev; R.Title:= ATitle;
     R.Source:= 'builtin'; R.DefaultEnabled:= AEnabled; R.Params:= AParams;
+    R.NeedsCompiler:= ANeedsCompiler;
+    R.CompatSince  := ACompatSince;
     L.Add(R);
   end;
 begin
@@ -948,6 +970,9 @@ begin
             IsFixableRule (DRagLint.Lint.Autofix) answers for it }
           Sc.HasSidecarFix:= Obj.GetValue('fix') <> nil;
           if Sc.HasSidecarFix then RegisterSidecarFixRule(Id, SidecarFixIsRisky(Obj.GetValue('fix')));
+          { two-way modernize (1.38): the target-compiler gate's two inputs }
+          Sc.NeedsCompiler:= if Obj.GetValue('needs_compiler') <> nil then StrToIntDef(Obj.GetValue('needs_compiler').Value, 0) else 0;
+          Sc.CompatSince  := if Obj.GetValue('compat_since') <> nil then StrToIntDef(Obj.GetValue('compat_since').Value, 0) else 0;
           Sc.Params:= nil;
           ById.Add(Id, Sc); Order.Add(Id);
         finally
