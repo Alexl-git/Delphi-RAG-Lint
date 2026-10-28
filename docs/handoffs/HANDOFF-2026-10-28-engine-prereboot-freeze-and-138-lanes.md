@@ -67,3 +67,8 @@ Grammar lane: drag-lint wt ext-dirword 8b95cf7e (RED runner) + grammar wt C:\Pro
 1. Recreate the status cron. 2. Collect the 4 WIP lanes' STATE.md, re-dispatch (ext-dirword first).
 3. FREEZE-FINAL when ext-dirword is green -> re-parse. 4. Start RB-5 + lf-docs + plugin writer lanes and INT2
 on stage3 in parallel with the re-parse. 5. Prepare (not publish) 1.37.0.
+
+## POST-REBOOT update (owner rebooted with fixed start scripts; read the ledger tail 16:20-16:40)
+* Lanes finished before the reboot: enumrules a8d021ab (owed: lint-all on new code), dg-d0 18726a00 (owed: tests\lint rerun; LSP needs Lint.TargetCompiler.pas ResolveTargetCompiler + SetActiveTargetCompiler + TTargetRuleGate -> send to LSP), cv-migtype 0b5222e7 (owed: re-lint Convert.Apply.pas, tell CONVERTER to re-test #migrate). Only ext-dirword is unfinished (grammar variants C/D).
+* Parallel plan (HPS): (a) ext-dirword finisher (session model) from its STATE.md; (b) INT138 = new branch gaps/int138 off gaps/stage3 322d14d6 merging ALL ready 1.38 branches + LSP in the documented order, featuregen build --all, build, guards -- runs while (a) works; (c) RB-5 x3 + lf-docs + plugin settings writer lanes from stage3; (d) when (a) is green: FREEZE-FINAL into gaps/ext -> stage3 -> merge into int138 -> start the re-parse; (e) prepare (not publish) 1.37.0 from stage3.
+* Recreate the 4-hourly status cron first. Owner open Qs: dl:ok bare-space reason form; doc-literal symbol_id y-candidate (default defer); gate for bug-rule fixes under old targets.
