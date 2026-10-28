@@ -250,6 +250,7 @@ uses
   , DRagLint.Preprocess.Profile
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
+  , DRagLint.Report    .Overview
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
@@ -362,6 +363,7 @@ type
     Output          : string        ;
     OutputDir       : string        ;
     Limit           : Integer       ;
+    MaxRows         : Integer       ; // --max-rows N: per-section row cap of `overview`
     SortBy          : string        ;
     ScanLibraries   : Boolean       ;
     ScanLibrariesAll: Boolean       ; // --scan-libraries-all: every platform subkey
@@ -1589,6 +1591,11 @@ begin
     else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
     else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--max-rows') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxRows:= StrToIntDef(ParamStr(i), 0);
+    end
     else if (A = '--name-like') and (i < ParamCount) then begin Inc(i); Result.NameLike:= ParamStr(i); end
     else if (A = '--seconds') and (i < ParamCount) then begin Inc(i); Result.HoldSeconds:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resume' then Result.Resume:= True
@@ -34561,6 +34568,7 @@ begin
     else if Args.Command = 'export'            then Result:= DoExport          (Args)
     else if Args.Command = 'top'               then Result:= DoTop             (Args)
     else if Args.Command = 'gain'              then Result:= DoGain            (Args)
+    else if Args.Command = 'overview'          then Result:= RunOverview       (Args.DbPath, Args.MaxRows, Args.AsJson)
     else if Args.Command = 'import-log'        then Result:= DoImportLog       (Args)
     else if Args.Command = 'graph'             then Result:= DoGraph           (Args)
     else if Args.Command = 'todos'             then Result:= DoTodos           (Args)
