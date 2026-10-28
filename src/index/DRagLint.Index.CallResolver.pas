@@ -23,7 +23,8 @@ uses
   System.DateUtils, { DateTimeToUnix -- same }
   System.Generics.Collections,
   DRagLint.Core.Model,
-  DRagLint.Core.Interfaces;
+  DRagLint.Core.Interfaces,
+  DRagLint.Index.LibraryOracle;
 
 type
   /// <summary>v14 (D5): a set of symbol kinds -- lets the resolver's child scans
@@ -307,8 +308,37 @@ type
     Unreadable: Int64;
   end;
 
-  /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
-  /// once (Create builds the name-candidate + file-scope maps from the whole DB),
+  /// <summary>Item 4 (resolver 1.16.0-alpha, spec 2026-10-28-untypable-receivers
+  /// s.4.1): the receiver's declared type as TEXT, as far as the ladder reached
+  /// it -- whether or not that type has a symbol in this index.</summary>
+  /// <remarks>Text is leaf-normalised (NormalizeTypeLeaf). Pending holds the
+  /// chain segments after Text the ladder could not step. Head is set instead
+  /// when no project rung could type the receiver's HEAD identifier and the
+  /// receiver is a plain identifier chain: the chain itself, for the library
+  /// oracle to read as a type, a global or a unit-qualified type.</remarks>
+  TRcvTypeText = record
+    /// <summary>The declared type the ladder reached, leaf-normalised; '' none.</summary>
+    Text   : string;
+    /// <summary>Dot-joined segments after Text that could not be stepped; ''.</summary>
+    Pending: string;
+    /// <summary>An identifier-chain receiver whose head no project rung typed; ''.</summary>
+    Head   : string;
+  end;
+
+  /// <summary>Item 4: per-run receiver counters, printed on the calls stage's
+  /// `receivers:` ResolveLog line.</summary>
+  /// <remarks>Only qualified sites (a receiver other than '' / Self) count.
+  /// TypedLocal + TypedByNameOnly + Untyped = the qualified sites resolved.</remarks>
+  TReceiverStats = record
+    /// <summary>The receiver typed to a symbol of THIS index.</summary>
+    TypedLocal     : Int64;
+    /// <summary>The receiver's type is known by NAME only (no symbol here).</summary>
+    TypedByNameOnly: Int64;
+    /// <summary>Neither: '' was recorded.</summary>
+    Untyped        : Int64;
+  end;
+
+  /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare  /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
   /// <remarks>
   /// Not thread-safe; single owning thread only. Holds the ISymbolStore
@@ -407,6 +437,13 @@ type
     FTypeUseStats: TTypeUseStats;
     // B-31: file id -> its type symbols and its root (unit/program) symbol.
     FFileTypes: TDictionary<Int64, TArray<TSymbol>>;
+    { Item 4: the library oracle over FExtraStores (no stores -> every Bind is no-store), the
+      receiver counters, and the lower-cased uses list per file (+ the .dpr's, loaded once). }
+    FOracle   : TLibraryOracle;
+    FReceiverStats : TReceiverStats;
+    FFileUses : TDictionary<Int64, TArray<string>>;
+    FDprUses  : TArray<string>;
+    FDprLoaded: Boolean;
 
     /// <summary>The type a bare type name at ARef names, by Delphi's scope order;
     /// the shared lookup behind ResolveTypeUse and ResolveEnumCast.</summary>
@@ -562,29 +599,38 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
-    /// <summary>v21: resolves a call the primary index could not, against the
-    /// extra (library) stores, answering with a QUALIFIED NAME. '' when it
-    /// cannot answer unambiguously. See the implementation for why it is
-    /// deliberately narrow.</summary>
-    /// <param name="AReceiver"><!-- drag-lint:auto type -->const string</param>
-    /// <param name="ACallName"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
-    /// <remarks>
-    /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Model.CanBeCallTarget, Pos, SameText, Trim</para>
-    /// <para>Complexity: 14 (cyclomatic, outer body), 53 lines (full implementation)</para>
-    /// <para>Reads: FExtraStores</para>
-    /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
-    /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
-    /// <!-- drag-lint:auto END -->
-    /// </remarks>
-    function ResolveExternally(const AReceiver, ACallName: string): string;
-    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
+    /// <summary>Item 4 (replaces v21's ResolveExternally): offers a site the
+    /// primary index could not bind to the library oracle, and answers with a
+    /// QUALIFIED NAME or ''. The type text the oracle gets: the receiver's
+    /// type text; for a PROJECT type, its first library ancestor's name (only
+    /// when the project chain declares no member of the name); for an untyped
+    /// identifier-chain head, the chain (BindHead); for a bare call, the
+    /// enclosing class's library ancestor, then a library routine.</summary>
+    /// <param name="ACallRef">The site.</param>
+    /// <param name="AReceiver">Its receiver text ('' bare).</param>
+    /// <param name="ATypeId">The receiver's type id in this index, 0 when untyped.</param>
+    /// <param name="AText">The receiver's type text; BindHead may fill Text.</param>
+    /// <returns>The qualified name of the library member, or ''.</returns>
+    function BindExternally(const ACallRef: TReference; const AReceiver: string; ATypeId: Int64;
+      var AText: TRcvTypeText): string;
+    /// <summary>Item 4: the name of the FIRST ancestor of ATypeId (transitive,
+    /// breadth-first) this index could not resolve -- a class-position (ordinal
+    /// 0) edge before any other.</summary>
+    /// <param name="ATypeId">A project type id.</param>
+    /// <returns>The ancestor name as written, or '' when every ancestor resolved.</returns>
+    function FirstUnresolvedAncestorName(ATypeId: Int64): string;
+    /// <summary>Item 4: True when ATypeId or a resolved ancestor declares a
+    /// member spelled AName -- the project's own answer, which an external
+    /// name must never override.</summary>
+    /// <param name="ATypeId">A project type id.</param>
+    /// <param name="AName">The member name.</param>
+    /// <returns>True when some type on the project chain declares it.</returns>
+    function ChainDeclaresName(ATypeId: Int64; const AName: string): Boolean;
+    /// <summary>Item 4: lower-cased unit names AFileId uses (both sections)
+    /// plus the uses of every .dpr in the index; cached per file.</summary>
+    /// <param name="AFileId">The referencing file.</param>
+    /// <returns>The names, lower-cased.</returns>
+    function FileUsesUnits(AFileId: Int64): TArray<string>;    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TList&lt;TSymbol&gt; -- Observed:
     /// TList&lt;TSymbol&gt;.Create.</returns>
@@ -968,13 +1014,24 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LocalInScopeAt"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64; overload;
+    /// <summary>Item 4: TypeReceiver that also hands back the receiver's
+    /// declared type TEXT, which survives when the type has no symbol here.</summary>
+    /// <param name="ACallRef">The ref whose receiver is typed.</param>
+    /// <param name="AReceiverExpr">The receiver text.</param>
+    /// <param name="AText">The type text (spec s.4.1); empty fields when untyped.</param>
+    /// <returns>The receiver type id, or 0.</returns>
+    function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string;
+      out AText: TRcvTypeText): Int64; overload;
     /// <summary>X1: the rungs of TypeReceiver, before the implicit pointer
     /// dereference TypeReceiver applies to their answer.</summary>
     /// <param name="ACallRef">The ref whose receiver is typed; supplies the file and enclosing routine.</param>
     /// <param name="AReceiverExpr">The receiver text, as ExtractReceiverExpr returns it.</param>
+    /// <param name="AText">Item 4: the declared type text each rung reads before it
+    /// resolves the name; it survives when the id is 0.</param>
     /// <returns>The receiver type id, or 0 when no rung can type it.</returns>
-    function TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    function TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;
+      out AText: TRcvTypeText): Int64;
     /// <summary>X1: Delphi's implicit dereference -- `p.K` with p: PRec = ^TRec
     /// reaches TRec.K. Answers the pointee type when ATypeId is a type alias
     /// spelled `^T` and T resolves; otherwise ATypeId unchanged (a pointer type
@@ -994,7 +1051,8 @@ type
     /// <returns>The receiver type id, or 0 when any step cannot be read (a
     /// call or cast inside the chain, a subscript on a non-array such as an
     /// indexed property or a string, an untypable head).</returns>
-    function TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    function TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string;
+      out AText: TRcvTypeText): Int64;
     /// <summary>T-11 kind 12: types a receiver whose chain holds a CALL or a
     /// parenthesised segment -- `O.Mk('a').Leaf`, `(O as TInner).Leaf`,
     /// `SB.Append(x)` -- by typing everything left of the LAST top-level dot
@@ -1010,7 +1068,8 @@ type
     /// untyped prefix, an empty segment (a line-scan fragment such as
     /// `.Mk(1).L`), a method that is overloaded or missing, a procedure, a
     /// subscript segment. Never a guess.</returns>
-    function TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string; out AHandled: Boolean): Int64;
+    function TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string; out AHandled: Boolean;
+      out AText: TRcvTypeText): Int64;
     /// <summary>R3(a): True when the enclosing routine, or any routine on its
     /// lexical chain, declares a local, parameter, const, var or nested routine
     /// spelled AName -- i.e. something NEARER than the enum's unit scope.</summary>
@@ -1175,8 +1234,15 @@ type
     /// <param name="ARef">Supplies the file and the enclosing routine.</param>
     /// <param name="AName">The identifier.</param>
     /// <returns>A type symbol id, or 0.</returns>
-    function TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
-    /// <summary>X2 (resolver 1.14.0-alpha): the declared RETURN type of the
+    function TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64; overload;
+    /// <summary>Item 4: TypeOfOrdinaryName that also hands back the RAW declared
+    /// type text of the value it found (a local's, a member's, the one unit-level
+    /// var's), or the name itself when it resolved as a type.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="AName">The identifier.</param>
+    /// <param name="ATypeText">The raw declaration text, '' when nothing was found.</param>
+    /// <returns>A type symbol id, or 0.</returns>
+    function TypeOfOrdinaryName(const ARef: TReference; const AName: string; out ATypeText: string): Int64; overload;    /// <summary>X2 (resolver 1.14.0-alpha): the declared RETURN type of the
     /// function a receiver names -- `GetCopy.M`, `MakeCopy.M`,
     /// `MakeCopy().M`.</summary>
     /// <param name="ARef">The call or member ref; supplies the file and the
@@ -1193,8 +1259,14 @@ type
     /// when the choice cannot matter. Pinned by
     /// tests\callresolve\run_interface_dispatch_bind.ps1 (IF6-IF8,
     /// CLS3-CLS4).</remarks>
-    function TypeOfFunctionResult(const ARef: TReference; const AName: string): Int64;
-    /// <summary>X2: True when ancestor AAncestor is an INTERFACE named in the
+    function TypeOfFunctionResult(const ARef: TReference; const AName: string): Int64; overload;
+    /// <summary>Item 4: TypeOfFunctionResult that also hands back the return
+    /// type TEXT every candidate agrees on, even when it resolves to nothing here.</summary>
+    /// <param name="ARef">As for the overload without ARetText.</param>
+    /// <param name="AName">As for the overload without ARetText.</param>
+    /// <param name="ARetText">The agreed return type text, leaf-normalised; ''.</param>
+    /// <returns>As for the overload without ARetText.</returns>
+    function TypeOfFunctionResult(const ARef: TReference; const AName: string; out ARetText: string): Int64; overload;    /// <summary>X2: True when ancestor AAncestor is an INTERFACE named in the
     /// heritage of AOwnerId and AOwnerId is not itself an interface.</summary>
     /// <param name="AOwnerId">The type whose ancestors are walked.</param>
     /// <param name="AAncestor">A resolved ancestor row of AOwnerId.</param>
@@ -1784,6 +1856,14 @@ type
     /// <summary>Per-run counters of the type_use pass.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
     property TypeUseStats: TTypeUseStats read FTypeUseStats;
+
+    /// <summary>Item 4: per-run receiver counters (qualified sites only).</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property ReceiverStats: TReceiverStats read FReceiverStats;
+    /// <summary>Item 4: the library oracle's outcome counters; no-store counts
+    /// every site that would have been offered to a library had one been open.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    function OracleStats: TOracleStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -2400,11 +2480,18 @@ begin
   FLocalDecls := TDictionary<Int64, string>.Create;
   FFileTypes  := TDictionary<Int64, TArray<TSymbol>>.Create;
   FWriteStats := Default(TWriteResolveStats);
+  FOracle    := TLibraryOracle.Create(AExtraStores);
+  FReceiverStats  := Default(TReceiverStats);
+  FFileUses  := TDictionary<Int64, TArray<string>>.Create;
+  FDprUses   := [];
+  FDprLoaded := False;
   BuildMaps;
 end;
 
 destructor TCallResolver.Destroy;
 begin
+  FFileUses.Free;
+  FOracle.Free;
   FRows.Ancestors     .Free;
   FRows.Symbols       .Free;
   FWith.SurfaceComplete.Free;
@@ -4254,6 +4341,13 @@ end;
 
 function TCallResolver.TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
 var
+  Ignored: string;
+begin
+  Result:= TypeOfOrdinaryName(ARef, AName, Ignored);
+end;
+
+function TCallResolver.TypeOfOrdinaryName(const ARef: TReference; const AName: string; out ATypeText: string): Int64;
+var
   M      : TSymbol       ;
   ClassId: Int64         ;
   L      : TList<TSymbol>;
@@ -4261,13 +4355,16 @@ var
   Hits   : Integer       ;
   Declared: Boolean      ;
 begin
+  ATypeText:= '';
   { A local or parameter: the nearest declaration covering the site. One that
     covers nothing here types to nothing, and still shadows everything below. }
   M:= LocalInScopeAt(ARef, AName, Declared);
+  ATypeText:= Trim(M.Signature);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, ARef.FileId));
   if Declared then Exit(0);
   EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
   M:= LookupMemberOnType(ClassId, AName);
+  ATypeText:= Trim(M.Signature);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
   { A unit-level var visible from here: exactly one, or nothing. }
   Hits:= 0;
@@ -4280,12 +4377,27 @@ begin
         M:= S;
       end;
   { Last: the name IS a type -- `with TFoo do` reaches its class members. }
-  if Hits = 0 then Result:= ResolveTypeNameToSymbol(AName, ARef.FileId)
-  else if Hits = 1 then Result:= ResolveTypeNameToSymbol(M.Signature, M.FileId)
+  if Hits = 0 then
+  begin
+    Result:= ResolveTypeNameToSymbol(AName, ARef.FileId);
+    if Result > 0 then ATypeText:= AName;
+  end
+  else if Hits = 1 then
+  begin
+    ATypeText:= Trim(M.Signature);
+    Result:= ResolveTypeNameToSymbol(M.Signature, M.FileId);
+  end
   else Result:= 0;
 end;
 
 function TCallResolver.TypeOfFunctionResult(const ARef: TReference; const AName: string): Int64;
+var
+  Ignored: string;
+begin
+  Result:= TypeOfFunctionResult(ARef, AName, Ignored);
+end;
+
+function TCallResolver.TypeOfFunctionResult(const ARef: TReference; const AName: string; out ARetText: string): Int64;
 var
   Probe  : TReference    ;
   Matches: TList<TSymbol>;
@@ -4293,13 +4405,26 @@ var
   RetType: string        ;
   TypeId : Int64         ;
 begin
-  Result:= 0;
+  Result  := 0;
+  ARetText:= '';
   if AName = '' then Exit;
   Probe         := ARef;
   Probe.NameText:= AName;
   Matches       := TList<TSymbol>.Create;
   try
     if FindParenlessCandidates(Probe, '', Matches) <> '' then Exit;
+    { Item 4: the return type TEXT, when every candidate writes the same leaf
+      -- known even when the type is a library one. }
+    for S in Matches do
+    begin
+      RetType:= NormalizeTypeLeaf(SignatureReturnType(S.Signature));
+      if (RetType = '') or ((ARetText <> '') and not SameText(RetType, ARetText)) then
+      begin
+        ARetText:= '';
+        Break;
+      end;
+      ARetText:= RetType;
+    end;
     { Every candidate must be a function, and all must name ONE type: the
       return type is resolved in the DECLARING unit's scope, where it is
       written. }
@@ -5038,7 +5163,8 @@ begin
   end;
 end;
 
-function TCallResolver.TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+function TCallResolver.TypeOfSelectorChain(const ACallRef: TReference; const AReceiverExpr: string;
+  out AText: TRcvTypeText): Int64;
 const
   MAX_ALIAS_HOPS = 4; // `TMsgs = TArray<TMsg>` is one; a longer alias chain declines
 var
@@ -5049,6 +5175,7 @@ var
   SegIx   : Integer;
   TypeText: string ; // the current value's declared type TEXT, or '' when TypeId holds it
   TypeId  : Int64  ;
+  PrevText: string ; // item 4: the type text before the step that failed
 
   { Step the current type through one selector: '[' (element) or '^' (pointee).
     A type text this cannot read directly is resolved as a NAMED type and, when
@@ -5109,7 +5236,15 @@ var
       if AnonDeclined then TypeText:= '';
     end
     else
-      TypeId:= TypeOfOrdinaryName(ACallRef, AName);
+    begin
+      var OrdText: string;
+      TypeId:= TypeOfOrdinaryName(ACallRef, AName, OrdText);
+      { Item 4 (f): a unit-level (or inherited) value of an ARRAY type answers
+        no id -- its text is `array [0 .. 64] of TfrmGageport2` -- so read the
+        TEXT and let the selector take the element type. Only when the id path
+        had nothing, so no edge that bound before can move. }
+      if (TypeId = 0) and (ArrayElementTypeText(OrdText) <> '') then TypeText:= OrdText;
+    end;
     Result:= (TypeText <> '') or (TypeId > 0);
   end;
 
@@ -5123,19 +5258,41 @@ var
     Result  := (Member.Id > 0) and (TypeText <> '');
   end;
 
+  { Item 4: the text a chain stopped at, when every segment from the failing
+    member on is a plain name the oracle can step: `T.Panels` yes, `T.Items[0]` no. }
+  procedure StopAt(AFailIx: Integer);
+  var
+    Names: TArray<string>;
+  begin
+    Names:= [];
+    for var K:= AFailIx to High(Segs) do
+    begin
+      if not SplitSelectorSegment(Segs[K], Name, Sels) or (Sels <> '') then Exit;
+      Names:= Names + [Name];
+    end;
+    AText.Text   := NormalizeTypeLeaf(PrevText);
+    AText.Pending:= if AText.Text = '' then '' else string.Join('.', Names);
+  end;
+
 begin
+  AText   := Default(TRcvTypeText);
   TypeText:= '';
   TypeId  := 0;
   Ok      := SplitTopLevelDots(AReceiverExpr, Segs);
   SegIx   := 0;
   while Ok and (SegIx <= High(Segs)) do
   begin
+    PrevText:= if TypeText <> '' then TypeText else if TypeId > 0 then SymbolById(TypeId).Name else '';
     Ok:= SplitSelectorSegment(Segs[SegIx], Name, Sels)
          and (if SegIx = 0 then TypeHead(Name) else TypeMember(Name));
+    if (not Ok) and (SegIx > 0) and (PrevText <> '') then StopAt(SegIx);
     for var Sel: Char in Sels do Ok:= Ok and ApplySelector(Sel);
     Inc(SegIx);
   end;
   Result:= if Ok then CurrentTypeId else 0;
+  if Ok then
+    AText.Text:= if TypeText <> '' then NormalizeTypeLeaf(TypeText)
+                 else if TypeId > 0 then SymbolById(TypeId).Name else '';
 end;
 
 { T-11: split a receiver at its TOP-LEVEL dots -- outside ( ) and [ ] groups
@@ -5210,20 +5367,27 @@ begin
 end;
 
 function TCallResolver.TypeOfCallChain(const ACallRef: TReference; const AReceiverExpr: string;
-  out AHandled: Boolean): Int64;
+  out AHandled: Boolean; out AText: TRcvTypeText): Int64;
 var
   Segs     : TArray<string>;
   HasParen : Boolean;
   HasEmpty : Boolean;
   OwnerType: Int64  ;
+  OwnerText: TRcvTypeText;
+  StepName : string ;
+  Found    : Boolean;
 
-  { The type the LAST segment ASeg yields as a member of AOwner. }
-  function ChainStep(AOwner: Int64; const ASeg: string): Int64;
+  { The type the LAST segment ASeg yields as a member of AOwner. Item 4: AStepText
+    is the member's declared type text / the method's return type text; AFound
+    False when the owner's chain has no such member (an inherited library one). }
+  function ChainStep(AOwner: Int64; const ASeg: string; out AStepText: string): Int64;
   var
     P   : Integer;
     Conf: string ;
   begin
-    Result:= 0;
+    Result   := 0;
+    AStepText:= '';
+    Found    := False;
     P:= 1;
     while (P <= Length(ASeg)) and IsIdentPart(ASeg[P]) do Inc(P);
     if (P = 1) or not IsIdentStart(ASeg[1]) then Exit;
@@ -5233,39 +5397,98 @@ var
     begin
       var Member: TSymbol:= LookupMemberOnType(AOwner, Name);
       if Member.Id > 0 then
+      begin
+        Found    := True;
+        AStepText:= NormalizeTypeLeaf(Member.Signature);
         Exit(DerefPointerAlias(ResolveTypeNameToSymbol(Member.Signature, Member.FileId)));
+      end;
     end
     else if not IsOneParenGroup(Args) then
-      Exit; // `Items[0]`, `F(x)[1]`: a subscript step is not modelled here
+    begin
+      Found:= True; // `Items[0]`, `F(x)[1]`: a subscript step is not modelled here
+      Exit;
+    end;
     { A method -- `Mk('a')`, or the parenless `Leaf` -- types to its declared
       return type. Exactly one candidate on the type's chain ('certain'): an
       overload set or an override pair may disagree on the return type. }
     var Target: Int64:= LookupMethodOnType(AOwner, Name, 0, False, Conf);
+    Found:= Target > 0;
     if (Target <= 0) or (Conf <> 'certain') then Exit;
     var Method: TSymbol:= SymbolById(Target);
     var RetType: string:= SignatureReturnType(Method.Signature);
+    AStepText:= NormalizeTypeLeaf(RetType);
     if RetType <> '' then
       Result:= DerefPointerAlias(ResolveTypeNameToSymbol(RetType, Method.FileId));
   end;
 
+  { Item 4: the last segment's plain name -- `Mk` of `Mk('a')` -- or '' for a
+    subscript / cast segment the oracle cannot step. }
+  function SegName(const ASeg: string): string;
+  var
+    P: Integer;
+  begin
+    P:= 1;
+    while (P <= Length(ASeg)) and IsIdentPart(ASeg[P]) do Inc(P);
+    Result:= Copy(ASeg, 1, P - 1);
+    if (Result = '') or not IsIdentStart(Result[1]) then Exit('');
+    var Args: string:= Trim(Copy(ASeg, P, MaxInt));
+    if (Args <> '') and not IsOneParenGroup(Args) then Result:= '';
+  end;
+
+  function Join(const A, B: string): string;
+  begin
+    Result:= if A = '' then B else A + '.' + B;
+  end;
+
 begin
   Result  := 0;
+  AText   := Default(TRcvTypeText);
   AHandled:= SplitChainSegments(AReceiverExpr, Segs, HasParen) and HasParen and (Length(Segs) >= 2);
   { An empty segment is a line-scan fragment (`.Mk(1).L`): never typed, and
     above all never from the enclosing class, which is what '' would mean. }
   HasEmpty:= False;
   for var Seg: string in Segs do HasEmpty:= HasEmpty or (Seg = '');
   if (not AHandled) or HasEmpty then Exit;
-  OwnerType:= TypeReceiver(ACallRef, string.Join('.', Segs, 0, High(Segs))); // shorter text -> the recursion ends
-  if OwnerType > 0 then Result:= ChainStep(OwnerType, Segs[High(Segs)]);
+  OwnerType:= TypeReceiver(ACallRef, string.Join('.', Segs, 0, High(Segs)), OwnerText); // shorter text -> the recursion ends
+  StepName := SegName(Segs[High(Segs)]);
+  if OwnerType > 0 then
+  begin
+    Result:= ChainStep(OwnerType, Segs[High(Segs)], AText.Text);
+    { Not on the project chain: the owner's text with this segment pending,
+      for the oracle to step through the owner's library ancestors. }
+    if (not Found) and (StepName <> '') then
+    begin
+      AText.Text   := if OwnerText.Text <> '' then OwnerText.Text else SymbolById(OwnerType).Name;
+      AText.Pending:= Join(OwnerText.Pending, StepName);
+    end;
+  end
+  else if StepName <> '' then
+  begin
+    if OwnerText.Text <> '' then
+    begin
+      AText.Text   := OwnerText.Text;
+      AText.Pending:= Join(OwnerText.Pending, StepName);
+    end
+    else if OwnerText.Head <> '' then
+      AText.Head:= Join(OwnerText.Head, StepName);
+  end;
 end;
 
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+var
+  Ignored: TRcvTypeText;
 begin
-  Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr));
+  Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr, Ignored));
 end;
 
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string): Int64;  // dl:ok too-many-exit-points@fb25, cyclomatic-complexity@26f1 -- REVIEWED 2026-10-26 (whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
+function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string;
+  out AText: TRcvTypeText): Int64;
+begin
+  Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr, AText));
+end;
+
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@72ca, cyclomatic-complexity@3450 -- REVIEWED 2026-10-28 (item 4, lane R4R: the out AText adds no rung and changes no answer -- each existing rung writes the type text it already read before resolving it, and the added branches are that bookkeeping in kinds 6 and 10; the rung order is still the contract. Earlier: 2026-10-26 whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
+  out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;
   ClassId : Int64  ;
@@ -5274,6 +5497,7 @@ var
   RetType : string ;
 begin
   Result:= 0;
+  AText := Default(TRcvTypeText); { item 4: '' for bare / Self / with-typed / untyped }
   if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
   Encl:= SymbolById(ACallRef.EnclosingSymbolId);
 
@@ -5310,12 +5534,19 @@ begin
   if TryParseCastTarget(AReceiverExpr, CastType) then
   begin
     Result:= ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
+    AText.Text:= if Result > 0 then NormalizeTypeLeaf(CastType) else '';
     if (Result = 0) and AReceiverExpr.StartsWith(CastType + '(', True) and IsIdentChain([CastType]) then
-      Result:= TypeOfFunctionResult(ACallRef, CastType);
+      Result:= TypeOfFunctionResult(ACallRef, CastType, AText.Text);
     { T-11: `O.Mk('a')` also reads as a cast to `O.Mk`; when that names no type
       and no function, kind 12 below types it as a call on O. }
     if Result > 0 then Exit;
-    Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled);
+    var FnText: string:= AText.Text;
+    Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled, AText);
+    { Item 4: a cast to a type this index does not hold (`TFDQuery(DS).Open`,
+      `(S as TStringList).Add`) still names that type; a function of the name
+      wrote its return type above. }
+    if not ChainHandled then
+      AText.Text:= if FnText <> '' then FnText else NormalizeTypeLeaf(CastType);
     Exit;
   end;
 
@@ -5327,7 +5558,7 @@ begin
   //     ladder again, the last segment is a member / method lookup on its type;
   //     any untyped step answers 0. Pinned by
   //     tests\callresolve\run_receiver_cst_capture.ps1.
-  Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled);
+  Result:= TypeOfCallChain(ACallRef, AReceiverExpr, ChainHandled, AText);
   if ChainHandled then Exit;
 
   // --- Kind 11 (X1, 2026-10-25): a receiver with SELECTORS -- an array element
@@ -5338,7 +5569,7 @@ begin
   //     0 -- the same floor as before. Pinned by
   //     tests\callresolve\run_local_read_chain_bind.ps1.
   if (Pos('[', AReceiverExpr) > 0) or (Pos('^', AReceiverExpr) > 0) then
-    Exit(TypeOfSelectorChain(ACallRef, AReceiverExpr));
+    Exit(TypeOfSelectorChain(ACallRef, AReceiverExpr, AText));
 
   // --- Kind 7 (v20b): a UNIT-QUALIFIED TYPE receiver, 'Unit.TType.M' /
   //     'System.JSON.TJSONArray.Create'. Mandatory Delphi whenever two used units
@@ -5367,16 +5598,40 @@ begin
     //     the unit-qualified rung below runs exactly as it did before -- so
     //     'Unit.TType' (an untypable head) is unchanged. Pinned by
     //     tests\callresolve\run_chained_receiver_bind.ps1.
-    var ChainType: Int64:= TypeReceiver(ACallRef, Segs[0]);
+    { Item 4: CurText follows the walk -- the head's text, then each stepped
+      member's declared type; StopIx is the first segment NOT stepped. }
+    var HeadText: TRcvTypeText;
+    var ChainType: Int64:= TypeReceiver(ACallRef, Segs[0], HeadText);
+    var CurText: string:= HeadText.Text;
+    var StopIx: Integer:= 1;
     var SegIx: Integer:= 1;
     while (ChainType > 0) and (SegIx <= High(Segs)) do
     begin
       var SegMember: TSymbol:= LookupMemberOnType(ChainType, Segs[SegIx]);
+      if CurText = '' then CurText:= SymbolById(ChainType).Name;
+      if SegMember.Id > 0 then
+      begin
+        CurText:= NormalizeTypeLeaf(SegMember.Signature);
+        StopIx := SegIx + 1;
+      end;
       ChainType:= if SegMember.Id > 0 then DerefPointerAlias(ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId)) else 0;
       Inc(SegIx);
     end;
-    if ChainType > 0 then Exit(ChainType);
-    Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
+    if ChainType > 0 then
+    begin
+      AText.Text:= if CurText <> '' then CurText else SymbolById(ChainType).Name;
+      Exit(ChainType);
+    end;
+    Result:= ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
+    if Result > 0 then AText.Text:= NormalizeTypeLeaf(Segs[High(Segs)])
+    else if CurText <> '' then
+    begin
+      AText.Text   := CurText;
+      AText.Pending:= if StopIx <= High(Segs) then string.Join('.', Segs, StopIx, Length(Segs) - StopIx) else '';
+    end
+    else if HeadText.Head <> '' then
+      AText.Head:= AReceiverExpr;
+    Exit;
   end;
 
   // The remaining handled kinds require a simple identifier receiver.
@@ -5397,7 +5652,10 @@ begin
   var Declared: Boolean;
   Member:= LocalInScopeAt(ACallRef, AReceiverExpr, Declared);
   if Member.Id > 0 then
+  begin
+    AText.Text:= NormalizeTypeLeaf(Member.Signature);
     Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+  end;
   if Declared then
     Exit; // a local/param of that name exists but none covers the site -> 0
 
@@ -5414,6 +5672,7 @@ begin
     var AnonDeclined: Boolean;
     RetType:= ResultTypeAt(ACallRef, AnonDeclined);
     if AnonDeclined then Exit;
+    AText.Text:= NormalizeTypeLeaf(RetType);
     if RetType <> '' then Exit(ResolveTypeNameToSymbol(RetType, ACallRef.FileId));
   end;
 
@@ -5423,7 +5682,10 @@ begin
   begin
     Member:= FindChildOfKind(ClassId, AReceiverExpr, [skField, skProperty]);
     if Member.Id > 0 then
+    begin
+      AText.Text:= NormalizeTypeLeaf(Member.Signature);
       Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+    end;
   end;
 
   // --- Kind 7: the receiver IS A TYPE -- 'TFoo.Create(...)', 'TFoo.ClassMethod'.
@@ -5457,7 +5719,9 @@ begin
   //     not modelled), and only then the name as a TYPE -- so the kind-7 type
   //     rung is still the last word when no value of the name is in scope. Pinned by
   //     tests\callresolve\run_unit_var_receiver_bind.ps1.
-  Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr);
+  var OrdText: string;
+  Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText);
+  AText.Text:= NormalizeTypeLeaf(OrdText);
   if Result > 0 then Exit;
 
   // --- Kind 11 (X2, resolver 1.14.0-alpha): a PARENLESS FUNCTION CALL as the
@@ -5465,11 +5729,16 @@ begin
   //     value and type rung above had its say, so a value or type of the name
   //     already answered. Known gap: a unit-level var of the name found by
   //     TypeOfOrdinaryName wins over a nearer class METHOD of the name.
-  Result:= TypeOfFunctionResult(ACallRef, AReceiverExpr);
+  var FnText: string;
+  Result:= TypeOfFunctionResult(ACallRef, AReceiverExpr, FnText);
+  if (Result > 0) or ((AText.Text = '') and (FnText <> '')) then AText.Text:= FnText;
   if Result > 0 then Exit;
 
   // Unresolved receiver identifier (unknown local/param/field, and not a type we
-  // can name) -> Result stays 0 (leave unresolved).
+  // can name) -> Result stays 0 (leave unresolved). Item 4: when nothing in this
+  // index even names its type, the identifier goes to the library oracle as a
+  // HEAD -- a library type, global, or inherited member.
+  if AText.Text = '' then AText.Head:= AReceiverExpr;
 end;
 
 function TCallResolver.LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
@@ -6187,7 +6456,14 @@ begin
     can follow it. A var-section variable then covers the rest of its routine. }
   Result:= (ADecl.StartLine < ALine) or ((ADecl.StartLine = ALine) and (ADecl.StartCol <= ACol));
   if Result and InlineVarAt(Lines, ADecl.StartLine, ADecl.StartCol, IsFor) then
-    Result:= InlineScopeOpen(CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol), IsFor);
+    Result:= InlineScopeOpen(CodeTokens(Lines, ADecl.StartLine, ADecl.StartCol, ALine, ACol), IsFor)
+  { Item 4 (extractor 1.27.0): `on E: T do` declares E for its handler clause
+    only -- the local_var's range IS the clause, so a site past its end (a
+    sibling handler's E, a routine-level E after the try) is not covered. }
+  else if Result and SameText(Copy(Lines[ADecl.StartLine - 1], ADecl.StartCol, 2), 'on')
+          and (Length(Lines[ADecl.StartLine - 1]) >= ADecl.StartCol + 2)
+          and CharInSet(Lines[ADecl.StartLine - 1][ADecl.StartCol + 2], [' ', #9]) then
+    Result:= PosAtOrBefore(ALine, ACol, ADecl.EndLine, ADecl.EndCol);
 end;
 
 function TCallResolver.LocalInScopeAt(const ARef: TReference; const AName: string;
@@ -6627,6 +6903,7 @@ var
   Target  : Int64      ;
   ArgCount: Integer    ;
   ArgsKnown: Boolean   ;
+  RcvType : TRcvTypeText;
 begin
   Result:= Default(TCallEdge);
   Result.RefId:= ACallRef.Id;
@@ -6685,8 +6962,15 @@ begin
   end;
 
   // 2. type the receiver -> a class/interface/record symbol id.
-  TypeId:= TypeReceiver(ACallRef, Rcv);
+  TypeId:= TypeReceiver(ACallRef, Rcv, RcvType);
   Result.ReceiverTypeSymbolId:= TypeId; // 0 when the receiver type is unknown
+  { Item 4: the declared type TEXT, set here so every exit below carries it
+    (spec s.4.1): '' for a bare / Self receiver and for one nothing types. }
+  Result.ReceiverTypeText:= RcvType.Text + (if (RcvType.Text <> '') and (RcvType.Pending <> '') then '.' + RcvType.Pending else '');
+  if (Rcv <> '') and not SameText(Rcv, 'Self') then
+    if TypeId > 0 then Inc(FReceiverStats.TypedLocal)
+    else if RcvType.Text <> '' then Inc(FReceiverStats.TypedByNameOnly)
+    else Inc(FReceiverStats.Untyped);
 
   // 3. look the method up on the resolved type + its ancestor chain.
   if TypeId > 0 then
@@ -6830,77 +7114,126 @@ begin
   // written at all; the name lands on refs.external_target instead. See the v21
   // note in Migrate for why the alternative (nullable FK + target_qname) was
   // rejected.
-  if (Result.TargetSymbolId = 0) and (Length(FExtraStores) > 0) then
-    Result.ExternalTarget:= ResolveExternally(Rcv, ACallRef.NameText);
+  //
+  // Item 4 (resolver 1.16.0-alpha): through the library oracle, for a VALUE
+  // receiver typed by name too, and called with no store open as well -- the
+  // oracle then counts the site as no-store at once, which is the number the
+  // `receivers:` line exists to print.
+  if Result.TargetSymbolId = 0 then
+  begin
+    Result.ExternalTarget:= BindExternally(ACallRef, Rcv, TypeId, RcvType);
+    { BindHead typed a head the project could not: that text is the fact now. }
+    if (Result.ReceiverTypeText = '') and (RcvType.Text <> '') then
+      Result.ReceiverTypeText:= RcvType.Text;
+  end;
 end;
 
-{ v21. Consults the extra (library) stores for a call the primary index could not
-  resolve, and answers with a QUALIFIED NAME.
+function TCallResolver.OracleStats: TOracleStats;
+begin
+  Result:= FOracle.Stats;
+end;
 
-  Deliberately narrow, because a wrong external name is a wrong FACT rendered in
-  documentation, and this runs with no uses-scope filter at all:
-    * a TYPE-NAME receiver only. A value receiver ('Q.Open') would need the
-      variable's type, which lives in the PRIMARY index and already failed to
-      resolve there -- guessing across a library would be inventing.
-    * the type leaf must name exactly ONE type in that store, and it must own
-      exactly ONE member with this call's name. Two candidates means the answer
-      is a guess, and absence beats a wrong name -- the same FP-conservative
-      posture ResolveTypeNameToSymbol takes locally.
-  Returns '' whenever any of that fails, which is the common case and is fine:
-  the ref simply stays unresolved, exactly as it was before v21. }
-function TCallResolver.ResolveExternally(const AReceiver, ACallName: string): string;
-var
-  Store  : ISymbolStore ;
-  Leaf   : string       ;
-  Cands  : TArray<TSymbol>;
-  S, M   : TSymbol      ;
-  TypeSym: TSymbol      ;
-  Found  : Integer      ;
-  Members: TArray<TSymbol>;
-  Hit    : TSymbol      ;
-  MemHits: Integer      ;
+function TCallResolver.FirstUnresolvedAncestorName(ATypeId: Int64): string;
 begin
   Result:= '';
-  if (Trim(AReceiver) = '') or (Trim(ACallName) = '') then Exit;
-  if SameText(AReceiver, 'Self') then Exit; { the enclosing class is a LOCAL question }
+  for var A: TTypeAncestor in AncestorsOf(ATypeId) do
+    if not A.Resolved and (A.Ordinal = 0) then Exit(A.Name);
+  for var A: TTypeAncestor in AncestorsOf(ATypeId) do
+    if not A.Resolved then Exit(A.Name);
+end;
 
-  { A dotted receiver contributes its LAST segment -- 'System.JSON.TJSONArray'
-    names TJSONArray; the leading segments are a unit qualifier. }
-  Leaf:= AReceiver;
-  if Pos('.', Leaf) > 0 then
+function TCallResolver.ChainDeclaresName(ATypeId: Int64; const AName: string): Boolean;
+var
+  AnyMember: TSymbolKindSet;
+begin
+  AnyMember:= METHOD_KINDS + [skProperty, skField, skVarDecl, skConstDecl];
+  Result:= FindChildOfKind(ATypeId, AName, AnyMember).Id > 0;
+  if Result then Exit;
+  for var A: TTypeAncestor in AncestorsOf(ATypeId) do
+    if A.Resolved and (A.SymbolId > 0) and (FindChildOfKind(A.SymbolId, AName, AnyMember).Id > 0) then Exit(True);
+end;
+
+function TCallResolver.FileUsesUnits(AFileId: Int64): TArray<string>;
+begin
+  if FFileUses.TryGetValue(AFileId, Result) then Exit;
+  if not FDprLoaded then
   begin
-    var Segs: TArray<string>:= Leaf.Split(['.']);
-    Leaf:= Segs[High(Segs)];
+    FDprLoaded:= True;
+    for var Id: Int64 in FStore.GetAllFileIds do
+      if SameText(ExtractFileExt(FStore.GetFilePath(Id)), '.dpr') then
+        for var U: TUnitUse in FStore.GetUnitUsesForFile(Id) do FDprUses:= FDprUses + [LowerCase(U.UnitName)];
   end;
-  if Leaf = '' then Exit;
+  Result:= FDprUses;
+  for var U: TUnitUse in FStore.GetUnitUsesForFile(AFileId) do Result:= Result + [LowerCase(U.UnitName)];
+  FFileUses.Add(AFileId, Result);
+end;
 
-  for Store in FExtraStores do
+{ Item 4. A wrong external name is a wrong FACT rendered in documentation, so
+  every path below hands the oracle something THIS index could not answer and
+  never overrides what it could:
+    * a PROJECT type (typed receiver, or a type text naming one): only when no
+      type on its project chain declares the member -- then the oracle starts at
+      the first ancestor this index did not resolve (`AStream.Position`,
+      TABZMemoryStream -> TStream);
+    * a type known by name only (`FMemTable.Post`): the oracle as is;
+    * an untyped identifier chain (`Application.ProcessMessages`): BindHead,
+      unless the head names a type or a unit-level value of THIS index (a
+      duplicated project type declines here, it is not a library one);
+    * a bare call: unless a local / parameter of the name is in scope (a
+      procedural value) or the project declares a routine / class member of
+      the name, BindBare -- the enclosing class's library ancestor,
+      then a library routine of a used unit. }
+function TCallResolver.BindExternally(const ACallRef: TReference; const AReceiver: string; ATypeId: Int64;  // dl:ok too-many-exit-points@0825 -- REVIEWED 2026-10-28 (item 4, lane R4R): one exit per receiver shape -- bare, project type, by-name type, untyped head -- plus the declines that keep a library name from overriding the project's own declaration; each is a distinct outcome the comment above lists in order.
+  var AText: TRcvTypeText): string;
+var
+  Reason  : string;
+  Kind    : TExternalKind;
+  ProjId  : Int64 ;
+  Declared: Boolean;
+  HeadText: string;
+
+  function ScopeType: string;
+  var
+    ClassId: Int64;
   begin
-    if Store = nil then Continue;
-    Cands:= Store.FindSymbolsByExactName(Leaf);
-    Found:= 0;
-    TypeSym:= Default(TSymbol);
-    for S in Cands do
-      if S.Kind in [skClass, skInterface, skRecord] then
-      begin
-        Inc(Found);
-        if Found > 1 then Break;
-        TypeSym:= S;
-      end;
-    if Found <> 1 then Continue;          { absent or ambiguous -> no answer }
-
-    Members:= Store.FindAllChildSymbols(TypeSym.Id);
-    MemHits:= 0;
-    Hit:= Default(TSymbol);
-    for M in Members do
-      if SameText(M.Name, ACallName) and CanBeCallTarget(M.Kind) then
-      begin
-        Inc(MemHits);
-        if MemHits > 1 then Break;
-        Hit:= M;
-      end;
-    if MemHits = 1 then Exit(Hit.QualifiedName);
+    EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, '', ClassId);
+    Result:= if ClassId > 0 then FirstUnresolvedAncestorName(ClassId) else '';
   end;
+
+begin
+  Result:= '';
+  if AReceiver = '' then
+  begin
+    LocalInScopeAt(ACallRef, ACallRef.NameText, Declared);
+    var ClassId: Int64;
+    { A routine of the name in THIS index (unit level, or on the enclosing class
+      chain) that local resolution declined -- arity, an overload tie -- is still
+      the project's: never answer it from a library. }
+    if Declared or FNameToRoutines.ContainsKey(LowerCase(ACallRef.NameText))
+       or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, ACallRef.NameText, ClassId) then Exit;
+    Exit(FOracle.BindBare(ACallRef.NameText, FileUsesUnits(ACallRef.FileId), ScopeType, Reason));
+  end;
+  Kind:= if SameText(ACallRef.Kind, 'member-access') then ekMemberAccess else ekCall;
+  ProjId:= 0;
+  if AText.Text <> '' then
+    ProjId:= if (ATypeId > 0) and (AText.Pending = '') then ATypeId else ResolveTypeNameToSymbol(AText.Text, ACallRef.FileId)
+  else if ATypeId > 0 then
+    ProjId:= ATypeId; // Self, a with target
+  if ProjId > 0 then
+  begin
+    var First: string:= if AText.Pending <> '' then AText.Pending.Split(['.'])[0] else ACallRef.NameText;
+    var Anc: string:= FirstUnresolvedAncestorName(ProjId);
+    if (Anc = '') or ChainDeclaresName(ProjId, First) then Exit;
+    Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+  end;
+  if AText.Text <> '' then
+    Exit(FOracle.Bind(AText.Text, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+  if AText.Head = '' then Exit;
+  var HeadLc: string:= LowerCase(Trim(AText.Head.Split(['.'])[0]));
+  if FNameToCands.ContainsKey(HeadLc) or FNameToUnitValues.ContainsKey(HeadLc) then Exit;
+  Result:= FOracle.BindHead(AText.Head, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), ScopeType,
+    Reason, HeadText);
+  if HeadText <> '' then AText.Text:= HeadText;
 end;
 
 end.

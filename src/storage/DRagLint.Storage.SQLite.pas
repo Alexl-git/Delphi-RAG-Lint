@@ -2462,7 +2462,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
-      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
+      /// <summary>Item 4 (spec s.4.3): records which extra stores the resolve pass
+      /// consulted as schema_meta.external_stores -- a JSON array of {path,
+      /// indexer_fingerprint, resolver_fingerprint, indexed_at_unix} read from each
+      /// store's own schema_meta -- so a reader can tell which library build the
+      /// external names came from.</summary>
+      /// <param name="AExtraStores">The stores the pass consulted; empty removes the key.</param>
+      /// <param name="AScoped">True for a scoped pass: with no stores it leaves the key, since
+      /// the rows it did not re-resolve keep their external names.</param>
+      procedure WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
       /// then wipes and rewrites dispatch_edges and classref_args in one
       /// transaction.</summary>
       /// <param name="AExtraStores">Library stores for class-reference type lookup; may be nil.</param>
@@ -13575,8 +13583,39 @@ begin
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + CAST_WRITTEN + Suffix);  // dl:ok sql-injection-concat@1334 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses; a temp-table name and an IN-list cannot be parameters.
   BindRefStream(CAST_UNIVERSE, REF_KIND_CALL, Suffix, AResolver.ResolveEnumCast, ACandidates, ABound);
 end;
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
-{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
+const
+  KEY = 'external_stores';
+
+  function J(const S: string): string;
+  begin
+    Result:= '"' + S.Replace('\', '\\').Replace('"', '\"') + '"';
+  end;
+
+var
+  Parts: TArray<string>;
+begin
+  if Length(AExtraStores) = 0 then
+  begin
+    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''');
+    Exit;
+  end;
+  Parts:= [];
+  for var S: ISymbolStore in AExtraStores do
+  begin
+    if S = nil then Continue;
+    var Path: string:= '';
+    if S is TSQLiteSymbolStore then
+      Path:= (S as TSQLiteSymbolStore).FConn.Params.Values['Database'];
+    Parts:= Parts + ['{"path":' + J(Path) +
+      ',"indexer_fingerprint":' + J(S.GetMetaValue('indexer_fingerprint')) +
+      ',"resolver_fingerprint":' + J(S.GetMetaValue('resolver_fingerprint')) +
+      ',"indexed_at_unix":' + J(S.GetMetaValue('indexed_at_unix')) + '}'];
+  end;
+  SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
+end;
+
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
   every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)
@@ -14151,6 +14190,16 @@ begin
     else
       ResolveLog(Format('calls      %d edge(s) from %d call-site ref(s), WHOLE DB  [%.1fs, clear %.1fs, maps %.1fs]',
         [Written, Streamed, ResolveSecs(T0), TClear, TMaps]));
+    { Item 4 (resolver 1.16.0-alpha). How the receivers typed, and what the library
+      oracle did with the sites this index could not bind. `no-store` is the count a
+      project indexed WITHOUT a library shows: every one of those sites had a type
+      (or a head, or a bare name) to offer and no store to offer it to. }
+    ResolveLog(Format('calls      receivers: typed-local %d, typed-by-name-only %d, untyped %d; ' +
+      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d',
+      [Resolver.ReceiverStats.TypedLocal, Resolver.ReceiverStats.TypedByNameOnly, Resolver.ReceiverStats.Untyped,
+       Resolver.OracleStats.Bound, Resolver.OracleStats.AmbiguousType, Resolver.OracleStats.NoMember,
+       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore]));
+    WriteExternalStores(AExtraStores, Scoped);
     { 2026-09-23 (enum-value-ref-binding). EVERY DECLINE IS PRINTED BY REASON,
       and that is the point of the line rather than a nicety: the pass answers
       `certain` or nothing, so a ref that does not bind leaves no trace anywhere
