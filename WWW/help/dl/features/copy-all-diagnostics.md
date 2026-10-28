@@ -33,6 +33,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
 | `--project-rules` |  |  |  |
+| `--build-config` | `<name>` |  |  |
 | `--stand-in-for` | `<realpath>` |  |  |
 
 ## Where to click
