@@ -1707,7 +1707,11 @@ once widened by a folder-target index keeps reporting more files than its
 closure has. `attempted=` and `up-to-date=` were previously called `parsed=`
 and `skipped=`; the values are unchanged, but `attempted` counts attempts made
 BEFORE the parse, so it legitimately exceeds `files=` when a parse fails, and
-`up-to-date` is a DIFFERENT population from the log's `SKIP` lines.
+`up-to-date` is a DIFFERENT population from the log's `SKIP` lines. `committed=`
+(last field before the timing, DEC-15) is the attempted files whose rows actually
+landed this run: `attempted - committed` is the count of attempts that rolled back
+(each also gets an `ERROR indexing` line on stderr and fails the section), so a
+silently failed parse is visible at a glance; on an all-good run it equals `attempted=`.
 
 Procedure, triage rules and the per-project run list:
 `docs\PLAN-project-completeness-sweep.md`.

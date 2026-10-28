@@ -4275,15 +4275,23 @@ begin
     var RateStr: string:= 'n/a';
     if (Elapsed > 0) and (Indexer.ParsedFiles > 0) then
       RateStr:= Format('%.0f attempted/min', [Indexer.ParsedFiles / Elapsed * SecsPerMin]);
-    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d [%.1fs, %s] ===',
+    { DEC-15 committed=: attempted files whose rows actually LANDED this run.
+      attempted is an upper bound by contract (counted before the parse); the
+      only way an attempt ends without a commit is a rolled-back file
+      transaction, which IIndexer.FailedFiles counts, so committed =
+      attempted - failed. Derived HERE (not in TIndexer) so the extraction
+      surface stays untouched. Appended AFTER up-to-date= to keep the existing
+      field order; fields keep their meanings. }
+    var SectionFailedFiles: Integer:= Indexer.FailedFiles;
+    var SectionCommitted: Integer:= Max(0, Indexer.ParsedFiles - SectionFailedFiles);
+    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d committed=%d [%.1fs, %s] ===',
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
        Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
-       Indexer.SkippedUpToDate, Elapsed, RateStr]));
+       Indexer.SkippedUpToDate, SectionCommitted, Elapsed, RateStr]));
     { F1: a section with a file that failed to store is a FAILED section -- the
       failed file keeps its old rows. Read the count before the warm below
       releases the indexer. The rule cache is still warmed: the rows that did
       commit are real. }
-    var SectionFailedFiles: Integer:= Indexer.FailedFiles;
     if SectionFailedFiles > 0 then
     begin
       Flush(Output);
