@@ -6,9 +6,9 @@ must together plan/produce exactly what the pre-split single book did.
      multiset of items (kind, instance, path, value, old_value, field, from_type, to_type,
      file leaf, line, text without its "line N:" prefix) of BDE UNION Data.DB == pre-split
      book; same for warnings (book line numbers stripped), converted, unlinked and the
-     distinct uses edits. The only expected difference is NAMED: the migrate-check items and
-     their "#migrate ... NOT applied" warnings, which came from the old trailer sitting
-     inside the TBatchMove block and vanish now that the lines are file-scope.
+     distinct uses edits. The migrate items are compared apart (1.38: identifier #migrate
+     lines rename in code, file-scope or not): the split books rename every site the
+     pre-split book renames (A3), plus TDBScreenCursor, which the pre-split book misspelt (A3b).
   B  BYTES (a dry run proves the plan, not the bytes): the pre-split book --apply on a
      scratch copy of the fixture vs BDE book --apply then Data.DB book --apply on another
      copy (reindex between): .dfm identical, .pas identical after dropping the audit stamp
@@ -74,12 +74,17 @@ try {
   # Q4b (deliberate, owner-accepted): the BDE book now carries '#migrate UpdateRecordTypes -> FilterChanges' INSIDE
   # the TTable/TQuery/TStoredProc blocks, so the engine applies it (migrate-applied) where the pre-split trailer was inert.
   # That one item kind is excluded from the A2 multiset and asserted separately in A4 / B4.
+  # 1.38 (owner ruling D2, 2026-10-28): an identifier #migrate (file scope, or in a block with a uses unit) now RENAMES
+  # in code, in the pre-split and the split books alike, and every site it does not rename is a migrate-check. The
+  # books word those rules differently (the pre-split TDBScreenCursors typo, scoped forms), so every migrate item is
+  # left out of A2 and compared in A3 / A3b.
   function ItemKeys($j) {
-    @($j.items | Where-Object { $_.kind -ne 'migrate-check' -and -not ($_.kind -eq 'migrate-applied' -and $_.text -match 'UpdateRecordTypes') } | ForEach-Object {
+    @($j.items | Where-Object { $_.kind -ne 'migrate-check' -and $_.kind -ne 'migrate-applied' } | ForEach-Object {
       '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}' -f $_.kind, $_.instance, $_.path, $_.value, $_.old_value, $_.field, $_.from_type, $_.to_type, $(if ($_.file -and $_.field -ne 'warnings') { Split-Path $_.file -Leaf } else { '' }), $(if ($_.field -eq 'warnings') { 0 } else { $_.line }), (BookLines (StripLine $_.text))
     })
   }
-  function WarnKeys($j) { @($j.warnings | Where-Object { $_ -notmatch '#migrate .* NOT applied' } | ForEach-Object { StripLine $_ }) }
+  function WarnKeys($j) { @($j.warnings | Where-Object { $_ -notmatch '#migrate ' } | ForEach-Object { StripLine $_ }) }
+  function MigKeys($j) { @($j.items | Where-Object { $_.kind -eq 'migrate-applied' -and $_.text -notmatch 'UpdateRecordTypes' } | ForEach-Object { '{0}->{1}@{2}' -f $_.path, $_.value, $_.line }) }
   function UsesKeys($j) { @($j.uses | ForEach-Object { '{0}|{1}|{2}' -f $_.action, $_.unit, $_.section }) }
   function UnlKeys($j) { @($j.unlinked | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.from_type, $_.path, $_.sites, $_.instances }) }
   function Sig($j1, $j2) {
@@ -105,7 +110,11 @@ try {
     $su = Sig $jb $j2
     Check 'A2 BDE UNION Data.DB plans exactly the pre-split items / warnings / converted / unlinked / uses' ((SigDiff $sb $su) -eq '') ('differs in: ' + (SigDiff $sb $su))
     Check 'A4 expected difference (Q4b): only the split BDE book applies the UpdateRecordTypes member migrate, exactly once' ((@($base.items | Where-Object { $_.kind -eq 'migrate-applied' -and $_.text -match 'UpdateRecordTypes' }).Count -eq 0) -and (@($jb.items | Where-Object { $_.kind -eq 'migrate-applied' -and $_.text -match 'UpdateRecordTypes -> .*FilterChanges' }).Count -eq 1)) ''
-    Check 'A3 expected difference: the pre-split run echoed migrate-check items, the split runs none' ((@($base.items | Where-Object kind -eq 'migrate-check').Count -gt 0) -and (@($jb.items | Where-Object kind -eq 'migrate-check').Count -eq 0) -and (@($j2.items | Where-Object kind -eq 'migrate-check').Count -eq 0)) ''
+    $mPre = @(MigKeys $base); $mSplit = @(MigKeys $jb) + @(MigKeys $j2)
+    $lost = @($mPre | Where-Object { $mSplit -notcontains $_ })
+    Check 'A3 identifier #migrate (1.38): the split books rename every site the pre-split book renames (non-vacuous: >= 15)' (($mPre.Count -ge 15) -and ($lost.Count -eq 0)) ('pre=' + $mPre.Count + ' lost: ' + ($lost -join ', '))
+    Check 'A3b expected difference: only the split Data.DB book renames TDBScreenCursor (the pre-split line spells TDBScreenCursors, which resolves nowhere)' `
+      ((@($mSplit | Where-Object { $_ -like 'TDBScreenCursor->TFDGUIxScreenCursor@*' }).Count -eq 1) -and (@($mPre | Where-Object { $_ -like 'TDBScreenCursor*' }).Count -eq 0)) ($mSplit -join ', ')
 
     # C1: a BDE book with one #link deleted must FAIL A2
     $t = [IO.File]::ReadAllText($bde)
@@ -141,7 +150,7 @@ try {
       if ($l -match '^// drag-lint convert-apply ' -or $l -match '^//   backup: ') { continue }
       if ($l -match '^  .*FireDAC\.Comp\.') { '  ' + ((($l.Trim().TrimEnd(';') -split ',\s*') | Sort-Object) -join ', ') + ';' } else { $l }
     }
-    return (($o -join "`n") -replace '\bFilterChanges\b', 'UpdateRecordTypes')
+    return (($o -join "`n") -replace '\bFilterChanges\b', 'UpdateRecordTypes' -replace '\bTFDGUIxScreenCursor\b', 'TDBScreenCursor')  # A3b
   }
   function Run-Sequence([string]$Name, [string[]]$Books) {
     $d = Copy-Fixture $Name

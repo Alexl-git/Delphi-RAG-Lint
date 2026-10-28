@@ -146,7 +146,7 @@ Rule-driven migration of legacy component types.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [convert-apply](features/convert-apply.md) | Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add | 1.2.0-alpha |
-| [convert-apply #migrate (member rename / DL_NONE)](features/convert-apply-migrate.md) | #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site | 1.22.0-alpha |
+| [convert-apply #migrate (member, type and enum rename / DL_NONE)](features/convert-apply-migrate.md) | #migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier | 1.22.0-alpha |
 | [convert-scaffold](features/convert-scaffold.md) | Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type | 1.1.0-alpha |
 | [convert-validate](features/convert-validate.md) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees | 1.1.0-alpha |
 | [Progress window and busy guard](features/convrules-busy-guard.md) | ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs | 1.35.0-alpha |

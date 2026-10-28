@@ -1,0 +1,2 @@
+#convert CvLib.TOldField -> CvLib.TNewField, CvLib
+#link Size <- Size

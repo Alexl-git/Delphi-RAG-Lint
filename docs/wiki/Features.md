@@ -228,7 +228,7 @@ Rule-driven migration of legacy component types.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Convert progress](convrules-editor-convert-progress) | `ConvRulesEditor.exe` (Convert tab progress line) |  |
-| [convert-apply #migrate (member rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
+| [convert-apply #migrate (member, type and enum rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
 | [convert-apply](convert-apply) | `convert-apply` |  |
 | [convert-reemit](Maintenance) | `convert-reemit` | internal |
 | [convert-scaffold](convert-scaffold) | `convert-scaffold` |  |

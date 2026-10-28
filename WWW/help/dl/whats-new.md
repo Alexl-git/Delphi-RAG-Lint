@@ -94,7 +94,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.22.0-alpha
 
-* [convert-apply #migrate (member rename / DL_NONE)](features/convert-apply-migrate.md) -- #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site.
+* [convert-apply #migrate (member, type and enum rename / DL_NONE)](features/convert-apply-migrate.md) -- #migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier.
 * [Feature registry](features/feature-registry.md) -- The machine-checked master list of every feature, and the generator of the index pages.
 
 ## 1.20.4-alpha

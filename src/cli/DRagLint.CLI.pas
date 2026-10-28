@@ -18504,6 +18504,7 @@ begin
         deliberate-break (inst.Old -> DL_NONE(inst.Old)), migrate-check;
         pas_uses[] status mapped for the member. }
       JCap.AddPair('migrate_members', TJSONBool.Create(True));
+      JCap.AddPair('migrate_identifiers', TJSONBool.Create(True)); { 1.38 (D2): file-scope / type / enum #migrate in code }
       { E18 (1.33.0): cycles --fix plans, gates and (with --apply) writes the mechanical
         fix of one circular group -- cycle-fix/1 JSON, exit 0 / 1 / 2. }
       JCap.AddPair('cycle_fix', TJSONBool.Create(True));
@@ -27259,6 +27260,11 @@ begin
   begin
     InBlock:= InBlock or (R.Kind = rkConvert);
     if not InBlock or (R.Kind <> rkMigrate) then Continue;
+    { 1.38 (D2): a plain rule naming uses units is an identifier #migrate,
+      which convert-apply realises }
+    var Plain: TConversionRule:= R;
+    Plain.UnitsAdd:= nil;
+    if (Length(R.UnitsAdd) > 0) and (MigrateRuleRefusal(Plain) = '') then Continue;
     var Why: string:= MigrateRuleRefusal(R);
     if Why <> '' then
       Writeln(Format('line %d: warning: #migrate %s -> %s is not applied by convert-apply -- %s', [R.LineNo, R.Old, R.New, Why]));

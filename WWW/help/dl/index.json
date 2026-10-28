@@ -1153,8 +1153,8 @@
   },
   {
     "id": "convert-apply-migrate",
-    "title": "convert-apply #migrate (member rename / DL_NONE)",
-    "summary": "#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site",
+    "title": "convert-apply #migrate (member, type and enum rename / DL_NONE)",
+    "summary": "#migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier",
     "group": "component-conversion",
     "order": 60002,
     "since": "1.22.0-alpha",
