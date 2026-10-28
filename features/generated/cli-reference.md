@@ -943,7 +943,7 @@ Described in [link-orm](../../docs/wiki/link-orm.md).
 lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -957,6 +957,7 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
 | `--project-rules` |  |  |  |
+| `--build-config` | `<name>` |  |  |
 | `--stand-in-for` | `<realpath>` |  |  |
 
 Described in:

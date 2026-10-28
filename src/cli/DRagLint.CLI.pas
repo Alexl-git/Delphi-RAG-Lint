@@ -949,6 +949,8 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+function ManifestStartDir(const AProjectPath: string): string; forward;
+function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
 procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
 function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
 { Declared here because ResolveReadDbsForFileWith (used by `outline`, well above
@@ -21371,7 +21373,7 @@ begin
       Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
                    ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
     else
-      Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+      Manifest:= LoadManifestForProject(ExtractFilePath(ParamStr(0)), ProjArg);
   except
     { A manifest that will not load is not a reason to throw away a compile that
       already succeeded -- the caller wants dcc's answer, not ours. }
@@ -21391,10 +21393,12 @@ begin
 
   { The project DB is the one that owns compiler findings for this target. A
     project section never names a library DB, so none can come back here. }
-  case ResolveProjectDb(Manifest, ProjArg, ProjDb, Claimants) of
-    pdmUnique   : if TFile.Exists(ProjDb) then Result:= ProjDb;
-    pdmAmbiguous: ReportAmbiguousProject('compile-check', ProjArg, Claimants);
-    pdmNone     : ; { unregistered: no owner to cache into }
+  { 1.20.4 #4b-3: an unregistered project (pdmNone) caches into its OWN documented default
+    <project dir>\_D-RAG\<base>.sqlite when that file exists (the plugin passes no --db). The
+    file is never created here: a missing default stays "nothing to cache into". }
+  case ResolveOwnProjectDb(Manifest, ProjArg, ProjDb, Claimants) of
+    pdmUnique, pdmNone: if (ProjDb <> '') and TFile.Exists(ProjDb) then Result:= ProjDb;
+    pdmAmbiguous      : ReportAmbiguousProject('compile-check', ProjArg, Claimants);
   end;
 end;
 
@@ -30320,6 +30324,23 @@ begin
     Result:= ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(AProjectPath)));
 end;
 
+/// <summary>Loads the manifest a --project run reads: the walk starts at the project's
+/// folder, falling back to the current directory when that manifest has no owner for the
+/// project (so a cwd-only registration keeps working).</summary>
+/// <param name="AEngineDir">The engine exe folder (the engine-level manifest location).</param>
+/// <param name="AProjectPath">The --project argument, or ''.</param>
+/// <returns>The loaded manifest; never nil-like, an empty manifest when none is found.</returns>
+function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest;
+var
+  NoClaimants: TArray<string>;
+  NoDb       : string        ;
+begin
+  Result:= TManifestIO.Load(AEngineDir, ManifestStartDir(AProjectPath));
+  if (AProjectPath <> '') and (ManifestStartDir(AProjectPath) <> GetCurrentDir) then
+    if ResolveOwnProjectDb(Result, AProjectPath, NoDb, NoClaimants) = pdmNone then
+      Result:= TManifestIO.Load(AEngineDir, GetCurrentDir);
+end;
+
 var
   GNotedOnce: string = '';
 
@@ -30356,14 +30377,7 @@ begin
       names one (as index / refresh-findings do), so a read picks the same DB the write
       did. Conservative: when that manifest has no owner for the project, fall back to the
       old cwd walk, so a cwd-only registration keeps working. }
-    Manifest:= TManifestIO.Load(EngineDir, ManifestStartDir(AArgs.ProjectPath));
-    if (AArgs.ProjectPath <> '') and (ManifestStartDir(AArgs.ProjectPath) <> GetCurrentDir) then
-    begin
-      var NoClaimants: TArray<string>;
-      var NoDb: string;
-      if ResolveOwnProjectDb(Manifest, AArgs.ProjectPath, NoDb, NoClaimants) = pdmNone then
-        Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
-    end;
+    Manifest:= LoadManifestForProject(EngineDir, AArgs.ProjectPath);
 
     { Pick platform: CLI --platform > the PROJECT'S OWN folder when --project
       names one > cwd detection > manifest defaultPlatform. Reading only the cwd
@@ -33933,6 +33947,15 @@ begin
     begin
       Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
         'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
+      Exit(2);
+    end;
+
+    { --rule takes ONE rule id. A comma list ("a,b,c") matched no rule, so lint-all reported
+      0 findings and the run read as clean; refuse it as loudly as a repeated --rule. }
+    if Args.Rule.Contains(',') then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --rule takes one rule id, not a list ("%s"). ' +
+        'Run once per rule, or drop --rule to report every enabled rule.', [Args.Rule]));
       Exit(2);
     end;
 

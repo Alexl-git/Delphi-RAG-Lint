@@ -2451,7 +2451,7 @@
         {
           "type": "cli",
           "verb": "lint",
-          "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]",
+          "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]",
           "flags": [
             {
               "name": "--rule",
@@ -2485,12 +2485,16 @@
               "name": "--project-rules"
             },
             {
+              "name": "--build-config",
+              "arg": "<name>"
+            },
+            {
               "name": "--stand-in-for",
               "arg": "<realpath>"
             }
           ],
           "helpOrder": 15,
-          "help": ["  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
+          "help": ["  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across", "                               every owning project) without listing them in \"autofix\" in drag-lint-lint.json;", "                               it also prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
       "audience": "both",
@@ -2501,10 +2505,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "b18a4751cff4a25d9b36a0ad4599aa8b396ffd1db4c380e8f0fa5183ff963c5a"
+        "surfaceHash": "62c5adc36d6f5e4b37cd468d0f7d2bda58e4ce2cc8ffed6e7dd68eb7e812f35f"
       }
     },
     {
@@ -2803,7 +2807,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -2822,7 +2826,7 @@
         "date": "2026-10-28",
         "by": "ENGINE",
         "build": "1.36.0-alpha",
-        "surfaceHash": "3b7f78a6f87bc8f6f114cb121f5e747f01c985bd1d4037c62b68f81ad1429da3"
+        "surfaceHash": "e65edf4f66fe3096af7f0e07b1eeda1d282935cd33c9f64ace06b46fc0c63727"
       }
     },
     {

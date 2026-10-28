@@ -18,10 +18,22 @@ function New-G8Scratch([string]$Fixture, [string]$WorkDir) {
   Get-ChildItem $src -File | ForEach-Object { Copy-Item $_.FullName $dst -Force }
   return $dst
 }
+function Get-ExeStartFailureHint([int]$Code) {
+  # 0xC000007B (STATUS_INVALID_IMAGE_FORMAT, -1073741701): the loader refused the exe -- missing or
+  # wrong-bitness companion DLLs beside it. Reporting that as "index produced no DB" sends the reader
+  # hunting in the indexer for a process that never started. '' for any other code.
+  if ($Code -eq -1073741701) {
+    return 'exe failed to start (0xC000007B): missing or wrong-bitness companion DLLs (tree-sitter*.dll, sqlite3.dll) beside the exe?'
+  }
+  return ''
+}
 function Invoke-G8Index([string]$Exe, [string]$Dir, [string]$Db) {
   if (Test-Path $Db) { [IO.File]::Delete($Db) }
   & $Exe index $Dir --db $Db 2>&1 | Out-Null
-  return $LASTEXITCODE
+  $code = $LASTEXITCODE
+  $hint = Get-ExeStartFailureHint $code
+  if ($hint) { Write-Host "  [FATAL] $hint" -ForegroundColor Red }
+  return $code
 }
 function Get-G8Findings([string]$Exe, [string]$Db, [string]$Rule, [string[]]$Extra = @(), [switch]$AllRules) {
   # -AllRules: no --rule flag (an explicit --rule opts an OFF-by-default rule in, so it cannot test OFF).

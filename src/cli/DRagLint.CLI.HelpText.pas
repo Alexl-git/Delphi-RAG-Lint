@@ -138,7 +138,7 @@ begin
   Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor''s class pickers. exit 1 = no such ancestor)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
-  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
+  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
   Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
   Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
   Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
@@ -148,7 +148,7 @@ begin
   Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
   Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
   Writeln('                               unit-name and the reported path)');
-  Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+  Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
   Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
@@ -164,7 +164,7 @@ begin
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-  Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
+  Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
@@ -432,6 +432,8 @@ begin
   Writeln('       see wiki page: index-build-config');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
+  Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
+  Writeln('       see wiki page: Copy-Diagnostics-Current-File');
   Writeln('  drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
   Writeln('       ^ A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\_D-RAG\drag-lint-project.json`.');
@@ -607,7 +609,7 @@ begin
   end;
   if pVerb = 'lint' then
   begin
-    Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
+    Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
     Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
     Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
     Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
@@ -617,7 +619,7 @@ begin
     Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
     Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
     Writeln('                               unit-name and the reported path)');
-    Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+    Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]');
     Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
     Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
     Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
@@ -649,7 +651,7 @@ begin
     Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
     Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-    Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
+    Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
     Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
     Writeln('                               --quiet: suppress per-file progress lines written to stderr');
     Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
