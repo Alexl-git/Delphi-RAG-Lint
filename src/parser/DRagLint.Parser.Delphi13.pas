@@ -483,6 +483,32 @@ begin
   Result:= IsParenRootedReceiver(ANode.ChildByField('lhs'));
 end;
 
+{ Ref-gap G5 support (1.37.0 B-FLOW item 2b): is this node a HARD-CAST shaped
+  receiver -- `TBfShape(pShape)`, a bare identifier called with exactly ONE
+  argument -- or a dotted chain of identifier members rooted in one,
+  `T(X).A.B`? G..G4 all answer False for it, so `Writeln(TBfShape(pShape).Name)`
+  recorded no ref for Name (the as-cast twin was fixed by G4).
+  The parse cannot tell a cast from a one-argument FUNCTION call (`Twin(O).L`)
+  and does not try: it records the receiver text, and the resolver decides --
+  kind 6 types `T(X)` as the cast target when T names a type, kind 11 types
+  `F(X)` by F's declared result, and an unknown head binds nothing. Only a
+  BARE identifier head qualifies: `O.Mk(x).L` (a method call segment) is left
+  to the call stream as before, which keeps this extraction change narrow. }
+function IsHardCastRootedReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprCall' then
+  begin
+    var E:= ANode.ChildByField('entity');
+    var A:= ANode.ChildByField('args');
+    Exit((not E.IsNull) and (E.NodeType = 'identifier') and (not A.IsNull) and (A.NamedChildCount = 1));
+  end;
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsHardCastRootedReceiver(ANode.ChildByField('lhs'));
+end;
 const
   { T-11: a longer receiver is not recorded at parse ('' -> NULL), and the
     resolver falls back to its line scan for it. }
@@ -3362,6 +3388,15 @@ begin
         var RG4:= ANode.ChildByField('rhs');
         if (not RG4.IsNull) and (RG4.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG4, AState.Source), RG4, ReceiverTextOf(ANode, AState.Source));
+      end;
+      // Ref-gap G5 (1.37.0 item 2b): the same capture when the receiver is a
+      // HARD CAST -- `TBfShape(pShape).Name`, `T(X).A.B`. See
+      // IsHardCastRootedReceiver; the resolver tells a cast from a call.
+      if IsHardCastRootedReceiver(L) then
+      begin
+        var RG5:= ANode.ChildByField('rhs');
+        if (not RG5.IsNull) and (RG5.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG5, AState.Source), RG5, ReceiverTextOf(ANode, AState.Source));
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;

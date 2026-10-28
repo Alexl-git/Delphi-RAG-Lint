@@ -1094,4 +1094,7 @@
 #   true constants -- same file (active text only; typed consts excluded) and uses-clause units (project scan +
 #   library DB) -- plus arithmetic / xor / strings / Ord / SizeOf / Declared(), so a different branch and include can
 #   be indexed. Pinned by tests\autotest\run_index_pp_consts.ps1 + tests\preprocess\run_expr_ext.ps1.
-1.26.0-alpha|6ca1eacb94de48872caa82458f506c9afc6c9c70ffa5599ae7201e10814231fe
+# 2026-10-28 (1.37.0 B-FLOW, item 2b): hash re-pinned WITHOUT a bump -- ref-gap G5 (hard-cast receiver
+#   T(X).M emits a member-access ref) rides the still-unreleased 1.26.0-alpha re-parse. Pinned by
+#   tests\callresolve\run_receiver_cst_capture.ps1 H1-H3.
+1.26.0-alpha|8932fe0089040e5cb897032d57e06743eb50fb91cad27dc12c016ff4aeb4cf59
