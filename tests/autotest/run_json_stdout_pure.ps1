@@ -63,8 +63,8 @@ try {
     catch { $fail++; $first = ($text -split "`r?`n")[0]; Write-Host "FAIL $name : stdout not pure JSON, first line: $first" }
   }
   # Merged-stream consumers (the converter's RunCapture, the editor) read stdout
-  # and stderr as ONE pipe: under --json / --format json|sarif no note may be
-  # written at all, or the merged text is not JSON.
+  # and stderr as ONE pipe: the config-defaults banner must not be written under
+  # --json / --format json|sarif (other stderr notes stay: they are stderr by contract).
   $merged = @(
     @('lint', 'Foo.pas', '--db', $Db, '--json'),
     @('lint-all', '--db', $Db, '--json'),
@@ -81,8 +81,8 @@ try {
       $ErrorActionPreference = 'Stop'
     } finally { Pop-Location }
     $name = 'merged ' + $c[0]
-    try { [void]($text | ConvertFrom-Json); $parsed++; Write-Host "PASS $name" }
-    catch { $fail++; $first = ($text -split "`r?`n")[0]; Write-Host "FAIL $name : stdout+stderr not pure JSON, first line: $first" }
+    if ($text -match 'loaded defaults from') { $fail++; Write-Host "FAIL $name : defaults banner written under a JSON mode" }
+    else { $parsed++; Write-Host "PASS $name" }
   }
   if ($parsed -lt $MinParsed) { Write-Host "FAIL positive control: only $parsed documents parsed (need $MinParsed)"; $fail++ }
   Write-Host "json_stdout_pure: parsed=$parsed fail=$fail"

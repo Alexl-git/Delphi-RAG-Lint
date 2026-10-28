@@ -932,6 +932,20 @@ begin
     if SameText(ParamStr(i), ASwitch) then Exit(True);
 end;
 
+/// <summary>True when argv asks for a machine-readable stdout document: --json,
+/// or --format json|sarif.</summary>
+/// <remarks>Read from ParamStr like HasSwitch (config load runs before ParseArgs).
+/// Merged-stream consumers (converter RunCapture, the editor) read stdout and
+/// stderr as one pipe, so under these modes no advisory note may be written.</remarks>
+function JsonOutputRequested: Boolean;
+var i: Integer;
+begin
+  Result:= HasSwitch('--json');
+  if Result then Exit;
+  for i:= 1 to ParamCount - 1 do
+    if SameText(ParamStr(i), '--format') and (SameText(ParamStr(i + 1), 'json') or SameText(ParamStr(i + 1), 'sarif')) then Exit(True);
+end;
+
 // v0.45 Task 9: forward declarations so DoQuery (declared early) can call
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
@@ -1145,7 +1159,7 @@ begin
     BEFORE ParseArgs -- there is no TArgs yet. Scanning argv directly is the only
     thing available here, and it is exact: --quiet takes no value, so a bare
     match cannot collide with another switch's argument. }
-  if not HasSwitch('--quiet') then
+  if not (HasSwitch('--quiet') or JsonOutputRequested) then
     Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
 end; // procedure
 
