@@ -4715,6 +4715,11 @@ begin
     (the edge says so) and "not resolved at all". It is deliberately NOT a
     substitute for a local edge: a ref never carries both. }
   TryExec('ALTER TABLE refs ADD COLUMN external_target TEXT');
+  { item 4 (1.16 resolver): refs.receiver_type_text -- the receiver's declared type
+    text as the resolve ladder reached it (spec 2026-10-28-untypable-receivers s.4.1).
+    NULL = never resolved by a 1.16 engine; '' = bare/untypable; additive, no
+    SCHEMA_VERSION bump (dispatch_edges / data_flows precedent). }
+  TryExec('ALTER TABLE refs ADD COLUMN receiver_type_text TEXT');
   // N-06: unit_uses rows extracted from an include directive carry the absolute
   // .inc path and the host line of the directive (NULL = the unit's own text).
   // The partial index serves editors and the .inc host-invalidation lookup.
@@ -13731,13 +13736,14 @@ begin
       and for the same reason: this runs inside the one big transaction below,
       where a fresh statement per row would dominate the pass. }
     UpdRcv.Connection:= FConn;
-    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x WHERE id = :id';
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t WHERE id = :id';
     { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
       type from the SQL alone and fails at execute with "Parameter [R] data type
       is unknown" -- which surfaces as a FATAL that aborts the whole index run,
       not as a skipped update. }
     UpdRcv.ParamByName('r' ).DataType:= ftString;
     UpdRcv.ParamByName('x' ).DataType:= ftString;
+    UpdRcv.ParamByName('t' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
 
@@ -13962,6 +13968,8 @@ begin
           externally" stays distinguishable from "resolved to an empty name". }
         if Edge.ExternalTarget <> '' then UpdRcv.ParamByName('x').AsWideString:= Edge.ExternalTarget
         else UpdRcv.ParamByName('x').Clear;
+        { item 4: '' is a value (bare / untypable); NULL only if never computed. }
+        UpdRcv.ParamByName('t').AsWideString := Edge.ReceiverTypeText;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
         end

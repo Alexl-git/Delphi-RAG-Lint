@@ -9,7 +9,7 @@ const
     v21: refs.external_target -- the qualified NAME of a call target that lives in
     another index (RTL/VCL/DevExpress/Spring), which call_edges structurally
     cannot hold because target_symbol_id is a NOT NULL FK into THIS DB.
-    Both are retrofitted by Migrate() ALTERs (see there), so neither may be
+    item 4: refs.receiver_type_text -- the receiver's declared type text (NULL = ALTERs (see there), so neither may be
     referenced from SCHEMA_DDL below -- read the INVARIANT. }
   { 21 -> 22 (2026-09-09, PLAN-routine-directives-in-index.md): additive
     symbols.directives (every routine directive, canonical, declaration order)
