@@ -84,7 +84,7 @@ try {
     $n = (& python -I -c $emptyFlows $db 2>&1) -join ' '
     Check 'fixture: extractor rows cleared' ($n -eq '0') "python said: $n"
     $n = (& python -I $rowsPy $db $fx taint 2>&1) -join ' '
-    Check 'fixture rows inserted (python sqlite3)' ($n -eq '42') "fixture_rows.py said: $n"
+    Check 'fixture rows inserted (python sqlite3)' ($n -eq '45') "fixture_rows.py said: $n"
     $n = (& python -I $rowsPy $lib $libFx minirtl 2>&1) -join ' '
     Check 'mini-library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
@@ -108,7 +108,7 @@ try {
     @('taint-command-injection', 'uShellEx.pas', 18, 'error'),    # record member Info.lpFile -> ShellExecuteEx(@Info)
     @('taint-command-injection', 'uCmd.pas',     18, 'error'),    # RunCmd(ParamStr(1)) -> CreateProcess
     @('taint-path-traversal',    'uGlobal.pas',  25, 'warning'),  # unit global written in InitPath -> DeleteFile
-    @('taint-path-traversal',    'uGlobal.pas',  28, 'warning')   # TFileStream.Create(ParamStr(1))
+    @('taint-path-traversal',    'uGlobal.pas',  28, 'warning')   # TFileStream.Create(GetEnvironmentVariable(..)): the TP twin of :30
   )
   foreach ($p in $pos) {
     $hit = At $f $p[0] $p[1] $p[2]
@@ -124,6 +124,9 @@ try {
   Check 'no  uSafe.pas (QuotedStr, ParamByName binding, literal, re-assigned, StrToInt, constant-only caller, forwarding helper)' ((InUnit $f 'uSafe.pas').Count -eq 0) "got $((InUnit $f 'uSafe.pas').Count)"
   Check 'no  uList.pas:18 (L.Add on a plain TStringList is not a sink)' ((At $f 'taint-sql-injection' 'uList.pas' 18).Count -eq 0)
   Check 'no  uGlobal.pas:26 (ExtractFileName sanitises a path)' ((At $f 'taint-path-traversal' 'uGlobal.pas' 26).Count -eq 0)
+  # TAINTFP 2026-10-27: ParamStr is not a CWE-22 source (taint-sources.json "categories")
+  Check 'no  uGlobal.pas:30 (ParamStr names the whole path: not a path-traversal source)' ((At $f 'taint-path-traversal' 'uGlobal.pas' 30).Count -eq 0)
+  Check 'no  uGlobal.pas:32 (ExpandFileName(ParamStr): same, through a propagator)' ((At $f 'taint-path-traversal' 'uGlobal.pas' 32).Count -eq 0)
   Check 'no  uInput.pas (sources only; reported at the sink)' ((InUnit $f 'uInput.pas').Count -eq 0)
   Check 'exactly one finding in uCycle.pas (the cycle terminates)' ((InUnit $f 'uCycle.pas').Count -eq 1) "got $((InUnit $f 'uCycle.pas').Count)"
   Check 'exactly one finding in uCmd.pas (RunCmdConst passes a literal)' ((InUnit $f 'uCmd.pas').Count -eq 1) "got $((InUnit $f 'uCmd.pas').Count)"
