@@ -1,0 +1,2 @@
+# interface-typed (IFoo as TObject is the only way to the instance) and unknown-typed operands must NOT fire.
+!redundant-as-tobject

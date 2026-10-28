@@ -1,0 +1,6 @@
+# JRow (line 29) is handed to JRows.AddElement, which owns it -> no leak (only the mid-body exception edge leaves it open).
+!object-leak 29
+# Sub handed to Root.AddPair -> no leak
+!object-leak 57
+# CONTROL: Sub is only the receiver of AddPair, never handed to an owner -> still a leak
+object-leak 76
