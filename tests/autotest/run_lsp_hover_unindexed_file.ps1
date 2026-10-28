@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_hover_unindexed_file.ps1 -- a hover in a file NO configured index
   contains must not be answered by the LIBRARY index.

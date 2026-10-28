@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_document_symbol_guard.ps1 -- `textDocument/documentSymbol` (B1).
 

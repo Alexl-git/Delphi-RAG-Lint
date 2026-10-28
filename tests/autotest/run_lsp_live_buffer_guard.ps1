@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_live_buffer_guard.ps1 -- position requests must answer about the
   CLIENT'S BUFFER, not the file on disk.

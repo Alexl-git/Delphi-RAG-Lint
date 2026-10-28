@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_clear_diags_guard.ps1 -- the LSP server must CLEAR what it published.
   Without it VS Code keeps a closed or deleted file's warnings in Problems forever.

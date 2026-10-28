@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_full_rules_guard.ps1 -- C1: `lsp --full-rules` (OPT-IN, default OFF).
 

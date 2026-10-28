@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_stdout_hygiene.ps1 -- nothing on the `lsp` / `serve` failure paths may
   write to STDOUT, because for those two commands stdout IS the JSON-RPC
