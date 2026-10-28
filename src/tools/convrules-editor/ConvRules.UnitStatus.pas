@@ -84,6 +84,22 @@ function StatusText(const AStatus: TUnitStatus): string;
 /// Find missing off: True; on: MISSING, plus via scope when AIncludeUnqualified.</returns>
 function ShouldAdd(const AStatus: TUnitStatus; AFindMissing, AIncludeUnqualified: Boolean): Boolean;
 
+const
+  /// <summary>The note a harvest gets while its classification waits (ClassifyDeferred).</summary>
+  CLASSIFY_PENDING_NOTE = ' Classified when the Unit Rules tab is shown.';
+
+/// <summary>Whether classifying the harvest -- and so loading the library unit list
+/// it needs -- can wait until the Unit Rules list is on screen.</summary>
+/// <param name="ARowCount">Harvested rows to classify.</param>
+/// <param name="AListOnScreen">The Unit Rules tab is the active page.</param>
+/// <returns>True when there is nothing to classify, or when the rows are not on
+/// screen; False only for rows the user is looking at.</returns>
+/// <remarks>The library unit list is one engine `sql` read of a multi-GB index: 11 s
+/// warm and over 60 s while other sessions hold the DB, on the main thread. Leaving
+/// a Destination edit, or feeding the harvest from the Convert tab, must not pay it.
+/// A deferred harvest is classified by the Unit Rules tab's OnShow.</remarks>
+function ClassifyDeferred(ARowCount: Integer; AListOnScreen: Boolean): Boolean;
+
 implementation
 
 uses
@@ -97,6 +113,11 @@ function UnknownStatus: TUnitStatus;
 begin
   Result.Kind    := uskUnknown;
   Result.Resolved:= '';
+end;
+
+function ClassifyDeferred(ARowCount: Integer; AListOnScreen: Boolean): Boolean;
+begin
+  Result:= (ARowCount = 0) or not AListOnScreen;
 end;
 
 function StatusText(const AStatus: TUnitStatus): string;

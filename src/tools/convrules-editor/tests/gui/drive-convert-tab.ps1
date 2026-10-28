@@ -56,14 +56,17 @@ public static class W {
   public static List<IntPtr> Tops(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static List<IntPtr> Kids(IntPtr parent) { var r = new List<IntPtr>(); EnumChildWindows(parent, (h, l) => { r.Add(h); return true; }, IntPtr.Zero); return r; }
   public static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
-  public static string Txt(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); var s = new StringBuilder(n + 2); SendSB(h, 0x000D, (IntPtr)(n + 1), s); return s.ToString(); }
+  // Two messages (length, then text) race a status written in between: read with slack, then re-read until two reads agree.
+  static string TxtOnce(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); int cap = n + 1024; var s = new StringBuilder(cap); SendSB(h, 0x000D, (IntPtr)cap, s); return s.ToString(); }
+  public static string Txt(IntPtr h) { string p = TxtOnce(h); for (int i = 0; i < 5; i++) { string c = TxtOnce(h); if (c == p) return c; p = c; } return p; }
   /* DRV-2b: Txt that gives up after MS (null) instead of blocking. While EngineHold has suspended an engine child that the
      editor waits for SYNCHRONOUSLY (the project-index listing after the C8 check), the editor's main thread answers no
      message: a plain SendMessage then waits for the editor's 180 s engine timeout, and the driver cannot resume the child
      meanwhile (a deadlock that turned every run's status into "file listing failed ... timeout"). */
   [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW")] static extern IntPtr SMT(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
   [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageTimeoutW")] static extern IntPtr SMTSB(IntPtr h, uint m, IntPtr w, StringBuilder l, uint f, uint ms, out IntPtr r);
-  public static string TxtT(IntPtr h, uint ms) { IntPtr n; if (SMT(h, 0x000E, IntPtr.Zero, IntPtr.Zero, 2, ms, out n) == IntPtr.Zero) return null; var s = new StringBuilder((int)n + 2); IntPtr r; if (SMTSB(h, 0x000D, (IntPtr)((int)n + 1), s, 2, ms, out r) == IntPtr.Zero) return null; return s.ToString(); }
+  static string TxtTOnce(IntPtr h, uint ms) { IntPtr n; if (SMT(h, 0x000E, IntPtr.Zero, IntPtr.Zero, 2, ms, out n) == IntPtr.Zero) return null; int cap = (int)n + 1024; var s = new StringBuilder(cap); IntPtr r; if (SMTSB(h, 0x000D, (IntPtr)cap, s, 2, ms, out r) == IntPtr.Zero) return null; return s.ToString(); }
+  public static string TxtT(IntPtr h, uint ms) { string p = TxtTOnce(h, ms); if (p == null) return null; for (int i = 0; i < 5; i++) { string c = TxtTOnce(h, ms); if (c == null) return null; if (c == p) return c; p = c; } return p; }
   public static uint PidOf(IntPtr h) { uint p; GetWindowThreadProcessId(h, out p); return p; }
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   /* DRV-2b: the N1 click is a REAL click at screen coordinates; another application's window over the Convert button
@@ -279,7 +282,8 @@ public static class CT {
 }
 '@
 $script:pass = 0; $script:fail = 0
-function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
+trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 # Looks at least ONCE: with $sec = 0 the old while-loop never looked, so "is the dialog still up" always said no.
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
