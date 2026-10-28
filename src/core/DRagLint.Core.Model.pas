@@ -150,7 +150,17 @@ const
     extractor lands under it; no DB may be re-parsed under 1.26.0 before T1 is
     merged (an engine built from T0 alone stores EMPTY data_flows under this
     fingerprint). Plan: docs\superpowers\plans\2026-10-27-taint-interprocedural-plan.md.
-    Guard: tests\autotest\run_dataflow_facts.ps1 (T1). }
+    Guard: tests\autotest\run_dataflow_facts.ps1 (T1).
+    Later lanes ride the SAME 1.26.0-alpha (no further bump, baseline re-pinned
+    within it): INC/INC2/INC3 index only the ACTIVE include files under the
+    includer's exact define values ($IF value defines, CompilerVersion, IFOPT,
+    true constants, Declared()); ARGOUT trims data_flows rows; REFTYPE emits
+    type_use refs for procedural-type signatures, generic arguments, initializer
+    expressions and default parameter values; B-FLOW G5 emits a member-access ref
+    for a hard cast T(X).M; R4X emits the `on E: T do` handler variable as a
+    local_var symbol. Resolver-side companions are DRAGLINT_RESOLVER_VERSION
+    1.16.0-alpha (refs.receiver_type_text, library oracle). One full re-parse
+    covers all of it. }
   DRAGLINT_EXTRACTOR_VERSION = '1.26.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already

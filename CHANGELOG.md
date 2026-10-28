@@ -14,7 +14,7 @@ breaking changes** until v1.0.
 - LSP: diagnostics for a file no loaded index owns are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"` (guard `run_lsp_unowned_label_guard.ps1`).
 - `lint --project` / `lint-all --project` / `unit-not-in-dpr`: the scope closure follows the `.dproj`'s ACTIVE build config (the same profile the defines use), so a unit only the inactive config uses is no longer linted (LSP lane, guard `run_lint_project_scope_active_config_guard.ps1`).
 
-## v1.37.0-alpha -- 2026-10-27
+## v1.37.0-alpha -- unreleased
 
 ### Added (lint rules)
 - About 50 new lint rules from the gap wave (G1-G9): security `.scm` rules (G1, incl. the XXE sidecar fix), shape rules (G2), memory and overflow checks (G3), ownership and lifetime checks (G4: `field-created-not-freed`, `free-of-owned-item`, `mismatched-alloc-free`, ...), nil and bounds checks (G5), exception and thread checks (G6), declaration parity (G7), project-wide DFM and virtual-method rules (G8) and FixInsight parity (G9). `drag-lint rules --json` is the authoritative list: 284 rules in 18 categories, 242 on by default, 109 with an auto-fix.
@@ -26,7 +26,24 @@ breaking changes** until v1.0.
 
 ### Changed (index)
 - Include files: a project DB indexes only the ACTIVE includes, parsed in the includer's define context (INC); includes are chosen under the exact preprocessor values, and `lint-all` lints `.inc` in the includer's context (INC2); `{$IF}` evaluates value defines, `CompilerVersion`, IFOPT, true constants of the same file, used project / library units, `Declared()` and fuller arithmetic (INC3). An `{$IF}` that cannot be decided reports the `pp-unresolved-if` hint.
-- `uses-movable-to-implementation` is OFF by default (false positives, risky autofix).
+- `uses-movable-to-implementation` stays ON: type references in procedural-type signatures, generic arguments, initializer expressions and default parameter values now emit `type_use` refs (REFTYPE), which removed its false positives (engine 114 / ORM3 243 findings, all hand-checked true); its fix is atomic (IATOM).
+- **Full re-parse.** `DRAGLINT_EXTRACTOR_VERSION` 1.25.0-alpha -> 1.26.0-alpha (new `data_flows` table, include files, type_use refs, hard-cast member access `T(X).M`, the `on E: T do` handler variable as a `local_var` symbol) and `DRAGLINT_RESOLVER_VERSION` 1.15.0-alpha -> 1.16.0-alpha (`refs.receiver_type_text`, library oracle): every DB re-parses once on the first index run. No schema bump.
+- Index writes: the writer opens `BEGIN IMMEDIATE` and every post-walk resolve pass starts its transaction above its candidate reads, so a second writer beside a reindex no longer produces an intermittent `FOREIGN KEY` failure (lane B-FK; guard `run_index_two_writers_fk.ps1`).
+
+### Added (gap-wave follow-up lanes)
+- Item 4, untypable receivers (R0/R4R/R4X/R4C/R4INT): `refs.receiver_type_text` records the receiver type text on every call site; a library oracle (`TLibraryOracle`) binds a receiver the project cannot type against the platform library (external binding v2, `schema_meta.external_stores`); the `on E: T do` handler variable is a `local_var` symbol; a unit-var array selector head binds. `find-callees` lists library-bound callees (`(library, by name)` / `(library, resolved now)`); the Called-from bucket drops a candidate whose receiver is a type declared in this store and unrelated to the owner; the context bundle gains a `Library calls: N (top: ...)` line and a `library_calls` JSON field; manifest section key `libraryResolve` (default off) opens the platform library for `index --project` / `index --all`.
+- B-FLOW: `used-before-assignment` fires on a member write of a class this unit declares even when the store has not classified it; a hard cast `T(X).M` emits a member-access ref.
+- B-DOC: `doc-drift` drops a transitive `<exception cref>` whose call site sits in the protected part of a swallowing try-except (`TManifestIO.Load`); the `line-too-long` fixer re-wraps an over-long `///` line (fixable rules 109 -> 110).
+- B-ENUM: new rule `enum-ordinal-cast` (ON, warning; `TEnum(<literal>)`, `Ord(e) <cmp> literal`, `case Ord(e) of`; 11/11 true on ORM3 + engine; no fix) and `unused-enum-value` (OFF, project-wide, opt-in).
+- B-EFFECT: new store rules `side-effect-in-short-circuit`, `property-getter-with-effect`, `ui-access-in-thread-transitive` (all OFF, no fix).
+- B-CLI / B-CLI2: `lint` / `lint-all` honour `--build-config` (scope and defines together); the "no index owns this file" NOTE prints once per run; the manifest walk starts at the project folder; an unregistered project's compile-check caches into its own `_D-RAG` DB; `lint --rule a,b,c` is refused (exit 2, one id per `--rule`).
+- B-CLOSE: `run_battery_prepare_guard.ps1`; the legacy-CLI fixture runner restores the owner settings key on a difference; the closed backlog notes moved to `docs\INBOX-Done`.
+
+### Changed (fixes and speed)
+- Atomic fix groups (IATOM, IMOV): a fix applies ALL-OR-NOTHING -- every edit of one finding (or one file's uses-clause group) is validated against the on-disk file before anything is written, and a broken group is dropped whole, cross-file included. `lint --fix --json` reports `declined` / `decline_reason` for such a finding; uses fixes understand the leading-comma layout and an `implementation` uses clause found after comments.
+- `--json` stdout carries no `(loaded defaults ...)` banner under `--json`, `--format json|sarif` or `--quiet` (IJSON; guard `run_json_stdout_pure.ps1`).
+- Single-file `lint` is back to its 1.36.0 cost: the `.scm` rule queries compile in parallel (IPERF; setup 3.2 s -> 1.6 s per process; guard `run_rule_load_parallel.ps1`).
+- Lint accuracy (ILC, lintcheck 1.36 vs 1.37 on ORM3 / the engine / the RTL): `used-before-assignment` no longer takes an out-arg mode from an unrelated free routine when a same-named METHOD differs; `collapsible-if` no longer fires (and its fix no longer drops later statements) when `end` occurs inside the first statement; `nonminimal-bool` recognises `not (A in S)` as `A not in S` and fixes it; the `public-field` fix no longer crashes on a parameterless routine header; `overwrite-before-read` declines a dead store that is an inline `var` initializer; `doc-param-not-in-signature` declines a rename so hand prose survives.
 
 ## v1.36.0-alpha -- 2026-10-27
 

@@ -1008,6 +1008,12 @@ Only for 2+ owners (or unknown ownership) the run prints its plan --
 `dropped_reason`. The IDE's Fix it / Fix all in unit preview first and confirm
 before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Multi-Project-Rename).
 
+An autofix with several edits (a uses-clause move, `unused-unit-in-uses`) is an
+atomic group: every edit is validated against the on-disk file before anything is
+written, and one that would not apply drops the whole group. `lint --fix --json`
+marks such a finding `"declined": true` with a `"decline_reason"` (and `applied:
+false`); text output ends `, N declined (...)`.
+
 #### Docs
 
 | Command | What it does | Notable flags |
