@@ -2525,7 +2525,11 @@ begin
       try
         ES:= OpenReadOnlyStore(D, EOk);
       except
-        ES:= nil; EOk:= False;
+        on Exception do
+        begin
+          ES := nil;
+          EOk:= False;
+        end;
       end;
       if EOk and (ES <> nil) then Result:= Result + [ES];
     end;
