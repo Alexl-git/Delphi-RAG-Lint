@@ -1,0 +1,36 @@
+{
+  "id": "convrules-curate",
+  "title": "Curate rule books",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.20.0-alpha",
+  "summary": "ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk",
+  "intro": "Move rules between books or build one composed book for the engine without editing text.",
+  "wikiPage": "convrules-editor-curate",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "File > Curate..."
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I move a rule to another book?",
+      "command": "ConvRulesEditor.exe > File > Curate... > check the block > Split..."
+    }
+  ],
+  "access": "standalone-app",
+  "accessReviewed": {
+    "date": "2026-10-28",
+    "by": "CONVERTER"
+  },
+  "verified": {
+    "date": "2026-10-28",
+    "by": "CONVERTER",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "52dd92279f213fc020e325439929af2b77914224db463c47ac329f8f853de618"
+  }
+}

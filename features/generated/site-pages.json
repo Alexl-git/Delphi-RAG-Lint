@@ -115,37 +115,45 @@
     "hash": "56251efff39cfb265a3f908671a8d30dbc75bb89fd658e8ae3e2cc5db21a7ecc",
     "version": "1.35.1-alpha"
   },
+  "features/convrules-busy-guard.md": {
+    "hash": "e374cc7ab3264b8873d0c77c6c3a598cc15af33dab4ec45f8156966c95e1ded2",
+    "version": "1.36.0-alpha"
+  },
   "features/convrules-convert-progress.md": {
-    "hash": "348034e518b6e84f8d72ec60a024388bca603755f5d33e2c443e06193e9259e9",
-    "version": "1.33.0-alpha"
+    "hash": "80296602ab9c5222c7f6fe4340e3d34c3bce009477fda8cbac7dead009e30364",
+    "version": "1.36.0-alpha"
+  },
+  "features/convrules-curate.md": {
+    "hash": "9ac2820d719b06c705e64db4d77e8a6710d78402d4cab826d2648170e25eb81d",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-editor.md": {
-    "hash": "314f6e107a0dde02111645b5c0426cfaa2ea43a8798978e3faf4c53e33c2a069",
-    "version": "1.33.0-alpha"
+    "hash": "9f230fa626e6b2b837da59ab8aed5c9e55bebe21632a1a27692487ec677f0387",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-encoding.md": {
-    "hash": "b2317fdc80330608b70a4bbe96b48b9e9ae2c3105b888e43f35c604a21688eb2",
-    "version": "1.35.0-alpha"
+    "hash": "307f4e49d9b46a94b40a58a5337756f1ea4500f1b3271153773bd75bbd3b23ea",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-migrate-members.md": {
-    "hash": "251b1385db1dc4333c4ba7fe5d0bfa84eeec384caafcab7e025fd1ea1e8e4194",
+    "hash": "8cf6db8d15c4e60e33563b4f041da2736eac837f60ff0bb4e1976990699ce0f3",
     "version": "1.36.0-alpha"
   },
   "features/convrules-qualify-fix.md": {
-    "hash": "cf2667f8386b4747c88852b31949445bfa9bf7f17f3b45b19b1448f26d858741",
-    "version": "1.35.0-alpha"
+    "hash": "3521eeaf75c4f8e98387affcdbd5dd29af4ce8e09e6e2ab9f9bbf55bf8edb1d4",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-reindex-project.md": {
-    "hash": "0df090711fc99761e69d0e835849a1f7baa1ddd99d9be7961d5d030bb97821b3",
-    "version": "1.35.0-alpha"
+    "hash": "bb3a08633caea6752e3ac7d6bd85b53acbe872755d6319268de936b54c39583a",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-rule-chains.md": {
-    "hash": "3a65a4df6061de0d3a8086d1c6412e7f9a7a33cb7f2bdb78504583487ccd59af",
-    "version": "1.35.1-alpha"
+    "hash": "7dc06816e3da74f951da108ee6b0c95e622192749ac0ee2625f6761dae43fbca",
+    "version": "1.36.0-alpha"
   },
   "features/convrules-work-list.md": {
-    "hash": "26736ab585de2b965c3fc548beb14905bdc6978684f2cf2ef6c963a7c6f9a791",
-    "version": "1.35.1-alpha"
+    "hash": "53f34ff00497e6fee51992b54bba33375dd00eb16a88df46373c61462320d73f",
+    "version": "1.36.0-alpha"
   },
   "features/copy-all-diagnostics.md": {
     "hash": "274b7ec77a6d8c4d8e474c1f62508c3020f37b14ea1737859b643d3b5e167f4b",
@@ -336,8 +344,8 @@
     "version": "1.35.1-alpha"
   },
   "features/glyph-vacuum.md": {
-    "hash": "04405957f7ba15041236c7ad039e37e230e0b1c79ebda2a04f16450c62492353",
-    "version": "1.35.1-alpha"
+    "hash": "0eb4040e20d2e47d2c7d0e1c3ad42c84ff4584f461e2456449485179c2360f90",
+    "version": "1.36.0-alpha"
   },
   "features/go-to-declaration.md": {
     "hash": "8cd03db426a352a43032b0d7617733215b9d1046359b987f6ec86de292fad8b1",
@@ -432,8 +440,8 @@
     "version": "1.35.1-alpha"
   },
   "features/lsp.md": {
-    "hash": "cafcacddc8c3af84830ce0469ce2c3b55574ee7bed54d8ae0901086a56a279f3",
-    "version": "1.35.1-alpha"
+    "hash": "b6d4b8e40438e7f29dc503f183f3d9c31d27b58be7089e167171dc0e4da8c152",
+    "version": "1.36.0-alpha"
   },
   "features/maintenance.md": {
     "hash": "b880c95ae36ec3086769089c61fa0662ad531a2c62d3edaba207c4d91e74741d",
@@ -484,8 +492,8 @@
     "version": "1.35.1-alpha"
   },
   "features/proptree.md": {
-    "hash": "52e796f2ea2b9d5f9f41a617bf52ea35a32e12ef1cb52528a691e44edaf08b44",
-    "version": "1.35.1-alpha"
+    "hash": "b72cfc36afe6cfa0b7870765ed9ffa69ddc17487aa7d2d134d9ec342a9a39a6f",
+    "version": "1.36.0-alpha"
   },
   "features/protocol-handler.md": {
     "hash": "94d0b008ac7a70f1c32e3149e9a6821041bd7a0931e216c56bfc374ac2c39863",

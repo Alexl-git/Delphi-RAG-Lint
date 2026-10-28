@@ -112,8 +112,10 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **convert-scaffold** -- Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type. Generate a starting conversion-rules book for a pair of component classes, from their real property trees, instead of typing every rule. [More](convert-scaffold)
 * **convert-validate** -- Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees. Check a conversion-rules book before you convert: syntax, and that every #link and #default path exists on the real classes. [More](convert-validate)
 * **ConvRulesEditor** -- Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27). Edit conversion-rules books visually, run a conversion and see what is left to do by hand. [More](convrules-editor)
+* **Curate rule books** -- ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk. Move rules between books or build one composed book for the engine without editing text. [More](convrules-editor-curate)
 * **glyph-vacuum** -- Measure every streamed glyph or picture under a tree before writing a glyph rule. Before you write a glyph rule, measure every image embedded in your forms: size, format and how many images each list holds. [More](glyph-vacuum)
 * **Member migration (#migrate)** -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list. Replace a member the converted code still uses (rename it, or mark it DL_NONE to convert by hand later) without typing the rule; the line goes into the book that converted the row (pas_uses[].rules_file); needs an engine with migrate_members. [More](convrules-editor-migrate)
+* **Progress window and busy guard** -- ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs. Know why the editor shows a progress window and why a click was refused while it runs. [More](convrules-editor-busy-guard)
 * **proptree** -- Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties. List every property of a class, including inherited and nested ones, as dotted paths; the raw material for writing conversion rules. [More](proptree)
 * **Qualify #convert quick fix** -- ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book. Fix an ambiguous bare #convert class the way the engine suggests, without retyping the line. [More](convrules-editor-qualify-fix)
 * **Reindex project** -- ConvRulesEditor command: incremental index --project of the editor's project index, cancellable. Refresh the project index after IDE edits or between conversion stages. [More](convrules-editor-reindex-project)
@@ -236,11 +238,12 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Allow this message: host 'Structure form' (the caption is verified, the host is declared)
 * Charts and the IDE: procedure docs\wiki\Charts-and-the-IDE.md
 * Circular Dependency Report (worked example): procedure docs\wiki\Circular-Dependency-Report.md
-* ConvRulesEditor: menu 'Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)' inside ConvRulesEditor.exe
+* ConvRulesEditor: menu 'Conversion > Convert... (the IDE plugin starts it with --convert-request FILE and probes --write-capabilities FILE)' inside ConvRulesEditor.exe
 * Convert progress: menu 'Convert tab progress line' inside ConvRulesEditor.exe
 * Copy All Diagnostics: host 'Structure form' (the caption is verified, the host is declared)
 * Copy Selected Diagnostics: host 'Structure form' (the caption is verified, the host is declared)
 * Create helper class: host 'Structure form' (the caption is verified, the host is declared)
+* Curate rule books: menu 'File > Curate...' inside ConvRulesEditor.exe
 * Cycles fix (mechanical, compile-gated): host 'Structure form' (the caption is verified, the host is declared)
 * Document it: host 'Structure form' (the caption is verified, the host is declared)
 * Document project: host 'Structure form' (the caption is verified, the host is declared)
@@ -268,6 +271,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Member migration (#migrate): menu 'Classes tab > Members list > Add...' inside ConvRulesEditor.exe
 * Member migration (#migrate): menu 'Work list tab > Migrate...' inside ConvRulesEditor.exe
+* Progress window and busy guard: menu 'Progress window (appears by itself)' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify #convert...' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify all...' inside ConvRulesEditor.exe
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe

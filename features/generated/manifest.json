@@ -5372,9 +5372,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "529f2b7728d80c00122c3f95529c1d7835edbc27382a786f21856aee6115f7e8"
       }
     },
@@ -5550,9 +5550,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "af70162811d56d63d59f9bf4e18122bf4b60c2dcff6821e3b8e9f2755f3828ba"
       }
     },
@@ -5604,9 +5604,9 @@
       ],
       "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\.",
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "da1fc5e5287650a452eb20c25fff64509455cf311fd24c9e1f1ffdbd08ea7722"
       }
     },
@@ -5680,9 +5680,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "3963e11d95daca2243f41d0d4ef6674f76772d307448179669765cdc7bb85b1d"
       }
     },
@@ -5747,9 +5747,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "bed45b800507d758bab7903f52df6df17da92cf2c99b3079d52800d269a9050b"
       }
     },
@@ -5771,7 +5771,7 @@
         {
           "type": "exe",
           "name": "ConvRulesEditor.exe",
-          "menu": "Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)"
+          "menu": "Conversion > Convert... (the IDE plugin starts it with --convert-request FILE and probes --write-capabilities FILE)"
         }
       ],
       "audience": "both",
@@ -5796,10 +5796,46 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "81571091f5be39465ef8f3e84e45e7026ea8e649412669f80dff72fdc7dab343"
+        "build": "1.36.0-alpha",
+        "surfaceHash": "e2461a908fd5b8bea2d413208afe6e93a9cc52998f70dbde903da031b7055444"
+      }
+    },
+    {
+      "id": "convrules-curate",
+      "title": "Curate rule books",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.20.0-alpha",
+      "summary": "ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk",
+      "intro": "Move rules between books or build one composed book for the engine without editing text.",
+      "wikiPage": "convrules-editor-curate",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "File > Curate..."
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I move a rule to another book?",
+          "command": "ConvRulesEditor.exe > File > Curate... > check the block > Split..."
+        }
+      ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-28",
+        "by": "CONVERTER"
+      },
+      "verified": {
+        "date": "2026-10-28",
+        "by": "CONVERTER",
+        "build": "1.36.0-alpha",
+        "surfaceHash": "52dd92279f213fc020e325439929af2b77914224db463c47ac329f8f853de618"
       }
     },
     {
@@ -5856,9 +5892,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "1f2b54af23642285c57752b058e26e10874cfc770b97c4a1d4d2b9e9e92ffdbc"
       }
     },
@@ -5901,10 +5937,46 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "da998cdf4aebfcbc925f889b6b31eb06e391ad5f8b6c67c11510b43ba8dfa568"
+      }
+    },
+    {
+      "id": "convrules-busy-guard",
+      "title": "Progress window and busy guard",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.35.0-alpha",
+      "summary": "ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs",
+      "intro": "Know why the editor shows a progress window and why a click was refused while it runs.",
+      "wikiPage": "convrules-editor-busy-guard",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Progress window (appears by itself)"
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Why was my click on Convert or Save refused?",
+          "command": "A long engine call is running (progress window); wait for it or press Cancel, then repeat"
+        }
+      ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-28",
+        "by": "CONVERTER"
+      },
+      "verified": {
+        "date": "2026-10-28",
+        "by": "CONVERTER",
+        "build": "1.36.0-alpha",
+        "surfaceHash": "6d2503f8331cc541e27b994402452ae33121e93b7de6d956b5bc2e176740fb3d"
       }
     },
     {
@@ -5988,9 +6060,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "5d6feeb2fe1ed7af5cd7d9b975cc5799d05e13eb02977ac9f1fcc8f09e73f645"
       }
     },
@@ -6034,9 +6106,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-20",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "3ee41d2b7ed8fc2e5c283938e6f970487370aa96cf28adac8fa2fbaf0f03f9ad"
       }
     },
@@ -6071,9 +6143,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "2ffbd6609bc1c1326cce6f702b4565ab77e1fe29e90023b180ddf9ad5b0b17e8"
       }
     },
@@ -6125,9 +6197,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "e307c21a37217ea3f4dc7b8b4dc62d13e21d90e4075f967e1b734f58770de358"
       }
     },
@@ -6154,10 +6226,25 @@
         }
       ],
       "audience": "both",
+      "questions": [
+        {
+          "ask": "Why does my TA -> TB plus TB -> TC book leave a TA as TB?",
+          "command": "ConvRulesEditor.exe > Conversion > Rule chains... (convert-apply is single pass; Merge to TA -> TC or Split into stage books)"
+        },
+        {
+          "ask": "How do I run the stage books in the right order?",
+          "command": "ConvRulesEditor.exe > Conversion > Convert... > check the books in order (Move Up / Move Down)"
+        }
+      ],
+      "access": "standalone-app",
+      "accessReviewed": {
+        "date": "2026-10-28",
+        "by": "CONVERTER"
+      },
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "eb7e135631f7a03a51a1fef17c2fcea14d88e68829273394dc0fe5a5cf5ffb33"
       }
     },
@@ -6192,9 +6279,9 @@
         "by": "CONVERTER"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "8f86227bc01c407bcb3451a7017486163764cc43f0fa0e022929d3ef778417de"
       }
     },
@@ -10573,9 +10660,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-23",
+        "date": "2026-10-28",
         "by": "CONVERTER",
-        "build": "1.33.0-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "db2fce9107b6535be56483366d29b2beab83f616381bc02aedbb954b7b41d2fb"
       }
     },

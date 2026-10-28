@@ -4,10 +4,10 @@ title: Rule chains (single-pass warning, merge / split)
 summary: "ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books"
 product: DL
 group: component-conversion
-order: 60011
+order: 60013
 since: 1.35.1-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Rule chains (single-pass warning, merge / split)
@@ -72,7 +72,7 @@ Merge replaces the first stage with `#convert TA -> TC` (using the last stage's 
 composing the stages from the left. The last stage block stays as it is, because a TB may
 also exist on its own in your sources. Merge edits the book and does NOT save: review it,
 then Save. The block starts with a `#note chain merge: ...` line that counts what was
-composed, carried and noted.
+composed, carried, dropped and noted.
 
 In plain words:
 
@@ -80,10 +80,12 @@ In plain words:
    becomes `C.z <- A.y`. If both stages have a cast, the link gets no cast and a note asks
    you to pick one; otherwise the one cast is kept.
 2. A `#ignore B.x` in the second stage becomes `#ignore A.y`.
-3. A first-stage `#link B.x <- A.y` with no second-stage line for `B.x` is kept as it is; the
-   next Save tells you whether TC has an `x`.
+3. A first-stage `#link B.x <- A.y` with no second-stage line for `B.x` is DROPPED: run in two
+   passes, the second pass drops the unlinked `B.x` too, and TC may have no `x` at all. A
+   `#note chain merge: dropped ...` names the line, `#ignore A.y` follows it, and the Merge
+   status lists every dropped line. Link `A.y` to a TC property yourself if the value should carry.
 4. A first-stage `#default B.x = v` follows a second-stage link to `#default C.z = v`; it is
-   dropped with a note through an `#ignore`, and kept when nothing matches.
+   dropped with a note through an `#ignore`, and dropped with a note when nothing matches.
 5. `#migrate Old -> New` followed by `#migrate New -> Newer` becomes `#migrate Old -> Newer`;
    all other `#migrate` lines are kept and de-duplicated.
 6. Everything else of the first stage (`#ignore`, `#remove`, `#apply`, `#tag`, `#warn`,
@@ -121,11 +123,24 @@ The Convert tab runs the CHECKED books in list order, one after the other, on ev
 and reindexes between books. So `X.rules` then `X.stage2.rules` really does turn a TA into
 TB and then into TC: book 2 reads book 1's output. The folder scan lists `X.rules` before
 `X.stage2.rules`; use **Move Up** and **Move Down** under the book list to change the order.
-The tab does not yet warn about a wrong order across books (a later book holding the
-earlier stage); that is planned as CHAIN-2.
+The tab does not yet warn about a wrong order across books in general (a later book holding the
+earlier stage); that is planned as CHAIN-2. One pair is checked today: when DataDB-to-FireDAC.rules
+is listed before BDE-to-FireDAC.rules, the preflight adds a note that the BDE book must convert
+first (a warning only; the run is not refused).
 
 Source: spec `docs\superpowers\specs\2026-10-27-converter-chain1-design.md`; engine facts:
 `docs\CONVERSION-RULES.md` (single pass).
+
+### Where to click
+
+**Conversion > Rule chains...**
+1. Open the rule book (File > Open...)
+2. Choose Conversion > Rule chains...
+3. Select the findings, then click Merge (one TA -> TC rule), Split (stage books) or Keep
+
+**File > Save (offer)**
+1. Choose File > Save
+2. If the book holds a fixable chain, the Rule chains dialog opens once per chain per session
 
 ---
 

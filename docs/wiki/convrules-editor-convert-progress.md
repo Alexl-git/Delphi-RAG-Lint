@@ -41,3 +41,10 @@ A Convert run (Conversion > Convert..., then Convert). Nothing to configure.
 ## Limits
 The engine's own progress inside one convert-apply call is not shown; a long
 apply shows `applying` with a ticking clock until it returns.
+
+## Where to click
+
+**Convert tab progress line**
+1. Choose Conversion > Convert... (opens the Convert tab)
+2. Check the books, add the units (Add...), click Convert
+3. Read the progress line under the buttons and in the status bar: unit, book, phase, elapsed
