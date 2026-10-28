@@ -36,6 +36,8 @@ if ($Acquire) {
     } catch {}
     if ($got) {
       Start-Process -WindowStyle Hidden -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-Beat', '-Owner', $Owner, '-LockFile', $LockFile, '-BeatSec', $BeatSec) | Out-Null
+      # ATOMLOCK: the lock is held, so no other driver's editor can be mid-start: reclaim VCL atoms leaked by killed editors.
+      try { . "$PSScriptRoot\vcl-atoms.ps1"; Write-Output (VclAtomsReclaim) } catch { Write-Output "vcl-atoms: reclaim failed: $($_.Exception.Message)" }
       Write-Output "$how by $Owner"; exit 0
     }
     if ((Get-Date) -gt $deadline) { Write-Output "TIMEOUT held by $(Get-Content -LiteralPath $LockFile -ErrorAction SilentlyContinue)"; exit 1 }
