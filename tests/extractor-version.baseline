@@ -1068,4 +1068,9 @@
 #   types of procedural and anonymous-method type declarations emit type_use refs. Pinned by
 #   tests\autotest\run_reftype_refs.ps1.
 #   Superseded: 1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
-1.26.0-alpha|78e9e91c9c34038abda630fd61f0508077e8fca2441009aa9be4f075b99be338
+#   2026-10-27 (lane REFTYPE part 2, gaps/reftype): re-pinned WITHIN 1.26.0-alpha. Initializer positions
+#   now emit read refs: const / typed const / resourcestring / global var initial values, param default
+#   VALUES, array and record const initializers, explicit enum ordinals (EmitExpressionIdentReads +
+#   declVar + TryWalkEnum). Pinned by tests\autotest\run_reftype_refs.ps1 part 2.
+#   Superseded: 1.26.0-alpha|78e9e91c9c34038abda630fd61f0508077e8fca2441009aa9be4f075b99be338
+1.26.0-alpha|cf421226101da454ad3f2fec99f01910c34315a655f06cb9d459e431aa70240c

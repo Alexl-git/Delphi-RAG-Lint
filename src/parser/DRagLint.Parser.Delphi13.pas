@@ -950,10 +950,29 @@ begin
     An EXPRESSION bound -- `array [1..CA*CB]` -- is (range .. (exprBinary ..)),
     which needs nothing here: the exprBinary arm above already reads lhs/rhs once
     Walk reaches it, which is what member B2's recursion arranges. }
+  { INITIALIZER POSITIONS (lane REFTYPE, 2026-10-27). A name used ONLY as an
+    initializer emitted NOTHING: `VERSION = DRAGLINT_VERSION;` (CLI.pas:69) had
+    zero refs, so uses-audit called DRagLint.Core.Model movable to the
+    implementation -- and its autofix would have broken the build. Shapes, from
+    tools\dumpnode, not assumed:
+        const / typed const / var init /    (defaultValue (kEq) (identifier))
+          param default VALUE / enum ordinal
+        array const                         (arrInitializer (identifier) ...)
+        record const                        (recInitializerField (identifier) (identifier))
+    In a recInitializerField the FIRST identifier is the field NAME being
+    initialised, not a usage, so only the value (the last named child) is read.
+    An EXPRESSION initializer (`= A + 1`, `= SizeOf(T)`, `= [a, b]`) needs
+    nothing: its own node already reads through the arms above. }
   else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel')
        or (NT = 'procExternal')
-       or (NT = 'range') or (NT = 'declString') or (NT = 'subrangeType') then
-    ReadAllDirectIdents;
+       or (NT = 'range') or (NT = 'declString') or (NT = 'subrangeType')
+       or (NT = 'defaultValue') or (NT = 'arrInitializer') then
+    ReadAllDirectIdents
+  else if (NT = 'recInitializerField') and (ANode.NamedChildCount >= 2) then
+  begin
+    Op:= ANode.NamedChild(ANode.NamedChildCount - 1);
+    if Op.NodeType = 'identifier' then AState.EmitRef('read', NodeText(Op, AState.Source), Op);
+  end;
 end; // procedure
 
 // v0.40.4: extract the literal string body from a `kIn literalString` pair
@@ -1512,6 +1531,10 @@ begin
           end;
           AState.Emit(skEnumValue, ValName, QName + '.' + ValName, EnumIdx, ValNode, IntToStr(EnumOrd));
           Inc(EnumOrd);
+          { Lane REFTYPE: `roA = RiH` -- the explicit ordinal is a usage of RiH.
+            This walker Exits the dispatch, so walk the defaultValue here. }
+          var EnumDefNode:= FindNamedChildOfType(ValNode, 'defaultValue');
+          if not EnumDefNode.IsNull then Walk(EnumDefNode, AState, AParentSymbolIdx, AParentQualifiedName);
         end;
       end;
     end;
@@ -2921,6 +2944,11 @@ begin
       else VQName:= VName;
       AState.Emit(skVarDecl, VName, VQName, AParentSymbolIdx, VChild, VTypeText);
     end;
+    { Lane REFTYPE: `GInit: Integer = RiJ;` -- the initializer is a usage. Only
+      the type was walked above, so a global's initial value emitted nothing. }
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(i).NodeType = 'defaultValue' then
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end; // if
 
