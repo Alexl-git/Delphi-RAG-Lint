@@ -528,8 +528,8 @@
     "version": "1.35.1-alpha"
   },
   "features/query-find-callers.md": {
-    "hash": "6fff114730cc9408cd6b2b83c63541260c7eb87bd91d64e11cc89484ab6336d5",
-    "version": "1.35.1-alpha"
+    "hash": "ea5b3b1d88211ad1cd4f671c3b09dca1b56ee0a4a14f749e772e9e80f2ff7426",
+    "version": "1.36.0-alpha"
   },
   "features/query-kind-all.md": {
     "hash": "e54fb55c52cfa6cf86a5c8737ae0f494c8c502a780cfef9316d9fc09ee0d70c3",
