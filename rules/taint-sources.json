@@ -1,11 +1,11 @@
 {
   "_comment": "Taint SOURCES for taint-sql-injection / taint-command-injection / taint-path-traversal. `categories` limits a source to those rules (default all): the command line, a dropped file and a file dialog name a WHOLE path the invoking user chose with their own rights -- no restricted parent directory to escape, no trust boundary crossed (CWE-22) -- so they are not path-traversal sources; they stay sources for SQL and command injection (argument injection through file associations and URL handlers). Schema and name matching: DocInsight of src/lint/DRagLint.Lint.TaintRules.pas. A project's lint config `taint` object adds rows or disables these by id.",
   "sources": [
-    {"id": "paramstr", "name": "ParamStr", "kind": "call", "confidence": "certain", "categories": ["sql", "cmd"], "note": "command-line argument"},
+    {"id": "paramstr", "name": "ParamStr", "kind": "call", "confidence": "certain", "categories": ["sql", "cmd"], "trusted_args": ["0"], "note": "command-line argument; ParamStr(0) is the module path (GetModuleFileName), never input"},
     {"id": "getcommandline", "name": "GetCommandLine", "kind": "call", "confidence": "certain", "categories": ["sql", "cmd"]},
     {"id": "getcommandlinew", "name": "GetCommandLineW", "kind": "call", "confidence": "certain", "categories": ["sql", "cmd"]},
     {"id": "findcmdlineswitch", "name": "FindCmdLineSwitch", "kind": "call", "confidence": "certain", "categories": ["sql", "cmd"], "note": "the value form fills its out argument"},
-    {"id": "getenvironmentvariable", "name": "GetEnvironmentVariable", "kind": "call", "confidence": "certain"},
+    {"id": "getenvironmentvariable", "name": "GetEnvironmentVariable", "kind": "call", "confidence": "certain", "trusted_args": ["'APPDATA'", "'LOCALAPPDATA'", "'USERPROFILE'", "'TEMP'", "'TMP'", "'ProgramData'", "'ProgramFiles'", "'ProgramFiles(x86)'", "'ProgramW6432'", "'CommonProgramFiles'", "'SystemRoot'", "'windir'", "'SystemDrive'", "'ALLUSERSPROFILE'", "'PUBLIC'", "'HOMEDRIVE'", "'HOMEPATH'", "'ComSpec'"], "note": "the listed names are Windows-defined known folders / system paths, the same value SHGetKnownFolderPath or TPath.GetHomePath returns (neither is a source)"},
     {"id": "readln", "name": "ReadLn", "kind": "call", "confidence": "certain", "note": "console / text-file line; fills its out argument"},
     {"id": "getdlgitemtext", "name": "GetDlgItemText", "kind": "call", "confidence": "certain", "note": "fills its out buffer"},
     {"id": "dragqueryfile", "name": "DragQueryFile", "kind": "call", "confidence": "certain", "categories": ["sql", "cmd"], "note": "dropped file names (WM_DROPFILES)"},
