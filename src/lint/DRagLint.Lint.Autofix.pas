@@ -41,10 +41,11 @@ type
 /// `--fix --json` row's `fixable` and what the fix verbs attempt.</remarks>
 function IsFixableRule(const ARuleId: string): Boolean;
 
-/// <summary>Is ARuleId a fixable rule whose fix applies only when opted in?</summary>
+/// <summary>Is ARuleId one of the store-backed NAMING fixes (a rename of the
+/// declaration and every use the index knows about)?</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
-/// <returns>True for the naming fixes in OPT_IN_FIX_RULE_IDS.</returns>
-function IsOptInFixRule(const ARuleId: string): Boolean;
+/// <returns>True for the ids in NAMING_FIX_RULE_IDS.</returns>
+function IsNamingFixRule(const ARuleId: string): Boolean;
 
 
 /// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
@@ -423,24 +424,22 @@ begin
 end;
 
 { The NAMING fixes. Each rewrites a declaration and every use the index knows
-  about -- project-wide -- so `lint --fix` applies one only when the config
-  opts it in ("autofix": [...] in drag-lint-lint.json) AND a store is open.
-  One list, read by the fixer AND by `rules --json` (`fix_opt_in`): the IDE
-  counted these as fixable, offered "Fix all in unit (78)" on ORM3's
-  BASICS.PAS, and the run then reported "no fixable findings" (2026-10-13). }
+  about -- project-wide -- and needs an open store. Until 1.37.0 a batch run
+  applied one only when the config opted it in ("autofix": [...]); lane A7 made
+  every fix default-ON (owner ruling), replacing the gate with per-finding
+  SKIPs the fixer reports (dfm-referenced, with-block) and the one brake
+  "autofix_off": [...]. One list, read by the fixer to route a finding to the
+  rename engine. }
 const
-  OPT_IN_FIX_RULE_IDS: array[0..7] of string = (
+  NAMING_FIX_RULE_IDS: array[0..7] of string = (
     'method-pascalcase', 'local-var-casing', 'const-casing', 'field-name-prefix',
     'param-name-prefix', 'type-name-prefix', 'local-field-prefix', 'property-accessor-name');
 
-/// <summary>Is ARuleId a fixable rule whose fix applies only when opted in?</summary>
-/// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
-/// <returns>True for the naming fixes in OPT_IN_FIX_RULE_IDS.</returns>
-function IsOptInFixRule(const ARuleId: string): Boolean;
+function IsNamingFixRule(const ARuleId: string): Boolean;
 var
   S: string;
 begin
-  for S in OPT_IN_FIX_RULE_IDS do
+  for S in NAMING_FIX_RULE_IDS do
     if SameText(S, ARuleId) then Exit(True);
   Result:= False;
 end;

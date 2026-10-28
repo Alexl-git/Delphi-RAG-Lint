@@ -12651,6 +12651,191 @@ begin
   end;
 end;
 
+{ Blank out comments and string literals (same length, so offsets and line
+  numbers survive) so a token scan below sees only code. }
+procedure BlankRange(var AText: string; AFrom, ATo: Integer);
+begin
+  for var I:= AFrom to ATo do
+    if (AText[I] <> #10) and (AText[I] <> #13) then AText[I]:= ' ';
+end;
+
+function MaskNonCode(const AText: string): string;
+var
+  I, J, N: Integer;
+  C, C2  : Char;
+begin
+  Result:= AText;
+  N:= Length(AText);
+  I:= 1;
+  while I <= N do
+  begin
+    C:= AText[I];
+    C2:= if I < N then AText[I + 1] else #0;
+    J:= I;
+    if (C = '/') and (C2 = '/') then
+    begin
+      while (J <= N) and (AText[J] <> #10) do Inc(J);
+      BlankRange(Result, I, J - 1);
+    end
+    else if C = '{' then
+    begin
+      while (J <= N) and (AText[J] <> '}') do Inc(J);
+      BlankRange(Result, I, Min(J, N));
+    end
+    else if (C = '(') and (C2 = '*') then
+    begin
+      Inc(J, 2);
+      while (J < N) and not ((AText[J] = '*') and (AText[J + 1] = ')')) do Inc(J);
+      J:= Min(J + 1, N);
+      BlankRange(Result, I, J);
+    end
+    else if C = '''' then
+    begin
+      Inc(J);
+      while (J <= N) and (AText[J] <> '''') and (AText[J] <> #10) do Inc(J);
+      BlankRange(Result, I, Min(J, N));
+    end;
+    I:= J + 1;
+  end;
+end;
+
+/// <summary>Is AIdent read or written BARE (not after a dot) inside the body of
+/// a `with` statement in AText?</summary>
+/// <param name="AText">Pascal source; comments and strings are ignored.</param>
+/// <param name="AIdent">The identifier; compared case-insensitively.</param>
+/// <returns>True when a `with ... do` body names AIdent without a qualifier.</returns>
+/// <remarks>Pure and conservative: it may say True for a name that the `with`
+/// target does not own (the fix is then skipped, never wrongly written). The
+/// body extent is the `begin..end` block or the statement up to its `;`.</remarks>
+function IdentReadBareInWith(const AText, AIdent: string): Boolean;
+var
+  Toks      : TMatchCollection;
+  I, J, Depth: Integer;
+  Tok       : string;
+begin
+  Result:= False;
+  Toks:= TRegEx.Matches(MaskNonCode(AText), '[A-Za-z_][A-Za-z0-9_]*|[;().]');
+  for I:= 0 to Toks.Count - 1 do
+    if SameText(Toks[I].Value, 'with') then
+    begin
+      J:= I + 1;
+      Depth:= 0;
+      while (J < Toks.Count) and not ((Depth = 0) and SameText(Toks[J].Value, 'do')) do
+      begin
+        if Toks[J].Value = '(' then Inc(Depth)
+        else if Toks[J].Value = ')' then Dec(Depth);
+        Inc(J);
+      end;
+      Inc(J);
+      Depth:= 0;
+      while J < Toks.Count do
+      begin
+        Tok:= Toks[J].Value;
+        if SameText(Tok, AIdent) and (Toks[J - 1].Value <> '.') then Exit(True);
+        if SameText(Tok, 'begin') or SameText(Tok, 'case') or SameText(Tok, 'try') or SameText(Tok, 'asm') then Inc(Depth)
+        else if SameText(Tok, 'end') then
+        begin
+          if Depth > 0 then Dec(Depth);
+          if Depth = 0 then Break;
+        end
+        else if (Tok = ';') and (Depth = 0) then Break;
+        Inc(J);
+      end;
+    end;
+end;
+
+const
+  BINARY_FORM_MAGIC = 'TPF0'; // the first bytes of a binary .dfm / .fmx
+
+{ The rename-engine finding's identifier, read from the file's own span. '' when
+  the span no longer holds one. }
+function NamingFixIdentifier(const AFinding: TLintFinding): string;
+begin
+  Result:= DRagLint.Refactor.NamingFix.ReadIdentifierAt(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, AFinding.EndCol);
+end;
+
+/// <summary>Does a BINARY form file beside the finding's unit contain the symbol
+/// the naming fix is about to rename?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True for method-pascalcase / type-name-prefix / field-name-prefix
+/// when the sibling .dfm / .fmx starts with the binary signature `TPF0` and holds
+/// the identifier (case-insensitively, as a substring: conservative).</returns>
+/// <remarks>A TEXT form file is not a skip: the rename engine rewrites its
+/// `OnClick = Handler` / `object X: TX` rows with the .pas edits (pinned by
+/// tests\autotest\run_rules_fix_default_on.ps1 A1). A binary one is opaque to the
+/// index, so the rename could not be proved complete and is skipped.</remarks>
+function NamingFixReferencedByBinaryForm(const AFinding: TLintFinding): Boolean;
+var
+  Ext, FormFile, Ident, Body: string;
+  Bytes: TBytes;
+begin
+  Result:= False;
+  if not (SameText(AFinding.RuleId, 'method-pascalcase') or SameText(AFinding.RuleId, 'type-name-prefix')
+       or SameText(AFinding.RuleId, 'field-name-prefix')) then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if Ident = '' then Exit;
+  for Ext in ['.dfm', '.fmx'] do
+  begin
+    FormFile:= TPath.ChangeExtension(AFinding.FilePath, Ext);
+    if not TFile.Exists(FormFile) then Continue;
+    Bytes:= TFile.ReadAllBytes(FormFile);
+    if (Length(Bytes) < Length(BINARY_FORM_MAGIC)) or (TEncoding.ASCII.GetString(Bytes, 0, Length(BINARY_FORM_MAGIC)) <> BINARY_FORM_MAGIC) then Continue;
+    Body:= TEncoding.ANSI.GetString(Bytes);
+    if ContainsText(Body, Ident) then Exit(True);
+  end;
+end;
+
+/// <summary>Does a TEXT form file in the finding's folder, other than the unit's
+/// own indexed form (same base name), name the symbol being renamed?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True for method-pascalcase / type-name-prefix / field-name-prefix when
+/// another .dfm / .fmx in the unit's folder holds the identifier as a whole word
+/// (case-insensitively).</returns>
+/// <remarks>Such a form (an inherited form, a form outside the .dproj) is not in the
+/// index, so the rename engine would leave its OnClick = Handler / inherited X:
+/// TX row stale: the .pas compiles and the form dies at load. Skipped, never
+/// rewritten (conservative). The unit's own same-named form is the engine's job.</remarks>
+function NamingFixReferencedByUnindexedForm(const AFinding: TLintFinding): Boolean;
+var
+  Ident, Dir, Own, Pattern, FormFile: string;
+  Mask: string;
+begin
+  Result:= False;
+  if not (SameText(AFinding.RuleId, 'method-pascalcase') or SameText(AFinding.RuleId, 'type-name-prefix')
+       or SameText(AFinding.RuleId, 'field-name-prefix')) then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if Ident = '' then Exit;
+  Dir:= TPath.GetDirectoryName(AFinding.FilePath);
+  if (Dir = '') or not TDirectory.Exists(Dir) then Exit;
+  Own:= TPath.GetFileNameWithoutExtension(AFinding.FilePath);
+  Pattern:= '(?<![A-Za-z0-9_])' + TRegEx.Escape(Ident) + '(?![A-Za-z0-9_])';
+  for Mask in ['*.dfm', '*.fmx'] do
+    for FormFile in TDirectory.GetFiles(Dir, Mask) do
+    begin
+      if SameText(TPath.GetFileNameWithoutExtension(FormFile), Own) then Continue;
+      var Bytes: TBytes:= TFile.ReadAllBytes(FormFile);
+      if (Length(Bytes) >= Length(BINARY_FORM_MAGIC)) and (TEncoding.ASCII.GetString(Bytes, 0, Length(BINARY_FORM_MAGIC)) = BINARY_FORM_MAGIC) then Continue;
+      if TRegEx.IsMatch(TEncoding.ANSI.GetString(Bytes), Pattern, [roIgnoreCase]) then Exit(True);
+    end;
+end;
+/// <summary>Is the field a field-name-prefix finding names read bare inside a
+/// `with` in its own file?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True only for field-name-prefix when IdentReadBareInWith holds for
+/// the finding's file.</returns>
+/// <remarks>The reference index holds no ref for such a read, so a rename would
+/// strand it and break the build. Only the declaring file is scanned.</remarks>
+function NamingFixReadBareInWith(const AFinding: TLintFinding): Boolean;
+var
+  Ident: string;
+begin
+  Result:= False;
+  if not SameText(AFinding.RuleId, 'field-name-prefix') then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if (Ident = '') or not TFile.Exists(AFinding.FilePath) then Exit;
+  Result:= IdentReadBareInWith(TEncoding.ANSI.GetString(TFile.ReadAllBytes(AFinding.FilePath)), Ident);
+end;
+
 type
   { What PlanMultiOwnerNaming hands back to FinalizeAndOutput. }
   TRenameOutcome = record
@@ -13096,6 +13281,27 @@ begin
     end
     else Targeted:= Survivors;
 
+    { Every fix is ON by default (1.37.0, lane A7). The only brake is the config
+      key "autofix_off": [...] -- a rule listed there keeps reporting, its fix is
+      withheld from a BATCH run. ONE finding asked for by line AND rule is an
+      explicit request and wins over the brake. The retired "autofix": [...] key
+      is read and ignored, with one note. }
+    if Cfg.HasLegacyAutoFix then
+      Writeln(ErrOutput, 'drag-lint: note: "autofix" no longer gates fixes -- every fix is on; ' +
+        'use "autofix_off": [...] to exclude a rule.');
+    var Braked: TArray<TLintFinding>:= nil;
+    var BrakedIds: TArray<string>:= nil;
+    for F in Targeted do
+      if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
+      begin
+        if not MatchText(F.RuleId, BrakedIds) then BrakedIds:= BrakedIds + [F.RuleId];
+      end
+      else Braked:= Braked + [F];
+    Targeted:= Braked;
+    if Length(BrakedIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
+        [Length(BrakedIds), string.Join(', ', BrakedIds)]));
+
     var FixCount: Integer                                               ;
     { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
     SetAutofixStore(AStore);
@@ -13210,77 +13416,42 @@ begin
       { Naming autofix: store-backed like doc-drift. Covers phase 1 (re-casing:
         method-pascalcase, local-var-casing, const-casing) AND phase 2
         (prefix-adding: field-name-prefix, param-name-prefix, type-name-prefix).
-        Only for findings whose rule is BOTH registered-fixable AND opted-in via
-        AutoFixIds (config "autofix": [...], tested via Cfg.IsAutoFix -- naming
-        fixes rewrite call sites project-wide, so they stay opt-in rather than
-        joining the always-on doc-drift append). The synthesizers + rename
-        engine live in DRagLint.Refactor.NamingFix. }
+        Default ON since 1.37.0 (lane A7): no config key and no --fix-naming is
+        needed. Two per-finding SAFETY NETS replace the old opt-in gate -- a
+        finding whose rename the engine cannot prove complete is SKIPPED and
+        COUNTED, never written: a symbol a BINARY form file references
+        (dfm-referenced; a TEXT .dfm row is rewritten with the .pas), and a
+        field read bare inside a `with` (with-block; the index holds no ref for
+        it). The only brake is "autofix_off": [...] (applied above). The
+        synthesizers + rename engine live in DRagLint.Refactor.NamingFix. }
       var NamingTargets: TArray<TLintFinding>:= nil;
-      { Findings whose rule CAN be fixed but is not opted in. Counted separately
-        so the summary can say which it is: "no fixable findings" is false and
-        actively misleading here -- the rule IS registered fixable, the catalog
-        advertises `"fixable": true` for it, and the fix demonstrably works the
-        moment the config opts in. Reporting the opt-in as an absence of
-        capability sent a triage session down the path of believing the fixer
-        was broken (docs\INBOX-field-name-prefix-fixable-flag-lies.md). }
-      var NamingOptOut: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
-      try
+      var DfmSkipped: Integer:= 0;
+      var WithSkipped: Integer:= 0;
+      var UnindexedSkipped: Integer:= 0;
       for F in Targeted do
-        if IsOptInFixRule(F.RuleId) then
+        if IsNamingFixRule(F.RuleId) then
         begin
-          { A request for ONE finding -- --fix-line AND --fix-rule naming this
-            rule, which is what the IDE's "Fix it" sends -- IS the opt-in. The
-            config gate exists so a BATCH fix never renames across the project
-            unasked; a human pointing at one constant and asking for it to be
-            renamed has asked (owner, 2026-10-13: "We can change them to
-            PascalCase"). }
-          { --fix-naming is the same consent for a BATCH run. The IDE's Fix all
-            sends it on BOTH runs -- the preview (to get the plan to show) and
-            the apply; only the apply follows the user's confirmation, and a
-            preview writes no source file whatever this flag says. }
-          var Explicit: Boolean:= ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) or AArgs.FixNaming;
-          if Cfg.IsAutoFix(F.RuleId) or Explicit then NamingTargets:= NamingTargets + [F]
-          else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
+          if NamingFixReferencedByBinaryForm(F) then Inc(DfmSkipped)
+          else if NamingFixReferencedByUnindexedForm(F) then Inc(UnindexedSkipped)
+          else if NamingFixReadBareInWith(F) then Inc(WithSkipped)
+          else NamingTargets:= NamingTargets + [F];
         end;
-      if NamingOptOut.Count > 0 then
-      begin
-        var OptOutIds: TArray<string>:= NamingOptOut.Keys.ToArray;
-        TArray.Sort<string>(OptOutIds);
-        Writeln(ErrOutput, Format(
-          'drag-lint: note: %d naming rule(s) here are fixable but NOT opted in: %s. ' +
-          'Naming fixes rewrite call sites project-wide, so they are opt-in -- add them to ' +
-          '"autofix": [...] in drag-lint-lint.json to apply.',
-          [Length(OptOutIds), string.Join(', ', OptOutIds)]));
-      end;
-      finally
-        NamingOptOut.Free;
-      end;
+      if DfmSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (dfm-referenced): %d -- a binary form file names the symbol, so the rename ' +
+          'could not be proved complete; nothing was written for it.', [DfmSkipped]));
+      if UnindexedSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (dfm-unindexed): %d -- a text form file beside the unit names the symbol and is not the unit''s own indexed form, ' +
+          'so the rename could not be proved complete; nothing was written for it.', [UnindexedSkipped]));
+      if WithSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (with-block): %d -- the field is read bare inside a `with`, a site the index ' +
+          'holds no reference for; nothing was written for it.', [WithSkipped]));
       if Length(NamingTargets) > 0 then
       begin
         { Naming-prefix autofixes rewrite the declaration + every use the ref
-          index knows about. Coverage status per rule:
-          - type-name-prefix: FULLY covered as of ref-gap E (v-next). The index
-            now captures impl-header qualifier + param/return types, local-var
-            type annotations, and is/as operands (ref-gap E), on top of the
-            ordinary typeref sites; ref-gap D already covered Self.-qualified
-            uses. So a type rename no longer strands references -- NO warning.
-          - field-name-prefix: ref-gap D covers Self.-qualified field uses, but
-            a BARE field read used as an expression operand (e.g.
-            `Result := client + 1;`) is still NOT indexed as a ref, so that one
-            site can be left on the old name -- the file can fail to compile
-            with exit code 0 and no other diagnostic. So field-name-prefix STILL
-            warrants the warning, narrowed to that remaining shape.
-          param-name-prefix uses BuildLocal's pure-AST scope walk and needs no
-          warning. When ref-gaps close the bare-field-read shape, drop this too. }
-        for F in NamingTargets do
-          if SameText(F.RuleId, 'field-name-prefix') then
-          begin
-            Writeln(ErrOutput, 'drag-lint: warning: field-name-prefix autofix may leave a bare field '
-              + 'read used as an expression operand (e.g. `X := field + 1`) unrenamed (the index does '
-              + 'not yet capture that site) -- review the diff and recompile.');
-            Break;
-          end;
-
+          index knows about. The index holds a ref for a bare field read in the
+          class's own methods (probed, pinned by run_rules_fix_default_on.ps1 C1),
+          so no review warning is printed; the one shape it cannot see, a bare
+          read inside with, is skipped and counted above. }
         Rename:= PlanMultiOwnerNaming(AArgs, NFHintDb, Cfg.Naming, NamingTargets);
         Inc(FixCount, Rename.Applied);
 
@@ -13295,6 +13466,18 @@ begin
         end;
         Inc(NFSkippedTotal, NFSkipped);
         Inc(NFStaleTotal, NFStale);
+        { The dry run IS the confirmation now that no opt-in gates a rename: say
+          how many symbols are renamed and in how many projects BEFORE --apply
+          writes. stderr keeps a --json stdout clean. }
+        var RenameOwners: TArray<string>:= nil;
+        for var RP: TTargetPlan in Rename.Plans do
+          if RP.Decision = rdApply then
+            for var RO: TOwnerReport in RP.Owners do
+              if (RO.RefCount > 0) and not MatchText(RO.Owner.SectionName, RenameOwners) then
+                RenameOwners:= RenameOwners + [RO.Owner.SectionName];
+        if Rename.Applied + NFCount > 0 then
+          Writeln(ErrOutput, Format('rename: %d symbol(s) across %d project(s)',
+            [Rename.Applied + NFCount, Max(1, Length(RenameOwners))]));
         { The single-project naming renames this run makes, for the IDE's Fix all
           confirmation. Only under --fix-naming, so an ordinary run's output is
           unchanged (spec criterion 15); stderr keeps a --json stdout clean. }
@@ -13662,7 +13845,7 @@ begin
         O.AddPair('source', R.Source);
         O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
         { true: the fix runs only when "autofix": [...] opts the rule in }
-        O.AddPair('fix_opt_in', TJSONBool.Create(IsOptInFixRule(R.Id)));
+        O.AddPair('fix_opt_in', TJSONBool.Create(False)); // deprecated: every fix is on by default (1.37.0); emitted for the IDE plugin
         AddParamsJson(O, R.Params);
         O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
         { 1.38 two-way modernize: the gate's inputs, and whether the rule runs by

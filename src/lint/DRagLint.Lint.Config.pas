@@ -101,6 +101,7 @@ type
     FDisabled    : TArray<string> ;
     FEnabled     : TArray<string> ;
     FAutoFix     : TArray<string> ;
+    FAutoFixOff  : TArray<string> ;
     FSevNames    : TArray<string> ; // parallel arrays: rule id -> severity
     FSevValues   : TArray<string> ;
     FThreshNames : TArray<string> ; // parallel arrays: metric name -> value
@@ -539,7 +540,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetAutoFix(const AIds: TArray<string>);
-    /// <summary>Sets or updates the severity override for AId.</summary>
+    /// <summary>True when ARuleId is in the configured "autofix_off" list --
+    /// the ONLY brake on the default-on autofixes (1.37.0).</summary>
+    /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
+    /// <returns>True when the rule's fix must not be applied.</returns>
+    /// <remarks>Pure. Independent of enabled/disabled: a rule still reports
+    /// findings, only its fix is withheld.</remarks>
+    function IsAutoFixOff(const ARuleId: string): Boolean;
+    /// <summary>Returns a copy of the "autofix_off" rule-id list.</summary>
+    /// <returns>The ids whose fix is withheld.</returns>
+    function AutoFixOffIds: TArray<string>;
+    /// <summary>Replaces the "autofix_off" list with AIds.</summary>
+    /// <param name="AIds">The ids whose fix is to be withheld.</param>
+    procedure SetAutoFixOff(const AIds: TArray<string>);
+    /// <summary>True when the loaded config still carries the retired
+    /// "autofix": [...] key (read and ignored since 1.37.0).</summary>
+    /// <returns>True when that key listed at least one id.</returns>
+    function HasLegacyAutoFix: Boolean;    /// <summary>Sets or updates the severity override for AId.</summary>
     /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
@@ -800,6 +817,7 @@ begin
   ApplyList('disabled', FDisabled);
   ApplyList('enabled', FEnabled);
   ApplyList('autofix', FAutoFix);
+  ApplyList('autofix_off', FAutoFixOff);
   ApplyList('exclude_paths', FExcludePaths);
   ApplyList('ifdef_allow', IfdefAllow);
   ApplyList('platform_divergent_allow', PlatformDivergentAllow);
@@ -1026,6 +1044,26 @@ end;
 procedure TLintConfig.SetAutoFix(const AIds: TArray<string>);
 begin
   FAutoFix:= AIds;
+end;
+
+function TLintConfig.IsAutoFixOff(const ARuleId: string): Boolean;
+begin
+  Result:= Contains(FAutoFixOff, ARuleId);
+end;
+
+function TLintConfig.AutoFixOffIds: TArray<string>;
+begin
+  Result:= FAutoFixOff;
+end;
+
+procedure TLintConfig.SetAutoFixOff(const AIds: TArray<string>);
+begin
+  FAutoFixOff:= AIds;
+end;
+
+function TLintConfig.HasLegacyAutoFix: Boolean;
+begin
+  Result:= Length(FAutoFix) > 0;
 end;
 
 procedure TLintConfig.SetSeverityPair(const AId, ASev: string);

@@ -681,7 +681,7 @@ define further codes.
 **Lint**
 | Verb | What it does |
 |------|--------------|
-| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`, and `fix_opt_in` on the 7 naming fixes that `--fix` applies only when `"autofix": [...]` in drag-lint-lint.json opts them in and a `--db` is open; `--rules-dir <dir>` loads the external `.scm` pack from another folder -- `lint` takes it too; each rule shows its CWE/CERT/MISRA ids, `--json` adds a `compliance` object, `--standard cwe|cert|misra` lists only rules labelled under one standard; `lint` / `lint-all` take `--labels` to append the ids to text findings -- see `docs\wiki\compliance-labels.md`; `--target-compiler <ver\|auto>` (with `--project` for auto) answers for that target: each row carries `needs_compiler`, `compat_since`, `target_active`, the root `target_compiler`) |
+| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`; `fix_opt_in` is deprecated and always false -- every fix is on by default, `"autofix_off": [...]` in drag-lint-lint.json is the only brake; `--rules-dir <dir>` loads the external `.scm` pack from another folder -- `lint` takes it too; each rule shows its CWE/CERT/MISRA ids, `--json` adds a `compliance` object, `--standard cwe|cert|misra` lists only rules labelled under one standard; `lint` / `lint-all` take `--labels` to append the ids to text findings -- see `docs\wiki\compliance-labels.md`; `--target-compiler <ver\|auto>` (with `--project` for auto) answers for that target: each row carries `needs_compiler`, `compat_since`, `target_active`, the root `target_compiler`) |
 | `lint <path>` | lint a file/dir -- a dir reports the union of `lint <file>` over every scanned .pas/.inc/.dpr, built-in checkers included (`--rule`, `--disable`, `--fix`, `--output <file>` for `--json` / `--format sarif`; see 4b). Conditionals are resolved the way the indexer resolves them, so code inside a branch the compiler never sees is NOT reported; `--no-preprocess` lints the raw bytes instead. Add `--db <index>` to enable the store-backed checks and this file's project rules (incl. the ON opt-in `discarded-effect-free-result`; the OFF opt-in project rules need `--rule`) -- without it type resolution and exception ancestry degrade conservatively. `--library-db <lib.sqlite>` overrides the manifest-resolved library index (the cross-store hop that lets a project class reach `TCustomForm`); absent, it resolves as before |
 | `lint <f> --db <db> --project-rules` | adds per-file `doc-drift`/`missing-doc`; off by default (per-decl cost can exceed the IDE's 8s budget) |
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
@@ -1039,14 +1039,14 @@ hundred tokens versus tens of thousands to read the relevant 2,000-line units.
 ## 4b. AutoFix (`--fix`)
 
 A subset of rules have a registered, mechanical quick-fix. `rules --json` marks
-each with `"fixable": true`; the seven NAMING fixes (const-casing, type-name-prefix, ...) also carry `"fix_opt_in": true` -- they rewrite every use project-wide, so `--fix` applies them only when `"autofix": [...]` in drag-lint-lint.json lists them and a `--db` is open, and otherwise reports them on stderr as `fixable but NOT opted in`. A request for ONE finding -- `--fix-line L --fix-rule <naming-rule>` together, which is what the IDE's Fix it sends -- IS the opt-in and renames that symbol (declaration + every indexed use; needs `--db`). `const-casing` renames word by word to the first `const_case` style (`StationType_Operator` -> `StationTypeOperator` / `STATION_TYPE_OPERATOR`) and asks the index first: a name that already exists makes it try the next style, and with none free it leaves the constant alone. The `confusable-identifier` warning (naming, on by default) reports two unit/class-level consts or vars whose names differ only by underscores. Apply them with `--fix`:
+each with `"fixable": true`; the NAMING fixes (const-casing, type-name-prefix, ...) rewrite every use project-wide and need a `--db`; since 1.37.0 they are ON like every other fix (`"fix_opt_in"` is emitted for compatibility and is always false). The only brake is `"autofix_off": [...]` in drag-lint-lint.json (a batch run then says `not fixed because "autofix_off" lists them`; ONE finding asked for with `--fix-line L --fix-rule <id>` still wins). The retired `"autofix": [...]` key is read and ignored, with one stderr note. A rename the engine cannot prove complete is SKIPPED and counted, never written: `skipped (dfm-referenced): N` (a binary form file names the symbol; a TEXT .dfm row is rewritten with the .pas), `skipped (dfm-unindexed): N` (another text .dfm/.fmx in the unit's folder, not its own indexed form, names the symbol) and `skipped (with-block): N` (a field read bare inside a `with`). The dry run prints `rename: N symbol(s) across M project(s)` on stderr before `--apply` writes. `const-casing` renames word by word to the first `const_case` style (`StationType_Operator` -> `StationTypeOperator` / `STATION_TYPE_OPERATOR`) and asks the index first: a name that already exists makes it try the next style, and with none free it leaves the constant alone. The `confusable-identifier` warning (naming, on by default) reports two unit/class-level consts or vars whose names differ only by underscores. Apply them with `--fix`:
 
 - **One finding:** `lint --in F --fix --fix-line L --fix-rule R --json [--apply]`
   (omit `--apply` to preview; `--json` reports `fixable`/`applied`/`preview`/`risky`, and
   `declined` + `decline_reason` when an atomic fix group was refused whole -- see below).
 - **Whole unit / project:** `lint --in F --fix --apply` / `lint-all --fix --apply`.
 - **Atomic fix groups:** a fix with several edits (a uses-clause move, `unused-unit-in-uses`) applies ALL-OR-NOTHING. Before any write every edit of the group is checked against the file as it is on disk; if one would not apply, the whole group is dropped and nothing of it is written. In `--json` such a finding has `"declined": true` and a `"decline_reason"` string (and `applied: false`); the text output ends `, N declined (...)` with a stderr note. Read `declined` before treating an unapplied finding as a bug.
-- **Naming fixes in a batch run:** add `--fix-naming` (`lint --in F --fix --fix-naming [--apply]`) -- explicit consent to the opt-in naming fixes without listing them in `"autofix"`; in a unit several project indexes own the rename covers every owner (the `rename-owners:` / `rename-project:` / `rename-target:` plan), and it prints `rename-local: <N>` on stderr for the single-project renames. The IDE's Fix all in unit sends it on BOTH runs -- the preview (no `--apply`) and the apply; only the apply waits for the user's confirm.
+- **Naming fixes in a batch run:** no flag is needed (`--fix-naming` is accepted and does nothing since 1.37.0); in a unit several project indexes own the rename covers every owner (the `rename-owners:` / `rename-project:` / `rename-target:` plan), and it prints `rename-local: <N>` on stderr for the single-project renames. The IDE's Fix all in unit sends it on BOTH runs -- the preview (no `--apply`) and the apply; only the apply waits for the user's confirm.
 - **A uses clause inside a `{$I}` include** is indexed on the HOST (`unit_uses.origin_path` = the .inc, `include_line` = the directive's host line, start/end coordinates inside the .inc). Graph answers include it; no editor edits it: `cycles --fix`/`--plan`, `uses-fix`, `find-unit`, `create-enum-helper` and `rename` refuse or skip with kind `uses-in-include` and name the .inc. Lint findings about such an entry sit on the `{$I}` line, message suffix ` (in include <Name.inc>, line <n>)`.
 - **A cycle is fixed by a verb, not by `--fix`:** `circular-uses` stays `"fixable": false` in `rules --json`. `lint <file> --db <db> --format json` reports it on EVERY unit of a cycle -- at the file's first uses entry that names another unit of the cycle (implementation section preferred), with the lint-all message -- and adds `"fix_hint": "cycles --fix --project \"<X.dproj>\" --db \"<db>\" --unit <stem>"` (the `--project` given to `lint`, else that placeholder). `lint-all` keeps one finding per cycle, anchored on the SAME line as `lint` (the first unit's intra-cycle uses entry, no longer `:1:1`), with no `fix_hint` -- but its message, like `lint`'s, now ends with ` fix: drag-lint cycles --fix --project <X.dproj> --unit <stem>`. The IDE's Diagnostics tree offers *Fix this cycle (dry run)...* and *Apply cycle fix...* on that row.
 - **Raise sites:** `lint <f> --db <db> --fix --fix-rule raise-bare-exception [--apply]` rewrites `raise Exception.Create('msg')` to the generated class for that message and adds the exceptions unit to `uses`. Requires `exceptions-sync --apply` to have run AND the index to be refreshed -- the class NAME is read out of the generated unit, never re-derived, so a rename survives. It SKIPS any file testing the class exactly (`ClassType = Exception`, `ClassNameIs('Exception')`), because narrowing a raise would break that test, and it says which.
@@ -1066,13 +1066,12 @@ assumes `for I := 0 to List.Count do` is a bug and rewrites the bound to
 `"risky": true` and the text preview prints a `[risky]` note. Review a risky fix
 before trusting it in a batch apply ? a deliberately-inclusive loop would break.
 
-### Naming-convention autofixes (opt-in, off by default)
+### Naming-convention autofixes (on by default since 1.37.0)
 
 The naming rules can also rewrite the offending identifier -- and every reference
-to it -- through the rename engine. These are **opt-in**: a naming rule
-participates in `--fix` only when its id is listed in the `autofix` array of
-`drag-lint-lint.json`. All are **off by default** and **dry-run unless
-`--apply`** (like every other fix). Two phases:
+to it -- through the rename engine. They are **on by default** like every
+other fix; list a rule in the `autofix_off` array of `drag-lint-lint.json` to
+withhold it. All are **dry-run unless `--apply`**. Two phases:
 
 - **Phase 1 -- case-only (safe).** `method-pascalcase`, `local-var-casing`,
   `const-casing`. Re-cases the identifier only (`runjob` -> `RunJob`); no new
@@ -1089,9 +1088,9 @@ participates in `--fix` only when its id is listed in the `autofix` array of
     occurrences may be left unrenamed. `--fix` on either rule emits a **stderr
     warning** telling you to review the resulting diff before committing. The `--fix-naming` rename uses the letter the finding reports; an index-gap finding is never auto-fixed.
 
-Enable an autofix by adding its rule id, e.g. in `drag-lint-lint.json`:
+Switch an autofix off by adding its rule id, e.g. in `drag-lint-lint.json`:
 ```json
-{ "autofix": ["method-pascalcase", "param-name-prefix"] }
+{ "autofix_off": ["method-pascalcase", "param-name-prefix"] }
 ```
 See the **v0.96 / v0.97** CHANGELOG entries for the full behaviour notes.
 

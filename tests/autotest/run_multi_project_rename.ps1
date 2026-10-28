@@ -121,7 +121,7 @@ function Reset {
   if ($Unindexed) { $secs += "  { `"name`": `"E`", `"include`": [`"$j\\D\\D.dpr`"], `"db`": `"$j\\E-never-built.sqlite`" }" }
   if ($Library) { $secs += "  { `"name`": `"LIB`", `"source`": `"registry-libraries`", `"platforms`": [`"Win32`", `"Win64`"], `"db`": `"$j\\LIB.sqlite`" }" }
   WriteAscii "$eng\drag-lint.json" (@('{ "indexes": { "sections": [', ($secs -join ",`r`n"), ']}}'))
-  $cfg = if ($NoOptIn) { '{ "autofix": []' } else { '{ "autofix": ["const-casing"]' }
+  $cfg = if ($NoOptIn) { '{ "autofix_off": ["const-casing"]' } else { '{ "autofix": ["const-casing"]' }   # 1.37.0: default-ON; the legacy key is ignored, kept to prove it
   if ($ConstCase.Count -gt 0) { $cfg += ', "naming": { "const_case": [' + (($ConstCase | ForEach-Object { "`"$_`"" }) -join ', ') + '] }' }
   WriteAscii "$work\drag-lint-lint.json" @($cfg + ' }')
   $ok = $true
@@ -390,23 +390,29 @@ try {
   Check 'K2 ... rename-unknown names BAD.sqlite and the refusal says ownership unknown' `
     (($o -match ('(?m)^rename-unknown: ' + [regex]::Escape("$work\BAD.sqlite"))) -and ((LastAutofix $o) -match '^autofix: rename refused -- ownership unknown')) (LastAutofix $o)
 
-  # ---------------------------------------------------------------- fix-naming (Ruling 11)
-  # a BATCH run (no --fix-line) with no config opt-in: --fix-naming is the consent
-  Check 'N0 reset: no "autofix" opt-in in drag-lint-lint.json' (Reset -NoOptIn) ''
+  # ---------------------------------------------------------------- default-ON (lane A7, 1.37.0)
+  # Every fix is ON by default: a BATCH run plans the multi-project rename with no
+  # config key and no --fix-naming. The only brake is "autofix_off".
+  Check 'N0 reset: default config (no brake)' (Reset) ''
   $h0 = Hashes
-  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--apply')
-  Check 'N1 batch without --fix-naming: the opt-out note, no rename plan' `
-    (($o -match 'fixable but NOT opted in: const-casing') -and ($o -notmatch '(?m)^rename-')) (Lines $o '(^rename-|NOT opted in)')
-  Check 'N2 ... and nothing is renamed' ((Hashes) -eq $h0) (Lines $o '^autofix')
-  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--fix-naming')
-  Check 'N3 batch preview with --fix-naming prints the plan for A, B and C' `
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix')
+  Check 'N1 batch preview with NO flag prints the plan for A, B and C' `
     (($o -match '(?m)^rename-owners: 3 of 4 indexes\r?$') -and ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=1\r?$')) (Lines $o '^rename-')
-  Check 'N4 ... no opt-out note, and the preview writes nothing' (($o -notmatch 'NOT opted in') -and ((Hashes) -eq $h0)) (Lines $o 'NOT opted in')
-  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--fix-naming', '--apply')
-  Check 'N5 batch --fix-naming --apply renames in shared, uA, uB and uMid' `
+  Check 'N2 ... no opt-out note, the preview writes nothing, and it says what it will rename' `
+    (($o -notmatch 'NOT opted in') -and ((Hashes) -eq $h0) -and ($o -match '(?m)^rename: 1 symbol\(s\) across 3 project\(s\)\r?$')) (Lines $o '^(rename|NOT)')
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--fix-naming')
+  Check 'N3 --fix-naming is a no-op: the same plan' `
+    (($o -match '(?m)^rename-owners: 3 of 4 indexes\r?$') -and ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=1\r?$')) (Lines $o '^rename-')
+  Check 'N4 reset (autofix_off lists const-casing)' (Reset -NoOptIn) ''
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--apply')
+  Check 'N4b the brake: the note names autofix_off, no rename plan, nothing renamed' `
+    (($o -match 'autofix_off') -and ($o -notmatch '(?m)^rename-') -and ((Hashes) -eq $h0)) (Lines $o '^(rename|autofix|drag-lint: note)')
+  Check 'N4c reset (default)' (Reset) ''
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--apply')
+  Check 'N5 batch --fix --apply (no flag) renames in shared, uA, uB and uMid' `
     (((Txt 'shared\uShared.pas') -cmatch '  MyConst = 1;') -and ((Txt 'A\uA.pas') -match 'Result:= MyConst;') -and `
      ((Txt 'B\uB.pas') -match 'Result:= MyConst;') -and ((Txt 'C\uMid.pas') -match 'Result:= MyConst;')) (Lines $o '^(rename-|autofix)')
-  Check 'N6 reset (no opt-in)' (Reset -NoOptIn) ''
+  Check 'N6 reset (default)' (Reset) ''
   $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix', '--fix-naming')
   Check 'N7 single-project batch with --fix-naming: rename-local: 1 (the IDE''s single-project confirm count)' `
     ($o -match '(?m)^rename-local: 1\r?$') (Lines $o '^(rename-|autofix)')

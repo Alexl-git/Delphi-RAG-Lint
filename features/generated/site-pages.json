@@ -316,7 +316,7 @@
     "version": "1.36.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "80a5e06d43603bddf22db946268b39789bbe565b0bf2806e70ce4755202a09a3",
+    "hash": "4dd7097b3ed7741a904a18f74bd278b34855d2b199b386366236162ce02addb8",
     "version": "1.36.0-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -324,7 +324,7 @@
     "version": "1.36.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "e1465127ec5e4bb7cb53fd6673d3d7f25f9ebc96144825a5df1af20d4189608b",
+    "hash": "8a91ae951865b0155c98be93322396ddccf25606b6c4f779c387328f73ee609c",
     "version": "1.36.0-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
@@ -488,7 +488,7 @@
     "version": "1.36.0-alpha"
   },
   "features/multi-project-rename.md": {
-    "hash": "fb10a3f877cb784cfd03abf51a78ea81bf676c3251d628d3bb77d4633090e288",
+    "hash": "ac1b5bf6dfb5e0f0c8bd35a485da24f5be4f50705c28bba300ee381dc5c38115",
     "version": "1.36.0-alpha"
   },
   "features/open-plugin-log.md": {

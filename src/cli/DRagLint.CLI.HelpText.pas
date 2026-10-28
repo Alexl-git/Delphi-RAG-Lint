@@ -156,9 +156,9 @@ begin
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
   Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
   Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
-  Writeln('                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across');
-  Writeln('                               every owning project) without listing them in "autofix" in drag-lint-lint.json;');
-  Writeln('                               it also prints "rename-local: <N>" (stderr) for the single-project renames.');
+  Writeln('                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across');
+  Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
+  Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
@@ -661,9 +661,9 @@ begin
     Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
     Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
     Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
-    Writeln('                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across');
-    Writeln('                               every owning project) without listing them in "autofix" in drag-lint-lint.json;');
-    Writeln('                               it also prints "rename-local: <N>" (stderr) for the single-project renames.');
+    Writeln('                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across');
+    Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
+    Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
     Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
     Exit;
   end;

@@ -81,8 +81,8 @@
       "command": "drag-lint lint-all --db <file.sqlite> --fix"
     },
     {
-      "ask": "Can I include naming fixes?",
-      "command": "drag-lint lint-all --db <file.sqlite> --fix --fix-naming --apply"
+      "ask": "Are naming fixes included, and how do I switch one off?",
+      "command": "drag-lint lint-all --db <file.sqlite> --fix --apply   (naming renames are included; list a rule in \"autofix_off\" in drag-lint-lint.json to withhold it)"
     }
   ],
   "verified": {

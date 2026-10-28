@@ -286,12 +286,12 @@ Check 'CASE3: call-argument use renamed to SetLimit(MAX_ITEMS)' $c3UseRenamed $a
 Check 'CASE3: no stale lower-camel maxItems remains' $c3NoStale $after3
 
 # =============================================================================
-# OPT-IN GATE: same const-casing fixture, but "autofix" does NOT list
-# const-casing -> registered-fixable (rules --json) but not permitted ->
+# BRAKE (1.37.0: every fix is default-ON): same const-casing fixture, but "autofix_off" LISTS
+# const-casing -> registered-fixable (rules --json) but braked ->
 # identifier UNCHANGED.
 # =============================================================================
 Write-Host ''
-Write-Host 'OPT-IN GATE: const-casing not opted in via AutoFixIds' -ForegroundColor Cyan
+Write-Host 'BRAKE: const-casing listed in autofix_off' -ForegroundColor Cyan
 $gateDir = Join-Path $WorkDir 'gate'
 $gateSrc = Join-Path $gateDir 'src'
 New-Item -ItemType Directory $gateSrc | Out-Null
@@ -305,9 +305,9 @@ Write-Ascii $gateFile $Case3Fixture
 # reconstructed-here-string (whose CRLF/trailing-newline shape need not match
 # what Write-Ascii actually wrote).
 $gateBefore = Get-Content -Raw $gateFile
-# "autofix" deliberately omits const-casing (opts in an UNRELATED rule instead,
-# so the config isn't simply "no autofix at all" but a real not-in-the-list case).
-'{ "autofix": ["method-pascalcase"], "naming": { "const_case": ["UPPER_CASE"] } }' | Out-File -FilePath $gateCfg -Encoding ascii
+# "autofix_off" lists const-casing (the only brake; the retired "autofix" key is ignored,
+# so a stray legacy opt-in could not make this pass vacuously).
+'{ "autofix": ["const-casing"], "autofix_off": ["const-casing"], "naming": { "const_case": ["UPPER_CASE"] } }' | Out-File -FilePath $gateCfg -Encoding ascii
 
 & $Exe index $gateSrc --db $gateDb 2>&1 | Out-Null
 Check 'GATE: index exits 0' ($LASTEXITCODE -eq 0)
@@ -318,7 +318,7 @@ Write-Host ($gateOut -join "`n")
 
 $gateAfter = Get-Content -Raw $gateFile
 Check 'GATE: exit code 0 even though nothing was fixed' ($gateExit -eq 0) "exit=$gateExit"
-Check 'GATE: const decl UNCHANGED (still maxItems, registered-fixable but not opted in)' `
+Check 'GATE: const decl UNCHANGED (still maxItems, registered-fixable but braked by autofix_off)' `
   ($gateAfter -cmatch 'maxItems\s*=\s*10;') $gateAfter
 Check 'GATE: call-argument use site UNCHANGED (still SetLimit(maxItems))' `
   ($gateAfter -cmatch 'SetLimit\(maxItems\);') $gateAfter

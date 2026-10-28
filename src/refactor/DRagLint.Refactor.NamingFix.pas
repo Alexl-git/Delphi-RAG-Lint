@@ -261,6 +261,14 @@ function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
 
+/// <summary>The identifier a naming finding's span holds in the file today.</summary>
+/// <param name="AFile">Path of the source file.</param>
+/// <param name="ALine">1-based line of the span.</param>
+/// <param name="AStartCol">1-based first column.</param>
+/// <param name="AEndCol">Exclusive end column.</param>
+/// <returns>The text of the span, or '' when the file or span is not there.</returns>
+function ReadIdentifierAt(const AFile: string; ALine, AStartCol, AEndCol: Integer): string;
+
 implementation
 
 uses

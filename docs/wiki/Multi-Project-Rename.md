@@ -121,8 +121,10 @@ drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --
 drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db> --apply
 ```
 
-Batch, with explicit consent to the naming fixes (`--fix-naming`; without it a
-batch renames only rules listed in `"autofix": [...]` in `drag-lint-lint.json`):
+Batch (every fix is on by default since 1.37.0; `--fix-naming` is still accepted
+and does nothing; list a rule in `"autofix_off": [...]` in `drag-lint-lint.json`
+to withhold it). The dry run prints `rename: N symbol(s) across M project(s)`
+before `--apply` writes:
 
 ```
 drag-lint lint --in <f> --fix --fix-naming --db <db>            (preview)
@@ -154,7 +156,7 @@ rename-unindexed: TEST_Foo (C:\Projects\...\_D-RAG\TEST_Foo.sqlite)
 * `rename-dropped-at-write:` -- a rename dropped whole by the write-time check.
 * `autofix: rename refused -- <reason>` -- a single-finding fix that wrote
   nothing; always the last `autofix:` line.
-* `rename-local: <N>` (stderr, `--fix-naming` only) -- naming renames in
+* `rename-local: <N>` (stderr, only with the `--fix-naming` no-op flag) -- naming renames in
   units one project owns.
 
 With `--json`, stdout stays one JSON document (the `rename-*` lines go to
