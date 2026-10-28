@@ -74,6 +74,21 @@ try {
   Check 'off-line: FreeAndNil inserted'        ($after.Contains('FreeAndNil(FX);'))
   Check 'off-line: System.SysUtils added'      ($after.Contains('System.SysUtils'))
   if ($null -ne $t4) { Check 'off-line: applied=true' ($t4.applied -eq $true) }
+
+  # The fixes that edit ABOVE (or around) the finding's line (lane A3 + A5 + G4):
+  # each must report applied=true on its own fixture AND change the file.
+  foreach ($id in @('create-inside-try', 'field-by-name-in-loop', 'swap-without-temp', 'unprotected-object-free',
+                    'doc-orphan-block', 'begin-end-pair-not-in-finally')) {
+    $fx = Get-ChildItem (Join-Path $PSScriptRoot "fixtures\$id") -Filter '*.pas' | Where-Object { $_.Name -notlike '*.fixed.pas' } | Select-Object -First 1
+    if ($null -eq $fx) { Check "off-line ${id}: fixture present" $false; continue }
+    $tgt = Join-Path $scratch "$id-$($fx.Name)"
+    Copy-Item $fx.FullName $tgt -Force
+    $before = [IO.File]::ReadAllText($tgt)
+    $rawX = & $exePath lint --file $tgt --fix --fix-rule $id --json --apply --no-backup 2>$null | Out-String
+    $arrX = $null; try { $arrX = @($rawX | ConvertFrom-Json) } catch { $arrX = $null }
+    $appX = @($arrX | Where-Object { $_.rule -eq $id -and $_.applied -eq $true })
+    Check "off-line ${id}: applied=true and the file changed" (($appX.Count -ge 1) -and ([IO.File]::ReadAllText($tgt) -ne $before))
+  }
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
