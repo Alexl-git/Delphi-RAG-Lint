@@ -1098,4 +1098,7 @@
 #   T(X).M emits a member-access ref) rides the still-unreleased 1.26.0-alpha re-parse. Pinned by
 #   tests\callresolve\run_receiver_cst_capture.ps1 H1-H3.
 # 2026-10-28 INT-B: re-pinned within unreleased 1.26.0-alpha after merging gaps/r0 (item 4: R4X handler local_var, receiver_type_text) onto gaps/stage (B-FLOW 2b, INC, REFTYPE). No bump: 1.26.0-alpha has not shipped.
-1.26.0-alpha|352247e0e7c75ceada222be9b410d47d29401994c3ccbbe39031e55a3c9990f3
+# 2026-10-28 (gaps/xj-7, xerj item 7): hash re-pinned WITHOUT a bump -- content-hash skip in TIndexer.IndexFile
+#   (a file whose sha256 matches is skipped even when its mtime moved, mtime refreshed). It only decides whether to
+#   re-parse, never what a parse emits, so it cannot affect extraction. Pinned by tests\autotest\run_index_content_hash_skip.ps1.
+1.26.0-alpha|8a4cf5f6e71bb9026e66df585b5b24e47a7fdab1d6c798ffbed362e8b40d40bd
