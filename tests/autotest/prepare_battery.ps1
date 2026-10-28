@@ -32,8 +32,12 @@
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [switch]$Force,
-  [switch]$SkipSelfIndex
+  [switch]$SkipSelfIndex,
+  # -Only calls,stub : build just those prerequisites (a standalone guard runner needs two, not the
+  # doctest/plugin/self-index set). Implies -SkipSelfIndex.
+  [ValidateSet('calls','stub')][string[]]$Only
 )
+if ($Only) { $SkipSelfIndex = $true }
 $ErrorActionPreference = 'Continue'
 $root  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
@@ -68,22 +72,23 @@ function Need([string]$Path, [string]$What, [scriptblock]$Make) {
 
 # --- calls.sqlite --------------------------------------------------------
 $calls = Join-Path $root 'tests\calls.sqlite'
-Need $calls 'tests\calls.sqlite' {
+if ((-not $Only) -or ($Only -contains 'calls')) { Need $calls 'tests\calls.sqlite' {
   if (Test-Path -LiteralPath $Exe) {
     if (Test-Path -LiteralPath $calls) { [IO.File]::Delete($calls) }
     $null = & $Exe index (Join-Path $root 'tests\fixtures\Calls.pas') --db $calls 2>&1
   } else { Say "  engine not built: $Exe (run build\build_draglint_win64.bat)" }
-}
+} }
 
 # --- LspStubServer.exe -----------------------------------------------------
 $stubDir = Join-Path $root 'tests\autotest\fixtures\lspproxy'
 $stub = Join-Path $stubDir 'Win64\Debug\LspStubServer.exe'
-Need $stub 'LspStubServer.exe' {
+if ((-not $Only) -or ($Only -contains 'stub')) { Need $stub 'LspStubServer.exe' {
   New-Item -ItemType Directory -Force -Path (Join-Path $stubDir 'Win64\Debug') | Out-Null
   $dcu = Join-Path $work 'dcu-stub'; New-Item -ItemType Directory -Force -Path $dcu | Out-Null
   $null = Invoke-Wrapped 'stub' ('dcc64 -NU"{0}" -E"{1}" -U"{2}" "{3}\LspStubServer.dpr"' -f $dcu, (Join-Path $stubDir 'Win64\Debug'), $stubDir, $stubDir)
-}
+} }
 
+if (-not $Only) {
 # --- drag-lint-switch.exe --------------------------------------------------
 $sw = Join-Path $root 'src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe'
 Need $sw 'drag-lint-switch.exe' {
@@ -108,6 +113,7 @@ foreach ($t in 'T2_typecheck','T3_regions','T4_xmldoc','T5_pasdoc','T6_dispatch'
   }
 }
 
+}
 # --- self-index ----------------------------------------------------------
 if (-not $SkipSelfIndex) {
   $self = Join-Path $root 'src\cli\_D-RAG\drag-lint.sqlite'
