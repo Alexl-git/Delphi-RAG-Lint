@@ -1934,6 +1934,10 @@ type
     LibraryCallCount: Integer           ;
     { Up to three external targets, most frequent first (ties: first seen). }
     LibraryCallTop  : TArray<string>    ;
+    { RSV-R2: where the count came from -- 'stored' (refs.external_target only) or
+      'oracle' (at least one call was bound at query time by --library-db). '' when
+      LibraryCallCount = 0. Carried in the json as library_calls.via. }
+    LibraryCallVia  : string            ;
   end;
 
 /// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>

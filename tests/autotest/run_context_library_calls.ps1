@@ -54,6 +54,27 @@ try {
     $js2 = (& $exePath context --task 'modify Go' --db $app --format json 2>&1) -join "`n"
     $o2  = $js2.Substring($js2.IndexOf('{')) | ConvertFrom-Json
     Check 'app (no library): json has no library_calls key' ($null -eq $o2.PSObject.Properties['library_calls'])
+    # --- RSV-R2 (#8): the opt-in oracle. `app` carries NO stored external_target; with
+    #     --library-db the receivers typed by name are bound against the library now.
+    #     The oracle binds only receivers typed BY NAME (the same binding find-callees uses),
+    #     so its count is what find-callees lists as "resolved now" (3 of Go's 6 here; the other
+    #     3 were bound at index time through typed locals and are not visible without stored refs).
+    $fc = (& $exePath find-callees --qname xt_app.Go --db $app --library-db $libDb 2>&1) -join "`n"
+    $nOr = @($fc -split "`n" | Where-Object { $_ -match '\(library, resolved now\)' }).Count
+    Check 'R2 precondition: find-callees binds some Go calls through the oracle' (($nOr -ge 1) -and ($nOr -lt $n)) "oracle=$nOr stored=$n"
+    $mo = (& $exePath context --task 'modify Go' --db $app --library-db $libDb 2>&1) -join "`n"
+    Check 'R2 app + --library-db: the Library calls line counts the oracle hits' ($mo -match "(?m)^Library calls: $nOr \(top: [^)]+\)\s*$") ($mo -split "`n" | Select-String 'Library calls' | Out-String)
+    $jo = (& $exePath context --task 'modify Go' --db $app --library-db $libDb --format json 2>&1) -join "`n"
+    $oo = $jo.Substring($jo.IndexOf('{')) | ConvertFrom-Json
+    Check 'R2 app + --library-db: json library_calls.count' ($oo.library_calls.count -eq $nOr) "got $($oo.library_calls.count)"
+    Check 'R2 app + --library-db: json library_calls.via is oracle' ($oo.library_calls.via -eq 'oracle') "got $($oo.library_calls.via)"
+    Check 'R2 appx (stored external_target): json via is stored' ($o.library_calls.via -eq 'stored') "got $($o.library_calls.via)"
+    $jx = (& $exePath context --task 'modify Go' --db $appx --library-db $libDb --format json 2>&1) -join "`n"
+    $ox = $jx.Substring($jx.IndexOf('{')) | ConvertFrom-Json
+    Check 'R2 appx + --library-db: stored refs are not double counted' ($ox.library_calls.count -eq $n) "got $($ox.library_calls.count)"
+    $jn = (& $exePath context --task 'modify Go' --db $app --library-db none --format json 2>&1) -join "`n"
+    $on = $jn.Substring($jn.IndexOf('{')) | ConvertFrom-Json
+    Check 'R2 --library-db none: no oracle, no library_calls key' ($null -eq $on.PSObject.Properties['library_calls'])
   } finally { Pop-Location }
 } finally { if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) } }
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
