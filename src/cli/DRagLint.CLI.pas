@@ -3072,6 +3072,13 @@ begin
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   InstallFileProfileResolver(AArgs, ADbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  { Lane IFCONST: the IF symbol table `lint` installs (lane INC3) -- an IF directive
+    naming a const of a USED unit (project unit through the DBs' files, library
+    unit from the library DB) must evaluate here too, else the name reads as
+    unknown = False and the inactive branch's parser-error is published.
+    Guard: run_lsp_if_sourceconst_guard.ps1. }
+  if not AArgs.NoPreprocess then
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), ADbPaths, [LintLibraryDb(AArgs)]);
 end;
 
 // v0.45 Task 7: build one plan item into its SQLite database.
