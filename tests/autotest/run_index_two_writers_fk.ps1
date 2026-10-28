@@ -32,6 +32,7 @@
         0 FOREIGN KEY, 0 `database is locked`.
     C3  integrity afterwards: foreign_key_check 0 rows, integrity_check ok,
         0 orphan call_edges.
+    C6  long hold: B holds an IMMEDIATE tx for 20 s; the victim waits it out (writer busy\n        timeout 120 s, env DRAGLINT_BUSY_TIMEOUT_MS) -- RED on a 5 s timeout.
     C4  a final undisturbed run leaves the same call_edges count as the
         first index, every target present.
 
@@ -126,6 +127,22 @@ Check 'C1 victim exit 0 beside a writer re-issuing ids' ($v.Code -eq 0) "exit=$(
 Check 'C1 no FOREIGN KEY failure' ($v.Out -notmatch 'FOREIGN KEY')
 if ($v.Out -match 'FOREIGN KEY|database is locked') { ($v.Out -split "`r?`n" | Where-Object { $_ -match 'FOREIGN|locked|failing edge' } | Select-Object -First 4) | ForEach-Object { Write-Host "   $_" } }
 
+# --- C6 long hold (RED on stage2: the busy timeout was 5 s) -------------------
+# B holds an IMMEDIATE tx for 20 s while the victim starts. A 5 s writer timeout dies
+# "database is locked" at 5 s; the 120 s writer timeout waits the hold out and completes.
+$hOut = Join-Path $scratch 'perp-c6.out'
+$hp = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--hold-ms', '20000') -PassThru -NoNewWindow -RedirectStandardOutput $hOut
+$deadline = (Get-Date).AddSeconds(15)
+while ((Get-Date) -lt $deadline -and -not ((Test-Path $hOut) -and ((Get-Content $hOut -Raw) -match 'READY'))) { Start-Sleep -Milliseconds 50 }
+Start-Sleep -Milliseconds 300
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$hv = Invoke-Victim
+$sw.Stop()
+$hp.WaitForExit()
+Check 'C6 perpetrator committed after its 20 s hold' ((Get-Content $hOut -Raw) -match 'COMMITTED')
+Check 'C6 victim waited out a 20 s writer hold (exit 0)' ($hv.Code -eq 0) ("exit={0} after {1:N1} s" -f $hv.Code, $sw.Elapsed.TotalSeconds)
+Check 'C6 no database-is-locked failure' ($hv.Out -notmatch 'database is locked')
+Check 'C6 victim really waited (>= 15 s)' ($sw.Elapsed.TotalSeconds -ge 15) ("{0:N1} s" -f $sw.Elapsed.TotalSeconds)
 # --- C2 stress --------------------------------------------------------------
 $sOut = Join-Path $scratch 'perp-c2.out'
 $sp = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--loop', '--period-ms', '10', '--seconds', '45') -PassThru -NoNewWindow -RedirectStandardOutput $sOut
