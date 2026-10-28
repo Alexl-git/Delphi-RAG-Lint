@@ -286,7 +286,8 @@ begin
 end;
 
 { Walk the tree-sitter AST for AFile and collect every identifier that appears
-  as a getter ('read') or setter ('write') accessor in a declProp node, plus
+  as a getter ('read'), setter ('write'), 'stored', 'index' or 'default'
+  specifier in a declProp node, plus
   the property's own backing-field name when it appears literally in those
   clauses.  Returns a lowercased-name set (TDictionary<string,Boolean>) that
   the caller must free.  Returns nil when the file cannot be parsed.
@@ -344,25 +345,20 @@ var
   var
     I      : Integer;
     GNode  : TTSNode;
-    SNode  : TTSNode;
     GName  : string ;
-    SName  : string ;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'declProp' then
     begin
-      { getter = read accessor; setter = write accessor. }
-      GNode:= N.ChildByField('getter');
-      if not GNode.IsNull then
+      { getter = read, setter = write; stored / index / defaultValue name a
+        private method or const just as often (`stored IsXStored`,
+        `index IDX_Y`, `default DEF_X`) and get no ref in the index either. }
+      for var Field in ['getter', 'setter', 'stored', 'index', 'defaultValue'] do
       begin
+        GNode:= N.ChildByField(Field);
+        if GNode.IsNull then Continue;
         GName:= BaseIdentOf(GNode);
         if GName <> '' then Dict.AddOrSetValue(GName, True);
-      end;
-      SNode:= N.ChildByField('setter');
-      if not SNode.IsNull then
-      begin
-        SName:= BaseIdentOf(SNode);
-        if SName <> '' then Dict.AddOrSetValue(SName, True);
       end;
       { No need to recurse inside declProp: nested declProp is not valid
         Delphi, so we exit early to avoid false matches from the type ref. }
@@ -4550,15 +4546,15 @@ begin
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
       for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
-    { gap-rules wave, lane G8. The two DFM rules are ON by default and walk one table each;
-      virtual-never-overridden (scans every file's symbols) and uses-movable-to-implementation
-      (false positives: a type used only in a `reference to function` signature records no ref, and
-      the autofix would move a still-needed unit) are OFF by default, so OptedIn-gated. }
+    { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
+      default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
+      engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden
+      scans every file's symbols, so it is OFF by default and OptedIn-gated. }
     if WantRule('dfm-event-handler-missing') then
       for var Hf in CollectDfmEventHandlerMissing(AStore, ALibraryStore) do Findings.Add(Hf);
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
-    if WantRule('uses-movable-to-implementation') and OptedIn('uses-movable-to-implementation') then
+    if WantRule('uses-movable-to-implementation') then
       for var Um in CollectUsesMovableToImplementation(AStore, AOnlyFileId) do Findings.Add(Um);
     if WantRule('virtual-never-overridden') and OptedIn('virtual-never-overridden') then
       for var Vn in CollectVirtualNeverOverridden(AStore, ALibraryStore) do Findings.Add(Vn);

@@ -12268,6 +12268,21 @@ begin
       Writeln(ErrOutput, Format('drag-lint: %d fix(es) deferred -- their edits overlap an earlier fix in this pass; ' +
         'run --fix again to apply them.', [Length(DeferredOwners)]));
     end;
+    { lane IATOM: ALL-OR-NOTHING per fix. A fix one of whose edits no longer
+      matches the file (stale index, a file changed since it was read) is
+      withdrawn WHOLE before anything is written -- never its insert without
+      its removal (E2004). tests\autotest\run_uses_movable_to_implementation.ps1 (uJ). }
+    var DeclinedOwners: TArray<string>;
+    Edits:= TTextEditApplier.WithdrawBrokenFixes(Edits, DeclinedOwners);
+    var DeclineSuffix: string:= '';
+    if Length(DeclinedOwners) > 0 then
+    begin
+      Dec(FixCount, Length(DeclinedOwners));
+      if FixCount < 0 then FixCount:= 0;
+      DeclineSuffix:= Format(', %d declined (%s)', [Length(DeclinedOwners), DECLINE_STALE_REASON]);
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) declined -- %s; none of their edits were written. ' +
+        'Reindex and run --fix again.', [Length(DeclinedOwners), DECLINE_STALE_REASON]));
+    end;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
@@ -12318,6 +12333,11 @@ begin
             JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
             JObj.AddPair('risky' , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
             if MatchText(FixOwnerKey(F), DeferredOwners) then JObj.AddPair('deferred', TJSONBool.Create(True));
+            if MatchText(FixOwnerKey(F), DeclinedOwners) then
+            begin
+              JObj.AddPair('declined', TJSONBool.Create(True));
+              JObj.AddPair('decline_reason', DECLINE_STALE_REASON);
+            end;
             { Multi-project rename: the owners and, when it applies, why the
               rename was dropped (spec criterion 14). Absent for a
               single-project unit. }
@@ -12374,6 +12394,8 @@ begin
     else if (FixCount = 0) and (NFStaleTotal + NFSkippedTotal > 0) then
       Writeln(Format('autofix: 0 fixable finding(s)%s%s -- reindex: %s',
         [StaleSuffix, SkipSuffix, NamingReindexHint(AArgs, NFHintDb)]))
+    else if (FixCount = 0) and (DeclineSuffix <> '') then
+      Writeln(Format('autofix: nothing written%s -- reindex and run --fix again', [DeclineSuffix]))
     else if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
     else if AArgs.Apply then
     begin
@@ -12392,7 +12414,7 @@ begin
       var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
         SkipSuffix:= Format(', %d %sskipped (stale index)', [NFSkippedTotal + ApplySkipped, IfThen(NFStaleTotal > 0, 'edit(s) ', '')]);
-      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
@@ -12401,7 +12423,7 @@ begin
       for F in Targeted do
         if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
       if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
-      Writeln(Format('autofix: %d fixable finding(s)%s%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix, DropSuffix]));
+      Writeln(Format('autofix: %d fixable finding(s)%s%s%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix]));
     end;
     { Other fixes on the line went ahead; the refused rename still has to be
       the last autofix: line the plugin reads. }
@@ -12626,10 +12648,10 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..9] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..8] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
-    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden', 'uses-movable-to-implementation');
+    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -20436,8 +20458,6 @@ begin
       OptIn:= OptIn + ['assert-with-side-effect'];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn:= OptIn + ['virtual-never-overridden'];
-    if Cfg.ShouldKeep('uses-movable-to-implementation', {ADefaultDisabled=}True) then   { G8 }
-      OptIn:= OptIn + ['uses-movable-to-implementation'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -20922,8 +20942,6 @@ begin
       OptIn2:= OptIn2 + ['assert-with-side-effect'];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
-    if LoadLintConfig(AArgs).ShouldKeep('uses-movable-to-implementation', {ADefaultDisabled=}True) then   { G8 }
-      OptIn2:= OptIn2 + ['uses-movable-to-implementation'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge

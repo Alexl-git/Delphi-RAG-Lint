@@ -322,7 +322,7 @@ begin
       if ContainsText(F.Message, 'HAS an initialization section') then Continue;
       M:= TRegEx.Match(F.Message, '^Unit ''([A-Za-z_][\w.]*)''');
       if not M.Success or (F.StartLine < 1) or (F.StartLine > Lines.Count) then Continue;
-      if not SameText(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), M.Groups[1].Value) then Continue;
+      if not SameText(StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]), M.Groups[1].Value) then Continue;
       One.Clear;
       if not RemoveUsesEntry(F, Lines, One) then Continue;
       E:= One[0];
@@ -330,6 +330,7 @@ begin
       for var L:= E.Line to Max(E.Line, E.EndLine) do Clash:= Clash or Taken.ContainsKey(L);
       if Clash then Continue;
       for var L:= E.Line to Max(E.Line, E.EndLine) do Taken.AddOrSetValue(L, True);
+      E.Owner:= FixOwnerKey(F);   { lane IATOM: the applier writes a finding's edits all-or-nothing }
       Result:= Result + [E];
       Inc(AFixed);
     end;

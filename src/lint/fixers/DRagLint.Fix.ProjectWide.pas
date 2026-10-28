@@ -30,13 +30,17 @@ uses
 /// does not end in a ';' on the line it can see) -- the caller then declines.</returns>
 /// <remarks>Shared by uses-movable-to-implementation (here) and
 /// unused-unit-in-uses (DRagLint.Fix.Store, lane A5B). Every edit carries
-/// ExpectText, so a file that changed under the finding is skipped.</remarks>
+/// ExpectText, so a file that changed under the finding is skipped. Lane IATOM:
+/// the house leading-comma layout (`uses` / `  A` / `  , B` / `  ;`) is understood --
+/// a `  , B` line goes whole; removing the first entry promotes the next one
+/// (its comma goes); a last `  , B;` hands its ';' to the entry above.</remarks>
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
 
 implementation
 
 uses
   System.SysUtils
+  , System.Math
   , System.IOUtils
   , System.StrUtils
   , System.RegularExpressions
@@ -113,9 +117,10 @@ begin
   Result:= (T = 'uses') or T.StartsWith('uses ');
 end;
 
-function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@0fbb -- REVIEWED 2026-10-27: one guard-clause Exit per uses-clause layout the fixer recognises; any other layout must decline
+function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@8322 -- REVIEWED 2026-10-28: one guard-clause Exit per uses-clause layout the fixer recognises (lane IATOM added the leading-comma ones); any other layout must decline
 var
-  T, Before, After, Name: string;
+  T, Before, After, Name, S: string;
+  NoTail, OneBrace         : Boolean;
   P, Q, EndC            : Integer;
   Edit                  : TTextEdit;
 
@@ -135,6 +140,73 @@ begin
   After := Copy(T, AFinding.EndCol, MaxInt);
   if ContainsText(After, ' in ''') or ContainsText(After, ' in "') then Exit;
   if ContainsText(Before, '//') then Exit;
+  { lane IATOM: a trailing comment (not a directive) leaves with a leading-comma entry's line }
+  S:= Trim(After);
+  OneBrace:= S.StartsWith('{') and not S.StartsWith('{$') and (Pos('}', S) = Length(S));
+  NoTail  := (S = '') or S.StartsWith('//') or OneBrace;
+
+  { lane IATOM: the house LEADING-COMMA layout -- `  , Name` alone on its line }
+  if Trim(Before) = ',' then
+  begin
+    if NoTail then
+    begin
+      { a middle entry, or the last one before a ';' line: the line goes }
+      Edit:= Fresh;
+      Edit.Kind      := tekDeleteLines;
+      Edit.Line      := AFinding.StartLine;
+      Edit.EndLine   := AFinding.StartLine;
+      Edit.ExpectLine:= AFinding.StartLine;
+      Edit.ExpectText:= Name;
+      AEdits.Add(Edit);
+      Exit(True);
+    end;
+    if Trim(After) <> ';' then Exit;
+    { the last entry holds the ';': the entry above takes it (not behind a comment) }
+    P:= AFinding.StartLine - 2;
+    while (P >= 0) and (Trim(ALines[P]) = '') do Dec(P);
+    if (P < 0) or ContainsText(ALines[P], '//') or ContainsText(ALines[P], '{') or ContainsText(ALines[P], '(*') then Exit;
+    Edit:= Fresh;
+    Edit.Kind      := tekReplaceLines;
+    Edit.Line      := P + 1;
+    Edit.EndLine   := AFinding.StartLine;
+    Edit.Text      := TrimRight(ALines[P]) + ';';
+    Edit.ExpectText:= ALines[P];
+    AEdits.Add(Edit);
+    Exit(True);
+  end;
+
+  if (Trim(Before) = '') and NoTail then
+  begin
+    { lane IATOM: the FIRST entry of a leading-comma clause -- the next entry is
+      promoted (its comma goes, it takes this line's indent); a lone entry
+      takes the whole `uses .. ;` clause with it }
+    Q:= AFinding.StartLine;                          { 0-based index of the line below }
+    while (Q < ALines.Count) and (Trim(ALines[Q]) = '') do Inc(Q);
+    if Q >= ALines.Count then Exit;
+    S:= TrimLeft(ALines[Q]);
+    Edit:= Fresh;
+    if S.StartsWith(',') then
+    begin
+      Edit.Kind      := tekReplaceLines;
+      Edit.Line      := AFinding.StartLine;
+      Edit.EndLine   := Q + 1;
+      Edit.Text      := Before + TrimLeft(Copy(S, 2, MaxInt));
+      Edit.ExpectText:= T;
+      AEdits.Add(Edit);
+      Exit(True);
+    end;
+    if Trim(S) <> ';' then Exit;
+    P:= AFinding.StartLine - 2;
+    while (P >= 0) and (Trim(ALines[P]) = '') do Dec(P);
+    if (P < 0) or not SameText(Trim(ALines[P]), 'uses') then Exit;
+    Edit.Kind      := tekDeleteLines;
+    Edit.Line      := P + 1;
+    Edit.EndLine   := Q + 1;
+    Edit.ExpectLine:= P + 1;
+    Edit.ExpectText:= 'uses';
+    AEdits.Add(Edit);
+    Exit(True);
+  end;
 
   if Trim(Before) = '' then
   begin
@@ -171,6 +243,11 @@ begin
         Edit.Line      := P + 1;
         Edit.EndLine   := AFinding.StartLine;
         Edit.Text      := Copy(TrimRight(ALines[P]), 1, Length(TrimRight(ALines[P])) - 1) + ';';
+        { ApplyReplaceLines guards Line against the WHOLE line; the ExpectLine
+          anchor guard wants a word of the TrimLeft'ed line instead, so an
+          indented line failed it and the removal was dropped while the
+          implementation insert still landed (E2004, dogfood 2026-10-27). }
+        Edit.ExpectLine:= 0;
         Edit.ExpectText:= ALines[P];
       end
       else Exit;
@@ -241,32 +318,101 @@ begin
   end;
 end;
 
-{ uses-movable-to-implementation: per FILE, because every moved entry lands in ONE implementation
-  clause edit (a clause created once, not once per finding). Entries whose removal layout is not
-  understood are left alone and not counted. }
+{ The 0-based line of the implementation uses clause, or -1. Delphi allows only
+  comments and directives between `implementation` and its uses, so the first
+  line that is not blank or comment decides -- a `uses` INSIDE a comment block
+  is never the clause (lane IATOM dogfood: DRagLint.Index.Reconcile.pas got two
+  units inserted into a brace comment's `uses` example, E2003). }
+function ImplUsesLine(ALines: TStringList; AImplAt: Integer): Integer;
+var
+  S     : string;
+  Closer: string;
+  P     : Integer;
+begin
+  Result:= -1;
+  Closer:= '';
+  for var i: Integer:= AImplAt + 1 to ALines.Count - 1 do
+  begin
+    S:= Trim(ALines[i]);
+    while S <> '' do
+    begin
+      if Closer <> '' then
+      begin
+        P:= Pos(Closer, S);
+        if P = 0 then Break;
+        S:= Trim(Copy(S, P + Length(Closer), MaxInt));
+        Closer:= '';
+      end
+      else if S.StartsWith('//') then S:= ''
+      else if S.StartsWith('{') then
+      begin
+        Closer:= '}';
+        S:= Copy(S, Length('{') + 1, MaxInt);
+      end
+      else if S.StartsWith('(*') then
+      begin
+        Closer:= '*)';
+        S:= Copy(S, Length('(*') + 1, MaxInt);
+      end
+      else Exit(if IsUsesKeywordLine(S) then i else -1);
+    end;
+  end;
+end;
+
+{ Leading whitespace of ALine. }
+function IndentOf(const ALine: string): string;
+begin
+  Result:= Copy(ALine, 1, Length(ALine) - Length(TrimLeft(ALine)));
+end;
+
+{ uses-movable-to-implementation: per FILE, because the findings of one file share the
+  implementation clause. Each finding's removal and its implementation insert carry the finding's
+  Owner, so the applier writes both or neither (lane IATOM). Where no implementation clause exists,
+  ONE created clause lists every moved unit, so all of the file's findings are tied into one
+  AtomGroup. Inserts follow the clause's layout: `  , Name` lines in a leading-comma clause, else
+  `  Name,` under a bare `uses`, else ` Name,` after the keyword. A finding whose removal would
+  touch a line another finding's removal already takes waits for the next run. Entries whose
+  removal layout is not understood are left alone and not counted. }
 function FixUsesMovable(const APath: string; const AFindings: TArray<TLintFinding>; out AFixed: Integer): TArray<TTextEdit>;
+const
+  RULE_ID = 'uses-movable-to-implementation';
 var
   Lines   : TStringList      ;
   Edits   : TList<TTextEdit> ;
+  One     : TList<TTextEdit> ;
   Present : TStringList      ;
-  ToAdd   : TStringList      ;
+  NewNames: TStringList      ;
+  Taken   : TDictionary<Integer, Boolean>;
   F       : TLintFinding     ;
   ImplAt  : Integer          ;
   UsesAt  : Integer          ;
+  EndAt   : Integer          ;
   i       : Integer          ;
   Name    : string           ;
+  Raw     : string           ;
+  LB      : string           ;
+  Indent  : string           ;
+  Group   : string           ;
+  Own     : string           ;
+  First   : string           ;
+  Leading : Boolean          ;
+  Clash   : Boolean          ;
   Edit    : TTextEdit        ;
   Body    : string           ;
 begin
   Result:= nil;
   AFixed:= 0;
   if not TFile.Exists(APath) then Exit;
-  Lines  := TStringList.Create;
-  Edits  := TList<TTextEdit>.Create;
-  ToAdd  := TStringList.Create;
-  Present:= nil;
+  Lines   := TStringList.Create;
+  Edits   := TList<TTextEdit>.Create;
+  One     := TList<TTextEdit>.Create;
+  NewNames:= TStringList.Create;
+  Taken   := TDictionary<Integer, Boolean>.Create;
+  Present := nil;
   try
-    Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+    Raw:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+    LB := TTextFileFormat.LineBreakOf(Raw);
+    Lines.Text:= Raw;
     ImplAt:= -1;
     for i:= 0 to Lines.Count - 1 do
       if SameText(Trim(Lines[i]), 'implementation') then
@@ -275,71 +421,119 @@ begin
         Break;
       end;
     if ImplAt < 0 then Exit;
-    UsesAt:= -1;
-    for i:= ImplAt + 1 to Lines.Count - 1 do
-      if IsUsesKeywordLine(Lines[i]) then
-      begin
-        UsesAt:= i;
-        Break;
-      end;
+    UsesAt:= ImplUsesLine(Lines, ImplAt);
     Present:= if UsesAt >= 0 then ImplUsesNames(Lines, UsesAt) else TStringList.Create;
+    Present.CaseSensitive:= False;
+    { the implementation clause's layout: where it ends, and whether it is leading-comma }
+    EndAt  := -1;
+    Leading:= False;
+    Indent := '  ';
+    if UsesAt >= 0 then
+      for i:= UsesAt to Lines.Count - 1 do
+      begin
+        if (i > UsesAt) and TrimLeft(Lines[i]).StartsWith(',') and not Leading then
+        begin
+          Leading:= True;
+          Indent := IndentOf(Lines[i]);
+        end;
+        if ContainsText(Lines[i], ';') then
+        begin
+          EndAt:= i;
+          Break;
+        end;
+      end;
+    Leading:= Leading and (EndAt > UsesAt);
+    Group  := if UsesAt < 0 then LowerCase(RULE_ID + '|' + APath) else '';
+    First  := '';
 
     for F in AFindings do
     begin
+      if not SameText(F.RuleId, RULE_ID) or not SameText(F.FilePath, APath) then Continue;
       if (F.StartLine < 1) or (F.StartLine > ImplAt + 1) then Continue;      { only interface entries are movable }
-      Name:= Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol);
+      { a column-aligned dotted name (`DRagLint.Core    .Model`) is compared and moved compacted }
+      Name:= StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]);
       { stale index: the span must still hold the unit the finding names (its message starts with it) }
-      if (Name = '') or not StartsText(Name + ' ', F.Message) or not RemoveUsesEntry(F, Lines, Edits) then Continue;
+      if (Name = '') or not StartsText(Name + ' ', F.Message) then Continue;
+      One.Clear;
+      if not RemoveUsesEntry(F, Lines, One) then Continue;
+      Clash:= False;
+      for Edit in One do
+        for i:= Edit.Line to Max(Edit.Line, Edit.EndLine) do Clash:= Clash or Taken.ContainsKey(i);
+      if Clash then Continue;
+      Own:= FixOwnerKey(F);
+      for Edit in One do
+      begin
+        for i:= Edit.Line to Max(Edit.Line, Edit.EndLine) do Taken.AddOrSetValue(i, True);
+        var Owned: TTextEdit:= Edit;
+        Owned.Owner    := Own;
+        Owned.AtomGroup:= Group;
+        Edits.Add(Owned);
+      end;
       Inc(AFixed);
-      if (Present.IndexOf(Name) < 0) and (ToAdd.IndexOf(Name) < 0) then ToAdd.Add(Name);
-    end;
-    if AFixed = 0 then Exit;
-
-    if ToAdd.Count > 0 then
-    begin
+      if Present.IndexOf(Name) >= 0 then Continue;                        { already in the implementation uses }
+      Present.Add(Name);
+      if UsesAt < 0 then
+      begin
+        NewNames.Add(Name);
+        if First = '' then First:= Own;
+        Continue;
+      end;
       Edit:= Default(TTextEdit);
       Edit.FilePath:= APath;
-      if UsesAt >= 0 then
+      Edit.Owner   := Own;
+      if Leading and (Trim(Lines[EndAt]) = ';') then
       begin
-        if SameText(Trim(Lines[UsesAt]), 'uses') then
-        begin
-          Edit.Kind:= tekInsertLines;
-          Edit.Line:= UsesAt + 1;
-          Body:= '';
-          for Name in ToAdd do
-            Body:= Body + (if Body = '' then '' else sLineBreak) + '  ' + Name + ',';
-          Edit.Text:= Body;
-        end
-        else
-        begin
-          Edit.Kind:= tekInsertInLine;
-          Edit.Line:= UsesAt + 1;
-          Edit.Col := Pos('uses', LowerCase(Lines[UsesAt])) + Length('uses');
-          Body:= '';
-          for Name in ToAdd do Body:= Body + ' ' + Name + ',';
-          Edit.Text:= Body;
-        end;
+        Edit.Kind:= tekInsertLines;
+        Edit.Line:= EndAt;                                                   { after the last entry, above the ';' line }
+        Edit.Text:= Indent + ', ' + Name;
+      end
+      else if Leading then
+      begin
+        Edit.Kind:= tekInsertInLine;                                         { the last entry holds the ';' }
+        Edit.Line:= EndAt + 1;
+        Edit.Col := Pos(';', Lines[EndAt]);
+        Edit.Text:= LB + Indent + ', ' + Name;
+      end
+      else if SameText(Trim(Lines[UsesAt]), 'uses') then
+      begin
+        Edit.Kind:= tekInsertLines;
+        Edit.Line:= UsesAt + 1;
+        Edit.Text:= '  ' + Name + ',';
       end
       else
       begin
-        Edit.Kind:= tekInsertLines;
-        Edit.Line:= ImplAt + 1;
-        Body:= sLineBreak + 'uses';
-        for i:= 0 to ToAdd.Count - 1 do
-          Body:= Body + sLineBreak + '  ' + ToAdd[i] + (if i = ToAdd.Count - 1 then ';' else ',');
-        Edit.Text:= Body;
+        Edit.Kind:= tekInsertInLine;
+        Edit.Line:= UsesAt + 1;
+        Edit.Col := Pos('uses', LowerCase(Lines[UsesAt])) + Length('uses');
+        Edit.Text:= ' ' + Name + ',';
       end;
+      Edits.Add(Edit);
+    end;
+
+    if NewNames.Count > 0 then
+    begin
+      Edit:= Default(TTextEdit);
+      Edit.FilePath := APath;
+      Edit.Owner    := First;
+      Edit.AtomGroup:= Group;
+      Edit.Kind     := tekInsertLines;
+      Edit.Line     := ImplAt + 1;
+      Body:= sLineBreak + 'uses';
+      for i:= 0 to NewNames.Count - 1 do
+        Body:= Body + sLineBreak + '  ' + NewNames[i] + (if i = NewNames.Count - 1 then ';' else ',');
+      Edit.Text:= Body;
       Edits.Add(Edit);
     end;
     Result:= Edits.ToArray;
   finally
-    Present.Free;
-    ToAdd  .Free;
-    Edits  .Free;
-    Lines  .Free;
+    Present .Free;
+    Taken   .Free;
+    NewNames.Free;
+    One     .Free;
+    Edits   .Free;
+    Lines   .Free;
   end;
 end;
-
 initialization
   RegisterFixer('dfm-password-edit-unmasked', FixPasswordEdit);
   RegisterFixer('virtual-never-overridden', FixVirtualDirective, True);

@@ -155,9 +155,14 @@ Check 'pubearly: file unchanged (the call precedes the body)' ([IO.File]::ReadAl
 # 7. unused-unit-in-uses: one-per-line and shared-line entries go; the initialization-section unit stays
 $c7 = CopyCase 'uses' 'unused-unit-in-uses'
 Check 'uses: ubhelp is reported (positive control)' ((AllRows $c7 'unused-unit-in-uses' 'uuses.pas' "'ubhelp'") -eq 1)
+Check 'uses: leading-comma entries reported (positive control: 2 + 2)' (((AllRows $c7 'unused-unit-in-uses' 'uusesl1.pas' "'") -eq 2) -and ((AllRows $c7 'unused-unit-in-uses' 'uusesl2.pas' "'") -eq 2))
 Check 'uses: uihelp is reported with its initialization caveat (positive control)' ((AllRows $c7 'unused-unit-in-uses' 'uuses.pas' "'uihelp'") -eq 1)
 FixAll $c7 'unused-unit-in-uses' @()
 Check 'uses: lint-all --fix --apply matches uuses.fixed.pas' (SameAsFixed $c7 'uuses')
+# lane IATOM: the house leading-comma layout -- first entry (next one promoted), last entry holding the ;,
+# middle entry, last entry before a ; on its own line
+Check 'uses: leading-comma uusesl1 matches uusesl1.fixed.pas (first + last-with-;)' (SameAsFixed $c7 'uusesl1')
+Check 'uses: leading-comma uusesl2 matches uusesl2.fixed.pas (middle + last-before-;)' (SameAsFixed $c7 'uusesl2')
 Reindex $c7
 Check 'uses: only uihelp is still reported after a reindex' (((AllRows $c7 'unused-unit-in-uses' 'uuses.pas' "'") -eq 1) -and ((AllRows $c7 'unused-unit-in-uses' 'uuses.pas' "'uihelp'") -eq 1))
 
