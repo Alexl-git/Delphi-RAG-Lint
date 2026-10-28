@@ -1,0 +1,3 @@
+# dl-project-setup
+
+`dl-project-setup.exe` (src\tools\project-setup) is a small VCL form for projects that have only a `.dpr`. It asks for platform, configuration, conditional defines, unit search path, namespaces, target compiler and optional library DB / RTL source roots, then writes `<Base>.dlcontext.json` (schema 1, generatedBy `dl-project-setup 1.0`) next to the project. Re-opening a project loads its existing context. Platform, config, target compiler and library paths are prefilled from `%LOCALAPPDATA%\drag-lint\context-defaults.json` when present (env `DRAGLINT_CONTEXT_DEFAULTS` overrides the path; read only). Usage: `dl-project-setup.exe [App.dpr]`.
