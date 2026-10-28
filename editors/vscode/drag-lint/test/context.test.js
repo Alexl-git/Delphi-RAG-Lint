@@ -5,10 +5,10 @@ const pkg = require(path.join(__dirname, '..', 'package.json'));
 const ctx = require(path.join(__dirname, '..', 'lib', 'context.js'));
 
 const props = pkg.contributes.configuration.properties;
-assert.strictEqual(props['draglint.project'].type, 'string');
-assert.strictEqual(props['draglint.project'].default, '');
-assert.deepStrictEqual(props['draglint.platform'].enum, ctx.PLATFORMS);
-assert.strictEqual(props['draglint.config'].default, '');
+assert.strictEqual(props['dragLint.project'].type, 'string');
+assert.strictEqual(props['dragLint.project'].default, '');
+assert.deepStrictEqual(props['dragLint.platform'].enum, ctx.PLATFORMS);
+assert.strictEqual(props['dragLint.config'].default, '');
 const cmds = pkg.contributes.commands.map((c) => c.command);
 assert.ok(cmds.includes('dragLint.selectPlatform'));
 assert.ok(cmds.includes('dragLint.selectProject'));

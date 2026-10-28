@@ -139,12 +139,12 @@
           "default": "off",
           "description": "Log the LSP conversation to the 'drag-lint' output channel."
         },
-        "draglint.project": {
+        "dragLint.project": {
           "type": "string",
           "default": "",
           "markdownDescription": "Path to the `.dproj` / `.dpr` whose index and platform the language server uses. Empty = detect from the open file."
         },
-        "draglint.platform": {
+        "dragLint.platform": {
           "type": "string",
           "enum": [
             "",
@@ -162,7 +162,7 @@
           "default": "",
           "markdownDescription": "Target platform for library lookups. Empty = the project default."
         },
-        "draglint.config": {
+        "dragLint.config": {
           "type": "string",
           "default": "",
           "markdownDescription": "Build configuration (e.g. `Debug`, `Release`). Empty = the project default."

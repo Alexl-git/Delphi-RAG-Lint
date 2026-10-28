@@ -389,8 +389,8 @@ function makeClient(exe) {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
     outputChannelName: 'drag-lint',
     errorHandler: makeErrorHandler(),
-    initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('draglint').get(k)),
-    synchronize: { configurationSection: 'draglint', fileEvents: manifestWatcher }
+    initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
+    synchronize: { configurationSection: 'dragLint', fileEvents: manifestWatcher }
   };
 
   const c = new LanguageClient('dragLint', 'drag-lint', serverOptions, clientOptions);
@@ -534,7 +534,7 @@ function showContext(ctx) {
 }
 
 async function applyContext(patch) {
-  const conf = workspace.getConfiguration('draglint');
+  const conf = workspace.getConfiguration('dragLint');
   for (const k of Object.keys(patch)) {
     await conf.update(k, patch[k], workspace.workspaceFolders ? ConfigurationTarget.Workspace : ConfigurationTarget.Global);
   }
@@ -551,7 +551,7 @@ async function applyContext(patch) {
 }
 
 async function selectPlatform() {
-  const cur = workspace.getConfiguration('draglint').get('platform') || '';
+  const cur = workspace.getConfiguration('dragLint').get('platform') || '';
   const items = dlctx.PLATFORMS.map((p) => ({ label: p === '' ? '(project default)' : p, value: p, description: p === cur ? 'current' : '' }));
   const pick = await window.showQuickPick(items, { placeHolder: 'drag-lint: select target platform' });
   if (pick) await applyContext({ platform: pick.value });
