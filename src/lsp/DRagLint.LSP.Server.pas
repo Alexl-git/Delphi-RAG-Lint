@@ -14,7 +14,7 @@ uses
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core    .Model
-  , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup
+  , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup; LIBRARY_RESOLVE_STATE_META_KEY: the lf-marker key
   , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
   , DRagLint.Core    .Interfaces
   , DRagLint.Core    .Encoding
@@ -1358,8 +1358,6 @@ const
   LSP_ERR_INTERNAL = -32603;
   { LSP-1 CORE: SPEC.md 3 -- opened (project DB, library DB) pairs kept. }
   LSP_STORE_SET_LRU = 3;
-  { lf-marker: = DRagLint.Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY (gaps/lf-marker), not yet in this base. }
-  LSP_LIBRARY_RESOLVE_STATE_KEY = 'library_resolve_state';
   { LSP-1 CORE: longest log line quoted in a failed re-index notice. }
   LSP_REINDEX_REASON_MAX = 200;
   { LSP-1 CORE: SPEC.md 1b -- the placeholder platform when nothing names one. }
@@ -2865,8 +2863,7 @@ begin
     else Exit('needs re-resolve (test marker)');
   { lf-marker (gaps/lf-marker cb98fe76): schema_meta.library_resolve_state =
     JSON (state: pending|bound, platform, library, reason, ...); missing or
-    empty = no marker. Only `pending` is incomplete. The key is spelled here
-    until Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY reaches this base. }
+    empty = no marker. Only `pending` is incomplete. Key: Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY. }
   var St: ISymbolStore:= nil;
   for var I:= 0 to High(FStorePaths) do
     if SameText(FStorePaths[I], AProjectDb) then St:= FStores[I];
@@ -2877,7 +2874,7 @@ begin
   if St = nil then Exit;
   var Raw: string:= '';
   try
-    Raw:= St.GetMetaValue(LSP_LIBRARY_RESOLVE_STATE_KEY);
+    Raw:= St.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY);
   except
     on E: Exception do Raw:= ''; { an unreadable marker is no marker; the answers stand }
   end;
