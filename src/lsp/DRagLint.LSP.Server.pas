@@ -3034,7 +3034,7 @@ var
   L      : TImpactLevel  ;
   DeclO  : TJSONObject   ;
 
-  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
+  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer; const AResolution: string);
   var
     O: TJSONObject;
   begin
@@ -3042,6 +3042,7 @@ var
     O.AddPair('file', AFile);
     O.AddPair('line', TJSONNumber.Create(ALine));
     O.AddPair('col' , TJSONNumber.Create(ACol ));
+    if AResolution <> '' then O.AddPair('resolution', AResolution); { XERJ item 3: LAST key, as the CLI }
     AArr.AddElement(O);
   end;
 
@@ -3120,7 +3121,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
       for R in UsageRefsForName(St, Nm, Decls) do
-        AddRefRow(GroupFor(R), St.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+        AddRefRow(GroupFor(R), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
       if Width = 'very-wide' then
         for L in St.FindTransitiveCallers(Nm, Depth) do
         begin

@@ -1983,6 +1983,15 @@ begin
   if H <> 0 then CloseHandle(H);
 end;
 
+/// <summary>XERJ item 3: the text-row suffix for a caller that is not an exact bind.</summary>
+/// <param name="AResolution">A RESOLUTION_* value or ''.</param>
+/// <returns>`  [name-only]` | `  [ambiguous]` | `  [external]`; '' for exact or unknown.</returns>
+function ResolutionSuffix(const AResolution: string): string;
+begin
+  if (AResolution = '') or (AResolution = RESOLUTION_EXACT) then Result:= ''
+  else Result:= '  [' + AResolution + ']';
+end; // function
+
 procedure PrintReferences(const AStore: ISymbolStore; const ARefs: TArray<TReference>; AsJson: Boolean);
 var
   JArr: TJSONArray ;
@@ -2006,6 +2015,7 @@ begin
         JObj.AddPair('start_col' , TJSONNumber.Create(R.StartCol ));
         JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
         JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
+        if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -2015,8 +2025,14 @@ begin
   end // if
   else
   begin
-    for R in ARefs do begin Path:= AStore.GetFilePath(R.FileId); Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText])); end;
-    Writeln(Format('%d caller(s)', [Length(ARefs)]));
+    var Tally: TResolutionTally:= Default(TResolutionTally);
+    for R in ARefs do
+    begin
+      Path:= AStore.GetFilePath(R.FileId);
+      Writeln(Format('%s:%d:%d  %s%s', [Path, R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
+      Tally.Add(R.Resolution);
+    end;
+    Writeln(Format('%d caller(s)%s', [Length(ARefs), (if Tally.ToText <> '' then ' (' + Tally.ToText + ')' else '')]));
   end;
 end; // procedure
 
@@ -2045,6 +2061,7 @@ begin
         JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
         JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
         if R.ContextText <> '' then JObj.AddPair('context', R.ContextText);
+        if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -2054,13 +2071,15 @@ begin
   end // if
   else
   begin
+    var Tally: TResolutionTally:= Default(TResolutionTally);
     for R in ARefs do
     begin
       Path:= AStore.GetFilePath(R.FileId);
-      Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
+      Writeln(Format('%s:%d:%d  %s%s', [Path, R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
       if R.ContextText <> '' then begin Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll])); end;
+      Tally.Add(R.Resolution);
     end;
-    Writeln(Format('%d caller(s)', [Length(ARefs)]));
+    Writeln(Format('%d caller(s)%s', [Length(ARefs), (if Tally.ToText <> '' then ' (' + Tally.ToText + ')' else '')]));
   end;
 end; // procedure
 
@@ -8232,6 +8251,7 @@ begin
         Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
       var CallerFiles: TArray<string>:= nil;
+      var ResTally: TResolutionTally:= Default(TResolutionTally);
       var JOut: TJSONArray:= nil;
       if AArgs.AsJson then JOut:= TJSONArray.Create;
       try
@@ -8265,6 +8285,9 @@ begin
               { 2026-09-16: a PROPERTY/FIELD access carries its mode; routine rows
                 keep the pinned key order exactly (no key when empty). }
               if Row.Mode <> '' then JObj.AddPair('mode', Row.Mode);
+              { XERJ item 3 (owner ruling 2026-10-28): `resolution` is the LAST key; the
+                pinned key order of run_query_callers_shared_guard.ps1 gained it on purpose. }
+              JObj.AddPair('resolution', Row.Resolution);
               JOut.AddElement(JObj);
             end
             else
@@ -8290,6 +8313,7 @@ begin
             end;
             Inc(TotalCallers);
             CallerFiles:= CallerFiles + [Row.FilePath];
+            ResTally.Add(Row.Resolution);
           end; // for Row
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
@@ -8297,7 +8321,8 @@ begin
         begin
           Writeln('0 caller(s)');
           Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
-        end;
+        end
+        else Writeln(Format('%d callers (%s)', [TotalCallers, ResTally.ToText]));
       finally
         JOut.Free;
       end; // try
@@ -10411,7 +10436,7 @@ var
   JHandles   : TJSONArray    ; { 1.36.0 handle / handle-all rows }
   JImpact    : TJSONArray    ;
 
-  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
+  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer; const AResolution: string);
   var
     O: TJSONObject;
   begin
@@ -10419,6 +10444,7 @@ var
     O.AddPair('file', AFile);
     O.AddPair('line', TJSONNumber.Create(ALine));
     O.AddPair('col' , TJSONNumber.Create(ACol ));
+    if AResolution <> '' then O.AddPair('resolution', AResolution); { XERJ item 3: LAST key }
     AArr.AddElement(O);
   end;
 
@@ -10511,7 +10537,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
@@ -25067,6 +25093,7 @@ begin
       JObj.AddPair('external'    , TJSONTrue.Create);
       JObj.AddPair('via'         , Via);
       JObj.AddPair('receiver_type', R.ReceiverTypeText);
+      JObj.AddPair('resolution'   , RESOLUTION_EXTERNAL); { XERJ item 3: LAST key }
       AJson.AddElement(JObj);
     end
     else Writeln(Format('  -> %s   (library, %s)', [QName, (if Via = 'edge' then 'by name' else 'resolved now')]));
@@ -25149,6 +25176,7 @@ begin
           var JObj:= TJSONObject.Create;
           JObj.AddPair('target_qname', QName        );
           JObj.AddPair('confidence'  , E.Confidence  );
+          JObj.AddPair('resolution'  , ResolutionOfConfidence(E.Confidence)); { XERJ item 3: LAST key }
           JOut.AddElement(JObj);
         end
         else Writeln(Format('  %s  [%s]', [QName, E.Confidence]));

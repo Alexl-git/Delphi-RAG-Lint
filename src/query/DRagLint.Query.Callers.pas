@@ -94,6 +94,13 @@ type
     /// routine call. Rendered as a trailing key/bracket only when set, so
     /// routine rows are byte-identical to what they were.</summary>
     Mode       : string ;
+    /// <summary>XERJ item 3: how sure the row is, DERIVED -- 'exact' | 'ambiguous' |
+    /// 'external' | 'name-only' (RESOLUTION_* in DRagLint.Core.Model). Rendered as the
+    /// LAST key of every caller JSON row.</summary>
+    /// <remarks>A resolved row maps from its call_edges Confidence; a 'callback' reach is
+    /// by-name and so 'name-only'; a name-matched row carries the TReference.Resolution the
+    /// store derived from call_edges / refs.external_target / refs.symbol_id.</remarks>
+    Resolution : string ;
   end;
 
   /// <remarks>
@@ -102,6 +109,29 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRows = TArray<TQueryCallerRow>;
+
+type
+  /// <summary>Counts of caller/callee rows per derived resolution kind, for the text
+  /// totals `12 callers (9 exact, 1 ambiguous, 2 name-only)` and the context JSON
+  /// `caller_resolution` object.</summary>
+  TResolutionTally = record
+    Exact    : Integer;
+    Ambiguous: Integer;
+    External : Integer;
+    NameOnly : Integer;
+    /// <summary>Counts one row of kind <paramref name="AKind"/> (a RESOLUTION_* value; an
+    /// unknown or empty kind is not counted).</summary>
+    procedure Add(const AKind: string);
+    /// <summary>`9 exact, 1 ambiguous, 2 name-only`: only the kinds seen, in the order
+    /// exact, ambiguous, external, name-only; '' when nothing was counted.</summary>
+    function ToText: string;
+  end;
+
+/// <summary>Maps a call_edges confidence (or 'callback') to the derived resolution kind.</summary>
+/// <param name="AConfidence">'certain' | 'ambiguous' | 'callback' | anything else.</param>
+/// <returns>'ambiguous' for 'ambiguous'; 'name-only' for 'callback' (a by-name reach, no
+/// edge); 'exact' for every other stored edge ('certain').</returns>
+function ResolutionOfConfidence(const AConfidence: string): string;
 
 /// <summary>Precise callers of every symbol matching <paramref name="AName"/>
 /// in one store, keyed by resolved call edges rather than by name.</summary>
@@ -226,6 +256,36 @@ begin
   end;
 end;
 
+procedure TResolutionTally.Add(const AKind: string);
+begin
+  if AKind = RESOLUTION_EXACT then Inc(Exact)
+  else if AKind = RESOLUTION_AMBIGUOUS then Inc(Ambiguous)
+  else if AKind = RESOLUTION_EXTERNAL then Inc(External)
+  else if AKind = RESOLUTION_NAME_ONLY then Inc(NameOnly);
+end; // procedure
+
+function TResolutionTally.ToText: string;
+  procedure Part(ACount: Integer; const ALabel: string);
+  begin
+    if ACount = 0 then Exit;
+    if Result <> '' then Result:= Result + ', ';
+    Result:= Result + Format('%d %s', [ACount, ALabel]);
+  end;
+begin
+  Result:= '';
+  Part(Exact    , RESOLUTION_EXACT    );
+  Part(Ambiguous, RESOLUTION_AMBIGUOUS);
+  Part(External , RESOLUTION_EXTERNAL );
+  Part(NameOnly , RESOLUTION_NAME_ONLY);
+end; // function
+
+function ResolutionOfConfidence(const AConfidence: string): string;
+begin
+  if SameText(AConfidence, 'ambiguous') then Result:= RESOLUTION_AMBIGUOUS
+  else if SameText(AConfidence, 'callback') then Result:= RESOLUTION_NAME_ONLY
+  else Result:= RESOLUTION_EXACT;
+end; // function
+
 function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string): TQueryCallerRows;
 var
   Targets     : TArray<TSymbol>;
@@ -251,6 +311,7 @@ begin
       Row.FullPath    := RC.FullPath      ;  { ...and the openable one beside it }
       Row.CallSiteLine:= RC.CallSiteLine  ;
       Row.Confidence  := RC.Confidence    ;
+      Row.Resolution  := ResolutionOfConfidence(RC.Confidence);
       Row.Mode        := RC.Mode          ;
       Row.TargetQName := T.QualifiedName  ;
       { Line is the caller SYMBOL's own start line (routine-granular; the CLI's
@@ -321,6 +382,7 @@ begin
       Row.CallSiteLine:= CbRef.StartLine          ;
       Row.HasLine     := CbDecl > 0               ;
       Row.Confidence := 'callback'               ;
+      Row.Resolution := RESOLUTION_NAME_ONLY     ;
       Row.TargetQName:= AName                    ;
       SetLength(Result, Length(Result) + 1);
       Result[High(Result)]:= Row;
@@ -353,6 +415,7 @@ begin
     Row.CallSiteLine:= Refs[i].StartLine;
     Row.HasLine    := Refs[i].StartLine > 0;
     Row.Confidence := '';
+    Row.Resolution := Refs[i].Resolution;
     Row.TargetQName:= '';
     Row.CodeText   := CodeLineFromContext(Refs[i].ContextText, Refs[i].StartLine);
     Row.EnclosingSymbolId:= Refs[i].EnclosingSymbolId;

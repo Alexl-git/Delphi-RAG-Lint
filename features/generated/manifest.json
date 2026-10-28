@@ -1841,11 +1841,12 @@
               "name": "--db"
             },
             {
-              "name": "--json"
+              "name": "--json",
+              "summary": "every row ends with a derived \"resolution\" key: exact | ambiguous | external | name-only (text totals: N callers (a exact, b name-only))"
             }
           ],
           "helpOrder": 3,
-          "help": ["  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]", "                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);", "                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];", "                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)", "  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)"]
+          "help": ["  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]", "                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);", "                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];", "                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)", "                               --json: every row ends with \"resolution\": exact|ambiguous|external|name-only (derived; XERJ item 3)", "  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)"]
         },
         {
           "type": "ide-menu",
@@ -1867,9 +1868,9 @@
       ],
       "notes": "issued by the plugin from TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)",
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-28",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.36.0-alpha",
         "surfaceHash": "5ead83fdcc8f1c26f301a1180a72e0a1349359a47df864523d3728f9dbc3935b"
       }
     },

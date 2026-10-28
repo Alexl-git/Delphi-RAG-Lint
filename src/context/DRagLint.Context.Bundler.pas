@@ -15,6 +15,7 @@ uses
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
   , DRagLint.Index   .LibraryOracle { TLibraryOracle -- the opt-in query-time Library calls count (RSV-R2) }
+  , DRagLint.Query   .Callers
   ;
 
 type
@@ -670,6 +671,7 @@ begin
     BC.Line       := R.StartLine;
     BC.Col        := R.StartCol;
     BC.ContextText:= R.ContextText;
+    BC.Resolution := R.Resolution ;
     Result.Callers[I]:= BC;
   end;
 
@@ -827,7 +829,9 @@ begin
       for I:= 0 to High(ABundle.Callers) do
       begin
         BC:= ABundle.Callers[I];
-        SB.AppendLine(Format('- %s:%d:%d', [BC.FilePath, BC.Line, BC.Col]));
+        { XERJ item 3: only a caller that is NOT an exact bind says so. }
+        SB.AppendLine(Format('- %s:%d:%d%s', [BC.FilePath, BC.Line, BC.Col,
+          (if (BC.Resolution = '') or (BC.Resolution = RESOLUTION_EXACT) then '' else ' [' + BC.Resolution + ']')]));
         if BC.ContextText <> '' then
         begin
           SB.AppendLine('  ```');
@@ -913,6 +917,13 @@ begin
     for I:= 0 to High(ABundle.LibraryCallTop) do Quoted:= Quoted + ['"' + JsonEscape(ABundle.LibraryCallTop[I]) + '"'];
     LibJson:= Format(',"library_calls":{"count":%d,"via":"%s","top":[%s]}', [ABundle.LibraryCallCount, ABundle.LibraryCallVia, string.Join(',', Quoted)]);
   end;
+
+  { XERJ item 3: the bundle JSON carries counts, not caller rows, so the resolution kinds
+    arrive as a tally object (an additive key, after library_calls). }
+  var ResTally: TResolutionTally:= Default(TResolutionTally);
+  for I:= 0 to High(ABundle.Callers) do ResTally.Add(ABundle.Callers[I].Resolution);
+  LibJson:= LibJson + Format(',"caller_resolution":{"exact":%d,"ambiguous":%d,"external":%d,"name-only":%d}',
+    [ResTally.Exact, ResTally.Ambiguous, ResTally.External, ResTally.NameOnly]);
 
   Result:= Format(
     '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +

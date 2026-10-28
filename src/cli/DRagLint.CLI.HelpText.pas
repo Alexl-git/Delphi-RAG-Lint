@@ -99,6 +99,7 @@ begin
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
   Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
   Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+  Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
   Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
@@ -552,6 +553,7 @@ begin
     Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
     Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
     Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+    Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
     Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
     Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
     Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');

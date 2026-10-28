@@ -9272,11 +9272,14 @@ begin
       calls. ref_id is that table's PRIMARY KEY, so the LEFT JOIN cannot add
       or drop a row -- every other caller sees the same rows as before. }
     if HasMemberAccesses then
-      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode FROM refs ' +
+      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf FROM refs ' +
                    'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
+                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
                    'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
     else
-      Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name COLLATE NOCASE ' + 'ORDER BY file_id, start_line';
+      Q.SQL.Text:= 'SELECT refs.*, ce.confidence AS edge_conf FROM refs ' +
+                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
+                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
     Q.ParamByName('name').AsWideString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -9308,6 +9311,16 @@ begin
       var ModeF: TField:= Q.FindField('access_mode');
       if (ModeF <> nil) and not ModeF.IsNull then R.AccessMode:= ModeF.AsString
       else R.AccessMode:= '';
+      { XERJ item 3: resolution, DERIVED from columns the index already holds -- no
+        resolver write. call_edges.ref_id is its PRIMARY KEY, so the LEFT JOIN cannot
+        add or drop a row. }
+      var EdgeF: TField:= Q.FindField('edge_conf');
+      var ExtF : TField:= Q.FindField('external_target');
+      if (EdgeF <> nil) and not EdgeF.IsNull then
+        R.Resolution:= (if SameText(EdgeF.AsString, 'ambiguous') then RESOLUTION_AMBIGUOUS else RESOLUTION_EXACT)
+      else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then R.Resolution:= RESOLUTION_EXTERNAL
+      else if R.SymbolId <> 0 then R.Resolution:= RESOLUTION_EXACT
+      else R.Resolution:= RESOLUTION_NAME_ONLY;
       List.Add(R);
       Q.Next;
     end; // while

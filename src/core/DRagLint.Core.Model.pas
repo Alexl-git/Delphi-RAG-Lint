@@ -767,6 +767,13 @@ type
     // call ref, filled by GetUnresolvedCallsFromSymbol only ('' when NULL or absent column).
     ReceiverTypeText: string;
     ExternalTarget  : string;
+    /// <summary>How the site was bound (XERJ item 3, derived at read time, never stored):
+    /// RESOLUTION_EXACT | RESOLUTION_AMBIGUOUS | RESOLUTION_EXTERNAL | RESOLUTION_NAME_ONLY.
+    /// Filled by FindCallersByName only (so also by FindCallersByNameWithContext); '' elsewhere.</summary>
+    /// <remarks>exact = a certain call_edges row or a resolver-bound refs.symbol_id; ambiguous = an
+    /// ambiguous call_edges row; external = refs.external_target is set; name-only = none of
+    /// those, the row matched by NAME alone.</remarks>
+    Resolution: string;
   end;
 
   /// <summary>v14 (D5): one resolved call-site edge, written by the
@@ -1879,6 +1886,8 @@ type
     Line       : Integer;
     Col        : Integer;
     ContextText: string ;
+    /// <summary>XERJ item 3: derived resolution kind of this caller site (RESOLUTION_*).</summary>
+    Resolution : string ;
   end;
 
   // v0.26: compiler diagnostic finding (from dcc64 or msbuild output).
@@ -2282,6 +2291,16 @@ const
   REF_KIND_HANDLE     = 'handle';
   /// <summary>See REF_KIND_RAISE.</summary>
   REF_KIND_HANDLE_ALL = 'handle-all';
+
+  /// <summary>The four values of the derived resolution key on caller / callee rows
+  /// (XERJ item 3); see TReference.Resolution.</summary>
+  RESOLUTION_EXACT     = 'exact';
+  /// <summary>See RESOLUTION_EXACT.</summary>
+  RESOLUTION_AMBIGUOUS = 'ambiguous';
+  /// <summary>See RESOLUTION_EXACT.</summary>
+  RESOLUTION_EXTERNAL  = 'external';
+  /// <summary>See RESOLUTION_EXACT.</summary>
+  RESOLUTION_NAME_ONLY = 'name-only';
 
 /// <summary>The SQL predicate selecting call-site refs, for the queries that
 /// build their WHERE clause as text.</summary>
