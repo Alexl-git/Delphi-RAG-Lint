@@ -6,6 +6,7 @@ breaking changes** until v1.0.
 ## Unreleased
 
 ### Added
+- `query --text ... --near <QName> [--hops 1..3] [--hops-uses] [--near-boost]` keeps only text hits in routines within N call-graph hops (callers and callees, default 2, max 3) of a symbol; `--hops-uses` adds unit-uses edges, `--near-boost` ranks instead of filtering; rows print `hop=N` (`--json`: `"hop"`). New reader `ISymbolStore.FindSymbolsWithinHops`; no extraction change (guard `run_query_text_near.ps1`).
 - `find-callees` lists library-bound callees after the resolved ones, marked `(library` (`--json`: `"external": true`, `"via": "edge"|"oracle"`). `edge` = the stored `refs.external_target`; `oracle` = bound at read time when the library index is named (a second `--db`, or `--library-db`) from `refs.receiver_type_text`. With no library open the text ends `M external (library not open)`. Guard `tests\autotest\run_find_callees_external.ps1`.
 - Manifest section key `"libraryResolve": true` (default false; the 2026-10-25 no-attach ruling stands): `index --all` / `index --project` open the platform library as an extra store for the call-resolve pass. Guard `tests\autotest\run_library_resolve_key.ps1`.
 

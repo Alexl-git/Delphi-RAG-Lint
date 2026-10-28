@@ -1343,6 +1343,13 @@ type
       /// </remarks>
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
         const AKind: string = ''): TArray<TStringLitMatch>;
+      /// <summary>Implements ISymbolStore.FindSymbolsWithinHops.</summary>
+      /// <param name="ASeedId">symbols.id of the seed.</param>
+      /// <param name="AHops">Maximum hop count (1..3).</param>
+      /// <param name="AUsesEdges">True adds unit-uses edges.</param>
+      /// <returns>One row per qualified name with its smallest hop.</returns>
+      function FindSymbolsWithinHops(ASeedId: Int64; AHops: Integer;
+        AUsesEdges: Boolean): TArray<TSymbolHop>;
       // v14 (D5): resolved call-target edges (call_edges table).
       /// <summary><!-- drag-lint:auto sum -->v14 (D5): resolved call-target edges
       /// (call_edges table).</summary>
@@ -8381,6 +8388,68 @@ begin
     List.Free;
   end;
 end;
+
+function TSQLiteSymbolStore.FindSymbolsWithinHops(ASeedId: Int64; AHops: Integer;
+  AUsesEdges: Boolean): TArray<TSymbolHop>;
+const
+  CallCte =
+    'WITH RECURSIVE nb(id, hop) AS (' +
+    ' SELECT :seed, 0 ' +
+    ' UNION ' +
+    ' SELECT ce.target_symbol_id, nb.hop + 1 FROM nb' +
+    '  JOIN refs r ON r.enclosing_symbol_id = nb.id' +
+    '  JOIN call_edges ce ON ce.ref_id = r.id WHERE nb.hop < :n ' +
+    ' UNION ' +
+    ' SELECT r.enclosing_symbol_id, nb.hop + 1 FROM nb' +
+    '  JOIN call_edges ce ON ce.target_symbol_id = nb.id' +
+    '  JOIN refs r ON r.id = ce.ref_id' +
+    '  WHERE nb.hop < :n AND r.enclosing_symbol_id IS NOT NULL) ';
+  UsesCte =
+    ', fh(fid, hop) AS (' +
+    ' SELECT file_id, 0 FROM symbols WHERE id = :seed ' +
+    ' UNION ' +
+    ' SELECT uu.target_file_id, fh.hop + 1 FROM fh JOIN unit_uses uu ON uu.file_id = fh.fid' +
+    '  WHERE uu.target_file_id IS NOT NULL AND fh.hop < :n ' +
+    ' UNION ' +
+    ' SELECT uu.file_id, fh.hop + 1 FROM fh JOIN unit_uses uu ON uu.target_file_id = fh.fid' +
+    '  WHERE fh.hop < :n) ';
+var
+  Q   : TFDQuery        ;
+  List: TList<TSymbolHop>;
+  H   : TSymbolHop      ;
+  Sql : string          ;
+begin
+  Sql:= CallCte;
+  if AUsesEdges then Sql:= Sql + UsesCte;
+  Sql:= Sql + 'SELECT qn, MIN(hop) AS hop FROM (' +
+    'SELECT s.qualified_name AS qn, nb.hop AS hop FROM nb JOIN symbols s ON s.id = nb.id';
+  if AUsesEdges then
+    Sql:= Sql + ' UNION ALL SELECT s.qualified_name, fh.hop FROM fh JOIN symbols s ON s.file_id = fh.fid' +
+      ' WHERE fh.hop > 0 AND s.impl_start_line IS NOT NULL AND s.impl_start_line > 0';
+  Sql:= Sql + ') GROUP BY qn';
+  List:= TList<TSymbolHop>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= Sql;
+    Q.ParamByName('seed').AsLargeInt:= ASeedId;
+    Q.ParamByName('n').AsInteger:= AHops;
+    Q.Open;
+    var FQn := Q.FieldByName('qn' );
+    var FHop:= Q.FieldByName('hop');
+    while not Q.Eof do
+    begin
+      H.QualifiedName:= FQn.AsString;
+      H.Hop          := FHop.AsInteger;
+      List.Add(H);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
 
 function TSQLiteSymbolStore.FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
 var

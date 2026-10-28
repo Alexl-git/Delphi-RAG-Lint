@@ -1314,6 +1314,11 @@ drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--jso
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
 | `--case-sensitive` |  |  |  |
 | `--exact` |  |  |  |
+| `--text` | `"<phrase>"` |  |  |
+| `--near` | `<QName>` |  |  |
+| `--hops` | `1..3` |  |  |
+| `--hops-uses` |  |  |  |
+| `--near-boost` |  |  |  |
 | `--in` | `<file.pas>` |  |  |
 | `--names` | `A` |  |  |
 | `--names-file` | `<f>` |  |  |
@@ -1327,6 +1332,7 @@ Described in:
 * [query find-callers](../../docs/wiki/query-find-callers.md)
 * [query --kind --all](../../docs/wiki/query-kind-all.md)
 * [query --name-like](../../docs/wiki/query-name-like.md)
+* [query --text --near](../../docs/wiki/query-text-near.md)
 * [query type-usage](../../docs/wiki/query-type-usage.md)
 * [query typecat](../../docs/wiki/query-typecat.md)
 * [query unit-usage](../../docs/wiki/query-unit-usage.md)

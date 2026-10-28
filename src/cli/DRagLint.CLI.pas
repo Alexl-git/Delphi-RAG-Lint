@@ -645,6 +645,10 @@ type
     TextQuery    : string ; // --text "<phrase>"
     TextAnyOrder : Boolean; // --any-order
     TextSubstring: Boolean; // --substring
+    NearQName    : string ; // query --text --near <QName> (call-graph neighbourhood filter)
+    HopsRaw      : string ; // --hops N ('' = default 2; 1..3 accepted)
+    HopsUses     : Boolean; // --hops-uses: unit-uses edges join the neighbourhood
+    NearBoost    : Boolean; // --near-boost: keep every row, neighbourhood first
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
     { `query --text --kind` reuses the EXISTING Kind field rather than adding a
       second one. --kind is parsed unconditionally further up this chain, so a
@@ -1871,6 +1875,18 @@ begin
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True
+    else if (A = '--near') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.NearQName:= ParamStr(i);
+    end
+    else if (A = '--hops') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.HopsRaw:= ParamStr(i);
+    end
+    else if A = '--hops-uses' then Result.HopsUses:= True
+    else if A = '--near-boost' then Result.NearBoost:= True
     // PP-Task-3: dump-pp-eval flags. --expr is the expression; --define and
     // --numeric are repeatable and accumulate into TArrays (parsed in DoDumpPpEval).
     else if (A = '--expr') and (i < ParamCount) then begin Inc(i); Result.PpExpr:= ParamStr(i); end
@@ -7833,6 +7849,92 @@ begin
   end;
 end; // function
 
+const
+  DefaultNearHops = 2;      // query --text --near: --hops default
+  MaxNearHops     = 3;      // query --text --near: --hops ceiling (wider = impact --depth)
+  NearFetchLimit  = 100000; // rows fetched before the neighbourhood filter cuts to --limit
+  OutsideHood     = -1;     // hop value of a hit outside the --near neighbourhood
+
+/// <summary>Resolves the `--near` seed in one store and returns its call-graph
+/// neighbourhood keyed by qualified name (case-insensitive) to the fewest hops.</summary>
+/// <param name="AStore">Open store to read.</param>
+/// <param name="AArgs">Parsed args; NearQName is the seed, HopsUses adds unit-uses edges.</param>
+/// <param name="AHops">Hop ceiling, 1..MaxNearHops.</param>
+/// <param name="AStatus">0 = seed found; 1 = not in this store; 2 = ambiguous (several
+/// qualified names answer to the bare name); AErr then lists them.</param>
+/// <param name="AErr">Error text when AStatus is 2, else empty.</param>
+/// <returns>A new dictionary the caller frees; empty unless AStatus is 0.</returns>
+function CollectNearHops(const AStore: ISymbolStore; const AArgs: TArgs; AHops: Integer;
+  out AStatus: Integer; out AErr: string): TDictionary<string, Integer>;
+var
+  Seeds: TArray<TSymbol>;
+  S    : TSymbol        ;
+  H    : TSymbolHop     ;
+  Cur  : Integer        ;
+begin
+  Result:= TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+  AErr:= '';
+  Seeds:= AStore.FindSymbolsByQualifiedName(AArgs.NearQName);
+  if Length(Seeds) = 0 then
+  begin
+    AStatus:= 1;
+    Exit;
+  end;
+  for S in Seeds do
+    if not SameText(S.QualifiedName, Seeds[0].QualifiedName) then
+    begin
+      AStatus:= 2;
+      AErr:= 'ERROR: --near "' + AArgs.NearQName + '" is ambiguous (' + Seeds[0].QualifiedName + ', ' +
+        S.QualifiedName + ', ...); qualify it, e.g. Unit.Routine or Type.Method';
+      Exit;
+    end;
+  AStatus:= 0;
+  for S in Seeds do
+    for H in AStore.FindSymbolsWithinHops(S.Id, AHops, AArgs.HopsUses) do
+      if (not Result.TryGetValue(H.QualifiedName, Cur)) or (H.Hop < Cur) then
+        Result.AddOrSetValue(H.QualifiedName, H.Hop);
+end; // function
+
+/// <summary>Applies the `--near` result policy to the fetched rows: restrict to the
+/// neighbourhood (hop &gt;= 0), or with ABoost keep every row and put neighbourhood
+/// rows first, nearest hop first. Stable within a hop, so the SQL ranking survives.</summary>
+/// <param name="AMatches">Fetched rows; replaced by the kept rows.</param>
+/// <param name="AHops">Hop per row, -1 = outside the neighbourhood; replaced in step.</param>
+/// <param name="AMaxHop">Highest hop present in the neighbourhood.</param>
+/// <param name="ABoost">True keeps rows outside the neighbourhood, last.</param>
+procedure ApplyNearFilter(var AMatches: TArray<TStringLitMatch>; var AHops: TArray<Integer>;
+  AMaxHop: Integer; ABoost: Boolean);
+var
+  OutM: TList<TStringLitMatch>;
+  OutH: TList<Integer>        ;
+  Hop : Integer               ;
+  i   : Integer               ;
+begin
+  OutM:= TList<TStringLitMatch>.Create;
+  OutH:= TList<Integer>.Create;
+  try
+    for Hop:= 0 to AMaxHop do
+      for i:= 0 to High(AMatches) do
+        if AHops[i] = Hop then
+        begin
+          OutM.Add(AMatches[i]);
+          OutH.Add(Hop);
+        end;
+    if ABoost then
+      for i:= 0 to High(AMatches) do
+        if AHops[i] < 0 then
+        begin
+          OutM.Add(AMatches[i]);
+          OutH.Add(OutsideHood);
+        end;
+    AMatches:= OutM.ToArray;
+    AHops   := OutH.ToArray;
+  finally
+    OutH.Free;
+    OutM.Free;
+  end; // try
+end; // procedure
+
 // v0.57 Task 8: text-constant search (phrase / any-order / substring).
 // Placed immediately before DoQuery so no forward declaration is needed.
 function DoQueryText(const AArgs: TArgs): Integer;
@@ -7847,6 +7949,19 @@ var
   M          : TStringLitMatch        ;
   JArr       : TJSONArray             ;
   JObj       : TJSONObject            ;
+  I          : Integer                ;
+  NearOn     : Boolean                ;
+  Hops       : Integer                ;
+  FetchLim   : Integer                ;
+  NearMap    : TDictionary<string, Integer>;
+  NearStatus : Integer                ;
+  NearErr    : string                 ;
+  SeedFound  : Boolean                ;
+  AllHops    : TArray<Integer>        ;
+  HopOf      : Integer                ;
+  OwnerKey   : string                 ;
+  HopTag     : string                 ;
+  EnclTag    : string                 ;
 begin
   if not ExplicitDbsExist(AArgs, 'query --text') then Exit(2);
   if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
@@ -7854,6 +7969,28 @@ begin
   else if AArgs.TextAnyOrder then Mode:= 'anyorder'
   else Mode:= 'phrase';
   if AArgs.Limit > 0 then Lim:= AArgs.Limit else Lim:= 200;
+  NearOn:= AArgs.NearQName <> '';
+  if (not NearOn) and ((AArgs.HopsRaw <> '') or AArgs.HopsUses or AArgs.NearBoost) then
+  begin
+    Writeln('ERROR: --hops, --hops-uses and --near-boost require --near <QName>');
+    Exit(2);
+  end;
+  Hops:= DefaultNearHops;
+  if NearOn and (AArgs.HopsRaw <> '') then
+  begin
+    Hops:= StrToIntDef(AArgs.HopsRaw, 0);
+    if Hops > MaxNearHops then
+    begin
+      Writeln('ERROR: --hops ', AArgs.HopsRaw, ': ', MaxNearHops, ' hops max; use impact --depth for wider');
+      Exit(2);
+    end;
+    if Hops < 1 then
+    begin
+      Writeln('ERROR: --hops must be a whole number from 1 to ', MaxNearHops);
+      Exit(2);
+    end;
+  end;
+  FetchLim:= if NearOn then NearFetchLimit else Lim;
   if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
     Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
 
@@ -7862,6 +7999,8 @@ begin
     if not TFile.Exists(DbPath) then begin Writeln('ERROR: database not found: ', DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   SetLength(AllMatches, 0);
+  SetLength(AllHops, 0);
+  SeedFound:= False;
   for DbPath in PathsToScan do
   begin
     var RoOk: Boolean;
@@ -7871,8 +8010,49 @@ begin
       if StaleDbRefusesRun(AArgs, 'query --text', DbPath) then Exit(2);
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
-    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim, AArgs.Kind);
-    for M in Matches do begin SetLength(AllMatches, Length(AllMatches) + 1); AllMatches[High(AllMatches)]:= M; end;
+    NearMap:= nil;
+    if NearOn then
+    begin
+      NearMap:= CollectNearHops(Store, AArgs, Hops, NearStatus, NearErr);
+      if NearStatus = 2 then
+      begin
+        NearMap.Free;
+        Writeln(NearErr);
+        Exit(2);
+      end;
+      if NearStatus = 1 then { seed lives in another scanned DB }
+      begin
+        NearMap.Free;
+        Continue;
+      end;
+      SeedFound:= True;
+    end;
+    try
+      Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, FetchLim, AArgs.Kind);
+      for M in Matches do
+      begin
+        SetLength(AllMatches, Length(AllMatches) + 1);
+        AllMatches[High(AllMatches)]:= M;
+        if NearOn then
+        begin
+          OwnerKey:= if M.OwnerName <> '' then M.OwnerName else M.EnclosingQName;
+          if not NearMap.TryGetValue(OwnerKey, HopOf) then HopOf:= OutsideHood;
+          SetLength(AllHops, Length(AllHops) + 1);
+          AllHops[High(AllHops)]:= HopOf;
+        end;
+      end;
+    finally
+      NearMap.Free;
+    end; // try
+  end;
+  if NearOn then
+  begin
+    if not SeedFound then
+    begin
+      Writeln('ERROR: --near symbol not found in the scanned index: ', AArgs.NearQName);
+      Exit(2);
+    end;
+    ApplyNearFilter(AllMatches, AllHops, Hops, AArgs.NearBoost);
   end;
   if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
 
@@ -7880,8 +8060,9 @@ begin
   begin
     JArr:= TJSONArray.Create;
     try
-      for M in AllMatches do
+      for I:= 0 to High(AllMatches) do
       begin
+        M:= AllMatches[I];
         JObj:= TJSONObject.Create;
         JObj.AddPair('file_path', M.FilePath );
         JObj.AddPair('start_line', TJSONNumber.Create(M.StartLine));
@@ -7891,6 +8072,9 @@ begin
         JObj.AddPair('owner_name', M.OwnerName     );
         JObj.AddPair('text'      , M.Text          );
         JObj.AddPair('enclosing' , M.EnclosingQName);
+        if NearOn then
+          if AllHops[I] >= 0 then JObj.AddPair('hop', TJSONNumber.Create(AllHops[I]))
+          else JObj.AddPair('hop', TJSONNull.Create);
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -7900,8 +8084,14 @@ begin
   end // if
   else
   begin
-    for M in AllMatches do
-      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, IfThen(M.EnclosingQName <> '', '  -> ' + M.EnclosingQName, '')]));
+    for I:= 0 to High(AllMatches) do
+    begin
+      M:= AllMatches[I];
+      HopTag:= '';
+      if NearOn and (AllHops[I] >= 0) then HopTag:= '  hop=' + IntToStr(AllHops[I]);
+      EnclTag:= if M.EnclosingQName <> '' then '  -> ' + M.EnclosingQName else '';
+      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, EnclTag, HopTag]));
+    end;
     Writeln(Format('%d match(es)', [Length(AllMatches)]));
   end;
   if Length(AllMatches) > 0 then Result:= 0 else Result:= 1;

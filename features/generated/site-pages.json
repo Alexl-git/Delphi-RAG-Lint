@@ -539,17 +539,21 @@
     "hash": "adb3f8bcab0ee8eed7ea80fcc12237bfbb20318d605a28dd9cade5f23bc158d2",
     "version": "1.35.1-alpha"
   },
+  "features/query-text-near.md": {
+    "hash": "b73330759930e41bcb5ed83d2a410d4d3368c9455b6515fe7b9516dd2a643981",
+    "version": "1.36.0-alpha"
+  },
   "features/query-type-usage.md": {
-    "hash": "59ae7d8d0526f615608c7a5a63616ae45318019a642183b766e005a277839807",
-    "version": "1.35.1-alpha"
+    "hash": "79488356bdc83f46804eab73ce13424a858963e287ae9f67cb548574abcbd9a2",
+    "version": "1.36.0-alpha"
   },
   "features/query-typecat.md": {
-    "hash": "24c1610560982b1345adfde8e549288a262fb1720d756cd87e71488271ce9493",
-    "version": "1.35.1-alpha"
+    "hash": "2ecae268e65f024cec6cd26fc07103e72cb4c626ad705a9f1d37fa68212ddb1c",
+    "version": "1.36.0-alpha"
   },
   "features/query-unit-usage.md": {
-    "hash": "3df61f381961523ae4c73f61da50337d2e4473281c2804ed219ec0bc2b761ab0",
-    "version": "1.35.1-alpha"
+    "hash": "e60a03e8bc6b7e296256f6634d19ba20ddf1a9d7ca720edb60506e38e0001dee",
+    "version": "1.36.0-alpha"
   },
   "features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md": {
     "hash": "d3380756580f9708e2c855eea45c3105fae9fb92ec938777c6b452b1ebbb8106",
@@ -632,8 +636,8 @@
     "version": "1.35.1-alpha"
   },
   "features/show-completion.md": {
-    "hash": "aeab1fd80b35799f5e2b8a06ddbf580be509dc03c546fab5e49cd468c9d7dfd5",
-    "version": "1.35.1-alpha"
+    "hash": "9444c89733ee2ca8a518b661f0321f0d35bd993038672ec0f74e3a45610cbafb",
+    "version": "1.36.0-alpha"
   },
   "features/show-in-call-graph.md": {
     "hash": "ed96e793296f4e5c4cf3977908df9006542759841a4296d5c3fe2eecdfafc647",
@@ -644,12 +648,12 @@
     "version": "1.36.0-alpha"
   },
   "features/show-signature-help.md": {
-    "hash": "32bedc4aeb848b147a76c32548357fc1088b04154612f129a1550d432b159f33",
-    "version": "1.35.1-alpha"
+    "hash": "a6b8873c2b0f9ae9a8be89ba4761d9bcbe4f2ed2ca573444dd8180137fe12adf",
+    "version": "1.36.0-alpha"
   },
   "features/show-structure.md": {
-    "hash": "410f3a9a53e43c4cd958b40b9c55f26858632d546fdb8710c0c8616e0e77095a",
-    "version": "1.35.1-alpha"
+    "hash": "674d73a581f2e61431dae882f602f4162823d5f8d15019fa48f8c5ee4cd45f01",
+    "version": "1.36.0-alpha"
   },
   "features/show-wiring-spring4d-di-dfm-events.md": {
     "hash": "a76f7d1809ec0f9cd60bdbf35351d709b22a3ed36f32dd2d127f8464a43b4e1c",
@@ -664,12 +668,12 @@
     "version": "1.35.1-alpha"
   },
   "features/symbol-search.md": {
-    "hash": "4a0549d3b669955b488c0cd1a4e1664b1edb7baab594d0f29878823a1fb022da",
-    "version": "1.35.1-alpha"
+    "hash": "678f5cd52de2e56f5a1bd6557fdcc7ab1cb5eacb5d387992c5a68dc6c59e13d6",
+    "version": "1.36.0-alpha"
   },
   "features/symbol-slice.md": {
-    "hash": "67a45c5e8deb469cf5faf27ba0f2f427bf74c04f243505487dafe0eb3d0b501a",
-    "version": "1.35.1-alpha"
+    "hash": "a22f0f981a8b5b7242a4189ac535db425a391075362cdd270c7c06d9be1e01c5",
+    "version": "1.36.0-alpha"
   },
   "features/taint-analysis.md": {
     "hash": "28709c31c3720f78a57430dda5eabed595a7b0ea23168467bfab29419ae18b17",
@@ -680,8 +684,8 @@
     "version": "1.35.1-alpha"
   },
   "features/type-at-cursor.md": {
-    "hash": "a423efcea6d1452056b249370b8f12983a1aacf8d6c7442de9fd296c149728b1",
-    "version": "1.35.1-alpha"
+    "hash": "66225ceb14ec0b2ec798f254799647399b4bab6b1c207f89db78e1bcd1c9df24",
+    "version": "1.36.0-alpha"
   },
   "features/type-name-prefix-origin.md": {
     "hash": "04f444be3a21206b846611ea89c66362c79b8cc5f46b27df460faf864728a858",
@@ -692,8 +696,8 @@
     "version": "1.35.1-alpha"
   },
   "features/usages.md": {
-    "hash": "3d6f069f18856d58825a01a46748aa7f2e675986dcf3fce778409a7c44dae0cc",
-    "version": "1.35.1-alpha"
+    "hash": "fb825ae73e5ef6c6b6bc6b60e99dffbd535cf27ab495bb7052f4867c067dd48f",
+    "version": "1.36.0-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {
     "hash": "c934d9522c4162749aadf1f2c33b7b6be4b1736faeec049d13da0cb3f5330088",
@@ -716,8 +720,8 @@
     "version": "1.35.1-alpha"
   },
   "features/wiki.md": {
-    "hash": "e744a8b9aaf87e037777a44083bf3b9e0f316315264ad20f9e275b453e413d8b",
-    "version": "1.35.1-alpha"
+    "hash": "d1fee7f07da910cdb6dee984722e7ecefa455b9d9230c8143d2d2209b26a1713",
+    "version": "1.36.0-alpha"
   },
   "features/workspace-add.md": {
     "hash": "8f9fa259eef89c1a36fe4b4d3d70fe5baf85745eee9a9cbd52225c7f692e5bff",

@@ -108,6 +108,7 @@ Find symbols, callers, callees, text and types in the index.
 | [outline](outline) | `outline`; drag-lint > Show Structure |  |
 | [query --kind --all](query-kind-all) | `query` |  |
 | [query --name-like](query-name-like) | `query` |  |
+| [query --text --near](query-text-near) | `query` |  |
 | [query ancestors](query-ancestors) | `query ancestors`; drag-lint > Inspect Symbol > Ancestors of Type (full chain)... |  |
 | [query descendants](query-descendants) | `query descendants`; drag-lint > Inspect Symbol > Descendants of Class... |  |
 | [query find-callers](query-find-callers) | `query find-callers`; drag-lint > Find Usages... |  |

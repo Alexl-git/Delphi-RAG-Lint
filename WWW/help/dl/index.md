@@ -52,6 +52,7 @@ Find symbols, callers, callees, text and types in the index.
 | [query find-callers](features/query-find-callers.md) | Lists callers of a routine by name, with an option to restrict results to precise, resolved callers | 0.1.0-alpha |
 | [query --kind --all](features/query-kind-all.md) | Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap | 1.19.1-alpha |
 | [query --name-like](features/query-name-like.md) | Case-insensitive substring search over symbol names | 1.8.0-alpha |
+| [query --text --near](features/query-text-near.md) | Keeps only text hits in routines within N call-graph hops of a symbol | 1.37.0-alpha |
 | [query type-usage](features/query-type-usage.md) | Answers one question, of a list of type names, about one file | 0.1.0-alpha |
 | [query typecat](features/query-typecat.md) | Resolves a type's category -- float, string, class, interface, and so on | 0.66.0-alpha |
 | [query unit-usage](features/query-unit-usage.md) | Shows which files reference a unit, or - with --in - which of its exports one file actually uses | 1.12.0-alpha |
