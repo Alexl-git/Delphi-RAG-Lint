@@ -163,10 +163,21 @@ function GetLibraryDbPathEx(out AReason: string): string;
 /// GetActiveProjectPlatform. Not thread-safe; call from the main thread only.</remarks>
 function GetActivePlatformForLibrary: string;
 
+/// <summary>Records this install's library index per platform (Win32, Win64) in the central
+/// settings file %LOCALAPPDATA%\drag-lint\context-defaults.json (key "libraries.&lt;Platform&gt;.libraryDb"),
+/// where the LSP and other readers fall back to it when a project names no library DB.</summary>
+/// <remarks>Called once at IDE start (Register); loads the plugin settings itself (ExePath locates
+/// the engine's drag-lint.json). Only a library DB that EXISTS under the manifest
+/// outDir is written; other keys and a platform's libraryRoots are preserved; a malformed file is
+/// left alone; an unchanged value is not rewritten. Never raises: every outcome goes to the
+/// plugin log (category ctxdefaults). Main thread only.</remarks>
+procedure PublishLibraryDefaults;
+
 implementation
 
 uses
   DragLint.Plugin.IndexJob
+  , DRagLint.Core.ContextDefaults
   ;
 
 function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
@@ -461,23 +472,19 @@ begin
   end;
 end; // function
 
-/// <summary>Returns the platform-specific library DB path using the manifest
-/// outDir and the currently active project's platform from OTAPI.
-/// Falls back to GetLibraryDbPath if the manifest or file is unavailable.</summary>
-/// <param name="ASettings">Plugin settings; ExePath provides the engine dir
-/// where drag-lint.json is located.</param>
-/// <returns>Absolute path to the best available library DB.</returns>
-/// <remarks>Not thread-safe; call from the main thread only.</remarks>
-function GetPlatformAwareLibraryDbPathEx(const ASettings: TDragLintSettings;
-  out AReason: string): string;
-{ 2026-08-17: this function used to `Exit` or fall through at FOUR points --
+function ManifestLibraryDbFor(const ASettings: TDragLintSettings;
+  const APlatform: string; out AReason, ADeclined: string): string;
+{ 2026-08-17: this lookup used to `Exit` or fall through at FOUR points --
   manifest absent, manifest unparseable, outDir missing, per-platform file
   absent -- and recorded none of them. The result was an IDE quietly resolving
   RTL/VCL against a stale index, indistinguishable from a healthy one. Every
-  decline now names itself in AReason, and the manifest beside the BPL is tried
+  decline now names itself in ADeclined, and the manifest beside the BPL is tried
   as well as the one beside the engine: a normal install has TWO copies of
   drag-lint.json and nothing keeps them in step, so probing only one turns an
-  ordinary desync into a silent downgrade. }
+  ordinary desync into a silent downgrade.
+  2026-10-28: split out of GetPlatformAwareLibraryDbPathEx so PublishLibraryDefaults
+  can ask for Win32 and Win64 explicitly; APlatform = '' keeps the old
+  active-platform-else-Win64 behaviour. }
 var
   MPath     : string        ;
   Content   : string        ;
@@ -488,17 +495,17 @@ var
   IdxVal    : TJSONValue    ;
   OutDirVal : TJSONValue    ;
   Manifests : TArray<string>;
-  Declined  : string        ;
 
   procedure Decline(const AWhy: string);
   begin
-    if Declined <> '' then Declined:= Declined + '; ';
-    Declined:= Declined + AWhy;
+    if ADeclined <> '' then ADeclined:= ADeclined + '; ';
+    ADeclined:= ADeclined + AWhy;
   end;
 
 begin
-  AReason := '';
-  Declined:= '';
+  Result   := '';
+  AReason  := '';
+  ADeclined:= '';
 
   { The engine's manifest first (it is the one that actually builds the indexes),
     then the BPL's. Duplicates are harmless -- the loop stops at the first hit. }
@@ -538,7 +545,8 @@ begin
         Continue;
       end;
 
-      LibPlat:= GetActivePlatformForLibrary;
+      LibPlat:= APlatform;
+      if LibPlat = '' then LibPlat:= GetActivePlatformForLibrary;
       if LibPlat = '' then
       begin
         LibPlat:= 'Win64';
@@ -549,7 +557,6 @@ begin
       if TFile.Exists(Db) then
       begin
         AReason:= Format('manifest %s -> outDir %s, platform %s', [MPath, OutDir, LibPlat]);
-        DLT('dbresolve', 'library: ' + AReason + ' => ' + Db);
         Exit(Db);
       end;
       Decline(Format('outDir %s has no library-%s.sqlite', [OutDir, LibPlat]));
@@ -557,11 +564,63 @@ begin
       on E: Exception do Decline(Format('%s reading %s: %s', [E.ClassName, MPath, E.Message]));
     end; // try
   end; // for
+end; // function
 
+function GetPlatformAwareLibraryDbPathEx(const ASettings: TDragLintSettings;
+  out AReason: string): string;
+var
+  Declined: string;
+begin
+  Result:= ManifestLibraryDbFor(ASettings, '', AReason, Declined);
+  if Result <> '' then
+  begin
+    DLT('dbresolve', 'library: ' + AReason + ' => ' + Result);
+    Exit;
+  end;
   Result := GetLibraryDbPathEx(AReason);
   AReason:= AReason + ' (manifest declined: ' + Declined + ')';
   DLT('dbresolve', 'library FALLBACK: ' + AReason + ' => ' + Result);
 end; // function
+
+procedure PublishLibraryDefaults;
+const
+  PLATFORMS: array[0..1] of string = ('Win32', 'Win64');
+var
+  P       : string;
+  Db      : string;
+  Reason  : string;
+  Declined: string;
+  Target  : string;
+  Settings: TDragLintSettings;
+begin
+  try
+    Settings:= LoadSettings;
+  except
+    on E: Exception do
+    begin
+      DLT('ctxdefaults', 'skipped: settings unreadable: ' + E.ClassName + ': ' + E.Message);
+      Exit;
+    end;
+  end; // try
+  Target:= ContextDefaultsFile;
+  if Target = '' then
+  begin
+    DLT('ctxdefaults', 'skipped: LOCALAPPDATA not set');
+    Exit;
+  end;
+  for P in PLATFORMS do
+    try
+      Db:= ManifestLibraryDbFor(Settings, P, Reason, Declined);
+      if Db = '' then
+        DLT('ctxdefaults', P + ': no library index (' + Declined + ')')
+      else if MergeLibraryDefault(Target, P, Db) then
+        DLT('ctxdefaults', P + ': wrote ' + Db + ' to ' + Target)
+      else
+        DLT('ctxdefaults', P + ': unchanged or file not writable as JSON (' + Target + ')');
+    except
+      on E: Exception do DLT('ctxdefaults', P + ': ' + E.ClassName + ': ' + E.Message);
+    end; // try
+end; // procedure
 
 function GetPlatformAwareLibraryDbPath(
   const ASettings: TDragLintSettings): string;

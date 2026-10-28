@@ -41,6 +41,7 @@ uses
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.About
   , DragLint.Plugin.Settings      { MigrateGhostTextDefault -- see Register }
+  , DragLint.Plugin.DbResolver    { PublishLibraryDefaults -- see Register }
   ;
 
 {$R 'DragLintSplash.res'}
@@ -109,6 +110,10 @@ begin
     EnableGhostText=0 under the old default would otherwise never see the new
     one, and KAI would keep failing to reach an unbound port. Runs once. }
   try MigrateGhostTextDefault; except end;
+  { Central settings folder (%LOCALAPPDATA%\drag-lint\context-defaults.json): record which
+    library index this install has per platform, so the LSP and the engine resolve a loose
+    unit against the same library the IDE uses. Never blocks start-up. }
+  PublishLibraryDefaults;
   RegisterPackageWizard(TDragLintWizard.Create);
   try RegisterDragLintAbout; except end;
   RegisterDragLintMenu;

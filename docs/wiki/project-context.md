@@ -47,3 +47,9 @@ define sets today; another platform name is kept but gets the Win64 built-ins.
 `%LOCALAPPDATA%\drag-lint\context-defaults.json` (override: environment variable
 `DRAGLINT_CONTEXT_DEFAULTS`) holds per-user fallbacks: `platform`, `config`,
 `targetCompiler` and per-platform `libraries`. Readers tolerate its absence.
+
+The RAD Studio plugin writes `libraries.<Platform>.libraryDb` for Win32 and Win64 each time
+the IDE starts: the `library-<Platform>.sqlite` under the manifest `indexes.outDir`, only when
+that file exists. It changes nothing else in the file (your `platform`, `config`,
+`targetCompiler` and `libraryRoots` stay), does not rewrite an unchanged value, and leaves a
+file that is not valid JSON alone. Each outcome is in the plugin log under `ctxdefaults`.
