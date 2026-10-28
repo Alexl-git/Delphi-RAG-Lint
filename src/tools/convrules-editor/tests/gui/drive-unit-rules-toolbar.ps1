@@ -176,7 +176,8 @@ public static class W {
 }
 '@
 $script:pass = 0; $script:fail = 0
-function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
+trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 # TEngineWaitForm (Task 4, 2026-09-30) is the editor's progress window for slow
 # property-tree loads: correct behaviour, never the dialog a step waits for. Forms
 # leaves it out, and WaitFor / WaitCls first wait for it to close (WaitEngineIdle),
@@ -367,4 +368,5 @@ try {
 finally {
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
   "gui2: $script:pass pass / $script:fail fail"
+if ($script:fail -gt 0) { exit 1 }
 }
