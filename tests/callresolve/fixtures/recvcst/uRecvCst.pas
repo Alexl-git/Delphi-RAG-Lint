@@ -38,7 +38,14 @@ type
     procedure Go(const O: TInner; M: ICopy);
   end;
 
+function Twin(const A: TInner): TInner;
+
 implementation
+
+function Twin(const A: TInner): TInner;
+begin
+  Result:= A;
+end;
 
 procedure TLeaf.K;
 begin
@@ -72,6 +79,9 @@ begin
   (O.Mk('e') as TInner).L.K;
   M.Run;
   X:= (O as TInner).L;
+  X:= TInner(O).L;
+  X:= Twin(O).L;
+  X:= Nope(O).L;
   Undeclared.Mk('x').K;
   O.Missing('x').K;
   K;

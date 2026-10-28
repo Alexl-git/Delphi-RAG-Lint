@@ -25,6 +25,9 @@
     P6  (O.Mk('e') as TInner).L.K       the blank after ')' survives: K -> TLeaf.K
     P5  M.Run                           interface head -> ICopy.Run
     R5  X:= (O as TInner).L             member-access L, receiver `(O as TInner)` -> TInner.L
+    H1  X:= TInner(O).L                 hard cast: member-access L, receiver `TInner(O)` -> TInner.L
+    H2  X:= Twin(O).L                   a FUNCTION of one arg: L typed by Twin's result -> TInner.L
+    H3  X:= Nope(O).L                   undeclared head -> NO binding for L
     N1  Undeclared.Mk('x').K            untyped head -> NO binding for Mk or K
     N2  O.Missing('x').K                untyped call segment -> NO binding
     N3  K                               bare -> receiver '' after resolve, NO binding
@@ -114,7 +117,8 @@ $p6 = LineOf "(O.Mk('e') as TInner).L.K;"
 $p5 = LineOf 'M.Run;';            $r5 = LineOf 'X:= (O as TInner).L;'
 $n1 = LineOf "Undeclared.Mk('x').K;"; $n2 = LineOf "O.Missing('x').K;"
 $n3 = LineOf 'K;'
-Check 'fixture statements located' (@($p1,$p2,$pc,$p3,$p4,$p6,$p5,$r5,$n1,$n2,$n3) -notcontains -1)
+$h1 = LineOf 'X:= TInner(O).L;'; $h2 = LineOf 'X:= Twin(O).L;'; $h3 = LineOf 'X:= Nope(O).L;'
+Check 'fixture statements located' (@($p1,$p2,$pc,$p3,$p4,$p6,$p5,$r5,$n1,$n2,$n3,$h1,$h2,$h3) -notcontains -1)
 
 $v = RcvOf $pc 'K' 'call';  Check 'positive control: O.L.K receiver' ($v -eq 'O.L') $v
 $v = BoundOf $pc 'K';       Check 'positive control: O.L.K -> TLeaf.K' ($v -eq 'uRecvCst.TLeaf.K') $v
@@ -141,6 +145,15 @@ $v = BoundOf $p5 'Run';      Check 'P5 interface head -> ICopy.Run' ($v -eq 'uRe
 
 $v = RcvOf $r5 'L' 'member-access'; Check 'R5 (X as T).M emits member-access L, receiver (O as TInner)' ($v -eq '(O as TInner)') $v
 $v = BoundOf $r5 'L';               Check 'R5 L -> TInner.L' ($v -eq 'uRecvCst.TInner.L') $v
+
+# 2b (1.37.0 B-FLOW): the HARD cast T(X).M emits the member-access too; the resolver's
+# kind 6 / kind 11 decide cast vs call, so a real function is typed by its RESULT.
+$v = RcvOf $h1 'L' 'member-access'; Check 'H1 T(X).M emits member-access L, receiver TInner(O)' ($v -eq 'TInner(O)') $v
+$v = BoundOf $h1 'L';               Check 'H1 hard cast: L -> TInner.L' ($v -eq 'uRecvCst.TInner.L') $v
+$v = RcvOf $h2 'L' 'member-access'; Check 'H2 F(X).M emits member-access L, receiver Twin(O)' ($v -eq 'Twin(O)') $v
+$v = BoundOf $h2 'L';               Check 'H2 function, not a cast: L -> TInner.L via the result type' ($v -eq 'uRecvCst.TInner.L') $v
+$v = RcvOf $h3 'L' 'member-access'; Check 'H3 the ref exists (the no-binding check below is not vacuous)' ($v -eq 'Nope(O)') $v
+$v = BoundOf $h3 'L';               Check 'H3 undeclared head Nope(O): L has NO binding' ($v -eq '') $v
 
 $v = RcvOf $n1 'K' 'call';  Check "N1 receiver Undeclared.Mk('x')" ($v -eq "Undeclared.Mk('x')") $v
 $v = BoundOf $n1 'K';       Check 'N1 untyped head: K has NO binding' ($v -eq '') $v
