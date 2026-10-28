@@ -127,29 +127,28 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**289 rules. 110 have an auto-fix. 244 are on by default.** 196 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**196 rules. 65 have an auto-fix. 154 are on by default.** 196 are built-in checks; 0 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 88 | 33 |
+| bug-patterns | 48 | 13 |
 | complexity | 13 | 2 |
 | data-flow | 9 | 2 |
-| dead-code | 19 | 15 |
+| dead-code | 12 | 8 |
 | documentation | 5 | 4 |
 | firedac | 3 | 3 |
 | metrics | 8 | - |
-| modernize | 4 | 4 |
-| naming | 13 | 9 |
-| other | 11 | 3 |
-| platform | 10 | 4 |
+| modernize | 1 | 1 |
+| naming | 12 | 9 |
+| platform | 3 | 1 |
 | policy | 3 | - |
 | project-wide | 30 | 6 |
-| refactoring | 20 | 8 |
-| resource-lifetime | 14 | 7 |
+| refactoring | 16 | 4 |
+| resource-lifetime | 12 | 6 |
 | review-markers | 5 | 2 |
-| security | 22 | 2 |
-| structure | 12 | 6 |
-| **Total** | **289** | **110** |
+| security | 11 | 1 |
+| structure | 5 | 3 |
+| **Total** | **196** | **65** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -168,7 +167,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 289 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 196 rules, 65 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
@@ -332,6 +331,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [lsp](lsp) | `lsp` |  |
 | [MCP server](Register-MCP-Server) | `mcp find_symbol`; `mcp find_callers`; `mcp lint`; `mcp get_symbol_doc`; `mcp find_by_doc_tag`; `mcp find_undocumented`; `mcp get_impact`; `mcp get_wiring`; `mcp get_surface`; `mcp get_slice`; `mcp get_context_bundle`; `mcp get_type_at_position`; `mcp rename_symbol`; `mcp run_ast_checks`; `mcp run_compile_check` |  |
 | [Output encoding (--output-encoding)](output-encoding) | `sql` |  |
+| [project-context](project-context) | `project-context` |  |
 | [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `mcp-config` |  |
 | [serve](serve) | `serve` |  |
 | [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |

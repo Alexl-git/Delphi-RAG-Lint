@@ -17,6 +17,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md) -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink.
 
+## 1.36.0-alpha
+
+* [project-context](features/project-context.md) -- Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness.
+
 ## 1.35.1-alpha
 
 * [Rule chains (single-pass warning, merge / split)](features/convrules-rule-chains.md) -- ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books.
