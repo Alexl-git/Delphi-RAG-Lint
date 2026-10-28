@@ -86,7 +86,8 @@ function EditorBusy(AWaitDepth: Integer; AHourGlass: Boolean): Boolean;
 /// ChainForm already exists". The editor's Busy query (EDITOR_BUSY_QUERY_MSG) stays EditorBusy:
 /// the GUI drivers wait for a modal by its caption, not by that answer. A native common dialog
 /// (Open / Save As / folder) runs its own message loop that never reaches Application.OnMessage,
-/// so this verdict does not filter commands posted under one -- that gap is closed separately.</remarks>
+/// so this verdict does not filter commands posted under one -- NativeLoopVerdict (run from the
+/// main form's WH_GETMESSAGE hook) covers that loop.</remarks>
 function GateBusy(AWaitDepth: Integer; AHourGlass, AMainEnabled: Boolean): Boolean;
 
 /// <summary>PURE (DRV-2b): whether a refused command's notice (LostCommandStatus) must
