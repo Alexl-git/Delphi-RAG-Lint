@@ -70,6 +70,7 @@ uses
   DRagLint.Core.FileTime;
 
 const
+  KIND_TEXT_TYPE      = 'type';
   /// <summary>How many unbound callee names the summary line lists.</summary>
   TOP_UNBOUND_COUNT = 10;
   PERCENT_SCALE     = 100;
@@ -87,6 +88,7 @@ const
   REF_KIND_WRITE      = 'write';
   REF_KIND_MEMBER     = 'member-access';
   MEMBER_MODE_WRITE   = 'write';
+  MEMBER_MODE_READ    = 'read';
   ANCESTOR_INTERFACE  = 'interface';
   NAME_RESULT         = 'result';
   NAME_SELF           = 'Self';
@@ -176,6 +178,7 @@ type
     FSummary     : TArray<TEffectSummary>;
     FUses        : TArray<TArray<TCalleeUse>>;
     FUnbound     : TDictionary<string, Integer>;
+    FProcTypes   : TNameSet;   // lower-case names of plain procedural types, not reference-to
     FStats       : TPurityStats;
     FVisits      : Integer;
     FLexTicks    : Int64;
@@ -192,6 +195,8 @@ type
     procedure CacheLines(AFileId: Int64; const ALines: TArray<string>);
     function  LinesOf(AFileId: Int64; out ALines: TArray<string>): Boolean;
     function  IsBound(const ARef: TReference): Boolean;
+    function  IsProcTypedTarget(ATargetId: Int64): Boolean;
+    function  IsImplicitProcCall(const ALines: TArray<string>; const ARef: TReference): Boolean;
     function  Classify(AIndex: Integer; const AText: string): TArgInfo;
     function  SelfReceiver: TArgInfo;
     function  ReceiverOf(AIndex: Integer; const AText: string; const ATarget: TSymbol; AIsInherited: Boolean): TArgInfo;
@@ -262,12 +267,14 @@ begin
   FOwnedSets  := TObjectList<TNameSet>.Create(True);
   FOwnedMaps  := TObjectList<TParamMap>.Create(True);
   FUnbound    := TDictionary<string, Integer>.Create;
+  FProcTypes  := NewSet;
   FEmptySet   := NewSet;
   FEmptyMap   := NewMap;
 end;
 
 destructor TPurityRun.Destroy;
 begin
+  FProcTypes := nil;
   FUnbound.Free;
   FOwnedMaps.Free;
   FOwnedSets.Free;
@@ -445,6 +452,47 @@ begin
   end;
 end;
 
+{ True for a type signature that declares a PLAIN procedural type or method
+  pointer (procedure, function: Integer, procedure of object). A "reference to"
+  anonymous method is excluded: it needs explicit parens to run, so a paren-less
+  read of one is a value, not a call (a parenthesised call already has its own
+  call ref). }
+function IsProcTypeSignature(const ASignature: string): Boolean;
+var
+  S: string;
+begin
+  S:= LowerCase(Trim(ASignature));
+  Result:= S.StartsWith('procedure') or S.StartsWith('function');
+end;
+
+{ True when the symbol a read ref binds to is a variable, parameter or field
+  whose declared type is a plain procedural type (named, or written inline). }
+function TPurityRun.IsProcTypedTarget(ATargetId: Int64): Boolean;
+var
+  T: TSymbol;
+begin
+  Result:= False;
+  if ATargetId <= 0 then Exit;
+  T:= SymbolById(ATargetId);
+  if not (T.Kind in [skVarDecl, skField]) and (T.Kind.ToText <> KIND_TEXT_LOCAL_VAR) and (T.Kind.ToText <> KIND_TEXT_PARAM) then Exit;
+  Result:= IsProcTypeSignature(T.Signature) or FProcTypes.ContainsKey(LowerKey(Trim(T.Signature)));
+end;
+
+{ A paren-less read of a procedural-type value RUNS it (Result := F;,
+  P;). Not a call: @P, Assigned(P), P = nil, P <> nil. }
+function TPurityRun.IsImplicitProcCall(const ALines: TArray<string>; const ARef: TReference): Boolean;
+var
+  Line, Before, After: string;
+begin
+  Result:= True;
+  if (ARef.StartLine < 1) or (ARef.StartLine > Length(ALines)) then Exit;
+  Line:= MaskLinePreservingColumns(ALines[ARef.StartLine - 1]);
+  Before:= LowerCase(TrimRight(Copy(Line, 1, ARef.StartCol - 1)));
+  After:= TrimLeft(Copy(Line, ARef.StartCol + Length(ARef.NameText), MaxInt));
+  if Before.EndsWith('@') or Before.EndsWith('assigned(') then Exit(False);
+  if After.StartsWith('=') or After.StartsWith('<>') then Exit(False);
+end;
+
 function TPurityRun.IsBound(const ARef: TReference): Boolean;
 var
   E: TCallEdge;
@@ -578,6 +626,8 @@ begin
   for var E in FStore.DumpAllCallEdges do FEdges.AddOrSetValue(E.RefId, E);
   for var M in FStore.DumpAllMemberAccesses do FMembers.AddOrSetValue(M.RefId, M);
   for var S in FStore.GetAllFileStamps do FStamps.AddOrSetValue(S.Path, S.MTimeUnix);
+  for var T in FStore.FindSymbolsByKind(KIND_TEXT_TYPE, False, MaxInt) do
+    if IsProcTypeSignature(T.Signature) then FProcTypes.AddOrSetValue(LowerKey(T.Name), True);
 end;
 
 { Params (ordered by declaration position -> ordinal) and locals per routine,
@@ -1115,7 +1165,9 @@ begin
         Exit;
       end;
     end;
-    if M.MemberMode = MEMBER_MODE_WRITE then MemberWrite(AIndex, ARef.ReceiverText, ARef.NameText, ASum, AChanged);
+    if M.MemberMode = MEMBER_MODE_WRITE then MemberWrite(AIndex, ARef.ReceiverText, ARef.NameText, ASum, AChanged)
+    else if (M.MemberMode = MEMBER_MODE_READ) and IsProcTypedTarget(M.TargetSymbolId) and IsImplicitProcCall(ALines, ARef) then
+      ASum.AddFlag(efUnknown, 'reads procedural member ' + ARef.ReceiverText + '.' + ARef.NameText + ' (implicit call, target not followed)', AChanged);
     Exit;
   end;
   ASum.AddFlag(efUnknown, 'accesses ' + ARef.ReceiverText + '.' + ARef.NameText + ' (unbound member)', AChanged);
@@ -1162,6 +1214,13 @@ begin
           CallLine:= R.StartLine;
           CallCol:= R.StartCol;
           CallRef(AIndex, R, ALines, Sum, Changed, UseList);
+        end
+        else if R.Kind = REF_KIND_READ then
+        begin
+          { FIX-3 part 2: a paren-less read of a procedural-type variable runs
+            whatever it holds -- an unknown callee. }
+          if IsProcTypedTarget(R.SymbolId) and IsImplicitProcCall(ALines, R) then
+            Sum.AddFlag(efUnknown, 'reads procedural variable ' + R.NameText + ' (implicit call, target not followed)', Changed);
         end
         else if R.Kind = REF_KIND_MEMBER then
         begin

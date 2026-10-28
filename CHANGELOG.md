@@ -10,6 +10,7 @@ breaking changes** until v1.0.
 - Manifest section key `"libraryResolve": true` (default false; the 2026-10-25 no-attach ruling stands): `index --all` / `index --project` open the platform library as an extra store for the call-resolve pass. Guard `tests\autotest\run_library_resolve_key.ps1`.
 
 ### Changed
+- Purity: a paren-less read of a procedural-type value (`Result := F;` with `F: TPlainFunc`, `Result := pHolder.FGet;` with a method-pointer field) is an implicit call to an unknown target and scores unknown (`?`, witness `reads procedural variable ...`) instead of effect-free (BACKLOG-TRIAGE-2026-09-28 FIX-3 part 2). `reference to` types, `Assigned(P)`, `@P` and `P = nil` / `P <> nil` stay effect-free. Resolver surface: INT bumps `DRAGLINT_RESOLVER_VERSION` once. Guard `tests\autotest\run_purity_proc_type_call.ps1`.
 - The `Called from:` name bucket drops a candidate whose recorded receiver type (`refs.receiver_type_text`) is a type declared in the same index and unrelated to the target's owner (not the owner, an ancestor, or a descendant); a library type (not declared in the index) is kept, marked `?`. Autodoc text moves only on an index re-resolved by the 1.16 resolver. Guard `tests\autodoc\run_called_from_type_filter.ps1`.
 - `--help` names `--out-root <dir>` on compare (its code reads it); the flag-verb map baseline drops 104 -> 103 cells.
 - `--help` names `--output` on lint-project and `--json` on check-ast and serve (every verb whose code reads --out / --json now shows it); the flag-verb map baseline drops 108 -> 104 cells.
