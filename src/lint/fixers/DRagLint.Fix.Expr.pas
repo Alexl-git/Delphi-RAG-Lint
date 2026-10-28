@@ -193,6 +193,13 @@ end;
 
 { ---- ifthen-to-if-expression ---- }
 
+{ True when AOperand is a bare identifier whose declared type is an array (so it cannot join an if-expression). }
+function IsArrayOperand(const AFinding: TLintFinding; const AOperand: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(Trim(AOperand), '^' + IDENT_RE + '$') and
+    TRegEx.IsMatch(Trim(DeclTypeOf(AFinding.FilePath, AFinding.StartLine, Trim(AOperand))), '^array\b', [roIgnoreCase]);
+end;
+
 { ifthen-to-if-expression: `if C then X := A else X := B;` -> `X := if C then A else B;`,
   one line, in the statement's own indent. }
 function FixIfThenToIfExpr(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
@@ -225,6 +232,8 @@ begin
   if not Match.Success then Exit;
   if TRegEx.IsMatch(Match.Groups['c'].Value + ' ' + Match.Groups['a'].Value + ' ' + Match.Groups['b'].Value,
     NESTED, [roIgnoreCase]) then Exit;
+  { a bare array-typed operand (array of Char beside a string) is not an if-expression operand: E2010 }
+  if IsArrayOperand(AFinding, Match.Groups['a'].Value) or IsArrayOperand(AFinding, Match.Groups['b'].Value) then Exit;
   NewTxt:= Match.Groups['l'].Value + Match.Groups['op'].Value + 'if ' + Match.Groups['c'].Value + ' then ' +
     Match.Groups['a'].Value + ' else ' + Match.Groups['b'].Value + Match.Groups['semi'].Value;
   E:= Default(TTextEdit);
