@@ -377,8 +377,9 @@ try {
 }
 finally {
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-  Get-ChildItem $tmp -File | ForEach-Object { [IO.File]::Delete($_.FullName) }
-  [IO.Directory]::Delete($tmp)
+  [void]$p.WaitForExit(15000)
+  # Cleanup is not a check: a just-killed editor (or its engine child) can still hold the folder for a moment.
+  try { Get-ChildItem $tmp -File | ForEach-Object { [IO.File]::Delete($_.FullName) }; [IO.Directory]::Delete($tmp) } catch { "INFO  cleanup: $($_.Exception.Message)" }
   "gui-save-encoding: $script:pass pass / $script:fail fail"
 }
 if ($script:fail -gt 0) { exit 1 }
