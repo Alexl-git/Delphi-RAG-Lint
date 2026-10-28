@@ -4,10 +4,10 @@ title: Find Usages
 summary: Lists every reference to the symbol under the editor caret across the indexed project
 product: DL
 group: search-navigation
-order: 20008
+order: 20009
 since: 0.33.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Find Usages

@@ -4,10 +4,10 @@ title: Symbol Slice
 summary: "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context"
 product: DL
 group: search-navigation
-order: 20028
+order: 20029
 since: 0.17.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Symbol Slice

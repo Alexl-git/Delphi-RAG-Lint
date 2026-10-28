@@ -4,10 +4,10 @@ title: Go to Definition
 summary: Jumps the editor caret to the declaration of the symbol under the cursor
 product: DL
 group: search-navigation
-order: 20011
+order: 20012
 since: 0.47.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Go to Definition
