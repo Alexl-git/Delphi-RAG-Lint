@@ -15903,6 +15903,12 @@ begin
   Check('gate.busy.wait', EditorBusy(1, False), '(the 400 ms before the window shows counts too)');
   Check('gate.busy.hourglass', EditorBusy(0, True));
   Check('gate.idle', not EditorBusy(0, False));
+  // chainform: a command posted to the main form while one of its modal dialogs is up (Rule
+  // chains) is refused, not run re-entrantly inside that dialog's message loop.
+  Check('gate.filter.modal', GateBusy(0, False, False), '(a modal window disables the main form: its queued commands are refused)');
+  Check('gate.filter.idle', not GateBusy(0, False, True), '(idle, main form enabled)');
+  Check('gate.filter.wait', GateBusy(1, False, True) and GateBusy(0, True, True), '(EditorBusy still counts)');
+  Check('gate.filter.query.unchanged', not EditorBusy(0, False), '(the Busy query the drivers wait on does NOT count a modal)');
   // DRV-2b: the lost-command notice waits for the OPERATION, never for the editor to be the active application.
   Check('gate.notice.idle.due', not LostNoticeDeferred(0, False, True, False), '(idle main form, whatever application is active: the notice is due)');
   Check('gate.notice.wait', LostNoticeDeferred(1, False, True, False), '(an engine wait still runs)');
