@@ -231,7 +231,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > ASCII output is byte-for-byte what it always was. `--output-encoding utf8` or
 > `utf16` writes UTF-8 / UTF-16LE instead (no BOM); `"outputEncoding": "utf8"` in
 > `.drag-lint.json` sets it when the command line does not; any other value is an
-> argument error (exit 3). Files a verb writes (`--output`) are not affected.
+> argument error (exit 3). Files a verb writes (`--output`, reports) obey it too. When an ascii run turns non-ASCII characters into `\uXXXX` escapes it prints ONE stderr warning naming the count and how to switch (`--output-encoding utf8`, or `"outputEncoding"` in `.drag-lint.json`); a JSON file written with `--output` then also carries a leading `"lossy_output": N`.
 > Non-ANSI characters in paths are stored in the index intact (they were `?`
 > before 2026-10-26).
 

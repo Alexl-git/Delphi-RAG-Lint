@@ -47,7 +47,7 @@ server's `lint --json` child) all read it unchanged.
   the same pipe.
 * The LSP control channel's stderr lines.
 
-Not covered: files a verb writes (`--output`, reports, generated source -- a
+Not covered: generated source (a
 converted `.pas` / `.dfm` keeps the encoding the converter chooses), and the
 LSP / MCP JSON-RPC transport, which is UTF-8 by protocol.
 
@@ -59,3 +59,12 @@ parameter is now bound as UTF-16, so `C:\src\caf\u00e9_\u0434\Unit1.pas` (writte
 here in the ascii escape) is stored and answered intact.
 
 Guard: `tests\autotest\run_output_encoding.ps1`.
+
+## Files a verb writes, and the lossy-output warning
+
+`--output` files and reports follow `--output-encoding` exactly like stdout: ascii writes `\uXXXX`,
+utf8 / utf16 write raw bytes, never a BOM. When an ascii run turns non-ASCII characters into
+escapes it prints one stderr warning with the count and the two ways to switch
+(`--output-encoding utf8`, or `"outputEncoding": "utf8"` in `.drag-lint.json`). A JSON file written
+with `--output` also gets a leading `"lossy_output": N`; stdout JSON does not (it streams before the
+total is known). A pure-ASCII run prints no warning.

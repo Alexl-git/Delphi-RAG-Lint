@@ -27,7 +27,8 @@ unit DRagLint.Core.OutputEncoding;
 interface
 
 uses
-  System.SysUtils
+  System.SysUtils,
+  System.IOUtils
   ;
 
 type
@@ -92,10 +93,32 @@ function CurrentOutputEncoding: TOutputEncoding;
 /// <returns>True when the switch is present (valid or not).</returns>
 function OutputEncodingOnCommandLine(out pEncoding: TOutputEncoding; out pValue: string): Boolean;
 
+/// <summary>Writes a file a verb produces (--output, a report) in the current
+/// output mode, so the file obeys --output-encoding exactly as stdout does.</summary>
+/// <param name="pPath">Target file; created or truncated.</param>
+/// <param name="pText">The text to write.</param>
+/// <remarks>ascii: non-ASCII becomes \uXXXX and is counted as lost output; utf8:
+/// UTF-8 without BOM; utf16: UTF-16LE without BOM. When the text is a JSON object
+/// and characters were lost so far in this run, a "lossy_output":N member is added
+/// as its first member.</remarks>
+procedure WriteOutputFile(const pPath, pText: string);
+
+/// <summary>How many non-ASCII characters this run wrote as \uXXXX escapes
+/// (ascii mode only).</summary>
+/// <returns>The count; 0 when nothing was lost or the mode is not ascii.</returns>
+function LossyOutputCount: Integer;
+
+/// <summary>The one-line warning text for pCount lost characters.</summary>
+/// <param name="pCount">Characters escaped in this run, greater than 0.</param>
+/// <returns>Pure ASCII text naming the count, the --output-encoding switch and
+/// the outputEncoding key of .drag-lint.json.</returns>
+function LossyOutputWarning(pCount: Integer): string;
+
 implementation
 
 uses
-  Winapi.Windows
+  Winapi.Windows,
+  System.SyncObjs
   ;
 
 const
@@ -110,6 +133,7 @@ const
 var
   GEncoding: TOutputEncoding = oeAscii;
   GInstalled: Boolean = False;
+  GLossy: Integer = 0;
   { An incomplete UTF-8 sequence left at the end of one buffer flush, kept for
     the next: the RTL flushes a full buffer wherever it happens to end. Index 0
     is Output, 1 is ErrOutput. }
@@ -160,13 +184,24 @@ begin
   end;
 end;
 
+procedure CountLost(const pText: string);
+var
+  C: Char;
+begin
+  for C in pText do
+    if Ord(C) >= ASCII_LIMIT then TInterlocked.Increment(GLossy);
+end;
+
 function EncodeForOutput(const pText: string): TBytes;
 begin
   case GEncoding of
     oeUtf8 : Result:= TEncoding.UTF8.GetBytes(pText);
     oeUtf16: Result:= TEncoding.Unicode.GetBytes(pText);
   else
+  begin
     Result:= TEncoding.ASCII.GetBytes(EscapeNonAscii(pText));
+    CountLost(pText);
+  end;
   end;
 end;
 
@@ -317,5 +352,54 @@ begin
       TryParseOutputEncoding(pValue, pEncoding);
     end;
 end;
+
+
+function LossyOutputCount: Integer;
+begin
+  if GEncoding = oeAscii then Result:= GLossy else Result:= 0;
+end;
+
+function LossyOutputWarning(pCount: Integer): string;
+begin
+  Result:= Format('drag-lint: warning: %d non-ASCII character(s) were written as \uXXXX escapes ' +
+    '(output encoding ascii). To write them as-is: add --output-encoding utf8 (or utf16) to the ' +
+    'command line, or set "outputEncoding": "utf8" in drag-lint.json / .drag-lint.json.', [pCount]);
+end;
+
+procedure WriteOutputFile(const pPath, pText: string);
+var
+  Text: string;
+  Pending: Integer;
+begin
+  Text:= pText;
+  if GEncoding = oeAscii then
+  begin
+    Pending:= 0;
+    for var C in pText do
+      if Ord(C) >= ASCII_LIMIT then Inc(Pending);
+    { a JSON object report: say how much was lost, as its first member }
+    if (GLossy + Pending > 0) and (Length(Text) > 1) and (Text[1] = '{') and (Text[2] <> '}') then
+      Text:= '{"lossy_output":' + IntToStr(GLossy + Pending) + ',' + Copy(Text, 2, MaxInt);
+  end;
+  TFile.WriteAllBytes(pPath, EncodeForOutput(Text));
+end;
+
+procedure WarnLossyOnce;
+var
+  N: Integer;
+begin
+  N:= LossyOutputCount;
+  if N <= 0 then Exit;
+  try
+    Writeln(ErrOutput, LossyOutputWarning(N));
+    Flush(ErrOutput);
+  except
+    { stderr closed: nothing left to warn on }
+  end;
+end;
+
+initialization
+finalization
+  WarnLossyOnce;
 
 end.

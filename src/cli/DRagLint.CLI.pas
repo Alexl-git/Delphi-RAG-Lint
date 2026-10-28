@@ -886,7 +886,7 @@ begin
   Writeln('  --output-encoding ascii|utf8|utf16   default ascii, or "outputEncoding" in .drag-lint.json.');
   Writeln('  ascii: 7-bit only; each non-ASCII UTF-16 code unit is written \uXXXX (lower-case hex,');
   Writeln('         a surrogate pair outside the BMP) -- the JSON escape, so --json decodes exactly.');
-  Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) are not affected.');
+  Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) obey it too; ascii runs that lose characters warn once on stderr.');
 end; // procedure
 
 const
@@ -12320,7 +12320,7 @@ begin
   if AArgs.Output = '' then Writeln(ADoc)
   else
   begin
-    TFile.WriteAllBytes(AArgs.Output, TEncoding.UTF8.GetBytes(ADoc + sLineBreak));
+    WriteOutputFile(AArgs.Output, ADoc + sLineBreak);
     Writeln(ErrOutput, 'drag-lint: findings written to ' + AArgs.Output);
   end;
 end;
@@ -15925,7 +15925,7 @@ begin
     else if Fmt = 'csv' then Output:= RenderCsv(Rep)
     else Output:= RenderText(Rep);
 
-    if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, Output, TEncoding.ANSI)
+    if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, Output)
     else Writeln(Output);
   finally
     for i:= 0 to High(Stores) do Stores[i]:= nil;
@@ -16240,7 +16240,7 @@ begin
       end;
     end; // else
 
-    if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
+    if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, OutStr)
     else Writeln(OutStr);
   finally
     Store.Free;
@@ -17385,7 +17385,7 @@ begin
     JRows.Free; { nil once JRoot took it; a failure path still owns it here }
   end; // try
 
-  if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
+  if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, OutStr)
   else WriteStdoutDocument(OutStr + sLineBreak); // after every stderr byte (T2i R18)
   Result:= 0;
 end; // function
@@ -21419,7 +21419,7 @@ begin
           non-ASCII (a path can hold it) still round-trips, while the ordinary
           all-ASCII report is now byte-for-byte plain ASCII. Pinned by
           tests\autotest\run_report_encoding.ps1. }
-        TFile.WriteAllBytes(OutPath, TEncoding.UTF8.GetBytes(OL.ToString));
+        WriteOutputFile(OutPath, OL.ToString);
       finally
         OL.Free;
       end;
@@ -27209,7 +27209,7 @@ begin
   begin
     // ASCII / CRLF file (rules DSL is strict 7-bit ASCII). AppendLine already
     // emitted platform CRLFs on Windows; ANSI keeps the bytes 1:1.
-    TFile.WriteAllText(AArgs.Output, OutText, TEncoding.ANSI);
+    WriteOutputFile(AArgs.Output, OutText);
     Writeln('Wrote ', AArgs.Output);
   end
   else
@@ -30558,7 +30558,7 @@ begin
   except
     on E: Exception do begin Writeln(ErrOutput, 'forms-csv: ', E.Message); Exit(1); end;
   end;
-  if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Csv, TEncoding.ANSI); Writeln('forms-csv: wrote ', AArgs.Output); end
+  if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Csv); Writeln('forms-csv: wrote ', AArgs.Output); end
   else Write(Csv);
   Result:= 0;
 end; // function
@@ -30630,7 +30630,7 @@ begin
   end;
   if AArgs.Output <> '' then
   begin
-    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    WriteOutputFile(AArgs.Output, Txt);
     Writeln('menu-tree: wrote ', AArgs.Output);
   end
   else Write(Txt);
@@ -30726,7 +30726,7 @@ begin
   end;
   if AArgs.Output <> '' then
   begin
-    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    WriteOutputFile(AArgs.Output, Txt);
     Writeln('menu-drift: wrote ', AArgs.Output);
   end
   else Write(Txt);
