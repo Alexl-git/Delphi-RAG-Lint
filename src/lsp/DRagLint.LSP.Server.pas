@@ -2861,7 +2861,7 @@ begin
   if (Marked <> '') and SameText(ExpandFileName(Marked), ExpandFileName(AProjectDb)) then
     Exit('needs re-resolve (test marker)');
   { lf-marker (gaps/lf-marker cb98fe76): schema_meta.library_resolve_state =
-    JSON {state: pending|bound, platform, library, reason, ...}; missing or
+    JSON (state: pending|bound, platform, library, reason, ...); missing or
     empty = no marker. Only `pending` is incomplete. The key is spelled here
     until Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY reaches this base. }
   var St: ISymbolStore:= nil;
