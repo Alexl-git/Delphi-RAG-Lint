@@ -3467,7 +3467,8 @@ begin
           if (Length(Syms) = 0) and (ALibStore <> nil) then
             Syms := ALibStore.FindSymbolsByExactName(ACalleeName);
           Any := False; Seen := pmUnknown;
-          MethodAny := False; MethodSeen := pmUnknown;
+          MethodAny := False;
+          MethodSeen := pmUnknown;
           for I := 0 to High(Syms) do
           begin
             { ONLY A FREE ROUTINE MAY ANSWER A BARE-NAME CALL. A bare `Foo(...)`
@@ -3499,8 +3500,13 @@ begin
             if Syms[I].Kind = skMethod then
             begin
               if ModeOf(Syms[I].Signature, M) then
-                if not MethodAny then begin MethodSeen := M; MethodAny := True; end
-                else if M <> MethodSeen then MethodSeen := pmUnknown;
+                if not MethodAny then
+                begin
+                  MethodSeen := M;
+                  MethodAny := True;
+                end
+                else if M <> MethodSeen then
+                  MethodSeen := pmUnknown;
               Continue;
             end;
             if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
