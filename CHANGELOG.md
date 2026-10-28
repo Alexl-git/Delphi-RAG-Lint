@@ -10,6 +10,7 @@ breaking changes** until v1.0.
 - `--help` names `--output` on lint-project and `--json` on check-ast and serve (every verb whose code reads --out / --json now shows it); the flag-verb map baseline drops 108 -> 104 cells.
 
 ### Fixed
+- LSP: diagnostics are now cleared -- `textDocument/didClose` and `workspace/didChangeWatchedFiles` (Deleted) publish an empty array for the file's own uri string, so closed or deleted files (e.g. a removed worktree) no longer linger in VS Code Problems; the VS Code extension watches `**/*.{pas,dpr,dpk,inc}` to send deletions (guard `run_lsp_clear_diags_guard.ps1`).
 - Release/deploy: `drag-lint-switch.exe` is now built and staged by `build_draglint_win64.bat` and `pack-lint-release.ps1` (through `stage-engine.ps1`) and ships in the win64 zip; the deployed copy had gone stale (no `--params`, `--vscode --on|--off`). Guard `run_release_ships_switch_guard.ps1`.
 - LSP: diagnostics for a file no loaded index owns are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"` (guard `run_lsp_unowned_label_guard.ps1`).
 - `lint --project` / `lint-all --project` / `unit-not-in-dpr`: the scope closure follows the `.dproj`'s ACTIVE build config (the same profile the defines use), so a unit only the inactive config uses is no longer linted (LSP lane, guard `run_lint_project_scope_active_config_guard.ps1`).
