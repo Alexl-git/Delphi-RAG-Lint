@@ -79,6 +79,7 @@
   "Symbol-Search": "symbol-search",
   "Symbol-Slice": "symbol-slice",
   "Top-Symbols-fan-in": "top-symbols-fan-in",
+  "Type-Level-Review-Marker": "type-level-review-marker",
   "Type-Name-Prefix-Origin": "type-name-prefix-origin",
   "Type-at-Cursor": "type-at-cursor",
   "Unit-Test-Stub-symbol": "unit-test-stub-symbol",

@@ -459,3 +459,12 @@ run on the `lint-all --db` / `lint-project --db` path (store-backed). All are `w
 | `referenced-never-set` | warning | `lint <file>` | A `private`/`strict private` class field with >= 1 read and 0 writes anywhere in the declaring unit. Field always holds its zero value. Guards: skips `published` fields, form/frame/`TComponent`-streamed classes, and fields with initializers. |
 | `unused-private-member` | warning | `lint-all --db` / `lint-project --db` | A `private`/`strict private` method, field, const, or nested type with zero references in the symbol index. Mirrors `unused-public-symbol` for private scope. Guards: skips published fields, RTTI/`{$M+}`-streamed members, and property accessor methods/fields. See Known limitations above for a residual intra-class FP. |
 | `unused-unit-in-uses` | warning | `lint-all --db` / `lint-project --db` | A unit in a `uses` clause with zero of its exported symbols referenced by the using unit. Conservative: skips plausible operator-overload / helper / side-effect-only units and a known allow-list. A unit used only for operator overloads or side effects without a referenced symbol may still be flagged; see Known limitations above. |
+
+### Enum rules and the type-level `dl:ok` (ENUMRULES, 2026-10-28)
+
+| Rule id | Severity | Path | Description |
+|---------|----------|------|-------------|
+| `enum-ordinal-cast` | warning | `lint <file>` (index-widened) | `TEnum(<literal>)`, `Ord(e) <cmp> <literal>`, `case Ord(e) of` with literal labels. Exempt: `Ord()` vs `Ord()`, a negative sentinel `TEnum(-1)`, an enum whose values are all pinned (`= N`). |
+| `unused-enum-value` | hint | `lint-all --db` / `lint-project --db` | ON by default. An enum value no ref names, in a type with at least one named value and no implicit use (Low/High, Succ/Pred/Inc/Dec, a cast, `Ord`, RTTI, a streamed property). A FILLER value named for its own ordinal (`Dummy0` at 0) is exempt. |
+
+Both rules honour ONE marker on the enum TYPE declaration line -- `// dl:ok unused-enum-value -- <reason>` or `// dl:ok enum-ordinal-cast -- <reason>` -- which reviews every finding of that rule for the type, in any unit (findings carry the type as `ScopeFile` / `ScopeLine`). `lint-all` reports such a marker `review-marker-unused` when it suppresses nothing; `lint <file>` does not judge it. Wiki: `Type-Level-Review-Marker`.

@@ -106,9 +106,7 @@ const
     'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
     'too-many-bool-fields', 'index-loop-to-for-in',
     { gap-rules wave (G0): OFF-by-default new built-ins }
-    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden',
-    { lane B-ENUM }
-    'unused-enum-value'];
+    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -721,8 +719,8 @@ begin
     B('enum-helper-separate-units', 'project-wide', 'warning', 'Enum helper (record/class helper) is declared in a different unit than its target enum -- consider co-locating'); { ON by default (explicit user decision, enum-helper-generator milestone 2026-07-07) -- diverges from the recent OFF-by-default convention for advisory rules; whole-DB helper edge (type_helpers, v15) via ISymbolStore.FindHelpersOfTypeSymbol (symbol-identity match, Task 9b), no heritage string-parsing }
     B('enum-ordinal-persisted', 'project-wide', 'warning', 'An enum whose ordinal crosses a stream / pipe / dataset / registry boundary (an ordinal cast TEnum(x) or Ord(v) in a routine that also calls a sink from rules\enum-persist-sinks.txt) has values with implicit ordinals -- inserting or reordering a value silently changes stored data; pin each value (= N)'); { ON by default (owner ruling 2026-10-25, lane X6): 3 findings on ORM3, 0 on DataCopy; fully pinned enums never fire }
     { --- lane B-ENUM (INBOX-lint-rules-from-new-facts-2026-09-23 rules 2 + 3) --- }
-    B('enum-ordinal-cast', 'bug-patterns', 'warning', 'A hard-coded enum ordinal -- a literal cast to an enum type TEnum(5), an enum''s ordinal compared with a literal (Ord(X) = 3), or case Ord(X) of with literal labels; inserting or reordering a value silently changes the meaning. Ord() against Ord(), a negative sentinel TEnum(-1) and an enum whose values are all pinned (= N) are exempt'); { ON by default (B-ENUM 2026-10-28): 11 findings, 11/11 true positives -- 10 on ORM3 CLIENT (TContrMode(0..4) in uPLANLIST), 1 on the engine tree (TSQueryError(0)); pinned TCommandID (Ord(ACmd) >= 200) and TDocCommentKind(-1) sentinels exempt by design }
-    B('unused-enum-value', 'project-wide', 'hint', 'An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed property) -- one finding per value, the decision per type', False); { OFF by default (B-ENUM 2026-10-28): 0 findings on ORM3 CLIENT (9 candidate types, all with a real implicit use: Ord/Byte/Integer casts) and 0 on the engine tree, so no 10-sample exists to justify ON }
+    B('enum-ordinal-cast', 'bug-patterns', 'warning', 'A hard-coded enum ordinal -- a literal cast to an enum type TEnum(5), an enum''s ordinal compared with a literal (Ord(X) = 3), or case Ord(X) of with literal labels; inserting or reordering a value silently changes the meaning. Ord() against Ord(), a negative sentinel TEnum(-1) and an enum whose values are all pinned (= N) are exempt; one dl:ok on the enum TYPE line reviews every cast of it'); { ON by default (B-ENUM 2026-10-28): 11 findings, 11/11 true positives -- 10 on ORM3 CLIENT (TContrMode(0..4) in uPLANLIST), 1 on the engine tree (TSQueryError(0)); pinned TCommandID (Ord(ACmd) >= 200) and TDocCommentKind(-1) sentinels exempt by design }
+    B('unused-enum-value', 'project-wide', 'hint', 'An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed property) -- one finding per value, the decision per type. A filler value named for its own ordinal (Dummy0 at 0) is exempt; one dl:ok on the TYPE line reviews every value'); { ON by default (ENUMRULES 2026-10-28, owner): B-ENUM measured 0 on ORM3 CLIENT and the engine tree (every candidate type has a real implicit use); filler padding and type-level dl:ok keep the owner's DB-ordinal enums silent }
 
     { --- purity v2 (spec 2026-09-15 section 14) --- BOTH OFF BY DEFAULT until
       the corpus counts are audited. They read the `purity` resolve stage's

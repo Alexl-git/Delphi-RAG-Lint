@@ -4555,7 +4555,7 @@ begin
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
       for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
-    { unused-enum-value (lane B-ENUM): OFF by default (flood risk: implicit uses) and OptedIn-gated --
+    { unused-enum-value (lane B-ENUM; ON since ENUMRULES 2026-10-28, the caller opts it in) and OptedIn-gated --
       a refs read per file, which a post-hoc config filter would hide while still charging for it. }
     if WantRule(UNUSED_ENUM_VALUE_RULE) and OptedIn(UNUSED_ENUM_VALUE_RULE) then
       for var Uv in CollectUnusedEnumValue(AStore) do Findings.Add(Uv);

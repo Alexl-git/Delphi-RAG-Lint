@@ -78,6 +78,8 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Run Diagnostics (didSave)** -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification. Read this to know why drag-lint findings refresh on their own: with automatic diagnostics on, the pass runs on a file each time you save it in the IDE. You can also trigger it by hand for the active editor with Ctrl+Alt+D or the About dialog button. [More](Run-Diagnostics-didSave)
 * **Run Lint All (Full Report)** -- Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check. Read this when you want an overall health check of a project: it runs the whole rule catalog over the indexed code and reports every surviving finding, optionally limited to one project with --project. [More](Run-Lint-All-Full-Report)
 * **Taint analysis (SQL, command, path)** -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink. Read this when you want to find tainted values reaching a SQL, command or file-path sink across routines and units. The rules run in lint-all and in lint with a store; the catalogues of sources, sinks and propagators are editable JSON. [More](taint-analysis)
+* **Type-level dl:ok review** -- One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit. Read this when an enum mirrors ordinals stored outside the code (a DB byte, a wire protocol, streaming) and its filler values or ordinal casts are deliberate: one `dl:ok <rule-id>` on the type line reviews them all, instead of one marker per value or cast. [More](Type-Level-Review-Marker)
+  aliases: dl:ok, enum-ordinal-cast, unused-enum-value
 * **type-name-prefix: expected letter from the ancestor chain** -- type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter. Before 1.31.4 a class whose ancestry left the project index was judged by its project-only chain, so EKeyViolation = class(EDatabaseError) was told to start with T and the fix renamed it TEKeyViolation. [More](Type-Name-Prefix-Origin)
 
 ## Documentation
@@ -296,6 +298,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Switch VS Code Delphi MCP entry: menu 'drag-lint-switch --vscode --off' inside drag-lint-switch.exe
+* Type-level dl:ok review: procedure docs\wiki\Type-Level-Review-Marker.md
 * Where the charts find Graphviz: procedure docs\wiki\Chart-Graphviz-Lookup.md
 * Work list: menu 'View > Work list' inside ConvRulesEditor.exe
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md

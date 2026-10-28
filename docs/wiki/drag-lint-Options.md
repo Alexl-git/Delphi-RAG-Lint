@@ -15,7 +15,7 @@ The equivalent standalone command, with the same catalog:
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ```
 As loaded by this dialog, the catalog has 289 rules, 110 of them fixable,
-244 on by default, across 18 categories.
+245 on by default, across 18 categories.
 
 ## Reaching it in the IDE
 drag-lint > drag-lint Options...

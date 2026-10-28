@@ -20,7 +20,12 @@ unit DRagLint.Diagnostics.EnumOrdinalCast;
   What is an enum is decided from this file's own declarations (enum types,
   enum values, the declared type of every var / param / field) and, when an
   index is supplied, from the refs at the exact identifier positions (an
-  enum-typed symbol, an enum value, or a cast bound to an enum type). }
+  enum-typed symbol, an enum value, or a cast bound to an enum type).
+
+  TYPE SCOPE (ENUMRULES, owner rule 2026-10-28): every finding carries the
+  enum type's declaration as ScopeFile / ScopeLine, so ONE
+  `// dl:ok enum-ordinal-cast -- <reason>` on the type line reviews every cast of
+  that type in any unit (DRagLint.CLI.ApplyLineMarkers). }
 
 interface
 
@@ -96,6 +101,8 @@ var
   DeclTypes : TDictionary<string, string>           ; { lower var/param/field name -> lower bare type; '' = ambiguous }
   RefByPos  : TDictionary<string, TReference>       ; { 'line:col' (1-based) -> ref }
   StoreEnum : TDictionary<string, Integer>          ; { lower type name -> ENUM_NONE / ENUM_FREE / ENUM_PINNED }
+  ScopeFile : TDictionary<string, string>           ; { lower enum type name -> file of its declaration (ENUMRULES) }
+  ScopeLine : TDictionary<string, Integer>          ; { lower enum type name -> line of its declaration }
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -157,6 +164,8 @@ var
           if V.ChildByField('value').IsNull then Pinned:= False;
         end;
         EnumTypes.AddOrSetValue(TypeNm, Pinned);
+        ScopeFile.AddOrSetValue(TypeNm, AFile);
+        ScopeLine.AddOrSetValue(TypeNm, Integer(P.ChildByField(FIELD_NAME).StartPoint.Row) + 1);
       end;
     end
     else if (T = 'declVar') or (T = 'declArg') or (T = 'declField') then
@@ -222,6 +231,11 @@ var
     if Length(Found) = 1 then
     begin
       Result:= ENUM_FREE;
+      if not ScopeFile.ContainsKey(ALowerType) then
+      begin
+        ScopeFile.Add(ALowerType, AStore.GetFilePath(Found[0].FileId));
+        ScopeLine.AddOrSetValue(ALowerType, Found[0].StartLine);
+      end;
       var Total: Integer;
       var Decl: string:= DeclTextOf(Found[0]);
       if (Decl <> '') and (CountImplicitOrdinals(Decl, Total) = 0) and (Total > 0) then Result:= ENUM_PINNED;
@@ -321,20 +335,27 @@ var
   end;
 
   { True for `Ord(E)` / `Integer(E)` / ... with E a value of an enum whose
-    ordinals are NOT all pinned (`= N` makes a literal ordinal stable). }
-  function IsOrdOfFreeEnum(const N: TTSNode): Boolean;
+    ordinals are NOT all pinned (`= N` makes a literal ordinal stable).
+    AType: the lower enum type name (the finding's type scope); '' when False. }
+  function IsOrdOfFreeEnum(const N: TTSNode; out AType: string): Boolean;
   begin
     Result:= False;
+    AType := '';
     var X: TTSNode:= N;
     while not X.IsNull and (X.NodeType = 'exprParens') and (X.NamedChildCount = 1) do X:= X.NamedChild(0);
     if X.IsNull or (X.NodeType <> 'exprCall') then Exit;
     var Ent: TTSNode:= X.ChildByField('entity');
     if Ent.IsNull or (Ent.NodeType <> 'identifier') or not InList(Trim(NodeStr(Ent)), ORD_CASTS) then Exit;
     var Arg: TTSNode:= SingleArg(X);
-    if not Arg.IsNull then Result:= EnumState(EnumTypeOfExpr(Arg)) = ENUM_FREE;
+    if Arg.IsNull then Exit;
+    AType := EnumTypeOfExpr(Arg);
+    Result:= EnumState(AType) = ENUM_FREE;
+    if not Result then AType:= '';
   end;
 
-  procedure EmitAt(const ANode: TTSNode; const AMsg: string);
+  { ATypeLower: the enum type the finding is about -- its declaration becomes
+    the finding's TYPE scope, where one dl:ok reviews every cast of it. }
+  procedure EmitAt(const ANode: TTSNode; const ATypeLower, AMsg: string);
   var
     P: TTSPoint    ;
     F: TLintFinding;
@@ -349,6 +370,13 @@ var
     F.StartCol := Integer(P.Column) + 1;
     F.EndLine  := Integer(ANode.EndPoint.Row) + 1;
     F.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+    var Sf: string;
+    var Sl: Integer;
+    if ScopeFile.TryGetValue(ATypeLower, Sf) and ScopeLine.TryGetValue(ATypeLower, Sl) then
+    begin
+      F.ScopeFile:= Sf;
+      F.ScopeLine:= Sl;
+    end;
     Findings.Add(F);
   end;
 
@@ -389,8 +417,9 @@ var
     if T = 'exprCall' then
     begin
       var Arg: TTSNode:= SingleArg(N);
-      if IsIntLiteral(Arg) and (EnumState(EnumCastTarget(N.ChildByField('entity'))) = ENUM_FREE) then
-        EmitAt(N, Format('%s hard-codes an enum ordinal -- inserting or reordering a value of %s ' +
+      var Target: string:= EnumCastTarget(N.ChildByField('entity'));
+      if IsIntLiteral(Arg) and (EnumState(Target) = ENUM_FREE) then
+        EmitAt(N, Target, Format('%s hard-codes an enum ordinal -- inserting or reordering a value of %s ' +
           'silently changes which value this is. Name the value instead.',
           [Trim(NodeStr(N)), Trim(NodeStr(N.ChildByField('entity')))]));
     end
@@ -402,10 +431,11 @@ var
         var L: TTSNode:= N.ChildByField('lhs');
         var R: TTSNode:= N.ChildByField('rhs');
         var Side: TTSNode:= Default(TTSNode);
-        if IsIntLiteral(R) and IsOrdOfFreeEnum(L) then Side:= L
-        else if IsIntLiteral(L) and IsOrdOfFreeEnum(R) then Side:= R;
+        var Ty: string:= '';
+        if IsIntLiteral(R) and IsOrdOfFreeEnum(L, Ty) then Side:= L
+        else if IsIntLiteral(L) and IsOrdOfFreeEnum(R, Ty) then Side:= R;
         if not Side.IsNull then
-          EmitAt(N, Format('%s compares an enum ordinal with a literal -- inserting or reordering a ' +
+          EmitAt(N, Ty, Format('%s compares an enum ordinal with a literal -- inserting or reordering a ' +
             'value silently changes the meaning. Compare with the enum value itself.',
             [Trim(NodeStr(N))]));
       end;
@@ -413,8 +443,9 @@ var
     else if T = 'case' then
     begin
       var Sel: TTSNode:= CaseSelector(N);
-      if not Sel.IsNull and IsOrdOfFreeEnum(Sel) and CaseHasLiteralLabel(N) then
-        EmitAt(N, Format('case %s of ... with literal labels hard-codes enum ordinals -- inserting or ' +
+      var Ty: string:= '';
+      if not Sel.IsNull and IsOrdOfFreeEnum(Sel, Ty) and CaseHasLiteralLabel(N) then
+        EmitAt(N, Ty, Format('case %s of ... with literal labels hard-codes enum ordinals -- inserting or ' +
           'reordering a value silently changes which branch runs. Case on the enum value itself.',
           [Trim(NodeStr(Sel))]));
     end;
@@ -432,6 +463,8 @@ begin
   DeclTypes := TDictionary<string, string>.Create;
   RefByPos  := TDictionary<string, TReference>.Create;
   StoreEnum := TDictionary<string, Integer>.Create;
+  ScopeFile := TDictionary<string, string>.Create;
+  ScopeLine := TDictionary<string, Integer>.Create;
   try
     CollectDecls(PF.Tree.RootNode);
     if (AStore <> nil) and (AFileId > 0) then
@@ -440,6 +473,8 @@ begin
     Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    ScopeLine.Free;
+    ScopeFile.Free;
     StoreEnum.Free;
     RefByPos.Free;
     DeclTypes.Free;

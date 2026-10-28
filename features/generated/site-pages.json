@@ -232,7 +232,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "154d94de9a09611891dc6fe68088ab4a90095637b6bbaaeba5f8cf38430e7bc2",
+    "hash": "b311d7e71e775caeec8a630f2eec23e4162ac9a9439f476f5fb2f163952cd096",
     "version": "1.36.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -440,7 +440,7 @@
     "version": "1.36.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "0c1afc86568cc7b7a4648711f715598e23df037e2bee912e4140fa45e27bd423",
+    "hash": "13aa755e1cc375ae6a347a2fc887af51522fdbe55cc90c55759c1fa5814c95fa",
     "version": "1.36.0-alpha"
   },
   "features/lint-tree.md": {
@@ -616,7 +616,7 @@
     "version": "1.36.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "aa8037ab1a973580abc373c3409a66bde1754e4e43cdb17fd5b107e499440c16",
+    "hash": "605119fc9e0579917e333dc40bc03724d18cded8c3a1b5647c99615b287a8fa1",
     "version": "1.36.0-alpha"
   },
   "features/safe-delete.md": {
@@ -695,8 +695,12 @@
     "hash": "66225ceb14ec0b2ec798f254799647399b4bab6b1c207f89db78e1bcd1c9df24",
     "version": "1.36.0-alpha"
   },
+  "features/type-level-review-marker.md": {
+    "hash": "06d958f6c5d8399d7c7ea9dff8411809ea987ccd08183a591689e2c5c4f01487",
+    "version": "1.36.0-alpha"
+  },
   "features/type-name-prefix-origin.md": {
-    "hash": "04f444be3a21206b846611ea89c66362c79b8cc5f46b27df460faf864728a858",
+    "hash": "04a5fb01216c7a438af23371d30cd9eb91ca9accc871bfb877ad85106871a1b9",
     "version": "1.36.0-alpha"
   },
   "features/unit-test-stub-symbol.md": {
