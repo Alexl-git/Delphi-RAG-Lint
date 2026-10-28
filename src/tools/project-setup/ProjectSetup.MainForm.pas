@@ -6,7 +6,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls,
-  Vcl.Dialogs, ProjectSetup.ContextJson;
+  Vcl.Dialogs, DRagLint.Project.ContextFile, ProjectSetup.ContextJson;
 
 type
   /// <summary>Single form that edits and saves a project's .dlcontext.json.</summary>
@@ -44,6 +44,7 @@ type
 implementation
 
 const
+  GENERATED_BY = 'dl-project-setup 1.0';
   // Layout, in pixels. Rows are stacked top to bottom: label, then control.
   MARGIN = 12;
   CONTENT_WIDTH = 560;
@@ -187,28 +188,33 @@ end;
 procedure TSetupForm.ApplyCentralDefaults;
 var
   Def: TContextDefaults;
+  Lib: TLibraryDefault;
 begin
-  if not TryLoadContextDefaults('', Def) then
+  if not TryLoadContextDefaults(Def) then
     Exit;
-  if FPlatformCombo.Items.IndexOf(Def.PlatformName) >= 0 then
-    FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Def.PlatformName);
+  if FPlatformCombo.Items.IndexOf(Def.Platform) >= 0 then
+    FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Def.Platform);
   if Def.Config <> '' then
     FConfigCombo.Text := Def.Config;
   FCompilerEdit.Text := Def.TargetCompiler;
-  FLibraryDbEdit.Text := Def.LibraryDb;
-  FillMemo(FRootsMemo, Def.LibraryRoots);
+  for Lib in Def.Libraries do
+    if SameText(Lib.Platform, FPlatformCombo.Text) then
+    begin
+      FLibraryDbEdit.Text := Lib.LibraryDb;
+      FillMemo(FRootsMemo, Lib.LibraryRoots);
+    end;
   PlatformChange(nil);
 end;
 
 procedure TSetupForm.ProjectChanged;
 var
-  Ctx: TSetupContext;
+  Ctx: TProjectContext;
 begin
   FStatus.Caption := '';
-  if (ProjectFile <> '') and TryLoadContext(ProjectFile, Ctx) then
+  if (ProjectFile <> '') and TryLoadProjectContext(ContextFileFor(ProjectFile), Ctx) then
   begin
-    if FPlatformCombo.Items.IndexOf(Ctx.PlatformName) >= 0 then
-      FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Ctx.PlatformName);
+    if FPlatformCombo.Items.IndexOf(Ctx.Platform) >= 0 then
+      FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Ctx.Platform);
     FConfigCombo.Text := Ctx.Config;
     FillMemo(FDefinesMemo, Ctx.Defines);
     FillMemo(FSearchMemo, Ctx.SearchPath);
@@ -239,18 +245,20 @@ end;
 
 procedure TSetupForm.SaveClick(pSender: TObject);
 var
-  Ctx: TSetupContext;
+  Ctx: TProjectContext;
 begin
   if (ProjectFile = '') or not FileExists(ProjectFile) then
   begin
     FStatus.Caption := 'Choose an existing .dpr first.';
     Exit;
   end;
-  Ctx := Default(TSetupContext);
+  Ctx := Default(TProjectContext);
+  Ctx.Schema := CONTEXT_SCHEMA;
+  Ctx.GeneratedBy := GENERATED_BY;
   Ctx.Project := ExpandFileName(ProjectFile);
   Ctx.SourceFile := Ctx.Project;
-  Ctx.SourceSha1 := FileSha1(Ctx.Project);
-  Ctx.PlatformName := FPlatformCombo.Text;
+  Ctx.SourceSha1 := FileSha1Hex(Ctx.Project);
+  Ctx.Platform := FPlatformCombo.Text;
   Ctx.Config := Trim(FConfigCombo.Text);
   Ctx.Defines := SplitLines(FDefinesMemo.Text);
   Ctx.SearchPath := SplitLines(FSearchMemo.Text);
@@ -258,7 +266,8 @@ begin
   Ctx.LibraryDb := Trim(FLibraryDbEdit.Text);
   Ctx.TargetCompiler := Trim(FCompilerEdit.Text);
   Ctx.LibraryRoots := SplitLines(FRootsMemo.Text);
-  FStatus.Caption := 'Saved ' + SaveContext(Ctx);
+  SaveProjectContext(Ctx, ContextFileFor(Ctx.Project));
+  FStatus.Caption := 'Saved ' + ContextFileFor(Ctx.Project);
 end;
 
 end.

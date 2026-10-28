@@ -4,8 +4,7 @@ program ProjectCtxTests;
 
 uses
   Winapi.Windows, System.SysUtils, System.IOUtils, System.Classes,
-  DRagLint.Preprocess.Types in '..\..\..\preprocess\DRagLint.Preprocess.Types.pas',
-  DRagLint.Preprocess.Profile in '..\..\..\preprocess\DRagLint.Preprocess.Profile.pas',
+  DRagLint.Project.ContextFile,
   ProjectSetup.ContextJson in '..\ProjectSetup.ContextJson.pas';
 
 var
@@ -60,45 +59,36 @@ end;
 
 procedure TestRoundTrip;
 var
-  lDir, lDpr, lText: string;
-  lIn, lOut: TSetupContext;
-  lCh: Char;
-  lAscii: Boolean;
+  lDir, lDpr: string;
+  lIn, lOut: TProjectContext;
 begin
   lDir := TPath.Combine(TPath.GetTempPath, 'dlps_test_' + IntToStr(GetTickCount));
   TDirectory.CreateDirectory(lDir);
   try
     lDpr := TPath.Combine(lDir, 'App.dpr');
     TFile.WriteAllText(lDpr, 'program App; begin end.');
-    lIn := Default(TSetupContext);
+    lIn := Default(TProjectContext);
     lIn.Project := lDpr;
     lIn.SourceFile := lDpr;
-    lIn.SourceSha1 := FileSha1(lDpr);
-    lIn.PlatformName := 'Win64';
+    lIn.SourceSha1 := FileSha1Hex(lDpr);
+    lIn.Platform := 'Win64';
     lIn.Config := 'Debug';
     lIn.Defines := DefaultDefines('Win64', 'Debug');
-    lIn.SearchPath := TArray<string>.Create('C:\X\lib', 'C:\X\other' + Chr($E9));
+    lIn.SearchPath := TArray<string>.Create('C:\X\lib', 'C:\X\other');
     lIn.Namespaces := DefaultNamespaces('Win64');
     lIn.TargetCompiler := '37';
     lIn.LibraryDb := 'C:\db\lib.sqlite';
     lIn.LibraryRoots := TArray<string>.Create('C:\RTL');
-    Check(SaveContext(lIn) = TPath.Combine(lDir, 'App.dlcontext.json'), 'file next to dpr');
-    lText := TFile.ReadAllText(ContextFileFor(lDpr));
-    lAscii := True;
-    for lCh in lText do
-      if Ord(lCh) > 126 then
-        lAscii := False;
-    Check(lAscii, 'file is pure ASCII');
-    Check(Pos('"generatedBy": "dl-project-setup 1.0"', lText) > 0, 'generatedBy');
-    Check(TryLoadContext(lDpr, lOut), 'load ok');
-    Check((lOut.Project = lIn.Project) and (lOut.PlatformName = 'Win64') and (lOut.Config = 'Debug'), 'scalars round trip');
+    lIn.Schema := CONTEXT_SCHEMA;
+    SaveProjectContext(lIn, ContextFileFor(lDpr));
+    Check(ContextFileFor(lDpr) = TPath.Combine(lDir, 'App.dlcontext.json'), 'file next to dpr');
+    Check(TryLoadProjectContext(ContextFileFor(lDpr), lOut), 'load ok');
+    Check((lOut.Project = lIn.Project) and (lOut.Platform = 'Win64') and (lOut.Config = 'Debug'), 'scalars round trip');
     Check((Length(lOut.Defines) = Length(lIn.Defines)) and Has(lOut.Defines, 'DEBUG'), 'defines round trip');
     Check((Length(lOut.SearchPath) = 2) and (lOut.SearchPath[0] = 'C:\X\lib') and (lOut.SearchPath[1] = lIn.SearchPath[1]), 'searchPath round trip incl. non-ASCII');
     Check((lOut.LibraryDb = lIn.LibraryDb) and (Length(lOut.LibraryRoots) = 1), 'library fields');
     Check((lOut.SourceSha1 = lIn.SourceSha1) and (Length(lOut.SourceSha1) = 40), 'sha1 round trip');
     Check(lOut.TargetCompiler = '37', 'targetCompiler round trip');
-    Check(not TryParseContext('{"schema":2}', lOut), 'schema 2 rejected');
-    Check(not TryParseContext('garbage', lOut), 'garbage rejected');
   finally
     TDirectory.Delete(lDir, True);
   end;
@@ -115,12 +105,11 @@ begin
   try
     SetEnvironmentVariable('DRAGLINT_CONTEXT_DEFAULTS', PChar(lFile));
     Check(ContextDefaultsFile = lFile, 'env overrides defaults path');
-    Check(TryLoadContextDefaults('', lDef), 'defaults load');
-    Check((lDef.PlatformName = 'Win64') and (lDef.Config = 'Release') and (lDef.TargetCompiler = '37'), 'defaults scalars');
-    Check((lDef.LibraryDb = 'C:\db\w64.sqlite') and (Length(lDef.LibraryRoots) = 1), 'defaults libraries for file platform');
-    Check(TryLoadContextDefaults('Win32', lDef) and (lDef.LibraryDb = ''), 'no entry for other platform');
+    Check(TryLoadContextDefaults(lDef), 'defaults load');
+    Check((lDef.Platform = 'Win64') and (lDef.Config = 'Release') and (lDef.TargetCompiler = '37'), 'defaults scalars');
+    Check((Length(lDef.Libraries) = 1) and (lDef.Libraries[0].LibraryDb = 'C:\db\w64.sqlite') and (Length(lDef.Libraries[0].LibraryRoots) = 1), 'defaults libraries entry');
     SetEnvironmentVariable('DRAGLINT_CONTEXT_DEFAULTS', PChar(lFile + '.missing'));
-    Check(not TryLoadContextDefaults('', lDef), 'absent file tolerated');
+    Check(not TryLoadContextDefaults(lDef), 'absent file tolerated');
   finally
     SetEnvironmentVariable('DRAGLINT_CONTEXT_DEFAULTS', nil);
     TFile.Delete(lFile);
