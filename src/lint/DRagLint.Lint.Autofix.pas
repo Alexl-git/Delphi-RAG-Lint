@@ -865,7 +865,10 @@ begin
           if AsPos > 1 then
           begin
             Repl:= TrimRight(Copy(Span, 1, AsPos - 1));
-            if Repl <> '' then
+            { only a bare identifier whose declared type is known and is not interface-looking (I + capital):
+              IFoo as TObject is the only way from an interface to its instance, never redundant. }
+            if (Repl <> '') and TRegEx.IsMatch(Repl, '^[A-Za-z_]\w*$') and (DeclTypeOf(F.FilePath, F.StartLine, Repl) <> '') and
+               not TRegEx.IsMatch(DeclTypeOf(F.FilePath, F.StartLine, Repl), '^I[A-Z]') then
             begin
               E:= Default(TTextEdit);
               E.FilePath:= F.FilePath;
