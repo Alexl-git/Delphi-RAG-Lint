@@ -1,7 +1,8 @@
 # Hits are pinned to the `for` keyword line.
 # Known non-hit shapes: I used arithmetically, a write A[I] := .. or
 # A[I].F := .., I read after the loop, A[I+1], downto, a different container
-# than the bound, a start other than 0.
+# than the bound, a start other than 0, a body that mutates the container (Delete, Add,
+# SetLength).
 index-loop-to-for-in 15
 index-loop-to-for-in 23
 index-loop-to-for-in 33
@@ -14,3 +15,6 @@ index-loop-to-for-in 39
 !index-loop-to-for-in 88
 !index-loop-to-for-in 96
 !index-loop-to-for-in 104
+!index-loop-to-for-in 112
+!index-loop-to-for-in 123
+!index-loop-to-for-in 134

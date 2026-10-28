@@ -22,6 +22,8 @@ begin
     WriteLn('g');
   if S.Contains(T) then
     WriteLn('h');
+  if Pos(T, S, 2) > 0 then
+    WriteLn('i');
 end;
 
 end.
