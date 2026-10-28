@@ -300,10 +300,15 @@ begin
   Result.Kind:= pnkDeclared;
   if Hit.Kind <> skConstDecl then Exit;
   { The stored signature is '= <expr>' or, for a literal value, '<inferred type> = <v>'
-    -- and a TYPED constant is stored the same way ('Integer = 3'), so the two
-    cannot be told apart here. Taking the value is still right for code that
-    compiles: dcc rejects a typed constant in an IF (E2026), so a name a compiling
-    IF uses is a true constant. }
+    -- and a TYPED constant is stored the same way ('Integer = 3'). Since EXT-E4
+    (extractor 1.26.0-alpha) the parser marks a typed constant with the
+    'typed' modifier, so it is refused here like dcc does (E2026). A DB indexed
+    before that has no modifier and still yields the value. }
+  if (' ' + LowerCase(Hit.Modifiers) + ' ').Contains(' typed ') then
+  begin
+    Result.Kind:= pnkTypedConst;
+    Exit;
+  end;
   Sig:= Trim(Hit.Signature);
   if not Sig.Contains('=') then Exit;
   Sig:= Copy(Sig, Pos('=', Sig), MaxInt);
@@ -336,9 +341,14 @@ begin
       if FInProgress.ContainsKey(Key) then Exit; // a uses cycle: the unit is mid-scan
       Decls:= Scan(Key, Path);
       if not Decls.TryGetValue(LowerCase(AName), D) then Exit;
-      if not (D.IsTrueConst and D.HasValue) then Exit(pnkDeclared);
-      AValue:= D.Value;
-      Exit(pnkConst);
+      if D.IsTypedConst then Result:= pnkTypedConst
+      else if not (D.IsTrueConst and D.HasValue) then Result:= pnkDeclared
+      else
+      begin
+        AValue:= D.Value;
+        Result:= pnkConst;
+      end;
+      Exit;
     end;
     if not FAnswers.TryGetValue(Key + '.' + LowerCase(AName), A) then
     begin

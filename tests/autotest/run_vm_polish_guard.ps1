@@ -42,6 +42,16 @@ $bin.AddRange([byte[]](0x00,0x00))
 [System.IO.File]::WriteAllText((Join-Path $src 'uBinForm.pas'),
   "unit uBinForm;`r`n`r`ninterface`r`n`r`ntype`r`n  TBinForm = class`r`n  end;`r`n`r`nimplementation`r`n`r`nend.`r`n",
   (New-Object System.Text.UTF8Encoding($false)))
+# Bare TPF0 stream (no FF 0A 00 resource header): EnsureUtf8Bytes must not transcode it.
+$tp = [System.Collections.Generic.List[byte]]::new()
+$tp.AddRange($ascii.GetBytes('TPF0'))
+$tp.AddRange([byte[]](0x0B)); $tp.AddRange($ascii.GetBytes('TTpfForm'))
+$tp.AddRange([byte[]](0x05)); $tp.AddRange($ascii.GetBytes('TpfF1'))
+$tp.AddRange([byte[]](0xE9,0xFF,0x80,0x00,0x00))
+[System.IO.File]::WriteAllBytes((Join-Path $src 'uTpfForm.dfm'), $tp.ToArray())
+[System.IO.File]::WriteAllText((Join-Path $src 'uTpfForm.pas'),
+  "unit uTpfForm;`r`n`r`ninterface`r`n`r`ntype`r`n  TTpfForm = class`r`n  end;`r`n`r`nimplementation`r`n`r`nend.`r`n",
+  (New-Object System.Text.UTF8Encoding($false)))
 [System.IO.File]::WriteAllText((Join-Path $src 'uTxtForm.dfm'),
   "object TxtForm: TTxtForm`r`n  Left = 0`r`n  Caption = 'text form'`r`nend`r`n",
   (New-Object System.Text.UTF8Encoding($false)))
@@ -58,6 +68,8 @@ $all = $so + "`n" + $se
 Write-Host "`n--- V-A: binary DFM diagnostic ---" -ForegroundColor Cyan
 Check 'V-A binary-DFM diagnostic appears' ([bool]($all -match 'binary DFM \(TPF0\) -- save as Text DFM')) $all
 Check 'V-A no "parse error" for the binary dfm' (-not ($all -match 'parse error')) $all
+Check 'V-A2 bare TPF0 dfm: binary diagnostic names uTpfForm.dfm' ([bool]($all -match 'uTpfForm\.dfm: binary DFM \(TPF0\) -- save as Text DFM')) $all
+Check 'V-A2 bare TPF0 dfm: no parse error' (-not ($all -match 'uTpfForm\.dfm[^\r\n]*parse error')) $all
 Check 'P2 binary dfm yields no object rows' `
   (-not ((& $exePath query --text 'HTTPServer1' --db $db --source dfm 2>&1 | Out-String) -match 'uBinForm\.dfm')) ''
 

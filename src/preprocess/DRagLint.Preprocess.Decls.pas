@@ -38,6 +38,8 @@ type
   TPPDecl = record
     Name       : string;
     IsTrueConst: Boolean;
+    /// <summary>EXT-E4: a TYPED constant (`NAME: T = v`); never IsTrueConst.</summary>
+    IsTypedConst: Boolean;
     HasValue   : Boolean;
     Value      : TPPValue;
     InInterface: Boolean;
@@ -319,7 +321,7 @@ begin
   if Result then FState:= dsStart;
 end;
 
-procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@4df6 -- REVIEWED 2026-10-27 the declaration state machine; one case arm per state  // dl:ok cyclomatic-complexity@9eb1 -- REVIEWED 2026-10-27 same state machine
+procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@8c61, cyclomatic-complexity@b95e -- REVIEWED 2026-10-28 the declaration state machine, one case arm per state (EXT-E4 added the typed-const flag)
 var
   Kw: Boolean;
 begin
@@ -364,6 +366,12 @@ begin
         else if (AText = ':') and (FSection = secConst) then
         begin
           AddDecl(FName, False, False, Default(TPPValue)); // typed constant
+          var LTyped: TPPDecl;
+          if FDecls.TryGetValue(LowerCase(FName), LTyped) then
+          begin
+            LTyped.IsTypedConst:= True;
+            FDecls.AddOrSetValue(LowerCase(FName), LTyped);
+          end;
           FState:= dsSkipToSemi;
         end
         else if (AText = '<') and (FSection = secType) then

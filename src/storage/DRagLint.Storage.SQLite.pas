@@ -1038,6 +1038,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      function FileShaMatches(const APath: string; const ASha: string): Boolean;
+      procedure RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
       function IncludeOriginsChanged(const APath: string): Boolean;
       /// <summary>Lane INC: records the include files AHostPath took in its last
       /// parse; see ISymbolStore.SetFileIncludes.</summary>
@@ -5605,6 +5607,39 @@ begin
     Q.Free;
   end;
 end; // function
+
+function TSQLiteSymbolStore.FileShaMatches(const APath: string; const ASha: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT 1 FROM files WHERE (path = :p OR LOWER(path) = LOWER(:p)) AND sha256 = :s';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('s').AsWideString:= ASha;
+    Q.Open;
+    Result:= not Q.IsEmpty;
+  finally
+    Q.Free;
+  end;
+end; // function
+
+procedure TSQLiteSymbolStore.RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'UPDATE files SET mtime_unix = :m WHERE (path = :p OR LOWER(path) = LOWER(:p))';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
+    Q.ExecSQL;
+  finally
+    Q.Free;
+  end;
+end; // procedure
 
 const
   // Lane INC: schema_meta key prefix of a host's recorded include list.

@@ -67,8 +67,11 @@ type
   /// <remarks>pnkUnknown: not declared anywhere the lookup can see.
   /// pnkDeclared: declared, but not a true constant with a computable value
   /// (a type, a variable, a typed constant, a constant whose expression we
-  /// cannot evaluate). pnkConst: a true constant; its value is returned.</remarks>
-  TPPNameKind = (pnkUnknown, pnkDeclared, pnkConst);
+  /// cannot evaluate). pnkConst: a true constant; its value is returned.
+  /// pnkTypedConst (EXT-E4, 1.37.0): a TYPED constant (`X: Integer = 3`) --
+  /// declared, never a true constant (dcc E2026 in an IF); the unresolved name
+  /// is reported as a typed constant so the hint can say why.</remarks>
+  TPPNameKind = (pnkUnknown, pnkDeclared, pnkConst, pnkTypedConst);
 
   /// <summary>The name lookup an IF expression consults for an identifier.</summary>
   /// <remarks>AName keeps its source spelling and may be dotted
@@ -128,6 +131,9 @@ const
   PTR_SIZE_32 = 4;
   EXTENDED_SIZE_32 = 10;
   OPS: array[0..5] of string = ('<=', '>=', '<>', '=', '<', '>');
+  { EXT-E4: appended to a typed constant's name in the unresolved list, so the
+    pp-unresolved-if hint says WHY it cannot be used. }
+  TYPED_CONST_NOTE = ' (typed constant: dcc rejects it in $IF, E2026)';
 
 type
   // One basic type's SizeOf / Low / High; HasRange False when High/Low of it
@@ -689,7 +695,7 @@ end;
 
 // A bare identifier: True/False, the numeric map, the caller's symbol table,
 // a defined symbol (evalExpr.js's bare-ident membership test), else unresolved.
-function TPPExprParser.ResolveName(const AId: string): TPPValue; // dl:ok too-many-exit-points@c174 -- REVIEWED 2026-10-27 one Exit per resolution tier, in precedence order
+function TPPExprParser.ResolveName(const AId: string): TPPValue; // dl:ok too-many-exit-points@5198 -- REVIEWED 2026-10-28 one Exit per resolution tier, in precedence order (EXT-E4: typed const tier)
 var
   N   : Integer;
   Key : string;
@@ -707,6 +713,11 @@ begin
       pnkDeclared:
         begin
           AddUnresolved(AId);
+          Exit(BoolVal(False));
+        end;
+      pnkTypedConst:
+        begin
+          AddUnresolved(AId + TYPED_CONST_NOTE);
           Exit(BoolVal(False));
         end;
     end;

@@ -158,7 +158,11 @@ const
     type_use refs for procedural-type signatures, generic arguments, initializer
     expressions and default parameter values; B-FLOW G5 emits a member-access ref
     for a hard cast T(X).M; R4X emits the `on E: T do` handler variable as a
-    local_var symbol. Resolver-side companions are DRAGLINT_RESOLVER_VERSION
+    local_var symbol; lane EXT (1.37.0 gaps triage, 2026-10-28) strips comment
+    nodes from routine signatures / declared types / const values (E1),
+    mirrors G5 hard-cast receivers in DataFlowFacts (E2) and marks a typed
+    constant with symbols.modifiers 'typed' so $IF refuses it (E4).
+    Resolver-side companions are DRAGLINT_RESOLVER_VERSION
     1.16.0-alpha (refs.receiver_type_text, library oracle). One full re-parse
     covers all of it. }
   DRAGLINT_EXTRACTOR_VERSION = '1.26.0-alpha';

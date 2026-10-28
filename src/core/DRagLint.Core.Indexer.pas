@@ -1169,12 +1169,16 @@ end; // function
 
 const
   BinaryDfmMagic: array[0..2] of Byte = ($FF, $0A, $00);  { Win resource header of a binary DFM }
+  BinaryDfmTpf0 : array[0..3] of Byte = ($54, $50, $46, $30);  { 'TPF0' stream signature }
 
-{ True iff ABytes starts with the binary-DFM resource header FF 0A 00. }
+{ True iff ABytes starts with the binary-DFM resource header FF 0A 00, or is a bare
+  TPF0 stream (signature 'TPF0', no resource header). }
 function HasBinaryDfmHeader(const ABytes: TBytes): Boolean;
 begin
-  Result:= (Length(ABytes) >= Length(BinaryDfmMagic))
-    and CompareMem(@ABytes[0], @BinaryDfmMagic[0], Length(BinaryDfmMagic));
+  Result:= ((Length(ABytes) >= Length(BinaryDfmMagic))
+    and CompareMem(@ABytes[0], @BinaryDfmMagic[0], Length(BinaryDfmMagic)))
+    or ((Length(ABytes) >= Length(BinaryDfmTpf0))
+    and CompareMem(@ABytes[0], @BinaryDfmTpf0[0], Length(BinaryDfmTpf0)));
 end;
 
 procedure TIndexer.IndexFile(const AFilePath: string);
@@ -1281,9 +1285,15 @@ begin
     and SameText(ExtractFileExt(AFilePath), '.inc')
     and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
   // N-06: ...unless an include it took a uses clause from changed since its parse.
-  if (not HasIncCtx) and ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha)
+  { Content-hash skip (xerj item 7): the bytes are what the parse depends on, so a
+    file whose sha256 matches but whose mtime moved (git checkout, touch, copy) is as
+    up to date as one whose mtime did not. Same guards as above; the stored mtime is
+    refreshed so the next run takes the plain path. Cannot change what is extracted. }
+  if (not HasIncCtx) and ((not FForceReparse) or MayResume)
+    and (FStore.FileIsUpToDate(AFilePath, Mtime, Sha) or FStore.FileShaMatches(AFilePath, Sha))
     and not FStore.IncludeOriginsChanged(AFilePath) then
   begin
+    if not FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then FStore.RefreshFileMtime(AFilePath, Mtime);
     Inc(FSkippedUpToDate);
     Exit;
   end;

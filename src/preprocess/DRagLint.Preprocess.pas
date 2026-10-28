@@ -770,6 +770,7 @@ begin
         end;
         if Ctx.Scanner.TryGet(AName, D) then
         begin
+          if D.IsTypedConst then Exit(pnkTypedConst);
           if not (D.IsTrueConst and D.HasValue) then Exit(pnkDeclared);
           AValue:= D.Value;
           Exit(pnkConst);
