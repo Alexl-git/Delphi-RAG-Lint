@@ -44,8 +44,9 @@ $engExe = Join-Path $eng 'drag-lint.exe'
 Copy-Item $bad (Join-Path $eng 'library-Win64.sqlite') -Force
 
 function Run-Cmd([string]$Cmd, [string[]]$A) {
-  $o = & $Cmd @A 2>&1 | ForEach-Object { "$_" }
-  return @{ Out = ($o -join "`n"); Code = $LASTEXITCODE }
+  Push-Location $WorkDir   # cwd under TEMP: the manifest walk-up must not find C:\Projects\.drag-lint.json
+  try { $o = & $Cmd @A 2>&1 | ForEach-Object { "$_" }; $code = $LASTEXITCODE } finally { Pop-Location }
+  return @{ Out = ($o -join "`n"); Code = $code }
 }
 function Count-Findings([string]$Out) {
   $m = [regex]::Match($Out, 'lint-all: (\d+) finding')

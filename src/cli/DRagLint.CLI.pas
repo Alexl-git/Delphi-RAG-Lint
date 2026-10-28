@@ -2519,7 +2519,14 @@ begin
       and may be spelled differently from the raw --db the user typed. }
     if not SameText(ExpandFileName(D), ExpandFileName(APrimaryDb)) then
     begin
-      ES:= OpenReadOnlyStore(D, EOk);
+      { A DB that will not open at all (not a SQLite file) is skipped like a stale
+        one: this is facts enrichment, and a corrupt library was already reported
+        once by DropUnreadableLibraryDb (CLIFIX C1). }
+      try
+        ES:= OpenReadOnlyStore(D, EOk);
+      except
+        ES:= nil; EOk:= False;
+      end;
       if EOk and (ES <> nil) then Result:= Result + [ES];
     end;
 end;
@@ -19817,6 +19824,34 @@ begin
       'For one unit run: drag-lint lint "%s" --db <db> [--rule <id>] [--fix]', [AArgs.InFile, AArgs.InFile]));
 end;
 
+/// <summary>Probes a library index and, when it cannot be opened at all (not a
+/// SQLite file, truncated, zeroed header), clears the path so the run continues
+/// without a library -- the same degrade lint-project always had.</summary>
+/// <param name="ALibDb">In: the library DB path ('' = none). Out: unchanged when
+/// readable, absent or ''; '' when the file exists but will not open.</param>
+/// <returns>True when the library was dropped; one line
+/// `warning: library DB &lt;path&gt; unreadable (&lt;sqlite message&gt;) -- continuing
+/// without it` has then gone to stderr.</returns>
+/// <remarks>Shared by DoLintAll and DoLintProject so both verbs say the same words.
+/// A stale-schema library is NOT dropped here: OpenLibraryStoreIfCurrent owns that
+/// case and its own warning. The probe opens read-only and releases at once.</remarks>
+function DropUnreadableLibraryDb(var ALibDb: string): Boolean;
+begin
+  Result:= False;
+  if (ALibDb = '') or (not TFile.Exists(ALibDb)) then Exit;
+  try
+    var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(ALibDb, {AReadOnly=}True);
+    Probe:= nil;
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, Format('warning: library DB %s unreadable (%s) -- continuing without it', [ALibDb, E.Message]));
+      ALibDb:= '';
+      Result:= True;
+    end;
+  end;
+end; // function
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -19933,6 +19968,7 @@ begin
     handing a Win32 run the Win64 library is the same class of mis-selection that
     made used-unit-not-resolvable fire 99 times on DataCopy. }
   if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
+  DropUnreadableLibraryDb(LibDb);
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
@@ -20974,6 +21010,7 @@ begin
       migrations as a side effect of linting takes a write lock on gigabytes of
       someone else's data. }
     var ProjLibDb: string:= ResolveLibraryDb(AArgs);
+    DropUnreadableLibraryDb(ProjLibDb);
     var ProjLibWhy: string;
     ProjLibStore:= OpenLibraryStoreIfCurrent(ProjLibDb, ProjLibWhy);
     if ProjLibWhy <> '' then
