@@ -1,0 +1,30 @@
+9 circular unit group(s) found:
+  [2 units] labvarwidget <-> labvarhost   (has interface coupling -- widest recompile blast radius)
+      labvarwidget uses labvarhost  [implementation]
+      labvarhost uses labvarwidget  [interface  <-- move-to-implementation candidate]
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
+      demologger uses demosession  [implementation]
+      democonfig uses demologger  [implementation]
+      demoaudit uses democonfig  [implementation]
+      demosession uses demoaudit  [implementation]
+  [2 units] labdira <-> labdirb   (has interface coupling -- widest recompile blast radius)
+      labdira uses labdirb  [interface  <-- move-to-implementation candidate]
+      labdirb uses labdira  [implementation]
+  [2 units] labguarda <-> labguardb   (has interface coupling -- widest recompile blast radius)
+      labguarda uses labguardb  [interface  <-- move-to-implementation candidate]
+      labguardb uses labguarda  [implementation]
+  [2 units] labctorowner <-> labctorchild   (has interface coupling -- widest recompile blast radius)
+      labctorowner uses labctorchild  [interface  <-- move-to-implementation candidate]
+      labctorchild uses labctorowner  [implementation]
+  [2 units] labrchost <-> labrcwidget   (has interface coupling -- widest recompile blast radius)
+      labrchost uses labrcwidget  [interface  <-- move-to-implementation candidate]
+      labrcwidget uses labrchost  [implementation]
+  [2 units] labinitsink <-> labinitconsumer   (implementation-only -- legal, lower impact)
+      labinitsink uses labinitconsumer  [implementation]
+      labinitconsumer uses labinitsink  [implementation]
+  [2 units] labexchost <-> labexcwidget   (implementation-only -- legal, lower impact)
+      labexchost uses labexcwidget  [implementation]
+      labexcwidget uses labexchost  [implementation]
+  [2 units] labclswidget <-> labclsregistry   (has interface coupling -- widest recompile blast radius)
+      labclswidget uses labclsregistry  [implementation]
+      labclsregistry uses labclswidget  [interface  <-- move-to-implementation candidate]

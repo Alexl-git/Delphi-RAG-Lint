@@ -1,0 +1,8 @@
+F2047: interface-only cycle(s) -- dcc rejects each with "Circular unit reference":
+  [2 units] illorders <-> illcustomers
+      illorders's INTERFACE uses illcustomers via:
+          line 11: TIllCustomer  [class]
+      illcustomers's INTERFACE uses illorders via:
+          line 12: TIllOrder  [class]
+      next: drag-lint cycles --db "db/IllegalLab.sqlite" --plan
+            drag-lint cycles --db "db/IllegalLab.sqlite" --fix --project "<X.dproj>" --unit illorders
