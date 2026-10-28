@@ -52,9 +52,9 @@ Check '3 CONTROL single marker re-hashed, reason kept' ($l17 -match 'concat-in-l
 Allow 16 'magic-literal'
 $l = Line 16
 Check '4 second click re-hashes B, reasons stay with their rule' (($l -match 'concat-in-loop@(?!0000)[0-9a-f]{4} -- reason one //') -and ($l -match 'magic-literal@(?!0000)[0-9a-f]{4} -- reason two$')) $l
-Allow 16 'empty-block'
+Allow 16 'inherited-bare'
 $l = Line 16
-Check '5 CONTROL new rule goes to the last comment, first untouched' (($l -match '-- reason one // dl:ok magic-literal@[0-9a-f]{4}, empty-block@[0-9a-f]{4} -- reason two$')) $l
+Check '5 CONTROL new rule goes to the last comment, first untouched' (($l -match '-- reason one // dl:ok magic-literal@[0-9a-f]{4}, inherited-bare@[0-9a-f]{4} -- reason two$')) $l
 
 [IO.Directory]::Delete($WorkDir, $true)
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

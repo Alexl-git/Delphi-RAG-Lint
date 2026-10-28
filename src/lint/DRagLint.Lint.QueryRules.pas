@@ -782,11 +782,11 @@ begin
   end;
 
   ErrOff:= 0;
-  ErrType:= TSQueryError(0);
+  ErrType:= TTSQueryError.TSQueryErrorNone;
   FQuery:= TTSQuery.Create(ALanguage, AQuerySource, ErrOff, ErrType);
   if FQuery.Query = nil then
   begin
-    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, ErrOff, Ord(ErrType), AScmPath]);
+    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, ErrOff, Ord(ErrType), AScmPath]); // dl:ok raise-bare-exception@b885 -- a rule-load failure is only shown as text by the loader, which catches Exception; a subclass would add nothing for any caller
   end;
 end; // constructor
 
