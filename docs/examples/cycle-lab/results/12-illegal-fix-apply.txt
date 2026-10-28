@@ -1,0 +1,176 @@
+## Cycle 1: illorders <-> illcustomers
+
+Status: **interface cycle** -- all 2 uses between the units of this cycle are in INTERFACE uses clauses (the compiler refuses this loop).
+
+Files:
+- `illorders` -> `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllOrders.pas`
+- `illcustomers` -> `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllCustomers.pas`
+
+### Why it cycles
+- `illorders` interface uses `TIllCustomer` (class) at `IllOrders.pas:11`; declared in `IllCustomers.pas:9`.
+- `illcustomers` interface uses `TIllOrder` (class) at `IllCustomers.pas:12`; declared in `IllOrders.pas:9`.
+
+### Goal
+Part A (steps 1-4, required) removes the INTERFACE coupling: each symbol above -- and whatever it needs -- moves into a new leaf unit, or its class gets a base class there, so no unit of the cycle needs another one in its interface any more. Part B (optional) removes the implementation-only cycle that may remain.
+
+### DONE
+This plan (Part A) removes the INTERFACE-section coupling of this cycle. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
+After it, some of these units still use each other in their interfaces: the MANUAL items were not cut. Cut them by hand, or leave them.
+
+### Step 1: what moves where
+1. `TIllCustomer` -- **class**, declared at `IllCustomers.pas` lines 9-13.
+   - Recipe: a class has no code of its own -- move the declaration, unchanged, into `IllCustomers.Untangle`.
+2. `TIllOrder` -- **class**, declared at `IllOrders.pas` lines 9-13.
+   - Recipe: a class has no code of its own -- move the declaration, unchanged, into `IllOrders.Untangle`.
+   - Used by: only the moved declaration `TIllCustomer`
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
+- `IllOrders.pas` / `IllCustomers`: **keep** it in the interface uses (the index saw no symbol from it there -- do not touch it).
+- `IllCustomers.pas` / `IllOrders`: **keep** it in the interface uses (the index saw no symbol from it there -- do not touch it).
+
+### Step 3: create the new units
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`IllCustomers`, `IllOrders`). Create each file with EXACTLY this text:
+
+#### `IllCustomers.Untangle` -> `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllCustomers.Untangle.pas`
+```pascal
+unit IllCustomers.Untangle;
+
+// Created by `drag-lint cycles --plan`: declarations moved here from IllCustomers
+// to break a circular unit dependency. This unit may use only units OUTSIDE
+// that cycle -- never IllCustomers, IllOrders.
+
+interface
+
+uses
+  IllOrders.Untangle;
+
+type
+  TIllCustomer = class
+  public
+    Name: string;
+    LastOrder: TIllOrder;
+  end;
+
+implementation
+
+end.
+```
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `IllCustomers.Untangle in 'IllCustomers.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="IllCustomers.Untangle.pas"/>`.
+
+#### `IllOrders.Untangle` -> `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllOrders.Untangle.pas`
+```pascal
+unit IllOrders.Untangle;
+
+// Created by `drag-lint cycles --plan`: declarations moved here from IllOrders
+// to break a circular unit dependency. This unit may use only units OUTSIDE
+// that cycle -- never IllCustomers, IllOrders.
+
+interface
+
+uses
+  IllCustomers.Untangle;
+
+type
+  TIllOrder = class
+  public
+    Buyer: TIllCustomer;
+    Total: Currency;
+  end;
+
+implementation
+
+end.
+```
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `IllOrders.Untangle in 'IllOrders.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="IllOrders.Untangle.pas"/>`.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `IllOrders.pas`  (`C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllOrders.pas`)
+E1. Delete lines 8-13. Current text:
+```pascal
+type
+  TIllOrder = class
+  public
+    Buyer: TIllCustomer;
+    Total: Currency;
+  end;
+```
+
+#### `IllCustomers.pas`  (`C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllCustomers.pas`)
+E1. Delete lines 8-13. Current text:
+```pascal
+type
+  TIllCustomer = class
+  public
+    Name: string;
+    LastOrder: TIllOrder;
+  end;
+```
+
+#### `IllegalLab.dpr`  (`C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllegalLab.dpr`)
+E1. Replace line 7. Current text:
+```pascal
+  IllOrders in 'IllOrders.pas';
+```
+New text:
+```pascal
+  IllOrders in 'IllOrders.pas',
+  IllCustomers.Untangle in 'IllCustomers.Untangle.pas',
+  IllOrders.Untangle in 'IllOrders.Untangle.pas';
+```
+
+#### `IllegalLab.dproj`  (`C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllegalLab.dproj`)
+E1. After line 80 (`<DCCReference Include="IllOrders.pas"/>`), insert:
+```xml
+        <DCCReference Include="IllOrders.Untangle.pas"/>
+```
+E2. After line 79 (`<DCCReference Include="IllCustomers.pas"/>`), insert:
+```xml
+        <DCCReference Include="IllCustomers.Untangle.pas"/>
+```
+
+### Checklist
+Tick each box in order. Do not skip the compile.
+1. [ ] Create `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllCustomers.Untangle.pas` with the exact text given for `IllCustomers.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+2. [ ] Create `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllOrders.Untangle.pas` with the exact text given for `IllOrders.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+3. [ ] Apply every edit listed for `IllOrders.pas`, in the order listed.
+4. [ ] Apply every edit listed for `IllCustomers.pas`, in the order listed.
+5. [ ] Apply every edit listed for `IllegalLab.dpr`, in the order listed.
+6. [ ] Apply every edit listed for `IllegalLab.dproj`.
+7. [ ] Compile `IllegalLab.dproj` (RAD Studio: Project > Build; or `msbuild "C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllegalLab.dproj" /t:Build` from a RAD Studio Command Prompt). Expect 0 errors; on an error see "If the compile fails" below, fix, and compile again.
+8. [ ] Re-index: `drag-lint index --project "C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllegalLab.dproj" --db "db/IllegalLab.sqlite"`
+9. [ ] Run `drag-lint cycles --db "db/IllegalLab.sqlite"`. It must print exactly:
+```text
+1 circular unit group(s) found:
+  [2 units] illorders <-> illcustomers   (has interface coupling -- widest recompile blast radius)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
+```
+   The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
+
+#### If the compile fails
+- `E2003 Undeclared identifier: 'X'` in file F at line N: the index missed a use of X. If X is listed in the "what moves where" step, add that step's new unit to F's uses clause of the section holding line N (interface above `implementation`, implementation below it). Otherwise X still lives in a unit you moved or removed in the uses step: add that unit back to the same section.
+- `E2065 Unsatisfied forward or external declaration`: a class moved without its method bodies. Move the bodies listed for it as well.
+- `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
+- `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
+- `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
+
+### Part B (optional): remove the implementation-only cycle too
+After Part A these units still use each other through these edges (predicted):
+
+The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
+No edge above can be cut mechanically as the units stand before Part A. Part A changes what these edges carry, so after it run `drag-lint cycles --db "db/IllegalLab.sqlite" --plan` again: it weighs move globals, routine-call inversion and member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.
+
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "db/IllegalLab.sqlite" --cycle 1
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "db/IllegalLab.sqlite" --cycle 1 --apply
+  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
+Verdict: mechanical
+rolled back, project not changed
+  - compile-error:  illegal/IllegalLab.dproj:0 -- the project does not build after the edit (1 dcc line(s), first: IllOrders.pas(6): error F2047: Circular unit reference to 'IllCustomers' [C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\illegal\IllegalLab.dproj]); the baseline already failed (F2047); a masked error may surface now -- fix it, then retry; rolled back, project not changed
+compile: baseline 18.2 s, after 13.7 s
+compile: baseline F2047 in this group -- the build after the edit is the only proof
+drag-lint: note: cycles --plan reads class ancestry from C:\Projects\.drag-lint\library-Win64.sqlite

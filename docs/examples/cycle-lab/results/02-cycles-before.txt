@@ -1,0 +1,37 @@
+11 circular unit group(s) found:
+  [2 units] labvarwidget <-> labvarhost   (has interface coupling -- widest recompile blast radius)
+      labvarwidget uses labvarhost  [implementation]
+      labvarhost uses labvarwidget  [interface  <-- move-to-implementation candidate]
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (has interface coupling -- widest recompile blast radius)
+      demologger uses demosession  [interface  <-- move-to-implementation candidate]
+      democonfig uses demologger  [interface  <-- move-to-implementation candidate]
+      demoaudit uses democonfig  [implementation]
+      demosession uses demoaudit  [interface  <-- move-to-implementation candidate]
+  [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
+      demouiconnect uses demogageport  [implementation]
+      demogageport uses demouiconnect  [implementation]
+  [2 units] labdira <-> labdirb   (has interface coupling -- widest recompile blast radius)
+      labdira uses labdirb  [interface  <-- move-to-implementation candidate]
+      labdirb uses labdira  [implementation]
+  [3 units] democontrolplan <-> demoblueprint.viewmodel <-> demoblueprint   (implementation-only -- legal, lower impact)
+      democontrolplan uses demoblueprint  [implementation]
+      demoblueprint.viewmodel uses democontrolplan  [implementation]
+      demoblueprint uses demoblueprint.viewmodel  [implementation]
+  [2 units] labguarda <-> labguardb   (has interface coupling -- widest recompile blast radius)
+      labguarda uses labguardb  [interface  <-- move-to-implementation candidate]
+      labguardb uses labguarda  [implementation]
+  [2 units] labctorowner <-> labctorchild   (has interface coupling -- widest recompile blast radius)
+      labctorowner uses labctorchild  [interface  <-- move-to-implementation candidate]
+      labctorchild uses labctorowner  [implementation]
+  [2 units] labrchost <-> labrcwidget   (has interface coupling -- widest recompile blast radius)
+      labrchost uses labrcwidget  [interface  <-- move-to-implementation candidate]
+      labrcwidget uses labrchost  [implementation]
+  [2 units] labinitsink <-> labinitconsumer   (has interface coupling -- widest recompile blast radius)
+      labinitsink uses labinitconsumer  [implementation]
+      labinitconsumer uses labinitsink  [interface  <-- move-to-implementation candidate]
+  [2 units] labexchost <-> labexcwidget   (has interface coupling -- widest recompile blast radius)
+      labexchost uses labexcwidget  [interface  <-- move-to-implementation candidate]
+      labexcwidget uses labexchost  [implementation]
+  [2 units] labclswidget <-> labclsregistry   (has interface coupling -- widest recompile blast radius)
+      labclswidget uses labclsregistry  [implementation]
+      labclsregistry uses labclswidget  [interface  <-- move-to-implementation candidate]

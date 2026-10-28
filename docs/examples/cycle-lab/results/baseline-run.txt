@@ -1,0 +1,15 @@
+[init] consumer started
+[INFO] (s0/0 -) config loaded: env=staging minLevel=INFO retain=7d
+[WARN] (s1/1 alexanderl) unit graph contains a cycle
+[audit] CircularDemo/staging: 4 entries, retained 7 days
+[config] CircularDemo on staging, 2 log line(s) emitted at INFO or above
+[blueprint] folder 7 shown: drawing of folder 7
+[viewmodel] folder 7 -> control plan of folder 7
+[controlplan] back to the drawing of folder 7
+[gageport] ui connected (last gage 0)
+[gageport] data 42
+[gageport] gage now 42
+[gageport] data 43
+[gageport] gage now 43
+[ctor] touched by owner
+[cls] widget runs
