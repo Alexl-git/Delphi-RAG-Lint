@@ -347,7 +347,9 @@ const
   /// and R5 member access after a paren cast; POLY DispatchResolver writes dispatch_edges
   /// (polymorphic form launches). A MINOR: new classes of derived row. The reservation
   /// for C2.3 + the IsStub unification MOVES from 1.15.0 to 1.16.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.15.0-alpha';
+  /// <para>1.15.0-alpha -&gt; 1.16.0-alpha (2026-10-28, item 4): receiver_type_text +
+  /// external binding of value receivers; guard tests\callresolve\run_receiver_type_text.ps1.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.16.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
@@ -747,6 +749,10 @@ type
     // carries no direction of its own). '' when there is no member_accesses
     // row. Filled by FindCallersByName only; `usages` buckets on it.
     AccessMode: string;
+    // item 4 (untypable receivers): refs.receiver_type_text and refs.external_target of the
+    // call ref, filled by GetUnresolvedCallsFromSymbol only ('' when NULL or absent column).
+    ReceiverTypeText: string;
+    ExternalTarget  : string;
   end;
 
   /// <summary>v14 (D5): one resolved call-site edge, written by the
@@ -775,6 +781,12 @@ type
     // they are what the leaf-name caller bucket draws from. TargetSymbolId = 0
     // does not mean "no receiver to record".
     ReceiverText        : string;
+    // item 4 (spec s.4.1), persisted as refs.receiver_type_text: NULL = never resolved by a
+    // 1.16 engine (property left unset by the engine means not computed); '' = bare call or a
+    // receiver untypable even by name; '<TypeText>' = declared type, leaf-normalised (unit
+    // qualifier and generic args stripped, '^' kept); '<TypeText>.<seg>...' = typed up to
+    // TypeText with the pending chain segments following; a type-name receiver = the type.
+    ReceiverTypeText    : string;
     // v21: the qualified NAME of a target in ANOTHER index (RTL/VCL/DevExpress/
     // Spring), set only when TargetSymbolId = 0. A ref never carries both: a
     // local edge always wins, and cross-DB resolution runs last.
@@ -1906,6 +1918,12 @@ type
       rendered an empty bundle and exited 0, which is precisely the silent
       empty answer the bare-name fallback was added to stop. }
     Resolved     : Boolean              ;
+    { Item 4 / plan C3: calls in the target's body whose refs.external_target is
+      set (a project indexed with --library-db). 0 = no such call, and then the
+      markdown line and the json key are both OMITTED. }
+    LibraryCallCount: Integer           ;
+    { Up to three external targets, most frequent first (ties: first seen). }
+    LibraryCallTop  : TArray<string>    ;
   end;
 
 /// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>

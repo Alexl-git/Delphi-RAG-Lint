@@ -594,16 +594,17 @@ Described in [fb-snapshot](../../docs/wiki/fb-snapshot.md).
 
 ### find-callees
 
-Lists the resolved outgoing calls of one routine.
+Lists the resolved outgoing calls of one routine, plus the library-bound ones.
 
 ```text
-drag-lint find-callees --qname <Foo.Bar> --db PATH [--json] (resolved outgoing calls of routine X)
+drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json] (resolved outgoing calls of routine X; library-bound callees are marked library)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--qname` | `<Foo.Bar>` |  |  |
 | `--db` | `PATH` |  |  |
+| `--library-db` | `LIBRARY` | the library index to bind library-bound callees against at read time (a second --db does the same) |  |
 | `--json` |  |  |  |
 
 Described in [find-callees](../../docs/wiki/find-callees.md).
@@ -866,7 +867,7 @@ drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-
 | `--db` | `<file.sqlite>` |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
-| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve (value receivers typed by name bind too; the manifest key libraryResolve opts a section in). |  |
 | `--max-file-kb` | `N` |  |  |
 | `--no-use-ignore` |  |  |  |
 | `--no-sql-ms` |  |  |  |

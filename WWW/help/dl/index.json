@@ -170,7 +170,7 @@
   {
     "id": "find-callees",
     "title": "find-callees",
-    "summary": "Lists the resolved outgoing calls of one routine",
+    "summary": "Lists the resolved outgoing calls of one routine, plus the library-bound ones",
     "group": "search-navigation",
     "order": 20005,
     "since": "0.91.0-alpha",

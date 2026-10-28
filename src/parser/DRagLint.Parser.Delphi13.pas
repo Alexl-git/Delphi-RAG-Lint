@@ -276,6 +276,10 @@ type
       implementation section). Lets us emit a symbol only for TOP-LEVEL
       implementation-only free routines, never for nested local procedures. }
     RoutineDepth: Integer;
+    { 1.26.0 (item 4): index into Symbols of the named routine whose body is being
+      walked (nested routines set their own); -1 outside any routine body. The
+      on E: T do handler variable is emitted as a local_var parented to it. }
+    CurrentRoutineIdx: Integer;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     { X4: True when the last SCOPEDENUMS switch before byte AOffset is ON;
@@ -303,6 +307,7 @@ constructor TWalkState.Create(const ASource: TBytes);
 begin
   inherited Create;
   Source:= ASource;
+  CurrentRoutineIdx:= -1;
   ScopedEnumSwitches:= ScanScopedEnumSwitches(ASource);
   Symbols    := TList<TSymbol      >.Create;
   References := TList<TReference   >.Create;
@@ -785,6 +790,25 @@ begin
   end;
   Root:= RootIdentifierOf(Expr);
   if not Root.IsNull then AState.EmitRef(REF_KIND_RAISE_EXPR, NodeText(Root, AState.Source), Root);
+end; // procedure
+
+{ Item 4: on E: T do declares E for the handler clause. Emitted as a local_var
+  (Signature = the type text as written) parented to the enclosing named routine,
+  range = the handler clause, so E.Message can be typed from it. on T do has no
+  variable and emits nothing. Guard: tests\autotest\run_handler_var_symbol.ps1. }
+procedure EmitHandlerVarSymbol(const ANode: TTSNode; const AState: TWalkState);
+var
+  VarNode, TypeRef: TTSNode;
+  VarName, RoutineQN: string;
+begin
+  if AState.CurrentRoutineIdx < 0 then Exit;
+  VarNode:= ANode.ChildByField('variable');
+  TypeRef:= ANode.ChildByField('exception');
+  if VarNode.IsNull or TypeRef.IsNull then Exit;
+  VarName:= NodeText(VarNode, AState.Source);
+  if VarName = '' then Exit;
+  RoutineQN:= AState.Symbols[AState.CurrentRoutineIdx].QualifiedName;
+  AState.Emit(skLocalVar, VarName, RoutineQN + '.' + VarName, AState.CurrentRoutineIdx, ANode, NodeText(TypeRef, AState.Source));
 end; // procedure
 
 procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
@@ -3158,9 +3182,12 @@ begin
     if not BodyNode.IsNull then
     begin
       Inc(AState.RoutineDepth);
+      var SavedRoutineIdx:= AState.CurrentRoutineIdx;
+      AState.CurrentRoutineIdx:= SelfIdx;
       try
         Walk(BodyNode, AState, AParentSymbolIdx, AParentQualifiedName);
       finally
+        AState.CurrentRoutineIdx:= SavedRoutineIdx;
         Dec(AState.RoutineDepth);
       end;
     end;
@@ -3270,6 +3297,7 @@ begin
   { XT-RAISE: raise / handler facts (deep scan only, the same gate as the
     'read' the raise already gets). Additive arms, no Exit: the default
     recursion and every existing handler still see these nodes. }
+  if NodeType = 'exceptionHandler' then EmitHandlerVarSymbol(ANode, AState);
   if AState.EmitUsageRefs then
   begin
     if NodeType = 'raise' then EmitRaiseReference(ANode, AState)

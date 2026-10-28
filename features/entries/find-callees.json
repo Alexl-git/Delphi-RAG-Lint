@@ -5,14 +5,14 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.91.0-alpha",
-  "summary": "Lists the resolved outgoing calls of one routine",
+  "summary": "Lists the resolved outgoing calls of one routine, plus the library-bound ones",
   "intro": "Read this when you want to know what a routine actually calls, resolved through the index rather than by reading its source. find-callees --qname Foo.Bar lists its outgoing calls; add --json for machine-readable output.",
   "wikiPage": "find-callees",
   "surfaces": [
     {
       "type": "cli",
       "verb": "find-callees",
-      "usage": "drag-lint find-callees --qname <Foo.Bar> --db PATH [--json] (resolved outgoing calls of routine X)",
+      "usage": "drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json] (resolved outgoing calls of routine X; library-bound callees are marked library)",
       "flags": [
         {
           "name": "--qname",
@@ -23,11 +23,16 @@
           "arg": "PATH"
         },
         {
+          "name": "--library-db",
+          "arg": "LIBRARY",
+          "summary": "the library index to bind library-bound callees against at read time (a second --db does the same)"
+        },
+        {
           "name": "--json"
         }
       ],
       "helpOrder": 77,
-      "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)"]
+      "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)", "                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.", "                               With no library open the text ends N external (library not open) for the calls one could bind."]
     },
     {
       "type": "ide-menu",
@@ -39,6 +44,10 @@
   "requires": ["index"],
   "questions": [
     {
+      "ask": "Which library routines does this routine call?",
+      "command": "drag-lint find-callees --qname <Foo.Bar> --db <db> --library-db <library.sqlite>"
+    },
+    {
       "ask": "What does this routine call?",
       "command": "drag-lint find-callees --qname <Foo.Bar> --db <db>"
     },
@@ -48,9 +57,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.36.0-alpha",
     "surfaceHash": "b3998e6800368f6c9f191af5c2d3b51b3696ad30dc5bcd7d3b8e8482458ddc83"
   }
 }

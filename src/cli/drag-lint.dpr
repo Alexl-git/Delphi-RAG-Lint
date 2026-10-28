@@ -224,6 +224,7 @@ uses
   DRagLint.Doc.SymbolFacts in '..\doc\DRagLint.Doc.SymbolFacts.pas',
   DRagLint.Doc.Wiki in '..\doc\DRagLint.Doc.Wiki.pas',
   DRagLint.Index.CallResolver in '..\index\DRagLint.Index.CallResolver.pas',
+  DRagLint.Index.LibraryOracle in '..\index\DRagLint.Index.LibraryOracle.pas',
   DRagLint.Index.DispatchResolver in '..\index\DRagLint.Index.DispatchResolver.pas',
   DRagLint.Index.DataFlowFacts in '..\index\DRagLint.Index.DataFlowFacts.pas',
   DRagLint.Lint.DocRules in '..\lint\DRagLint.Lint.DocRules.pas',

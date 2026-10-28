@@ -123,6 +123,10 @@ uses
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
   ;
 
+const
+  { How many external targets the "Library calls" line names. }
+  LIBRARY_CALLS_TOP = 3;
+
 class function TContextBundler.EstimateTokens(const AText: string): Integer;
 begin
   Result:= Round(Length(AText) / 3.7);
@@ -589,6 +593,41 @@ begin
     Result.Callers[I]:= BC;
   end;
 
+  // Library calls (item 4 / C3): one query per target id, counted from the stored
+  // external_target; nothing is bound here, so a project indexed without a library
+  // gets count 0 and the line stays out of the bundle.
+  var LibCounts: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
+  try
+    var LibOrder: TList<string>:= TList<string>.Create;
+    try
+      for var TId: Int64 in TargetIds do
+        for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
+          if LR.ExternalTarget <> '' then
+          begin
+            Inc(Result.LibraryCallCount);
+            var Seen: Integer;
+            if LibCounts.TryGetValue(LR.ExternalTarget, Seen) then LibCounts[LR.ExternalTarget]:= Seen + 1
+            else
+            begin
+              LibCounts.Add(LR.ExternalTarget, 1);
+              LibOrder.Add(LR.ExternalTarget);
+            end;
+          end;
+      while (Length(Result.LibraryCallTop) < LIBRARY_CALLS_TOP) and (LibOrder.Count > 0) do
+      begin
+        var Best: Integer:= 0;
+        for var K: Integer:= 1 to LibOrder.Count - 1 do
+          if LibCounts[LibOrder[K]] > LibCounts[LibOrder[Best]] then Best:= K;
+        Result.LibraryCallTop:= Result.LibraryCallTop + [LibOrder[Best]];
+        LibOrder.Delete(Best);
+      end;
+    finally
+      LibOrder.Free;
+    end;
+  finally
+    LibCounts.Free;
+  end;
+
   // Impact summary (for refactor/delete verbs)
   if SameText(AVerb, 'refactor') or SameText(AVerb, 'delete') then Result.ImpactSummary:= AStore.FindTransitiveCallers(CallerName, 2);
 
@@ -726,6 +765,12 @@ begin
       SB.AppendLine;
     end;
 
+    if ABundle.LibraryCallCount > 0 then
+    begin
+      SB.AppendLine(Format('Library calls: %d (top: %s)', [ABundle.LibraryCallCount, string.Join(', ', ABundle.LibraryCallTop)]));
+      SB.AppendLine;
+    end;
+
     if Length(ABundle.Callers) > 0 then
     begin
       SB.AppendLine(Format('## Callers (%d)', [Length(ABundle.Callers)]));
@@ -791,9 +836,10 @@ end; // function
 
 class function TContextBundler.RenderJson(const ABundle: TContextBundle): string;
 var
-  Wiki: string    ;
-  I   : Integer   ;
-  W   : TWikiTopic;
+  Wiki   : string    ;
+  LibJson: string    ;
+  I      : Integer   ;
+  W      : TWikiTopic;
 begin
   { The wiki topics are NAMED here rather than dumped: a JSON consumer that
     wants the body has `wiki --term`, and a bundle summary that inlined
@@ -808,13 +854,21 @@ begin
       [JsonEscape(W.Name), JsonEscape(W.FilePath), W.HeaderLine]);
   end;
 
+  LibJson:= '';
+  if ABundle.LibraryCallCount > 0 then
+  begin
+    var Quoted: TArray<string>:= nil;
+    for I:= 0 to High(ABundle.LibraryCallTop) do Quoted:= Quoted + ['"' + JsonEscape(ABundle.LibraryCallTop[I]) + '"'];
+    LibJson:= Format(',"library_calls":{"count":%d,"top":[%s]}', [ABundle.LibraryCallCount, string.Join(',', Quoted)]);
+  end;
+
   Result:= Format(
     '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +
-    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]}', [
+    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]%s}', [
       JsonEscape(ABundle.Verb + ' ' + ABundle.QName), JsonEscape(ABundle.Verb), JsonEscape(ABundle.QName),
       IfThen(ABundle.Resolved, 'true', 'false'),
       ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
-      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki]);
+      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki, LibJson]);
 end; // function
 
 end.

@@ -228,7 +228,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [call-path](features/call-path.md) -- Finds the shortest resolved call path from one symbol to another.
 * [callgraph](features/callgraph.md) -- Prints an N-deep resolved call tree for a symbol, in either direction.
 * [dump-call-edges](features/dump-call-edges.md) -- Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows.
-* [find-callees](features/find-callees.md) -- Lists the resolved outgoing calls of one routine.
+* [find-callees](features/find-callees.md) -- Lists the resolved outgoing calls of one routine, plus the library-bound ones.
 * [purge-locals](features/purge-locals.md) -- A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space.
 
 ## 0.90.0-alpha

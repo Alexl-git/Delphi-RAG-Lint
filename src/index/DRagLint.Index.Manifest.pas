@@ -180,6 +180,13 @@ type
     /// <summary>When True and Source='', only MS*.SQL files pass the SQL file gate.</summary>
     /// <remarks>Applies to folder-tree (non-library) sections only; ignored when Source='registry-libraries'.</remarks>
     SqlOnlyMS: Boolean;
+    /// <summary>Item 4 (untypable receivers), manifest key "libraryResolve". When True,
+    /// `index --all` / `index --project` open the platform library index READ-ONLY as an
+    /// extra store for this section's call-resolve pass, so value receivers typed by name
+    /// bind to refs.external_target. Default False: the 2026-10-25 no-attach ruling stands
+    /// unless the manifest opts in. Ignored for library sections (a library never resolves
+    /// against itself).</summary>
+    LibraryResolve: Boolean;
   end; // record
 
   /// <summary>Complete parsed and merged manifest for a drag-lint installation.</summary>
@@ -922,6 +929,9 @@ begin
 
   B:= GetManifestBool(AObj, 'sqlOnlyMS', APath);
   if B <> nil then Result.SqlOnlyMS:= B.AsBoolean;
+
+  B:= GetManifestBool(AObj, 'libraryResolve', APath);
+  if B <> nil then Result.LibraryResolve:= B.AsBoolean;
 end; // function
 
 { ---------------------------------------------------------------------- }
@@ -1479,6 +1489,7 @@ begin
     end;
 
     JSecObj.AddPair('sqlOnlyMS', TJSONBool.Create(Sec.SqlOnlyMS));
+    if Sec.LibraryResolve then JSecObj.AddPair('libraryResolve', TJSONBool.Create(True));
   end; // for
 end; // function
 

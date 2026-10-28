@@ -146,6 +146,7 @@ type
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
     strict private
       FConn                  : TFDConnection;
+      FRtyColumn             : Integer      ; { item 4: refs.receiver_type_text present? 0 unknown, 1 yes, 2 no }
       FQInsertFile           : TFDQuery     ;
       FQUpsertFile           : TFDQuery     ;
       FQInsertSymbol         : TFDQuery     ;
@@ -337,6 +338,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ProbeExists(const ASQL: string): Boolean;
+      /// <summary>Item 4 type filter of the Called-from name bucket: removes from AList (and the parallel
+      /// ARtyList) every candidate whose receiver_type_text names a type that resolves in THIS store and is
+      /// neither the owner, nor one of its ancestors, nor one of its descendants.</summary>
+      /// <param name="AOwnerTypeName">The target's owning type (leaf name).</param>
+      /// <param name="AList">Candidates; filtered in place.</param>
+      /// <param name="ARtyList">receiver_type_text per candidate, same order and length as AList.</param>
+      /// <remarks>Keeps (unknown is not foreign): an empty or NULL type text, a text with pending segments
+      /// ('T.seg'), and a type this store does not declare (a library type). Ancestors are kept because a
+      /// call through a base type reaches the owner's override. Not thread-safe.</remarks>
+      procedure DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
       /// <summary>True when ResolveCallTargets may restrict itself to the refs
       /// this instance's writes can have affected.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ScopedResolveDeclineReason
@@ -2462,7 +2473,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
-      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
+      /// <summary>Item 4 (spec s.4.3): records which extra stores the resolve pass
+      /// consulted as schema_meta.external_stores -- a JSON array of {path,
+      /// indexer_fingerprint, resolver_fingerprint, indexed_at_unix} read from each
+      /// store's own schema_meta -- so a reader can tell which library build the
+      /// external names came from.</summary>
+      /// <param name="AExtraStores">The stores the pass consulted; empty removes the key.</param>
+      /// <param name="AScoped">True for a scoped pass: with no stores it leaves the key, since
+      /// the rows it did not re-resolve keep their external names.</param>
+      procedure WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
       /// then wipes and rewrites dispatch_edges and classref_args in one
       /// transaction.</summary>
       /// <param name="AExtraStores">Library stores for class-reference type lookup; may be nil.</param>
@@ -4732,6 +4751,11 @@ begin
     (the edge says so) and "not resolved at all". It is deliberately NOT a
     substitute for a local edge: a ref never carries both. }
   TryExec('ALTER TABLE refs ADD COLUMN external_target TEXT');
+  { item 4 (1.16 resolver): refs.receiver_type_text -- the receiver's declared type
+    text as the resolve ladder reached it (spec 2026-10-28-untypable-receivers s.4.1).
+    NULL = never resolved by a 1.16 engine; '' = bare/untypable; additive, no
+    SCHEMA_VERSION bump (dispatch_edges / data_flows precedent). }
+  TryExec('ALTER TABLE refs ADD COLUMN receiver_type_text TEXT');
   // N-06: unit_uses rows extracted from an include directive carry the absolute
   // .inc path and the host line of the directive (NULL = the unit's own text).
   // The partial index serves editors and the .inc host-invalidation lookup.
@@ -6897,6 +6921,9 @@ var
   ScopeC: string                ; { the reach CTE, or '' }
   ScopeP: string                ; { the reach predicate, or '' }
   RcvP  : string                ; { v20: the receiver predicate, or '' }
+  RtyCol: string                ; { item 4: the receiver_type_text select term }
+  RtyList: TList<string>        ; { item 4: receiver_type_text per row of List }
+  UnknownRty: Boolean           ; { item 4: the column is absent (pre-item-4 DB) }
 begin
   { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
     the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
@@ -7023,12 +7050,18 @@ begin
     '                    AND sv.kind IN (''local_var'',''param'',''field'',''property'',''var'',''const''))) ';
 
   List:= TList<TResolvedCaller>.Create;
+  RtyList:= TList<string>.Create;
+  { A DB older than the column reads '' for every row (keep everything). }
+  if FRtyColumn = 0 then
+    FRtyColumn:= (if ProbeExists('SELECT 1 FROM pragma_table_info(''refs'') WHERE name = ''receiver_type_text''') then 1 else 2);
+  UnknownRty:= FRtyColumn = 2;
+  RtyCol:= (if UnknownRty then ''''' AS rty ' else 'r.receiver_type_text AS rty ');
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= ScopeC +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ' +
-      '       r.receiver_text ' +
+      '       r.receiver_text, ' + RtyCol +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
@@ -7066,14 +7099,99 @@ begin
       else R.ReceiverText:= Q.FieldByName('receiver_text').AsString;
       R.Confidence:= 'unverified';
       List.Add(R);
+      RtyList.Add(Q.FieldByName('rty').AsString);
       Q.Next;
     end; // while
+    Q.Close;
+    { item 4 TYPE FILTER -- see FoldForeignTypedCallers. }
+    if (Trim(AOwnerTypeName) <> '') and not UnknownRty then DropForeignTypedCallers(AOwnerTypeName, List, RtyList);
     Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
+    RtyList.Free;
   end; // try
 end; // function
+
+procedure TSQLiteSymbolStore.DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
+var
+  Related : TStringList;
+  Declared: TDictionary<string, Boolean>;
+  Q       : TFDQuery;
+
+  procedure Load(const ASql: string);
+  begin
+    Q.SQL.Text:= ASql;
+    Q.ParamByName('o').AsWideString:= AOwnerTypeName;
+    Q.Open;
+    try
+      while not Q.Eof do
+      begin
+        Related.Add(Q.Fields[0].AsString);
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end;
+  end;
+
+  function DeclaredHere(const ATypeName: string): Boolean;
+  begin
+    if Declared.TryGetValue(LowerCase(ATypeName), Result) then Exit;
+    Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :t COLLATE NOCASE AND kind IN (''class'',''interface'',''record'',''type'') LIMIT 1';
+    Q.ParamByName('t').AsWideString:= ATypeName;
+    Q.Open;
+    try
+      Result:= not Q.Eof;
+    finally
+      Q.Close;
+    end;
+    Declared.Add(LowerCase(ATypeName), Result);
+  end;
+
+begin
+  Related := nil;
+  Declared:= nil;
+  Q       := nil;
+  try
+    for var i: Integer:= AList.Count - 1 downto 0 do
+    begin
+      var Rty: string:= ARtyList[i];
+      if (Rty = '') or Rty.Contains('.') or SameText(Rty, AOwnerTypeName) then Continue;
+      if Related = nil then
+      begin
+        Related := TStringList.Create;
+        Related.Sorted       := True;
+        Related.Duplicates   := dupIgnore;
+        Related.CaseSensitive:= False;
+        Declared:= TDictionary<string, Boolean>.Create;
+        Q:= TFDQuery.Create(nil);
+        Q.Connection:= FConn;
+        { descendants (any kind: an implementer of an interface owner is one) and ancestors, by NAME }
+        Load('WITH RECURSIVE d(name) AS (' +
+             ' SELECT s.name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  WHERE ta.ancestor_name = :o COLLATE NOCASE' +
+             ' UNION' +
+             ' SELECT s.name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  JOIN d ON ta.ancestor_name = d.name COLLATE NOCASE) SELECT name FROM d');
+        Load('WITH RECURSIVE a(name) AS (' +
+             ' SELECT ta.ancestor_name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  WHERE s.name = :o COLLATE NOCASE AND s.kind IN (''class'',''interface'',''record'',''type'')' +
+             ' UNION' +
+             ' SELECT ta.ancestor_name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  JOIN a ON s.name = a.name COLLATE NOCASE) SELECT name FROM a');
+      end;
+      if Related.IndexOf(Rty) >= 0 then Continue;
+      if not DeclaredHere(Rty) then Continue; { a library type: unknown is not foreign }
+      AList.Delete(i);
+      ARtyList.Delete(i);
+    end;
+  finally
+    Q.Free;
+    Declared.Free;
+    Related.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
 var
@@ -7138,6 +7256,9 @@ begin
     var EColF : TField:= Q.FieldByName('end_col'   );
     { FindField: a pre-v20 DB has no receiver_text, which reads as '' (bare). }
     var RcvF  : TField:= Q.FindField('receiver_text');
+    { item 4: both columns are additive (Migrate); a DB older than the engine reads '' }
+    var RtyF  : TField:= Q.FindField('receiver_type_text');
+    var ExtF  : TField:= Q.FindField('external_target');
     while not Q.Eof do
     begin
       R:= Default(TReference);
@@ -7151,6 +7272,8 @@ begin
       R.EndCol           := EColF.AsInteger;
       R.EnclosingSymbolId:= AEnclosingSymbolId;
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
+      if (RtyF <> nil) and not RtyF.IsNull then R.ReceiverTypeText:= RtyF.AsString;
+      if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -13596,8 +13719,39 @@ begin
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + CAST_WRITTEN + Suffix);  // dl:ok sql-injection-concat@1334 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses; a temp-table name and an IN-list cannot be parameters.
   BindRefStream(CAST_UNIVERSE, REF_KIND_CALL, Suffix, AResolver.ResolveEnumCast, ACandidates, ABound);
 end;
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
-{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
+const
+  KEY = 'external_stores';
+
+  function J(const S: string): string;
+  begin
+    Result:= '"' + S.Replace('\', '\\').Replace('"', '\"') + '"';
+  end;
+
+var
+  Parts: TArray<string>;
+begin
+  if Length(AExtraStores) = 0 then
+  begin
+    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''');
+    Exit;
+  end;
+  Parts:= [];
+  for var S: ISymbolStore in AExtraStores do
+  begin
+    if S = nil then Continue;
+    var Path: string:= '';
+    if S is TSQLiteSymbolStore then
+      Path:= (S as TSQLiteSymbolStore).FConn.Params.Values['Database'];
+    Parts:= Parts + ['{"path":' + J(Path) +
+      ',"indexer_fingerprint":' + J(S.GetMetaValue('indexer_fingerprint')) +
+      ',"resolver_fingerprint":' + J(S.GetMetaValue('resolver_fingerprint')) +
+      ',"indexed_at_unix":' + J(S.GetMetaValue('indexed_at_unix')) + '}'];
+  end;
+  SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
+end;
+
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
   every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)
@@ -13774,13 +13928,14 @@ begin
       and for the same reason: this runs inside the one big transaction below,
       where a fresh statement per row would dominate the pass. }
     UpdRcv.Connection:= FConn;
-    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x WHERE id = :id';
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t WHERE id = :id';
     { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
       type from the SQL alone and fails at execute with "Parameter [R] data type
       is unknown" -- which surfaces as a FATAL that aborts the whole index run,
       not as a skipped update. }
     UpdRcv.ParamByName('r' ).DataType:= ftString;
     UpdRcv.ParamByName('x' ).DataType:= ftString;
+    UpdRcv.ParamByName('t' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
 
@@ -14001,6 +14156,8 @@ begin
           externally" stays distinguishable from "resolved to an empty name". }
         if Edge.ExternalTarget <> '' then UpdRcv.ParamByName('x').AsWideString:= Edge.ExternalTarget
         else UpdRcv.ParamByName('x').Clear;
+        { item 4: '' is a value (bare / untypable); NULL only if never computed. }
+        UpdRcv.ParamByName('t').AsWideString := Edge.ReceiverTypeText;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
         end
@@ -14187,6 +14344,16 @@ begin
     else
       ResolveLog(Format('calls      %d edge(s) from %d call-site ref(s), WHOLE DB  [%.1fs, clear %.1fs, maps %.1fs]',
         [Written, Streamed, ResolveSecs(T0), TClear, TMaps]));
+    { Item 4 (resolver 1.16.0-alpha). How the receivers typed, and what the library
+      oracle did with the sites this index could not bind. `no-store` is the count a
+      project indexed WITHOUT a library shows: every one of those sites had a type
+      (or a head, or a bare name) to offer and no store to offer it to. }
+    ResolveLog(Format('calls      receivers: typed-local %d, typed-by-name-only %d, untyped %d; ' +
+      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d',
+      [Resolver.ReceiverStats.TypedLocal, Resolver.ReceiverStats.TypedByNameOnly, Resolver.ReceiverStats.Untyped,
+       Resolver.OracleStats.Bound, Resolver.OracleStats.AmbiguousType, Resolver.OracleStats.NoMember,
+       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore]));
+    WriteExternalStores(AExtraStores, Scoped);
     { 2026-09-23 (enum-value-ref-binding). EVERY DECLINE IS PRINTED BY REASON,
       and that is the point of the line rather than a nicety: the pass answers
       `certain` or nothing, so a ref that does not bind leaves no trace anywhere
