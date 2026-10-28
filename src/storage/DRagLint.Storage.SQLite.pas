@@ -3592,6 +3592,20 @@ begin
   Result:= (TStopwatch.GetTimeStamp - AStart) / TStopwatch.Frequency;
 end;
 
+{ Item 12: PRAGMA data_version on AConn. SQLite bumps it for a connection when ANOTHER
+  connection commits, never for its own commits, so two readings inside one
+  BEGIN IMMEDIATE transaction must be equal; a difference means the lock discipline was
+  bypassed somewhere. -1 when the pragma cannot be read -- a witness must never be the
+  reason a pass fails. }
+function ReadDataVersion(AConn: TFDConnection): Int64;
+begin
+  try
+    Result:= AConn.ExecSQLScalar('PRAGMA data_version');
+  except
+    on EFDDBEngineException do Result:= -1;
+  end;
+end;
+
 { V-C (1.31.5): the REF count from which a WHOLE-DB calls pass is worth the
   "expensive shape ... running, not hung" warning. Refs, not files: the pass
   cost follows refs, and file count misleads both ways (drag-lint's own 205
@@ -3903,13 +3917,16 @@ begin
   QE := TFDQuery.Create(nil);
   QA := TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE Res.Run reads the symbol ids it will write
+      (BEGIN IMMEDIATE via ConnectWriter); a second writer re-issuing ids in between made
+      the dispatch_edges / classref_args inserts fail their foreign keys. }
+    FConn.StartTransaction;
+    try
     Res.Run;
     QE.Connection:= FConn;
     QE.SQL.Text  := 'INSERT INTO dispatch_edges(base_symbol_id, impl_symbol_id, kind, confidence) VALUES (:b, :i, :k, :c)';
     QA.Connection:= FConn;
     QA.SQL.Text  := 'INSERT INTO classref_args(ref_id, arg_index, param_symbol_id, class_symbol_id, confidence) VALUES (:r, :a, :p, :k, :c)';
-    FConn.StartTransaction;
-    try
       FConn.ExecSQL('DELETE FROM dispatch_edges');
       FConn.ExecSQL('DELETE FROM classref_args');
       for E in Res.Edges do
@@ -12396,6 +12413,11 @@ begin
   QNames := TFDQuery.Create(nil);
   QUpdate:= TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE the files/unit_uses reads (BEGIN IMMEDIATE via
+      ConnectWriter), so a concurrent prune that deletes a files row cannot slip between
+      the stem map and the UPDATE of unit_uses.target_file_id (FK). }
+    FConn.StartTransaction;
+    try
     QFiles.Connection:= FConn;
     QFiles.SQL.Text:= 'SELECT id, path FROM files';
     QFiles.Open;
@@ -12466,8 +12488,6 @@ begin
     QUpdate.Params.ParamByName('un'  ).DataType:= ftString;
     QUpdate.Params.ParamByName('full').DataType:= ftString;
     QUpdate.Prepare;
-    FConn.StartTransaction;
-    try
       { RECOMPUTE, don't top up. Filling only NULL rows made the pass unable to
         REPAIR a wrong value: on an incremental re-index a file that is not
         re-parsed keeps its unit_uses rows, so the 122 measured wrong dotted
@@ -12700,6 +12720,12 @@ begin
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE the candidate reads below (ConnectWriter makes
+      it BEGIN IMMEDIATE), so the ids read in steps 1-1b are the ids written. Before this a
+      second writer re-issuing a file's symbol ids in between made this pass write a WRONG
+      type_ancestors.ancestor_symbol_id (no FK to say so). }
+    FConn.StartTransaction;
+    try
     Q.Connection:= FConn;
     { 1. candidate class/interface symbols, indexed by lowercased simple name.
       qualified_name is load-bearing: PickAncestorCandidateByScope derives each
@@ -12832,8 +12858,6 @@ begin
       CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
                  'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
-    FConn.StartTransaction;
-    try
       FConn.ExecSQL('DELETE FROM type_ancestors');
       Q.Open;
       while not Q.Eof do
@@ -12964,6 +12988,11 @@ begin
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE the candidate reads (BEGIN IMMEDIATE via
+      ConnectWriter), so the symbol ids read in step 1 are the ids written to
+      type_helpers.target_symbol_id -- a second writer can no longer re-issue them in between. }
+    FConn.StartTransaction;
+    try
     Q.Connection:= FConn;
     { 1. candidate type symbols (all, any kind), indexed by lowercased simple name. }
     Q.SQL.Text:= 'SELECT id, file_id, kind, name FROM symbols WHERE kind IS NOT NULL';
@@ -13002,8 +13031,6 @@ begin
     QIns.Params.ParamByName('tfid').DataType:= ftLargeint;
     Q.SQL.Text:= 'SELECT id, file_id, kind, heritage FROM symbols ' +
                  'WHERE is_helper = 1 AND heritage IS NOT NULL AND heritage <> ''''';
-    FConn.StartTransaction;
-    try
       FConn.ExecSQL('DELETE FROM type_helpers');
       Q.Open;
       while not Q.Eof do
@@ -13643,6 +13670,7 @@ var
   Profiled  : Boolean       ;
   Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
   ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
+  DataVersion0: Int64       ; { PRAGMA data_version right after the transaction opened (item 12) }
 begin
   T0:= TStopwatch.GetTimeStamp;
   { The accumulators cost two QueryPerformanceCounter reads per ref, which on a
@@ -13682,6 +13710,17 @@ begin
     if CountReferences >= WholeDbSlowRefThreshold then
       ResolveLog('calls      ... this is the expensive shape (~37 min on a 2 GB index) -- it is running, not hung');
   end;
+  { ITEM 12 (two writers on one DB): THE TRANSACTION OPENS HERE, ABOVE EVERY READ OF
+    CANDIDATE IDS. The writer connection starts BEGIN IMMEDIATE (ConnectWriter), so the
+    write lock is taken now: a second writer that commits a per-file reindex (new symbol
+    ids) can no longer slip between TCallResolver.BuildMaps / the stale prescan and the
+    edge writes below -- that interleaving wrote call_edges rows naming dead ids
+    (FOREIGN KEY constraint failed). Reads and writes now share one snapshot. }
+  FConn.StartTransaction;
+  Ref := Default(TReference);
+  Edge:= Default(TCallEdge );
+  DataVersion0:= ReadDataVersion(FConn);
+  try
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope
     writes nothing but connection-local temp tables, so it is safe outside. }
@@ -13713,6 +13752,10 @@ begin
   CastBound      := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
+  except
+    FConn.Rollback; { the lock taken above must not outlive a failed set-up }
+    raise;
+  end;
   { Split out because it is O(symbols) and independent of how many refs this run
     actually needs to resolve -- i.e. it is the part an incremental version of
     this pass would still pay, so it must be measured separately from the stream
@@ -13726,6 +13769,7 @@ begin
   StaleFileCount:= 0;
   StaleWhere:= '';
   try
+    try { item 12: the rollback frame starts here, so it also covers the prescan above the DELETE }
     Q.Connection:= FConn;
     { PREPARED once, executed per ref -- the same discipline UpsertCallEdge uses,
       and for the same reason: this runs inside the one big transaction below,
@@ -13852,7 +13896,6 @@ begin
       StaleIds.Free;
     end;
 
-    FConn.StartTransaction;
     { INBOX-used-before-assignment, shape D -- and the note that called it a
       FALSE POSITIVE had it backwards. The except handler ~130 lines below
       renders Edge and Ref as `the failing edge`, and the try starts HERE:
@@ -13868,9 +13911,6 @@ begin
       (INBOX-intermittent-fk-failure-on-incremental-reindex) needs to know: it
       separates a failing DELETE/open from a failing edge insert, and those have
       nothing in common but the message. }
-    Ref := Default(TReference);
-    Edge:= Default(TCallEdge );
-    try
       { THE DELETE BELONGS IN THIS TRANSACTION, and it was outside it until
         v0.86. ResolveAncestry and ResolveHelpers both DELETE inside their own
         transaction; this pass did not, so its `DELETE FROM call_edges`
@@ -14110,14 +14150,19 @@ begin
         try
           Diag:= sLineBreak +
             Format('  [call-edge capture] shape=%s written=%d streamed=%d',
-                   [Shape, Written, Streamed]) + sLineBreak;
+                   [Shape, Written, Streamed]) + sLineBreak +
+            { Item 12: the two readings must be EQUAL -- this pass holds the write lock since
+              its first statement. Unequal means another connection committed during the
+              pass, i.e. the lock discipline was bypassed somewhere. A pragma read, not a
+              probe of any table, so it cannot mask the original error. }
+            Format('  data_version before=%d now=%d', [DataVersion0, ReadDataVersion(FConn)]) + sLineBreak;
           { Ref.Id is 0 exactly when the stream never produced a row -- see the
             zeroing above the try. Naming an edge here would be naming stack
             noise, and this branch is a FACT the investigation wants: the
-            failure was in the DELETE or in Q.Open, not in an edge insert. }
+            failure was before the first edge insert (set-up, prescan, DELETE or Q.Open). }
           if Ref.Id = 0 then
             Diag:= Diag +
-              '  no row had been read when this failed -- the DELETE or the ' +
+              '  no row had been read when this failed -- set-up, the prescan, the DELETE or the ' +
               'stream open raised, so there is NO failing edge to name.' + sLineBreak
           else
             Diag:= Diag +
