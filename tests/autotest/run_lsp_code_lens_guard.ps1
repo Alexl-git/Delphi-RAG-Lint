@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_code_lens_guard.ps1 -- `textDocument/codeLens` (B4).
 

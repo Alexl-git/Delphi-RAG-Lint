@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_publish_respects_defaults.ps1 -- the LSP's publishDiagnostics must
   honour the SAME default-disabled rule set the CLI honours.

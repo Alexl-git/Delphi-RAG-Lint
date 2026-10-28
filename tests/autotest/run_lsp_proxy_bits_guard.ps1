@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family -- spawns and reaps DelphiLSP children (see run_lsp_proxy_byte_identity_guard.ps1).
 <#
   run_lsp_proxy_bits_guard.ps1 -- `drag-lint lsp --proxy --delphi-lsp-bits 32|64`

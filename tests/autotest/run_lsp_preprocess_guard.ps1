@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_preprocess_guard.ps1 -- the LSP's publishDiagnostics must lint the
   PREPROCESSED text, exactly as `lint` does.

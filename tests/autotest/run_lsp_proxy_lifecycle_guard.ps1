@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family. These spawn and reap DelphiLSP/LspStub children and have
 #   been observed interfering with EACH OTHER while strictly SERIALISED (three
 #   battery runs, exactly one of two adjacent proxy guards failing each time,

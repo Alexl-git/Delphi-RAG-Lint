@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_loose_open_scaling_guard.ps1 -- X-23 / INBOX-lsp-ephemeral-index-cost.
 

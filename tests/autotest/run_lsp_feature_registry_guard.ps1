@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_feature_registry_guard.ps1 -- the LSP feature registry (S0) is wired
   end to end, and the refactor that introduced it changed no existing answer.

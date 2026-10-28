@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_execute_command_guard.ps1 -- `workspace/executeCommand`
   `draglint.showCallers` (B6), the command B4's code lens runs.

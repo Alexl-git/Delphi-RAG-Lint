@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_c9_preprocess_guard.ps1 -- the LSP's own tree-sitter parse
   (DRagLint.LSP.SyntaxTree.ParseDelphiUtf8: semantic tokens, inlay hints) must

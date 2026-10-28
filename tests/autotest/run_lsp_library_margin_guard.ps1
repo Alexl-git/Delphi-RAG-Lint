@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_library_margin_guard.ps1 -- LSP C12 (follow-up of C11).
 

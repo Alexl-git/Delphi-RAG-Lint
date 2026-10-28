@@ -815,6 +815,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidClose(const AParams: TJSONObject);
+      /// <summary>Publishes an empty diagnostics array for AUri so the client drops the entries it holds.</summary>
+      /// <param name="AUri">The uri string exactly as the client sent it (never re-encoded from a path), or the client keys the clear to a different document.</param>
+      /// <remarks>WHY: the server publishes but never cleared, so a closed or deleted file kept its warnings in Problems forever.</remarks>
+      procedure PublishEmptyDiagnostics(const AUri: string);
+      /// <summary>Handles workspace/didChangeWatchedFiles: for each change of type 3 (Deleted) clears the file diagnostics and drops its overlay/memo state.</summary>
+      /// <param name="AParams">Notification params; params.changes[] of {uri, type}. nil is ignored.</param>
+      /// <remarks>Notification: no response. Types 1 (Created) and 2 (Changed) are ignored.</remarks>
+      procedure HandleDidChangeWatchedFiles(const AParams: TJSONObject);
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
@@ -3779,7 +3787,8 @@ begin
   if AParams = nil then Exit;
   TextDoc:= AParams.GetValue('textDocument') as TJSONObject;
   if TextDoc = nil then Exit;
-  var ClosedPath: string:= FileFromUri(TextDoc.GetValue('uri').Value);
+  var ClosedUri: string:= TextDoc.GetValue('uri').Value;
+  var ClosedPath: string:= FileFromUri(ClosedUri);
   TLiveDocuments.Remove(ClosedPath);
   TProjectProfileCache.Forget(ClosedPath); // LSP C10: keep the file -> .dproj memo bounded to open files
   { INBOX-lsp-hover-unindexed-file: the ephemeral index exists only to answer
@@ -3787,6 +3796,53 @@ begin
     temp database open, so it is evicted with the overlay and for the same
     reason. }
   if (ClosedPath <> '') and SameText(ClosedPath, FEphemFile) then DropEphemeralStore;
+  PublishEmptyDiagnostics(ClosedUri); // stale Problems entries: the client keeps the last publish until told otherwise
+end; // procedure
+
+procedure TLSPServer.PublishEmptyDiagnostics(const AUri: string);
+var
+  Notif, ParamsObj: TJSONObject;
+begin
+  Notif:= TJSONObject.Create;
+  try
+    Notif.AddPair('jsonrpc', '2.0');
+    Notif.AddPair('method', 'textDocument/publishDiagnostics');
+    ParamsObj:= TJSONObject.Create;
+    ParamsObj.AddPair('uri', AUri);
+    ParamsObj.AddPair('diagnostics', TJSONArray.Create);
+    Notif.AddPair('params', ParamsObj);
+    SendRawNotification(Notif);
+  finally
+    Notif.Free;
+  end;
+end; // procedure
+
+procedure TLSPServer.HandleDidChangeWatchedFiles(const AParams: TJSONObject);
+{ A deleted file (e.g. a removed git worktree) is never didClose'd, so without this its
+  last diagnostics stay in the client's Problems panel forever. }
+const
+  FILE_CHANGE_DELETED = 3; // LSP FileChangeType.Deleted
+var
+  Changes: TJSONArray;
+  Item: TJSONValue;
+  Entry: TJSONObject;
+  DelUri, DelPath: string;
+begin
+  if AParams = nil then Exit;
+  Changes:= AParams.GetValue('changes') as TJSONArray;
+  if Changes = nil then Exit;
+  for Item in Changes do
+  begin
+    Entry:= Item as TJSONObject;
+    if (Entry = nil) or (Entry.GetValue<Integer>('type', 0) <> FILE_CHANGE_DELETED) then Continue;
+    DelUri:= Entry.GetValue<string>('uri', '');
+    if DelUri = '' then Continue;
+    DelPath:= FileFromUri(DelUri);
+    TLiveDocuments.Remove(DelPath);
+    TProjectProfileCache.Forget(DelPath);
+    if (DelPath <> '') and SameText(DelPath, FEphemFile) then DropEphemeralStore;
+    PublishEmptyDiagnostics(DelUri);
+  end;
 end; // procedure
 
 function TLSPServer.StandDownTaken: Boolean;
@@ -3806,7 +3862,7 @@ begin
   end;
 end;
 
-procedure TLSPServer.Run;
+procedure TLSPServer.Run;  // dl:ok cyclomatic-complexity@35fd -- one flat method-name dispatch chain; each branch is a one-line delegate to a handler
 var
   Msg      : TJSONObject;
   Method   : string     ;
@@ -3858,6 +3914,7 @@ begin
       else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
       else if Method = 'textDocument/didChange' then HandleDidChange(Params)
       else if Method = 'textDocument/didClose' then HandleDidClose(Params)
+      else if Method = 'workspace/didChangeWatchedFiles' then HandleDidChangeWatchedFiles(Params)
       { S0: registered features, tried after every built-in and before the
         catch-all, so an unknown method still answers -32601. }
       else if FFeatureByMethod.TryGetValue(Method, Feature) then

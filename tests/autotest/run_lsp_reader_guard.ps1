@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_reader_guard.ps1 -- the LSP server is a READER of every --db it is
   handed (PLAN-multi-client-index-safety, ruling 2, T1/T3).

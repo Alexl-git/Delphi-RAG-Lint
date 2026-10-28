@@ -203,3 +203,6 @@ Limits: a mcp.json containing comments (JSONC) cannot be parsed, so the tool exi
 ## Diagnostics for a file no index owns
 
 Plain `drag-lint lsp` publishes lint findings for every opened file. When no loaded index owns the file (for example another worktree's copy of a unit), the findings are computed from the buffer alone and are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"`, so you can tell they are not backed by a project index. Owned files keep `"drag-lint"`. Guard: `tests\autotest\run_lsp_unowned_label_guard.ps1`.
+
+## Clearing diagnostics
+ server clears what it published: on `textDocument/didClose` and on `workspace/didChangeWatchedFiles` entries of type 3 (Deleted) it publishes an empty `diagnostics` array for the same uri string the client used, so a closed file, or one deleted without ever being closed (a removed git worktree), disappears from the Problems panel instead of keeping its last warnings. The VS Code extension registers a `**/*.{pas,dpr,dpk,inc}` watcher so deletions reach the server. Guard: `tests\autotest\run_lsp_clear_diags_guard.ps1`.
