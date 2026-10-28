@@ -21,7 +21,7 @@ implementation
 
 procedure WriteVerbReference;
 begin
-  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
   Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
   Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
@@ -39,10 +39,11 @@ begin
   Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>]');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
+  Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
   Writeln('                               members, the project-local units they transitively use, each one''s sibling');
@@ -441,6 +442,8 @@ begin
   Writeln('       ^ tokens_returned is measured only for context and query --text; the other readers are estimated at 15 tokens per row');
   Writeln('       ^ The log is per user and best effort: an unwritable LOCALAPPDATA loses lines silently by design');
   Writeln('       see wiki page: Gain-usage-log');
+  Writeln('  drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+  Writeln('       see wiki page: Format-Whole-Project-with-YADF');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
@@ -485,7 +488,7 @@ begin
   Result := True;
   if pVerb = 'index' then
   begin
-    Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+    Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]');
     Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
     Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
     Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
@@ -503,10 +506,11 @@ begin
     Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
     Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
     Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]]');
+    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>]');
+    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
+    Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
     Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
     Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
     Writeln('                               members, the project-local units they transitively use, each one''s sibling');

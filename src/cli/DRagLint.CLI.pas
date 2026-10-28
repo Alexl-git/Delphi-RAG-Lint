@@ -101,6 +101,7 @@ uses
   , System.Classes
   , System.Hash
   , System.IOUtils
+  , DRagLint.CLI.LibraryReady { library-first resolve: readiness probe + platform choice (plan 2026-10-28) }
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
   , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
   , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
@@ -582,6 +583,8 @@ type
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
+    WaitLibraryMin : Integer; // index --wait-library <minutes>: poll a not-ready platform library, then continue
+    RequireLibrary : Boolean; // index --require-library: a not-ready platform library is ERROR, exit 2
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
@@ -1807,6 +1810,12 @@ begin
       Result.LspMergeBudgetSet:= True;
     end
     else if A = '--resolve-only' then Result.ResolveOnly:= True
+    else if A = '--require-library' then Result.RequireLibrary:= True
+    else if (A = '--wait-library') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.WaitLibraryMin:= StrToIntDef(ParamStr(i), 0);
+    end
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
       `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
@@ -3725,30 +3734,140 @@ begin
   end;
 end;
 
+{ The manifest default platform, the last resort of the library-platform choice; '' when the manifest
+  will not load (every caller then lets ResolveLibraryDb's own detection decide). }
+function ManifestDefaultPlatform: string;
+begin
+  Result:= '';
+  try
+    Result:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.DefaultPlatform;
+  except
+    on E: Exception do Result:= '';
+  end;
+end;
+
+{ Milliseconds between --wait-library probes: 30 s; DRAGLINT_LIBRARY_POLL_MS overrides (tests). }
+function LibraryPollMs: Integer;
+const
+  DEFAULT_POLL_MS = 30000;
+begin
+  Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_LIBRARY_POLL_MS'), DEFAULT_POLL_MS);
+end;
+
+type
+  /// <summary>How EvaluateLibraryGate behaves: how long to wait, whether a not-ready library refuses, whether to print.</summary>
+  TLibraryGateOptions = record
+    WaitMin: Integer;
+    Require: Boolean;
+    Notify : Boolean;
+  end;
+
+function LibraryGateOptions(AWaitMin: Integer; ARequire, ANotify: Boolean): TLibraryGateOptions;
+begin
+  Result.WaitMin:= AWaitMin;
+  Result.Require:= ARequire;
+  Result.Notify := ANotify;
+end;
+
+function QuietLibraryGate: TLibraryGateOptions;
+begin
+  Result:= LibraryGateOptions(0, False, False);
+end;
+
+/// <summary>Evaluates the platform library an index run would consult: which platform, which DB, ready or not
+/// (library-first resolve, plan 2026-10-28 s.2.1/s.2.2/s.2.5 line 1).</summary>
+/// <param name="AEnabled">The section opted in with "libraryResolve": true.</param>
+/// <param name="AExplicitLibDb">The --library-db the user named, or ''. Wins; is printed but never waited on or refused.</param>
+/// <param name="APlatformArg">--platform, or the section's platform token ('' for a project section).</param>
+/// <param name="ADproj">The project's .dproj/.dpr, or ''.</param>
+/// <param name="AOwnDb">The DB being built; a library that IS this DB is not active.</param>
+/// <param name="AStore">The project DB's store (its indexer_fingerprint plat= limb names the platform), or nil.</param>
+/// <param name="AOpt">WaitMin: --wait-library minutes (probe every 30 s); Require: --require-library (not ready sets Refuse, the caller exits 2); Notify: print the one pre-walk `library:` line, the wait progress and the refusal.</param>
+/// <returns>The gate; Active=False when the run did not opt in.</returns>
+/// <remarks>Reads the library read-only. Default with a not-ready library is continue + mark + say so.</remarks>
+function EvaluateLibraryGate(AEnabled: Boolean; const AExplicitLibDb, APlatformArg, ADproj, AOwnDb: string;
+  const AStore: ISymbolStore; const AOpt: TLibraryGateOptions): TLibraryGate;
+begin
+  var AWaitMin: Integer:= AOpt.WaitMin;
+  var ARequire: Boolean:= AOpt.Require;
+  var ANotify : Boolean:= AOpt.Notify;
+  Result:= Default(TLibraryGate);
+  if not AEnabled and (AExplicitLibDb = '') then Exit;
+  Result.Explicit:= AExplicitLibDb <> '';
+  var ProjFp: string:= '';
+  if AStore <> nil then ProjFp:= AStore.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
+  Result.Platform:= ChooseLibraryPlatform(APlatformArg, ProjFp, ADproj, ManifestDefaultPlatform, Result.PlatformSource);
+  if Result.Explicit then Result.LibDb:= AExplicitLibDb
+  else
+  begin
+    var LibArgs: TArgs:= Default(TArgs);
+    LibArgs.CheckPlatform:= Result.Platform;
+    Result.LibDb:= ResolveLibraryDb(LibArgs);
+  end;
+  if (Result.LibDb <> '') and SameText(ExpandFileName(Result.LibDb), ExpandFileName(AOwnDb)) then Exit;
+  Result.Active:= True;
+  var CheckPlat: string:= if Result.Explicit then '' else Result.Platform;
+  Result.State:= ProbeLibraryReadiness(Result.LibDb, CheckPlat, Result.Why, Result.StampFp);
+  if ANotify and (Result.State <> lrReady) and not Result.Explicit and (AWaitMin > 0) then
+  begin
+    var Deadline: TDateTime:= IncMinute(Now, AWaitMin);
+    var Probe   : Integer  := 1;
+    while (Result.State <> lrReady) and (Now < Deadline) do
+    begin
+      Writeln(Format('library: waiting for %s (probe %d: %s)', [Result.LibDb, Probe, Result.Why]));
+      Flush(Output); { a redirected stdout is block-buffered: a poll line must be visible while the wait runs }
+      TThread.Sleep(LibraryPollMs);
+      Inc(Probe);
+      Result.State:= ProbeLibraryReadiness(Result.LibDb, CheckPlat, Result.Why, Result.StampFp);
+    end;
+    Writeln(Format('library: probe %d: %s', [Probe, LibraryReadinessToken(Result.State)]));
+  end;
+  if Result.State <> lrReady then Result.Refuse:= ARequire and not Result.Explicit;
+  if not ANotify then Exit;
+  if Result.State = lrReady then
+    Writeln(Format('library: %s (%s) READY %s', [Result.LibDb, Result.Platform, Result.Why]))
+  else if Result.Refuse then
+    Writeln(Format('ERROR: library: %s (%s) NOT READY -- %s; --require-library refuses to continue',
+      [Result.LibDb, Result.Platform, Result.Why]))
+  else
+    Writeln(Format('library: %s (%s) NOT READY -- %s; this run resolves %s',
+      [Result.LibDb, Result.Platform, Result.Why,
+       (if Result.Explicit then 'against the named library anyway' else 'against the project only and is marked pending')]));
+end;
+
 /// <summary>The extra (library) stores a manifest section's call-resolve pass opens when the
 /// section opts in with "libraryResolve": true (item 4).</summary>
 /// <param name="ALibraryResolve">The section's key; False returns no store at all.</param>
-/// <param name="APlatform">The section's platform token ('' = the manifest default platform).</param>
+/// <param name="APlatformArg">--platform / the section's platform token ('' = project-authoritative choice).</param>
+/// <param name="ADproj">The project file, for the platform choice; '' when none.</param>
 /// <param name="AOwnDb">The DB being built; a library that IS this DB is never opened against itself.</param>
-/// <returns>The platform library opened like --library-db (read-only use, never written), or an
-/// empty array with one stdout NOTE when the library index cannot be found.</returns>
+/// <param name="AStore">The project DB's store (its fingerprint names the platform), or nil.</param>
+/// <param name="AGate">Out: the readiness verdict (re-probed now, quietly) for the marker writer.</param>
+/// <returns>The platform library opened like --library-db (read-only use, never written) when it is
+/// READY; an empty array with a `library: PENDING` line when it is not (continue, mark, say so).</returns>
 /// <remarks>Default OFF: the 2026-10-25 ruling is that no run attaches a library nobody named.
 /// The key is the explicit, per-section, reviewable form of naming it.</remarks>
-function ManifestLibraryStores(ALibraryResolve: Boolean; const APlatform, AOwnDb: string): TArray<ISymbolStore>;
+function ManifestLibraryStores(ALibraryResolve: Boolean; const APlatformArg, ADproj, AOwnDb: string;
+  const AStore: ISymbolStore; out AGate: TLibraryGate): TArray<ISymbolStore>;
 begin
   Result:= nil;
-  if not ALibraryResolve then Exit;
-  var LibArgs: TArgs:= Default(TArgs);
-  LibArgs.CheckPlatform:= APlatform;
-  var LibDb: string:= ResolveLibraryDb(LibArgs);
-  if (LibDb = '') or not TFile.Exists(LibDb) then
+  AGate := EvaluateLibraryGate(ALibraryResolve, '', APlatformArg, ADproj, AOwnDb, AStore, QuietLibraryGate);
+  if not AGate.Active then Exit;
+  if AGate.State = lrReady then
   begin
-    Writeln('  NOTE: libraryResolve is on but no library index was found; resolving without it.');
-    Exit;
+    var LibArgs: TArgs:= Default(TArgs);
+    LibArgs.LibraryDbs:= [AGate.LibDb];
+    Result:= OpenLibraryStores(LibArgs);
+    if Length(Result) > 0 then Writeln('  library: bound (', AGate.LibDb, ', ', AGate.Why, ')')
+    else AGate.State:= lrUnreadable;
   end;
-  if SameText(ExpandFileName(LibDb), ExpandFileName(AOwnDb)) then Exit;
-  LibArgs.LibraryDbs:= [LibDb];
-  Result:= OpenLibraryStores(LibArgs);
+  if Length(Result) = 0 then
+  begin
+    if AGate.State = lrMissing then
+      Writeln('  NOTE: libraryResolve is on but no library index was found; resolving without it.');
+    Writeln(Format('  library: PENDING (%s) -- stored call edges are project-local; run: drag-lint %s once the %s library is ready',
+      [AGate.Why, IndexRemedyFor(AStore, AOwnDb, {AResolveOnly=}True), AGate.Platform]));
+  end;
 end;
 
 /// <summary>True when the manifest section that owns ADb opts in with "libraryResolve".</summary>
@@ -3768,7 +3887,8 @@ function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: st
 
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
-  AResolveOnly: Boolean = False; const ABuildConfig: string = ''): Boolean;
+  AResolveOnly: Boolean = False; const ABuildConfig: string = ''; AWaitLibraryMin: Integer = 0;
+  ARequireLibrary: Boolean = False): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -3815,6 +3935,13 @@ begin
     Store.Migrate;
     { V-C (1.31.5): a section DB with no files yet has no stale stamp to report. }
     var SecDbWasEmpty: Boolean:= Store.CountFiles = 0;
+    { Library-first resolve: say BEFORE the walk whether the platform library is ready (and wait or
+      refuse when asked); the resolve stage below re-probes. }
+    var ItemDproj: string:= '';
+    if (AItem.Mode = smClosure) and (Length(AItem.Roots) > 0) then ItemDproj:= AItem.Roots[0];
+    var PreGate: TLibraryGate:= EvaluateLibraryGate(AItem.LibraryResolve and (AItem.Mode <> smLibrary), '',
+      AItem.Platform, ItemDproj, AItem.DbPath, Store, LibraryGateOptions(AWaitLibraryMin, ARequireLibrary, True));
+    if PreGate.Refuse then Exit(False);
 
     { THE OPENING HALF OF A PAIR. The section already announces how it ENDED;
       until now it never announced that it had BEGUN, and the difference is not
@@ -4157,7 +4284,9 @@ begin
     if RanCalls then
     begin
       { item 4: the opt-in library store, opened once for both stages; none when the key is off. }
-      var SectionLibs: TArray<ISymbolStore>:= ManifestLibraryStores(AItem.LibraryResolve and (AItem.Mode <> smLibrary), AItem.Platform, AItem.DbPath);
+      var SectionGate: TLibraryGate;
+      var SectionLibs: TArray<ISymbolStore>:= ManifestLibraryStores(AItem.LibraryResolve and (AItem.Mode <> smLibrary),
+        AItem.Platform, ItemDproj, AItem.DbPath, Store, SectionGate);
       Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
       Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
@@ -4720,6 +4849,21 @@ begin
             Writeln(Format('        sibling-platform-prune: %d [%s]',
                            [Length(DrySib), string.Join(', ', DrySib)]));
           end;
+          if PS.LibraryResolve and (PS.Mode <> smLibrary) then
+          begin
+            var DryStore: ISymbolStore:= nil;
+            if TFile.Exists(PS.DbPath) then
+              try
+                DryStore:= TSQLiteSymbolStore.Create(PS.DbPath, {AReadOnly=}True);
+              except
+                on E: Exception do DryStore:= nil;
+              end;
+            var DryDproj: string:= '';
+            if (PS.Mode = smClosure) and (Length(PS.Roots) > 0) then DryDproj:= PS.Roots[0];
+            var DryGate: TLibraryGate:= EvaluateLibraryGate(True, '', PS.Platform, DryDproj, PS.DbPath, DryStore, QuietLibraryGate);
+            if DryGate.Active then
+              Writeln(Format('        library: %s (%s, %s)', [DryGate.LibDb, DryGate.Platform, LibraryReadinessToken(DryGate.State)]));
+          end;
           if PS.Mode in [smLibrary, smFolderTree] then
           begin
             var DryDropped: TArray<string>;
@@ -4768,7 +4912,7 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN); if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do begin if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN); if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig, AArgs.WaitLibraryMin, AArgs.RequireLibrary) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -4871,6 +5015,8 @@ begin
       // build honours the raw all-branch request across every spawned worker.
       if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
       if AArgs.BuildConfig <> '' then ChildCmdLine:= ChildCmdLine + ' --build-config "' + AArgs.BuildConfig + '"';
+      if AArgs.WaitLibraryMin > 0 then ChildCmdLine:= ChildCmdLine + ' --wait-library ' + IntToStr(AArgs.WaitLibraryMin);
+      if AArgs.RequireLibrary then ChildCmdLine:= ChildCmdLine + ' --require-library';
       { The MODE has to travel with the section, and did not have to before: when
         every section was recreated unconditionally there was nothing to
         propagate. A child that defaulted to --recompile would turn
@@ -6135,6 +6281,17 @@ begin
     (AArgs.ProjectPath <> '') or
     MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj', '.dpk']);
 
+  { Library-first resolve: say BEFORE the walk whether the platform library is ready; wait or refuse on
+    request. A dry run prints the state and never waits or refuses. }
+  var IdxDproj: string:= AArgs.ProjectPath;
+  if (IdxDproj = '') and MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj']) then IdxDproj:= AArgs.Path;
+  var IdxExplicit: string:= '';
+  if Length(AArgs.LibraryDbs) > 0 then IdxExplicit:= AArgs.LibraryDbs[0];
+  var IdxGate: TLibraryGate:= EvaluateLibraryGate(ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), IdxExplicit,
+    AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store,
+    LibraryGateOptions((if AArgs.DryRun then 0 else AArgs.WaitLibraryMin), AArgs.RequireLibrary and not AArgs.DryRun, True));
+  if IdxGate.Refuse then Exit(2);
+
   if AArgs.DryRun then begin Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.'); Result:= 0; Exit; end;
 
   { MODE: --rebuild empties the index of source before the walk, so the run
@@ -6547,9 +6704,11 @@ begin
     if RanCalls then
     begin
       { item 4: --library-db wins; else the section's "libraryResolve" opt-in; else no extra store. }
+      var IdxResolveGate: TLibraryGate;
       var RunLibs: TArray<ISymbolStore>:= OpenLibraryStores(AArgs);
       if Length(RunLibs) = 0 then
-        RunLibs:= ManifestLibraryStores(ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), AArgs.CheckPlatform, ResolvedDb);
+        RunLibs:= ManifestLibraryStores(ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), AArgs.CheckPlatform,
+          IdxDproj, ResolvedDb, Store, IdxResolveGate);
       Stage('', 'calls', procedure begin Store.ResolveCallTargets(RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
