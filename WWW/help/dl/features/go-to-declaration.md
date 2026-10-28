@@ -4,10 +4,10 @@ title: Go to Declaration
 summary: Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node
 product: DL
 group: search-navigation
-order: 20010
+order: 20011
 since: 0.43.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Go to Declaration

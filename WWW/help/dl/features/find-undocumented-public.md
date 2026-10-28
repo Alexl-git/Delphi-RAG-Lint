@@ -4,10 +4,10 @@ title: Find Undocumented (public)
 summary: Uses query find to list indexed symbols filtered by documentation state, kind, or visibility
 product: DL
 group: search-navigation
-order: 20006
+order: 20007
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Find Undocumented (public)

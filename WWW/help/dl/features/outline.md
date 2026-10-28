@@ -4,10 +4,10 @@ title: outline
 summary: Prints the file-scoped symbol outline for one Pascal unit
 product: DL
 group: search-navigation
-order: 20015
+order: 20016
 since: 0.86.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # outline
