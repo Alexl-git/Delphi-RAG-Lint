@@ -208,6 +208,7 @@ uses
   , DRagLint.Diagnostics.DeclChecks
   , DRagLint.Diagnostics.SizeChecks
   , DRagLint.Diagnostics.ConcurrencyChecks
+  , DRagLint.Diagnostics.EnumOrdinalCast { enum-ordinal-cast (lane B-ENUM) }
   , DRagLint.Diagnostics.DisallowedChecks
   , DRagLint.Diagnostics.ModernizeChecks
   , DRagLint.Diagnostics.PpChecks
@@ -12632,23 +12633,25 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..21] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..22] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
     'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
-    'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden');
+    'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
+    'unused-enum-value');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..8] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..9] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
-    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden');
+    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
+    'unused-enum-value');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -14110,6 +14113,9 @@ begin
       { X4: a bare read the index bound to a scoped-enum value (needs the index) }
       if LintRuleWants(NarrowRule, ['enum-bare-read-scoped']) then
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
+      { B-ENUM: a hard-coded enum ordinal (the index widens what counts as an enum) }
+      if LintRuleWants(NarrowRule, [ENUM_ORDINAL_CAST_RULE]) then
+        Findings:= Findings + TEnumOrdinalCastChecker.Check(EffPath, FlowStore, FlowFid);
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
         Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
       { LSP C12: a platform-library unit skips the type map too, for the flow
@@ -20177,6 +20183,8 @@ begin
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['enum-bare-read-scoped']) then { X4 }
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@099b -- REVIEWED 2026-10-25 profiler scan-slot id of the ScanAdd table, not a quantity
+        if LintRuleWants(Nr, [ENUM_ORDINAL_CAST_RULE]) then { B-ENUM }
+          for F in TEnumOrdinalCastChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
         if LintRuleWants(Nr, LINT_GATE_NAMING) then
           for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
@@ -20455,6 +20463,8 @@ begin
       OptIn:= OptIn + ['assert-with-side-effect'];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn:= OptIn + ['virtual-never-overridden'];
+    if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}True) then   { B-ENUM }
+      OptIn:= OptIn + ['unused-enum-value'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -20939,6 +20949,8 @@ begin
       OptIn2:= OptIn2 + ['assert-with-side-effect'];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
+    if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}True) then   { B-ENUM }
+      OptIn2:= OptIn2 + ['unused-enum-value'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge
