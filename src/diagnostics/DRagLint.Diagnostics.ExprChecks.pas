@@ -133,10 +133,7 @@ begin
   if N.IsNull or (N.NodeType <> 'literalNumber') then Exit;
   T:= Trim(NodeText(N, ASrc));
   if T = '' then Exit;
-  if T[1] = '%' then
-    Result:= TryStrToInt64('0b' + Copy(T, 2, MaxInt), AValue)
-  else
-    Result:= TryStrToInt64(T, AValue);
+  Result:= if T[1] = '%' then TryStrToInt64('0b' + Copy(T, 2, MaxInt), AValue) else TryStrToInt64(T, AValue);
   if (not Result) and (T[1] = '%') then
   begin
     // TryStrToInt64 has no 0b prefix on every RTL; parse by hand.
@@ -297,8 +294,7 @@ var
     IsAnd, Bad: Boolean;
   begin
     if not BitMaskPieces(N, Src, V, M, IsAnd) then Exit;
-    if IsAnd then Bad:= (V and (not M)) <> 0
-    else Bad:= (M and (not V)) <> 0;
+    Bad:= if IsAnd then (V and (not M)) <> 0 else (M and (not V)) <> 0;
     if Bad then
       EmitAt(N, 'bad-bit-mask',
         'Bit-mask comparison is constant: the compared value has bits the mask can never produce',
@@ -417,7 +413,7 @@ var
         if not EntTxt.EndsWith('.containskey') then Continue;
         Recv:= Trim(Copy(EntTxt, 1, Length(EntTxt) - Length('.containskey')));
         Key := ArgsKey(Args, Src);
-        if (Recv = '') or (Key = '') or (Pos('(', Key) > 0) or (Pos(',', Key) > 0) then Continue;
+        if (Recv = '') or (Key = '') or (Key.Contains('(')) or (Key.Contains(',')) then Continue;
         if ReadsSubscript(ThenN, Recv, Key) then
         begin
           EmitAt(N, 'double-dictionary-lookup',

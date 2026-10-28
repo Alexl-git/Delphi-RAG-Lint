@@ -183,8 +183,7 @@ begin
   L:= TList<TTSNode>.Create;
   try
     Stmts(N, L);
-    if L.Count > 0 then Result:= L[L.Count - 1]
-    else Result:= Default(TTSNode);
+    Result:= if L.Count > 0 then L[L.Count - 1] else Default(TTSNode);
   finally
     L.Free;
   end;

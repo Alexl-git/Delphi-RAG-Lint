@@ -756,8 +756,7 @@ begin
                 var AfLit: string:= Trim(Copy(AfRest, AfQuote, MaxInt));
                 var AfNew: string;
                 { Recase toward the conversion the code already performs. }
-                if ContainsText(AfFn, 'upper') then AfNew:= UpperCase(AfLit)
-                else                                AfNew:= LowerCase(AfLit);
+                AfNew:= if ContainsText(AfFn, 'upper') then UpperCase(AfLit) else LowerCase(AfLit);
                 if (AfLit <> '') and (AfNew <> AfLit) then
                 begin
                   E:= Default(TTextEdit);
@@ -919,7 +918,7 @@ begin
             if (LhsText <> '') and (IsTrue or IsFalse) then
             begin
               { (= True) or (<> False) => positive; (= False) or (<> True) => negative }
-              if OpText = '=' then Positive:= IsTrue else Positive:= IsFalse;
+              Positive:= if OpText = '=' then IsTrue else IsFalse;
               if Positive then Repl:= LhsText
               else if IsSingleTokenAtom(LhsText) then Repl:= 'not ' + LhsText
               else Repl:= 'not (' + LhsText + ')';

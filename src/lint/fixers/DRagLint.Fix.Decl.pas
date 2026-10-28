@@ -238,7 +238,7 @@ var
 begin
   Result:= False;
   Open:= Pos('(', AHeader);
-  if (Open = 0) or ((Pos(';', AHeader) > 0) and (Pos(';', AHeader) < Open)) then Exit(True);  { no parameter list }
+  if (Open = 0) or ((AHeader.Contains(';')) and (Pos(';', AHeader) < Open)) then Exit(True);  { no parameter list }
   Depth:= 0;
   Close:= 0;
   for I:= Open to Length(AHeader) do
@@ -403,9 +403,9 @@ begin
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   K:= DcHeaderKeywordLine(ALines, AFinding.StartLine);
   if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) then Exit;
-  if (Pos('.', QName) = 0) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
+  if (not QName.Contains('.')) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
   Found:= DcLookupDecl(ALines, K, QName, DeclLine);
-  if (Found = dlAmbiguous) or ((Found = dlNone) and (Pos('.', QName) > 0)) then Exit;
+  if (Found = dlAmbiguous) or ((Found = dlNone) and (QName.Contains('.'))) then Exit;
   Edits:= TList<TTextEdit>.Create;
   try
     DcRemoveInline(AFinding, ALines, K, Edits);
@@ -470,9 +470,9 @@ begin
   K:= DcHeaderKeywordLine(ALines, AFinding.StartLine);
   if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) then Exit;
   if not DcHeaderEnd(ALines, K, SemiLine, SemiCol) or (SemiLine < AFinding.StartLine) then Exit;
-  if (Pos('.', QName) = 0) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
+  if (not QName.Contains('.')) and (DcIndentOf(ALines[K - 1]) <> 0) then Exit;
   Found:= DcLookupDecl(ALines, K, QName, DeclLine);
-  if (Found = dlAmbiguous) or ((Found = dlNone) and (Pos('.', QName) > 0)) then Exit;
+  if (Found = dlAmbiguous) or ((Found = dlNone) and (QName.Contains('.'))) then Exit;
   E:= DcNewEdit(AFinding, tekReplaceInLine, AFinding.StartLine);
   E.Col       := AFinding.StartCol;
   E.EndCol    := AFinding.EndCol;
@@ -763,7 +763,7 @@ var
 begin
   Result:= nil;
   if not DcLocateBody(AFinding, ALines, 'constructor', QName, Header, BodyBegin, BodyEnd) then Exit;
-  if Pos('(', Header) > 0 then Exit;
+  if Header.Contains('(') then Exit;
   E:= DcNewEdit(AFinding, tekInsertLines, BodyBegin);
   E.ExpectLine:= BodyBegin;
   E.ExpectText:= 'begin';
@@ -818,7 +818,7 @@ begin
   Result:= nil;
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   K:= DcHeaderKeywordLine(ALines, AFinding.StartLine);
-  if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) or (Pos('.', QName) = 0) then Exit;
+  if (K = 0) or not DcParseHead(ALines[K - 1], Kind, QName) or (not QName.Contains('.')) then Exit;
   if (Kind <> 'function') and (Kind <> 'procedure') then Exit;
   if DcLookupDecl(ALines, K, QName, DeclLine) <> dlFound then Exit;
   if not DcSectionIsSafe(ALines, DeclLine) then Exit;

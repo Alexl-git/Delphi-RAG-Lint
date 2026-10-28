@@ -451,7 +451,7 @@ begin
   end;
 end;
 
-procedure TPPDeclScanner.Token(const AText: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@a1a7 -- REVIEWED 2026-10-27 token dispatch in precedence order (const value, parens, blocks, sections)  // dl:ok cyclomatic-complexity@c976 -- REVIEWED 2026-10-27 same dispatch
+procedure TPPDeclScanner.Token(const AText: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@75e1, cyclomatic-complexity@80cd -- REVIEWED 2026-10-28 token dispatch in precedence order (const value, parens, blocks, sections)
 var
   L: string;
 begin
