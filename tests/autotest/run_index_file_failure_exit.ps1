@@ -82,6 +82,12 @@ function Run([string]$ArgLine, [string]$FailFile) {
   [pscustomobject]@{ Code = $code; Out = [IO.File]::ReadAllText($out); Err = [IO.File]::ReadAllText($err) }
 }
 
+# DEC-15: committed= on the section summary line. Returns @{attempted;committed} for the named section, or $null.
+function Get-Committed([string]$Text, [string]$Name) {
+  $m = [regex]::Match($Text, '(?m)^=== ' + [regex]::Escape($Name) + '\b.*?\sattempted=(\d+)\s+up-to-date=(\d+)\s+committed=(\d+)\s+\[')
+  if (-not $m.Success) { return $null }
+  return @{ attempted = [int]$m.Groups[1].Value; committed = [int]$m.Groups[3].Value }
+}
 # ---- P1: positive control, no seam ----
 Write-Host 'P1: clean corpus, no fault' -ForegroundColor Cyan
 $dbP = Join-Path $scratch 'p1.sqlite'
@@ -127,12 +133,17 @@ foreach ($jobs in 1,2) {
   Check "$id exit 1"                           ($r.Code -eq 1) "exit $($r.Code)"
   Check "$id roll-up names WithBroken"          ($roll -match 'WithBroken') "roll-up: [$roll]`nstderr: $($r.Err)"
   Check "$id roll-up does NOT name AllGood"     ($roll -notmatch 'AllGood') "roll-up: [$roll]"
+  $cw = Get-Committed $r.Out 'WithBroken'; $cg = Get-Committed $r.Out 'AllGood'
+  Check "$id DEC-15 WithBroken committed = attempted - 1" (($null -ne $cw) -and ($cw.attempted -eq 2) -and ($cw.committed -eq 1)) "line: $(($r.Out -split "`n" | Where-Object { $_ -match '^=== WithBroken' }) -join '')"
+  Check "$id DEC-15 AllGood committed = attempted (control)" (($null -ne $cg) -and ($cg.attempted -eq 1) -and ($cg.committed -eq 1)) "line: $(($r.Out -split "`n" | Where-Object { $_ -match '^=== AllGood' }) -join '')"
 }
 
 # ---- A0: positive control for --all, no seam ----
 Write-Host 'A0: index --all, no fault' -ForegroundColor Cyan
 $r = Run "index --all --config `"$cfg`" --jobs 1 --rebuild" ''
 Check 'A0 exit 0 and no roll-up' (($r.Code -eq 0) -and ($r.Err -notmatch 'FAILED sections')) "exit $($r.Code) stderr: $($r.Err)"
+$c0 = Get-Committed $r.Out 'WithBroken'
+Check 'A0 DEC-15 no fault: committed = attempted = 2' (($null -ne $c0) -and ($c0.attempted -eq 2) -and ($c0.committed -eq 2)) "line: $(($r.Out -split "`n" | Where-Object { $_ -match '^=== WithBroken' }) -join '')"
 
 } finally {
   Set-Location C:\TEMP

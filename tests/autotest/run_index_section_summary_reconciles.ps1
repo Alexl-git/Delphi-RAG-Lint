@@ -157,7 +157,7 @@ function RunCapture([string]$ArgLine) {
 # reordered or renamed breaks the match rather than being skipped over by a
 # permissive gap pattern.
 # ---------------------------------------------------------------------------
-$SUMMARY_RX = '===\s*(?<name>\S+)[^\r\n]*?\sfiles=(?<files>\d+)\s+symbols=(?<symbols>\d+)\s+refs=(?<refs>\d+)\s+walked=(?<walked>\d+)\s+attempted=(?<attempted>\d+)\s+up-to-date=(?<utd>\d+)\s+\[(?<secs>\d+(?:\.\d+)?)s,\s*(?<rate>[^\]]+)\]\s*==='
+$SUMMARY_RX = '===\s*(?<name>\S+)[^\r\n]*?\sfiles=(?<files>\d+)\s+symbols=(?<symbols>\d+)\s+refs=(?<refs>\d+)\s+walked=(?<walked>\d+)\s+attempted=(?<attempted>\d+)\s+up-to-date=(?<utd>\d+)\s+committed=(?<committed>\d+)\s+\[(?<secs>\d+(?:\.\d+)?)s,\s*(?<rate>[^\]]+)\]\s*==='
 
 function Parse-Summary([string]$Text) {
   $m = [regex]::Match($Text, $SUMMARY_RX)
@@ -170,6 +170,7 @@ function Parse-Summary([string]$Text) {
     walked    = [int]$m.Groups['walked'].Value
     attempted = [int]$m.Groups['attempted'].Value
     utd       = [int]$m.Groups['utd'].Value
+    committed = [int]$m.Groups['committed'].Value
     secs      = [double]$m.Groups['secs'].Value
     rate      = $m.Groups['rate'].Value.Trim()
     line      = $m.Value
@@ -258,6 +259,7 @@ Check 'R1 walked=3'     (($null -ne $s1) -and ($s1.walked    -eq 3)) "walked=$(i
 Check 'R1 attempted=3'  (($null -ne $s1) -and ($s1.attempted -eq 3)) "attempted=$(if($s1){$s1.attempted})"
 Check 'R1 up-to-date=0' (($null -ne $s1) -and ($s1.utd       -eq 0)) "up-to-date=$(if($s1){$s1.utd})"
 Check-Inv 'R1' $s1 $r1.Out | Out-Null
+Check 'R1 DEC-15 committed == attempted == 3 (all-good positive control)' (($null -ne $s1) -and ($s1.committed -eq $s1.attempted) -and ($s1.committed -eq 3)) "committed=$(if($s1){$s1.committed})"
 # files is the STOCK, attempted the FLOW. On a fresh rebuild with no skip of any
 # kind they must agree -- and stating it as a RELATIONSHIP rather than a literal
 # is what lets this survive: when a future parse failure reappears, files falls
