@@ -163,7 +163,7 @@ Described in [callgraph](features/callgraph.md).
 Runs drag-lint's AST-level checks against a file.
 
 ```text
-drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]
+drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -458,7 +458,7 @@ Described in [doc-forget](features/doc-forget.md).
 Writes DocInsight documentation into every public declaration a project owns.
 
 ```text
-drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment
+drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -482,7 +482,7 @@ Described in:
 Documents every public declaration in every indexed unit, with no project scope.
 
 ```text
-drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)
+drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -530,7 +530,7 @@ Described in [dump-refs](features/dump-refs.md).
 Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites.
 
 ```text
-drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)
+drag-lint exceptions-sync [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -984,7 +984,7 @@ Described in:
 Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
+drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1017,7 +1017,7 @@ Described in:
 Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol.
 
 ```text
-drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]
+drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]
 ```
 
 | Flag | Argument | Meaning | Default |

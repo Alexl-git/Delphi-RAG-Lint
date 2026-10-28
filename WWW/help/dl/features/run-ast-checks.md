@@ -33,7 +33,7 @@ Full flag list: [check-ast in the CLI reference](../cli.md#check-ast).
 * drag-lint About window, button **Run AST Checks**
    1. Open the file in the editor
    2. Open the About window (drag-lint > About) and click the Run AST Checks button
-   3. From a shell: `drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]`
+   3. From a shell: `drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json]`
 
 ## Details
 

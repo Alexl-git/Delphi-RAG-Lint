@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "exceptions-sync",
-      "usage": "drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)",
+      "usage": "drag-lint exceptions-sync [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)",
       "flags": [
         {
           "name": "--db",
@@ -30,7 +30,7 @@
         }
       ],
       "helpOrder": 21,
-      "help": ["  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project's derived exception classes)", "                               Harvests every bare `raise Exception.Create('literal')` in the project and declares one class per", "                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.", "                               Opt in with an \"exceptions\" block in drag-lint-lint.json -- an empty one is enough; key \"unit\" names", "                               the unit (default uExceptionDefinitions, created if absent) and key \"root\" the ancestor (default Exception).", "                               Each declaration carries its message in a same-line // comment, and THAT COMMENT IS THE KEY: rename a", "                               generated class freely, but edit its comment and the next run adds a second class for the old message.", "                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE", "                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`."]
+      "help": ["  drag-lint exceptions-sync    [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project's derived exception classes)", "                               Harvests every bare `raise Exception.Create('literal')` in the project and declares one class per", "                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.", "                               Opt in with an \"exceptions\" block in drag-lint-lint.json -- an empty one is enough; key \"unit\" names", "                               the unit (default uExceptionDefinitions, created if absent) and key \"root\" the ancestor (default Exception).", "                               Each declaration carries its message in a same-line // comment, and THAT COMMENT IS THE KEY: rename a", "                               generated class freely, but edit its comment and the next run adds a second class for the old message.", "                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE", "                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`."]
     }
   ],
   "audience": "both",
@@ -51,9 +51,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "96d32fdb560ebad248e0f3f0f134fa47a4a4c1c9ee8249d8dea6fe3822b564a8"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "6c846729f767fec67c376ee12be3025c72d27bfaef5b725ee7866b0df4216218"
   }
 }

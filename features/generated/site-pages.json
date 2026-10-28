@@ -260,7 +260,7 @@
     "version": "1.35.1-alpha"
   },
   "features/exceptions-sync.md": {
-    "hash": "d53ca3d4fb9549aba044f7531be45f1ec891f99c6735d8251777dca6bd96c280",
+    "hash": "98d920375eac672309dc751f117ad663696ac99dfc805e0d0e4ec40c4cbdfe0f",
     "version": "1.36.0-alpha"
   },
   "features/export-enums-delphi-const.md": {
@@ -596,7 +596,7 @@
     "version": "1.35.1-alpha"
   },
   "features/run-ast-checks.md": {
-    "hash": "48416aa6184ab4fe7e8160156d4edb33ebe8a7f98a9cbd6599fba539c61006aa",
+    "hash": "1c70f22717df223f9fda1f66caab391273a6ec628ca9a96d70a1a26facf5ce5b",
     "version": "1.36.0-alpha"
   },
   "features/run-diagnostics-didsave.md": {
