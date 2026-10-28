@@ -617,6 +617,22 @@ begin
   Result:= TRegEx.IsMatch(ALines.Text, '\b(?:Inc|Dec|Include|Exclude)\s*\(\s*(?:\w+\.)*' + Esc + '\b', [roIgnoreCase]) or
     TRegEx.IsMatch(ALines.Text, '@\s*(?:\w+\.)*' + Esc + '\b', [roIgnoreCase]);
 end;
+{ True when a later plain field line in the class (before ALast) names a field that the fixer will decline
+  (var/out argument or Inc / Dec / @ target): it would stay a field AFTER the earlier converted properties, which
+  Delphi rejects (E2169). }
+function DcLaterSiblingStaysField(ALines: TStringList; AFrom, ALast: Integer): Boolean;
+var
+  I: Integer;
+  M: TMatch;
+begin
+  Result:= False;
+  for I:= AFrom to ALast - 1 do
+  begin
+    M:= TRegEx.Match(ALines[I - 1], '^\s*(\w+)\s*:\s*[^\s;=\[\(]+\s*;\s*$');
+    if M.Success and (DcFieldPassedAsVarArg(ALines, M.Groups[1].Value) or DcFieldUsedAsVariable(ALines, M.Groups[1].Value)) then Exit(True);
+  end;
+end;
+
 { public-field: `X: T;` in a public section -> a same-named property `property X: T read FX write FX;` plus a
   private `FX: T;` (in the class's first `private` section, else in a new `private` section opened just above the
   `public` line). Same name, so no call site changes. Declines for anything but a lone, comment-free `X: T;` with a
@@ -668,6 +684,7 @@ begin
       Break;
     end;
   if ClassLast = 0 then Exit;
+  if DcLaterSiblingStaysField(ALines, AFinding.StartLine + 1, ClassLast) then Exit;   { decline: a sibling stays a field }
   PrivLine:= 0;
   for I:= ClassFirst to ClassLast do
   begin
