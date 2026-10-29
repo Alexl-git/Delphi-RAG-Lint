@@ -317,16 +317,50 @@ end;
   is still over the editor control the dwell started in AND on the same token
   -- see DragLint.Plugin.HoverGate. Otherwise it is discarded (and stays cached,
   so pointing back at the token shows it at once). }
+{ The 0-based buffer cell under a SCREEN point NOW, through the grid the gutter
+  painter publishes -- the same arithmetic OnTick uses to ask the question, so a
+  wheel scroll (GGutterAnchorLine moved) or an edit lands on a different cell
+  under a stationary pointer. False (-1, -1) when no grid is painted or the
+  point is left of the text. }
+function PointerCellNow(const AScreenPt: TPoint; out ARow0, ACol0: Integer): Boolean;
+var
+  Pt  : TPoint ;
+  DY  : Integer;
+  ROff: Integer;
+begin
+  ARow0:= -1;
+  ACol0:= -1;
+  Result:= False;
+  if (GGutterAnchorHwnd = 0) or (GGutterLineHeight <= 0) or (GGutterCharWidth <= 0) then Exit;
+  Pt:= AScreenPt;
+  if not ScreenToClient(GGutterAnchorHwnd, Pt) then Exit;
+  if Pt.X < GGutterTextLeft then Exit;
+  DY:= Pt.Y - GGutterAnchorTopY;
+  if DY >= 0 then ROff:= DY div GGutterLineHeight
+  else ROff:= -((-DY + GGutterLineHeight - 1) div GGutterLineHeight);
+  ARow0:= (GGutterAnchorLine + ROff) - 1;
+  ACol0:= (Pt.X - GGutterTextLeft) div GGutterCharWidth;
+  Result:= ARow0 >= 0;
+  if not Result then
+  begin
+    ARow0:= -1;
+    ACol0:= -1;
+  end;
+end;
+
 procedure TDragLintHoverHelper.GateAndShowInflight;
 var
   NowPt  : TPoint;
   Client : TPoint;
   Verdict: TDLHoverGateVerdict;
+  NowRow0: Integer;
+  NowCol0: Integer;
 begin
   GetCursorPos(NowPt);
   Client:= NowPt;
   if FInflightAnchor.Hwnd <> 0 then ScreenToClient(FInflightAnchor.Hwnd, Client);
-  Verdict:= DLHoverGate(FInflightAnchor, EditorControlAt(NowPt), Client);
+  PointerCellNow(NowPt, NowRow0, NowCol0);
+  Verdict:= DLHoverGate(FInflightAnchor, EditorControlAt(NowPt), Client, NowRow0, NowCol0);
   if (Verdict <> hgvShow) or not IdeIsForeground or not LoadSettings.EnableHoverTooltip then
   begin
     DLT('hover', Format('answer discarded: gate=%d (pointer left the token / editor)', [Ord(Verdict)]));
@@ -617,7 +651,7 @@ begin
       var BoxPt: TPoint:= Pos;
       ScreenToClient(UnderHwnd, BoxPt);
       Anchor:= DLHoverAnchorFor(UnderHwnd, BoxPt.X - FALLBACK_HALF_BOX, 1,
-        BoxPt.Y - FALLBACK_HALF_BOX, 2 * FALLBACK_HALF_BOX, 0, 2 * FALLBACK_HALF_BOX);
+        BoxPt.Y - FALLBACK_HALF_BOX, 2 * FALLBACK_HALF_BOX, 0, 2 * FALLBACK_HALF_BOX, -1);
     end;
 
     { IOTAEditView.Position is 1-based; LSP / diagnostic cache is 0-based }
@@ -669,7 +703,7 @@ begin
           var TokS, TokE: Integer;
           if DLIdentSpanAt(BufferLineText(EditView, MouseRow0 + 1), MouseCol0, TokS, TokE) then
             Anchor:= DLHoverAnchorFor(GGutterAnchorHwnd, GGutterTextLeft, GGutterCharWidth,
-              GGutterAnchorTopY + ROff * GGutterLineHeight, GGutterLineHeight, TokS, TokE);
+              GGutterAnchorTopY + ROff * GGutterLineHeight, GGutterLineHeight, TokS, TokE, MouseRow0);
         end;
       end;
     end;

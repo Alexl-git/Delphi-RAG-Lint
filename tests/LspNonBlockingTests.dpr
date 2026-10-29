@@ -13,7 +13,11 @@ program LspNonBlockingTests;
      see an engine that keeps a request unanswered; Notify does not block when
      the engine stops reading stdin, and Stop then returns.
   G  the hover show-gate geometry (pure): same window, X within the token span,
-     Y within +-0.6 line heights of the original line's centre.
+     Y within +-0.6 line heights of the original line's centre, and the
+     pointer's buffer cell still inside the token (row + column span).
+  B  busy accounting: a request whose frame was never sent is not outstanding;
+     an old BACKGROUND request (callerCounts / codeLens) never makes the client
+     busy, a foreground one does.
   S  DLIdentSpanAt (pure).
 
   Every "does not block" assertion runs the call on a worker thread and waits
@@ -268,8 +272,9 @@ begin
         finally
           FLock.Leave;
         end;
-        { 'slow' is never answered: the engine is "still working on it". }
-        if (Id > 0) and (M <> 'slow') then Reply(Id, M);
+        { 'slow' and 'draglint/callerCounts' are never answered: the engine is
+          "still working on it" (a foreground and a background request). }
+        if (Id > 0) and (M <> 'slow') and (M <> 'draglint/callerCounts') then Reply(Id, M);
       finally
         V.Free;
       end;
@@ -441,8 +446,55 @@ begin
   end;
 end;
 
-{ ---- T: teardown is bounded (coordinator addition, 2026-10-29) ----
-  After an engine death RAD Studio took minutes to exit. Free must finish
+{ ---- B: busy accounting (whole-branch review 2026-10-29) ---- }
+
+procedure TestSendFailureNotOutstanding;
+var
+  C : TDragLintLspClient;
+  R : TJSONValue;
+begin
+  { No pipes attached: SendRequestFrame fails. The id must not stay
+    "outstanding", or IsBusy / IsStuck latch and the watchdog restarts an
+    engine that was never asked anything. }
+  C:= TDragLintLspClient.Create;
+  try
+    C.BusyAfterMs := 50;
+    C.StuckAfterMs:= 100;
+    R:= C.Request('textDocument/hover', nil, 50);
+    Check('B1 a sync Request whose frame could not be sent returns nil', R = nil);
+    R.Free;
+    Check('B2 ... and leaves nothing outstanding', C.OutstandingCount = 0, Format('outstanding=%d', [C.OutstandingCount]));
+    Sleep(200);
+    Check('B3 ... so the client is neither busy nor stuck afterwards', (not C.IsBusy) and (not C.IsStuck));
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TestBackgroundNotBusy;
+var
+  Rig: TRig;
+begin
+  Rig:= OpenRig;
+  try
+    Rig.Client.BusyAfterMs := 200;
+    Rig.Client.StuckAfterMs:= 60000;
+    Check('B4 draglint/callerCounts is a background method', DLIsBackgroundLspMethod('draglint/callerCounts'));
+    Check('B5 textDocument/codeLens is a background method', DLIsBackgroundLspMethod('textDocument/codeLens'));
+    Check('B6 draglint/hoverBundle is NOT a background method', not DLIsBackgroundLspMethod('draglint/hoverBundle'));
+    Rig.Client.RequestAsync('draglint/callerCounts', nil, 60000, nil);
+    Pump(400);
+    Check('B7 PREMISE the background request is still outstanding', Rig.Client.OutstandingCount = 1, Format('outstanding=%d', [Rig.Client.OutstandingCount]));
+    Check('B8 an old outstanding BACKGROUND request does not make the client busy (hover still asks)', not Rig.Client.IsBusy);
+    Rig.Client.RequestAsync('slow', nil, 60000, nil);
+    Pump(400);
+    Check('B9 CONTROL an old outstanding foreground request does', Rig.Client.IsBusy);
+  finally
+    CloseRig(Rig);
+  end;
+end;
+
+{ ---- T: teardown is bounded (coordinator addition, 2026-10-29) ----  After an engine death RAD Studio took minutes to exit. Free must finish
   inside the 2 s stop budget (+ slack) whether the engine is deaf (alive, not
   reading stdin, never writing stdout: writer AND reader both blocked) or dead
   (both pipe ends gone). }
@@ -505,27 +557,38 @@ const
   TOP = 160;    { top of the hovered line }
   ED: HWND = HWND($1234);
   OTHER: HWND = HWND($5678);
+  ROW = 7;      { 0-based buffer row of the token }
 var
   A: TDLHoverAnchor;
 begin
   { Token at columns [4, 10): X span [72, 120). Line band centre 168, +-9.6. }
-  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10);
+  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10, ROW);
   Check('G1 anchor X span = text left + column * char width', (A.TokenLeftX = 72) and (A.TokenRightX = 120), Format('%d..%d', [A.TokenLeftX, A.TokenRightX]));
-  Check('G2 same window, inside the token, on the line -> show', DLHoverGate(A, ED, Point(90, 168)) = hgvShow);
-  Check('G3 the first pixel of the token shows', DLHoverGate(A, ED, Point(72, 168)) = hgvShow);
-  Check('G4 the first pixel AFTER the token does not', DLHoverGate(A, ED, Point(120, 168)) = hgvOffToken);
-  Check('G5 one pixel before the token does not', DLHoverGate(A, ED, Point(71, 168)) = hgvOffToken);
-  Check('G6 another window (Project Manager) -> discard', DLHoverGate(A, OTHER, Point(90, 168)) = hgvOtherWindow);
-  Check('G7 window under the cursor 0 -> discard', DLHoverGate(A, 0, Point(90, 168)) = hgvOtherWindow);
+  Check('G2 same window, inside the token, on the line -> show', DLHoverGate(A, ED, Point(90, 168), ROW, 5) = hgvShow);
+  Check('G3 the first pixel of the token shows', DLHoverGate(A, ED, Point(72, 168), ROW, 5) = hgvShow);
+  Check('G4 the first pixel AFTER the token does not', DLHoverGate(A, ED, Point(120, 168), ROW, 5) = hgvOffToken);
+  Check('G5 one pixel before the token does not', DLHoverGate(A, ED, Point(71, 168), ROW, 5) = hgvOffToken);
+  Check('G6 another window (Project Manager) -> discard', DLHoverGate(A, OTHER, Point(90, 168), ROW, 5) = hgvOtherWindow);
+  Check('G7 window under the cursor 0 -> discard', DLHoverGate(A, 0, Point(90, 168), ROW, 5) = hgvOtherWindow);
   { centre 168; 0.6 * 16 = 9.6 -> Y in [158.4, 177.6] }
-  Check('G8 Y = centre + 9 (inside 0.6 line heights) shows', DLHoverGate(A, ED, Point(90, 177)) = hgvShow);
-  Check('G9 Y = centre - 9 shows', DLHoverGate(A, ED, Point(90, 159)) = hgvShow);
-  Check('G10 Y = centre + 10 (next line) -> discard', DLHoverGate(A, ED, Point(90, 178)) = hgvOffLine);
-  Check('G11 Y = centre - 10 (previous line) -> discard', DLHoverGate(A, ED, Point(90, 158)) = hgvOffLine);
-  Check('G12 window is checked before geometry', DLHoverGate(A, OTHER, Point(0, 0)) = hgvOtherWindow);
+  Check('G8 Y = centre + 9 (inside 0.6 line heights) shows', DLHoverGate(A, ED, Point(90, 177), ROW, 5) = hgvShow);
+  Check('G9 Y = centre - 9 shows', DLHoverGate(A, ED, Point(90, 159), ROW, 5) = hgvShow);
+  Check('G10 Y = centre + 10 (next line) -> discard', DLHoverGate(A, ED, Point(90, 178), ROW, 5) = hgvOffLine);
+  Check('G11 Y = centre - 10 (previous line) -> discard', DLHoverGate(A, ED, Point(90, 158), ROW, 5) = hgvOffLine);
+  Check('G12 window is checked before geometry', DLHoverGate(A, OTHER, Point(0, 0), ROW, 5) = hgvOtherWindow);
   A.Hwnd:= 0;
-  Check('G13 no anchor -> discard', DLHoverGate(A, 0, Point(90, 168)) = hgvNoAnchor);
-end;
+  Check('G13 no anchor -> discard', DLHoverGate(A, 0, Point(90, 168), ROW, 5) = hgvNoAnchor);
+  { The cell rule (whole-branch review 2026-10-29): same pixels, different
+    buffer cell -- a wheel scroll or an edit under a stationary pointer. }
+  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10, ROW);
+  Check('G14 scrolled: same pixels, another row -> discard', DLHoverGate(A, ED, Point(90, 168), ROW + 3, 5) = hgvOtherCell);
+  Check('G15 edited: same row, column left the token -> discard', DLHoverGate(A, ED, Point(90, 168), ROW, 12) = hgvOtherCell);
+  Check('G16 the last column of the token shows', DLHoverGate(A, ED, Point(90, 168), ROW, 9) = hgvShow);
+  Check('G17 the column just after the token does not', DLHoverGate(A, ED, Point(90, 168), ROW, 10) = hgvOtherCell);
+  Check('G18 pointer no longer maps to a cell -> discard', DLHoverGate(A, ED, Point(90, 168), -1, -1) = hgvOtherCell);
+  Check('G19 anchor records the row and the column span', (A.Row0 = ROW) and (A.StartCol0 = 4) and (A.EndCol0 = 10));
+  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10, -1);
+  Check('G20 a fallback anchor (row unknown) skips the cell rule', DLHoverGate(A, ED, Point(90, 168), -1, -1) = hgvShow);end;
 
 { ---- S: identifier span ---- }
 
@@ -549,6 +612,7 @@ begin
   try
     TestGate;
     TestIdentSpan;
+    TestSendFailureNotOutstanding;
     TestQueueNeverBlocks;
     if GQueueBlocked then Check('W* .. T*: not run -- the write queue blocks, every pipe test would hang', False)
     else
@@ -557,6 +621,7 @@ begin
       TestAsyncReply;
       TestSupersededDropped;
       TestTimeoutBusyStuck;
+      TestBackgroundNotBusy;
       TestNotifyWhenEngineStopsReading;
       TestTeardownBudget;
     end;

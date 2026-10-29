@@ -5782,7 +5782,11 @@ begin
     end;
     Result:= True;
     if (GCallerCountsId <> 0) and (GCallerCountsClient = Cli) then Exit;
-    if Cli.IsBusy then Exit;
+    { IsBusy ignores BACKGROUND requests (so a slow count never starves a
+      hover); a background pass itself still waits until the engine owes
+      nothing -- including a timed-out earlier count -- so counts never pile
+      up behind each other. }
+    if Cli.IsBusy or (Cli.OutstandingCount > 0) then Exit;
 
     Params:= TJSONObject.Create;
     try

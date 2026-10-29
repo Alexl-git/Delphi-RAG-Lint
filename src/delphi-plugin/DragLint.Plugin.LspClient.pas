@@ -49,6 +49,14 @@ type
     dlsFailed     { spawn or initialize failed; see LastError     }
   );
 
+  /// <summary>One request sent and not yet answered.</summary>
+  TDLOutstanding = record
+    /// <summary>GetTickCount64 when it was sent.</summary>
+    Sent      : UInt64 ;
+    /// <summary>DLIsBackgroundLspMethod of its method: IsBusy ignores it.</summary>
+    Background: Boolean;
+  end;
+
   TDragLintLspClient = class
     strict private
       FProcessHandle  : THandle                         ;
@@ -79,7 +87,7 @@ type
       { Every request sent and not yet answered (sync and async), with the tick
         it was sent at. A TIMED-OUT request stays here: the serial engine is
         still working on it, which is exactly what "busy" has to see. }
-      FOutstanding    : TDictionary<Integer, UInt64>    ;
+      FOutstanding    : TDictionary<Integer, TDLOutstanding>;
       FLastRxTick     : UInt64                          ;
       FTicker         : TThread                         ;
       FTickerStop     : TEvent                          ;
@@ -171,8 +179,10 @@ type
       /// stdin unread, for longer than BusyAfterMs.</summary>
       /// <remarks>Callers use it to stop queueing more work (hover, code lens)
       /// behind a request the serial engine is still chewing on.</remarks>
-      /// <returns>True while the oldest outstanding request, or the current
-      /// stdin write, is older than BusyAfterMs.</returns>
+      /// <returns>True while the oldest outstanding FOREGROUND request, or the
+      /// current stdin write, is older than BusyAfterMs. Background requests
+      /// (DLIsBackgroundLspMethod) never count; a request whose frame could
+      /// not be sent is never outstanding.</returns>
       function IsBusy: Boolean;
 
       /// <summary>True when requests are outstanding and the engine has sent
@@ -212,6 +222,16 @@ type
       /// IsStuck True (default 60000).</summary>
       property StuckAfterMs: Cardinal read FStuckAfterMs write FStuckAfterMs;
   end;
+
+/// <summary>True for a request the IDE sends in the BACKGROUND, whose age must
+/// not make the client busy.</summary>
+/// <param name="AMethod">JSON-RPC method name, compared case-sensitively.</param>
+/// <returns>True for draglint/callerCounts and textDocument/codeLens.</returns>
+/// <remarks>Pure. A background request still counts for OutstandingCount and
+/// IsStuck; only IsBusy -- the "do not ask a hover now" signal -- ignores it,
+/// so a slow caller-count pass never starves the hover the engine yields
+/// to.</remarks>
+function DLIsBackgroundLspMethod(const AMethod: string): Boolean;
 
 implementation
 
@@ -517,7 +537,7 @@ begin
   FResponses      := TDictionary<Integer, TJSONValue>.Create;
   FAsync          := TObjectDictionary<Integer, TObject>.Create([doOwnsValues]);
   FFlags          := TObjectDictionary<Integer, TObject>.Create([doOwnsValues]);
-  FOutstanding    := TDictionary<Integer, UInt64>.Create;
+  FOutstanding    := TDictionary<Integer, TDLOutstanding>.Create;
   FNextId       := 1;
   FProcessHandle:= 0;
   FStdInWrite   := INVALID_HANDLE_VALUE;
@@ -979,6 +999,17 @@ begin
   end;
 end;
 
+function DLIsBackgroundLspMethod(const AMethod: string): Boolean;
+begin
+  Result:= (AMethod = 'draglint/callerCounts') or (AMethod = 'textDocument/codeLens');
+end;
+
+function OutstandingNow(const AMethod: string): TDLOutstanding;
+begin
+  Result.Sent      := GetTickCount64;
+  Result.Background:= DLIsBackgroundLspMethod(AMethod);
+end;
+
 function TDragLintLspClient.SendRequestFrame(AId: Integer; const AMethod: string; AParams: TJSONValue): Boolean;
 var
   Msg: TJSONObject;
@@ -1012,12 +1043,23 @@ begin
       Id:= FNextId;
       Inc(FNextId);
       FPendingRequests.Add(Id, Evt);
-      FOutstanding.AddOrSetValue(Id, GetTickCount64);
+      FOutstanding.AddOrSetValue(Id, OutstandingNow(AMethod));
     finally
       FLock.Leave;
     end;
 
-    if SendRequestFrame(Id, AMethod, AParams) and (Evt.WaitFor(ATimeoutMs) = wrSignaled) then
+    if not SendRequestFrame(Id, AMethod, AParams) then
+    begin
+      { Never sent: nothing for the engine to owe. Left in FOutstanding, it
+        latched IsBusy / IsStuck and the watchdog restarted a healthy engine. }
+      FLock.Enter;
+      try
+        FOutstanding.Remove(Id);
+      finally
+        FLock.Leave;
+      end;
+    end
+    else if Evt.WaitFor(ATimeoutMs) = wrSignaled then
     begin
       FLock.Enter;
       try
@@ -1073,7 +1115,7 @@ begin
     end;
     FAsync.Add(Id, Entry);
     FFlags.Add(Id, Holder);
-    FOutstanding.AddOrSetValue(Id, GetTickCount64);
+    FOutstanding.AddOrSetValue(Id, OutstandingNow(AMethod));
   finally
     FLock.Leave;
   end;
@@ -1138,14 +1180,16 @@ function TDragLintLspClient.IsBusy: Boolean;
 var
   Now64 : UInt64;
   Oldest: UInt64;
-  Sent  : UInt64;
+  Sent  : TDLOutstanding;
 begin
   Now64:= GetTickCount64;
   Oldest:= Now64;
   FLock.Enter;
   try
+    { A BACKGROUND request (caller counts, code lens) never makes the client
+      busy: the engine yields to a hover, so refusing one would starve it. }
     for Sent in FOutstanding.Values do
-      if Sent < Oldest then Oldest:= Sent;
+      if (not Sent.Background) and (Sent.Sent < Oldest) then Oldest:= Sent.Sent;
   finally
     FLock.Leave;
   end;
@@ -1157,7 +1201,7 @@ function TDragLintLspClient.IsStuck: Boolean;
 var
   Oldest: UInt64;
   Since : UInt64;
-  Sent  : UInt64;
+  Sent  : TDLOutstanding;
 begin
   { Silence is measured from the LATER of "last thing the engine said" and
     "oldest request still unanswered": an engine idle for ten minutes and then
@@ -1169,7 +1213,7 @@ begin
     begin
       Oldest:= High(UInt64);
       for Sent in FOutstanding.Values do
-        if Sent < Oldest then Oldest:= Sent;
+        if Sent.Sent < Oldest then Oldest:= Sent.Sent;
       Since:= if FLastRxTick > Oldest then FLastRxTick else Oldest;
       Result:= GetTickCount64 - Since > FStuckAfterMs;
     end;

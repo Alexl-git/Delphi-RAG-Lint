@@ -14,7 +14,11 @@ unit DragLint.Plugin.HoverGate;
      * horizontally anywhere within the hovered identifier's span, and
      * vertically within +-0.6 of a line height around the centre of the
        original line (so a hand drifting a few pixels keeps the popup, while
-       the next line's token does not).
+       the next line's token does not), and
+     * on the SAME buffer cell span: the pointer now maps to the anchor's row
+       and a column inside the token (whole-branch review 2026-10-29). A wheel
+       scroll or an edit moves a different line under a stationary pointer,
+       and the pixel tests alone would pass it.
 
    Everything here is pure arithmetic on numbers the caller supplies -- no Open
    Tools API, no VCL -- so it is unit-tested outside the IDE
@@ -44,6 +48,9 @@ type
     TokenRightX: Integer; { first client X AFTER the identifier (exclusive) }
     LineTopY   : Integer; { client Y of the hovered line's top edge }
     LineHeight : Integer; { pixel height of one editor line; > 0 }
+    Row0       : Integer; { 0-based buffer row of the token; -1 = not known (fallback box) }
+    StartCol0  : Integer; { 0-based first column of the token (inclusive) }
+    EndCol0    : Integer; { 0-based column AFTER the token (exclusive) }
   end;
 
   /// <summary>Outcome of the show-gate. Only hgvShow shows the popup; the
@@ -53,18 +60,26 @@ type
     hgvNoAnchor   , { the anchor was never captured (Hwnd = 0 / height <= 0) }
     hgvOtherWindow, { the window under the cursor is not the anchor control }
     hgvOffToken   , { same control, but X left the identifier's span }
-    hgvOffLine      { same control and X, but Y left the line band }
+    hgvOffLine    , { same control and X, but Y left the line band }
+    hgvOtherCell    { pixels match, but the buffer cell under the pointer is not the token's (scrolled / edited) }
   );
 
 /// <summary>Decides whether an arriving hover answer may be shown.</summary>
 /// <param name="AAnchor">Where the request was asked (client coordinates).</param>
 /// <param name="ANowHwnd">The window under the cursor NOW (WindowFromPoint).</param>
 /// <param name="AClientPt">The cursor NOW, in AAnchor.Hwnd's client coordinates.</param>
+/// <param name="ANowRow0">0-based buffer row the pointer maps to NOW; -1 when it
+/// cannot be mapped.</param>
+/// <param name="ANowCol0">0-based buffer column the pointer maps to NOW.</param>
 /// <returns>hgvShow when ANowHwnd = AAnchor.Hwnd, TokenLeftX &lt;= X &lt;
-/// TokenRightX and |Y - line centre| &lt;= HOVER_GATE_Y_TOLERANCE * LineHeight;
-/// otherwise the first failing rule, checked in the order window, X, Y.</returns>
-/// <remarks>Pure; never raises.</remarks>
-function DLHoverGate(const AAnchor: TDLHoverAnchor; ANowHwnd: HWND; const AClientPt: TPoint): TDLHoverGateVerdict;
+/// TokenRightX, |Y - line centre| &lt;= HOVER_GATE_Y_TOLERANCE * LineHeight and,
+/// when AAnchor.Row0 &gt;= 0, ANowRow0 = Row0 with StartCol0 &lt;= ANowCol0 &lt;
+/// EndCol0; otherwise the first failing rule, checked in the order window, X,
+/// Y, cell.</returns>
+/// <remarks>Pure; never raises. A fallback anchor (Row0 = -1) skips the cell
+/// rule: there was no grid to map the question to.</remarks>
+function DLHoverGate(const AAnchor: TDLHoverAnchor; ANowHwnd: HWND; const AClientPt: TPoint;
+  ANowRow0, ANowCol0: Integer): TDLHoverGateVerdict;
 
 /// <summary>The identifier span containing a 0-based column of one line.</summary>
 /// <param name="ALine">The line text.</param>
@@ -87,7 +102,10 @@ function DLIdentSpanAt(const ALine: string; ACol0: Integer; out AStart0, AEnd0: 
 /// <param name="AEnd0">0-based column just after the token.</param>
 /// <returns>The anchor; X span = ATextLeft + column * ACharWidth, the exact
 /// inverse of the mapping that turned the pointer into a column.</returns>
-function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer): TDLHoverAnchor;
+/// <param name="ARow0">0-based buffer row of the token; -1 when unknown (the
+/// gate then skips its cell rule).</param>
+function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer;
+  ARow0: Integer): TDLHoverAnchor;
 
 implementation
 
@@ -95,12 +113,15 @@ uses
   System.SysUtils
   ;
 
-function DLHoverGate(const AAnchor: TDLHoverAnchor; ANowHwnd: HWND; const AClientPt: TPoint): TDLHoverGateVerdict;
+function DLHoverGate(const AAnchor: TDLHoverAnchor; ANowHwnd: HWND; const AClientPt: TPoint;
+  ANowRow0, ANowCol0: Integer): TDLHoverGateVerdict;
 begin
   if (AAnchor.Hwnd = 0) or (AAnchor.LineHeight <= 0) then Exit(hgvNoAnchor);
   if ANowHwnd <> AAnchor.Hwnd then Exit(hgvOtherWindow);
   if (AClientPt.X < AAnchor.TokenLeftX) or (AClientPt.X >= AAnchor.TokenRightX) then Exit(hgvOffToken);
   if Abs((AClientPt.Y - AAnchor.LineTopY) - AAnchor.LineHeight / 2) > HOVER_GATE_Y_TOLERANCE * AAnchor.LineHeight then Exit(hgvOffLine);
+  if (AAnchor.Row0 >= 0) and ((ANowRow0 <> AAnchor.Row0) or (ANowCol0 < AAnchor.StartCol0) or (ANowCol0 >= AAnchor.EndCol0)) then
+    Exit(hgvOtherCell);
   Result:= hgvShow;
 end;
 
@@ -123,13 +144,17 @@ begin
   Result:= True;
 end;
 
-function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer): TDLHoverAnchor;
+function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer;
+  ARow0: Integer): TDLHoverAnchor;
 begin
   Result.Hwnd       := AHwnd;
   Result.TokenLeftX := ATextLeft + AStart0 * ACharWidth;
   Result.TokenRightX:= ATextLeft + AEnd0   * ACharWidth;
   Result.LineTopY   := ALineTopY;
   Result.LineHeight := ALineHeight;
+  Result.Row0       := ARow0;
+  Result.StartCol0  := AStart0;
+  Result.EndCol0    := AEnd0;
 end;
 
 end.
