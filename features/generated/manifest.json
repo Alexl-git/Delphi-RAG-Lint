@@ -1393,7 +1393,7 @@
         {
           "type": "cli",
           "verb": "hover",
-          "usage": "drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]",
+          "usage": "drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]",
           "flags": [
             {
               "name": "--qname",
@@ -1405,13 +1405,10 @@
             },
             {
               "name": "--format"
-            },
-            {
-              "name": "--write-back"
             }
           ],
           "helpOrder": 34,
-          "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]"]
+          "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]"]
         }
       ],
       "audience": "both",
@@ -1426,7 +1423,7 @@
         },
         {
           "ask": "What type does a re-published property (property Text;) have, and which ancestor declares it?",
-          "command": "drag-lint hover --qname <Unit.TDerived.Text> --format json   (fields type + declared_in; --write-back memoizes the type into a writable index)"
+          "command": "drag-lint hover --qname <Unit.TDerived.Text> --format json   (fields type + declared_in; the type itself is stored by index, prop-types stage)"
         }
       ],
       "verified": {

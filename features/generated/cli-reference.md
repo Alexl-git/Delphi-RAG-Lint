@@ -794,7 +794,7 @@ Described in [helpers-of](../../docs/wiki/helpers-of.md).
 Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers.
 
 ```text
-drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]
+drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -802,7 +802,6 @@ drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] 
 | `--qname` | `<Foo.Bar>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
-| `--write-back` |  |  |  |
 
 Described in [Hover at Cursor](../../docs/wiki/Hover-at-Cursor.md).
 

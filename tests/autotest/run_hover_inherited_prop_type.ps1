@@ -12,18 +12,18 @@
   TMid adds nothing, TDerived re-publishes `property Text;`.
 
   ORDER:
-    (1) PREMISE    -- the index really holds an EMPTY signature on TDerived.Text
-                      and 'string' on TBase.Text (else the guard tests nothing).
+    (1) PREMISE    -- `index` FILLED TDerived.Text with ': string' (the
+                      prop-types stage, run_index_fill_prop_types.ps1) and
+                      TBase.Text keeps its own 'string'.
     (2) CLI hover  -- json carries type 'string' + declared_in 'uPropBase.TBase';
                       md and plain say the same.
     (3) CONTROL    -- TBase.Text (declares its own type) reports NO declared_in.
     (4) OTHER KINDS -- field / var / const / param / local var report their
                       declared type in the model and the LSP hover.
-    (5) READ-ONLY  -- a default hover never writes the DB (row stays empty).
-    (6) MEMOIZE    -- `hover --write-back` stamps ': string' onto the row; a
-                      SECOND hover (fresh process, no session cache) reads the
-                      stored type, still names the ancestor, and never renders
-                      a doubled colon.
+    (5)/(6) FILLED -- a hover over the filled row (fresh process, no session
+                      cache) still names the ancestor and never renders a
+                      doubled colon. (`hover --write-back` was removed
+                      2026-10-29: the index-time fill made it redundant.)
     (7) LSP        -- textDocument/hover on the re-publication and on a use site
                       shows `property Text: string` + the ancestor; hoverBundle's
                       model carries the same type / declared_in.
@@ -142,8 +142,8 @@ function HoverJson([string]$qn, [string[]]$extra = @()) {
 }
 
 Write-Host ''
-Write-Host '(1) PREMISE: the re-publication has no signature of its own' -ForegroundColor Cyan
-Check 'TDerived.Text signature is empty in the index' ((SigOf 'uPropBase.TDerived.Text') -eq '') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
+Write-Host '(1) PREMISE: index filled the re-publication' -ForegroundColor Cyan
+Check 'TDerived.Text signature is the filled : string' ((SigOf 'uPropBase.TDerived.Text') -eq ': string') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
 Check 'TBase.Text signature is string in the index' ((SigOf 'uPropBase.TBase.Text') -eq 'string') "got: [$(SigOf 'uPropBase.TBase.Text')]"
 
 Write-Host ''
@@ -177,14 +177,9 @@ $jm = HoverJson 'uPropBase.TDerived.Run'
 Check 'NEGATIVE: a method has no type field value' ([string]::IsNullOrEmpty($jm.type)) "got: [$($jm.type)]"
 
 Write-Host ''
-Write-Host '(5) a default hover never writes' -ForegroundColor Cyan
-Check 'TDerived.Text row still empty after read-only hovers' ((SigOf 'uPropBase.TDerived.Text') -eq '') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
-
-Write-Host ''
-Write-Host '(6) --write-back memoizes; the next hover reads the stored type' -ForegroundColor Cyan
-$jw = HoverJson 'uPropBase.TDerived.Text' @('--write-back')
-Check 'write-back hover still answers string' ($jw.type -eq 'string') "got: [$($jw.type)]"
-Check 'row now carries the memoized type' ((SigOf 'uPropBase.TDerived.Text') -match '^:?\s*string$') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
+Write-Host '(5)/(6) hover over the filled row' -ForegroundColor Cyan
+$null = & $Exe hover --qname uPropBase.TDerived.Text --db $db --write-back 2>$null
+Check 'hover --write-back is gone (rejected)' ($LASTEXITCODE -ne 0) "exit=$LASTEXITCODE"
 $j2 = HoverJson 'uPropBase.TDerived.Text'
 Check 'second hover: type = string' ($j2.type -eq 'string') "got: [$($j2.type)]"
 Check 'second hover: still declared in uPropBase.TBase' ($j2.declared_in -eq 'uPropBase.TBase') "got: [$($j2.declared_in)]"
@@ -225,9 +220,9 @@ function Invoke-Lsp([int]$Line0, [int]$Char0, [string]$file = $file) {
 
 Write-Host ''
 Write-Host '(7) LSP hover + hoverBundle' -ForegroundColor Cyan
-# Fresh index: the LSP must climb for itself (the row above is memoized now).
+# --rebuild: the row is re-filled by the same run (no hover involved).
 $null = & $Exe index $src --db $db --rebuild 2>$null
-Check 'reindex resets the row (premise for the LSP leg)' ((SigOf 'uPropBase.TDerived.Text') -eq '') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
+Check '--rebuild re-fills the row' ((SigOf 'uPropBase.TDerived.Text') -eq ': string') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
 # The reported shape: a use site whose LHS type (TDerived) owns the bare
 # re-publication, so the hover's chosen symbol IS uPropBase.TDerived.Text.
 $p = Pos0 '*E.Text:=*' 'Text' ($useText -split "`r?`n")
@@ -247,7 +242,7 @@ $p = Pos0 '*property Text: string read*' 'Text'
 $r = Invoke-Lsp $p[0] $p[1]
 Check 'CONTROL: LSP hover on TBase.Text shows its own type' ($r.md -match 'property Text: string') "got: [$($r.md)]"
 Check 'CONTROL: TBase.Text names no ancestor' ($r.md -notmatch 'declared in') "got: [$($r.md)]"
-Check 'LSP never wrote the read-only DB' ((SigOf 'uPropBase.TDerived.Text') -eq '') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
+Check 'LSP left the stored type alone' ((SigOf 'uPropBase.TDerived.Text') -eq ': string') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
