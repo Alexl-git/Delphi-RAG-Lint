@@ -2911,28 +2911,50 @@ begin
     Exit;
   end;
 
-  // declField: emit a field symbol (always inside a class/record/interface).
-  if NodeType = 'declField' then
+  { declField: emit a field symbol per NAME (always inside a class/record/
+    interface). declFieldNoSemi is the same list as the LAST field of a section
+    written without its `;` (`N3, N4: string end`) and gets the same treatment.
+
+    Lane gaps/multiname: the grammar's `name` field is delimited1, so
+    `A1, A2, A3: string;` carries three identifier children under one field
+    name, and ChildByField('name') returns only the first -- names 2..n had no
+    row, and declFieldNoSemi was never matched at all. Every name before the
+    `type` child is a field. The FIRST name keeps the whole-declaration span it
+    always had (single-name fields are byte-identical); names 2..n start at
+    their own identifier and share the declaration's end and type text.
+    Pinned by tests\autotest\run_multiname_fields.ps1. }
+  if (NodeType = 'declField') or (NodeType = 'declFieldNoSemi') then
   begin
-    var FNameNode:= ANode.ChildByField('name');
-    if not FNameNode.IsNull then
+    var FTypeNode:= ANode.ChildByField('type');
+    var FTypeText:= TypeTextOf(ANode, AState.Source);
+    var FFirst:= True;
+    for i:= 0 to ANode.NamedChildCount - 1 do
     begin
+      var FNameNode:= ANode.NamedChild(i);
+      if FNameNode.NodeType <> 'identifier' then Continue;
+      if (not FTypeNode.IsNull) and
+         ((FNameNode.StartPoint.row > FTypeNode.StartPoint.row) or
+          ((FNameNode.StartPoint.row = FTypeNode.StartPoint.row) and (FNameNode.StartPoint.column >= FTypeNode.StartPoint.column))) then Break;
       var FName:= NodeText(FNameNode, AState.Source);
-      if FName <> '' then
+      if FName = '' then Continue;
+      var FQName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + FName else FName;
+      { v22: a FIELD carries vis_explicit too. Wiring only the routine emit
+        site left every field in an unlabelled section reading True -- which is
+        the wrong answer for exactly the population the column exists to
+        describe, since a published component field is the commonest case of
+        all. Caught by run_default_section_visibility.ps1: DefaultMethod said
+        False while FDefaultField, three lines above it in the same section,
+        said True. }
+      var FIdx:= AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, FTypeText, AState.CurrentVisibility,
+                             '', False, False, '', '', AState.CurrentVisExplicit);
+      if not FFirst then
       begin
-        var FQName: string;
-        if AParentQualifiedName <> '' then FQName:= AParentQualifiedName + '.' + FName
-        else FQName:= FName;
-        { v22: a FIELD carries vis_explicit too. Wiring only the routine emit
-          site left every field in an unlabelled section reading True -- which is
-          the wrong answer for exactly the population the column exists to
-          describe, since a published component field is the commonest case of
-          all. Caught by run_default_section_visibility.ps1: DefaultMethod said
-          False while FDefaultField, three lines above it in the same section,
-          said True. }
-        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility,
-                    '', False, False, '', '', AState.CurrentVisExplicit);
+        var FSym:= AState.Symbols[FIdx];
+        FSym.StartLine:= Integer(FNameNode.StartPoint.row   ) + 1;
+        FSym.StartCol := Integer(FNameNode.StartPoint.column) + 1;
+        AState.Symbols[FIdx]:= FSym;
       end;
+      FFirst:= False;
     end;
     // Walk children so the field's type is visited and emits a type_use ref.
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
