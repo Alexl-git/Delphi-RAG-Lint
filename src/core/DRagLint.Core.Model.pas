@@ -365,6 +365,12 @@ const
   /// external binding of value receivers; guard tests\callresolve\run_receiver_type_text.ps1.</para>
   /// <para>1.16.0-alpha -&gt; 1.17.0-alpha (2026-10-28, INT138, ki-purity): a paren-less read
   /// of a procedural-type variable scores efUnknown in the purity stage (FIX-3 part 2).</para>
+  /// <para>1.16.0-alpha -&gt; 1.17.0-alpha (2026-10-28, RB-5 P2 + P3, resolve-only):
+  /// DispatchResolver writes `implements` edges for GENERIC interfaces (no longer
+  /// skipped), and narrows same-arity overload ties to the implementing method with
+  /// the same parameter type list (ORM3 CLIENT: 454 ambiguous implements rows).
+  /// Remedy: index --all --resolve-only; guard
+  /// tests\callresolve\run_interface_dispatch_generic.ps1.</para>
   DRAGLINT_RESOLVER_VERSION = '1.17.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for

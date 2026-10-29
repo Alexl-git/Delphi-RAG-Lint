@@ -308,6 +308,17 @@ type
     Unreadable: Int64;
   end;
 
+  /// <summary>Lane rb5-ovl: what an argument at a call site IS, as far as the
+  /// overload narrowing can tell without a type checker -- a literal or
+  /// constructor of a fixed kind, or a plain identifier whose declared type is
+  /// a built-in scalar or string type.</summary>
+  /// <remarks>asUnknown is every other expression (a call, an operator, a cast,
+  /// an identifier of a type the narrowing does not classify); it never rules a
+  /// candidate out. The *Var shapes are identifiers typed through
+  /// TypeReceiver.</remarks>
+  TArgShape = (asUnknown, asIntLit, asFloatLit, asStrLit, asCharLit, asBoolLit,
+    asNilLit, asSetLit, asIntVar, asFloatVar, asStrVar, asCharVar, asBoolVar);
+
   /// <summary>Item 4 (resolver 1.16.0-alpha, spec 2026-10-28-untypable-receivers
   /// s.4.1): the receiver's declared type as TEXT, as far as the ladder reached
   /// it -- whether or not that type has a symbol in this index.</summary>
@@ -418,6 +429,15 @@ type
     // 2026-09-23 (resolver 1.8.0-alpha): the with scope's per-run state -- see
     // TWithScopeState.
     FWith           : TWithScopeState;
+    // rb5-ovl: the call site ResolveOne is resolving, so PickFromMatches can read
+    // its argument SHAPES lazily -- only when arity leaves a tie. FSiteLines is
+    // nil outside ResolveOne's site (and FSiteArgCount -1 when arity is
+    // unknown); FSiteShapesState is 0 = not read yet, 1 = read, 2 = unreadable.
+    FSiteRef        : TReference;
+    FSiteLines      : TStringList;
+    FSiteArgCount   : Integer;
+    FSiteShapes     : TArray<TArgShape>;
+    FSiteShapesState: Integer;
     // Per-run counters of the bare member-read pass.
     FMemberReadStats: TMemberReadStats;
     // 1.8.0: symbol rows and ancestor lists, read once per run -- see
@@ -748,6 +768,30 @@ type
     /// </remarks>
     function PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
       AArgsKnown: Boolean; out AConfidence: string): Int64;
+    /// <summary>rb5-ovl: drops from AFit every candidate that some argument at
+    /// the current call site cannot be passed to (ArgFitsParam answers no).</summary>
+    /// <param name="AFit">Candidates that already fit by arity; narrowed in place.</param>
+    /// <param name="AArgCount">The site's argument count; the site's own lexed
+    /// list must agree with it or nothing is narrowed.</param>
+    /// <remarks>NARROWING ONLY: AFit changes only when at least one candidate
+    /// survives and at least one is dropped. A candidate whose parameter groups
+    /// do not agree with its arity range is never dropped.</remarks>
+    procedure NarrowByArgShapes(AFit: TList<TSymbol>; AArgCount: Integer);
+    /// <summary>rb5-ovl: the argument shapes of the site ResolveOne is on, read
+    /// once per site with LexCallArguments.</summary>
+    /// <param name="AArgCount">The count arity was decided on.</param>
+    /// <param name="AShapes">Out: one shape per argument.</param>
+    /// <returns>False outside ResolveOne, for a site that does not lex, or when
+    /// the lexed count differs from AArgCount.</returns>
+    function SiteArgShapes(AArgCount: Integer; out AShapes: TArray<TArgShape>): Boolean;
+    /// <summary>rb5-ovl: the shape of a bare-identifier argument, from its
+    /// declared type as TypeReceiver reads it at the current site.</summary>
+    /// <param name="AName">The identifier.</param>
+    /// <returns>An *Var shape for a built-in scalar or string type; asUnknown
+    /// otherwise.</returns>
+    /// <remarks>Restores the with-scope counters TypeReceiver bumps, so the
+    /// run's statistics are not inflated by these probes.</remarks>
+    function VariableArgShape(const AName: string): TArgShape;
     /// <summary>Given a resolved receiver TYPE symbol id, look up a method named
     /// AMethodName on the type's own children + its transitive ancestors. Sets
     /// AConfidence ('certain' one surviving candidate | 'ambiguous' >1) and
@@ -1953,14 +1997,33 @@ type
   /// </remarks>
   function SignatureArityRange(const ASignature: string; out AMin, AMax: Integer): Boolean;
 
+  /// <summary>The parameter part of a routine signature as a comparable key:
+  /// per parameter, its modifier and declared type, lower-case, without names,
+  /// default values or whitespace. `(var A: Integer; const B, C: string = 'x')`
+  /// gives `var:integer;const:string;const:string;`.</summary>
+  /// <param name="ASignature">A stored symbol Signature.</param>
+  /// <returns>One `modifier:type;` group per declared parameter; '' when the
+  /// signature has no parameter list.</returns>
+  /// <remarks>Only the text inside the first top-level parentheses counts, so the
+  /// return type never takes part (Delphi overloads cannot differ by it). An
+  /// untyped parameter (`var ABuffer`) has an empty type. Parentheses, brackets
+  /// and angle brackets nest, so a `;` inside them never splits a group; a `;`
+  /// inside a quoted default value DOES split one, so a caller that maps groups
+  /// to argument positions must check the group count against
+  /// SignatureArityRange. Shared by DispatchResolver (implements ties, rb5-gen)
+  /// and the call-side overload narrowing (rb5-ovl).</remarks>
+  function ParamTypeKey(const ASignature: string): string;
+
 implementation
 
 uses
   System.Math,     // Min -- ResolveAccessor's declaring-line range
   System.StrUtils, // B1: StartsText / SplitString, used by SignatureArityRange
+  System.RegularExpressions, // rb5-ovl: ArgShapeOfText's number literals
   TreeSitter,      // 1.8.0: the with scope parses a file's `with` statements
   TreeSitterLib,
   DRagLint.Core.Encoding,    // EnsureUtf8Bytes -- the indexer's own transcoding
+  DRagLint.Analysis.Purity,  // LexCallArguments -- the shared argument lexer (rb5-ovl)
   DRagLint.Preprocess.Types; // NormalizeLoneCR -- the indexer's own row counting
 
 { Declared HERE, in the implementation, for the reason DRagLint.Diagnostics.
@@ -2727,6 +2790,367 @@ begin
     end;
 end;
 
+{ Declared in the interface (DocInsight there); moved here from DispatchResolver by rb5-ovl. }
+function ParamTypeKey(const ASignature: string): string;
+var
+  Depth, Open, Close, Start: Integer;
+  Inner, Names, TypeText, Modifier: string;
+  Groups: TList<string>;
+begin
+  Result:= '';
+  Open:= Pos('(', ASignature);
+  if Open = 0 then Exit;
+  Depth:= 0;
+  Close:= 0;
+  for var i:= Open to Length(ASignature) do
+  begin
+    if CharInSet(ASignature[i], ['(', '[', '<']) then Inc(Depth)
+    else if CharInSet(ASignature[i], [')', ']', '>']) then Dec(Depth);
+    if Depth = 0 then
+    begin
+      Close:= i;
+      Break;
+    end;
+  end;
+  if Close = 0 then Exit;
+  Inner:= Copy(ASignature, Open + 1, Close - Open - 1);
+  Groups:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    for var i:= 1 to Length(Inner) + 1 do
+    begin
+      if (i > Length(Inner)) or ((Depth = 0) and (Inner[i] = ';')) then
+      begin
+        Groups.Add(Trim(Copy(Inner, Start, i - Start)));
+        Start:= i + 1;
+      end
+      else if CharInSet(Inner[i], ['(', '[', '<']) then Inc(Depth)
+      else if CharInSet(Inner[i], [')', ']', '>']) then Dec(Depth);
+    end;
+    for var G in Groups do
+    begin
+      if G = '' then Continue;
+      var Decl:= G;
+      var Eq:= Pos('=', Decl);
+      if Eq > 0 then Decl:= Trim(Copy(Decl, 1, Eq - 1));
+      var Colon:= Pos(':', Decl);
+      Names   := Trim(if Colon > 0 then Copy(Decl, 1, Colon - 1) else Decl);
+      TypeText:= if Colon > 0 then Copy(Decl, Colon + 1, MaxInt) else '';
+      Modifier:= '';
+      var Sp:= Pos(' ', Names);
+      if Sp > 0 then
+      begin
+        var W:= LowerCase(Copy(Names, 1, Sp - 1));
+        if MatchStr(W, ['const', 'var', 'out', 'constref']) then
+        begin
+          Modifier:= W;
+          Names:= Trim(Copy(Names, Sp + 1, MaxInt));
+        end;
+      end;
+      TypeText:= LowerCase(StringReplace(StringReplace(TypeText, ' ', '', [rfReplaceAll]), #9, '', [rfReplaceAll]));
+      for var k:= 1 to Length(Names.Split([','])) do
+        Result:= Result + Modifier + ':' + TypeText + ';';
+    end;
+  finally
+    Groups.Free;
+  end;
+end;
+
+type
+  { rb5-ovl: the declared-type families the overload narrowing can reason about.
+    pfOther is any type it cannot classify (an enum, an alias, a record, a
+    class, a procedural type, a generic T) and never rules a candidate out. }
+  TParamFamily = (pfOther, pfUntyped, pfInt, pfFloat, pfString, pfChar, pfPChar,
+    pfBool, pfVariant, pfOpenArray, pfPointer);
+  { yes = the argument can be passed; no = the compiler would reject it;
+    maybe = the narrowing cannot tell. Only `no` removes a candidate. }
+  TArgFit = (afMaybe, afYes, afNo);
+
+const
+  { rb5-ovl: may an argument of this shape be passed to a VALUE / const
+    parameter of this family? Every afNo is a compile error in Delphi (an
+    integer literal for an open array or a string, `[..]` for an Integer, a
+    float for an integer type, a string for a Boolean, ...). Anything the
+    narrowing is not sure of is afMaybe -- notably every pfPointer / pfPChar
+    pairing but the trivially legal ones, and every string-to-open-array one.
+    Columns: Other Untyped Int Float String Char PChar Bool Variant OpenArray Pointer. }
+  ARG_FIT: array[TArgShape, TParamFamily] of TArgFit = (
+    {asUnknown } (afMaybe, afMaybe, afMaybe, afMaybe, afMaybe, afMaybe, afMaybe, afMaybe, afMaybe, afMaybe, afMaybe),
+    {asIntLit  } (afMaybe, afMaybe, afYes,   afYes,   afNo,    afNo,    afMaybe, afNo,    afYes,   afNo,    afMaybe),
+    {asFloatLit} (afMaybe, afMaybe, afNo,    afYes,   afNo,    afNo,    afMaybe, afNo,    afYes,   afNo,    afMaybe),
+    {asStrLit  } (afMaybe, afMaybe, afNo,    afNo,    afYes,   afNo,    afYes,   afNo,    afYes,   afMaybe, afMaybe),
+    {asCharLit } (afMaybe, afMaybe, afNo,    afNo,    afYes,   afYes,   afMaybe, afNo,    afYes,   afMaybe, afMaybe),
+    {asBoolLit } (afMaybe, afMaybe, afNo,    afNo,    afNo,    afNo,    afMaybe, afYes,   afYes,   afNo,    afMaybe),
+    {asNilLit  } (afMaybe, afMaybe, afNo,    afNo,    afMaybe, afNo,    afYes,   afNo,    afMaybe, afMaybe, afYes),
+    {asSetLit  } (afMaybe, afMaybe, afNo,    afNo,    afNo,    afNo,    afMaybe, afNo,    afMaybe, afYes,   afMaybe),
+    {asIntVar  } (afMaybe, afMaybe, afYes,   afYes,   afNo,    afNo,    afMaybe, afNo,    afYes,   afNo,    afMaybe),
+    {asFloatVar} (afMaybe, afMaybe, afNo,    afYes,   afNo,    afNo,    afMaybe, afNo,    afYes,   afNo,    afMaybe),
+    {asStrVar  } (afMaybe, afMaybe, afNo,    afNo,    afYes,   afNo,    afMaybe, afNo,    afYes,   afMaybe, afMaybe),
+    {asCharVar } (afMaybe, afMaybe, afNo,    afNo,    afYes,   afYes,   afMaybe, afNo,    afYes,   afMaybe, afMaybe),
+    {asBoolVar } (afMaybe, afMaybe, afNo,    afNo,    afNo,    afNo,    afMaybe, afYes,   afYes,   afNo,    afMaybe));
+
+  { ParamTypeKey strips blanks, so `array of X` arrives as `arrayofx`. }
+  OPEN_ARRAY_PREFIX = 'arrayof';
+
+  LITERAL_SHAPES = [asIntLit, asFloatLit, asStrLit, asCharLit, asBoolLit, asNilLit, asSetLit];
+
+{ rb5-ovl: the family of one ParamTypeKey type (lower-case, no blanks). A unit
+  qualifier (`system.integer`) is dropped; `string[20]` is a short string. }
+const
+  { rb5-ovl: the built-in type names of each family, comma-delimited. }
+  FAMILY_NAMES: array[pfInt..pfPointer] of string = (
+    ',integer,cardinal,shortint,smallint,longint,int64,byte,word,longword,uint64,nativeint,nativeuint,' +
+      'int8,int16,int32,uint8,uint16,uint32,dword,fixedint,fixeduint,',
+    ',single,double,extended,real,real48,currency,comp,',
+    ',string,ansistring,widestring,unicodestring,shortstring,rawbytestring,utf8string,',
+    ',char,ansichar,widechar,',
+    ',pchar,pansichar,pwidechar,',
+    ',boolean,bytebool,wordbool,longbool,',
+    ',variant,olevariant,',
+    '',
+    ',pointer,');
+
+function ParamFamily(const ATypeKey: string): TParamFamily;
+var
+  Leaf: string;
+begin
+  Result:= pfOther;
+  if ATypeKey = '' then Exit(pfUntyped);
+  if StartsStr(OPEN_ARRAY_PREFIX, ATypeKey) then Exit(pfOpenArray);
+  if StartsStr('string[', ATypeKey) then Exit(pfString);
+  Leaf:= ',' + Copy(ATypeKey, LastDelimiter('.', ATypeKey) + 1, MaxInt) + ',';
+  for var F:= Low(FAMILY_NAMES) to High(FAMILY_NAMES) do
+    if FAMILY_NAMES[F].Contains(Leaf) then Exit(F);
+end;
+
+{ rb5-ovl: the number of characters a string-literal expression denotes --
+  quoted runs (`''` is one quote) and `#nn` / `#$hh` codes, juxtaposed with no
+  operator -- or -1 when AArg is not wholly such a literal. }
+function StringLiteralLength(const AArg: string): Integer;
+var
+  i, Start: Integer;
+begin
+  Result:= 0;
+  i:= 1;
+  if AArg = '' then Exit(-1);
+  while i <= Length(AArg) do
+  begin
+    if AArg[i] = '''' then
+    begin
+      Inc(i);
+      while True do
+      begin
+        if i > Length(AArg) then Exit(-1);
+        if AArg[i] = '''' then
+        begin
+          if (i < Length(AArg)) and (AArg[i + 1] = '''') then
+          begin
+            Inc(Result);
+            Inc(i, 2);
+            Continue;
+          end;
+          Inc(i);
+          Break;
+        end;
+        Inc(Result);
+        Inc(i);
+      end;
+    end
+    else if AArg[i] = '#' then
+    begin
+      Inc(i);
+      if (i <= Length(AArg)) and (AArg[i] = '$') then Inc(i);
+      Start:= i;
+      while (i <= Length(AArg)) and CharInSet(AArg[i], ['0'..'9', 'a'..'f', 'A'..'F']) do Inc(i);
+      if i = Start then Exit(-1);
+      Inc(Result);
+    end
+    else Exit(-1);
+  end;
+end;
+
+{ rb5-ovl: True when AArg is one bracketed constructor `[ ... ]` -- the `]`
+  that closes the first `[` is the last character. Quoted text is skipped. }
+function IsSetConstructor(const AArg: string): Boolean;
+var
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Result:= False;
+  if (Length(AArg) < 2) or (AArg[1] <> '[') or (AArg[Length(AArg)] <> ']') then Exit;
+  Depth:= 0;
+  InStr:= False;
+  for var i:= 1 to Length(AArg) do
+  begin
+    if AArg[i] = '''' then InStr:= not InStr;
+    if InStr then Continue;
+    if AArg[i] = '[' then Inc(Depth)
+    else if AArg[i] = ']' then
+    begin
+      Dec(Depth);
+      if (Depth = 0) and (i < Length(AArg)) then Exit;
+    end;
+  end;
+  Result:= (Depth = 0) and not InStr;
+end;
+
+{ rb5-ovl: the shape of one argument's TEXT, as LexCallArguments returns it.
+  Literals and constructors only; a bare identifier is asUnknown here and is
+  typed by TCallResolver.VariableArgShape. Numbers: [sign] ( $hex | digits
+  [. digits] [e [sign] digits] ) -- anything after them makes an expression. }
+function ArgShapeOfText(const AArg: string): TArgShape;
+var
+  Len: Integer;
+begin
+  Len:= StringLiteralLength(AArg);
+  Result:=
+    if AArg = '' then asUnknown
+    else if SameText(AArg, 'nil') then asNilLit
+    else if SameText(AArg, 'True') or SameText(AArg, 'False') then asBoolLit
+    else if IsSetConstructor(AArg) then asSetLit
+    else if Len = 1 then asCharLit
+    else if Len >= 0 then asStrLit
+    else if TRegEx.IsMatch(AArg, '^[+-]?(\d+|\$[0-9A-Fa-f]+)$') then asIntLit
+    else if TRegEx.IsMatch(AArg, '^[+-]?\d+(\.\d+([eE][+-]?\d+)?|[eE][+-]?\d+)$') then asFloatLit
+    else asUnknown;
+end;
+{ rb5-ovl: True when AArg is one plain identifier (no dot, call, selector or operator). }
+function IsPlainIdent(const AArg: string): Boolean;
+begin
+  if (AArg = '') or not IsIdentStart(AArg[1]) then Exit(False);
+  for var i:= 2 to Length(AArg) do
+    if not IsIdentPart(AArg[i]) then Exit(False);
+  Result:= True;
+end;
+
+{ rb5-ovl: may an argument of shape AShape be passed to the parameter whose
+  ParamTypeKey group is AParamKey (`modifier:type`)? A literal or constructor
+  can never be passed to a var / out parameter; a VARIABLE to one needs its
+  exact type, which the shape does not carry, so that is afMaybe. }
+function ArgFitsParam(AShape: TArgShape; const AParamKey: string): TArgFit;
+var
+  Colon   : Integer;
+  Modifier: string;
+  TypeKey : string;
+begin
+  if AShape = asUnknown then Exit(afMaybe);
+  Colon:= Pos(':', AParamKey);
+  if Colon = 0 then Exit(afMaybe);
+  Modifier:= Copy(AParamKey, 1, Colon - 1);
+  if (Modifier = 'var') or (Modifier = 'out') then
+    Exit(if AShape in LITERAL_SHAPES then afNo else afMaybe);
+  TypeKey:= Copy(AParamKey, Colon + 1, MaxInt);
+  Result := ARG_FIT[AShape, ParamFamily(TypeKey)];
+  { A string or char for an OPEN ARRAY is afMaybe in the table because of
+    `array of Char`; for any other known element type (`array of const`,
+    `array of Integer`, `array of string`) it needs a `[..]` constructor. }
+  if (Result = afMaybe) and (ParamFamily(TypeKey) = pfOpenArray)
+     and (AShape in [asStrLit, asCharLit, asStrVar, asCharVar]) then
+  begin
+    var Element: string:= Copy(TypeKey, Length(OPEN_ARRAY_PREFIX) + 1, MaxInt);
+    if (Element = 'const') or (ParamFamily(Element) in [pfInt, pfFloat, pfString, pfBool, pfVariant, pfPChar, pfPointer]) then
+      Result:= afNo;
+  end;
+end;
+
+function TCallResolver.VariableArgShape(const AName: string): TArgShape;
+var
+  Txt  : TRcvTypeText;
+  Saved: TWithScopeStats;
+begin
+  Result:= asUnknown;
+  if (AName = '') or SameText(AName, 'Self') or SameText(AName, 'Result') then Exit;
+  Saved:= FWith.Stats;
+  TypeReceiver(FSiteRef, AName, Txt);
+  FWith.Stats:= Saved;
+  if (Txt.Pending <> '') or (Txt.Text = '') then Exit;
+  case ParamFamily(LowerCase(StringReplace(Txt.Text, ' ', '', [rfReplaceAll]))) of
+    pfInt   : Result:= asIntVar;
+    pfFloat : Result:= asFloatVar;
+    pfString: Result:= asStrVar;
+    pfChar  : Result:= asCharVar;
+    pfBool  : Result:= asBoolVar;
+  end;
+end;
+
+function TCallResolver.SiteArgShapes(AArgCount: Integer; out AShapes: TArray<TArgShape>): Boolean;
+var
+  Line, Col, N: Integer;
+  Name        : string;
+  Slice, Args : TArray<string>;
+begin
+  AShapes:= nil;
+  if (FSiteLines = nil) or (AArgCount <= 0) or (AArgCount <> FSiteArgCount) then Exit(False);
+  if FSiteShapesState = 0 then
+  begin
+    FSiteShapesState:= 2;
+    Line:= FSiteRef.StartLine;
+    Col := FSiteRef.StartCol;
+    Name:= FSiteRef.NameText;
+    { The ref must point AT its name, or the column after it is not where the
+      argument list starts. }
+    if (Line < 1) or (Line > FSiteLines.Count) or (Col < 1) or (Name = '')
+       or not SameText(Copy(FSiteLines[Line - 1], Col, Length(Name)), Name) then Exit(False);
+    N:= Min(FSiteLines.Count - Line + 1, CMaxArgListLines + 1);
+    SetLength(Slice, N);
+    for var i:= 0 to N - 1 do Slice[i]:= FSiteLines[Line - 1 + i];
+    if not LexCallArguments(Slice, 1, Col + Length(Name), Args) or (Length(Args) <> AArgCount) then Exit(False);
+    SetLength(FSiteShapes, Length(Args));
+    for var i:= 0 to High(Args) do
+    begin
+      FSiteShapes[i]:= ArgShapeOfText(Args[i]);
+      if (FSiteShapes[i] = asUnknown) and IsPlainIdent(Args[i]) then
+        FSiteShapes[i]:= VariableArgShape(Args[i]);
+    end;
+    FSiteShapesState:= 1;
+  end;
+  Result:= (FSiteShapesState = 1) and (Length(FSiteShapes) = AArgCount);
+  if Result then AShapes:= FSiteShapes;
+end;
+
+procedure TCallResolver.NarrowByArgShapes(AFit: TList<TSymbol>; AArgCount: Integer);
+var
+  Shapes  : TArray<TArgShape>;
+  Keep    : TList<TSymbol>;
+  Params  : TArray<string>;
+  Lo, Hi  : Integer;
+  Rejected: Boolean;
+begin
+  { Same-arity overloads that differ only by parameter TYPE (ORM3's
+    IABZLoggingSys.LogMessage: `array of const` vs `cardinal` in position 3,
+    159 ambiguous sites on CLIENT). Delphi's own overload resolution ranks
+    conversions; this does not -- it only DROPS a candidate the compiler could
+    not have chosen, so an Integer-vs-Double tie on a literal 5 stays a tie. }
+  if AFit.Count < 2 then Exit;
+  if not SiteArgShapes(AArgCount, Shapes) then Exit;
+  Keep:= TList<TSymbol>.Create;
+  try
+    for var S in AFit do
+    begin
+      Params  := ParamTypeKey(S.Signature).Split([';'], TStringSplitOptions.ExcludeEmpty);
+      Rejected:= False;
+      { A group count that disagrees with the arity range (a `;` inside a quoted
+        default value) would misalign argument and parameter: keep it. }
+      if SignatureArityRange(S.Signature, Lo, Hi) and (Length(Params) = Hi) and (AArgCount <= Hi) then
+        for var i:= 0 to AArgCount - 1 do
+          if ArgFitsParam(Shapes[i], Params[i]) = afNo then
+          begin
+            Rejected:= True;
+            Break;
+          end;
+      if not Rejected then Keep.Add(S);
+    end;
+    if (Keep.Count > 0) and (Keep.Count < AFit.Count) then
+    begin
+      AFit.Clear;
+      AFit.AddRange(Keep);
+    end;
+  finally
+    Keep.Free;
+  end;
+end;
+
 function TCallResolver.PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
   AArgsKnown: Boolean; out AConfidence: string): Int64;
 var
@@ -2760,6 +3184,10 @@ begin
       for S in AMatches do
         if SignatureArityRange(S.Signature, Lo, Hi) and (AArgCount >= Lo) and (AArgCount <= Hi) then
           Fit.Add(S);
+
+    { rb5-ovl: a same-arity tie is narrowed by the argument SHAPES -- only a
+      candidate no argument could be passed to is dropped. }
+    if AArgsKnown and (Fit.Count > 1) then NarrowByArgShapes(Fit, AArgCount);
 
     if Fit.Count = 1 then
     begin
@@ -6911,6 +7339,9 @@ begin
   Result.TargetSymbolId      := 0;
   Result.ReceiverTypeSymbolId:= 0;
   Result.Confidence          := '';
+  { rb5-ovl: no site until the arguments are counted below. }
+  FSiteLines      := nil;
+  FSiteShapesState:= 0;
 
   if ACallRef.NameText = '' then Exit;
 
@@ -6944,6 +7375,9 @@ begin
   // argument list reads RIGHT and legitimately spans lines, so this is given the
   // whole file rather than the single line.
   ArgCount:= CountCallArgs(Lines, ACallRef.StartLine, ACallRef.StartCol, ArgsKnown);
+  FSiteRef     := ACallRef;
+  FSiteLines   := Lines;
+  FSiteArgCount:= if ArgsKnown then ArgCount else -1;
 
   // 1c. NESTED-CALL RESOLUTION: a BARE call is resolved by Delphi's lexical
   // scope chain BEFORE any receiver typing, because the innermost declaration
