@@ -1152,6 +1152,22 @@ begin
   end;
 end; // function
 
+{ doclit: record that the lines of ARegion document the symbol ASymId, so the
+  literals pass can give each /// doc literal the id of the declaration it
+  documents rather than its containing scope. The region is the one
+  FindDocRegionAbove picked for the symbol -- the SAME attachment that feeds
+  symbol_docs -- so the two never disagree. First symbol wins: a routine is
+  emitted before its parameters, which share its start line and therefore
+  find the same region. Lines outside AMap are ignored. }
+procedure PaintDocOwner(var AMap: TArray<Int64>; const ARegion: TDocCommentRegion; ASymId: Int64);
+var
+  L: Integer;
+begin
+  if ASymId <= 0 then Exit;
+  for L:= ARegion.StartLine to ARegion.EndLine do
+    if (L >= 0) and (L <= High(AMap)) and (AMap[L] = 0) then AMap[L]:= ASymId;
+end;
+
 function TIndexer.SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
 var
   Lo, Hi, J: Integer;
@@ -1204,6 +1220,7 @@ var
   Lit           : TStringLiteral             ;
   EnclId        : Int64                      ; { X-23: containing symbol id of one literal (0 = none) }
   ContainingByLine: TArray<Int64>            ; { X-23: line -> containing symbol id, built once per file (see BuildContainingLineMap) }
+  DocOwnerByLine: TArray<Int64>              ; { doclit: line -> id of the symbol whose doc region covers it (0 = none); first symbol wins }
   SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
@@ -1427,6 +1444,8 @@ begin
         for I:= 0 to High(ParseRes.Symbols) do
           SymStartLines[I]:= ParseRes.Symbols[I].StartLine;
         TArray.Sort<Integer>(SymStartLines);
+        DocOwnerByLine:= nil;
+        SetLength(DocOwnerByLine, Length(SourceLines) + 2); { zero-filled: 0 = no documented symbol }
         TProf:= ProfNow;
         for I:= 0 to High(ParseRes.Symbols) do
         begin
@@ -1444,6 +1463,7 @@ begin
           begin
             ParsedDoc:= TDocCommentParser.Dispatch(DocRegion);
             if ParsedDoc.HasContent then FStore.UpsertSymbolDoc(Token, NewSymId, ParsedDoc);
+            PaintDocOwner(DocOwnerByLine, DocRegion, NewSymId);
           end;
         end; // for
         Inc(GProfSymbols, ProfNow - TProf);
@@ -1498,6 +1518,13 @@ begin
             EnclId:= ContainingByLine[Lit.StartLine]
           else
             EnclId:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine).Id;
+          { doclit: a /// line is owned by the declaration it DOCUMENTS (the same
+            FindDocRegionAbove decision that wrote symbol_docs above), not by the
+            scope it sits in. A /// block no declaration claims keeps the
+            containing-scope answer. }
+          if (Lit.Kind = 'doc') and (Lit.StartLine >= 0) and (Lit.StartLine <= High(DocOwnerByLine))
+             and (DocOwnerByLine[Lit.StartLine] > 0) then
+            EnclId:= DocOwnerByLine[Lit.StartLine];
           if EnclId > 0 then Lit.SymbolId:= EnclId;
           FStore.UpsertStringLiteral(Token, Lit);
         end;
