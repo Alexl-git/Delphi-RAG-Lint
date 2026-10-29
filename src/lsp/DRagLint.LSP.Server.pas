@@ -1372,6 +1372,7 @@ uses
   System.StrUtils, { LSP-1 CORE: MatchText }
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
+  DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
 
@@ -3069,6 +3070,9 @@ begin
     end;
     FReindex.AddOrSetValue(AKey, Run);
     Writeln(ErrOutput, 'drag-lint LSP: re-index of ', Run.Db, ' finished, exit ', Code);
+    { The declared-type session cache is keyed by store INSTANCE; the reopened
+      store may reuse a freed address over changed rows. }
+    ClearPropertyDeclaredTypeCache;
     { Re-open that DB: drop every cached set holding it (reopened lazily) and
       swap a startup store in place. }
     for var I:= FSets.Count - 1 downto 0 do

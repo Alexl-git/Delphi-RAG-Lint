@@ -381,14 +381,26 @@ type
 /// climb, not a copy of it. A recovered type is written back with
 /// ISymbolStore.MemoizePropertyType onto the row AND onto every bare
 /// same-named row of the resolved ancestors between it and the declaring
-/// class -- a no-op on a read-only store, never an error. Every answer
-/// (including "unknown") is also kept in a process-wide session cache keyed by
-/// store instance + row id + qualified name + line, so a read-only library
-/// index pays the climb once per session. Thread-safe (the cache is locked);
-/// the store itself must not be mutated concurrently.
+/// class -- a no-op on a read-only store, never an error. Every RESOLVED
+/// answer is also kept in a process-wide session cache keyed by store
+/// instance + row id + qualified name + line, so a read-only library index
+/// pays the climb once per session; a miss is never cached (its ancestor may
+/// be indexed later), and ClearPropertyDeclaredTypeCache drops the cache when
+/// a store is reopened. The type is parsed whole: generic arguments and an
+/// index parameter list ('[I: Integer]: TFoo' gives 'TFoo') never truncate it.
+/// Thread-safe (the cache is locked); the store itself must not be mutated
+/// concurrently.
 /// </remarks>
 function ResolvePropertyDeclaredType(const AStore: ISymbolStore;
   const AProp: TSymbol): TDeclaredPropType;
+
+/// <summary>Drops every answer held in the session cache of
+/// ResolvePropertyDeclaredType.</summary>
+/// <remarks>Call when a store is reopened or an index run over it completed
+/// (the LSP does so in ReindexFinished): the cache key carries the store
+/// INSTANCE, and a reopened store can reuse a freed instance's address over
+/// changed rows. Thread-safe.</remarks>
+procedure ClearPropertyDeclaredTypeCache;
 
 implementation
 
@@ -412,28 +424,54 @@ const
   // this size: a hover session touches a few hundred properties, never this many.
   MAX_DECL_TYPE_CACHE = 20000;
 
-// Parse the bare type token out of a property Signature. Handles a leading
-// ": " (some rows carry it, some do not) and stops at the first whitespace,
-// ';', or a 'read'/'write' accessor keyword. Returns '' when nothing parseable
+// Parse the declared type out of a property Signature. Skips a leading index
+// parameter list ('[I: Integer]: TFoo'), handles a leading ': ' (some rows
+// carry it, some do not), keeps generic arguments whole
+// ('TDictionary<string, Integer>': whitespace inside balanced <> [] () is part
+// of the type), and stops at depth 0 on whitespace or ';' -- i.e. before
+// read / write / index / default / stored. Returns '' when nothing parseable
 // remains (an empty / accessor-only signature).
 function ParseTypeToken(const ASignature: string): string;
 var
-  S  : string;
-  P  : Integer;
-  Tok: string;
-  Low: string;
+  S    : string;
+  P    : Integer;
+  Depth: Integer;
+  Tok  : string;
+  Low  : string;
 begin
   Result:= '';
   S:= Trim(ASignature);
   if S = '' then Exit;
+  // An indexed property: skip the balanced '[...]' parameter list.
+  if S[1] = '[' then
+  begin
+    Depth:= 0;
+    for P:= 1 to Length(S) do
+    begin
+      if S[P] = '[' then Inc(Depth)
+      else if S[P] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          S:= Trim(Copy(S, P + 1, MaxInt));
+          Break;
+        end;
+      end;
+    end;
+    if Depth <> 0 then Exit; // unbalanced: nothing trustworthy
+  end;
   // Trim a single leading ':' then re-trim whitespace.
   if (S <> '') and (S[1] = ':') then S:= Trim(Copy(S, 2, MaxInt));
   if S = '' then Exit;
-  // Take the first token up to whitespace / ';'.
-  Tok:= '';
+  // Take the type up to depth-0 whitespace / ';'.
+  Tok  := '';
+  Depth:= 0;
   for P:= 1 to Length(S) do
   begin
-    if CharInSet(S[P], [' ', #9, #13, #10, ';']) then Break;
+    if CharInSet(S[P], ['<', '[', '(']) then Inc(Depth)
+    else if CharInSet(S[P], ['>', ']', ')']) and (Depth > 0) then Dec(Depth)
+    else if (Depth = 0) and CharInSet(S[P], [' ', #9, #13, #10, ';']) then Break;
     Tok:= Tok + S[P];
   end;
   Low:= LowerCase(Tok);
@@ -1907,12 +1945,24 @@ begin
       MemoizeChainBetween(AStore, Cls, Decl, AProp.Name, Result.TypeName);
   end;
 
+  { A miss is NOT cached: the ancestor may be indexed later in this session. }
+  if Result.TypeName = '' then Exit;
   Cached         := Result;
   Cached.Memoized:= False; { a cache hit wrote nothing }
   TMonitor.Enter(GDeclTypeLock);
   try
     if GDeclTypeCache.Count >= MAX_DECL_TYPE_CACHE then GDeclTypeCache.Clear;
     GDeclTypeCache.AddOrSetValue(Key, Cached);
+  finally
+    TMonitor.Exit(GDeclTypeLock);
+  end;
+end;
+
+procedure ClearPropertyDeclaredTypeCache;
+begin
+  TMonitor.Enter(GDeclTypeLock);
+  try
+    GDeclTypeCache.Clear;
   finally
     TMonitor.Exit(GDeclTypeLock);
   end;

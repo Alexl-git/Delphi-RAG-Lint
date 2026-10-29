@@ -272,9 +272,11 @@ begin
     ancestor that declares it does. DescribeDeclaredType runs the converter's
     climb (memoized on a writable store, session-cached otherwise), and the
     resolved token also replaces a memoized ': string' so the signature reads
-    the way an indexed one does. }
+    the way an indexed one does. Only a RE-PUBLICATION (no accessor of its
+    own) is rewritten: a property with accessors keeps its own signature. }
   var Declared: TDeclaredType:= DescribeDeclaredType(ASym, AStore);
-  if (ASym.Kind = skProperty) and (Declared.TypeName <> '') then Described.Signature:= Declared.TypeName;
+  if (ASym.Kind = skProperty) and (Trim(ASym.PropAccess) = '') and (Declared.TypeName <> '') then
+    Described.Signature:= Declared.TypeName;
   { Composed above for a parameter: `const AFile: string` instead of `string`. }
   if Doc2Sig <> '' then Described.Signature:= Doc2Sig;
 

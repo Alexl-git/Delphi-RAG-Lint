@@ -76,8 +76,10 @@ type
   TBase = class(TObject)
   private
     FText: string;
+    FMap: TDictionary<string, Integer>;
   protected
     property Text: string read FText write FText;
+    property Map: TDictionary<string, Integer> read FMap;
   end;
 
   TMid = class(TBase)
@@ -89,6 +91,7 @@ type
     procedure Run(const AName: string);
   published
     property Text;
+    property Map;
   end;
 
 implementation
@@ -248,6 +251,16 @@ $r = Invoke-Lsp $p[0] $p[1]
 Check 'CONTROL: LSP hover on TBase.Text shows its own type' ($r.md -match 'property Text: string') "got: [$($r.md)]"
 Check 'CONTROL: TBase.Text names no ancestor' ($r.md -notmatch 'declared in') "got: [$($r.md)]"
 Check 'LSP never wrote the read-only DB' ((SigOf 'uPropBase.TDerived.Text') -eq '') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
+
+Write-Host ''
+Write-Host '(8) generic types are parsed WHOLE (whole-branch review 2026-10-29)' -ForegroundColor Cyan
+$jg = HoverJson 'uPropBase.TBase.Map'
+Check 'own-accessor generic: type = TDictionary<string, Integer>' ($jg.type -eq 'TDictionary<string, Integer>') "got: [$($jg.type)]"
+Check 'own-accessor generic: signature keeps the full type' ($jg.signature -eq 'TDictionary<string, Integer>') "got: [$($jg.signature)]"
+$jr = HoverJson 'uPropBase.TDerived.Map'
+Check 're-published generic: type = TDictionary<string, Integer>' ($jr.type -eq 'TDictionary<string, Integer>') "got: [$($jr.type)]"
+Check 're-published generic: signature = the full type' ($jr.signature -eq 'TDictionary<string, Integer>') "got: [$($jr.signature)]"
+Check 're-published generic: declared in uPropBase.TBase' ($jr.declared_in -eq 'uPropBase.TBase') "got: [$($jr.declared_in)]"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
