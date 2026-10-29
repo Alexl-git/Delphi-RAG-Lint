@@ -10583,8 +10583,9 @@
       "audience": "both",
       "verified": {
         "date": "2026-10-29",
-        "by": "alexanderl",
-        "build": "1.38.0-alpha"
+        "by": "LSP",
+        "build": "1.38.0-alpha",
+        "surfaceHash": "6f0eec223c5fc9d7faf03d2bd474b15f5a1a8f5dd24889064b2a180b0d624cef"
       }
     },
     {
