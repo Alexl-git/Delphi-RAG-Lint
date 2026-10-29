@@ -290,5 +290,6 @@ Which units a unit needs, where they go in uses, and the cycles they make.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
+| [Auto uses on save (VS Code)](features/auto-uses-on-save.md) | VS Code adds a missing unit to uses on save (source.addMissingImports); dropping an unused unit on save is opt-in and gated | 1.38.0-alpha |
 | [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md) | Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked | 1.38.0-alpha |
 

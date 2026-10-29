@@ -68,3 +68,5 @@ single site with `// dl:ok unit-missing-from-uses -- why`.
 
 Related: [find-unit](find-unit.md) (ask for one symbol), Add Missing Units
 (whole unit), [circular-uses](Circular-Uses-Report-cycles-fix-plan.md).
+
+In VS Code the single-resolution fix also runs on save: see [Auto uses on save](vscode-extension.md#auto-uses-on-save).

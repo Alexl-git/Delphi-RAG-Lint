@@ -44,7 +44,7 @@
         }
       ],
       "helpOrder": 39,
-      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs]", "                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers (RB-5)"]
+      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs]", "                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers; --format json gains \"via_dispatch\" [{via,kind,sites}] (present only when non-empty) (RB-5)"]
     }
   ],
   "audience": "both",
@@ -70,9 +70,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-10-29",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "7dd90e2a4d32b93cce5f5922135154f78f5cb5c9d5a6ab5558191270c81095f8"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "586ac7407bd95c8d9823c15e485cb1b87c308d10854689a3f549d7842ea72a6d"
   }
 }
