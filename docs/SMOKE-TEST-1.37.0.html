@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>drag-lint 1.37.0-alpha smoke test</title>
+<style>
+:root{--bg:#fff;--fg:#1d2127;--mut:#5b6573;--bd:#cfd6df;--hd:#eef2f7;--ok:#e3f4e6}
+@media (prefers-color-scheme:dark){:root{--bg:#171a1f;--fg:#e4e8ee;--mut:#9aa5b4;--bd:#343b46;--hd:#232831;--ok:#1d3524}}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 Segoe UI,Arial,sans-serif;margin:0 auto;max-width:1100px;padding:16px}
+h1{font-size:20px}h2{font-size:16px;margin:22px 0 6px;background:var(--hd);padding:6px 8px;border:1px solid var(--bd)}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--bd);padding:4px 6px;vertical-align:top;text-align:left}
+th{background:var(--hd)}tr.done td{background:var(--ok)}code{font-family:Consolas,monospace;font-size:13px}
+td.c{width:26px}td.a{width:110px;color:var(--mut)}td.n{width:200px}input[type=text]{width:100%;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--bd)}
+textarea{width:100%;height:160px;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--bd)}
+.mut{color:var(--mut)}@media(max-width:700px){td.a,td.n{width:auto}}
+</style></head><body>
+<h1>drag-lint 1.37.0-alpha - smoke test (hand run)</h1>
+<p class="mut">Run after installing the staged build. <b>DL</b> = <code>C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe</code> (always the full path). Test project: any small indexed .dproj (P). Tick a row when the expected result is seen; note anything odd. 1.37.0 headline changes: ~50 new lint rules, taint rules, 110 fixable rules with <b>every autofix default-ON</b>, compliance labels, include-file indexing, full re-parse (extractor 1.26.0-alpha).</p>
+<p><span id="cnt">0 / 0</span> done</p>
+<div id="root"></div>
+<h2>Notes (copy out)</h2>
+<textarea id="out" readonly></textarea><br>
+<button onclick="gen()">Build notes from table</button> <button onclick="cp()">Copy notes</button>
+<script>
+var D=[
+["Install + manifest",[
+["Install","Run the staged installer / copy of the build to the target folder","Completes with no error; no locked-file prompt"],
+["Install","DL --version","Prints 1.37.0-alpha"],
+["Install","DL --help","Lists lint, lint-all, rules, index, query, context; every verb has its flags on its line"],
+["Manifest","DL info","Shows exe dir, manifest source, DB locations; library DBs and logs under LOCALAPPDATA"],
+["Manifest","DL manifest migrate (dry run first, if offered)","Renames, never auto-deletes; old paths reported"],
+["Manifest","DL resolve-dbs --project P.dproj","Returns <project>\\_D-RAG\\P.sqlite plus the platform library DB"],
+["Re-parse","DL index --project P.dproj --db <db> (full re-parse: extractor 1.26.0-alpha)","Summary line: files = walked (no files > walked); no error"]]],
+["ENGINE CLI",[
+["index","DL index --project P.dproj --db <db> a second time","Incremental: up-to-date, near-instant, 0 re-parsed"],
+["index","Run two DL index at once on one DB","No FOREIGN KEY failure (index-writer fix)"],
+["query","DL query --name <KnownClass> --db <db>","Declaration found with unit + line"],
+["query","DL query --text \"<phrase from a message>\" --db <db>","Hit in pas/dfm source with file:line"],
+["find-callers","DL query find-callers --name <BareMethod> --db <db>","Non-zero callers incl. hard cast T(X).M calls"],
+["context","DL context --task \"modify <Unit.TClass.Method>\" --db <db> --format markdown","Bundle has an Impl slice, class surface and callers"],
+["include files","Query a symbol declared in an active .inc of P","Found (active includes indexed in the includer's define context)"],
+["lint","DL lint <file.pas> --db <db>","Findings listed; each has path; exit code ok"],
+["lint","DL lint <folder> --db <db>","Same checks as per file, union over all .pas/.inc/.dpr"],
+["lint","DL lint <file.pas> --json","stdout is pure JSON (no 'loaded defaults' banner); array with start_line and path"],
+["lint-all","DL lint-all --db <db>","Completes; project-wide rules (unused public, uses-edge) appear"],
+["lint-all","DL lint-all --db <db> --enable magic-literal,multiple-statements-per-line,commented-out-code","Counts sane (not thousands on new code)"],
+["new rules","DL lint a file with TEnum(3) cast or case Ord(e) of","enum-ordinal-cast fires (warning)"],
+["taint","DL lint a scratch unit: Query.SQL.Text := 'x' + Edit.Text; Query.Open;","taint-sql-injection (CWE-89) reported"],
+["taint","Same with ShellExecute/CreateProcess on user text, and file open on user path","taint-command-injection / taint-path-traversal reported"],
+["compliance","DL rules --standard cwe  (and cert, misra)","Rules listed with labels; DL lint --labels shows compliance object in --json"],
+["compliance","DL lint-all --db <db> --format sarif > t.sarif; open it","Valid SARIF with taxonomies; profiles cwe/cert/misra/cwe-top25 selectable"],
+["fix dry run","Copy a unit with known findings; DL lint copy.pas --fix --dry-run (or --diff)","Shows planned edits only; file unchanged"],
+["fix apply","DL lint copy.pas --fix --json on the copy","Per-finding applied/declined flags; overlapping fixes deferred; result compiles"],
+["fix naming","Copy with a badly named symbol referenced by a .dfm; --fix","Rename SKIPPED ('skipped (dfm-unindexed)' / dfm-referenced); other renames applied"],
+["fix atomic","Force a fix group to fail (read-only second file)","Whole group dropped, nothing half-written, reported as declined"],
+["rules","DL rules --json | count entries","Count matches README / docs\\AI-USAGE (about 261+ rules); ON/OFF split plausible"],
+["flags","DL lint-all --build-config <cfg>","Scope and defines both follow the config; unindexed file NOTE prints once"]]],
+["IDE plugin (RAD Studio)",[
+["Load","Start RAD Studio; open P.dproj","drag-lint menu present; no load error / EResNotFound dialog"],
+["Menu","drag-lint > About","Shows 1.37.0-alpha"],
+["Menu","drag-lint > Go to Definition (cursor on a symbol)","Jumps to declaration"],
+["Menu","drag-lint > Find Usages...","List of usages opens"],
+["Menu","drag-lint > Hover at Cursor / Inspect Symbol > Type at Cursor","Type text shown"],
+["Menu","drag-lint > Inspect Symbol > Class Surface... / Descendants of Class...","Windows fill with members / descendants"],
+["Menu","drag-lint > Rename Symbol...","Preview lists edits; apply renames; compile ok"],
+["Menu","drag-lint > Safe Delete Symbol... on an unused routine","Offers delete; refuses a used one"],
+["Menu","drag-lint > Code Quality > Run Lint All (Full Report)...","Report opens with findings and counts"],
+["Menu","drag-lint > Code Quality > Find Dead Code...","List shown"],
+["Menu","drag-lint > Index & Maintenance > Rebuild Index for This Project","Completes; no locked-DB error"],
+["Menu","drag-lint > Index & Maintenance > Show Resolved DBs (debug)...","Lists project DB + library DB"],
+["Menu","drag-lint > Generate & Export > Doc Comment Stub (symbol)...","Stub inserted/copied, ASCII only"],
+["Menu","drag-lint > Reports > Compare a Saved Report or Chart with Current Code...","Compares without error (Charts)"],
+["Menu","drag-lint > Help > Help on a feature... and Help > IDE Menu Reference","Opens help; reference lists the menu above"],
+["Structure form","Open Structure form on a unit with findings","Findings tree appears"],
+["Structure form","Fix it on one finding","Applied (default ON); unit still compiles; undo works"],
+["Structure form","Fix all in unit on a copy of a unit with naming findings","Renames applied except .dfm-referenced symbols (skipped, reported)"],
+["Structure form","Fix it on a symbol referenced in the .dfm","Skipped with a reason; .dfm untouched"],
+["Compile","drag-lint > Compile & Diagnose","Diagnostics appear for a deliberate error"]]],
+["LSP / switch",[
+["LSP","Start the LSP (editor client or DL lsp); open P","Initialize ok; hover and go-to-definition answer"],
+["LSP","Edit a unit with a taint/ownership issue","Diagnostics (new 1.37 rules) published"],
+["Switch","Run the engine switch / ide-release then shutdown --all --wait 30 (DL ide-release --seconds 60)","Engines stand down; plugin stops respawning; restart restores"]]],
+["Converter + ConvRules editor",[
+["Start","Launch ConvRulesEditor.exe FROM the pin dir (third_party\\engine-pinned\\1.37.0-...); wait for startup","Starts; status bar names the pinned engine; menu bar File / Conversion / Mapping / Uses Units / View"],
+["Start","Launch with --form <a legacy form .pas> (or IDE convert request)","Descendant sets load behind a progress window; editor stays responsive (moves, repaints), no dead buttons"],
+["Classes","Click the Unit Rules tab","Library unit list loads behind the progress window, then classifies (library / project); no freeze"],
+["Busy","While the progress window is up, click Conversion > Convert... and a toolbar button","Click refused; a notice says what was refused; nothing runs; Cancel on the progress window stops the load"],
+["File menu","File > Open... a rule book; File > Save; File > Save As... to a new name","Opens / saves; .bak written; ASCII + CRLF kept; File > Encoding shows the book's level checked"],
+["File menu","Type a non-ASCII char into a rule, then File > Save","Save asks about the encoding (raise / keep / cancel); Cancel leaves the file untouched"],
+["File menu","With unsaved changes: File > New, then File > Exit","Each asks to save first; Cancel keeps the book open"],
+["Dialogs","Open File > Open..., and while it is up press Ctrl+S / try File > Save As...","No second dialog; the refused command is reported after the dialog closes; no hang"],
+["Chains","Open a book with a 2-stage chain (A -> B, B -> C); File > Save","Status shows 'Rule chains: ...'; chained rules marked; Rule chains dialog shown ONCE per chain"],
+["Chains","Conversion > Rule chains... ; click it again while open","One dialog only (no 'ChainForm already exists'); lists chains, cycles, duplicate From, unit chains"],
+["Chains","In Rule chains: Merge on one chain; Keep on another","Merge rewrites to A -> C; Keep changes nothing; no dialog on close"],
+["Chains","In Rule chains: Split (D2)","Writes <book>.stage2.rules; Conversion > Convert... lists both books, stage 1 before stage 2, with an order note"],
+["Convert","Conversion > Convert... : Add... a copy of a small legacy unit; Convert","Pre-run encoding question if the unit is not ASCII (Yes keeps note rows; Cancel adds none); .BCK1 backups; row notes"],
+["Convert","Convert 2 units in one run","Batch note in the report (one convert-apply for both); both converted"],
+["Convert","Open the converted form in the IDE / build it (delphi-build)","Form loads at design and run time; builds clean"],
+["Convert","View > Work list","Lists what the converted units still use from the old components"]]],
+["Charts",[
+["Chart","Generate a chart/report from the IDE Reports menu; save it","File saved, renders"],
+["Chart","Re-open the saved chart with Compare ... with Current Code","Diff vs current code shown"]]],
+["Help / website pages",[
+["Help","Open WWW\\help\\dl\\index.html in a browser","Loads; features and whats-new pages link and render"],
+["Help","whats-new.md / page mentions 1.37.0 items (taint, autofix default-ON, compliance)","Present and accurate"],
+["Help","Click 5 feature links from index (incl. ide.md, cli.md pages)","No 404"]]]
+];
+var root=document.getElementById('root'),n=0,saved={};
+try{saved=JSON.parse(localStorage.getItem('dl137')||'{}')}catch(e){}
+D.forEach(function(g){var h=document.createElement('h2');h.textContent=g[0];root.appendChild(h);
+var t=document.createElement('table');t.innerHTML='<tr><th></th><th>Area</th><th>Steps</th><th>Expected</th><th>Notes</th></tr>';
+g[1].forEach(function(r){n++;var id='c'+n,tr=document.createElement('tr');
+tr.innerHTML='<td class="c"><input type="checkbox" id="'+id+'"></td><td class="a"></td><td></td><td></td><td class="n"><input type="text" id="t'+id+'"></td>';
+tr.cells[1].textContent=n+'. '+r[0];tr.cells[2].textContent=r[1];tr.cells[3].textContent=r[2];
+var cb=tr.querySelector('input[type=checkbox]'),tx=tr.querySelector('input[type=text]');
+if(saved[id]){cb.checked=!!saved[id][0];tx.value=saved[id][1]||'';}
+function upd(){tr.className=cb.checked?'done':'';saved[id]=[cb.checked,tx.value];try{localStorage.setItem('dl137',JSON.stringify(saved))}catch(e){}
+document.getElementById('cnt').textContent=document.querySelectorAll('input[type=checkbox]:checked').length+' / '+n;}
+cb.onchange=upd;tx.oninput=upd;t.appendChild(tr);tr.className=cb.checked?'done':'';});
+root.appendChild(t);});
+document.getElementById('cnt').textContent=document.querySelectorAll('input[type=checkbox]:checked').length+' / '+n;
+function gen(){var s='drag-lint 1.37.0-alpha smoke test\n';document.querySelectorAll('tr').forEach(function(tr){var cb=tr.querySelector('input[type=checkbox]');if(!cb)return;
+var tx=tr.querySelector('input[type=text]').value;s+=(cb.checked?'[x] ':'[ ] ')+tr.cells[1].textContent+(tx?' -- '+tx:'')+'\n';});
+document.getElementById('out').value=s;}
+function cp(){gen();var o=document.getElementById('out');o.select();try{document.execCommand('copy')}catch(e){}}
+</script></body></html>

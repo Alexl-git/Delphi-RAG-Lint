@@ -141,7 +141,9 @@ type
       FPickProjLoaded: Boolean       ;
       FPickW32Loaded : Boolean       ;
       FPickW64Loaded : Boolean       ;
-      FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
+      FPickLoading   : Boolean       ; // EnsurePickLists' progress window is up: no second load from its pump
+      FClassesLoading: Boolean       ; // LoadAllClasses' progress window is up: no second load from its pump
+      FTabUnits     : TTabSheet             ; // the Unit Rules page; "is it active?" checks
       FTabConvert    : TTabSheet             ; // the Convert page; drops go to FConvertTab while it is active
       FConvertTab    : TConvertTab           ; // checked rule books x source units
       FTabWorkList   : TTabSheet             ; // the Work list page (Task 3, engine 1.27.0 pas_uses)
@@ -230,6 +232,7 @@ type
       FLostClickTitle: string         ; // N1: the progress title the Convert click was lost under; '' = no notice pending
       FBusyTitle    : string          ; // N1: the running long call's title (RunLongCallTracked); '' = none
       FLostCommand  : string          ; // N7/N11: CommandName of the refused click FLostClickTitle reports
+      FGateHook     : HHOOK           ; // dlggap: the WH_GETMESSAGE hook that runs NativeLoopMessage; 0 = none
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCancelStatus : string          ; // the status text that cancel wrote; SetStatusAfterCancel keeps it while it is on screen
       { Keys (TValidateJob.Key) of blocks whose validation a Cancel cut short. The
@@ -1173,7 +1176,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function LoadDescendantSet(const AAncestor: string): TStringList;
+      function LoadDescendantSet(const AAncestor: string; out AErr: string): TStringList;
       /// <summary>How many rules in the catalog claim ATypeName; 0 or 1 is healthy.</summary>
       /// <param name="ATypeName">A bare or qualified type name.</param>
       /// <returns>The number of sites, so a caller can render "+N DUPLICATE".</returns>
@@ -2265,7 +2268,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure LoadAllClasses;
+      function LoadAllClasses: Boolean;
       /// <summary><!-- drag-lint:auto sum -->Falls back to a tiny built-in set if either
       /// query yields nothing so the New Conversion flow always works. Each side's DB set
       /// = its platform's library index + the shared project DB (additive, so
@@ -2410,6 +2413,16 @@ type
       /// enabled check at all) and input that queued while the main thread was blocked.
       /// Sent messages never pass a queue and are not filtered.</remarks>
       procedure AppMessage(var Msg: TMsg; var Handled: Boolean);
+      /// <summary>The queue filter inside a native common dialog's own loop (dlggap): the
+      /// WH_GETMESSAGE hook passes every message removed from the queue here while NativeDialogUp.
+      /// A command for the main form (NativeLoopVerdict gvRefuse) becomes WM_NULL and arms
+      /// FLostClickTimer to report it once the dialog is gone; other main-form input (gvDrop)
+      /// becomes WM_NULL silently.</summary>
+      /// <param name="AMsg">The message the loop is about to dispatch; rewritten to WM_NULL when refused or dropped.</param>
+      /// <remarks>AppMessage cannot do this: Application.OnMessage is called by VCL pumps only,
+      /// never by a TOpenDialog / TSaveDialog / SelectDirectory loop, which therefore ran a posted
+      /// Save, Convert or Delete under the dialog. Main thread only.</remarks>
+      procedure NativeLoopMessage(var AMsg: TMsg);
       /// <summary>The caption of what a refused message would have clicked: a menu item
       /// (WM_COMMAND from a menu) or a TButton; '' when it is neither.</summary>
       /// <param name="AMsg">The refused message.</param>
@@ -2941,6 +2954,18 @@ end;
   TypeOfCell / LeafNameOf. }
 function GridRowMatchesFilter(const AFromCell, AToCell, AFromFilter, AToFilter: string): Boolean; forward;
 
+var
+  GGateForm: TConvRulesForm = nil; // dlggap: the form GateGetMsgHook filters for; nil = none
+
+{ dlggap: WH_GETMESSAGE hook of the main thread. Every loop that removes a message -- a native
+  common dialog's included, which never calls Application.OnMessage -- passes it here first. }
+function GateGetMsgHook(ACode: Integer; AWParam: WPARAM; ALParam: LPARAM): LRESULT; stdcall;
+begin
+  if (ACode = HC_ACTION) and (AWParam = PM_REMOVE) and (GGateForm <> nil) and NativeDialogUp then
+    GGateForm.NativeLoopMessage(PMsg(ALParam)^);
+  Result:= CallNextHookEx(0, ACode, AWParam, ALParam);
+end;
+
 { TConvRulesForm }
 
 constructor TConvRulesForm.Create(AOwner: TComponent);
@@ -2978,6 +3003,8 @@ begin
   OnCloseQuery:= FormCloseQueryHandler;
   Application.OnHint:= AppHint;
   Application.OnMessage:= AppMessage; // N7/N11: the one queue filter while busy
+  GGateForm:= Self;                   // dlggap: ... and the one under a native common dialog
+  FGateHook:= SetWindowsHookEx(WH_GETMESSAGE, @GateGetMsgHook, 0, GetCurrentThreadId);
   Visible:= True; // ensure the CreateNew form is shown by Run
 
   // Where the Open-form dialog resumes. --form's own folder wins over the stored
@@ -3035,6 +3062,10 @@ begin
     Application.OnHint:= nil;
   if TMethod(Application.OnMessage).Data = Self then
     Application.OnMessage:= nil;
+  if FGateHook <> 0 then
+    UnhookWindowsHookEx(FGateHook);
+  if GGateForm = Self then
+    GGateForm:= nil;
   FEngine.Free;
   FBook.Free;
   // Both are lazily created (FVisualSet only if the engine answered, FDeclUnits on
@@ -4213,9 +4244,11 @@ begin
   FCbTo  .Items.Clear;
   Screen.Cursor:= crHourGlass;
   try
-    LoadAllClasses;
+    var LClassesOk: Boolean:= LoadAllClasses;
     var LNote: string:= '';
-    var LWarn: Boolean:= False;
+    var LWarn: Boolean:= not LClassesOk;
+    if not LClassesOk then
+      LNote:= ' Class lists NOT loaded (cancelled); pick a class to load them again.';
     if Length(FHarvest) > 0 then
     begin
       ReclassifyHarvest; // rebuilds the resolver for the new TO platform
@@ -4235,23 +4268,51 @@ begin
   end;
 end; // procedure
 
-procedure TConvRulesForm.LoadAllClasses;
+function TConvRulesForm.LoadAllClasses: Boolean;
 var
   FromNames: TArray<string>;
   ToNames  : TArray<string>;
   Err      : string        ;
+  ToErr    : string        ;
+  FromOk   : Boolean       ;
+  ToOk     : Boolean       ;
 begin
+  Result:= True;
   if (Length(FFromClasses) > 0) and (Length(FToClasses) > 0) then Exit; // already loaded
+  // A load reached from inside the progress window's own message pump: the load in
+  // progress answers it (the caller sees the lists as they are now).
+  if FClassesLoading then
+    Exit(False);
 
-  // FROM: TComponent descendants of the FROM platform's library (+ project).
-  if not FEngine.ListDescendantsOf('TComponent', FromDbSet, FromNames, Err)
-     or (Length(FromNames) = 0) then
+  // LIBDESC: the two library-wide ListDescendantsOf calls run behind the progress
+  // window (the editor keeps answering, Cancel works). The worker touches no VCL and
+  // writes only these locals; DB sets are read here, on the main thread.
+  var LFromDbs: TArray<string>:= FromDbSet;
+  var LToDbs  : TArray<string>:= ToDbSet;
+  FClassesLoading:= True;
+  try
+    var LGuard: IInterface:= HourGlass; // dl:ok write-only-local@8f1f -- REVIEWED 2026-10-27 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
+    var LDone: Boolean:= FEngine.RunInLongCall('Loading the From / To class lists',
+      procedure
+      begin
+        // FROM: TComponent descendants of the FROM platform's library (+ project).
+        FromOk:= FEngine.ListDescendantsOf('TComponent', LFromDbs, FromNames, Err) and (Length(FromNames) > 0);
+        // TO: TControl descendants of the TO platform's library (+ project).
+        ToOk  := FEngine.ListDescendantsOf('TControl', LToDbs, ToNames, ToErr) and (Length(ToNames) > 0);
+      end);
+    if not LDone then
+    begin
+      // Cancelled: keep the previous (empty) state, never a partial set; the next need asks again.
+      SetError(ClassListsCancelledText);
+      Exit(False);
+    end;
+  finally
+    FClassesLoading:= False;
+  end;
+  if not FromOk then
     FromNames:= ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit', 'TOvcTable', 'TTable'];
   FFromClasses:= FromNames;
-
-  // TO: TControl descendants of the TO platform's library (+ project).
-  if not FEngine.ListDescendantsOf('TControl', ToDbSet, ToNames, Err)
-     or (Length(ToNames) = 0) then
+  if not ToOk then
     ToNames:= ['TEdit', 'TMemo', 'TButton', 'TLabel', 'TCheckBox', 'TcxTextEdit', 'TcxGrid'];
   FToClasses:= ToNames;
 
@@ -4277,8 +4338,8 @@ begin
   SetStatus('Loading classes from the Library scan (first time only)...');
   try
     Application.ProcessMessages;
-    LoadAllClasses;
-    SetStatus(Format('%d source (From) + %d target (To) classes available. Type to filter.', [Length(FFromClasses), Length(FToClasses)]));
+    if LoadAllClasses then
+      SetStatus(Format('%d source (From) + %d target (To) classes available. Type to filter.', [Length(FFromClasses), Length(FToClasses)]));
   finally
     Screen.Cursor:= crDefault;
   end;
@@ -4695,12 +4756,14 @@ procedure TConvRulesForm.DoLoad(Sender: TObject);
 var
   Dlg: TOpenDialog;
 begin
+  if NativeDialogUp then
+    Exit; // gateleak: a File > Open posted under a native dialog (no discard prompt under it either)
   if not ConfirmDiscard then
     Exit;
   Dlg:= TOpenDialog.Create(Self);
   try
     Dlg.Filter:= 'Conversion rules (*.rules;*.txt)|*.rules;*.txt|All files (*.*)|*.*';
-    if Dlg.Execute then
+    if RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       LoadFile(Dlg.FileName);
   finally
     Dlg.Free;
@@ -5427,9 +5490,6 @@ var
   Parts: TArray<TFormTypeRows>;
   Old  : TFormTypeRows        ;
   Txt  : string               ;
-  Names: TArray<string>       ;
-  Err  : string               ;
-  N    : string               ;
   i    : Integer              ;
   j    : Integer              ;
 begin
@@ -5457,12 +5517,49 @@ begin
 
   // Three descendant sets, once per session. Non-fatal: if the engine cannot
   // answer, rows stay '?' rather than being labelled non-visual on no evidence.
+  // STARTUP2: behind the progress window (~6.5 s on library-Win64, --form start-up
+  // included), so the editor keeps answering and Cancel works. Cancelled = no sets
+  // (rows '?', said on the status line); the next Examine asks again.
   if FVisualSet = nil then
   begin
     var LGuard: IInterface:= HourGlass;
-    FVisualSet    := LoadDescendantSet('TControl'   );
-    FComponentSet := LoadDescendantSet('TComponent' );
-    FPersistentSet:= LoadDescendantSet('TPersistent');
+    var LSets: TArray<TStringList>:= [nil, nil, nil];
+    var LErrs: TArray<string>:= ['', '', ''];
+    var LNames: TArray<string>:= ['TControl', 'TComponent', 'TPersistent'];
+    try
+      if FEngine.RunInLongCall('Loading the TControl / TComponent / TPersistent class sets',
+        procedure
+        begin
+          for var k:= 0 to 2 do
+            LSets[k]:= LoadDescendantSet(LNames[k], LErrs[k]);
+        end) then
+      begin
+        // LIBDESC: all three or none. A failed set is NOT cached (the next Examine
+        // asks again) and its reason is said once on the status line.
+        var LFailNames: TArray<string>:= nil;
+        var LFailWhy  : TArray<string>:= nil;
+        for var k:= 0 to 2 do
+          if LSets[k] = nil then
+          begin
+            LFailNames:= LFailNames + [LNames[k]];
+            LFailWhy  := LFailWhy   + [LErrs[k]];
+          end;
+        if LFailNames = nil then
+        begin
+          FVisualSet    := LSets[0];
+          FComponentSet := LSets[1];
+          FPersistentSet:= LSets[2];
+          LSets:= nil; // owned by the form now
+        end
+        else
+          SetError(DescendantSetsFailedText(LFailNames, LFailWhy));
+      end
+      else
+        SetError(DescendantSetsCancelledText);
+    finally
+      for var LSet: TStringList in LSets do
+        LSet.Free;
+    end; // try
   end;
 
   if Length(FCatalog) = 0 then
@@ -5489,18 +5586,18 @@ begin
   RefreshFormTypes;
 end; // procedure
 
-function TConvRulesForm.LoadDescendantSet(const AAncestor: string): TStringList;
+function TConvRulesForm.LoadDescendantSet(const AAncestor: string; out AErr: string): TStringList;
 var
   Names: TArray<string>;
-  Err  : string        ;
   N    : string        ;
 begin
+  Result:= nil; // a FAILED load is nil + AErr, never an empty set the caller would cache
+  if not FEngine.ListDescendantsOf(AAncestor, Names, AErr) then
+    Exit;
   Result:= TStringList.Create;
   Result.Sorted       := True;
   Result.Duplicates   := dupIgnore;
   Result.CaseSensitive:= False;
-  if not FEngine.ListDescendantsOf(AAncestor, Names, Err) then
-    Exit;
   for N in Names do
     if Trim(N) <> '' then
       Result.Add(Trim(N));
@@ -6046,7 +6143,7 @@ begin
     // ignored by TOpenDialog rather than being an error.
     if (FLastFormDir <> '') and TDirectory.Exists(FLastFormDir) then
       Dlg.InitialDir:= FLastFormDir;
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     AFiles:= ExpandUnitSiblings(Dlg.Files.ToStringArray);
     if Length(AFiles) > 0 then
@@ -6129,8 +6226,6 @@ var
   U        : TUsageSet             ;
   L        : TPropLeaf             ;
   F        : string                ;
-  T        : string                ;
-  UnitParts: TArray<TArray<string>>;
   FromBare : string                ;
   DotPos   : Integer               ;
 begin
@@ -6833,6 +6928,24 @@ begin
     FLostClickTitle:= BusyTitleFor(LWaitTitle, FLblStatus.Caption);
     FLostClickTimer.Enabled:= True;
   end;
+end;
+
+procedure TConvRulesForm.NativeLoopMessage(var AMsg: TMsg);
+begin
+  if not HandleAllocated then
+    Exit;
+  var LInMain: Boolean:= (AMsg.hwnd <> 0) and (GetAncestor(AMsg.hwnd, GA_ROOT) = Handle);
+  var LVerdict: TGateVerdict:= NativeLoopVerdict(AMsg.message, NativeDialogUp, LInMain, GateTargetClass(AMsg.hwnd));
+  if LVerdict = gvPass then
+    Exit;
+  // As AppMessage: the first refusal is reported; LostNoticeDeferred holds it while the dialog disables the editor.
+  if (LVerdict = gvRefuse) and (FLostClickTitle = '') then
+  begin
+    FLostCommand   := CommandName(GateTargetCaption(AMsg));
+    FLostClickTitle:= NATIVE_DIALOG_BUSY_TITLE;
+    FLostClickTimer.Enabled:= True;
+  end;
+  AMsg.message:= WM_NULL; // the dialog's loop dispatches a no-op: the command never runs
 end;
 
 const
@@ -8320,7 +8433,7 @@ begin
         Dlg.FileName  := ExtractFileName(FFilePath);
       end;
       Dlg.Options:= Dlg.Options + [ofOverwritePrompt];
-      if not Dlg.Execute then
+      if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
         Exit;
       FFilePath:= Dlg.FileName;
       FLblFile.Caption:= FFilePath;
@@ -8773,7 +8886,7 @@ procedure TConvRulesForm.DoBrowseMaskFolder(Sender: TObject);
 var
   Dir: string;
 begin
-  if not SelectDirectory('Hide units under this folder', '', Dir) then
+  if not RunNativeDialog(function: Boolean begin Result:= SelectDirectory('Hide units under this folder', '', Dir); end) then
     Exit;
   FEdMaskFolder.Text:= Dir;
   MaskChanged(Sender);
@@ -9254,7 +9367,7 @@ begin
     Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
     if (FLastFormDir <> '') and TDirectory.Exists(FLastFormDir) then
       Dlg.InitialDir:= FLastFormDir;
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     SetLastFormDir(ExtractFileDir(Dlg.FileName));
     AddSourceFiles(Dlg.Files.ToStringArray);
@@ -9358,7 +9471,7 @@ begin
     Dlg.Options:= Dlg.Options + [ofFileMustExist];
     if Trim(FEdDest.Text) <> '' then
       Dlg.InitialDir:= ExtractFileDir(Trim(FEdDest.Text));
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     FEdDest.Text:= Dlg.FileName;
   finally
@@ -9752,44 +9865,69 @@ begin
 end; // function
 
 procedure TConvRulesForm.EnsurePickLists(APlatform: TConvPlatform);
+type
+  TLoadOne = reference to procedure(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean);
 var
-  Failed: Boolean;
-
-  { One list, once. A failure is reported and NOT cached, so the next open
-    retries -- the usual cause (a DB mid-rebuild) is transient. }
-  procedure LoadOne(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean);
-  var
-    Names: TArray<string>;
-    Err  : string        ;
-  begin
-    if ALoaded then
-      Exit;
-    if FEngine.ListUnits(ADbs, Names, Err) then
-    begin
-      AList  := Names;
-      ALoaded:= True;
-    end
-    else
-    begin
-      Failed:= True;
-      SetError(Format('Unit picker: %s units unavailable -- %s', [AWhat, Err]));
-    end;
-  end; // procedure
-
+  Failed : Boolean;
+  LErrs  : TArray<string>;
+  LoadOne: TLoadOne;
 begin
+  { One list, once. A failure is reported and NOT cached, so the next open
+    retries -- the usual cause (a DB mid-rebuild) is transient. Runs on the
+    progress window's worker: it touches no VCL; the errors are reported after.
+    An anonymous method, not a nested procedure: the worker's closure calls it. }
+  LoadOne:=
+    procedure(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean)
+    var
+      Names: TArray<string>;
+      Err  : string        ;
+    begin
+      if ALoaded then
+        Exit;
+      if FEngine.ListUnits(ADbs, Names, Err) then
+      begin
+        AList  := Names;
+        ALoaded:= True;
+      end
+      else
+      begin
+        Failed:= True;
+        LErrs := LErrs + [Format('Unit picker: %s units unavailable -- %s', [AWhat, Err])];
+      end;
+    end;
+
   if FPickProjLoaded and (FPickW32Loaded or (APlatform = cpWin64)) and (FPickW64Loaded or (APlatform = cpWin32)) then
+    Exit;
+  // A classify or pick reached from inside the window's own message pump: the load
+  // in progress answers it; the caller sees what is loaded so far (a failure).
+  if FPickLoading then
     Exit;
   var LGuard: IInterface:= HourGlass;  // dl:ok write-only-local@8f1f -- REVIEWED 2026-09-24 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
   SetStatus('Loading unit lists for the unit picker (first time only)...');
-  Application.ProcessMessages;
   Failed:= False;
-  LoadOne([GEditorProjectDb], 'project', FPickProj, FPickProjLoaded);
-  if APlatform <> cpWin64 then
-    LoadOne(LibDbsFor(cpWin32, GEditorLibDir), 'Win32 library', FPickWin32, FPickW32Loaded);
-  if APlatform <> cpWin32 then
-    LoadOne(LibDbsFor(cpWin64, GEditorLibDir), 'Win64 library', FPickWin64, FPickW64Loaded);
-  if not Failed then
-    SetStatus(Format('Unit picker: %d project, %d Win32, %d Win64 unit(s) loaded.', [Length(FPickProj), Length(FPickWin32), Length(FPickWin64)]));
+  LErrs := nil;
+  // STARTUP2: the Win64 library list is an 11.5 s read: behind the progress window, so
+  // the editor keeps answering and Cancel works. The worker writes only these fields.
+  FPickLoading:= True;
+  try
+    var LDone: Boolean:= FEngine.RunInLongCall('Loading unit lists for the unit picker',
+      procedure
+      begin
+        LoadOne([GEditorProjectDb], 'project', FPickProj, FPickProjLoaded);
+        if APlatform <> cpWin64 then
+          LoadOne(LibDbsFor(cpWin32, GEditorLibDir), 'Win32 library', FPickWin32, FPickW32Loaded);
+        if APlatform <> cpWin32 then
+          LoadOne(LibDbsFor(cpWin64, GEditorLibDir), 'Win64 library', FPickWin64, FPickW64Loaded);
+      end);
+    if not LDone then
+      SetError(PickListsCancelledText)
+    else if Failed then
+      SetError(string.Join(' ', LErrs))
+    else
+      SetStatus(Format('Unit picker: %d project, %d Win32, %d Win64 unit(s) loaded.', [Length(FPickProj), Length(FPickWin32), Length(FPickWin64)]));
+  finally
+    FPickLoading:= False;
+  end; // try
 end; // procedure
 
 function TConvRulesForm.PickUnit(const ACaption, AInitial: string; ASide: TUnitPickSide; out AUnit: string): Boolean;

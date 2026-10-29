@@ -1293,6 +1293,22 @@ type
       /// handles closed before the call returns or the exception propagates. On cancel
       /// or timeout an unterminated last stderr line is dropped, not appended.</remarks>
       function RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
+      /// <summary>Runs AWork -- any number of this adapter's ordinary calls (ListUnits,
+      /// ListDescendantsOf, ...) -- through LongCallRunner, so they run behind the
+      /// progress window, and lets its Cancel stop the engine call in flight.</summary>
+      /// <param name="ATitle">The progress window's first line.</param>
+      /// <param name="AWork">The calls to make. Runs on the runner's worker thread: it
+      /// must not touch the VCL; it stores its answers for the caller to use after.</param>
+      /// <returns>True when AWork ran to its end; False when the user cancelled
+      /// (LastCancelled is then True) -- before it started, or during an engine call,
+      /// which then returns ENGINE_OUTCOME_CANCELLED to the call that made it, so its
+      /// answer is a failure and never a short list.</returns>
+      /// <remarks>An exception raised by AWork or the runner propagates to the caller unchanged.
+      /// No LongCallRunner (model tests, callers without a UI): AWork runs inline
+      /// and cannot be cancelled. Every engine call AWork makes ON THE RUNNER'S THREAD polls
+      /// the runner's cancel token (a threadvar, set only for AWork's duration); calls
+      /// made on other threads are not affected.</remarks>
+      function RunInLongCall(const ATitle: string; const AWork: TProc): Boolean;
 
       property ExePath: string read FExePath;
       /// <summary>--depth for proptree / convert-scaffold; 0 = omit (engine without book_depth).</summary>
@@ -1665,6 +1681,38 @@ begin
   Result:= RunCaptureTimed(AArgs, ENGINE_TIMEOUT_MS, AOutput);
 end;
 
+threadvar
+  // The cancel token RunInLongCall hands its work's engine calls; nil outside one.
+  // A threadvar, not a field: the main thread may make its own calls meanwhile.
+  GCallCancel: TCancelToken;
+
+function TEngineAdapter.RunInLongCall(const ATitle: string; const AWork: TProc): Boolean;
+var
+  LWork: TStreamingWork;
+  LCode: Integer;
+begin
+  LWork:=
+    function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
+    begin
+      if (ACancel <> nil) and ACancel.IsCancelled then
+        Exit(ENGINE_OUTCOME_CANCELLED);
+      var LOuter: TCancelToken:= GCallCancel;
+      GCallCancel:= ACancel;
+      try
+        AWork();
+      finally
+        GCallCancel:= LOuter;
+      end; // try
+      Result:= if (ACancel <> nil) and ACancel.IsCancelled then ENGINE_OUTCOME_CANCELLED else 0;
+    end;
+  if Assigned(FLongCallRunner) then
+    LCode:= FLongCallRunner(ATitle, LWork)
+  else
+    LCode:= LWork(nil, nil);
+  FLastCancelled:= LCode = ENGINE_OUTCOME_CANCELLED;
+  Result:= not FLastCancelled;
+end;
+
 function TEngineAdapter.CastLibArgs: string;
 begin
   if (FCastLibFile <> '') and TFile.Exists(FCastLibFile) then
@@ -1876,7 +1924,8 @@ begin
   // a stdout line and break the JSON / sql / query text every caller parses (seen
   // on convert-validate as "Validate: s, not a re-parse). (+3 more)"). Now stdout
   // comes first, whole, and stderr's lines follow it.
-  Result:= RunCaptureStreaming(AArgs, ATimeoutMs, nil, nil, AOutput);
+  // GCallCancel: nil, except inside RunInLongCall's work on the runner's thread.
+  Result:= RunCaptureStreaming(AArgs, ATimeoutMs, nil, GCallCancel, AOutput);
   if Result = ENGINE_OUTCOME_TIMEOUT then
   begin
     AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
@@ -2212,7 +2261,9 @@ begin
   // "(loaded defaults ...)" / "(none)" trailer we skip). Passing several --db
   // unions the results; we dedupe so a class in more than one DB appears once.
   Code:= RunCapture(Format('query descendants --of "%s"%s', [AAncestor, DbArgsFor(ADbs)]), Output);
-  if Code = 2 then
+  // 2 = failed, 3 = fatal or RunCapture's timeout, < 0 = cancelled / not started: the
+  // output of any of them is partial at best -- never a (short) set.
+  if (Code >= 2) or (Code < 0) then
   begin
     AError:= Format('query descendants failed (exit %d)', [Code]);
     Exit(False);

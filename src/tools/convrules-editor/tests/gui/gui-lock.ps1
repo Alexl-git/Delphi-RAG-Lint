@@ -10,10 +10,16 @@
 # (A PID check cannot work: each agent tool call is a short-lived shell.)
 param([switch]$Acquire, [switch]$Release, [switch]$Beat, [string]$Owner = 'unknown',
       [string]$LockFile = 'C:\TEMP\claude\lanes\gui.lock', [int]$BeatSec = 30, [int]$StaleSec = 120,
-      [int]$UnmarkedStaleMin = 60, [double]$MaxWaitMin = 90)
+      [int]$UnmarkedStaleMin = 60, [double]$MaxWaitMin = 90, [string]$Token = '')
 function NamesOwner { try { return ((Get-Content -LiteralPath $LockFile -ErrorAction Stop) -like "$Owner *") } catch { return $false } }
+# LOCKBEAT: a heartbeat serves ONE acquire. It keeps beating only while the lock still starts with that
+# acquire's own token (owner + acquire time): a release, or a re-acquire under the same owner name, ends it.
+# Before this, every acquire's heartbeat matched by owner name alone and lived on, so a runner killed mid-run left
+# a lock that never went stale.
+function HoldsToken { try { return ((Get-Content -LiteralPath $LockFile -TotalCount 1 -ErrorAction Stop).StartsWith($Token)) } catch { return $false } }
 if ($Beat) {
-  while (NamesOwner) { try { (Get-Item -LiteralPath $LockFile).LastWriteTime = Get-Date } catch {}; Start-Sleep -Seconds $BeatSec }
+  if ($Token -eq '') { exit 2 }
+  while (HoldsToken) { try { (Get-Item -LiteralPath $LockFile).LastWriteTime = Get-Date } catch {}; Start-Sleep -Seconds $BeatSec }
   exit 0
 }
 if ($Acquire) {
@@ -35,7 +41,9 @@ if ($Acquire) {
       }
     } catch {}
     if ($got) {
-      Start-Process -WindowStyle Hidden -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-Beat', '-Owner', $Owner, '-LockFile', $LockFile, '-BeatSec', $BeatSec) | Out-Null
+      Start-Process -WindowStyle Hidden -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-Beat', '-Owner', $Owner, '-LockFile', $LockFile, '-BeatSec', $BeatSec, '-Token', "`"$mine`"") | Out-Null
+      # ATOMLOCK: the lock is held, so no other driver's editor can be mid-start: reclaim VCL atoms leaked by killed editors.
+      try { . "$PSScriptRoot\vcl-atoms.ps1"; Write-Output (VclAtomsReclaim) } catch { Write-Output "vcl-atoms: reclaim failed: $($_.Exception.Message)" }
       Write-Output "$how by $Owner"; exit 0
     }
     if ((Get-Date) -gt $deadline) { Write-Output "TIMEOUT held by $(Get-Content -LiteralPath $LockFile -ErrorAction SilentlyContinue)"; exit 1 }

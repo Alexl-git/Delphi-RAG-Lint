@@ -34,7 +34,8 @@ this file when a standing item changes.
 Pending now (owner via ENGINE, 2026-10-27): NO new rule/feature articles until the release
 that ships 1.36.0 + the Clippy wave + the 32-rule triage + compliance labels; ENGINE messages
 the facts. Held for it: the help set from 40b9db28, ENGINE's circular-uses diff for sections
-05/07/08, and the FixInsight migration article (research: `docs\lint\fixinsight-parity\`).
+05/07/08 (plus a re-captured `cycles --plan` sample: wording changed in main dbc28c1f,
+ships in 1.37.0), and the FixInsight migration article (research: `docs\lint\fixinsight-parity\`).
 
 ## 3. Discoverability (weekly, 10 minutes)
 

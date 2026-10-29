@@ -10152,6 +10152,146 @@ begin
     TDirectory.Delete(Dir, True);
   end;
 end;
+
+{ STARTUP2 (2026-10-27): RunInLongCall runs ordinary adapter calls inside the long-call
+  runner (the progress window's worker) and its Cancel stops the engine call in flight.
+  The --form start-up's three descendant sets (~6.5 s) and the unit picker's library
+  lists (11.5 s) ran on the main thread with no window and no Cancel. The stand-ins log
+  every call and answer one class name; the sleeping one runs ~6 s. }
+procedure TestRunInLongCall;
+const
+  LOG_CMD         = '@echo %1>>"%~dp0calls.log"'#13#10'@echo TFoo'#13#10'@exit /b 0'#13#10;
+  SLEEP_CMD       = '@ping -n 7 127.0.0.1 >nul'#13#10;
+  PART_CMD        = '@echo TFoo'#13#10'@ping -n 7 127.0.0.1 >nul'#13#10;
+  CANCEL_AFTER_MS = 300;
+  CANCEL_BOUND_MS = 3000; // cancel + process teardown, far under the stand-in's ~6 s
+  TITLE           = 'Loading class sets';
+var
+  Dir    : string;
+  Log    : string;
+  Eng    : TEngineAdapter;
+  Names  : TArray<string>;
+  Err    : string;
+  Ok     : Boolean;
+  Ran    : Boolean;
+  CallsIn: Integer;
+  Seen   : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'longcall-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TPath.Combine(Dir, 'calls.log');
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'log.cmd'), LOG_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'sleep.cmd'), SLEEP_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'part.cmd'), PART_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'log.cmd'), []);
+    try
+      // No runner: inline, uncancellable, the answer is kept.
+      Ok:= False;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListDescendantsOf('TControl', Names, Err); end);
+      Check('longcall.inline.runs', Ran and Ok and (Length(Names) = 1) and not Eng.LastCancelled, Format('ran=%s ok=%s n=%d err=%s', [BoolToStr(Ran, True), BoolToStr(Ok, True), Length(Names), Err]));
+
+      // A runner: the calls are made INSIDE it, under its title.
+      TFile.Delete(Log);
+      CallsIn:= -1;
+      Seen   := '';
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          CallsIn:= LogLineCount(Log);
+          Seen   := ATitle;
+          Result := AWork(nil, nil);
+        end;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListDescendantsOf('TControl', Names, Err); end);
+      Check('longcall.inside.runner', Ran and Ok and (CallsIn = 0) and (LogLineCount(Log) = 1) and (Seen = TITLE), Format('before=%d after=%d title=%s', [CallsIn, LogLineCount(Log), Seen]));
+
+      // Cancel pressed before the work starts: no engine call, not a success.
+      TFile.Delete(Log);
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T: TCancelToken;
+        begin
+          T:= TCancelToken.Create;
+          try
+            T.Cancel;
+            Result:= AWork(nil, T);
+          finally
+            T.Free;
+          end;
+        end;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListDescendantsOf('TControl', Names, Err); end);
+      Check('longcall.cancel.before.no.call', (not Ran) and Eng.LastCancelled and (LogLineCount(Log) = 0), Format('ran=%s calls=%d', [BoolToStr(Ran, True), LogLineCount(Log)]));
+    finally
+      Eng.Free;
+    end;
+
+    // Cancel DURING an engine call: the call stops, its answer is a failure, not a short list.
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'sleep.cmd'), []);
+    try
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T : TCancelToken;
+          Th: TThread;
+        begin
+          T:= TCancelToken.Create;
+          try
+            // The stand-in for the user's Cancel click, from another thread as the window's is.
+            Th:= TThread.CreateAnonymousThread(
+              procedure
+              begin
+                TThread.Sleep(CANCEL_AFTER_MS);
+                T.Cancel;
+              end);
+            Th.FreeOnTerminate:= False;
+            Th.Start;
+            try
+              Result:= AWork(nil, T);
+            finally
+              Th.WaitFor;
+              Th.Free;
+            end;
+          finally
+            T.Free;
+          end;
+        end;
+      Ok:= True;
+      var LStart: UInt64:= GetTickCount64;
+      Ran:= Eng.RunInLongCall(TITLE, procedure begin Ok:= Eng.ListUnits(['a.sqlite'], Names, Err); end);
+      var LElapsed: UInt64:= GetTickCount64 - LStart;
+      Check('longcall.cancel.stops.call', (not Ran) and Eng.LastCancelled and (not Ok) and (LElapsed < CANCEL_BOUND_MS), Format('ran=%s ok=%s %d ms err=%s', [BoolToStr(Ran, True), BoolToStr(Ok, True), LElapsed, Err]));
+
+      // A descendant query cancelled after its first line: a failure, never that one line
+      // as the whole set (it took exit 2 alone as a failure, and read a cancelled call's
+      // partial output as the answer).
+      var LPart: TEngineAdapter:= TEngineAdapter.Create(TPath.Combine(Dir, 'part.cmd'), []);
+      try
+        LPart.LongCallRunner:= Eng.LongCallRunner;
+        Ok:= True;
+        Ran:= LPart.RunInLongCall(TITLE, procedure begin Ok:= LPart.ListDescendantsOf('TControl', Names, Err); end);
+        Check('longcall.cancel.descendants.not.short', (not Ran) and (not Ok) and (Length(Names) = 0), Format('ran=%s ok=%s n=%d err=%s', [BoolToStr(Ran, True), BoolToStr(Ok, True), Length(Names), Err]));
+      finally
+        LPart.Free;
+      end;
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  // A cancelled load is said, with its consequence and how it is retried (never stale-silent).
+  Check('longcall.sets.cancelled.text', ContainsText(DescendantSetsCancelledText, 'cancelled') and ContainsText(DescendantSetsCancelledText, '[?]') and ContainsText(DescendantSetsCancelledText, 'again'), DescendantSetsCancelledText);
+  Check('longcall.picklists.cancelled.text', ContainsText(PickListsCancelledText, 'cancelled') and ContainsText(PickListsCancelledText, 'MISSING') and ContainsText(PickListsCancelledText, 'again'), PickListsCancelledText);
+
+  // LIBDESC: a FAILED set load is said once with the ancestor and the engine's reason; nothing failed = no text.
+  var LFailed: string:= DescendantSetsFailedText(['TControl', 'TPersistent'], ['engine exited 2', '']);
+  Check('libdesc.failed.text.names', ContainsText(LFailed, 'TControl') and ContainsText(LFailed, 'engine exited 2') and ContainsText(LFailed, '[?]') and ContainsText(LFailed, 'again'), LFailed);
+  Check('libdesc.failed.text.noreason', ContainsText(DescendantSetsFailedText(['TPersistent'], ['']), 'TPersistent'), DescendantSetsFailedText(['TPersistent'], ['']));
+  Check('libdesc.classes.cancelled.text', ContainsText(ClassListsCancelledText, 'cancelled') and ContainsText(ClassListsCancelledText, 'again'), ClassListsCancelledText);
+  Check('libdesc.failed.text.none', DescendantSetsFailedText([], []) = '', DescendantSetsFailedText([], []));
+end;
 { ResolveClassQName answers are cached for the session (job C6 follow-up): every
   rule click resolved its From and To classes again (0.5-1.2 s each), so even a
   trivial load flashed the progress window. Keyed on the name (case-insensitive,
@@ -15965,7 +16105,70 @@ begin
   Check('gate.title.unknown', (BusyTitleFor('', '  ') = BUSY_TITLE_UNKNOWN) and (BUSY_TITLE_UNKNOWN = 'another operation'));
 end;
 
-procedure TestConverterMinorsStartup;
+{ gateleak (2026-10-27): RunNativeDialog, the one re-entrancy guard of every native common
+  dialog (Add..., File > Open / Save As, the Unit Rules browses, the curation dialogs). Their
+  native loops never call Application.OnMessage, so the queue filter cannot refuse a command
+  posted meanwhile; the second dialog-opening command must not run while one is up. }
+procedure TestNativeDialogGuard;
+var
+  LUpInside, LInnerRan, LInnerResult, LRaised: Boolean;
+begin
+  Check('native.result.true', RunNativeDialog(function: Boolean begin Result:= True; end));
+  Check('native.result.false', not RunNativeDialog(function: Boolean begin Result:= False; end));
+  Check('native.idle', not NativeDialogUp, '(nothing is up between runs)');
+  LUpInside:= False; LInnerRan:= False; LInnerResult:= True;
+  RunNativeDialog(function: Boolean
+    begin
+      LUpInside:= NativeDialogUp;
+      LInnerResult:= RunNativeDialog(function: Boolean begin LInnerRan:= True; Result:= True; end);
+      Result:= True;
+    end);
+  Check('native.up.inside', LUpInside, '(the dialog is up while AExecute runs)');
+  Check('native.nested.not.run', not LInnerRan, '(a second dialog-opening command under the first runs nothing)');
+  Check('native.nested.false', not LInnerResult, '(and reads as cancelled)');
+  Check('native.down.after', not NativeDialogUp);
+  LRaised:= False;
+  try
+    RunNativeDialog(function: Boolean begin raise Exception.Create('dialog failed'); end);
+  except
+    on Exception do
+      LRaised:= True;
+  end;
+  Check('native.raise.propagates', LRaised);
+  Check('native.raise.clears', not NativeDialogUp, '(a raising dialog does not lock every later one)');
+  Check('native.runs.again', RunNativeDialog(function: Boolean begin Result:= True; end));
+end;
+
+{ dlggap (2026-10-28): RunNativeDialog stops only a SECOND dialog. A command that opens none (a
+  posted Save / Convert / Delete) was dispatched by the dialog's own native loop and ran under it.
+  NativeLoopVerdict is the filter the editor's WH_GETMESSAGE hook applies inside those loops. }
+procedure TestNativeLoopGate;
+const
+  WM_PAINT_ = $000F;
+  WM_TIMER_ = $0113;
+begin
+  Check('native.loop.idle.passes', NativeLoopVerdict(GATE_WM_COMMAND, False, True, '') = gvPass,
+    '(no dialog up: Application.OnMessage owns the VCL pumps)');
+  Check('native.loop.command.refused', NativeLoopVerdict(GATE_WM_COMMAND, True, True, '') = gvRefuse,
+    '(a posted Save / Convert / menu item for the editor under a dialog)');
+  Check('native.loop.bmclick.refused', NativeLoopVerdict(GATE_BM_CLICK, True, True, 'TButton') = gvRefuse,
+    '(a posted Delete button click)');
+  Check('native.loop.command.listbox.refused', NativeLoopVerdict(GATE_WM_COMMAND, True, True, 'TListBox') = gvRefuse,
+    '(a command stays a command whatever the class)');
+  Check('native.loop.dialog.input.passes', NativeLoopVerdict(GATE_WM_COMMAND, True, False, 'Button') = gvPass,
+    '(the dialog''s own buttons work)');
+  Check('native.loop.dialog.key.passes', NativeLoopVerdict(GATE_WM_KEYFIRST, True, False, 'Edit') = gvPass);
+  Check('native.loop.key.dropped', NativeLoopVerdict(GATE_WM_KEYFIRST, True, True, '') = gvDrop);
+  Check('native.loop.selection.dropped', NativeLoopVerdict(GATE_WM_LBUTTONDOWN, True, True, 'TListBox') = gvDrop);
+  Check('native.loop.press.refused', NativeLoopVerdict(GATE_WM_LBUTTONDOWN, True, True, 'TButton') = gvRefuse);
+  Check('native.loop.paint.passes', NativeLoopVerdict(WM_PAINT_, True, True, '') = gvPass);
+  Check('native.loop.timer.passes', NativeLoopVerdict(WM_TIMER_, True, True, '') = gvPass,
+    '(the notice timer runs; LostNoticeDeferred holds it while the editor is disabled)');
+  Check('native.loop.notice', LostCommandStatus('', 'Save', NATIVE_DIALOG_BUSY_TITLE)
+    = 'Save was NOT run: it was clicked while the editor was busy (a file or folder dialog was open). Click it again.');
+  Check('native.loop.notice.deferred', LostNoticeDeferred(0, False, False, False),
+    '(under the dialog the editor is disabled: the notice waits until it closes)');
+end;procedure TestConverterMinorsStartup;
 const
   FORM_ERR = '--form "X.pas" does not exist.';
   REQ_STATUS = 'Request from the IDE: convert 1 selected component(s)';
@@ -16296,6 +16499,7 @@ begin
     TestChooseTestEngine;
     TestStdoutSeparateFromStderr;
     TestProptreeResolveInRunner;
+    TestRunInLongCall;
     TestResolveCache;
     TestValidateParse;
     TestValidate1262Note;
@@ -16355,6 +16559,8 @@ begin
     TestConverterMinorsDepth;
     TestConverterMinorsStartup;
     TestInputGate;
+    TestNativeDialogGuard;
+    TestNativeLoopGate;
     TestClassifyDeferred;
     TestCapabilityProbe;
     TestEncodingLevels;

@@ -57,6 +57,7 @@ Add-Type -AssemblyName System.Windows.Forms
 if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'drive-unit-harvest.ps1 needs an STA thread for the clipboard (pwsh -File runs STA by default).' }
 $script:pass = 0; $script:fail = 0
 trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Find($parent, $cls, $text) { [H]::Kids($parent) | Where-Object { [H]::Cls($_) -eq $cls -and ($null -eq $text -or [H]::Txt($_) -eq $text) } }
 function LvCount($lv) { [int][H]::Send($lv, 0x1004, [IntPtr]::Zero, [IntPtr]::Zero) }

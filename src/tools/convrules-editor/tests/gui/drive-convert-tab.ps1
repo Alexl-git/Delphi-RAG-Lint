@@ -18,7 +18,10 @@
 # Delete) are refused, the first one reported, none run (n7.*); WaitIdle also asks the editor ('ConvRulesEditor.Busy').
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
-param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow, [switch]$ProofOccluded, [switch]$ForeignActive)
+# GATELEAK env.vcl.atoms (2026-10-27): before the launch, the VCL atoms leaked by killed Delphi processes are
+# reclaimed (vcl-atoms.ps1); after it, the editor's own two VCL atoms must exist, else FindControl is nil and every
+# button is dead (the 'add.dialog' flake). -ProofAtomCheck asks for a wrong atom name: env.vcl.atoms must FAIL.
+param([string]$Exe, [switch]$ProofNoIndex, [switch]$ProofNoWindow, [switch]$ProofOccluded, [switch]$ForeignActive, [switch]$ProofAtomCheck)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -283,6 +286,7 @@ public static class CT {
 '@
 $script:pass = 0; $script:fail = 0
 trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 # Looks at least ONCE: with $sec = 0 the old while-loop never looked, so "is the dialog still up" always said no.
@@ -555,20 +559,26 @@ try {
 
   # The file FIRST, then the flags: ConvRulesEditor.dpr auto-opens only a LEADING file argument,
   # and the rules folder of the run is that book's folder.
+  . "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)
   $p = Start-Process $Exe -ArgumentList "`"$book`" --project-db `"$db`"" -PassThru
   $main = [IntPtr]::Zero; $t0 = Get-Date
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $m = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($m) { $main = $m } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   # A zero HWND would make EnumChildWindows(NULL) walk every OTHER process's windows.
   if ($main -eq [IntPtr]::Zero) { return }
+  # GATELEAK: no VCL atoms = FindControl nil = every button click lost; a precondition, not an editor defect.
+  $atoms = VclAtomsOf $p.Id $main -WrongName:$ProofAtomCheck
+  Check 'env.vcl.atoms' (($atoms.Control -ne 0) -and ($atoms.Window -ne 0)) ("control=$($atoms.Control) window=$($atoms.Window) ($($atoms.Names)); 0 = the global atom table was full when the editor started")
+  if (($atoms.Control -eq 0) -or ($atoms.Window -eq 0)) { return }
   Start-Sleep -Seconds 2
   # DRV-2b: the start-up work (book load, engine probes) runs behind the InputGate; a menu command posted then is
-  # refused like any other (seen: 'active tabs: Classes' + busy=True, then every later step cascaded): the library unit-list
-  # query blocked the main thread for over 60 s while other sessions held the library DB. Wait (up to the engine timeout) until idle.
+  # refused like any other (seen: 'active tabs: Classes' + busy=True, then every later step cascaded). Wait (up to the
+  # engine timeout) until idle. (The 60 s+ block seen while other sessions held the library DB is NOT start-up: it is the
+  # library unit-list read on the first Add..., not this wait.)
   [void](WaitIdle $p.Id $main 180)
 
   # --- 1. Conversion > Convert... shows the Convert tab ---
-  # The start-up work comes in bursts (two 'info' probes, then the library unit list); a 2 s idle gap between them
+  # The start-up work comes in bursts (two 'info' probes, then the book load); a 2 s idle gap between them
   # satisfies WaitIdle, and a command posted into the next burst is refused. So: up to 3 tries, each after WaitIdle.
   for ($try = 1; $try -le 3; $try++) {
     $invoked = [W]::InvokeMenu($main, 'Conversion|Convert...')
@@ -703,6 +713,12 @@ try {
   if ($dlg -eq [IntPtr]::Zero) { [void](WaitIdle $p.Id $main 60); Click $add; $dlg = WaitOpenDlg $p.Id 20 }
   if ($dlg -eq [IntPtr]::Zero) { Check 'add.dialog' $false "no Open dialog after two Add... clicks; windows: $(TopsNow $p.Id); status: $(Status $main)"; return }
   Start-Sleep -Milliseconds 700
+  # GATELEAK: the Open dialog is a native modal loop that never calls Application.OnMessage, so InputGate cannot see
+  # a WM_COMMAND(Add...) posted to the disabled editor meanwhile; AddClick must not nest a second Open dialog.
+  [void][W]::PostMessage([CT]::Parent($add), 0x0111, [IntPtr]::Zero, $add)
+  Start-Sleep -Milliseconds 1200
+  $nOpen = @([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq '#32770' -and @([W]::Kids($_) | Where-Object { [W]::Cls($_) -eq 'Edit' }).Count -gt 0 }).Count
+  Check 'add.reentrant.not.nested' ($nOpen -eq 1) ('Open dialogs while one is up and Add... is posted again: ' + $nOpen)
   [void][W]::SendS(@([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0], 0x000C, [IntPtr]::Zero, $pas)
   [EngineHold]::Arm($engine)   # DRV-2
   Click (@(Find $dlg 'Button' '&Open')[0])
