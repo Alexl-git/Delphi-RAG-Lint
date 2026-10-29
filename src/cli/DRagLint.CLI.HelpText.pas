@@ -101,6 +101,8 @@ begin
   Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
   Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
   Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
+  Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
+  Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
   Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
@@ -238,6 +240,8 @@ begin
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+  Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
+  Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
   Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
@@ -245,6 +249,7 @@ begin
   Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
+  Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers (RB-5)');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
@@ -332,6 +337,7 @@ begin
   Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
+  Writeln('                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitt' +
@@ -581,6 +587,8 @@ begin
     Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
     Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
     Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
+    Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
+    Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
     Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
     Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
     Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
@@ -814,6 +822,8 @@ begin
   if pVerb = 'impact' then
   begin
     Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+    Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
+    Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
     Exit;
   end;
   if pVerb = 'wiring' then
@@ -837,6 +847,7 @@ begin
     Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
     Writeln('                               [--max-callers N] [--context N] [--no-docs]');
     Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
+    Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers (RB-5)');
     Exit;
   end;
   if pVerb = 'bench-context' then
@@ -1084,6 +1095,7 @@ begin
   if pVerb = 'call-path' then
   begin
     Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
+    Writeln('                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)');
     Exit;
   end;
   if pVerb = 'callgraph' then

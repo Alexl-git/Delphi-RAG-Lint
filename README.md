@@ -240,6 +240,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 
 * `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;
   `--name Bar` returns the call sites.
+* `find-callers` also reports interface dispatch (RB-5): a method reached only THROUGH an interface method it implements
+  lists those sites as a separate `via <IFoo.Bar> dispatch` group; `--json` rows gain `via` (the interface method),
+  `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
+  `impact` lists an interface method's implementors (`--format json`: `implementors`, `via_dispatch` [of via, kind, sites]),
+  `context` adds `## Callers via interface dispatch` sections, and `call-path` follows an interface method to its implementors.
 * `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
   library** database (`resolve-dbs --platform win64`), not a project DB - a
   project DB holds only that project's own units.
@@ -959,7 +964,7 @@ Win64 build.
 | [`call-path`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/call-path) `--from <A> --to <B>` | Shortest resolved call path A -> B | `--max-depth N` |
 | [`ambiguous-calls`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ambiguous-calls) | Resolver-coverage diagnostic: unresolved/ambiguous call sites | `--qname`, `--in` |
 | [`helpers-of`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) `<T>` | Record/class helper edges targeting type `T` | `--json` |
-| `impact --qname <q>` | Blast radius: callers/units affected by a change, per depth level | `--depth N` |
+| `impact --qname <q>` | Blast radius: callers/units affected by a change, per depth level; an interface method also lists its implementors (`implementors`, `via_dispatch` in JSON) | `--depth N` |
 | `surface --qname <q>` | Public interface (declaration lines) of a class/record | `--include-impl`, `--all-visibility` |
 | `slice --qname <q>` | Minimal self-contained call-slice reachable from a symbol | |
 | [`context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) `--task "verb qname"` | Compact context bundle for AI prompts -- doc + surface + body + callers, ~10-60x leaner than the source | `--max-callers N`, `--context N`, `--no-docs` |

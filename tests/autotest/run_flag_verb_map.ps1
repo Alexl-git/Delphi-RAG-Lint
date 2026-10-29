@@ -269,6 +269,54 @@ Check 'CONTROL the alias token regex does not match a longer flag' `
   (-not ('--include-mode' -match (Get-AliasTokenRx '--in')) -and ('[--in <f>]' -match (Get-AliasTokenRx '--in'))) ''
 
 # ---------------------------------------------------------------------------
+# PLANTED REFUSAL CASES -- a pre-dispatch read that only REFUSES must not make a
+# flag cross-verb (--rule, comma-list refusal), and a real consumer must still.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- planted cases (refusal-only reads)' -ForegroundColor Cyan
+$pRefuse = @"
+begin
+  if Args.RuleConflict <> '' then
+  begin
+    Writeln(ErrOutput, Args.RuleConflict);
+    Exit(2);
+  end;
+  if Args.Rule.Contains('') then
+  begin
+    Writeln(ErrOutput, Format('', [Args.Rule]));
+    Exit(2);
+  end;
+end;
+"@ -replace "`r?`n", "`r`n"
+$pConsume = @"
+begin
+  if Args.Rule <> '' then
+  begin
+    UseTheRule(Args.Rule);
+  end;
+end;
+"@ -replace "`r?`n", "`r`n"
+$pNoExit = @"
+begin
+  if Args.Rule.Contains('') then
+  begin
+    Writeln(ErrOutput, Args.Rule);
+  end;
+end;
+"@ -replace "`r?`n", "`r`n"
+$rd = { param($t) @([regex]::Matches((Remove-RefusalOnlyReads -Span $t -Field 'Rule'), '\bArgs\.Rule\b')).Count }
+Check 'CONTROL the helper sees a plain Args.Rule read (else the absences below are vacuous)' `
+  (@([regex]::Matches($pRefuse, '\bArgs\.Rule\b')).Count -eq 2) ''
+Check 'PLANT an `if Args.Rule... then begin .. Exit(2); end` block is refusal-only: no Args.Rule left' `
+  ((& $rd $pRefuse) -eq 0) "left=$(& $rd $pRefuse)"
+Check 'CONTROL an UNDOCUMENTED consumer of Args.Rule (no Exit(2)) still counts as a read' `
+  ((& $rd $pConsume) -eq 2) "left=$(& $rd $pConsume)"
+Check 'CONTROL a block that reads Args.Rule but does not refuse (no Exit(2)) still counts' `
+  ((& $rd $pNoExit) -eq 2) "left=$(& $rd $pNoExit)"
+Check 'PLANT the helper leaves RuleConflict alone (it has its own refusal-only entry)' `
+  (@([regex]::Matches((Remove-RefusalOnlyReads -Span $pRefuse -Field 'Rule'), '\bArgs\.RuleConflict\b')).Count -eq 2) ''
+
+# ---------------------------------------------------------------------------
 # THE MAP, against the real source
 # ---------------------------------------------------------------------------
 Write-Host ''

@@ -96,6 +96,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 
 * `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;
   `--name Bar` returns the call sites.
+* `find-callers` also reports interface dispatch (RB-5): a method reached only THROUGH an interface method it implements
+  lists those sites as a separate `via <IFoo.Bar> dispatch` group; `--json` rows gain `via` (the interface method),
+  `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
+  `impact` lists an interface method's implementors (`--format json`: `implementors`, `via_dispatch` [of via, kind, sites]),
+  `context` adds `## Callers via interface dispatch` sections, and `call-path` follows an interface method to its implementors.
 * `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
   library** database (`resolve-dbs --platform win64`), not a project DB - a
   project DB holds only that project's own units.
@@ -429,7 +434,7 @@ define further codes.
 | Verb | What it does |
 |------|--------------|
 | `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work; `--max-callers N` caps the caller list and `--context N` the source lines around each; `--library-db <lib>` adds query-time library-bound calls to the Library calls count (json `library_calls.via` stored|oracle). Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
-| `impact --qname U.T.M` | transitive caller blast radius (`--depth N`) |
+| `impact --qname U.T.M` | transitive caller blast radius (`--depth N`); an interface method also lists its implementors, an implementor the interface sites reaching it (`--format json`: `implementors`, `via_dispatch`) |
 | `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
 | `find-callees --qname U.T.M [--db P --db LIB \| --library-db LIB]` | resolved outgoing calls of a routine; library-bound callees follow, marked `(library`, in text, and as `{"external": true, "via": "edge"\|"oracle", "receiver_type": ...}` rows in `--json` (`edge` = stored `refs.external_target`, `oracle` = bound at read time against the named library). With no library open the text ends `M external (library not open)` |
 | `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |

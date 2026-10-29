@@ -28,7 +28,7 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--context` | `N` |  |  |
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
 | `--db` |  |  |  |
-| `--json` |  | every row ends with a derived "resolution" key: exact \| ambiguous \| external \| name-only (text totals: N callers (a exact, b name-only)) |  |
+| `--json` |  | every row ends with a derived "resolution" key: exact \| ambiguous \| external \| name-only (text totals: N callers (a exact, b name-only)); a site that reaches the target only through an interface method also carries "via", "via_kind" and, for an ambiguous implements edge, "via_edge" (RB-5), placed before "resolution" |  |
 
 ## Where to click
 

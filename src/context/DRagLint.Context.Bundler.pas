@@ -129,7 +129,6 @@ implementation
 uses
   DRagLint.Doc.Regions
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
-  , DRagLint.Query  .Callers { DispatchCallersOf -- the via-interface callers (RB-5 P1) }
   ;
 
 const

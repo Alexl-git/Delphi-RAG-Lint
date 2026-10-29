@@ -496,6 +496,27 @@ function Get-CliRoutineMap {
   return $routines
 }
 
+function Remove-RefusalOnlyReads {
+<#
+  .SYNOPSIS
+    Blanks the `if <cond reading Args.<Field>> then begin ... Exit(2); end;` blocks of a
+    pre-dispatch span: reads that exist only to REFUSE a bad command line.
+  .DESCRIPTION
+    Run refuses `--rule a,b,c` before dispatch (`if Args.Rule.Contains(',') then ...
+    Exit(2)`), as it refuses a repeated --rule through Args.RuleConflict. Reading a
+    field to reject it does not make its flag belong to every verb; --rule is still
+    lint's / lint-all's / rules', and must stay on THEIR lines. A read counts as
+    refusal-only ONLY inside an `if` whose `begin..end` body (no nested block) ends
+    in `Exit(2);`. Any other pre-dispatch read of the field -- a consumer that
+    does something with the value, or a block that does not refuse -- is left in
+    place and the flag stays cross-verb (positive control in run_flag_verb_map.ps1).
+    Operates on the LEXED projection (comments and strings already blanked).
+#>
+  param([Parameter(Mandatory)][string]$Span, [Parameter(Mandatory)][string]$Field)
+  $rx = '(?is)\bif\s+(?:(?!\bthen\b).)*?\bArgs\.' + [regex]::Escape($Field) + '\b(?:(?!\bthen\b).)*?\bthen\s+begin\b(?:(?!\bbegin\b|\bend\b).)*?\bExit\s*\(\s*2\s*\)\s*;\s*end\s*;'
+  return [regex]::Replace($Span, $rx, { param($m) ' ' * $m.Length })
+}
+
 function Get-CliVerbFlagMap {
 <#
   .SYNOPSIS
@@ -609,6 +630,8 @@ function Get-CliVerbFlagMap {
   $global = New-Object System.Collections.Generic.HashSet[string]
   $preEnd = if ($armHits.Count -gt 0) { $armHits[0].Index } else { $runEnd }
   $preSpan = $res.Code.Substring($runBeg, $preEnd - $runBeg)
+  # REFUSAL-ONLY reads of --rule (the comma-list refusal, N-02 sibling): blanked, see Remove-RefusalOnlyReads.
+  $preSpan = Remove-RefusalOnlyReads -Span $preSpan -Field 'Rule'
   foreach ($m in [regex]::Matches($preSpan, '(?<![A-Za-z0-9_.])Args\.([A-Za-z_][A-Za-z0-9_]*)')) {
     [void]$global.Add($m.Groups[1].Value)
   }
