@@ -249,7 +249,7 @@ begin
   Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
-  Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers (RB-5)');
+  Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers; --format json gains "via_dispatch" [{via,kind,sites}] (present only when non-empty) (RB-5)');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
@@ -849,7 +849,7 @@ begin
     Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
     Writeln('                               [--max-callers N] [--context N] [--no-docs]');
     Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
-    Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers (RB-5)');
+    Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers; --format json gains "via_dispatch" [{via,kind,sites}] (present only when non-empty) (RB-5)');
     Exit;
   end;
   if pVerb = 'bench-context' then
