@@ -97,7 +97,7 @@ uses
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
-  , DRagLint.Lint.MissingUses { unit-missing-from-uses (lint <file> / lint-all) }
+  , DRagLint.Lint.MissingUses { unit-missing-from-uses (lint <file> / lint-all) } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   , System.SysUtils
   , System.Classes
   , System.Hash
@@ -15493,7 +15493,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
       { a name declared in a unit the file does not use (project index + library) }
       if LintRuleWants(NarrowRule, [MISSING_USES_RULE]) then
-        Findings:= Findings + TMissingUsesChecker.Check(EffPath, FlowStore, FlowFid, [FlowStore, FlowLibStore]);
+        Findings:= Findings + TMissingUsesChecker.Check(EffPath, FlowStore, FlowFid, [FlowStore, FlowLibStore]); // dl:ok concat-in-loop@7c9b -- Findings is a TArray<TLintFinding>; one append per checker, not string concatenation
       { B-ENUM: a hard-coded enum ordinal (the index widens what counts as an enum) }
       if LintRuleWants(NarrowRule, [ENUM_ORDINAL_CAST_RULE]) then
         Findings:= Findings + TEnumOrdinalCastChecker.Check(EffPath, FlowStore, FlowFid);

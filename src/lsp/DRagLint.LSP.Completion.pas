@@ -301,7 +301,7 @@ uses
   , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
   , System.Math                { Max: the H2 doc-comment marker span }
   , DRagLint.Core.UsesInsert   { TUsesSection / SectionWord: unit-missing-from-uses data }
-  , DRagLint.Lint.MissingUses  { unit-missing-from-uses: findings + their uses edits }
+  , DRagLint.Lint.MissingUses  { unit-missing-from-uses: findings + their uses edits } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   ;
 
 { TLspCompletion }

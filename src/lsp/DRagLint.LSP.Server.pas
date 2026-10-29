@@ -1370,7 +1370,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
-  DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction }
+  DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
