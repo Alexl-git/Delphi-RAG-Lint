@@ -181,6 +181,7 @@ type
     procedure WarmUp;
     function  Enqueue(const AWork: TProc): Boolean;
     function  IsDirty(const APath: string): Boolean;
+    procedure AnnounceOpen(const APath: string);
     procedure TrackDocument(const AFrame: TBytes; ALen: Integer);
     procedure PickupContext(const AFrame: TBytes; ALen: Integer);
     procedure QueueDocUpdate(const APath: string; ARemove: Boolean; const AText: string);
@@ -1102,6 +1103,30 @@ end;
   didOpen / didClose clear it; with MergeCompletion or MergeHover, the text the notification
   implies is queued for the live-document overlay. A first didOpen also warms
   the worker. Runs on the C>S pump thread, inline (no worker, no FCallLock). }
+{ C>S, didOpen: queues (never waits) the announcement of the file's context on the
+  merge worker: the embedded server then sends draglint/context with its notice
+  through the client writer and starts the background re-index of a project DB
+  marked needs-re-resolve (once per DB: the server keys the run by DB). Needs
+  the server, so only when an index-backed merge is on and a writer is set. }
+procedure TProxyMergeEngine.AnnounceOpen(const APath: string);
+begin
+  if not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition) or not Assigned(FClientWriter) then Exit;
+  Enqueue(
+    procedure
+    var
+      S: TLSPServer;
+    begin
+      S:= Server;
+      if S = nil then Exit;
+      S.EnableProxyNotices(
+        procedure(AJson: string)
+        begin
+          FClientWriter(BuildFrame(TEncoding.UTF8.GetBytes(AJson)));
+        end);
+      S.AnnounceProxyOpen(APath);
+    end);
+end;
+
 procedure TProxyMergeEngine.TrackDocument(const AFrame: TBytes; ALen: Integer);
 var
   Json  : TJSONValue;
@@ -1157,7 +1182,11 @@ begin
         Upd:= LiveUpdateOf(Method, Json, LiveText);
         if Upd <> luNone then QueueDocUpdate(Path, Upd = luRemove, LiveText);
       end;
-      if Method = METHOD_DID_OPEN then WarmUp;
+      if Method = METHOD_DID_OPEN then
+      begin
+        WarmUp;
+        AnnounceOpen(Path);
+      end;
     finally
       Json.Free;
     end;
