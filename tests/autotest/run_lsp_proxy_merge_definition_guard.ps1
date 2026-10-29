@@ -117,7 +117,27 @@ function Frame([string]$body) {
   $h  = [System.Text.Encoding]::ASCII.GetBytes("Content-Length: $($bb.Length)`r`n`r`n")
   return [byte[]]($h + $bb)
 }
+# The proxy now also forwards the index server's own draglint/context and
+# window/showMessage notifications (run_lsp_proxy_notices_guard.ps1). They are
+# extra frames, not part of DelphiLSP's relayed bytes, so "= plain relay"
+# compares the streams without them.
+function Strip-Notices([byte[]]$b) {
+  if (-not $b) { return ,[byte[]]@() }
+  $s = [System.Text.Encoding]::Latin1.GetString($b)
+  $o = New-Object System.Text.StringBuilder
+  $pos = 0
+  while ($pos -lt $s.Length) {
+    $m = [regex]::Match($s.Substring($pos), '(?is)\AContent-Length:\s*(\d+)[^\r]*\r\n(?:[^\r]*\r\n)*?\r\n')
+    if (-not $m.Success) { [void]$o.Append($s.Substring($pos)); break }
+    $end = [Math]::Min($s.Length, $pos + $m.Length + [int]$m.Groups[1].Value)
+    $frame = $s.Substring($pos, $end - $pos)
+    if ($frame -notmatch '"method"\s*:\s*"(draglint/context|window/showMessage)"') { [void]$o.Append($frame) }
+    $pos = $end
+  }
+  return ,[System.Text.Encoding]::Latin1.GetBytes($o.ToString())
+}
 function Same([byte[]]$a, [byte[]]$b) {
+  $a = Strip-Notices $a; $b = Strip-Notices $b
   return ($a.Length -gt 0) -and ($a.Length -eq $b.Length) -and ($null -eq (Compare-Object $a $b -SyncWindow 0))
 }
 function Split-Frames([byte[]]$b) {

@@ -262,6 +262,8 @@ type
       FNoticed       : TDictionary<string, Byte>; { lower(path)|reason already shown }
       FPending       : TObjectList<TJSONObject>;  { notifications queued for the stdio loop }
       FQueueNotices  : Boolean;                   { True only inside Run: proxy mode never writes to stdout }
+      FNoticeSink    : TProc<string>;           { proxy mode: where queued notifications go (the relay's client writer); nil = stdout via SendRawNotification }
+      FProxyPaths    : TList<string>;           { proxy mode: files announced, re-announced when a re-index finishes }
       FLastOpenPath  : string;
       FResolved      : TDictionary<string, TLspDbSet>; { project|platform -> FDbResolver's answer }
       { LSP-1 CORE (owner ruling 2026-10-28): a project DB that needs re-resolve
@@ -422,6 +424,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  BuildEphemeralStore(const APath: string; AStamp: TDateTime): Boolean;
+    public { proxy notices }
+      /// <summary>Proxy mode: lets this server queue draglint/context and window/showMessage notifications and auto re-index a DB marked needs-re-resolve, delivering every notification through ASink instead of stdout.</summary>
+      /// <param name="ASink">Receives the notification as one JSON-RPC text (no framing); called under the work lock, from the announcing worker or a re-index watcher thread. Must be thread-safe.</param>
+      /// <remarks>Direct mode (Run) is unchanged and never calls this. A started re-index is keyed by DB, so it runs at most once per DB and is never retried.</remarks>
+      procedure EnableProxyNotices(const ASink: TProc<string>);
+      /// <summary>Proxy mode: announces APath's context (draglint/context with its notice) to the sink and starts the background re-index when its project DB needs one.</summary>
+      /// <param name="APath">Full path of the document the client opened.</param>
+      /// <remarks>No-op unless EnableProxyNotices was called. Call from the merge worker, never from the relay pumps.</remarks>
+      procedure AnnounceProxyOpen(const APath: string);
     public { S0: reached by TLspServerContextAdapter; A3 fix 2: and by the merge proxy (DRagLint.LSP.Proxy.Merge), so its completion sees a file no index owns }
       /// <summary>The store list to answer a request about APath with: FStores
       /// unchanged when some store owns the file, else the ephemeral
@@ -1662,6 +1673,7 @@ begin
   FReindexThreads:= TObjectList<TThread>.Create({AOwnsObjects=}True);
   FOpenDocs      := TDictionary<string, string>.Create;
   FPublishedTarget:= TDictionary<string, Integer>.Create;
+  FProxyPaths    := TList<string>.Create;
   FPending := TObjectList<TJSONObject>.Create({AOwnsObjects=}True);
 
   { S0 feature registry: one instance per registered class; the first feature
@@ -1703,6 +1715,7 @@ begin
   FOpenDocs.Free;
   FPublishedTarget.Free;
   FStopEvent.Free;
+  FProxyPaths.Free;
   FWorkLock.Free;
   FPending.Free;
   FNoticed.Free;
@@ -3123,6 +3136,12 @@ begin
       end;
     if Length(FStores) > 0 then FStore:= FStores[0];
     FCtxCache.Clear;
+    { Proxy mode: no open-document map (the IDE's DelphiLSP owns diagnostics); re-announce the announced files so the notice clears. }
+    for var ProxyPath: string in FProxyPaths.ToArray do
+    begin
+      StoresForFile(ProxyPath);
+      QueueContextNotification(ProxyPath);
+    end;
     { Clear (or state) the notice and republish every open document. }
     for var Doc: TPair<string, string> in FOpenDocs.ToArray do
     begin
@@ -3271,10 +3290,32 @@ begin
   QueueNotification(LSP_NOTIFY_CONTEXT, Params);
 end;
 
+procedure TLSPServer.EnableProxyNotices(const ASink: TProc<string>);
+begin
+  FNoticeSink   := ASink;
+  FQueueNotices := Assigned(ASink);
+end;
+
+procedure TLSPServer.AnnounceProxyOpen(const APath: string);
+begin
+  if not Assigned(FNoticeSink) or (APath = '') then Exit;
+  FWorkLock.Enter;
+  try
+    if not FProxyPaths.Contains(APath) then FProxyPaths.Add(APath);
+    FLastOpenPath:= APath;
+    StoresForFile(APath);
+    QueueContextNotification(APath);
+    FlushPending;
+  finally
+    FWorkLock.Leave;
+  end;
+end;
+
 procedure TLSPServer.FlushPending;
 begin
   try
-    for var Obj: TJSONObject in FPending do SendRawNotification(Obj);
+    for var Obj: TJSONObject in FPending do
+      if Assigned(FNoticeSink) then FNoticeSink(Obj.ToJSON) else SendRawNotification(Obj);
   finally
     FPending.Clear;
   end;
