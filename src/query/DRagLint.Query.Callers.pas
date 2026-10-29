@@ -101,6 +101,20 @@ type
     /// by-name and so 'name-only'; a name-matched row carries the TReference.Resolution the
     /// store derived from call_edges / refs.external_target / refs.symbol_id.</remarks>
     Resolution : string ;
+    /// <summary>Qualified name of the INTERFACE method this site calls, when
+    /// the row is a caller that reaches TargetQName only through interface
+    /// dispatch (RB-5 P1); '' for a direct caller.</summary>
+    Via        : string ;
+    /// <summary>'interface' on a via row; '' otherwise. Reserved for other
+    /// dispatch kinds.</summary>
+    ViaKind    : string ;
+    /// <summary>On the FIRST row of a via group: the number of sites in the
+    /// group (the group is the consecutive rows sharing TargetQName and Via);
+    /// 0 on every other row. The text renderer prints its header from it.</summary>
+    ViaCount   : Integer;
+    /// <summary>'certain' | 'ambiguous': the dispatch_edges confidence of the
+    /// implements edge that links TargetQName to Via. Set on via rows only.</summary>
+    ViaEdge    : string ;
   end;
 
   /// <remarks>
@@ -176,7 +190,25 @@ function ResolutionOfConfidence(const AConfidence: string): string;
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string): TQueryCallerRows;
+function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string; AWithDispatch: Boolean = False): TQueryCallerRows;
+
+/// <summary>The callers that reach one implementing method only through the
+/// INTERFACE method it implements (RB-5 P1).</summary>
+/// <param name="AStore">An open store; must not be nil.</param>
+/// <param name="AImplId">Symbol id of the implementing method.</param>
+/// <returns>For every dispatch_edges 'implements' edge into AImplId (climbing
+/// through 'override' edges, bounded), the resolved callers of the interface
+/// method, as rows with Via = the interface method's qualified name, ViaKind =
+/// 'interface', TargetQName = AImplId's qualified name and ViaCount set on the
+/// first row of each group. Empty on a database without dispatch_edges or when
+/// nothing implements through an interface.</returns>
+/// <remarks>Only 'implements' edges are reported: a virtual override is not
+/// part of the owner ruling and would churn every class-hierarchy answer. A call
+/// whose receiver is class-typed binds to the class method (a direct caller) and
+/// never appears here. Rows keep the call edge's own confidence; the dispatch
+/// edge's confidence is ViaEdge, and an 'ambiguous' edge is marked by the
+/// renderers.</remarks>
+function DispatchCallersOf(const AStore: ISymbolStore; AImplId: Int64): TQueryCallerRows;
 
 /// <summary>Name-matched callers of <paramref name="AName"/> in one store,
 /// each carrying its own source line.</summary>
@@ -286,7 +318,81 @@ begin
   else Result:= RESOLUTION_EXACT;
 end; // function
 
-function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string): TQueryCallerRows;
+
+{ One TResolvedCaller -> one row, the shape both arms of ResolvedCallersForName
+  and DispatchCallersOf emit. }
+function RowOfCaller(const AStore: ISymbolStore; const ARC: TResolvedCaller; const ATargetQName: string): TQueryCallerRow;
+begin
+  Result:= Default(TQueryCallerRow);
+  Result.CallerQName := ARC.EnclosingQName;
+  Result.FilePath    := ARC.Location      ;  { file name only, by contract }
+  Result.FullPath    := ARC.FullPath      ;  { ...and the openable one beside it }
+  Result.CallSiteLine:= ARC.CallSiteLine  ;
+  Result.Confidence  := ARC.Confidence    ;
+  Result.Resolution  := ResolutionOfConfidence(ARC.Confidence);
+  Result.Mode        := ARC.Mode          ;
+  Result.TargetQName := ATargetQName      ;
+  { Line is the caller SYMBOL's own start line (routine-granular; the CLI's
+    caller_line, omitted when the enclosing symbol is unknown). The site
+    is CallSiteLine above. }
+  if ARC.EnclosingSymbolId > 0 then
+  begin
+    Result.Line   := AStore.GetSymbolById(ARC.EnclosingSymbolId).StartLine;
+    Result.HasLine:= True;
+  end;
+end;
+
+function DispatchCallersOf(const AStore: ISymbolStore; AImplId: Int64): TQueryCallerRows;
+const
+  MAX_BASE_HOPS = 8;
+var
+  Todo    : TQueue<Int64>               ;
+  Seen    : TDictionary<Int64, Boolean> ;
+  Cur     : Int64                       ;
+  Hops    : Integer                     ;
+  ImplName: string                      ;
+  Row     : TQueryCallerRow             ;
+  First   : Integer                     ;
+begin
+  SetLength(Result, 0);
+  if AStore = nil then Exit;
+  ImplName:= AStore.GetSymbolById(AImplId).QualifiedName;
+  Todo:= TQueue<Int64>.Create;
+  Seen:= TDictionary<Int64, Boolean>.Create;
+  try
+    Todo.Enqueue(AImplId);
+    Seen.Add(AImplId, True);
+    Hops:= 0;
+    while (Todo.Count > 0) and (Hops < MAX_BASE_HOPS) do
+    begin
+      Inc(Hops);
+      Cur:= Todo.Dequeue;
+      for var Link in AStore.FindDispatchLinks(Cur, True) do
+      begin
+        if Seen.ContainsKey(Link.OtherId) then Continue;
+        Seen.Add(Link.OtherId, True);
+        Todo.Enqueue(Link.OtherId);
+        if Link.Kind <> 'implements' then Continue;
+        First:= Length(Result);
+        for var RC in AStore.FindResolvedCallers(Link.OtherId) do
+        begin
+          Row:= RowOfCaller(AStore, RC, ImplName);
+          Row.Via    := Link.OtherQName;
+          Row.ViaKind:= 'interface'    ;
+          Row.ViaEdge:= Link.Confidence;
+          SetLength(Result, Length(Result) + 1);
+          Result[High(Result)]:= Row;
+        end;
+        if Length(Result) > First then Result[First].ViaCount:= Length(Result) - First;
+      end; // for Link
+    end; // while
+  finally
+    Seen.Free;
+    Todo.Free;
+  end; // try
+end; // function
+
+function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string; AWithDispatch: Boolean): TQueryCallerRows;
 var
   Targets     : TArray<TSymbol>;
   Row         : TQueryCallerRow;
@@ -303,28 +409,24 @@ begin
     var First: Boolean:= True;
     for var RC in RCallers do
     begin
-      Row:= Default(TQueryCallerRow);
+      Row:= RowOfCaller(AStore, RC, T.QualifiedName);
       Row.FirstOfTarget:= First;
       First:= False;
-      Row.CallerQName := RC.EnclosingQName;
-      Row.FilePath    := RC.Location      ;  { file name only, by contract }
-      Row.FullPath    := RC.FullPath      ;  { ...and the openable one beside it }
-      Row.CallSiteLine:= RC.CallSiteLine  ;
-      Row.Confidence  := RC.Confidence    ;
-      Row.Resolution  := ResolutionOfConfidence(RC.Confidence);
-      Row.Mode        := RC.Mode          ;
-      Row.TargetQName := T.QualifiedName  ;
-      { Line is the caller SYMBOL's own start line (routine-granular; the CLI's
-        `caller_line`, omitted when the enclosing symbol is unknown). The site
-        is CallSiteLine above. }
-      if RC.EnclosingSymbolId > 0 then
-      begin
-        Row.Line   := AStore.GetSymbolById(RC.EnclosingSymbolId).StartLine;
-        Row.HasLine:= True;
-      end;
       SetLength(Result, Length(Result) + 1);
       Result[High(Result)]:= Row;
     end; // for RC
+    { RB-5 P1: then the sites that reach T only through its interface. A target
+      with no direct caller still needs its header, so the first via row takes
+      FirstOfTarget when nothing direct came first. }
+    if AWithDispatch and (T.Kind in [skProcedure, skFunction, skMethod]) then
+      for var VR in DispatchCallersOf(AStore, T.Id) do
+      begin
+        Row:= VR;
+        Row.FirstOfTarget:= First;
+        First:= False;
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)]:= Row;
+      end;
   end; // for T
 
   { Callback reaches -- only when the name denotes a ROUTINE. A 'read' of a

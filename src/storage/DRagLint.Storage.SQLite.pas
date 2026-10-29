@@ -1467,6 +1467,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    function FindDispatchLinks(ASymbolId: Int64; AToBases: Boolean): TArray<TDispatchLink>;
     function GetUnresolvedCallsFromSymbol(AEnclosingSymbolId: Int64): TArray<TReference>;
       /// <returns><!-- drag-lint:auto -->Int64 -- Observed:
       /// Q.FieldByName('n').AsLargeInt.</returns>
@@ -7310,6 +7311,58 @@ begin
       if Q.FieldByName('receiver_type_symbol_id').IsNull then E.ReceiverTypeSymbolId:= 0
       else E.ReceiverTypeSymbolId:= Q.FieldByName('receiver_type_symbol_id').AsLargeInt;
       List.Add(E);
+      Q.Next;
+    end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.FindDispatchLinks(ASymbolId: Int64; AToBases: Boolean): TArray<TDispatchLink>;
+var
+  Q   : TFDQuery             ;
+  List: TList<TDispatchLink> ;
+  L   : TDispatchLink        ;
+  NearCol: string            ;
+  FarCol : string            ;
+  FldId, FldQ, FldK, FldC: TField;
+begin
+  Result:= [];
+  if not HasDispatchEdges then Exit;
+  if AToBases then
+  begin
+    NearCol:= 'impl_symbol_id';
+    FarCol := 'base_symbol_id';
+  end
+  else
+  begin
+    NearCol:= 'base_symbol_id';
+    FarCol := 'impl_symbol_id';
+  end;
+  List:= TList<TDispatchLink>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT d.' + FarCol + ' AS far_id, s.qualified_name AS far_q, d.kind AS k, d.confidence AS c ' +
+      'FROM dispatch_edges d JOIN symbols s ON s.id = d.' + FarCol + ' ' +
+      'WHERE d.' + NearCol + ' = :x ORDER BY s.qualified_name, d.' + FarCol;
+    Q.ParamByName('x').AsLargeInt:= ASymbolId;
+    Q.Open;
+    FldId:= Q.FieldByName('far_id');
+    FldQ := Q.FieldByName('far_q' );
+    FldK := Q.FieldByName('k'     );
+    FldC := Q.FieldByName('c'     );
+    while not Q.Eof do
+    begin
+      L:= Default(TDispatchLink);
+      L.OtherId   := FldId.AsLargeInt;
+      L.OtherQName:= FldQ .AsString  ;
+      L.Kind      := FldK .AsString  ;
+      L.Confidence:= FldC .AsString  ;
+      List.Add(L);
       Q.Next;
     end; // while
     Result:= List.ToArray;
