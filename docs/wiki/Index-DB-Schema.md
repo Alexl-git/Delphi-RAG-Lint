@@ -79,7 +79,7 @@ erDiagram
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
 | **library** | `index` of a platform library | same tables as a project DB; `schema_meta.scan_type = library` |
-| **meta** | every index run | `schema_meta` (`schema_version`, `indexer_fingerprint`, `resolver_fingerprint`, `indexed_at_unix`, `scan_type`, `project_tag`, `out_of_closure_count`, `rebuild_in_progress`) |
+| **meta** | every index run | `schema_meta` (`schema_version`, `indexer_fingerprint`, `resolver_fingerprint`, `indexed_at_unix`, `scan_type`, `project_tag`, `out_of_closure_count`, `rebuild_in_progress`, `library_resolve_state`) |
 
 Re-indexing a file deletes its rows (`DELETE ... WHERE file_id` plus the FK cascades below),
 so derived tables (`call_edges`, `member_accesses`, ...) lose exactly that file's edges
@@ -93,8 +93,8 @@ action. Unless noted, line/col pairs are the source span of the declaration or r
 ### schema_meta
 `key TEXT PK`, `value TEXT NOT NULL`. Keys seen: `schema_version`, `indexer_fingerprint`,
 `resolver_fingerprint`, `indexed_at_unix`, `scan_type` (`project` | `library`),
-`project_tag` (sanitised project name), `out_of_closure_count`, `rebuild_in_progress`
-(empty when idle).
+`project_tag` (sanitised project name), `out_of_closure_count`, `rebuild_in_progress`, `library_resolve_state`
+(empty when idle). `library_resolve_state` (JSON, present only for a `libraryResolve` section: `state` = `pending` when the resolve pass ran without a ready platform library, `bound` when it ran against one; absent = never opted in). See [[library-first-resolve]].
 
 ### files
 | column | type | meaning |
@@ -323,7 +323,7 @@ All three live in `schema_meta` and drive "is this index current".
 * **resolver** `resolver_fingerprint`, e.g. `r=1.15.0-alpha;schema=23`: the resolve-pass
   generation. A mismatch re-runs resolve (without re-parsing) so `refs.symbol_id`,
   `call_edges`, `member_accesses` etc. are rebuilt.
-* `indexed_at_unix` is the freshness stamp; a non-empty `rebuild_in_progress` means a
+* `indexed_at_unix` is the freshness stamp; a non-empty `rebuild_in_progress`, `library_resolve_state` means a
   `--rebuild` is mid-flight and the DB is not authoritative.
 
 ## 6. Library DB versus project DB

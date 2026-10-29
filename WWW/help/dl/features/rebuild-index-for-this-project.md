@@ -29,6 +29,8 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 | `--recompile` |  |  |  |
 | `--rebuild` |  |  |  |
 | `--dry-run` |  |  |  |
+| `--wait-library` | `<min>` |  |  |
+| `--require-library` |  |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
 

@@ -457,8 +457,10 @@ begin
   Writeln('       see wiki page: Format-Whole-Project-with-YADF');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
-  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
+  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
+  Writeln('       see wiki page: Rescan-this-unit');
   Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('       see wiki page: Copy-Diagnostics-Current-File');
   Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');

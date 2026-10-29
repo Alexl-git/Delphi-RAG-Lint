@@ -584,7 +584,7 @@
     "version": "1.35.1-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
-    "hash": "48e43e997cf11f81739e4e15cbf4962683402f4c9747a2e421ddc86dbeaeedae",
+    "hash": "fec8d91b71751b7a6aaeb47178f9290622f32aadc7a1434d7ab9c12def042e00",
     "version": "1.36.0-alpha"
   },
   "features/reconcile-project-members-dpr-dproj.md": {
