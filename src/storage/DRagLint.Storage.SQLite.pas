@@ -8351,7 +8351,13 @@ begin
       with existing consumers; the routine lands in owner_name, which was empty
       for .pas anyway. DFM/SQL literals keep their own owner_name (a property or
       exception name) -- NULLIF makes the stored value win when it is non-empty,
-      and their files hold no routines, so the subquery yields NULL for them. }
+      and their files hold no routines, so the subquery yields NULL for them.
+
+      doclit (extractor 1.26.0-alpha): the indexer now STORES the innermost
+      routine body as sl.symbol_id (a local const/var keeps itself), and a ///
+      literal stores the declaration it documents. On such a database `encl`
+      names that symbol instead of the unit, and agrees with `owner` for body
+      literals; the live subquery stays so a pre-1.26 database answers the same. }
     Sql:=
       'SELECT sl.text AS txt, sl.source AS src, sl.kind AS kind, ' +
       '  COALESCE(NULLIF(sl.owner_name, ''''), ' +
