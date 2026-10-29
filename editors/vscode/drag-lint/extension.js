@@ -11,7 +11,7 @@
 // advertising hover, definition, references, workspaceSymbol, completion and
 // signatureHelp.
 
-const { workspace, window, commands, ConfigurationTarget, StatusBarAlignment, ThemeColor } = require('vscode');
+const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor } = require('vscode');
 const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
 const fs = require('fs');
 const path = require('path');
@@ -30,7 +30,8 @@ let client;
 // building a fresh client per restart -- which is what the restart command does
 // -- would otherwise leak one file-system watcher per invocation.
 let manifestWatcher;
-// Source-file watcher: sends workspace/didChangeWatchedFiles deletions so the server
+// Source-file watcher: sends workspace/didChangeWatchedFiles (OS change notifications) so the server
+// re-lints files edited on disk by another tool and
 // clears Problems entries of files removed without ever being closed (e.g. a removed worktree).
 let sourceWatcher;
 
@@ -388,7 +389,7 @@ function makeClient(exe) {
   // adds a section does not require reloading the window.
   manifestWatcher = workspace.createFileSystemWatcher('**/drag-lint.json');
   if (sourceWatcher) sourceWatcher.dispose();
-  sourceWatcher = workspace.createFileSystemWatcher('**/*.{pas,dpr,dpk,inc}');
+  sourceWatcher = workspace.createFileSystemWatcher('**/*.{pas,dpr,dpk,inc,dfm}');
 
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
@@ -403,6 +404,28 @@ function makeClient(exe) {
   // "context unknown".
   c.onNotification('draglint/context', (ctx) => showContext(ctx));
   return c;
+}
+
+// "Refresh Problems": re-lints, from disk, every file that currently carries a drag-lint
+// diagnostic. The cheap way back from stale Problems entries (no server restart, no window
+// reload). Sends the custom notification draglint/refreshDiagnostics; the server bounds it.
+async function refreshProblems() {
+  if (!client) {
+    window.showWarningMessage('drag-lint: the language server is not running. Use "Restart Language Server".');
+    return;
+  }
+  const uris = [];
+  for (const [uri, diags] of languages.getDiagnostics()) {
+    if (uri.scheme === 'file' && diags.some((d) => /^(drag-lint|dcc)/.test(String(d.source || '')))) {
+      uris.push(uri.toString());
+    }
+  }
+  if (uris.length === 0) {
+    window.setStatusBarMessage('drag-lint: no drag-lint problems to refresh', 3000);
+    return;
+  }
+  await client.sendNotification('draglint/refreshDiagnostics', { uris });
+  window.setStatusBarMessage(`drag-lint: refreshing ${uris.length} file(s)`, 3000);
 }
 
 async function restartServer() {
@@ -603,6 +626,7 @@ function activate(context) {
   // mean the recovery command is absent exactly when it is needed.
   context.subscriptions.push(commands.registerCommand('dragLint.restartServer', restartServer));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
+  context.subscriptions.push(commands.registerCommand('dragLint.refreshProblems', refreshProblems));
   // Colour commands are registered before the exe check too: they read the
   // registry and touch no engine, so they must keep working on a machine where
   // the server path is wrong.

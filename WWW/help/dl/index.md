@@ -259,6 +259,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.38.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |
 | [Setup installer](features/setup-installer.md) | One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF | 1.28.3-alpha |
+| [VS Code extension: Problems stay current](features/vscode-extension.md) | VS Code extension commands, and Problems that follow files an agent edits on disk | 1.38.0-alpha |
 | [workspace add](features/workspace-add.md) | Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it | 0.6.0-alpha |
 | [workspace index](features/workspace-index.md) | Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass | 0.6.0-alpha |
 | [workspace status](features/workspace-status.md) | Reports the status of every project registered in a .drag-lint-workspace.json workspace config | 0.6.0-alpha |

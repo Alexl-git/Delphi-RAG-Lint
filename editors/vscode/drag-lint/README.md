@@ -42,6 +42,7 @@ rebuild, the copy is stale until you reload the window** or run
 | Command | What it does |
 |---|---|
 | `drag-lint: Restart Language Server` | Restarts the LSP client and its engine process |
+| `drag-lint: Refresh Problems` | Re-lints from disk every file that currently shows a drag-lint problem (no restart) |
 | `drag-lint: Update Engine Copy Now` | Refreshes the private engine copy immediately |
 | `drag-lint: Apply RAD Studio Colours (Pascal only)` | Reads your RAD Studio editor scheme and applies it to Pascal files via `editor.tokenColorCustomizations`. Instant, no reload, leaves other languages alone |
 | `drag-lint: Generate Theme From RAD Studio Colours` | Rebuilds the **Delphi IDE (drag-lint)** theme from your current IDE scheme (offers a window reload) |

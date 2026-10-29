@@ -468,7 +468,7 @@
     "version": "1.38.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "7c40622ef06691266ee4972e6b9a013cdcd7a921c1844f97b1017a25a3290287",
+    "hash": "f8cc54f9fd093153ea9f0d8ccf36561640d3067e3eccb269ef84e5677d42389f",
     "version": "1.38.0-alpha"
   },
   "features/maintenance.md": {
@@ -743,6 +743,10 @@
     "hash": "8c03bcf2601c15a01b7b91c0dc90f2aa3f79e89eecc4a4fdd1d0f22eda6c47c3",
     "version": "1.35.1-alpha"
   },
+  "features/vscode-extension.md": {
+    "hash": "2430b8dd73192b7efeb1ea2c42e711600adfb0c7a63f0426673e40dd26ff0edc",
+    "version": "1.38.0-alpha"
+  },
   "features/wiki-blocks-authoring.md": {
     "hash": "e5bf2e31c8b93a2689a7681ba9c8dc1f4328edbd5150ccb3fec5127f8c146a72",
     "version": "1.35.1-alpha"
@@ -752,15 +756,15 @@
     "version": "1.38.0-alpha"
   },
   "features/workspace-add.md": {
-    "hash": "23aad234ca77f89103bf11076613c2a722b35f73e716ff245ab82307cd594610",
+    "hash": "106864a6dfb97cd72631f65d297e62847ca93ffc7b78f9f066772ca117ce90a1",
     "version": "1.38.0-alpha"
   },
   "features/workspace-index.md": {
-    "hash": "ff2411fa098a13fe1d51e614461246f534146fecea6aa6cd73979eafa0a2e1b6",
+    "hash": "fc880fcfcc4ea38f00b75b20b5c85790adeee9965864410037c727ac69519c6e",
     "version": "1.38.0-alpha"
   },
   "features/workspace-status.md": {
-    "hash": "c70d623055df5ebe6bc3bfc7fd846de8785d1a6c75dff04d9c5893186803d2ce",
+    "hash": "b3db4c27ee1662fcd5c0ec0b64f9f8e048624e896813dfeaae1cd69481619d04",
     "version": "1.38.0-alpha"
   }
 }

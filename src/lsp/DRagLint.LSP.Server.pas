@@ -945,10 +945,17 @@ type
       /// <param name="AUri">The uri string exactly as the client sent it (never re-encoded from a path), or the client keys the clear to a different document.</param>
       /// <remarks>WHY: the server publishes but never cleared, so a closed or deleted file kept its warnings in Problems forever.</remarks>
       procedure PublishEmptyDiagnostics(const AUri: string);
-      /// <summary>Handles workspace/didChangeWatchedFiles: for each change of type 3 (Deleted) clears the file diagnostics and drops its overlay/memo state.</summary>
+      /// <summary>Handles workspace/didChangeWatchedFiles: type 3 (Deleted) clears the file diagnostics and drops its overlay/memo state; types 1/2 on a .pas/.dpr/.dpk the client has NOT open re-lint it from disk and publish.</summary>
       /// <param name="AParams">Notification params; params.changes[] of {uri, type}. nil is ignored.</param>
-      /// <remarks>Notification: no response. Types 1 (Created) and 2 (Changed) are ignored.</remarks>
+      /// <remarks>Notification: no response. An open document is left alone (the editor buffer is authoritative). De-duplicated per message and capped at WATCH_REFRESH_MAX files. Never reindexes the project.</remarks>
       procedure HandleDidChangeWatchedFiles(const AParams: TJSONObject);
+      /// <summary>Re-lints from disk every file listed in params.uris and publishes the result (draglint/refreshDiagnostics, sent by the VS Code command "Drag-Lint: Refresh Problems").</summary>
+      /// <param name="AParams">Notification params; params.uris[] of uri strings. nil is ignored.</param>
+      /// <remarks>Unlike didChangeWatchedFiles this also refreshes OPEN documents (the user asked explicitly), using the live buffer overlay when one exists. Bounded to WATCH_REFRESH_MAX uris per message. Never reindexes the project.</remarks>
+      procedure HandleRefreshDiagnostics(const AParams: TJSONObject);
+      /// <summary>Re-lints one on-disk file (or clears it when the file is gone) and publishes the result.</summary>
+      /// <param name="AUri">The uri string exactly as the client sent it.</param>
+      procedure RefreshFileFromDisk(const AUri: string);
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
@@ -1389,6 +1396,8 @@ const
   LSP_ERR_METHOD_NOT_FOUND = -32601;
   { LSP-1 CORE: SPEC.md 3 -- opened (project DB, library DB) pairs kept. }
   LSP_STORE_SET_LRU = 3;
+  { Most files re-linted from disk per watched-files / refresh message; a burst of agent writes stays bounded. }
+  WATCH_REFRESH_MAX = 64;
   { LSP-1 CORE: longest log line quoted in a failed re-index notice. }
   LSP_REINDEX_REASON_MAX = 200;
   { LSP-1 CORE: SPEC.md 1b -- the placeholder platform when nothing names one. }
@@ -4978,6 +4987,11 @@ begin
   end;
 end; // procedure
 
+function IsLintableSource(const APathLower: string): Boolean;
+begin
+  Result:= APathLower.EndsWith('.pas') or APathLower.EndsWith('.dpr') or APathLower.EndsWith('.dpk');
+end; // function
+
 procedure TLSPServer.HandleDidChangeWatchedFiles(const AParams: TJSONObject);
 { A deleted file (e.g. a removed git worktree) is never didClose'd, so without this its
   last diagnostics stay in the client's Problems panel forever. }
@@ -4987,23 +5001,72 @@ var
   Changes: TJSONArray;
   Item: TJSONValue;
   Entry: TJSONObject;
-  DelUri, DelPath: string;
+  DelUri, DelPath, ChgPath: string;
+  Seen: TDictionary<string, Boolean>;
 begin
   if AParams = nil then Exit;
   Changes:= AParams.GetValue('changes') as TJSONArray;
   if Changes = nil then Exit;
-  for Item in Changes do
-  begin
-    Entry:= Item as TJSONObject;
-    if (Entry = nil) or (Entry.GetValue<Integer>('type', 0) <> FILE_CHANGE_DELETED) then Continue;
-    DelUri:= Entry.GetValue<string>('uri', '');
-    if DelUri = '' then Continue;
-    DelPath:= FileFromUri(DelUri);
-    TLiveDocuments.Remove(DelPath);
-    TProjectProfileCache.Forget(DelPath);
-    if (DelPath <> '') and SameText(DelPath, FEphemFile) then DropEphemeralStore;
-    PublishEmptyDiagnostics(DelUri);
+  { A file edited on disk by another tool (an agent) never reaches didChange/didSave, so
+    its Problems entries went stale. Created/Changed on a lintable source that the client
+    does NOT have open is re-linted from disk; an open file is left alone (the editor
+    buffer is authoritative and the client sends didChange when it reloads). The batch is
+    de-duplicated and capped, so a burst of writes stays bounded. }
+  Seen:= TDictionary<string, Boolean>.Create;
+  try
+    for Item in Changes do
+    begin
+      Entry:= Item as TJSONObject;
+      if Entry = nil then Continue;
+      DelUri:= Entry.GetValue<string>('uri', '');
+      if DelUri = '' then Continue;
+      DelPath:= FileFromUri(DelUri);
+      if Entry.GetValue<Integer>('type', 0) = FILE_CHANGE_DELETED then
+      begin
+        TLiveDocuments.Remove(DelPath);
+        TProjectProfileCache.Forget(DelPath);
+        if (DelPath <> '') and SameText(DelPath, FEphemFile) then DropEphemeralStore;
+        PublishEmptyDiagnostics(DelUri);
+        Continue;
+      end;
+      ChgPath:= LowerCase(DelPath);
+      if not IsLintableSource(ChgPath) or FOpenDocs.ContainsKey(ChgPath) or Seen.ContainsKey(ChgPath) then Continue;
+      if Seen.Count >= WATCH_REFRESH_MAX then Break;
+      Seen.Add(ChgPath, True);
+      RefreshFileFromDisk(DelUri);
+    end;
+  finally
+    Seen.Free;
   end;
+end; // procedure
+
+procedure TLSPServer.RefreshFileFromDisk(const AUri: string);
+var
+  Path: string;
+begin
+  Path:= FileFromUri(AUri);
+  if (Path = '') or not TFile.Exists(Path) then
+  begin
+    PublishEmptyDiagnostics(AUri);
+    Exit;
+  end;
+  TProjectProfileCache.Forget(Path);
+  if not FOpenDocs.ContainsKey(LowerCase(Path)) then TLiveDocuments.Remove(Path);
+  PublishDiagnostics(AUri, Path);
+end; // procedure
+
+procedure TLSPServer.HandleRefreshDiagnostics(const AParams: TJSONObject);
+var
+  Uris: TJSONArray;
+  I, Last: Integer;
+begin
+  if AParams = nil then Exit;
+  Uris:= AParams.GetValue('uris') as TJSONArray;
+  if Uris = nil then Exit;
+  Last:= Uris.Count;
+  if Last > WATCH_REFRESH_MAX then Last:= WATCH_REFRESH_MAX;
+  for I:= 0 to Last - 1 do
+    RefreshFileFromDisk(Uris.Items[I].Value);
 end; // procedure
 
 function TLSPServer.StandDownTaken: Boolean;
@@ -5061,6 +5124,7 @@ begin
   else if Method = 'textDocument/didChange' then HandleDidChange(Params)
   else if Method = 'textDocument/didClose' then HandleDidClose(Params)
   else if Method = 'workspace/didChangeWatchedFiles' then HandleDidChangeWatchedFiles(Params)
+  else if Method = 'draglint/refreshDiagnostics' then HandleRefreshDiagnostics(Params)
   else if Method = 'workspace/didChangeConfiguration' then HandleDidChangeConfiguration(Params)
   else if (Method = 'workspace/executeCommand') and HandleSetContext(Id, Params) then
     // LSP-1 CORE: draglint.setContext answered; other commands fall through to the feature
