@@ -10840,7 +10840,7 @@ begin
     if DS.Kind in [skProcedure, skFunction, skMethod] then
     begin
       for var DL in Store.FindDispatchLinks(DS.Id, False) do
-        if DL.Kind = 'implements' then DispImpls:= DispImpls + [DL]; // dl:ok concat-in-loop -- DispImpls is a TArray<TDispatchLink>; '+ [x]' appends one element, it is not string concatenation
+        if DL.Kind = 'implements' then DispImpls:= DispImpls + [DL];
       DispVia:= DispVia + DispatchCallersOf(Store, DS.Id);
     end;
   if SameText(AArgs.Format, 'json') then
