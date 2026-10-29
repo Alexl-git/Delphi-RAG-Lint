@@ -8,6 +8,7 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
+- 2026-10-29 | website | 1.38.0-alpha set LIVE (2 new articles, circular-uses re-captured, 290/18/111 + asOf stamps); FixInsight + dev series held for owner go | open | [HANDOFF-2026-10-29-website-138-live-held-series.md](HANDOFF-2026-10-29-website-138-live-held-series.md)
 - 2026-10-29 | engine | 1.38 prep on local main (536 unpushed -- owner pushes), deployed + vsix 1.6.1; owner IDE test -> publish; next = plan A auto uses on save | open | [HANDOFF-2026-10-29-engine-138-prep-done-auto-uses-next.md](HANDOFF-2026-10-29-engine-138-prep-done-auto-uses-next.md)
 - 2026-10-29 | engine | rel/138x RC (hang fix + bounded waits + missing-uses + concat FP) built, guards 54/59; lint verify -> commit -> deploy; then ORM3 hook supersede (ocrpdf, due today) | closed | [HANDOFF-2026-10-29-engine-rel138x-deploy-pending.md](HANDOFF-2026-10-29-engine-rel138x-deploy-pending.md)
 - 2026-10-29 | ENGINE | IDE hang fixes P0-P2 + review fixes on fix/hang-int138; deploy pending (owner go given); missing-uses + index-fill branches ready | closed | [HANDOFF-2026-10-29-engine-hang-fix-deploy-pending](HANDOFF-2026-10-29-engine-hang-fix-deploy-pending.md)

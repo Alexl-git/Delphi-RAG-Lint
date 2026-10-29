@@ -73,3 +73,10 @@ The build refuses an article whose first 3000 characters of body have no link to
 3. Run `pwsh -File WWW\build.ps1`.
 4. Open `WWW\_site\index.html` in a browser to check the layout and style.
 5. The owner runs `pwsh -File WWW\publish.ps1` to go live.
+
+## Dated numbers (owner rule, 2026-10-29)
+
+Every article that shows numbers or command output says in the masthead byline when and on
+which version they were measured, e.g. `as of 2026-10-29, drag-lint 1.38.0-alpha`; the footer
+names the same version. A later reader then sees a dated figure, not a wrong one. Product-page
+counts use the `asOf` fact in `site.json`; update it together with the counts.
