@@ -1,18 +1,18 @@
 ---
 id: hover-at-cursor
 title: Hover at Cursor
-summary: "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers"
+summary: "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers"
 product: DL
 group: search-navigation
 order: 20014
 since: 0.7.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.36.0-alpha
 ---
 
 # Hover at Cursor
 
-Shows a hover card for the symbol under the editor caret: signature, documentation, and callers.
+Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers.
 
 Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card.
 
@@ -27,6 +27,7 @@ Full flag list: [hover in the CLI reference](../cli.md#hover).
 | `--qname` | `<Foo.Bar>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
+| `--write-back` |  |  |  |
 
 ## Where to click
 
@@ -48,10 +49,24 @@ capability is also exposed as a standalone CLI verb, and over stdio by the
 bundled language server (the Features page lists hover among
 the methods `drag-lint lsp` implements):
 ```text
-drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
+drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]
 ```
 `--qname` is the fully qualified symbol; `--format` selects plain text,
-markdown, or JSON.
+markdown, or JSON. `--write-back` opens the index writable so a property type
+recovered from an ancestor (below) is stored on the row; without it the hover
+never writes.
+
+### What the card says about types
+
+A property, field, var, const, parameter or local variable shows its declared
+type (`Text: string`). A bare re-publication such as `property Text;` stores no
+type of its own, so the card climbs the ancestors -- the same climb the
+converter's property tree uses, bridging an unlinked ancestor by scope -- and
+names the class that declares it: `Text: string (declared in
+dxBar.TdxBarWindowItem)`. The JSON form carries the same as `type` and
+`declared_in`, and `signature` holds the resolved type. The language server
+opens its indexes read-only, so it keeps the answer in a session cache instead
+of the database.
 
 ### What the card says about effects
 

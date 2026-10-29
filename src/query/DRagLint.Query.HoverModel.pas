@@ -50,6 +50,10 @@ type
     /// <summary>The mined Result:=/Exit() expressions, in first-seen order --
     /// what RenderHoverMarkdown takes as its AReturnRhs.</summary>
     ReturnRhs: TArray<string>;
+    /// <summary>The declared type, formatted by FormatDeclaredType ('string'
+    /// or 'string (declared in Unit.TBase)'); '' when the symbol has none.
+    /// What the md / plain renderers take as their ADeclaredType.</summary>
+    DeclaredType: string;
   end;
 
 /// <summary>Assembles the structured hover model for one indexed symbol,
@@ -264,11 +268,21 @@ begin
     itself, so a real signature is never overwritten. }
   var Described: TSymbol:= ASym;
   if Described.Signature = '' then Described.Signature:= DescribeTypeKind(Described, AStore);
+  { A bare re-published property ('property Text;') stores NO type; the
+    ancestor that declares it does. DescribeDeclaredType runs the converter's
+    climb (memoized on a writable store, session-cached otherwise), and the
+    resolved token also replaces a memoized ': string' so the signature reads
+    the way an indexed one does. }
+  var Declared: TDeclaredType:= DescribeDeclaredType(ASym, AStore);
+  if (ASym.Kind = skProperty) and (Declared.TypeName <> '') then Described.Signature:= Declared.TypeName;
   { Composed above for a parameter: `const AFile: string` instead of `string`. }
   if Doc2Sig <> '' then Described.Signature:= Doc2Sig;
 
   Result.Model    := BuildHoverModel(Described, Doc, UnitFile, Rhs, RhsLines);
   Result.ReturnRhs:= Rhs;
+  Result.Model.TypeName  := Declared.TypeName  ;
+  Result.Model.DeclaredIn:= Declared.DeclaredIn;
+  Result.DeclaredType    := FormatDeclaredType(Declared);
 
   { TDocFactsBuilder.Build + TDocRegions.FormatPhase2FactLines is the identical
     pair `document` uses to write the managed doc block. Going through it is the

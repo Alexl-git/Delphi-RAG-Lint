@@ -680,6 +680,7 @@ type
     // open that never mutates the DB. A writable open that fails falls back to
     // read-only automatically (resolution still works; memoization skipped).
     NoWriteBack   : Boolean; // proptree: force read-only, no memoization (default False = auto write-back)
+    WriteBack     : Boolean; // hover --write-back: open writable so a recovered property type is memoized (default False = read-only)
     // proptree/2 (Task 2, R2): --min-visibility published|public filters emitted
     // leaves by EFFECTIVE (most-derived) visibility. '' (default/unset) = emit
     // ALL leaves, exactly as proptree/1 did (back-compat).
@@ -1282,6 +1283,7 @@ begin
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
   Result.RefsAsLeaves       := False;      // proptree: expand TComponent refs (legacy); --refs-as-leaves treats them as leaves
   Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
+  Result.WriteBack          := False;      // hover: read-only unless --write-back
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
@@ -1594,6 +1596,7 @@ begin
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if A = '--refs-as-leaves' then Result.RefsAsLeaves:= True // proptree: TComponent-typed props are reference leaves
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
+    else if A = '--write-back' then Result.WriteBack:= True // hover: memoize a recovered property type
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
@@ -9563,7 +9566,11 @@ var
   UsedDb: string        ;
 begin
   if not ExplicitDbsExist(AArgs, 'hover') then Exit(2);
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]'); Exit(2); end;
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json] [--write-back]');
+    Exit(2);
+  end;
 
   // v0.94.1 BUGFIX: hover must search ALL --db paths, not just one. The IDE (and
   // manifest resolution) pass several --db values -- e.g. a project index, a SQL
@@ -9586,7 +9593,14 @@ begin
   begin
     if not TFile.Exists(Db) then Continue;
     var RoOk: Boolean;
-    Store:= OpenReadOnlyStore(Db, RoOk);
+    { --write-back: open WRITABLE so a property type recovered from an ancestor
+      is memoized onto the row (DRagLint.Convert.PropTree.ResolvePropertyDeclaredType).
+      A writable open that fails falls back to read-only -- memoization is
+      best-effort, the hover itself never depends on it. }
+    Store:= nil;
+    if AArgs.WriteBack then Store:= OpenWritableStore(Db, RoOk);
+    if Store = nil then Store:= OpenReadOnlyStore(Db, RoOk)
+    else if not RoOk then Store:= OpenReadOnlyStore(Db, RoOk);
     if not RoOk then
     begin
       if StaleDbRefusesRun(AArgs, 'hover', Db) then Exit(2);
@@ -9632,9 +9646,9 @@ begin
   if (Fmt = 'json') or (Fmt = 'md') then
   begin
     if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, Asm_.FactLines))
-    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines));
+    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines, Asm_.DeclaredType));
   end
-  else Write(RenderHoverPlain(Syms[0], Doc));
+  else Write(DRagLint.Hover.Renderer.RenderHoverPlain(Syms[0], Doc, Asm_.DeclaredType));
   Result:= 0;
 end; // function
 

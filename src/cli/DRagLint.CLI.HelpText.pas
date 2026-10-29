@@ -224,7 +224,7 @@ begin
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
-  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
   Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
@@ -745,7 +745,7 @@ begin
   end;
   if pVerb = 'hover' then
   begin
-    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
     Exit;
   end;
   if pVerb = 'impact' then

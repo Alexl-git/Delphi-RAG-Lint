@@ -271,11 +271,13 @@ type
     function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
       out AValue: string): Boolean;
     function ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
-    function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
+    function ResolveInheritedType(const AClass: TSymbol; const APropName: string;
+      out ADecl: TSymbol): string;
     function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
     function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
     function ResolveConstVisibilityByProximity(const AClass: TSymbol; const AConst: TSymbol): string;
-    function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
+    function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string;
+      out ADecl: TSymbol): string;
     function ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
     function PropagateBareType(const AClassIds: TArray<Int64>;
       const APropName, ATypeTok: string): Integer;
@@ -333,7 +335,60 @@ type
     procedure ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
       out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>;
       out AHidden: TArray<TPropHiddenMember>);
+    /// <summary>The type an ANCESTOR declares for a property of AClass, and
+    /// that ancestor -- the same two-step climb ResolveMembers runs for a bare
+    /// re-publication ('property Text;').</summary>
+    /// <param name="AClass">The class that owns the property row. A class-kind
+    /// symbol of this resolver's store.</param>
+    /// <param name="APropName">The property's bare name.</param>
+    /// <param name="ADeclaringClass">Receives the ancestor class whose
+    /// same-named property carries the type; Id = 0 when none was found.</param>
+    /// <returns>The type token (e.g. 'string'), or '' when no ancestor declares
+    /// one.</returns>
+    /// <remarks>Resolved ancestors first (GetTransitiveAncestors), then the
+    /// scope-aware bridge across an unresolved ancestor edge (bounded by a
+    /// visited set and MAX_BRIDGE_DEPTH). Performs NO writes.</remarks>
+    function ResolveDeclaredPropertyType(const AClass: TSymbol; const APropName: string;
+      out ADeclaringClass: TSymbol): string;
   end;
+
+  /// <summary>What hover needs to say about a property's type.</summary>
+  /// <remarks>Produced by ResolvePropertyDeclaredType.</remarks>
+  TDeclaredPropType = record
+    /// <summary>The declared type token, e.g. 'string'; '' when unresolved.</summary>
+    TypeName  : string ;
+    /// <summary>Qualified name of the ANCESTOR class whose declaration carries
+    /// the type; '' when the property declares its own type, or none was
+    /// found.</summary>
+    DeclaredIn: string ;
+    /// <summary>True when this call stamped the recovered type into the
+    /// store (writable stores only).</summary>
+    Memoized  : Boolean;
+  end;
+
+/// <summary>Resolves the declared type of a property row, climbing to the
+/// ancestor that declares it when the row is a bare re-publication
+/// ('property Text;'), and memoizes a recovered type.</summary>
+/// <param name="AStore">The store that owns AProp. May be read-only.</param>
+/// <param name="AProp">A property-kind symbol of AStore. Any other kind, or
+/// Id &lt;= 0, yields an empty result.</param>
+/// <returns>TypeName + DeclaredIn; both '' when nothing is known. A row with
+/// its own type and accessors returns that type with DeclaredIn=''.</returns>
+/// <remarks>
+/// A row is a re-publication when it carries no accessor (prop_access empty).
+/// Its type comes from its own Signature when one was memoized earlier, else
+/// from TPropMemberResolver.ResolveDeclaredPropertyType -- the converter's
+/// climb, not a copy of it. A recovered type is written back with
+/// ISymbolStore.MemoizePropertyType onto the row AND onto every bare
+/// same-named row of the resolved ancestors between it and the declaring
+/// class -- a no-op on a read-only store, never an error. Every answer
+/// (including "unknown") is also kept in a process-wide session cache keyed by
+/// store instance + row id + qualified name + line, so a read-only library
+/// index pays the climb once per session. Thread-safe (the cache is locked);
+/// the store itself must not be mutated concurrently.
+/// </remarks>
+function ResolvePropertyDeclaredType(const AStore: ISymbolStore;
+  const AProp: TSymbol): TDeclaredPropType;
 
 implementation
 
@@ -347,6 +402,15 @@ type
   /// dcNoDefault is what made a BARE REDECLARATION ('property AutoSize;',
   /// which keeps the ancestor's default) report as having none.</remarks>
   TDefaultClause = (dcAbsent, dcNoDefault, dcValue);
+
+const
+  // Hop cap for the bridged ancestor climb, beside its visited-name set. A real
+  // VCL / DevExpress chain is ~10-15 classes deep; this only stops a cycle the
+  // name set cannot see (two spellings of one class).
+  MAX_BRIDGE_DEPTH = 32;
+  // The session cache of ResolvePropertyDeclaredType is dropped wholesale at
+  // this size: a hover session touches a few hundred properties, never this many.
+  MAX_DECL_TYPE_CACHE = 20000;
 
 // Parse the bare type token out of a property Signature. Handles a leading
 // ": " (some rows carry it, some do not) and stops at the first whitespace,
@@ -1028,7 +1092,8 @@ end;
 // ClassChain's own (A.Kind = 'class') filter, which is why CollectMembers'
 // shadowing/DeclaredIn never suffers this -- only this ancestor-only-typed
 // fallback walk did.
-function TPropMemberResolver.ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
+function TPropMemberResolver.ResolveInheritedType(const AClass: TSymbol; const APropName: string;
+  out ADecl: TSymbol): string;
 var
   Anc   : TArray<TTypeAncestor>;
   A     : TTypeAncestor        ;
@@ -1037,6 +1102,7 @@ var
   Tok   : string               ;
 begin
   Result:= '';
+  ADecl := Default(TSymbol);
   Anc:= FStore.GetTransitiveAncestors(AClass.Id);
   for A in Anc do
   begin
@@ -1048,7 +1114,11 @@ begin
     if (Child.Id > 0) and (Child.Kind = skProperty) then
     begin
       Tok:= ParseTypeToken(Child.Signature);
-      if Tok <> '' then Exit(Tok);
+      if Tok <> '' then
+      begin
+        ADecl:= AncSym;
+        Exit(Tok);
+      end;
     end;
   end;
 end;
@@ -1185,9 +1255,11 @@ end;
 // whose uses-clause / namespace prefix disambiguates e.g. Vcl from FMX -- see
 // Climb's rule below), and returns the first KNOWN type declared for APropName
 // above the break. '' when the walk still finds nothing (never fabricates a type).
-function TPropMemberResolver.ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
+function TPropMemberResolver.ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string;
+  out ADecl: TSymbol): string;
 var
   Visited: TDictionary<string, Boolean>;
+  Found  : TSymbol;
 
   // Declared type of APropName directly on ASym (parseable signature), or ''.
   function PropTypeOn(const ASym: TSymbol): string;
@@ -1198,9 +1270,12 @@ var
     Child:= FStore.FindChildSymbolByName(ASym.Id, APropName);
     if (Child.Id > 0) and (Child.Kind = skProperty) then
       Result:= ParseTypeToken(Child.Signature);
+    if Result <> '' then Found:= ASym;
   end;
 
-  function Climb(const ASym: TSymbol): string;
+  // ADepth bounds the recursion beside the Visited name set (hover calls this
+  // per request and must stay cheap on a pathological chain).
+  function Climb(const ASym: TSymbol; ADepth: Integer): string;
   var
     Anc  : TArray<TTypeAncestor>;
     A    : TTypeAncestor        ;
@@ -1212,6 +1287,7 @@ var
     Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
   begin
     Result:= '';
+    if ADepth > MAX_BRIDGE_DEPTH then Exit;
     Anc:= FStore.GetTransitiveAncestors(ASym.Id);
     Known:= TList<TSymbol>.Create;
     try
@@ -1259,7 +1335,7 @@ var
         if CrossesGuiFramework(Decl, Nxt) then Continue;
         Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
         if Tok <> '' then Exit(Tok);
-        Tok:= Climb(Nxt);        // else climb the bridged class's own chain
+        Tok:= Climb(Nxt, ADepth + 1); // else climb the bridged class's own chain
         if Tok <> '' then Exit(Tok);
       end;
     finally
@@ -1268,13 +1344,15 @@ var
   end;
 
 begin
+  Found  := Default(TSymbol);
   Visited:= TDictionary<string, Boolean>.Create;
   try
     Visited.Add(LowerCase(AClass.Name), True);
-    Result:= Climb(AClass);
+    Result:= Climb(AClass, 0);
   finally
     Visited.Free;
   end;
+  ADecl:= Found;
 end;
 
 // Known limitation: descendants are enumerated by NAME (FindDescendantNames ->
@@ -1454,6 +1532,7 @@ var
   TypeSym    : TSymbol        ;
   ClosureIds : TArray<Int64>  ;
   ClosureDone: Boolean        ;
+  TypeDecl   : TSymbol        ; // the ancestor a recovered type came from (unused here)
   // R4 (Task 4): field/const leaves -- separate variable set, mirrors the
   // property loop's shape but is a flat (non-recursive) emission.
   FieldOrder     : TArray<TSymbol>;
@@ -1550,9 +1629,9 @@ begin
     // (typically type-alias) ancestor edge to the class that really declares it.
     OwnTok   := ParseTypeToken(Prop.Signature);
     Tok      := OwnTok;
-    if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name);
+    if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name, TypeDecl);
     if Tok = '' then
-      Tok:= ResolveViaBridgedAncestry(AClass, Prop.Name);
+      Tok:= ResolveViaBridgedAncestry(AClass, Prop.Name, TypeDecl);
 
     if Tok = '' then
     begin
@@ -1709,5 +1788,142 @@ begin
     Nodes   .Free;
   end;
 end;
+
+function TPropMemberResolver.ResolveDeclaredPropertyType(const AClass: TSymbol; const APropName: string;
+  out ADeclaringClass: TSymbol): string;
+
+  // True when AOwner's own APropName row is a bare re-publication (no
+  // accessor): it may carry a MEMOIZED type, but it did not declare one.
+  function IsRepublication(const AOwner: TSymbol): Boolean;
+  var
+    Child: TSymbol;
+  begin
+    Child := FStore.FindChildSymbolByName(AOwner.Id, APropName);
+    Result:= (Child.Id > 0) and (Child.Kind = skProperty) and (Trim(Child.PropAccess) = '');
+  end;
+
+  // One climb from AFrom: resolved ancestors first, then the bridge.
+  function Step(const AFrom: TSymbol; out ADecl: TSymbol): string;
+  begin
+    Result:= ResolveInheritedType(AFrom, APropName, ADecl);
+    if Result = '' then Result:= ResolveViaBridgedAncestry(AFrom, APropName, ADecl);
+  end;
+
+var
+  Hops: Integer;
+  Next: TSymbol;
+begin
+  Result:= Step(AClass, ADeclaringClass);
+  { A memoized re-publication on the way up carries the type but did not
+    declare it: keep climbing from it to the class that did. The type is
+    already known; only the declaring class moves. }
+  Hops:= 0;
+  while (ADeclaringClass.Id > 0) and (Hops < MAX_BRIDGE_DEPTH) and IsRepublication(ADeclaringClass) do
+  begin
+    if Step(ADeclaringClass, Next) = '' then Break;
+    if Next.Id = ADeclaringClass.Id then Break;
+    ADeclaringClass:= Next;
+    Inc(Hops);
+  end;
+end;
+
+var
+  GDeclTypeLock : TObject;
+  GDeclTypeCache: TDictionary<string, TDeclaredPropType>;
+
+// Store INSTANCE + row id + line + qname: a store reopened at the same address
+// over a different index cannot alias a cached row unless all four agree.
+function DeclTypeCacheKey(const AStore: ISymbolStore; const AProp: TSymbol): string;
+begin
+  Result:= Format('%p|%d|%d|%s', [Pointer(AStore), AProp.Id, AProp.StartLine, LowerCase(AProp.QualifiedName)]);
+end;
+
+// Stamp ATypeName onto the bare same-named rows of the resolved ancestors
+// between AClass and ADecl (exclusive), so they are ready too. Writable stores
+// only -- the caller checks.
+procedure MemoizeChainBetween(const AStore: ISymbolStore; const AClass, ADecl: TSymbol;
+  const APropName, ATypeName: string);
+var
+  Anc  : TTypeAncestor;
+  Child: TSymbol      ;
+begin
+  for Anc in AStore.GetTransitiveAncestors(AClass.Id) do
+  begin
+    if not (Anc.Resolved and (Anc.SymbolId > 0)) then Continue;
+    if Anc.SymbolId = ADecl.Id then Break;
+    Child:= AStore.FindChildSymbolByName(Anc.SymbolId, APropName);
+    if (Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '') then
+      AStore.MemoizePropertyType(Child.Id, ATypeName);
+  end;
+end;
+
+function ResolvePropertyDeclaredType(const AStore: ISymbolStore;
+  const AProp: TSymbol): TDeclaredPropType;
+var
+  Own     : string             ;
+  Key     : string             ;
+  Cls     : TSymbol            ;
+  Decl    : TSymbol            ;
+  Resolver: TPropMemberResolver;
+  Cached  : TDeclaredPropType  ;
+begin
+  Result:= Default(TDeclaredPropType);
+  if (AStore = nil) or (AProp.Id <= 0) or (AProp.Kind <> skProperty) then Exit;
+  Own:= ParseTypeToken(AProp.Signature);
+  { Own accessors = its own declaration: nothing to climb for. }
+  if (Own <> '') and (Trim(AProp.PropAccess) <> '') then
+  begin
+    Result.TypeName:= Own;
+    Exit;
+  end;
+
+  Key:= DeclTypeCacheKey(AStore, AProp);
+  TMonitor.Enter(GDeclTypeLock);
+  try
+    if GDeclTypeCache.TryGetValue(Key, Cached) then Exit(Cached);
+  finally
+    TMonitor.Exit(GDeclTypeLock);
+  end;
+
+  Decl:= Default(TSymbol);
+  Cls := AStore.GetSymbolById(AProp.ParentId);
+  if (Cls.Id > 0) and (Cls.Kind = skClass) then
+  begin
+    Resolver:= TPropMemberResolver.Create(AStore, Default(TPropTreeOptions));
+    try
+      Result.TypeName:= Resolver.ResolveDeclaredPropertyType(Cls, AProp.Name, Decl);
+    finally
+      Resolver.Free;
+    end;
+    if Decl.Id > 0 then Result.DeclaredIn:= Decl.QualifiedName;
+  end;
+  { A memoized row whose declarer is out of reach still knows its type. }
+  if Result.TypeName = '' then Result.TypeName:= Own;
+
+  if (Own = '') and (Result.TypeName <> '') then
+  begin
+    Result.Memoized:= AStore.MemoizePropertyType(AProp.Id, Result.TypeName);
+    if Result.Memoized and (Decl.Id > 0) then
+      MemoizeChainBetween(AStore, Cls, Decl, AProp.Name, Result.TypeName);
+  end;
+
+  Cached         := Result;
+  Cached.Memoized:= False; { a cache hit wrote nothing }
+  TMonitor.Enter(GDeclTypeLock);
+  try
+    if GDeclTypeCache.Count >= MAX_DECL_TYPE_CACHE then GDeclTypeCache.Clear;
+    GDeclTypeCache.AddOrSetValue(Key, Cached);
+  finally
+    TMonitor.Exit(GDeclTypeLock);
+  end;
+end;
+
+initialization
+  GDeclTypeLock := TObject.Create;
+  GDeclTypeCache:= TDictionary<string, TDeclaredPropType>.Create;
+
+finalization
+  GDeclTypeCache.Free;
+  GDeclTypeLock .Free;
 
 end.

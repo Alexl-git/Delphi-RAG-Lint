@@ -29,8 +29,12 @@ uses
 /// <seealso cref="DRagLint.Hover.Renderer.UnescapeJsonText"/>
 /// <seealso cref="DRagLint.Hover.Renderer.WikiIndicatorLines"/>
 /// <!-- drag-lint:auto END -->
+/// <para>ADeclaredType (optional): the symbol's declared type as
+/// DRagLint.Symbol.Describe.FormatDeclaredType renders it ('string' or
+/// 'string (declared in Unit.TBase)'); when non-empty it is printed as a
+/// 'Name: Type' line under the header. '' (the default) prints nothing.</para>
 /// </remarks>
-function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc; const ADeclaredType: string = ''): string;
 
 /// <summary>Renders a symbol's hover popup as markdown: qualified-name
 /// heading, deprecated/since badges, summary, parameters (from doc-comment
@@ -53,6 +57,10 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// caller-computes pattern; keeps this unit decoupled from
 /// DRagLint.Doc.Facts/DRagLint.Storage, which DoHover/HandleHover already
 /// have open).</param>
+/// <param name="ADeclaredType">The symbol's declared type as
+/// DRagLint.Symbol.Describe.FormatDeclaredType renders it; when non-empty a
+/// 'Name: Type' line follows the header. '' (the default) renders none --
+/// the renderer never resolves a type itself.</param>
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -66,7 +74,8 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// <seealso cref="DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil;
+  const ADeclaredType: string = ''): string;
 
 /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
 /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
@@ -148,6 +157,13 @@ type
     DefLine      : Integer            ;
     Params       : TArray<TParamPart> ;
     ReturnType   : string             ;
+    /// <summary>Declared type of a value-kind symbol (property, field, var,
+    /// const, parameter, local var); '' for every other kind. Filled by
+    /// DRagLint.Query.HoverModel.AssembleHover, never by BuildHoverModel.</summary>
+    TypeName     : string             ;
+    /// <summary>The ancestor class that declares a re-published property's
+    /// type; '' otherwise.</summary>
+    DeclaredIn   : string             ;
     Returns      : TArray<TReturnFact>;
     ReturnsMore  : Integer            ;
     Doc          : TParsedDoc         ;
@@ -519,7 +535,7 @@ begin
   if ASym.GenericParams <> '' then Result:= Result + '<' + ASym.GenericParams + '>';
 end;
 
-function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
+function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc; const ADeclaredType: string): string;
 var
   SB: TStringBuilder;
   Re: TRegEx        ;
@@ -528,6 +544,7 @@ begin
   SB:= TStringBuilder.Create;
   try
     SB.AppendLine(HoverHeaderName(ASym));
+    if ADeclaredType <> '' then SB.AppendLine(ASym.Name + ': ' + ADeclaredType);
     if ADoc.Deprecated then SB.AppendLine('[DEPRECATED]');
     if ADoc.SinceText <> '' then SB.AppendLine('Since: '   + ADoc.SinceText);
     // v(ADP3 T1): strip the ownership marker before a human sees it -- see
@@ -594,7 +611,8 @@ begin
   end; // try
 end; // function
 
-function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
+function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string>; const AFactLines: TArray<string>;
+  const ADeclaredType: string): string;
 var
   SB: TStringBuilder;
   Re: TRegEx        ;
@@ -603,6 +621,11 @@ begin
   SB:= TStringBuilder.Create;
   try
     SB.AppendLine('# ' + HoverHeaderName(ASym));
+    if ADeclaredType <> '' then
+    begin
+      SB.AppendLine('');
+      SB.AppendLine('`' + ASym.Name + ': ' + ADeclaredType + '`');
+    end;
     if ADoc.Deprecated then SB.AppendLine('> **DEPRECATED**');
     if ADoc.SinceText <> '' then SB.AppendLine('> _Since: ' + ADoc.SinceText + '_');
     // v(ADP3 T1): strip the ownership marker before a human sees it -- see
@@ -756,6 +779,10 @@ begin
     SB.Append(Format('"signature":"%s",', [JsonEscape(AModel.Signature)]));   // raw sig -- for enum values this carries the ordinal (= N)
     SB.Append(Format('"unit":"%s","def_line":%d,', [JsonEscape(AModel.UnitFile), AModel.DefLine]));
     SB.Append(Format('"return_type":"%s",', [JsonEscape(AModel.ReturnType)]));
+    { The declared type of a value-kind symbol, and -- for a bare re-published
+      property -- the ancestor that declares it, so the IDE popup can show
+      'Text: string' without parsing markdown. }
+    SB.Append(Format('"type":"%s","declared_in":"%s",', [JsonEscape(AModel.TypeName), JsonEscape(AModel.DeclaredIn)]));
     SB.Append('"params":[');
     for i:= 0 to High(AModel.Params) do
     begin

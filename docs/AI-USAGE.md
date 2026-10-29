@@ -417,7 +417,7 @@ define further codes.
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
 | `slice --qname U.T.M` | one symbol's source body |
 | `typeat F:L:C` | resolve the identifier at a cursor position |
-| `hover --qname U.T.M` | hover card (`--format plain\|md\|json`). On an **interface** it also answers "what satisfies this contract": `Implemented by:` (classes) and `Extended by:` (derived interfaces), capped with a `(+N more)` suffix. Absent entirely when nothing implements it -- never `(none)`. `--format json` also carries `effect_free` (-1/0/1), `effect_summary` (`g,h,s,p<k>,?`) and `effect_witness` -- the stored purity verdict and its first blocker |
+| `hover --qname U.T.M` | hover card (`--format plain\|md\|json`). On an **interface** it also answers "what satisfies this contract": `Implemented by:` (classes) and `Extended by:` (derived interfaces), capped with a `(+N more)` suffix. Absent entirely when nothing implements it -- never `(none)`. `--format json` also carries `effect_free` (-1/0/1), `effect_summary` (`g,h,s,p<k>,?`) and `effect_witness` -- the stored purity verdict and its first blocker -- plus `type` / `declared_in`: the declared type of a property/field/var/const/param/local, and for a bare `property Text;` the ancestor that declares it. `--write-back` memoizes that recovered type into a writable index (default: read-only) |
 | `helpers-of T` | record/class helper edges targeting type T |
 | `top` | most-depended-on symbols (`--by fanin`, `--limit N`) |
 
@@ -856,7 +856,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `glyph-vacuum` | [glyph-vacuum](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/glyph-vacuum) | Measure every streamed glyph or picture under a tree before writing a glyph rule |  |
 | `graph` | [Export Graph (DOT)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Export-Graph-DOT) | Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring | index |
 | `helpers-of` | [helpers-of](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) | Lists record/class helper edges targeting a given type, anywhere in the index | index |
-| `hover` | [Hover at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Hover-at-Cursor) | Shows a hover card for the symbol under the editor caret: signature, documentation, and callers |  |
+| `hover` | [Hover at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Hover-at-Cursor) | Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers |  |
 | `ide-release` | [ide-release](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request |  |
 | `impact` | [Impact / Blast Radius (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Impact-Blast-Radius-symbol) | Reports what would be affected if a chosen symbol changes -- the set of code to retest |  |
 | `import-log` | [Import Build Log](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Import-Build-Log) | Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings | index |

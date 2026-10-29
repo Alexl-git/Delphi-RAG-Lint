@@ -44,7 +44,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Go to Definition](features/go-to-definition.md) | Jumps the editor caret to the declaration of the symbol under the cursor | 0.47.0-alpha |
 | [Go to Implementation](features/go-to-implementation.md) | Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node | 0.43.0-alpha |
 | [helpers-of](features/helpers-of.md) | Lists record/class helper edges targeting a given type, anywhere in the index | 0.94.0-alpha |
-| [Hover at Cursor](features/hover-at-cursor.md) | Shows a hover card for the symbol under the editor caret: signature, documentation, and callers | 0.7.0-alpha |
+| [Hover at Cursor](features/hover-at-cursor.md) | Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers | 0.7.0-alpha |
 | [outline](features/outline.md) | Prints the file-scoped symbol outline for one Pascal unit | 0.86.0-alpha |
 | [query ancestors](features/query-ancestors.md) | Resolves the transitive class/interface hierarchy of a type | 0.1.0-alpha |
 | [query descendants](features/query-descendants.md) | The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases | 1.2.2-alpha |

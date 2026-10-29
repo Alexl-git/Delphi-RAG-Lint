@@ -16,10 +16,24 @@ capability is also exposed as a standalone CLI verb, and over stdio by the
 bundled language server (the [Features](Features) page lists hover among
 the methods `drag-lint lsp` implements):
 ```
-drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
+drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]
 ```
 `--qname` is the fully qualified symbol; `--format` selects plain text,
-markdown, or JSON.
+markdown, or JSON. `--write-back` opens the index writable so a property type
+recovered from an ancestor (below) is stored on the row; without it the hover
+never writes.
+
+## What the card says about types
+
+A property, field, var, const, parameter or local variable shows its declared
+type (`Text: string`). A bare re-publication such as `property Text;` stores no
+type of its own, so the card climbs the ancestors -- the same climb the
+converter's property tree uses, bridging an unlinked ancestor by scope -- and
+names the class that declares it: `Text: string (declared in
+dxBar.TdxBarWindowItem)`. The JSON form carries the same as `type` and
+`declared_in`, and `signature` holds the resolved type. The language server
+opens its indexes read-only, so it keeps the answer in a session cache instead
+of the database.
 
 ## What the card says about effects
 

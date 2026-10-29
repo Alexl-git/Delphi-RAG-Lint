@@ -1381,7 +1381,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.7.0-alpha",
-      "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+      "summary": "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers",
       "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card.",
       "wikiPage": "Hover-at-Cursor",
       "surfaces": [
@@ -1393,7 +1393,7 @@
         {
           "type": "cli",
           "verb": "hover",
-          "usage": "drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]",
+          "usage": "drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]",
           "flags": [
             {
               "name": "--qname",
@@ -1405,10 +1405,13 @@
             },
             {
               "name": "--format"
+            },
+            {
+              "name": "--write-back"
             }
           ],
           "helpOrder": 34,
-          "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]"]
+          "help": ["  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]"]
         }
       ],
       "audience": "both",
@@ -1420,13 +1423,17 @@
         {
           "ask": "Can I get the hover card as markdown?",
           "command": "drag-lint hover --qname <Foo.Bar> --format md"
+        },
+        {
+          "ask": "What type does a re-published property (property Text;) have, and which ancestor declares it?",
+          "command": "drag-lint hover --qname <Unit.TDerived.Text> --format json   (fields type + declared_in; --write-back memoizes the type into a writable index)"
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-29",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
+        "build": "1.36.0-alpha",
+        "surfaceHash": "4f720f64562f350a06f27f23d6e6f6c1a2ab211bb50a929c5a56150321ee9a2f"
       }
     },
     {

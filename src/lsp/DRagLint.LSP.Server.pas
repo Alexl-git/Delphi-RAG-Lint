@@ -1210,6 +1210,7 @@ implementation
 
 uses
   DRagLint.Project.DefineProfile,
+  DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
 
@@ -2079,10 +2080,15 @@ end; // function
 //   class TShape                          (containers: no signature)
 // Signature already carries the leading '(' or ': ' for proc-likes, so we
 // concatenate directly; for type-valued kinds we insert ': ' before the type.
-function DeclLineFor(const ASym: TSymbol): string;
+// Value kinds take their type from DescribeDeclaredType -- the describer the
+// hover model uses -- so a bare re-published property ('property Text;')
+// shows the type its ancestor declares, plus a '// declared in' note, and a
+// local var / parameter shows its type at all. AStore owns ASym.
+function DeclLineFor(const ASym: TSymbol; const AStore: ISymbolStore): string;
 var
-  Keyword: string;
-  Sig    : string;
+  Keyword : string;
+  Sig     : string;
+  Declared: TDeclaredType;
 begin
   Sig:= ASym.Signature;
   case ASym.Kind of
@@ -2097,7 +2103,9 @@ begin
     skProperty : Keyword:= 'property';
     skField    : Keyword:= 'var';
     skVarDecl  : Keyword:= 'var';
+    skLocalVar : Keyword:= 'var';
     skConstDecl: Keyword:= 'const';
+    skParam    : Keyword:= '';
     else Keyword:= ASym.Kind.ToText;
   end; // case
 
@@ -2105,8 +2113,16 @@ begin
     skFunction, skProcedure, skConstructor, skDestructor, skMethod:
       // Sig is '(args): Ret' or ': Ret' or '(args)' or '' -- concat directly.
       Result:= Format('%s %s%s', [Keyword, ASym.Name, Sig]);
-    skProperty, skField, skVarDecl, skConstDecl: if Sig <> '' then Result:= Format('%s %s: %s', [Keyword, ASym.Name, Sig])
-    else Result:= Format('%s %s', [Keyword, ASym.Name]);
+    skProperty, skField, skVarDecl, skConstDecl, skLocalVar, skParam:
+      begin
+        Declared:= DescribeDeclaredType(ASym, AStore);
+        { A const keeps its whole signature ('Integer = 5'): the value is the
+          point of hovering one. }
+        if (ASym.Kind <> skConstDecl) and (Declared.TypeName <> '') then Sig:= Declared.TypeName;
+        if Sig <> '' then Result:= Trim(Format('%s %s: %s', [Keyword, ASym.Name, Sig]))
+        else Result:= Trim(Format('%s %s', [Keyword, ASym.Name]));
+        if Declared.DeclaredIn <> '' then Result:= Result + '  // declared in ' + Declared.DeclaredIn;
+      end;
     else Result:= Format('%s %s', [Keyword, ASym.Name]);
   end;
 end; // function
@@ -2657,7 +2673,8 @@ begin
     // mirroring a default `document` run.
     var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
-    MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines);
+    MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
+      FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
   end
   else
   begin
@@ -2750,7 +2767,7 @@ begin
       for Sym in Filtered do
       begin
         Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName, Sym.StartLine]));
-        Sb.AppendLine('    ' + DeclLineFor(Sym));
+        Sb.AppendLine('    ' + DeclLineFor(Sym, HitStore));
         { v0.43: break the signature into an IDE-style Parameters block
           (name + type per line, + Returns). Only for a focused candidate
           set so a 50-hit common member doesn't explode the popup. }
