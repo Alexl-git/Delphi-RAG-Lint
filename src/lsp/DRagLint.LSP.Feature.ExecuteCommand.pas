@@ -72,7 +72,8 @@ begin
   var Sites: TList<TSite>:= TList<TSite>.Create;
   var Seen: TDictionary<string, Byte>:= TDictionary<string, Byte>.Create;
   try
-    var Stores: TArray<ISymbolStore>:= Copy(ACtx.Stores); // a local copy; the server's list is never touched
+    // D1: the active context's stores (project DB + platform library), not every startup store
+    var Stores: TArray<ISymbolStore>:= Copy(ACtx.StoresForFile(APath));
     for var St: ISymbolStore in Stores do
     begin
       if St = nil then Continue;
