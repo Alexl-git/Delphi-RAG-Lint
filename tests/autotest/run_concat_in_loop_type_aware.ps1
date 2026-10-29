@@ -67,6 +67,11 @@ $unit = @(
   'function JoinAll(const AItems: TArray<string>): string;'
   'procedure Ambig1;'
   'procedure Ambig2;'
+  'function MakeRows(Count: Integer): TArray<Integer>;'
+  'procedure FndLocal(const AOther: TArray<Integer>; Count: Integer);'
+  'procedure FndVarParam(var Fnd: TArray<Integer>; Count: Integer);'
+  'procedure FndOutParam(out Fnd: TArray<Integer>; Count: Integer);'
+  'procedure FndString(const AItems: TArray<string>);'
   ''
   'implementation'
   ''
@@ -149,6 +154,50 @@ $unit = @(
   '    Writeln(Acc);'
   'end;'
   ''
+  'function MakeRows(Count: Integer): TArray<Integer>;'
+  'begin'
+  '  SetLength(Result, Count);'
+  'end;'
+  ''
+  'procedure FndLocal(const AOther: TArray<Integer>; Count: Integer);'
+  'var'
+  '  Fnd: TArray<Integer>;'
+  '  K: Integer;'
+  'begin'
+  '  Fnd := nil;'
+  '  for K := 1 to 3 do'
+  '    Fnd := Fnd + MakeRows(Count);'
+  '  Writeln(Length(Fnd), Length(AOther));'
+  'end;'
+  ''
+  'procedure FndVarParam(var Fnd: TArray<Integer>; Count: Integer);'
+  'var'
+  '  K: Integer;'
+  'begin'
+  '  for K := 1 to 3 do'
+  '    Fnd := Fnd + MakeRows(Count);'
+  'end;'
+  ''
+  'procedure FndOutParam(out Fnd: TArray<Integer>; Count: Integer);'
+  'var'
+  '  K: Integer;'
+  'begin'
+  '  Fnd := nil;'
+  '  for K := 1 to 3 do'
+  '    Fnd := Fnd + MakeRows(Count);'
+  'end;'
+  ''
+  'procedure FndString(const AItems: TArray<string>);'
+  'var'
+  '  Fnd: string;'
+  '  Item: string;'
+  'begin'
+  '  Fnd := '''';'
+  '  for Item in AItems do'
+  '    Fnd := Fnd + Item;'
+  '  Writeln(Fnd);'
+  'end;'
+  ''
   'end.'
 ) -join "`r`n"
 $pas = Join-Path $WorkDir 'ConcatTyped.pas'
@@ -163,6 +212,8 @@ function LineOf([string]$Needle) {
   for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq $Needle) { return $i + 1 } }
   return -1
 }
+$fndArrLines = @(for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq 'Fnd := Fnd + MakeRows(Count);') { $i + 1 } })
+Check 'three TArray Fnd statements located' ($fndArrLines.Count -eq 3)
 $ln = [ordered]@{
   StringVar   = LineOf 'S := S + Item;'
   IntegerVar  = LineOf 'Total := Total + Count;'
@@ -176,6 +227,7 @@ $ln = [ordered]@{
   InlineStr   = LineOf 'InlS := InlS + Item;'
   ArrLiteral  = LineOf 'Lit := Lit + [Count];'
   AliasArr    = LineOf 'Al := Al + AOther;'
+  FndString   = LineOf 'Fnd := Fnd + Item;'
   InlArrLit   = LineOf 'InlA := InlA + [Count];'
 }
 Check 'all thirteen fixture statements located' (@($ln.Values) -notcontains -1) (($ln.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')
@@ -241,6 +293,11 @@ foreach ($s in $surfaces.GetEnumerator()) {
   Check "$($s.Key): TArray literal append Lit := Lit + [Count] must NOT fire"  (-not ($fired -contains $ln.ArrLiteral))
   Check "$($s.Key): INLINE TArray InlA := InlA + [Count] must NOT fire"  (-not ($fired -contains $ln.InlArrLit))
   Check "$($s.Key): ALIAS-of-TArray Al := Al + AOther must NOT fire"  (-not ($fired -contains $ln.AliasArr))
+  # Fnd is declared in four routines with different types: a file-wide map made it ambiguous
+  # and the rule kept firing on the three TArray<Integer> ones (local, var param, out param).
+  Check "$($s.Key): TArray local/var/out Fnd := Fnd + MakeRows(..) (name reused as string elsewhere) must NOT fire" `
+    (@($fndArrLines | Where-Object { $fired -contains $_ }).Count -eq 0) ("lines=" + ($fndArrLines -join ','))
+  Check "$($s.Key): string Fnd := Fnd + Item in the OTHER routine MUST fire (positive control)" ($fired -contains $ln.FndString)
   Check "$($s.Key): INLINE Double var Inl := Inl + D must NOT fire"                            (-not ($fired -contains $ln.InlineDbl))
 }
 

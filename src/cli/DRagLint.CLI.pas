@@ -15493,7 +15493,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
       { a name declared in a unit the file does not use (project index + library) }
       if LintRuleWants(NarrowRule, [MISSING_USES_RULE]) then
-        Findings:= Findings + TMissingUsesChecker.Check(EffPath, FlowStore, FlowFid, [FlowStore, FlowLibStore]); // dl:ok concat-in-loop@7c9b -- Findings is a TArray<TLintFinding>; one append per checker, not string concatenation
+        Findings:= Findings + TMissingUsesChecker.Check(EffPath, FlowStore, FlowFid, [FlowStore, FlowLibStore]);
       { B-ENUM: a hard-coded enum ordinal (the index widens what counts as an enum) }
       if LintRuleWants(NarrowRule, [ENUM_ORDINAL_CAST_RULE]) then
         Findings:= Findings + TEnumOrdinalCastChecker.Check(EffPath, FlowStore, FlowFid);

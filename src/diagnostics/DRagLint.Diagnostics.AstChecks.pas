@@ -3662,6 +3662,7 @@ var
   PF       : TParsedFile;
   TypeMap  : TDictionary<string, string>;
   NonString: TDictionary<string, Boolean>; { 'line:col' of a proven non-string target }
+  Scopes   : TObjectList<TDictionary<string, string>>; { per-routine decl maps, innermost last }
   HasConcat: Boolean;
 
   { True when ATypeText names a container that is never a string. }
@@ -3717,6 +3718,16 @@ var
     Result:= IsContainerType(ATypeText) or (AliasContainerTarget(ATypeText) <> '');
   end;
 
+  { Innermost enclosing routine's declaration first, then the file-wide map. }
+  function LookupType(const AName: string; out ATypeText: string): Boolean;
+  var
+    K: Integer;
+  begin
+    for K:= Scopes.Count - 1 downto 0 do
+      if Scopes[K].TryGetValue(AName, ATypeText) then Exit(True);
+    Result:= TypeMap.TryGetValue(AName, ATypeText);
+  end;
+
   { Records every `X := X + Y` whose X is proven non-string. AReturnType is the
     innermost enclosing function's return type text ('' outside one), which is
     what types `Result`. }
@@ -3728,13 +3739,21 @@ var
     Target  : string;
     TypeText: string;
     P       : TTSPoint;
+    Pushed  : Boolean;
+    Scope   : TDictionary<string, string>;
   begin
     if N.IsNull then Exit;
     Ret:= AReturnType;
+    Pushed:= False;
     if N.NodeType = 'defProc' then
     begin
       Hdr:= N.ChildByField('header');
       Ret:= (if Hdr.IsNull then '' else Trim(SrcText(Hdr.ChildByField('type'), PF.Src)));
+      { This routine's own params + locals: the same name declared with another type in a different routine must not make it ambiguous here. }
+      Scope:= TDictionary<string, string>.Create;
+      CollectDeclTypes(N, PF.Src, Scope, True);
+      Scopes.Add(Scope);
+      Pushed:= True;
     end
     else if N.NodeType = 'assignment' then
     begin
@@ -3743,7 +3762,7 @@ var
       begin
         Target:= LowerCase(Trim(SrcText(Lhs, PF.Src)));
         if Target = 'result' then TypeText:= Ret
-        else if not TypeMap.TryGetValue(Target, TypeText) then TypeText:= '';
+        else if not LookupType(Target, TypeText) then TypeText:= '';
         if ProvenNonString(TypeText) then
         begin
           P:= N.StartPoint;
@@ -3752,6 +3771,7 @@ var
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), Ret);
+    if Pushed then Scopes.Delete(Scopes.Count - 1);
   end;
 
 begin
@@ -3769,6 +3789,7 @@ begin
   if PF.Tree = nil then Exit;
   TypeMap  := TDictionary<string, string>.Create;
   NonString:= TDictionary<string, Boolean>.Create;
+  Scopes   := TObjectList<TDictionary<string, string>>.Create(True);
   try
     CollectDeclTypes(PF.Tree.RootNode, PF.Src, TypeMap, True); { inline `var X: T` too }
     Walk(PF.Tree.RootNode, '');
@@ -3778,6 +3799,7 @@ begin
       if not (SameText(F.RuleId, RULE_ID) and NonString.ContainsKey(Format('%d:%d', [F.StartLine, F.StartCol]))) then
         Result:= Result + [F];
   finally
+    Scopes.Free;
     NonString.Free;
     TypeMap.Free;
   end;
