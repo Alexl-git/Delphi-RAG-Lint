@@ -204,6 +204,7 @@ type
       /// <summary>True when a whole message can be read from stdin without
       /// blocking: a pipe with bytes waiting (PeekNamedPipe) or a file not at
       /// its end. A console or any other handle answers False -- never yield.</summary>
+      /// <returns>True when a read would not block; False after FInputEnded.</returns>
       function InputPending: Boolean;
       /// <summary>Called by a long request between its batches: reads every
       /// message already waiting and dispatches the hover-class ones at once,
@@ -3031,7 +3032,7 @@ begin
           if FStores[SI] = nil then Continue;
           for var Sym: TSymbol in FStores[SI].FindSymbolsByFile(Path) do
           begin
-            if not (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Continue;
+            if Sym.Kind not in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then Continue;
             if Sym.StartLine <= 0 then Continue;
             var Keys: TStringList;
             if not Decl.TryGetValue(Sym.StartLine, Keys) then
@@ -3999,7 +4000,7 @@ begin
   end;
 end;
 
-function TLSPServer.DispatchMessage(const AMsg: TJSONObject): Boolean;  // dl:ok cognitive-complexity@152c -- the former Run body moved verbatim: one flat method-name dispatch chain, each branch a one-line delegate
+function TLSPServer.DispatchMessage(const AMsg: TJSONObject): Boolean;  // dl:ok cognitive-complexity@ca32 -- the former Run body moved verbatim: one flat method-name dispatch chain, each branch a one-line delegate
 var
   Method   : string     ;
   Id       : TJSONValue ;
@@ -4011,8 +4012,7 @@ begin
   Method:= if AMsg.GetValue('method') <> nil then AMsg.GetValue('method').Value else '';
   Id       := AMsg.GetValue('id'    );
   ParamsVal:= AMsg.GetValue('params');
-  if ParamsVal is TJSONObject then Params:= TJSONObject(ParamsVal)
-  else Params:= nil;
+  Params:= if ParamsVal is TJSONObject then TJSONObject(ParamsVal) else nil;
 
   if Method      = 'initialize' then HandleInitialize(Id, Params)
   else if Method = 'initialized' then
