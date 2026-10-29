@@ -791,9 +791,9 @@ begin
       begin
         Result:= MergeEngine.Intercept(ADir, AFrame, ALen, AReplacement);
       end;
+    MergeEngine.ClientWriter:= WriteToClient;
     if AOptions.MergeDefinition then
     begin
-      MergeEngine.ClientWriter:= WriteToClient;
       GAnswerer:=
         function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean
         begin
