@@ -7,7 +7,7 @@ group: editor-integration
 order: 110012
 since: 1.33.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # LSP full rule set on save

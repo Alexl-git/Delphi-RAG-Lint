@@ -7,7 +7,7 @@ group: indexing
 order: 10003
 since: 1.35.1-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Index a project against its active build config

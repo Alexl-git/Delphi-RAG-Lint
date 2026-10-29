@@ -7,7 +7,7 @@ group: editor-integration
 order: 110020
 since: 0.4.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # serve

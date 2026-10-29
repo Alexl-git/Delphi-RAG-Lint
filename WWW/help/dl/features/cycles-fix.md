@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)

@@ -7,7 +7,7 @@ group: linting
 order: 30027
 since: 1.31.4-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # type-name-prefix: expected letter from the ancestor chain

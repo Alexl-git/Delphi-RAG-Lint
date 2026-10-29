@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70005
 since: 0.43.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Circular Uses Report (cycles + fix plan)

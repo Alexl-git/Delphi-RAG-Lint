@@ -7,7 +7,7 @@ group: indexing
 order: 10001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Auto-Document Whole Project

@@ -7,7 +7,7 @@ group: linting
 order: 30017
 since: 0.2.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Lint rules

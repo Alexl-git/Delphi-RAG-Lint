@@ -7,7 +7,7 @@ group: linting
 order: 30025
 since: 1.38.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Target compiler (--target-compiler)

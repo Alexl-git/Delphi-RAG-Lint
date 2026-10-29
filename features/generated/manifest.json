@@ -1483,7 +1483,7 @@
       "status": "shipped",
       "since": "0.7.0-alpha",
       "summary": "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers",
-      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card.",
+      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor.",
       "wikiPage": "Hover-at-Cursor",
       "surfaces": [
         {
@@ -1533,7 +1533,7 @@
       "verified": {
         "date": "2026-10-29",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
+        "build": "1.38.0-alpha",
         "surfaceHash": "4f720f64562f350a06f27f23d6e6f6c1a2ab211bb50a929c5a56150321ee9a2f"
       }
     },

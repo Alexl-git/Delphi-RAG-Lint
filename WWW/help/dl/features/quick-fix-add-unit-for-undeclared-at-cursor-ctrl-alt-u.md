@@ -7,7 +7,7 @@ group: refactoring
 order: 50007
 since: 0.47.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
