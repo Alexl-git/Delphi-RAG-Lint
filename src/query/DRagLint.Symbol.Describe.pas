@@ -166,7 +166,7 @@ begin
     Result.DeclaredIn:= P.DeclaredIn;
     Exit;
   end;
-  if not (ASym.Kind in [skProperty, skField, skVarDecl, skConstDecl, skParam, skLocalVar]) then Exit;
+  if ASym.Kind not in [skProperty, skField, skVarDecl, skConstDecl, skParam, skLocalVar] then Exit;
   S:= Trim(ASym.Signature);
   if S.StartsWith(':') then S:= Trim(Copy(S, 2, MaxInt));
   if ASym.Kind = skConstDecl then

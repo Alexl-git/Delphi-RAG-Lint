@@ -2360,9 +2360,7 @@ begin
       if (Sig <> '') and ((Sig[1] = ':') or (Pos('): ', Sig) > 0)) then Keyword:= 'function'
     else Keyword:= 'procedure';
     skProperty : Keyword:= 'property';
-    skField    : Keyword:= 'var';
-    skVarDecl  : Keyword:= 'var';
-    skLocalVar : Keyword:= 'var';
+    skField, skVarDecl, skLocalVar: Keyword:= 'var';
     skConstDecl: Keyword:= 'const';
     skParam    : Keyword:= '';
     else Keyword:= ASym.Kind.ToText;
@@ -2378,8 +2376,8 @@ begin
         { A const keeps its whole signature ('Integer = 5'): the value is the
           point of hovering one. }
         if (ASym.Kind <> skConstDecl) and (Declared.TypeName <> '') then Sig:= Declared.TypeName;
-        if Sig <> '' then Result:= Trim(Format('%s %s: %s', [Keyword, ASym.Name, Sig]))
-        else Result:= Trim(Format('%s %s', [Keyword, ASym.Name]));
+        Result:= if Sig <> '' then Trim(Format('%s %s: %s', [Keyword, ASym.Name, Sig]))
+                  else Trim(Format('%s %s', [Keyword, ASym.Name]));
         if Declared.DeclaredIn <> '' then Result:= Result + '  // declared in ' + Declared.DeclaredIn;
       end;
     else Result:= Format('%s %s', [Keyword, ASym.Name]);

@@ -1665,7 +1665,7 @@ begin
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if A = '--refs-as-leaves' then Result.RefsAsLeaves:= True // proptree: TComponent-typed props are reference leaves
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
-    else if A = '--write-back' then Result.WriteBack:= True // hover: memoize a recovered property type
+    else if A = '--write-back' then Result.WriteBack:= True // hover: memoize a recovered property type  // dl:ok duplicate-code@417f -- REVIEWED 2026-10-29: the ParseArgs one-flag arm chain; the 100-token window matches the --deep/--no-preprocess arms by shape, there is no shared logic to extract
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
