@@ -104,7 +104,7 @@
     "version": "1.36.0-alpha"
   },
   "features/concept-search.md": {
-    "hash": "87ab1758682ab7f5de30865309a63a818da68a5420d2185c1bcf730f3a67ab6b",
+    "hash": "66368fed45fa9227b000884d5fc06683fb5037c1efeb97c32d098f2675b44f51",
     "version": "1.36.0-alpha"
   },
   "features/context.md": {
@@ -504,7 +504,7 @@
     "version": "1.36.0-alpha"
   },
   "features/output-encoding.md": {
-    "hash": "44d179ebe7767784ef74d393d2c74e373689d15a08535ffdb6826ca8c48159f1",
+    "hash": "9aaf6278b9a4fbf9d3f9fada51e374a33e23d83cd9ce6a55d35de6cadb135157",
     "version": "1.36.0-alpha"
   },
   "features/pp-profile.md": {

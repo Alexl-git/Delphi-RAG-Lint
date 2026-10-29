@@ -968,12 +968,12 @@ Win64 build.
 
 #### Lint
 
-**289 rules across 18 categories -- 196 built-in + 93 external `.scm`, 244
+**289 rules across 18 categories -- 196 built-in + 93 external `.scm`, 245
 enabled by default, 110 with an auto-fix.**
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| [`rules`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules) | List the rule catalog | `--json`, `--category <name>`, `--rules-dir <dir>` (load the external `.scm` pack from another folder; `lint` takes it too) |
+| [`rules`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules) | List the rule catalog | `--json`, `--category <name>`, `--rules-dir <dir>` (load the external `.scm` pack from another folder; `lint` takes it too), `--target-compiler <ver|auto>` (answer for an older compiler target: each row gains `needs_compiler` / `compat_since` / `target_active`; `auto` reads `--project`; `lint` takes it too) |
 | `lint <path>` | Run built-in + external `.scm` rules on a file/folder (no index needed). Pass `--db <index>` and the store-backed checks join in -- exact type resolution, cross-unit virtual-in-constructor, and the expected `type-name-prefix` letter is traced through the project index AND the `--library-db` / manifest library index (`EKeyViolation = class(EDatabaseError)` -> E); an ancestor in neither index is an error-severity index-gap finding. Without a store those degrade conservatively, which is why an editor buffer linted with no `--db` can show findings `lint-all` does not | `--rule <id>`, `--disable id1,id2`, `--json`, `--db <index.sqlite>`, `--library-db <lib.sqlite>` (override the manifest-resolved library index; the cross-store ancestry hop that lets a project class reach `TCustomForm` is otherwise untestable) |
 | `lint <file> --db <db> --project-rules` | Also runs the per-declaration doc rules (`doc-drift`, `missing-doc`) for that one file. **Off by default on purpose:** they rebuild the expected facts block per declaration at ~16 ms each, so a 53-decl unit costs 0.83 s and a real DataCopy unit reached 8.75 s -- past the IDE plugin's hard 8 s timeout, whose failure branch shows *no* diagnostics at all | |
 | `lint <snapshot> --stand-in-for <realpath>` | Analyse `<snapshot>`'s **text** under `<realpath>`'s **identity**. For editors that lint an unsaved buffer by writing it to a temp file: store membership, file id, `unit-name-matches-file` and the reported path all answer for the real file, so a temp path no longer defeats the index | Used by the IDE plugin's live diagnostics |
@@ -1168,6 +1168,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | [`sql`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) `--query "SELECT ..."` / `--in <q.sql>` `--db <db>` | **Guarded read-only SQL over the index** -- one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, plus a row cap and a wall-clock cap | `--limit N` (default 200), `--timeout-ms N` (default 10000), `--format text\|json`, `--output <f>` |
 | [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities (`fts5`, `cli_verbs`, `apply_unit_rules`, `book_depth`, `progress_lines`, `lazy_validate` -- the last four the JSON literal `true`); with `--db`, per-index freshness (`current` / `resolve-owed` / `reparse-owed` / `index-newer`) -- an `indexes` array under `--json`, an `index: <path>  verdict: <v>` line (plus `remedy:` when owed) in text | `--json`, `--db <index>` (repeatable) |
 | [`ide-release`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Ask a running Delphi IDE plugin not to respawn `drag-lint.exe` while a hold lasts, so the engine can be **rebuilt while the IDE stays open**. Frees nothing by itself -- `build\stage-engine.ps1` kills the holder. Expires on its own | `--seconds N` (default 120), `--resume`, `--status`, `--json` |
+| [`project-context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/project-context) `--project <x.dproj>` | Write `<base>.dlcontext.json` beside the project (platform, config, the effective define set, the `.dproj` SHA-1) for the LSP; `--check` writes nothing and exits 1 when missing or stale | `--platform P`, `--config C`, `--output <file>`, `--json`, `--check` |
 | `shutdown` | **Maintenance stand-down.** Ask every running engine of this user and logon session that was started in `lsp` mode (an editor's language server -- the process that lingers and holds an index) to close its stores and exit 0, so an index can be re-parsed or the engine re-staged without `TerminateProcess` and the `-wal`/`-shm` sidecars a kill leaves. Transport is a Windows **named pipe** with an explicit per-user DACL (`\\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>`), never a TCP port; the channel answers only `status` and `shutdown`. An engine mid-request answers **BUSY** and keeps running; every honoured or refused request is audited on the engine's stderr and in `%LOCALAPPDATA%\drag-lint\control-channel-audit.log` | `--db <f>` (only engines holding it), `--dry-run`, `--wait <sec>` (default 5), `--all` (default), `--force` (TerminateProcess **only** after a refusal, said loudly) |
 | [`dump-refs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) `<file> --db <db>` | Diagnostic: refs + enclosing-symbol attribution | |
 | [`dump-call-edges`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-call-edges) `--db <db>` | Diagnostic: resolved call edges | |
@@ -1220,7 +1221,7 @@ CLI-only verbs).
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
 external `.scm`). As of v1.37.0-alpha: **289 rules across 18 categories -- 196
-built-in and 93 external `.scm`, 244 enabled by default, and 110 with an
+built-in and 93 external `.scm`, 245 enabled by default, and 110 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

@@ -461,7 +461,7 @@ function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; co
 /// <returns>True when the run must stop at its next safe point; sticky once true.</returns>
 function BatchStandDownTaken: Boolean;
 
-/// <summary>Releases the batch channel; when a request was taken, answers xiting first.</summary>
+/// <summary>Releases the batch channel; when a request was taken, answers `exiting` first.</summary>
 /// <remarks>Call AFTER every store is closed. Safe when no channel is open.</remarks>
 procedure BatchChannelClose;
 

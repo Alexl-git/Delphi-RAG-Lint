@@ -8,7 +8,7 @@ breaking changes** until v1.0.
 ### Planned
 - Downgrade fixes: `compat` rules (`compat_since`) that rewrite syntax the `--target-compiler` cannot take back to classic syntax -- `if` expression, `is not`, `not in`, `Contains`, `InRange`, digit separators, inline `var`. Registry entry `compat-downgrade-fixes`.
 
-## Unreleased
+## v1.38.0-alpha -- unreleased
 
 ### Added
 - `gain [--since yyyy-mm-dd] [--json]` and a per-user usage log (`%LOCALAPPDATA%\drag-lint\usage.log`, opt out with `DRAGLINT_USAGE_LOG=0`): `context`, `query` (`--name`, `--text`) and `find-callers` append one best-effort line (tokens returned, source units/bytes avoided); `gain` sums them per verb and day (guard `run_gain_verb.ps1`). A log failure never changes a verb's output or exit code.

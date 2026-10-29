@@ -37,7 +37,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Progress window and busy guard](features/convrules-busy-guard.md) -- ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs.
 * [Rule book and source encoding](features/convrules-encoding.md) -- ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel).
 * [Member migration (#migrate)](features/convrules-migrate-members.md) -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list.
-* [Output encoding (--output-encoding)](features/output-encoding.md) -- Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; --output files obey it and an ascii run that loses characters warns once on stderr.
+* [Output encoding (--output-encoding)](features/output-encoding.md) -- Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once.
 
 ## 1.33.0-alpha
 

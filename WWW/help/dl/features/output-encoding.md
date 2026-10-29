@@ -1,7 +1,7 @@
 ---
 id: output-encoding
 title: Output encoding (--output-encoding)
-summary: "Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \\uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; --output files obey it and an ascii run that loses characters warns once on stderr"
+summary: "Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \\uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once"
 product: DL
 group: editor-integration
 order: 110018
@@ -12,7 +12,7 @@ updated: 1.36.0-alpha
 
 # Output encoding (--output-encoding)
 
-Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; --output files obey it and an ascii run that loses characters warns once on stderr.
+Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once.
 
 Read this when a tool reads drag-lint output through a pipe and a path or message holds non-ASCII text. The default is 7-bit ASCII -- the JSON escape inside --json, so a JSON reader gets the exact string back; --output-encoding utf8|utf16 (or outputEncoding in .drag-lint.json) writes raw Unicode instead.
 

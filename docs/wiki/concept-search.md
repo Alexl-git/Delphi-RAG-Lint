@@ -69,8 +69,8 @@ yet (one stderr line says so; nothing crashes).
 for symbols that have none, from rows already in the database (symbols,
 symbol_docs, doc-comment literals). So an index built by an older engine gets
 concept search by running `drag-lint index` on it once: zero files are
-re-parsed, the schema version and extractor version do not change. Until then
-`query --concept` exits 3 with the hint. Later incremental runs keep it current:
+re-parsed, the schema version and extractor version do not change. On an index that has not had
+that run yet, `query --concept` exits 3 with the hint. Later incremental runs keep it current:
 rows follow their symbol (a deleted or re-parsed symbol's row cascades away and
 is rebuilt by the next stage run).
 
