@@ -17,7 +17,8 @@
   "audience": "both",
   "verified": {
     "date": "2026-10-29",
-    "by": "alexanderl",
-    "build": "1.38.0-alpha"
+    "by": "LSP",
+    "build": "1.38.0-alpha",
+    "surfaceHash": "f6ba6e793ccedae904f39a48f76bdc1da993bee69007c26430c790afd6706c3e"
   }
 }
