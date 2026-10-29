@@ -182,6 +182,7 @@ type
     FStats       : TPurityStats;
     FVisits      : Integer;
     FLexTicks    : Int64;
+    FTkFile, FTkRefs, FTkBody, FTkEsc, FTkRefLoop, FTkSym, FSymMiss, FSymLookups, FTkPreload, FPreloadRows: Int64;   { scan sub-phases, DRAGLINT_PROFILE only }
     function  NewSet: TNameSet;
     function  NewMap: TParamMap;
     function  SymbolById(AId: Int64): TSymbol;
@@ -312,10 +313,14 @@ end;
 function TPurityRun.SymbolById(AId: Int64): TSymbol;
 begin
   if AId = 0 then Exit(Default(TSymbol));
+  Inc(FSymLookups);
   if not FSymCache.TryGetValue(AId, Result) then
   begin
+    var Tk0: Int64:= TStopwatch.GetTimeStamp;
     Result:= FStore.GetSymbolById(AId);
     FSymCache.Add(AId, Result);
+    Inc(FTkSym, TStopwatch.GetTimeStamp - Tk0);
+    Inc(FSymMiss);
   end;
 end;
 
@@ -739,7 +744,22 @@ begin
     J:= I;
     while (J <= High(FRoutines)) and (FRoutines[J].FileId = FileId) do Inc(J);
     { [I, J) is this file's routines (FindSymbolsWithFacts orders by file). }
+    var Tk0: Int64:= TStopwatch.GetTimeStamp;
     Path:= FStore.GetFilePath(FileId);
+    { ONE query for the file's symbols instead of one per ref target. The refs
+      below bind mostly to this file's own locals, params and routines, and
+      SymbolById fetched each of them singly: 55,693 single-row queries, 30.7 s
+      of a 40 s stage on this repo's own project, paid on every index run that
+      wrote a file (run_purity_symbol_lookup_cost.ps1). Same rows, same mapper
+      (SELECT * FROM symbols + ReadSymbolFromQuery), so the cache holds exactly
+      what SymbolById would have fetched; TryAdd keeps an entry already there. }
+    var TkP: Int64:= TStopwatch.GetTimeStamp;
+    for var S in FStore.FindSymbolsByFile(Path) do
+    begin
+      FSymCache.TryAdd(S.Id, S);
+      Inc(FPreloadRows);
+    end;
+    Inc(FTkPreload, TStopwatch.GetTimeStamp - TkP);
     Stale:= not (TryGetFileMTimeUnix(Path, DiskUnix) and FStamps.TryGetValue(Path, Stored) and (DiskUnix = Stored));
     { An unreadable file IS the stale case (ruling 7): every routine in it is
       marked unknown with the stale witness below, which is the report. }
@@ -758,6 +778,8 @@ begin
       Continue;
     end;
     CacheLines(FileId, Lines);
+    Inc(FTkFile, TStopwatch.GetTimeStamp - Tk0);
+    Tk0:= TStopwatch.GetTimeStamp;
     ByRoutine:= TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
     try
       for var R in FStore.GetReferencesFromFile(FileId) do
@@ -771,6 +793,7 @@ begin
         end;
         RefList.Add(R);
       end;
+      Inc(FTkRefs, TStopwatch.GetTimeStamp - Tk0);
       for var K:= I to J - 1 do
       begin
         if ByRoutine.TryGetValue(FRoutines[K].Id, RefList) then
@@ -1189,7 +1212,9 @@ begin
   UseList:= TList<TCalleeUse>.Create;
   try
     if FFacts.TryGetValue(FRoutines[AIndex].Id, Facts) then ApplyFacts(AIndex, Facts, Sum, Changed);
+    var Tk0: Int64:= TStopwatch.GetTimeStamp;
     Scan:= ScanBody(AIndex, ALines);
+    Inc(FTkBody, TStopwatch.GetTimeStamp - Tk0);
     if Scan.HasWith then Sum.AddFlag(efUnknown, WITNESS_WITH, Changed);
     Gated:= (Scan.HasVarBlock or Scan.HasInlineVar) and (FCtx[AIndex].OwnLocals.Count = 0);
     if Gated then
@@ -1200,7 +1225,10 @@ begin
     if Scan.HasBareInherited then AddInheritedUse(AIndex, Sum, Changed, UseList);
     if ARefs <> nil then
     begin
+      Tk0:= TStopwatch.GetTimeStamp;
       CollectEscapes(AIndex, ALines, ARefs);
+      Inc(FTkEsc, TStopwatch.GetTimeStamp - Tk0);
+      Tk0:= TStopwatch.GetTimeStamp;
       CallLine:= 0;
       CallCol:= 0;
       for var R in ARefs do
@@ -1229,6 +1257,7 @@ begin
           if (R.StartLine = CallLine) and (R.StartCol = CallCol) then Continue;
           MemberRef(AIndex, R, ALines, Sum, Changed, UseList);
         end;
+      Inc(FTkRefLoop, TStopwatch.GetTimeStamp - Tk0);
     end;
     FLocal[AIndex]:= Sum;
     FUses[AIndex]:= UseList.ToArray;
@@ -1395,6 +1424,11 @@ begin
                               '(%d visit(s); lex is part of fixpoint; %d file re-read(s) after a line-cache eviction, %d MB cached at the end)',
       [ALoad, AScan, FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits, FLineReReads,
        Round(FLineChars * SizeOf(Char) / BYTES_PER_MB)]));
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+    Writeln(ErrOutput, Format('purity: scan = file %.1fs  refs %.1fs  body %.1fs  escapes %.1fs  ref-loop %.1fs; symbol lookups %d: single-row fetches %d in %.2fs, per-file preload %d row(s) in %.2fs',
+      [FTkFile / TStopwatch.Frequency, FTkRefs / TStopwatch.Frequency, FTkBody / TStopwatch.Frequency,
+       FTkEsc / TStopwatch.Frequency, FTkRefLoop / TStopwatch.Frequency,
+       FSymLookups, FSymMiss, FTkSym / TStopwatch.Frequency, FPreloadRows, FTkPreload / TStopwatch.Frequency]));
 end;
 
 function TPurityRun.Execute: TPurityStats;
