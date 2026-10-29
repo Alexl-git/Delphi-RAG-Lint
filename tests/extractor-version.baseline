@@ -1121,4 +1121,9 @@
 #   nativecode, dcc; loses cpux86_64, compiler_version_37); other platforms UNVERIFIED. Re-pinned within unreleased 1.26.0-alpha, no bump.
 #   Superseded: 1.26.0-alpha|0cf33f0abbeec93a4ea58c7f2d25c0a06b510fb5f475070c9f6c745cbc924c18
 # 2026-10-28 FREEZE-FINAL merge ext + ext-plat (interim pin, no bump; final recompute after gaps/doclit):
-1.26.0-alpha|1ce747432049d6a73441ea9d3f7aed5862c58d054f1fbc989283ad3e4043abb4
+#   Superseded: 1.26.0-alpha|1ce747432049d6a73441ea9d3f7aed5862c58d054f1fbc989283ad3e4043abb4
+# 2026-10-28 FREEZE-FINAL recompute (the ONE re-pin): gaps/ext-plat 843a7fc8 (Win32/Win64 built-ins exact vs dcc32/dcc64) +
+#   gaps/doclit 52e7df08 (/// doc literal symbol_id = documented decl) + gaps/multiname 0e5de0f3 (one field symbol per name in a
+#   multi-name field list). Within unreleased 1.26.0-alpha, no bump: deployed DBs are v=1.25.0-alpha, so the 1.37 re-parse is forced anyway.
+
+1.26.0-alpha|2e3128646f62cadf2a6ddf46f5f2fb6f2d056ee5d9e96325e966b2b295a4f8cb
