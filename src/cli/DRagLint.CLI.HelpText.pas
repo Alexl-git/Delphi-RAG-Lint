@@ -238,7 +238,7 @@ begin
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
-  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
   Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
   Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
@@ -818,7 +818,7 @@ begin
   end;
   if pVerb = 'hover' then
   begin
-    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
     Exit;
   end;
   if pVerb = 'impact' then

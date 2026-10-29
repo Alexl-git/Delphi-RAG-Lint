@@ -302,7 +302,7 @@
   {
     "id": "hover-at-cursor",
     "title": "Hover at Cursor",
-    "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+    "summary": "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers",
     "group": "search-navigation",
     "order": 20016,
     "since": "0.7.0-alpha",

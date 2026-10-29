@@ -57,11 +57,47 @@ uses
 /// </remarks>
 function DescribeTypeKind(const ASym: TSymbol; const AStore: ISymbolStore): string;
 
+type
+  /// <summary>The declared type of a value-kind symbol, as every hover
+  /// surface shows it.</summary>
+  /// <remarks>Produced by DescribeDeclaredType; rendered by
+  /// FormatDeclaredType.</remarks>
+  TDeclaredType = record
+    /// <summary>The type as written, e.g. 'string'; '' when the index has
+    /// none.</summary>
+    TypeName  : string;
+    /// <summary>Qualified name of the ancestor class that declares the type
+    /// of a re-published property; '' otherwise.</summary>
+    DeclaredIn: string;
+  end;
+
+/// <summary>The declared type of a property, field, var, const, parameter or
+/// local variable.</summary>
+/// <param name="ASym">The symbol. Any other kind yields an empty result.</param>
+/// <param name="AStore">The store that owns ASym. Needed only for a
+/// property; may be nil, in which case a re-published property yields only a
+/// type it already carries.</param>
+/// <returns>TypeName (and, for a re-published property, DeclaredIn).</returns>
+/// <remarks>
+/// A property goes through DRagLint.Convert.PropTree.ResolvePropertyDeclaredType
+/// -- the converter's ancestor climb, memoized on a writable store and in a
+/// session cache otherwise. Every other kind reads its own Signature: a
+/// leading ':' is dropped, and a const's '= value' tail is cut. NOTHING IS
+/// INVENTED: an untyped const or a type nobody declares stays ''.
+/// </remarks>
+function DescribeDeclaredType(const ASym: TSymbol; const AStore: ISymbolStore): TDeclaredType;
+
+/// <summary>Renders a declared type for a hover line.</summary>
+/// <param name="AType">From DescribeDeclaredType.</param>
+/// <returns>'string', 'string (declared in Unit.TBase)', or '' when
+/// TypeName is empty.</returns>
+function FormatDeclaredType(const AType: TDeclaredType): string;
 implementation
 
 uses
-  System.SysUtils,
-  System.Classes ;
+  System.SysUtils         ,
+  System.Classes          ,
+  DRagLint.Convert.PropTree;
 
 { A preview, not an enumeration -- a 40-value enum would push everything else
   off the row, and the declaration is one Ctrl-click away. }
@@ -115,6 +151,38 @@ begin
     skEnum:
       Result:= EnumMembersPreview(ASym, AStore);
   end;
+end;
+
+function DescribeDeclaredType(const ASym: TSymbol; const AStore: ISymbolStore): TDeclaredType;
+var
+  S : string;
+  Eq: Integer;
+begin
+  Result:= Default(TDeclaredType);
+  if (ASym.Kind = skProperty) and Assigned(AStore) then
+  begin
+    var P: TDeclaredPropType:= ResolvePropertyDeclaredType(AStore, ASym);
+    Result.TypeName  := P.TypeName;
+    Result.DeclaredIn:= P.DeclaredIn;
+    Exit;
+  end;
+  if not (ASym.Kind in [skProperty, skField, skVarDecl, skConstDecl, skParam, skLocalVar]) then Exit;
+  S:= Trim(ASym.Signature);
+  if S.StartsWith(':') then S:= Trim(Copy(S, 2, MaxInt));
+  if ASym.Kind = skConstDecl then
+  begin
+    { 'Integer = 5' -> 'Integer'; '= 5' (untyped, not inferred) -> ''. }
+    Eq:= Pos('=', S);
+    if Eq > 0 then S:= Trim(Copy(S, 1, Eq - 1));
+  end;
+  Result.TypeName:= S;
+end;
+
+function FormatDeclaredType(const AType: TDeclaredType): string;
+begin
+  Result:= AType.TypeName;
+  if (Result <> '') and (AType.DeclaredIn <> '') then
+    Result:= Result + ' (declared in ' + AType.DeclaredIn + ')';
 end;
 
 end.
