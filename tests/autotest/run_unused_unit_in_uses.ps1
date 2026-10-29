@@ -187,6 +187,77 @@ end;
 end.
 '@
 
+# --- side-effect units (finalization section, class constructor/destructor) ----
+# Linked for their side effect exactly like an initialization unit; a host
+# that references nothing from them must NOT be told the import is dead.
+Write-Ascii (Join-Path $lib 'uFinalOnly.pas') @'
+unit uFinalOnly;
+
+interface
+
+procedure FinalOnlyProc;
+
+implementation
+
+procedure FinalOnlyProc;
+begin
+end;
+
+finalization
+  FinalOnlyProc;
+
+end.
+'@
+Write-Ascii (Join-Path $lib 'uClassCtor.pas') @'
+unit uClassCtor;
+
+interface
+
+type
+  TReg = class
+    class constructor Create;
+  end;
+
+implementation
+
+class constructor TReg.Create;
+begin
+end;
+
+end.
+'@
+# NEGATIVE CONTROL: the words appear only in a comment and a string -> still dead.
+Write-Ascii (Join-Path $lib 'uCommentedCtor.pas') @'
+unit uCommentedCtor;
+
+interface
+
+procedure CommentedProc;
+
+implementation
+
+{ class constructor }
+procedure CommentedProc;
+begin
+  // class destructor
+  WriteLn('class destructor');
+end;
+
+end.
+'@
+Write-Ascii (Join-Path $prj 'uHost.pas') @'
+unit uHost;
+
+interface
+
+uses
+  uFinalOnly, uClassCtor, uCommentedCtor;
+
+implementation
+
+end.
+'@
+
 $libDb = Join-Path $WorkDir 'lib.sqlite'
 $prjDb = Join-Path $WorkDir 'prj.sqlite'
 & $Exe index $lib --db $libDb 2>&1 | Out-Null
@@ -207,6 +278,13 @@ Check 'a unit used ONLY through a GENERIC export is NOT reported' `
   (-not (($uuiu -join "`n") -match 'uGeneric')) 'TBox<T> declared vs TBox<Integer> used -- both sides need stripping'
 Check 'a registration unit (dxSkin*) is NOT reported' `
   (-not (($uuiu -join "`n") -match 'dxSkinFake')) 'registration units export nothing by design'
+
+Check 'a unit with only a FINALIZATION section is NOT reported' `
+  (-not (($uuiu -join "`n") -match 'uFinalOnly')) 'linked for its side effect, like initialization'
+Check 'a unit with a CLASS CONSTRUCTOR is NOT reported' `
+  (-not (($uuiu -join "`n") -match 'uClassCtor')) 'class constructor runs at unit start-up'
+Check 'NEGATIVE CONTROL: class ctor/dtor words only in a comment/string IS still reported' `
+  (($uuiu -join "`n") -match 'uCommentedCtor') 'the source scan must skip comments and strings'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'UNUSED-UNIT-IN-USES GUARD: FAIL' -ForegroundColor Red; exit 1 }
