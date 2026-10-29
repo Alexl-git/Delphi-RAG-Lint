@@ -11,6 +11,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.38.0-alpha
 
+* [Auto uses on save (VS Code)](features/auto-uses-on-save.md) -- VS Code adds a missing unit to uses on save (source.addMissingImports); dropping an unused unit on save is opt-in and gated.
 * [query --concept](features/concept-search.md) -- Ranked BM25 concept search over identifier words and doc-comment prose.
 * [Gain (counted savings)](features/gain-usage-log.md) -- Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day.
 * [init: one command from a project to a wired AI client](features/init-wiring.md) -- Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command.

@@ -4,7 +4,7 @@ title: Missing unit in uses (unit-missing-from-uses)
 summary: "Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked"
 product: DL
 group: uses-dependencies
-order: 130001
+order: 130002
 since: 1.38.0-alpha
 status: shipped
 updated: 1.38.0-alpha
@@ -104,6 +104,8 @@ single site with `// dl:ok unit-missing-from-uses -- why`.
 
 Related: [find-unit](find-unit.md) (ask for one symbol), Add Missing Units
 (whole unit), [circular-uses](circular-uses-report-cycles-fix-plan.md).
+
+In VS Code the single-resolution fix also runs on save: see [Auto uses on save](auto-uses-on-save.md#auto-uses-on-save).
 
 ---
 

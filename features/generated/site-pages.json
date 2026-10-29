@@ -27,6 +27,10 @@
     "hash": "0e3e275630e57c84d6747bc4a71318c67413dd18c70e6d89f377b1d0ca3ada06",
     "version": "1.38.0-alpha"
   },
+  "features/auto-uses-on-save.md": {
+    "hash": "c1bc3f11a746870a0942c8b51611150584d549210ffa332a59bf6dd0cd38f87d",
+    "version": "1.38.0-alpha"
+  },
   "features/autofix-wave.md": {
     "hash": "da9e24e3f9cd08fb7ef02cff05d616bdf6361b38a2c34533f0fee0ba25c282b8",
     "version": "1.38.0-alpha"
@@ -468,7 +472,7 @@
     "version": "1.38.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "f8cc54f9fd093153ea9f0d8ccf36561640d3067e3eccb269ef84e5677d42389f",
+    "hash": "0d5642d28af4845f51b3faff96f9fc8215726d9dc776da0d401cce8b7aff1bcf",
     "version": "1.38.0-alpha"
   },
   "features/maintenance.md": {
@@ -716,7 +720,7 @@
     "version": "1.38.0-alpha"
   },
   "features/unit-missing-from-uses.md": {
-    "hash": "26f0bdb35d95c0a04edc918493d7864637ac407c285c287bae92e39e90093502",
+    "hash": "663ba56742f3ea2bf85d918932e2c056736ee057ccb6cfc47398dec79777e2df",
     "version": "1.38.0-alpha"
   },
   "features/unit-test-stub-symbol.md": {
@@ -744,7 +748,7 @@
     "version": "1.35.1-alpha"
   },
   "features/vscode-extension.md": {
-    "hash": "2430b8dd73192b7efeb1ea2c42e711600adfb0c7a63f0426673e40dd26ff0edc",
+    "hash": "0541a2b797d4c366c69e44cc0fbcea48e7b3a12ed5a1c06c3f2feab3bcd09ffe",
     "version": "1.38.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {

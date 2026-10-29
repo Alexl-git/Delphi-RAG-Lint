@@ -13,9 +13,14 @@
       "type": "cli",
       "verb": "lint",
       "example": "drag-lint lint uMain.pas --db <db> --rule unit-missing-from-uses --fix --apply"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/codeAction"
     }
   ],
   "audience": "both",
+  "notes": "VS Code on save: the LSP also offers the single-resolution fix as source.addMissingImports (see auto-uses-on-save); an ambiguous name stays quickfix-only",
   "verified": {
     "date": "2026-10-29",
     "by": "alexanderl",

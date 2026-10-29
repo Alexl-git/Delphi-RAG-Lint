@@ -250,6 +250,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 
 ## Uses and Dependencies
 
+* **Auto uses on save (VS Code)** -- VS Code adds a missing unit to uses on save (source.addMissingImports); dropping an unused unit on save is opt-in and gated. Read this when you want the uses clause to fix itself on save in VS Code. Saving adds the one unambiguous unit that declares an undeclared name; an ambiguous name stays a light-bulb choice. Removal of a dead import on save is off by default (enable it in the [pascal] editor.codeActionsOnSave block) and lands only once the index has caught up with the buffer. There is no while-typing mode. [More](vscode-extension)
 * **Missing unit in uses (unit-missing-from-uses)** -- Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked. Read this when the IDE says Undeclared identifier for a name another unit declares (CodeSite without CodeSiteLogging in uses). The rule names the unit and the clause -- interface when the name is used there, else implementation -- checks the new uses edge for a circular unit reference first, and fixes it from Ctrl+Alt+U, the LSP light bulb or lint --fix --apply. [More](unit-missing-from-uses)
 
 ## Declared, not harvested
@@ -257,6 +258,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The surfaces below are declared by their entries and exercised only by the periodic review; a green battery does not prove them.
 
 * Allow this message: host 'Structure form' (the caption is verified, the host is declared)
+* Auto uses on save (VS Code): lsp textDocument/codeAction
 * Charts and the IDE: procedure docs\wiki\Charts-and-the-IDE.md
 * Circular Dependency Report (worked example): procedure docs\wiki\Circular-Dependency-Report.md
 * ConvRulesEditor: menu 'Conversion > Convert... (the IDE plugin starts it with --convert-request FILE and probes --write-capabilities FILE)' inside ConvRulesEditor.exe
@@ -292,6 +294,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Member migration (#migrate): menu 'Classes tab > Members list > Add...' inside ConvRulesEditor.exe
 * Member migration (#migrate): menu 'Work list tab > Migrate...' inside ConvRulesEditor.exe
+* Missing unit in uses (unit-missing-from-uses): lsp textDocument/codeAction
 * Progress window and busy guard: menu 'Progress window (appears by itself)' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify #convert...' inside ConvRulesEditor.exe
 * Qualify #convert quick fix: menu 'Convert tab > Qualify all...' inside ConvRulesEditor.exe
