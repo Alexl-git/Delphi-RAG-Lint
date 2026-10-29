@@ -29,3 +29,6 @@ dl:ok reason form deferred; doc-literal fix done right (doclit); D5 = upconvert 
 
 ## Update 21:45
 DONE: stage3 merged into int138 (a40f6e1a, one extractor pin 3302e490..a53acc, no bump) + lf-docs (a6986d97); int138 HEAD a6986d97, full battery green. Next actions 3 and the lf-docs half of 5 are done. Minor: two near-identical `index --project` usage lines in generated HelpText (rebuild-index-for-this-project vs rescan-this-unit).
+
+## Update 21:55 -- OWNER GO GIVEN, /clear is safe
+Library processes (PIDs 2328/37084) survived their agent ending, so they do not depend on this session. OWNER GO: when both exit, deploy **1.38 (gaps/int138 a6986d97 build)** -- same extractor 1.26.0-alpha as the freeze, so the scratch libraries are valid for it: engine -> dll-win64 (stage-engine.ps1), swap libraries in, libraryResolve for the 2 ORM3 sections (dll-win64 + dll-win32), projects (ORM3 --platform Win64), `index --all --resolve-only`, IDE plugin BPL (RAD Studio must be CLOSED; ask the owner if bds.exe runs), VS Code extension, installer package for the owner Delphi 5 VM (stage, do not publish). Skip the 1.37 package. Then TELL THE OWNER the IDE is ready for test. First action in the new session: start a background waiter on the two PIDs (lib-status.txt).
